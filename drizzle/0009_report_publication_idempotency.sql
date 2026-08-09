@@ -1,0 +1,2 @@
+ALTER TABLE `report_publications` ADD `publication_key` text;--> statement-breakpoint
+CREATE UNIQUE INDEX `report_publications_publication_key_idx` ON `report_publications` (`publication_key`) WHERE "report_publications"."publication_key" is not null;

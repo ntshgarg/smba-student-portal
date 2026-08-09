@@ -1,0 +1,212 @@
+SMBA FINANCIALS PHASE 2 — FROZEN IMPLEMENTATION RECORD
+=======================================================
+
+Status: Implemented and validated
+Document date: 8 August 2026
+Architecture version: Financials Phase 2
+
+
+1. PURPOSE
+==========
+
+Phase 2 evolves a Payment from a one-Charge fact into one receipt that may be
+allocated across one or more Charges. It adds auditable Refunds, fee
+Concessions and an on-demand Collections export while preserving the quiet,
+operational character of Financials.
+
+Financials remains separate from training. Financial state never controls
+attendance, scheduling, reports, account access or player development.
+
+
+2. ARCHITECTURAL INVARIANTS
+===========================
+
+- UUIDs are canonical identities and foreign keys.
+- Receipt and Refund references are immutable human references only.
+- All money is stored as positive integer paise in INR.
+- Balances and statuses are derived from persisted ledger facts and are never
+  stored as mutable result columns.
+- A Payment amount equals the exact sum of its immutable allocations.
+- A Refund amount equals the exact sum of its immutable Refund allocations.
+- Published allocations are never edited.
+- A Payment is corrected by reversing the complete receipt and creating a new
+  Payment. A Payment with an active Refund cannot be reversed.
+- A Refund is corrected through an explicit Refund reversal.
+- A Concession application creates one concession_credit Adjustment.
+- A concession_credit can be reversed only through its linked Concession
+  application; the generic Adjustment workflow cannot mutate it.
+- Financial records are never hard-deleted.
+- Every mutation is coach-authorized, transactional, idempotent, revision
+  checked where concurrent balance changes are possible, and audited once.
+- Financial presentation never exposes internal notes, database UUIDs,
+  fingerprints, audit metadata or coach-only reasons to a player.
+
+
+3. STORAGE MODEL
+================
+
+Phase 2 adds these ledger entities to the Phase 1 model:
+
+- payment_allocations
+- refunds
+- refund_allocations
+- concessions
+- concession_applications
+- finance_reference_sequences
+
+payments remains the receipt-level fact. Its legacy charge_id is nullable and
+is retained only for a clean Phase 1 migration/compatibility path. New
+multi-Charge relationships use payment_allocations.
+
+Receipt references use:
+
+  SMBA-R-YYYY-NNNNN
+
+Refund references use an independent yearly sequence:
+
+  SMBA-RF-YYYY-NNNNN
+
+Sequence allocation and the corresponding ledger write occur in the same
+SQLite immediate transaction. Failed transactions consume no number.
+
+
+4. PAYMENT WORKFLOW
+===================
+
+The coach's primary repeated workflow is:
+
+  Search player
+      -> enter one received amount
+      -> review oldest-first suggested allocations
+      -> optionally override allocations
+      -> record the receipt
+      -> return focus to player search
+
+The coach may override the suggestion, but the confirmed allocation must:
+
+- contain distinct Charges belonging to the selected player;
+- reference issued Charges only;
+- not exceed any current Charge balance;
+- equal the complete Payment amount; and
+- match the current optimistic Charge revisions.
+
+There are no unapplied funds or wallet balances in Phase 2.
+
+
+5. REFUND WORKFLOW
+==================
+
+A Refund belongs to one recorded Payment. Refund allocation suggestions undo
+the newest covered Charge first, ordered deterministically by due date,
+issuance time and UUID. The coach may override the suggestion.
+
+A Refund:
+
+- cannot exceed the remaining refundable amount;
+- cannot predate its Payment;
+- cannot be dated in the future;
+- references only allocations belonging to its Payment; and
+- changes the affected Charge balances without changing the original receipt.
+
+Refund and Payment corrections remain explicit reversal workflows. Reversing
+a Refund restores its refundable allocations; it does not delete history.
+
+
+6. CONCESSIONS
+==============
+
+Concessions may be one-off or recurring, and may use a fixed paise amount or a
+percentage stored in basis points.
+
+- Percentage values are calculated from the original Charge with half-up
+  rounding.
+- Every Concession credit is capped at the Charge's remaining balance.
+- One-off Concessions may be applied exactly once. If corrected, create a new
+  one-off Concession rather than rewriting the original.
+- Active recurring Concessions for one player cannot overlap.
+- Recurring Concessions apply idempotently when monthly fees are prepared.
+- A recurring Concession created after a fee was prepared may be applied
+  explicitly to an existing in-period outstanding monthly Charge.
+- Ending a recurring Concession stops future use. Existing applications and
+  credits remain historical facts.
+- Reversing an individual application removes only its linked credit through
+  the dedicated, audited Concession workflow.
+
+The player sees the neutral label "Fee concession" and never sees the private
+reason or internal lifecycle terminology.
+
+
+7. COLLECTIONS EXPORT
+=====================
+
+The coach may export current Payment and Refund events for a date range of at
+most 366 days. The CSV is generated on demand, streamed, private/no-store and
+never persisted.
+
+Export fields are limited to:
+
+- date
+- event type
+- receipt or Refund reference
+- player name
+- Academy ID
+- method
+- amount
+- affected fee references
+
+CSV cells are formula-neutralized. Internal notes, account UUIDs, contact
+details and audit metadata are excluded. A Refund lists only the fee
+references touched by that Refund's own allocations.
+
+
+8. AUTHORIZATION AND PRIVACY
+============================
+
+- Coach routes and Server Actions verify an authenticated coach.
+- Finance services independently enforce the same coach authorization.
+- Collection exports are coach-only.
+- Player Fee Record data is derived from the authenticated player's Account
+  UUID and is read-only.
+- Player views contain public receipt facts, allocations, Refunds and neutral
+  Concession entries only.
+
+The production authentication and managed-persistence work identified in the
+principal readiness audit remains a deployment prerequisite. Phase 2 does not
+weaken or replace that requirement.
+
+
+9. MIGRATION
+============
+
+Migration 0012 preserves every Phase 1 Payment and:
+
+- creates one deterministic receipt reference per existing Payment;
+- creates one matching Payment allocation using the historical charge_id;
+- retains the old charge_id as a nullable compatibility field;
+- initializes the applicable yearly receipt sequence; and
+- leaves all financial amounts, dates, methods, reversals and audit history
+  unchanged.
+
+Migration verification requires SQLite integrity, foreign-key integrity,
+unique receipt references and an exact Payment-to-allocation sum match.
+
+
+10. INTENTIONALLY DEFERRED
+==========================
+
+Phase 2 does not include:
+
+- online payment gateways or webhooks;
+- wallets, unapplied credits or overpayments;
+- family billing accounts;
+- receipt or invoice PDFs;
+- GST/tax accounting;
+- aging reports;
+- automated reminders by WhatsApp, SMS or email;
+- bank reconciliation;
+- bulk payment imports;
+- historical as-of exports; or
+- accounting-system integrations.
+
+These require a separately approved Phase 3 architecture and real operational
+evidence.

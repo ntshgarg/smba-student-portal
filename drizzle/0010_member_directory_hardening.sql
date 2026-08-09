@@ -1,0 +1,1 @@
+ALTER TABLE `player_enrollments` ADD `record_revision` integer DEFAULT 0 NOT NULL;

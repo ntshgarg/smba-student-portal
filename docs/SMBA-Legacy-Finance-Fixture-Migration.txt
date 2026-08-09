@@ -1,0 +1,79 @@
+SMBA — Legacy Finance Fixture Migration
+Frozen implementation contract
+
+Status
+
+APPROVED AND IMPLEMENTED
+
+Purpose
+
+Stop generating the obsolete settled-before-portal finance state while retaining
+safe read compatibility for databases that already contain that historical fact.
+
+Scope
+
+- Remove legacy settlement creation from Demo, Edge, Stress and all fresh seed
+  paths.
+- Remove the legacy state from current setup, reconciliation, adjustment and
+  mutation choices.
+- Represent fresh settled history using real ledger facts: Charges, Payments,
+  Allocations, Adjustments and their audit events.
+- Preserve private compatibility for pre-existing legacy rows so upgrades do not
+  corrupt balances or make previously settled charges outstanding.
+- Present compatible legacy credit in neutral historical language rather than as
+  a current workflow or selectable status.
+
+Invariants
+
+- Fresh databases never write a `settled_before_portal` fact.
+- Public and coach-facing mutation contracts cannot create that fact.
+- Existing persisted legacy rows remain readable and continue to contribute the
+  same credit to derived balances.
+- Compatibility is one-way: old facts may be read, but no new legacy facts may
+  be created.
+- Existing legacy facts are never hard-deleted or silently rewritten.
+- Legacy compatibility remains internal. Current UI, exports and generated
+  documents use neutral labels such as historical or credit adjustment.
+- A legacy compatibility row cannot be reversed through a modern payment
+  reversal workflow because it is not a Payment.
+- Current balances and statuses remain derived exclusively from persisted ledger
+  facts; no mutable balance or paid flag is introduced.
+- The migration does not change training, attendance, scheduling, reports or
+  player access.
+
+Out of scope
+
+- Reconstructing invented historic receipts or payment methods.
+- Bulk rewriting legacy facts into fabricated Payments.
+- Deleting old databases or historical ledger records.
+- Exposing a legacy-settlement control in current financial workflows.
+- Keeping legacy states in fresh fixtures for demonstration purposes.
+
+Migration behavior
+
+- Existing databases upgrade in place and retain their persisted legacy facts.
+- Read calculators recognize those facts as historical credits.
+- New financial activity uses only current Charge, Payment, Allocation,
+  Adjustment, Concession, Refund and reversal contracts.
+- New deterministic profiles contain zero legacy settlements and exercise settled
+  states through genuine modern ledger operations.
+
+Validation contract
+
+- A fixture or API attempt to create a legacy settlement is rejected or absent
+  from the supported type contract.
+- Demo, Edge and Stress verify zero newly written legacy rows.
+- An upgraded database containing an old legacy row preserves the same derived
+  outstanding balance and paid status.
+- Legacy rows render with neutral compatibility wording and never expose an
+  actionable reversal control.
+- Modern payment, refund, concession, adjustment and audit workflows remain
+  unchanged.
+- Finance service, UI, fixture, migration, TypeScript, lint and production-build
+  checks pass.
+
+Change policy
+
+This compatibility path may be removed only through a separately reviewed data
+migration that proves no supported database retains legacy rows. Until then it is
+read-only historical compatibility, not an active finance feature.

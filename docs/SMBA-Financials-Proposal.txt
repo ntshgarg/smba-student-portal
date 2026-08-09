@@ -1,0 +1,1085 @@
+SMBA FINANCIALS V1 — FROZEN IMPLEMENTATION SPECIFICATION
+========================================================
+
+Status: Approved for implementation
+Prepared for: SMBA Coach Workspace and Player Journal
+Document date: 8 August 2026
+Architecture version: Financials V1
+
+
+1. PURPOSE AND PRODUCT PHILOSOPHY
+=================================
+
+Financials is a first-class operational feature of the Coach Workspace. It
+helps the academy answer three questions:
+
+1. What has the player been charged?
+2. What money has the academy received?
+3. What still requires attention?
+
+Financials is not a Paid / Not Paid flag and is not an accounting dashboard.
+It is a small, auditable ledger built from independent financial facts:
+
+  Fee Agreement -> Charge -> Payment
+                          -> Adjustment
+
+The coach sees simple operational language. The player sees a quiet,
+informational fee record. Training and development remain the centre of the
+product.
+
+
+1.1 Architectural invariants
+----------------------------
+
+- All financial calculations are deterministic and derived exclusively from
+  persisted ledger facts.
+- No balance, outstanding amount or payment status is stored in the database.
+- Charges describe what is owed.
+- Payments describe what was received for one charge.
+- Adjustments explain an explicit change to a charge's effective amount.
+- Financial records are never hard-deleted. Charges are voided, payments are
+  reversed, and adjustments are reversed through new auditable facts.
+- Every financial mutation is authorized, validated, transactional,
+  idempotent where retry is possible, and represented by an audit event.
+- All money is stored as integer paise. Floating-point arithmetic is forbidden
+  for persisted values and balance calculations.
+- Account UUID is the immutable owner key. Academy ID is searchable display
+  data and is never a foreign key.
+- Fee references are generated once, stored as opaque immutable identifiers,
+  and never used to derive chronology or business logic.
+- Financial status never affects training access, attendance, scheduling,
+  monthly reports, account access or report generation.
+- The Financials activation is a one-time, irreversible academy cutover. It
+  cannot be toggled off after activation; corrections happen through the
+  ledger and audit trail.
+
+
+1.2 Phase 1 goals
+-----------------
+
+Coach goals:
+
+- See which players are paid, pending, partially paid, overdue or require
+  setup.
+- Track the one-time registration fee and monthly training fees.
+- Prepare a month's fees explicitly and safely.
+- Record an offline payment quickly, including partial payment.
+- Search by player name, Academy ID or fee reference.
+- Reverse an incorrect payment without deleting history.
+- Apply a justified credit, debit or historical settlement.
+- Review one player's complete fee record.
+
+Player goals:
+
+- See current fee status without payments dominating the Player Journal.
+- Understand the current amount due, due date and fee reference.
+- Review registration, monthly-charge and payment history.
+- See factual, calm language rather than collection-oriented messaging.
+
+
+1.3 Explicitly deferred
+-----------------------
+
+Phase 1 does not include:
+
+- Online payments or payment-gateway webhooks.
+- Multi-charge payment allocation.
+- Family or parent billing accounts.
+- Fee-product or price-catalogue database tables.
+- Automated proration.
+- Automated fee generation jobs.
+- Refund workflows.
+- Downloadable receipts or invoices.
+- Tax/GST accounting.
+- Bank reconciliation.
+- WhatsApp, SMS or email payment reminders.
+- Discounts, waivers or scholarships as dedicated product workflows.
+- Accounting-system integrations.
+
+These are extension points, not incomplete Phase 1 work.
+
+
+2. FIXED BUSINESS RULES
+=======================
+
+2.1 Money and pricing
+---------------------
+
+- Currency is INR.
+- Monetary columns store positive integer paise.
+- Registration fee is INR 1,000 (100,000 paise).
+- Canonical monthly prices come from one checked-in typed configuration shared
+  with the public fee guide.
+- An issued charge snapshots its amount. Later pricing changes never rewrite a
+  historical charge.
+- An active Fee Agreement snapshots the player's agreed monthly fee and Academy
+  Plan.
+
+
+2.2 Registration fee
+--------------------
+
+- Registration-fee charging begins only after Financials activation.
+- A newly approved player receives at most one active registration charge.
+- The charge is due three calendar days after approval.
+- Existing players are reconciled during setup as pending, settled before the
+  portal, or unresolved.
+- Settled before portal is represented by a legacy-settlement adjustment. A
+  fake historical payment must not be created.
+- An unresolved registration remains Setup required and visible in the coach's
+  attention queue even after monthly training Charges are paid. It leaves that
+  coach-attention state only after explicit registration reconciliation.
+  Registration reconciliation is a separate fact from the player's actual
+  ledger status: a real pending, partially paid or overdue monthly obligation
+  must still show its amount and due date in player/detail views.
+
+
+2.3 Monthly fee
+---------------
+
+- The coach explicitly selects Prepare <Month> fees.
+- The operation is idempotent and creates only missing eligible charges.
+- One player can have at most one active monthly-training charge per billing
+  month.
+- The normal due date is the fifth of the billing month.
+- Monthly billing starts from the first effective session assignment.
+- If the first assignment begins on or before the fifth, the first charge is
+  due on the fifth.
+- If the first assignment begins after the fifth, the first charge is due three
+  calendar days after the assignment date.
+- The first month is charged in full. Phase 1 has no proration.
+- A monthly charge requires both an applicable Fee Agreement and a scheduled
+  session assignment whose effective dates and session-series window overlap
+  the selected billing month. A historical assignment that ended earlier does
+  not make later months billable.
+- A player without an effective assignment or Fee Agreement is not charged and
+  appears as Setup required or Awaiting assignment.
+- An otherwise eligible player whose selected month has not been prepared is
+  shown as Month not prepared and remains in the coach's attention view.
+- Coach attention and outstanding totals include every issued monthly arrear
+  up to the selected billing month. Paying the current month never hides an
+  older unpaid Charge. The Received summary may remain scoped to the selected
+  billing period.
+- Reading a page never creates charges.
+
+
+2.4 Payments
+------------
+
+- A Phase 1 payment belongs directly to one charge.
+- A payment may be partial.
+- A payment must be greater than zero and cannot exceed the charge's current
+  outstanding amount.
+- Supported methods are Cash, UPI, Bank transfer, Card, Cheque and Other.
+- External reference and internal note are optional.
+- Retrying a payment with the same idempotency key returns the original result
+  and does not create another payment.
+- Optimistic charge revision prevents two coaches from settling the same
+  remaining balance concurrently.
+- If one concurrent operation settles the charge first, the other receives a
+  deterministic conflict rather than creating an overpayment.
+
+
+2.5 Corrections
+---------------
+
+- Recorded payments are not edited.
+- An incorrect payment is reversed with a required reason and actor.
+- A successful payment reversal creates exactly one corresponding
+  payment_reversed audit event. Retries must not create duplicate reversal
+  facts or duplicate audit events.
+- An issued charge is not silently edited.
+- A charge may be voided only with a reason and only when it has no active
+  recorded payment.
+- Manual credit decreases the effective amount owed.
+- Manual debit increases the effective amount owed.
+- Legacy settlement clears only the current outstanding amount being
+  reconciled.
+- Adjustments require a reason and may themselves be reversed, preserving the
+  complete history.
+- Reversing a debit calculates the post-reversal effective amount with the
+  same zero floor as the ledger. It is blocked only when recorded Payments
+  would exceed that floored amount.
+
+
+3. DOMAIN MODEL
+===============
+
+Financials V1 uses exactly five finance tables:
+
+1. fee_agreements
+2. financial_charges
+3. payments
+4. charge_adjustments
+5. financial_audit_events
+
+There is no BillingAccount, BillingAccountMembership, FeeProduct, FeePrice or
+PaymentAllocation table in Phase 1.
+
+
+3.1 Fee Agreement
+-----------------
+
+Domain name: FeeAgreement
+Coach-facing name: Fee plan
+Storage table: fee_agreements
+
+Purpose:
+
+- Describes the commercial terms agreed for one player over an effective date
+  range.
+- Snapshots Academy Plan, level, batch, agreed monthly fee and due-day policy.
+- Does not create attendance eligibility or session assignments.
+
+Required fields:
+
+- id: immutable UUID/text primary key.
+- player_account_id: immutable Account UUID foreign key.
+- academy_plan: weekday-3-day, weekday-4-day, weekday-5-day, or
+  weekend-standard.
+- level: Beginner, Intermediate, Advanced, or Adult.
+- batch: Weekday or Weekend.
+- agreed_monthly_fee_paise: positive integer.
+- currency: INR.
+- monthly_due_day: integer 1-28; Phase 1 default 5.
+- effective_from: date-only key.
+- effective_to: nullable date-only key.
+- status: active, paused, or ended.
+- record_revision: optimistic concurrency integer.
+- created_by_account_id and updated_by_account_id.
+- created_at and updated_at.
+
+Constraints:
+
+- At most one active Fee Agreement per player.
+- effective_to cannot precede effective_from.
+- Ending or replacing an agreement never changes historical charges.
+
+
+3.2 Charge
+----------
+
+Domain name: Charge
+Storage table: financial_charges
+
+Purpose:
+
+- Records an issued registration or monthly-training obligation.
+- Owns the immutable public-facing fee reference.
+- Holds the amount snapshot, description, billing period and due date.
+
+Required fields:
+
+- id: immutable UUID/text primary key.
+- fee_reference: stored opaque reference matching SMBA-XXXXXXXX.
+- player_account_id: Account UUID foreign key.
+- fee_agreement_id: nullable Fee Agreement foreign key.
+- type: registration or monthly_training.
+- billing_period: null for registration; YYYY-MM for monthly training.
+- description: immutable issued description.
+- original_amount_paise: positive integer snapshot.
+- currency: INR.
+- due_date: date-only key.
+- lifecycle: issued or void.
+- record_revision: optimistic concurrency integer.
+- issued_by_account_id and issued_at.
+- voided_by_account_id, voided_at and void_reason when void.
+
+Constraints:
+
+- fee_reference is unique case-insensitively.
+- At most one issued registration charge per player.
+- At most one issued monthly-training charge per player and billing period.
+- A void charge must record actor, timestamp and non-empty reason.
+- A void charge remains queryable and auditable.
+
+Fee reference rules:
+
+- Format: SMBA-XXXXXXXX using an unambiguous uppercase alphabet.
+- Generated once with cryptographically secure randomness.
+- Does not encode date, sequence, player identity or database identity.
+- Used for display and search only.
+
+
+3.3 Payment
+-----------
+
+Domain name: Payment
+Storage table: payments
+
+Purpose:
+
+- Records money received for one Charge.
+- Supports a recorded or reversed lifecycle.
+
+Required fields:
+
+- id: immutable UUID/text primary key.
+- charge_id: Charge foreign key.
+- player_account_id: Account UUID foreign key.
+- amount_paise: positive integer.
+- currency: INR.
+- received_on: date-only key.
+- method: cash, upi, bank_transfer, card, cheque, or other.
+- external_reference: nullable, length-limited text.
+- internal_note: nullable, length-limited text; coach-only.
+- lifecycle: recorded or reversed.
+- idempotency_key: unique retry key.
+- recorded_by_account_id and recorded_at.
+- reversed_by_account_id, reversed_at and reversal_reason when reversed.
+
+Constraints:
+
+- A reversed payment must retain its original value and record actor, timestamp
+  and non-empty reason.
+- Reversal never removes the original payment.
+- player_account_id must match the charge owner.
+- Player-facing queries never expose internal_note.
+
+
+3.4 Charge Adjustment
+---------------------
+
+Domain name: Adjustment
+Storage table: charge_adjustments
+
+Purpose:
+
+- Applies an explicit credit, debit or historical settlement to one Charge.
+- Preserves why an effective amount differs from its issued amount.
+
+Required fields:
+
+- id: immutable UUID/text primary key.
+- charge_id: Charge foreign key.
+- kind: manual_credit, manual_debit, or legacy_settlement.
+- amount_paise: positive integer.
+- reason: required text.
+- created_by_account_id and created_at.
+- reversed_by_account_id, reversed_at and reversal_reason when reversed.
+
+Constraints:
+
+- Active credits and legacy settlements reduce the effective amount.
+- Active debits increase the effective amount.
+- Reversed adjustments remain in history but no longer affect calculations.
+- An adjustment reversal is an explicit authorized operation and audit event.
+
+
+3.5 Financial Audit Event
+-------------------------
+
+Domain name: FinancialAuditEvent
+Storage table: financial_audit_events
+
+Purpose:
+
+- Records who performed each material finance mutation, what changed and when.
+- Provides the unique one-time Financials activation marker.
+
+Required fields:
+
+- id: immutable UUID/text primary key.
+- actor_account_id: coach Account UUID.
+- event_type.
+- entity_type: academy, fee_agreement, charge, payment, adjustment, or player.
+- entity_id.
+- idempotency_key: nullable unique retry key.
+- metadata: versionable JSON text containing non-sensitive event context.
+- occurred_at.
+
+Required event types:
+
+- finance_activated.
+- fee_agreement_created.
+- fee_agreement_replaced.
+- fee_agreement_paused.
+- fee_agreement_ended.
+- charge_issued.
+- charge_voided.
+- monthly_fees_prepared.
+- payment_recorded.
+- payment_reversed.
+- adjustment_created.
+- adjustment_reversed.
+- historical_reconciled.
+
+Audit rules:
+
+- Audit events are append-only.
+- One logical mutation creates one corresponding event.
+- Idempotent retries never create duplicate events.
+- Payment reversal must create exactly one payment_reversed event.
+- There can be exactly one finance_activated event for the academy.
+- Metadata must not contain secrets or unnecessary private payment details.
+
+
+4. DERIVED LEDGER CALCULATIONS
+==============================
+
+For one issued Charge:
+
+  active_debits
+    = sum(manual_debit adjustments not reversed)
+
+  active_credits
+    = sum(manual_credit and legacy_settlement adjustments not reversed)
+
+  effective_amount
+    = max(0, original_amount + active_debits - active_credits)
+
+  received
+    = sum(recorded payments not reversed)
+
+  outstanding
+    = max(0, effective_amount - received)
+
+Derived visible status:
+
+- void: charge lifecycle is void.
+- paid: outstanding is zero and settlement is represented by payments or
+  normal adjustments.
+- settled_before_portal: outstanding is zero, a legacy settlement exists, and
+  no recorded payment is being represented as historical receipt.
+- partially_paid: received is greater than zero and outstanding remains.
+- overdue: no active payment has been received, outstanding remains and due
+  date is before the injected reference date.
+- pending: outstanding remains and due date is today or later.
+- not_prepared: the player is eligible for the selected month but no active
+  monthly Charge exists yet.
+- setup_required: the player has no applicable Fee Agreement/charge state.
+
+Status precedence for player summaries is:
+
+  overdue -> not_prepared -> partially_paid -> pending -> paid/settled_before_portal
+
+The calculation is a pure domain function. It accepts a reference date rather
+than reading the current clock internally.
+
+
+5. FINANCE LIFECYCLES
+=====================
+
+5.1 Academy activation
+----------------------
+
+  Not active
+      -> Coach reviews the one-time cutover
+      -> Coach selects the first tracking month
+      -> Transaction appends finance_activated
+      -> Active forever
+
+Activation is an irreversible academy-level cutover. There is no Deactivate
+operation and no feature flag that deletes or hides ledger truth after
+activation. A first tracking month may not be later than the current academy
+month. Replaying an already completed activation preserves the irreversible
+activation result rather than replacing it.
+
+
+5.2 Fee Agreement lifecycle
+---------------------------
+
+  active <-> paused
+  active/paused -> ended
+  active -> replaced by a new effective-dated agreement
+
+Replacing an agreement ends the old agreement and creates a new one in a
+single transaction. Existing Charges continue to reference the historical
+agreement snapshot. Fee Agreements begin on the first day of a billing month,
+so one deterministic agreement applies to each player/month.
+
+
+5.3 Charge lifecycle
+--------------------
+
+  issued -> void
+
+Void is terminal. A replacement obligation is a new Charge with a new opaque
+fee reference. Voiding never rewrites payments or adjustments. A void Charge
+retains its original amount for history, while its effective amount and
+outstanding amount are both presented as zero.
+
+
+5.4 Payment lifecycle
+---------------------
+
+  recorded -> reversed
+
+Reversed is terminal. A corrected receipt is a new Payment with its own
+idempotency key.
+
+
+5.5 Adjustment lifecycle
+------------------------
+
+  active -> reversed
+
+Reversal records actor, timestamp and reason and removes the adjustment only
+from derived calculations, never from history.
+
+
+6. SERVICE AND API BOUNDARIES
+=============================
+
+Phase 1 uses two implementation-facing boundaries:
+
+  FinanceService
+  FinanceRepository
+
+Avoid premature decomposition into catalogue, allocation or billing-account
+services.
+
+
+6.1 FinanceService responsibilities
+-----------------------------------
+
+Commands:
+
+- activateFinance(trackingMonth).
+- createOrReplaceFeeAgreement(...).
+- setupExistingPlayerFinance(...).
+- issueRegistrationChargeForApprovedPlayer(...).
+- prepareMonthlyCharges(period).
+- recordPayment(...).
+- reversePayment(...).
+- applyChargeAdjustment(...).
+- reverseAdjustment(...).
+- voidCharge(...).
+
+Queries:
+
+- getCoachFinanceDashboardSummary(period).
+- getCoachFinanceWorkspace(period, filters, search, selectedPlayer).
+- getPlayerFeeRecord(playerAccountId, referenceDate).
+- getPlayerFinanceDashboardSummary(playerAccountId, referenceDate).
+
+Rules:
+
+- Command methods receive an authenticated coach actor from the server, never
+  from trusted client input.
+- Query methods use route-specific DTOs. Dashboard cards must not load the
+  complete 100-player ledger.
+- Player queries derive the owner Account UUID from the authenticated session.
+- All date-sensitive calculations receive an injected reference date/instant.
+- Every command validates runtime input before opening a transaction.
+
+
+6.2 FinanceRepository responsibilities
+--------------------------------------
+
+- Persist the five finance entities.
+- Provide set-based summaries and filtered/paginated player lists.
+- Lock or revision-check mutable lifecycle rows for concurrency safety.
+- Enforce idempotency and uniqueness constraints.
+- Keep reads free of side-effect writes.
+- Never expose internal notes through player-facing result shapes.
+
+
+6.3 Mutation contract
+---------------------
+
+Every financial mutation follows this order:
+
+1. Authenticate the session.
+2. Authorize the coach role.
+3. Parse and validate a shared runtime schema.
+4. Begin one database transaction.
+5. Re-read current ledger facts/revisions.
+6. Enforce domain invariants.
+7. Write the ledger fact.
+8. Write exactly one matching audit event.
+9. Commit.
+10. Revalidate only affected coach/player routes.
+
+Failures preserve entered form data and return a safe operation-specific error.
+Database error details and private identifiers are not exposed to clients.
+
+
+6.4 Concurrency and idempotency
+-------------------------------
+
+- Payment commands require a unique idempotency key and expected charge
+  revision.
+- Monthly preparation uses a stable period-scoped idempotency key plus database
+  uniqueness for player/period.
+- Reversal and adjustment commands use their own stable idempotency keys.
+- If two coaches attempt to settle the final balance simultaneously, one may
+  succeed. The other must receive Charge already settled or Balance changed.
+- A duplicate network retry returns the first successful result without
+  creating a second payment or audit event.
+- Idempotent Fee Agreement and existing-player setup retries must match the
+  complete original command payload; reusing a key for different business
+  input returns a deterministic conflict.
+
+
+7. AUTHORIZATION AND SECURITY
+=============================
+
+- Only an authenticated coach may activate Financials, configure Fee
+  Agreements, prepare fees, record/reverse payments, apply/reverse adjustments
+  or void charges.
+- A player may read only financial records owned by their authenticated Account
+  UUID.
+- Never accept actorAccountId or player owner identity from an untrusted client
+  when it can be derived from the session or selected authorized record.
+- Coach list/detail queries must enforce coach authorization server-side.
+- Player routes must be protected against IDOR even if a UUID is guessed.
+- Internal notes and audit metadata are coach-only.
+- Finance mutation endpoints require origin/CSRF protection consistent with the
+  authenticated application.
+- Input length, enum, date, month, money and idempotency constraints are
+  validated at runtime and reinforced by database constraints.
+- Sensitive values are excluded from logs.
+- Academy-ID-only prototype authentication is not sufficient for public finance
+  deployment. Production phone OTP, password or passkey authentication with
+  rate limiting must be completed before Financials is publicly released.
+
+
+8. COACH WORKSPACE UX
+=====================
+
+8.1 Dashboard integration
+-------------------------
+
+Place Financials after Monthly Reports and before Members.
+
+The compact card may show:
+
+- Outstanding amount.
+- Number of players needing attention.
+- A single Open Financials action.
+
+Do not add charts, collection graphics, payment-method breakdowns or historical
+trends to the dashboard card.
+
+
+8.2 Financials workspace
+------------------------
+
+Primary route:
+
+  /coach/financials
+
+Supported URL state:
+
+  ?period=YYYY-MM
+  &view=attention|all|pending|partially_paid|overdue|paid|setup_required
+  &query=<search text>
+  &player=<account UUID>
+
+The page should reveal the first useful control in the initial mobile viewport.
+Recommended order:
+
+1. Compact title and back navigation.
+2. Activation/setup state when required.
+3. Billing-period selector.
+4. Received, outstanding and attention summary.
+5. Search and status view.
+6. Player rows.
+7. Focused player record.
+
+Search matches:
+
+- Player name.
+- Academy ID.
+- Exact/partial fee reference.
+
+Default ordering:
+
+1. Overdue.
+2. Partially paid.
+3. Pending.
+4. Setup required.
+5. Paid/settled.
+
+Within a group, order by due date then player name.
+
+
+8.3 First-time activation and existing-player setup
+----------------------------------------------------
+
+Before activation, show one restrained setup surface explaining that Financials
+will become the academy's permanent ledger from the selected tracking month.
+
+After activation, existing players require a compact setup/reconciliation flow:
+
+- Confirm Academy Plan, level and batch from enrollment defaults.
+- Confirm agreed monthly fee and effective month/date.
+- Classify registration fee as pending, settled before portal or unresolved.
+- Save the complete setup transactionally.
+
+Never guess ambiguous historical payments.
+
+
+8.4 Prepare Month
+-----------------
+
+Preview must distinguish:
+
+- Ready.
+- Already prepared.
+- Awaiting assignment.
+- Setup required.
+
+Confirmation creates only missing eligible monthly Charges. Re-running the
+operation is safe and reports reused/skipped results.
+
+
+8.5 Quick Record Payment
+------------------------
+
+This is the primary repeated coach workflow:
+
+  Search player/reference -> choose outstanding charge -> enter amount -> save
+
+Fields:
+
+- Amount received.
+- Received date.
+- Method.
+- Optional external reference.
+- Optional internal note.
+
+Success uses one inline confirmation without shifting surrounding controls.
+Conflicts preserve form values and explain that the balance changed.
+
+
+8.6 Administrative corrections
+-------------------------------
+
+Reverse payment, apply credit/debit, reverse adjustment and void charge are
+progressively disclosed inside a selected financial record. They are not
+primary dashboard actions.
+
+Every correction requires a reason and a review step appropriate to its risk.
+
+
+9. PLAYER PORTAL UX
+===================
+
+Place a subtle Fee record card after Monthly Reports and before Player Profile.
+
+The card communicates at most:
+
+- Current status.
+- Current outstanding amount, if any.
+- Next due date, if any.
+- View fee record.
+
+Primary route:
+
+  /player/financials
+
+The read-only page groups:
+
+- Registration fee.
+- Current monthly fee.
+- Prior monthly fees by year/month.
+- Recorded and reversed payment history.
+- Fee references.
+
+Player-facing language remains factual:
+
+- Paid.
+- Payment pending.
+- Partially paid.
+- Overdue.
+- Settled before portal.
+- Fee details are being prepared.
+
+Do not show internal notes, audit events, coach controls, technical adjustment
+terminology or collection-oriented warnings.
+
+
+10. MIGRATION AND ACTIVATION
+============================
+
+10.1 Schema migration
+---------------------
+
+1. Add the five finance tables, indexes, unique constraints and CHECK
+   constraints in one versioned migration.
+2. Do not create Financials records from a read path or migration side effect.
+3. Deploy code with Financials inactive.
+4. Verify migration and rollback/restore procedures on a disposable database.
+5. Authorize a coach to perform the one-time activation and select the first
+   tracking month.
+6. Reconcile existing players explicitly.
+7. Prepare the first active month only after setup review.
+
+Activation is a one-time irreversible cutover for the academy. There is no
+supported path to return to the pre-Financials state. A database restore is an
+operational disaster-recovery action, not product deactivation.
+
+
+10.2 Existing-player reconciliation
+------------------------------------
+
+For each approved player:
+
+1. Resolve current enrollment defaults.
+2. Confirm the Fee Agreement and effective date.
+3. Confirm registration state:
+   - pending;
+   - settled before portal; or
+   - unresolved.
+4. Issue/reuse the registration Charge.
+5. Apply a legacy-settlement adjustment only when the academy confirms it was
+   previously settled.
+6. Never manufacture a historical Payment.
+7. Record historical_reconciled in the audit trail.
+
+
+10.3 Production persistence dependency
+---------------------------------------
+
+Financials must not be publicly deployed on an ephemeral or instance-local
+SQLite file. Before production:
+
+- Use a managed transactional database, or a documented single stateful Node
+  deployment with an absolute persistent-volume path.
+- Run migrations as a release step rather than on the first user request.
+- Back up the database and test restoration.
+- Add health/readiness checks and privacy-safe structured logging.
+- Complete production authentication and security headers.
+
+
+11. EDGE CASES AND REQUIRED BEHAVIOUR
+=====================================
+
+- Duplicate approval/retry creates at most one active registration Charge.
+- Repeated Prepare Month creates no duplicate monthly Charge.
+- A player approved before activation is not charged until explicit
+  reconciliation.
+- A player without a session assignment is not monthly billable.
+- A player whose assignment or session series does not overlap the selected
+  month is not monthly billable for that month.
+- Fee Agreement creation and replacement are accepted only at month
+  boundaries, and candidate selection cannot double-count a player/month.
+- The first finance tracking month cannot be in the future.
+- An ended Fee Agreement valid during a historical period remains eligible for
+  that historical period.
+- A later plan/price change does not alter already issued Charges.
+- A partial Payment leaves the exact remaining balance.
+- Reversing that Payment restores the exact balance.
+- Reversing a Payment never creates or deletes another Payment.
+- One Payment reversal creates exactly one audit event, including after retry.
+- A Payment cannot exceed the current outstanding amount.
+- Concurrent final payments cannot over-settle a Charge.
+- A void Charge cannot accept new Payments.
+- A void Charge presents zero effective and outstanding value while preserving
+  its immutable original amount.
+- A Charge with an active Payment cannot be voided until the Payment is
+  explicitly reversed.
+- Credits cannot produce a negative outstanding balance.
+- Legacy settlement covers only current outstanding value.
+- A reversed adjustment no longer affects calculations but remains visible in
+  coach history.
+- Date-only values remain date-only; instants are displayed in Asia/Kolkata.
+- Long names and large fee references wrap without horizontal overflow.
+- Financial status never blocks attendance, sessions, reports or login.
+
+
+12. TEST STRATEGY
+=================
+
+12.1 Pure domain tests
+----------------------
+
+- Integer-paise effective amount, received and outstanding calculations.
+- Credit, debit and legacy-settlement behavior.
+- Reversed Payment and reversed Adjustment behavior.
+- Every derived status around due-date boundaries.
+- Asia/Kolkata/reference-date determinism.
+- Opaque fee-reference validation.
+- Idempotency-key validation.
+
+
+12.2 Database and service tests
+-------------------------------
+
+- Migration applies to clean and existing databases.
+- Foreign keys and CHECK constraints pass integrity checks.
+- Finance activation can occur exactly once.
+- Initial activation rejects a future tracking month.
+- Activation cannot be reversed through a product operation.
+- Approval issues at most one registration Charge after activation.
+- Existing-player reconciliation is idempotent.
+- One monthly Charge per player/period.
+- Monthly preparation and preview require an overlapping assignment and
+  session-series window.
+- Fee Agreements start on the first of a month and cannot produce duplicate
+  preparation candidates for one player/period.
+- Players eligible for an unprepared month remain visible in attention counts.
+- Prepare Month is repeatable and side-effect safe.
+- A historical ended agreement remains usable for its valid period.
+- Payment recording updates derived balance without stored status/balance.
+- Partial Payment and reversal produce correct ledgers.
+- Payment reversal produces exactly one audit event.
+- Retried payment reversal produces no duplicate event.
+- Adjustment creation/reversal produces one event per successful operation.
+- Charge void rules are enforced.
+- Two simultaneous final-balance payments: one succeeds; the other receives a
+  deterministic conflict.
+- Transaction rollback leaves neither a partial ledger fact nor orphaned audit
+  event.
+
+
+12.3 Authorization and security tests
+-------------------------------------
+
+- Anonymous requests cannot read or mutate Financials.
+- Player A cannot read Player B's fees by changing route/query identifiers.
+- A player cannot invoke coach mutations.
+- Internal notes never appear in player DTOs or HTML.
+- Actor identity cannot be forged through form fields.
+- Forged enum, date, month, negative amount, oversized note and invalid
+  idempotency inputs are rejected.
+- Origin/CSRF protections apply to mutation requests.
+
+
+12.4 End-to-end workflow tests
+------------------------------
+
+- Activate -> reconcile player -> prepare month -> record partial payment ->
+  record final payment.
+- Registration pending -> payment -> paid.
+- Settled-before-portal reconciliation without fake payment.
+- Quick Record Payment search by name, Academy ID and fee reference.
+- Reverse a mistaken Payment and observe restored balance in coach and player
+  views.
+- Prepare Month remains stable after refresh/back/retry.
+- Finance changes do not alter attendance, reports, schedules or access.
+- Empty, setup-required, paid, overdue and conflict states are understandable.
+
+
+12.5 Responsive and accessibility tests
+---------------------------------------
+
+- 320, 360, 390 and 430px portrait layouts.
+- Landscape and virtual-keyboard behavior.
+- No document-level horizontal overflow.
+- Logical headings, labels, descriptions and error associations.
+- Focus moves to the first invalid field.
+- Modal/disclosure focus and Escape behavior.
+- Status is communicated with text, not color alone.
+- Touch targets meet the established minimum.
+- Long player names and large 100-player datasets remain usable.
+
+
+12.6 Regression dataset
+-----------------------
+
+The deterministic 100-player dataset should include:
+
+- Activated Financials.
+- 100 Fee Agreements.
+- Registration and at least two monthly Charges per player.
+- Paid, partially paid, overdue and settled-before-portal examples.
+- Deterministic logical checksums that ignore random database UUIDs.
+- Repeat seeding with identical logical outcomes.
+
+The clean academy database must remain untouched while regression fixtures are
+created and tested.
+
+
+13. PHASED IMPLEMENTATION
+=========================
+
+PHASE 1 — OPERATIONAL FINANCIALS (BUILD NOW)
+--------------------------------------------
+
+1. Add the five-table schema and migration.
+2. Add the shared typed fee configuration.
+3. Implement pure ledger/status/date/reference helpers.
+4. Implement FinanceRepository and FinanceService.
+5. Implement one-time activation and existing-player setup.
+6. Issue idempotent registration Charges.
+7. Implement explicit monthly preparation.
+8. Implement manual and partial Payments.
+9. Implement Payment reversal, credits, debits, legacy settlement, Adjustment
+   reversal and Charge voiding.
+10. Implement one-event-per-mutation auditability.
+11. Add route-specific coach summaries, list/search and player records.
+12. Add the Coach Workspace card and Financials workspace.
+13. Add the subtle Player Journal card and owner-scoped fee record.
+14. Validate using the deterministic 100-player dataset.
+15. Complete runtime validation, negative authorization and concurrency tests.
+
+
+PHASE 2 — ADMINISTRATIVE DEPTH (DEFER)
+--------------------------------------
+
+Build only after real academy use demonstrates need:
+
+- Payment allocation across multiple Charges.
+- Dedicated discount, waiver and scholarship workflows.
+- Refunds and payment corrections beyond reversal.
+- Receipt generation and numbering.
+- Bulk Quick Record Payment refinements.
+- Richer exports and reconciliation reports.
+- Optional family/parent billing account migration.
+- Notification preparation, still requiring explicit privacy/product review.
+
+
+PHASE 3 — ONLINE COLLECTION (DEFER)
+-----------------------------------
+
+Build only after Phase 1 is operationally stable:
+
+- Payment-provider abstraction.
+- Online checkout.
+- Signed, replay-safe webhooks.
+- Gateway idempotency and reconciliation.
+- Online receipts.
+- Refund integration.
+- Automated WhatsApp/SMS/email reminders with consent and delivery tracking.
+- Accounting integrations where a verified business need exists.
+
+
+14. RISKS AND TRADE-OFFS
+========================
+
+Risk: Phase 1 ties one Payment directly to one Charge.
+Trade-off: This keeps manual collection simple. Multi-charge allocation is a
+clear Phase 2 migration rather than premature complexity.
+
+Risk: Canonical pricing is checked-in configuration rather than database data.
+Trade-off: It gives the current two-fee model one source of truth without
+building a catalogue UI. Charges snapshot values, so future catalogue migration
+does not rewrite history.
+
+Risk: No automated proration.
+Trade-off: Full first-month charging matches the selected academy policy and is
+far easier to explain. Exceptional cases use explicit, auditable adjustments.
+
+Risk: Explicit monthly preparation requires a coach action.
+Trade-off: Phase 1 prioritizes operational transparency over invisible jobs.
+The action is idempotent and shows what will happen before confirmation.
+
+Risk: Local prototype authentication and persistence are not production-safe.
+Mitigation: Financials may be built and tested locally, but public release is
+blocked until production authentication and durable persistence are complete.
+
+
+15. FINAL IMPLEMENTATION DECISION
+=================================
+
+Financials V1 is frozen around five ledger tables and two service boundaries.
+It intentionally avoids ERP abstractions while preserving the invariants that
+matter:
+
+1. Financial truth is append-only and auditable.
+2. Balances and statuses are derived, never stored.
+3. Money is integer paise.
+4. Charges, Payments and Adjustments remain separate facts.
+5. Fee references are opaque and immutable.
+6. Financials never changes training operations.
+7. Activation is a one-time irreversible academy cutover.
+8. Every successful Payment reversal creates exactly one audit event.
+
+Status: APPROVED FOR IMPLEMENTATION.
+
+Do not expand Phase 1 architecture unless implementation reveals a concrete
+correctness or safety requirement. Future capability should be added from real
+academy usage, not speculative complexity.

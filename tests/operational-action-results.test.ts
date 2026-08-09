@@ -1,0 +1,219 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+vi.mock("server-only", () => ({}))
+
+const mocks = vi.hoisted(() => ({
+  approveRegistration: vi.fn(),
+  assignSessionRecords: vi.fn(),
+  cancelSessionOccurrence: vi.fn(),
+  createSessionSeriesRecords: vi.fn(),
+  endSessionAssignment: vi.fn(),
+  findScheduledOccurrence: vi.fn(),
+  getCoachCalendarMonthSessionSnapshot: vi.fn(),
+  getCoachSessionSnapshot: vi.fn(),
+  initializeDatabase: vi.fn(),
+  publishMakeupAttendanceAdjustment: vi.fn(),
+  rejectRegistration: vi.fn(),
+  replaceSessionOccurrence: vi.fn(),
+  requireHeadAdminAction: vi.fn(),
+  revalidatePath: vi.fn(),
+  saveSessionAttendanceRecords: vi.fn(),
+  saveStaffAttendanceRecords: vi.fn(),
+  voidAttendanceAdjustment: vi.fn(),
+}))
+
+vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }))
+vi.mock("@/lib/auth/account-service", () => ({
+  approveRegistration: mocks.approveRegistration,
+  rejectRegistration: mocks.rejectRegistration,
+}))
+vi.mock("@/lib/auth/current-coach", () => ({
+  requireHeadAdminAction: mocks.requireHeadAdminAction,
+}))
+vi.mock("@/lib/attendance/adjustments", () => ({
+  publishMakeupAttendanceAdjustment: mocks.publishMakeupAttendanceAdjustment,
+  voidAttendanceAdjustment: mocks.voidAttendanceAdjustment,
+}))
+vi.mock("@/lib/coach/database", () => ({
+  getCoachSessionSnapshot: mocks.getCoachSessionSnapshot,
+  listCoachMonthlyReports: vi.fn(() => []),
+}))
+vi.mock("@/lib/coach/session-read-models", () => ({
+  getCoachCalendarMonthSessionSnapshot: mocks.getCoachCalendarMonthSessionSnapshot,
+}))
+vi.mock("@/lib/coach/member-service", () => ({
+  archiveMemberRecord: vi.fn(),
+  updateMemberRecord: vi.fn(),
+}))
+vi.mock("@/lib/coach/staff-attendance", () => ({
+  saveStaffAttendanceRecords: mocks.saveStaffAttendanceRecords,
+}))
+vi.mock("@/lib/db/client", () => ({
+  initializeDatabase: mocks.initializeDatabase,
+}))
+vi.mock("@/lib/sessions/database", () => ({
+  findScheduledOccurrence: mocks.findScheduledOccurrence,
+}))
+vi.mock("@/lib/sessions/service", () => ({
+  assignSessionRecords: mocks.assignSessionRecords,
+  cancelSessionOccurrence: mocks.cancelSessionOccurrence,
+  createSessionSeriesRecords: mocks.createSessionSeriesRecords,
+  endSessionAssignment: mocks.endSessionAssignment,
+  replaceSessionOccurrence: mocks.replaceSessionOccurrence,
+  saveSessionAttendanceRecords: mocks.saveSessionAttendanceRecords,
+}))
+
+import {
+  approveRegistrationAction,
+  replaceSessionOccurrenceAction,
+} from "@/app/coach/actions"
+import { publishAttendanceAdjustmentAction } from "@/app/coach/attendance/adjustments/actions"
+import { OperationalActionError } from "@/lib/actions/operational-result"
+
+const snapshot = {
+  sessionAssignments: [],
+  sessionOccurrences: [],
+  sessionSeries: [],
+}
+
+describe("production-safe operational action results", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.requireHeadAdminAction.mockResolvedValue({ subjectId: "coach-1" })
+    mocks.initializeDatabase.mockReturnValue({})
+    mocks.findScheduledOccurrence.mockReturnValue({ occurrenceDate: "2026-08-12" })
+    mocks.getCoachCalendarMonthSessionSnapshot.mockReturnValue(snapshot)
+    mocks.getCoachSessionSnapshot.mockReturnValue(snapshot)
+  })
+
+  it("returns a structured replacement field error without revalidating", async () => {
+    mocks.replaceSessionOccurrence.mockImplementation(() => {
+      throw new OperationalActionError(
+        "INVALID_INPUT",
+        "Choose a valid session duration.",
+        "durationMinutes",
+      )
+    })
+
+    await expect(replaceSessionOccurrenceAction({
+      occurrenceId: "occurrence-1",
+      dateKey: "2026-08-12",
+      startTime: "07:00",
+      durationMinutes: Number.NaN,
+      venue: "SMBA Court",
+    })).resolves.toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+      field: "durationMinutes",
+      message: "Choose a valid session duration.",
+    })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("keeps unexpected and authorization failures throwable", async () => {
+    mocks.replaceSessionOccurrence.mockImplementationOnce(() => {
+      throw new Error("database unavailable")
+    })
+    await expect(replaceSessionOccurrenceAction({
+      occurrenceId: "occurrence-1",
+      dateKey: "2026-08-12",
+      startTime: "07:00",
+      durationMinutes: 60,
+      venue: "SMBA Court",
+    })).rejects.toThrow("database unavailable")
+
+    mocks.requireHeadAdminAction.mockRejectedValueOnce(new Error("Head coach access is required."))
+    await expect(approveRegistrationAction("registration-1"))
+      .rejects.toThrow("Head coach access is required.")
+    expect(mocks.approveRegistration).not.toHaveBeenCalled()
+  })
+
+  it("returns only the source calendar month after a successful replacement", async () => {
+    mocks.replaceSessionOccurrence.mockReset()
+    await expect(replaceSessionOccurrenceAction({
+      occurrenceId: "occurrence-1",
+      dateKey: "2026-09-02",
+      startTime: "07:00",
+      durationMinutes: 60,
+      venue: "SMBA Court",
+    })).resolves.toEqual({ ok: true, data: snapshot })
+
+    expect(mocks.getCoachCalendarMonthSessionSnapshot).toHaveBeenCalledOnce()
+    expect(mocks.getCoachCalendarMonthSessionSnapshot).toHaveBeenCalledWith("2026-08")
+    expect(mocks.getCoachSessionSnapshot).not.toHaveBeenCalled()
+  })
+
+  it("returns expected registration and adjustment conflicts as data", async () => {
+    mocks.approveRegistration.mockImplementation(() => {
+      throw new OperationalActionError(
+        "NOT_FOUND",
+        "This registration is no longer pending.",
+        "registrationId",
+      )
+    })
+    await expect(approveRegistrationAction("registration-1")).resolves.toMatchObject({
+      ok: false,
+      code: "NOT_FOUND",
+      field: "registrationId",
+    })
+
+    mocks.publishMakeupAttendanceAdjustment.mockImplementation(() => {
+      throw new OperationalActionError(
+        "CONFLICT",
+        "This absence already has a published adjustment.",
+        "sourceOccurrenceId",
+      )
+    })
+    await expect(publishAttendanceAdjustmentAction({
+      playerId: "player-1",
+      sourceOccurrenceId: "occurrence-1",
+      completedOn: "2026-08-12",
+    })).resolves.toMatchObject({
+      ok: false,
+      code: "CONFLICT",
+      field: "sourceOccurrenceId",
+    })
+  })
+})
+
+describe("replacement field accessibility", () => {
+  it("associates expected field failures and focuses the first invalid input", () => {
+    const calendar = readFileSync(path.join(
+      process.cwd(),
+      "components/coach/calendar/session-calendar.tsx",
+    ), "utf8")
+
+    expect(calendar).toContain('feedback.field === "durationMinutes"')
+    expect(calendar).toContain("durationInputRef.current?.focus()")
+    expect(calendar).toContain('aria-invalid={feedback?.field === "durationMinutes" || undefined}')
+    expect(calendar).toContain('aria-describedby={feedback?.field === "durationMinutes" ? feedbackId : undefined}')
+  })
+
+  it("associates and focuses field failures in schedule and adjustment editors", () => {
+    const scheduleCreate = readFileSync(path.join(
+      process.cwd(),
+      "components/coach/calendar/session-create.tsx",
+    ), "utf8")
+    const schedules = readFileSync(path.join(
+      process.cwd(),
+      "components/coach/calendar/session-schedules.tsx",
+    ), "utf8")
+    const adjustments = readFileSync(path.join(
+      process.cwd(),
+      "components/coach/attendance-adjustments-workspace.tsx",
+    ), "utf8")
+
+    expect(scheduleCreate).toContain("field: result.field")
+    expect(scheduleCreate).toContain('feedback?.field === "venue"')
+    expect(scheduleCreate).toContain("fieldTargets[feedback.field]?.focus()")
+    expect(schedules).toContain("field: result.field")
+    expect(schedules).toContain('rosterFeedback.field === "weekdays"')
+    expect(schedules).toContain("assignmentDateRef.current?.focus()")
+    expect(adjustments).toContain("field: result.field")
+    expect(adjustments).toContain('feedback.field === "sourceOccurrenceId"')
+    expect(adjustments).toContain('aria-invalid={feedback?.field === "completedOn" || undefined}')
+  })
+})

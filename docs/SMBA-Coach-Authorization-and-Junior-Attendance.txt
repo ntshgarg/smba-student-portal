@@ -1,0 +1,80 @@
+SMBA — Coach Authorization & Junior Coach Attendance
+Frozen implementation contract
+
+Status
+
+APPROVED AND IMPLEMENTED
+
+Purpose
+
+Separate privileged academy administration from junior-coach access while giving
+junior coaches a deliberately small, self-service attendance experience.
+
+Scope
+
+- Introduce explicit coach access levels:
+  - head_admin
+  - junior_coach
+- Provision Sathiya Moorthy as the head administrator.
+- Permit only a head administrator to access or mutate academy operations,
+  including Members, Sessions, Calendar, player Attendance, Reports and
+  Financials.
+- Give each junior coach an authenticated Coach Workspace containing only:
+  - a personal welcome surface; and
+  - their own read-only staff-attendance record.
+- Give the head administrator one staff-attendance register for recording daily
+  Present, Absent or cleared/unrecorded outcomes for junior coaches.
+- Calculate staff-attendance summaries from persisted daily facts.
+
+Authorization invariants
+
+- An account role of coach is not, by itself, administrative authorization.
+- Every privileged page, action and externally reachable service boundary must
+  require head_admin access and fail closed.
+- A junior coach can read only their own attendance. They cannot read another
+  coach's attendance or any player, schedule, report, member or financial data.
+- Junior coaches cannot mutate staff attendance.
+- The head administrator may read and record attendance for junior coaches but
+  does not appear as a row in the junior-coach register.
+- Authorization is enforced on the server. Hidden navigation is not a security
+  boundary.
+
+Staff-attendance invariants
+
+- One junior coach has at most one attendance outcome per academy date.
+- Dates use Asia/Kolkata date-only semantics.
+- Attendance cannot be recorded before the coach's joined date or after the
+  current academy date.
+- Present and Absent are explicit persisted facts; a cleared date is unrecorded.
+- Attendance percentage is Present / (Present + Absent). Unrecorded and
+  unavailable dates do not affect the denominator.
+- Staff attendance is independent of player session schedules, rosters,
+  payroll and finance.
+- Account and attendance identifiers use immutable UUID relationships rather
+  than Academy IDs.
+
+Out of scope
+
+- Public or self-service coach registration.
+- Assistant-coach access to academy administration.
+- Coach shifts, working-hour schedules, leave management or payroll.
+- Session-linked coach attendance.
+- Head-coach attendance tracking.
+- Delegated permissions or configurable role policies.
+
+Validation contract
+
+- Head administrators can open every existing coach workflow and mutation.
+- Junior coaches are redirected or denied for every head-only route and action.
+- Direct requests cannot bypass role restrictions.
+- A junior coach sees only their own attendance and cannot mutate it.
+- Duplicate coach/date attendance writes remain impossible.
+- Joined-date, future-date and Asia/Kolkata boundary behavior is deterministic.
+- Present, Absent and cleared changes survive reload and produce the expected
+  summary.
+- TypeScript, lint, unit/integration tests and production build pass.
+
+Change policy
+
+This contract is frozen. New junior-coach capabilities require a separate
+authorization milestone and must not be inferred from the coach account role.

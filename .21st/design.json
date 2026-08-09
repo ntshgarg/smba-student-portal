@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "project": {
+    "name": "smba-player-journal",
+    "productType": "student and coach athlete portal",
+    "stack": ["nextjs", "react", "tailwind-v4"]
+  },
+  "sources": {
+    "tokens": ["app/globals.css"],
+    "components": ["components"],
+    "assets": ["public/images"]
+  },
+  "constraints": {
+    "must": [
+      "Feel like a personal training journal rather than admin software",
+      "Keep functional metrics below the welcome hero",
+      "Reuse SMBA ivory, navy, red, Manrope, Newsreader, and official logo"
+    ],
+    "avoid": [
+      "Dense KPI grids",
+      "Admin sidebars",
+      "Decorative animation",
+      "Generic sports gradients"
+    ]
+  },
+  "decisions": [
+    {
+      "area": "dashboard-entry",
+      "decision": "Use a near-full-height personal welcome with a time-aware greeting and one editorial coach message; reveal dashboard functions only after the fold."
+    },
+    {
+      "area": "navigation",
+      "decision": "Keep the portal centered on one primary page with no tab navigation. A single Monthly reports card leads from the dashboard to one continuous coach-report record, with a contextual back action returning to the dashboard."
+    },
+    {
+      "area": "motion",
+      "decision": "Use short opacity and transform reveals only, with reduced-motion fallbacks and no scroll-jacking."
+    },
+    {
+      "area": "monthly-reports",
+      "decision": "Keep report content off the landing page. Use one Monthly reports card that opens a single chronological archive organized as year chapters. Let the year chapters begin directly beneath the page introduction without a redundant archive heading, overall total or leading divider; each year carries its own report count. The newest report year opens by default, older years remain collapsed, monthly reports use compact ledger rows, and only one year and one report may be open at a time. Selecting a month reveals the existing navy coach-feedback panel and PDF action inline. Group by the report month rather than publication year, preserve the selected chapter and report in URL state, and keep downloaded PDFs in the separate A4 academy letterhead format."
+    },
+    {
+      "area": "player-reflection",
+      "decision": "Do not include an on-screen training journal. SMBA provides a physical notebook in the welcome kit so players can reflect away from screens during sessions."
+    },
+    {
+      "area": "coach-workspace",
+      "decision": "Use a separate /coach route and coach-specific shell. Treat its calm near-full-height hero as a morning briefing rather than a dashboard: a personalized greeting, one short encouraging operational line, one ivory daily briefing card, and a scroll cue into attendance. The encouragement stays specific to the coach's role and supports readiness without becoming sentimental or performance-driven. The hero remains editorial rather than analytical. Any future hero metric must answer an immediate operational question for today; historical trends, reporting, notifications, and general KPIs belong below the fold."
+    },
+    {
+      "area": "portal-architecture",
+      "decision": "Run the public homepage, Player Journal and Coach Workspace as one Next.js application and one session boundary. The public academy remains at /, players enter at /player, coaches enter at /coach, and protected areas retain dedicated layouts over the same academy database."
+    },
+    {
+      "area": "unified-application",
+      "decision": "Preserve the established public and portal visual systems while consolidating them under one server, one domain and one login-aware header. Keep the former site project only as a temporary rollback copy; do not duplicate business data or authentication across applications."
+    },
+    {
+      "area": "prototype-login",
+      "decision": "Use one Academy ID login for both roles. Public registration is player-only, remains inaccessible until coach approval, and receives an immutable human-friendly Academy ID after approval. Coach access requires a future controlled provisioning flow rather than self-selected registration. The cookie stores only a random database-backed session token. Academy ID authentication is explicitly a guarded local prototype that can be replaced by OTP without changing account UUIDs, Academy ID allocations or academy history."
+    },
+    {
+      "area": "new-student-state",
+      "decision": "Treat prototype sign-in as a genuine first-day student experience: identity is personalized, while program, level, attendance, sessions and monthly reports remain pending until assessment or training creates them. Use calm empty states and one assessment action instead of invented performance data."
+    },
+    {
+      "area": "coach-attendance",
+      "decision": "Make attendance the first workflow beneath the coach welcome. The annual school-register view is selected by Weekday or Weekend Batch and Beginner, Intermediate, Advanced or Adult Level. A player appears as one group with a separate sub-row for every assigned session, so two occurrences on one day remain independently markable and count as two eligible sessions. Allow marking only where an immutable scheduled occurrence exists, the assignment covers it, the occurrence is on or after joining, and it is not cancelled or in the future. Keep explicit draft saving, unsaved-change protection, India date rules and previous/current/next year navigation."
+    },
+    {
+      "area": "coach-calendar",
+      "decision": "Use the SMBA Session Calendar as the operational source of truth. Session-series UUIDs are immutable identities; Level_Batch_Time display names are generated consistently for presentation. Level plus Weekday or Weekend Batch determines assignment eligibility, while assignments determine participation. Players may hold multiple matching, non-overlapping active assignments. Late assignment exposes only real occurrences from its effective date, attendance always references immutable occurrences, and cancellation or replacement preserves history. Google Calendar remains a future optional synchronization layer."
+    },
+    {
+      "area": "coach-training-operations",
+      "decision": "Separate operations from configuration. Calendar opens on today and uses its month grid only as a navigator into the Day View workspace, where attendance and occurrence actions live. Schedules is the single place for recurring session configuration, player assignments and rosters. On a normal Schedules entry, all programme groups begin collapsed; a guided player-assignment link may still open the relevant programme and session directly. Do not reintroduce Agenda or Week views."
+    },
+    {
+      "area": "academy-plans-and-assignment-days",
+      "decision": "Keep Academy Plan as an informational enrollment and pricing choice: Weekday 3-day, 4-day or 5-day, and Weekend plan. It never creates attendance or participates in attendance calculations. During session assignment, Weekday plans require an exact union of 3, 4 or 5 distinct weekdays across all active assignments; Weekend retains its current one-or-two-day flexibility. The first Weekday assignment establishes the complete training week, later assignments may reuse those days, and the saved effective-dated assignment weekdays independently determine which immutable session occurrences are attendance-eligible. Completing a player's first evaluation leads directly into this assignment workflow."
+    },
+    {
+      "area": "coach-reports",
+      "decision": "Split Coach Reports into two explicit tasks without changing the immutable report model. Write Reports is the operational workspace for drafts, resume, editing, preview and publication; Published Reports is a month-first, read-only archive of immutable publication revisions with exact-revision detail and private PDF downloads. The Dashboard card keeps the latest completed reporting-month progress and exposes both destinations with equal weight. The writer retains the Beginner, Intermediate, Advanced and Adult checklist, last selected player and month, read-only attendance, unsaved-work protection and one-to-two-paragraph editor. The archive defaults to the latest completed India reporting month, includes archived players' history, never exposes drafts, and preserves revision identity through publication UUIDs."
+    },
+    {
+      "area": "coach-members",
+      "decision": "Keep the academy roster and registration approval queue coach-only. Newly approved players enter as Unassigned and receive exactly one Level—Beginner, Intermediate, Advanced or Adult—and one Batch—Weekday or Weekend. Active assignments must match both values, and classification can change only after current assignments end so historical attendance remains intact. The directory shows the count and names of active sessions without becoming a CRM; initials, concealed contact details and non-destructive records remain unchanged."
+    },
+    {
+      "area": "academy-data-lifecycle",
+      "decision": "Treat Account, Authentication and Player Enrollment as separate domains. Immutable account UUIDs own historical relationships; Academy IDs are never reused or edited. Player enrollment moves from Unassigned to Active or Paused, while archive is an administrative state. Attendance clearing is recorded as a state and published report revisions remain immutable rather than being deleted or overwritten."
+    },
+    {
+      "area": "attendance-integrity",
+      "decision": "Calculate monthly attendance through one pure Asia/Kolkata date-only domain service with an injected reference date. Eligibility requires an immutable scheduled occurrence covered by the player's assignment, on or after their joining date and on or before the reference date. Unmarked sessions remain pending and do not reduce the recorded rate. Live workspaces share saved attendance, while every immutable report publication stores an append-only versioned attendance snapshot so later corrections never rewrite an older report or PDF."
+    },
+    {
+      "area": "attendance-adjustments",
+      "decision": "Keep routine marking and exceptional reconciliation as separate focused destinations reached from the Coach Dashboard Attendance card. Record attendance opens the occurrence-based annual register at /coach/attendance; Reschedule attendance opens the existing make-up editor at /coach/attendance/adjustments. Both destinations share the same Back to dashboard placement, Attendance register eyebrow, title alignment, title-to-workspace gap and bordered workspace start. Inside the rescheduling workspace, do not repeat a second visible Make-up attendance title or a redundant Draft badge. Use a quiet New adjustment eyebrow that changes to Review adjustment during review, while a screen-reader-only heading preserves structure. Keep the first Player control close to that eyebrow and render action feedback only when a message exists. Review confirmation uses coach-facing action language—Ready to reschedule attendance—rather than exposing attendance-accounting mechanics; publication confirms Attendance rescheduled. After the coach chooses a player, select the source absence from a compact month calendar rather than a long list: the coach may move directly between months containing absences, missed dates use a restrained red ring, a selected date can be tapped again to clear it and its dependent draft values, and a date with multiple saved absences reveals the exact session occurrences. A published make-up links one saved absence to one completed academy training date without changing schedules, assignments, rosters or eligibility. Keep that evidence inside the original session row: the source cell becomes a quiet ochre state without a letter marker, while the completion date shows an inline green +N in the same row. Do not add a separate make-up row. Previous reschedules remain collapsed until requested, published or deep-linked. Drafts remain local and protected, publication is explicit, reversals are soft-voided, and legacy dashboard adjustment URLs redirect to the focused rescheduling page."
+    },
+    {
+      "area": "training-language",
+      "decision": "Do not use invented foundation, development or competitive pathways. Describe training with the academy's factual Beginner, Intermediate, Advanced and Adult programs, together with batch and active status. Age groups remain deferred until the academy defines them."
+    },
+    {
+      "area": "mobile-operational-density",
+      "decision": "Preserve the spacious public, Player Journal and Coach Workspace welcome experiences, but make mobile operational pages task-first and content-driven. Keep the first useful action within the initial viewport, place Next session before attendance and reports for players, place attendance directly beneath the coach briefing, and use progressive disclosure for optional filters, report queues and long schedule groups. Compactness must come from removing repetition and idle space rather than shrinking touch targets or changing SMBA's editorial visual identity."
+    },
+    {
+      "area": "coach-calendar-workspace-density",
+      "decision": "Treat Day View as a coach's running sheet rather than a marketing page. Its reading order is time, session identity, then operational status. On mobile, gain density through tighter internal rhythm and stable alignment while preserving typography, touch targets, logical-group whitespace, expanded-session continuity and the current desktop balance. Session metadata uses calm sentence case, and cancelled occurrences remain clearly legible rather than fading through whole-row opacity."
+    },
+    {
+      "area": "public-production-readiness",
+      "decision": "Treat the approved public homepage as a locked editorial composition. Production polish may correct factual drift, semantics, focus, touch targets, essential helper-text legibility, responsive asset delivery and metadata without restructuring sections or changing SMBA's visual identity. Keep public motion subtle and CSS-native where it can preserve the same experience with less client payload."
+    },
+    {
+      "area": "mobile-authentication-freeze",
+      "decision": "Treat the validated mobile Login and Registration experience as frozen. Preserve its shared field spacing, typography, controls, copy, whitespace and structure. Subsequent changes are limited to functional bugs, accessibility regressions or production defects; any visual redesign requires a separate milestone."
+    },
+    {
+      "area": "mobile-account-menu-freeze",
+      "decision": "Clamp long signed-in names to two naturally wrapped lines in the authenticated mobile portal menu while retaining the complete name in the DOM. Preserve both portal and public account-menu width, positioning, spacing, controls, wording and interaction behavior. Subsequent mobile changes are limited to functional bugs, accessibility regressions or production defects; desktop enhancements require a separate milestone."
+    },
+    {
+      "area": "mobile-calendar-attendance-freeze",
+      "decision": "Treat the validated mobile Coach Dashboard, Session Calendar, Month View, Day View, expanded session roster, Attendance Register, empty day state and Attendance dashboard card as frozen. Preserve their operational hierarchy, navigation, typography, touch targets, annual-register structure and desktop presentation. Subsequent changes are limited to functional defects, accessibility regressions, production issues or evidence gathered from observed coach usage; visual or workflow redesign requires a separate milestone."
+    },
+    {
+      "area": "coach-dashboard-attendance-entry",
+      "decision": "Present the Coach Dashboard Attendance entry with the same two-box destination pattern as Sessions. Keep Attendance register as a small eyebrow above a single horizontal row containing the register icon and Attendance title; this attendance-specific title arrangement does not alter the Sessions card. Retain the schedule count, then provide matched links for Record attendance and Reschedule attendance. Each link opens a dedicated focused page; the dashboard card itself does not expand. Preserve the established card typography, borders, action hierarchy and all register, adjustment, deep-link and unsaved-work behavior inside their respective destinations."
+    },
+    {
+      "area": "coach-attendance-mobile-level-selector",
+      "decision": "Keep all four attendance levels visible together on mobile in a compact two-by-two grid. Do not require horizontal scrolling to discover Beginner, Intermediate, Advanced or Adult. Preserve the existing selected state, typography and touch-target height; the Weekday and Weekend batch selector remains a separate two-option row."
+    },
+    {
+      "area": "coach-attendance-year-selector",
+      "decision": "Present four year values directly without a redundant Year label: the previous year, current year and next two years. Derive them from the current India calendar year so the range advances automatically. Keep the values as equal-width mobile controls with the existing selected-state styling and touch-target height."
+    },
+    {
+      "area": "coach-attendance-selected-category-heading",
+      "decision": "Keep the selected Level and Batch value on one deliberate line throughout the 320–430px mobile range. Scale only this editorial heading responsively so Intermediate with either Weekday or Weekend remains intact; preserve selector typography, register structure and desktop heading scale."
+    },
+    {
+      "area": "mobile-member-directory-freeze",
+      "decision": "Treat the validated mobile Member Directory landing, search, filters, filtered results, member cards, expand and collapse interaction, member details, contact reveal, edit form and 320–430px responsive layouts as frozen. Preserve the privacy-first contact treatment, Profile and Training hierarchy, initials, status presentation, navigation, density and established coach-workspace interaction model. Expansion-control weight, expanded-panel separation and active-filter emphasis remain deferred unless accessibility review or observed coach usage establishes a concrete need. Subsequent changes are limited to functional defects, accessibility regressions, production issues or evidence gathered from coach usability testing; aesthetic or structural revisions require a separate milestone."
+    },
+    {
+      "area": "member-directory-production-integrity",
+      "decision": "Preserve the frozen Member Directory composition while hardening its production behaviour. Member edits use an explicit record revision and never write assignment-managed status; validation and assignment invariants are enforced transactionally; Academy ID presentation comes from the immutable allocation rather than an active login method; contact reveal restores focus and reconceals on collapse; and non-destructive archival is allowed only after active assignments end, revoking login access while preserving all academy history."
+    },
+    {
+      "area": "financials-v1",
+      "decision": "Treat Financials as a quiet operational ledger rather than an accounting dashboard. Charges, payments and append-only adjustments are immutable facts; balances and statuses are always derived. The coach receives a focused current-month workspace and quick payment flow after Monthly Reports, while the player receives a subordinate read-only Fee Record after reports. Financial state never controls training, attendance, scheduling, reports or account access. Preserve SMBA's existing cards, typography and compact mobile operational rhythm; do not introduce charts, collection pressure, automated reminders or finance metrics in either welcome hero."
+    },
+    {
+      "area": "financials-v2",
+      "decision": "Extend the quiet Financials ledger with human-readable receipts, immutable multi-charge allocations, refunds and fee concessions without turning it into an accounting dashboard. Quick Record Payment is the coach's primary repeated workflow; the player sees a restrained read-only receipt history with allocation, refund and neutral Fee concession facts. Receipt and refund corrections use explicit reversal workflows, published allocations never mutate, balances remain derived from ledger facts, and CSV collection history is generated on demand. Reuse the established bordered cards, typography, status language, notices and mobile density; do not introduce charts, aging reports, reminders, gateways, invoice PDFs or new dashboard metrics."
+    },
+    {
+      "area": "financials-v3",
+      "decision": "Complete Financials as a coach-maintained current-truth record system without turning SMBA into accounting software. Add one Financial Records destination containing the calculator-backed Fee Register, Collections Day Book and readable Activity History; generate private receipt and player-statement PDFs and formula-safe CSV exports on demand without persistence or ledger writes. End Fee Plans explicitly and auditably, and restart through a new non-overlapping effective-dated agreement rather than rewriting history. Preserve the established bordered operational language and the Player Portal experience. Do not add gateways, checkout, expenses, payroll, GST, period-close snapshots, reminders, charts or financial hero metrics."
+    },
+    {
+      "area": "player-attendance-record",
+      "decision": "Keep the player-facing annual attendance register read-only and visually aligned with the coach register. Present and absent use calm solid green and solid red cells respectively; do not add ticks, crosses or decorative patterns to recorded states. Pending uses a short muted horizontal dash, while future scheduled cells remain quiet ivory without a symbol. Player-facing adjustment language is Rescheduled. The adjacent text legend provides the explicit status labels."
+    },
+    {
+      "area": "player-next-session",
+      "decision": "Present the Player Journal's Next Session card as a compact, time-led editorial briefing. Place the Next session label beside its calendar icon, then read through start time, date, session identity, practical details and arrival note with a tight internal rhythm. Preserve the existing time-aware occurrence resolution, empty states, bordered-card language and quiet palette; do not add countdowns, badges, actions or decorative motion."
+    },
+    {
+      "area": "player-dashboard-companion-cards",
+      "decision": "Treat the Player Journal dashboard cards as one compact operational stack. Next Session and Attendance share an icon-and-label header and gain density through tighter spacing rather than smaller information or touch targets. Attendance preserves its percentage, factual recorded-session copy, progress track and annual-record disclosure. Monthly reports remains a shallower, medium-scale archive index and one full-card link to the complete report record. Preserve all loaded, pending and empty-state behavior."
+    },
+    {
+      "area": "player-profile-ledger",
+      "decision": "Close the Player Journal dashboard with a quiet editorial ledger for Player, Level and Academy Plan. Use compact labelled rows on mobile and content-proportional columns on desktop, retaining the semantic description list and natural wrapping. Keep this passive reference information visually subordinate to the dashboard cards; do not add a title, icon, credential treatment, action or decorative motif. Academy Plan presentation does not repeat the separately labelled Level."
+    },
+    {
+      "area": "coach-financials-task-navigation",
+      "decision": "Organize coach Financials around two explicit tasks rather than a combined landing workspace. Record Payment is the rapid receipt workflow and defaults to players with outstanding balances while allowing an All players fallback. Fee Records is the administrative destination for the Fee Register, Collections Day Book, Activity History and focused per-player fee records containing plans, registration reconciliation, concessions, ledger history and corrections. The Coach Dashboard card exposes both destinations and the current month preparation state. For active academies, /coach/financials remains only a compatibility redirect; inactive academies retain the setup flow. Preserve all ledger facts, calculations, audit rules and player-facing financial presentation."
+    },
+    {
+      "area": "attendance-sessions-workflow-separation",
+      "decision": "This decision supersedes the earlier coach-training-operations, coach-attendance, coach-dashboard-attendance-entry and mobile-calendar-attendance-freeze workflow contracts where they conflict. Treat Player Attendance and Staff Attendance as independent domains: their annual colour-coded registers are read-only current-truth views, ordinary player attendance is recorded only against an explicitly selected immutable occurrence, Staff Roll Call records one daily fact per currently supported junior coach, and player rescheduling remains the exceptional adjustment workflow. The Coach Dashboard Attendance card groups Player links for Register, Record and Reschedule separately from Staff links for Register and Roll Call. Calendar owns month/day visibility, static rosters and dated cancellation/replacement; it never edits attendance, though a started scheduled occurrence may open the focused player recorder through a fixed deep link. Sessions exposes Calendar, Create Schedule and Schedules & Rosters as three focused destinations. Preserve existing attendance and scheduling domain rules, SMBA typography, palette, bordered cards, mobile rhythm and personal player/junior-coach registers."
+    },
+    {
+      "area": "announcements-notice-board",
+      "decision": "Treat Announcements as a simple head-coach notice board: write locally, review only the message and its destinations, then publish once. Do not create saved drafts, queues or scheduling. Published content and destinations remain immutable; pinning is mutable display priority and withdrawal is a one-way audited action with a private required reason. Homepage delivery stays failure-isolated from the static marketing shell, while Player Dashboard notices remain authenticated. Preserve SMBA's existing bordered cards, typography and operational-versus-history dashboard pattern."
+    }
+  ]
+}

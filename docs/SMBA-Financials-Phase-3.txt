@@ -1,0 +1,204 @@
+SMBA FINANCIALS PHASE 3 — FROZEN IMPLEMENTATION RECORD
+=======================================================
+
+Status: Implemented and validated
+Document date: 8 August 2026
+Architecture version: Financials Phase 3
+
+
+1. PURPOSE
+==========
+
+Phase 3 completes Financials as a coach-maintained operational record system.
+It adds three read-only records views, private on-demand documents and an
+explicit Fee Plan ending workflow. It does not introduce a payment gateway,
+checkout, online collection, expenses, payroll or formal accounting.
+
+The player experience remains unchanged. Financial state never controls
+training, attendance, scheduling, reports, account access or player
+development.
+
+
+2. ARCHITECTURAL INVARIANTS
+===========================
+
+- UUIDs remain canonical identities and foreign keys.
+- Charges, Payments, allocations, Refunds, Concessions and Adjustments remain
+  immutable ledger facts corrected only through explicit lifecycle actions.
+- Financial records are never hard-deleted.
+- Every balance, status, register total, export and document is derived through
+  shared ledger calculators. Views do not perform independent calculations.
+- Reports and documents represent current ledger truth at generation time.
+  Phase 3 deliberately has no historical as-of or period-close snapshot model.
+- Documents and CSV exports are generated on demand, are never persisted and
+  never mutate the ledger.
+- Coach authorization is enforced at both route and service boundaries.
+- Internal notes, fingerprints, database UUIDs and private audit metadata are
+  excluded from coach documents and exports unless explicitly part of the
+  operational record contract.
+
+
+3. INFORMATION ARCHITECTURE
+===========================
+
+Financials now has three complementary destinations:
+
+  Overview / player ledger
+      -> current operational status and player-level actions
+
+  Quick Record Payment
+      -> repeated receipt-entry workflow
+
+  Financial Records
+      -> Fee Register
+      -> Collections Day Book
+      -> Activity History
+
+Financial Records is a work surface rather than a dashboard. It contains no
+charts, trends, KPIs, accounting jargon or new navigation system.
+
+
+4. FEE REGISTER
+===============
+
+The Fee Register supports Monthly and Registration views. It provides:
+
+- player name and Academy ID;
+- active or archived scope;
+- fee reference and due date;
+- original billed amount;
+- credit and debit adjustments;
+- amount received and current outstanding amount;
+- derived financial status;
+- current summary totals;
+- search by player, Academy ID or fee reference;
+- status and player-scope filters;
+- stable pagination;
+- on-demand CSV export; and
+- a private player statement download.
+
+A missing monthly Charge is presented as Not prepared when an applicable Fee
+Plan exists and Setup required when it does not. The register never stores or
+mutates a separate balance or status.
+
+
+5. COLLECTIONS DAY BOOK
+=======================
+
+The Collections Day Book is a dated record of receipt and Refund events. It
+shows:
+
+- event date and immutable human reference;
+- player and Academy ID;
+- method;
+- affected fee references;
+- amount and lifecycle;
+- gross receipts, Refunds, net collections and method totals; and
+- an authenticated receipt PDF for recorded Payment rows.
+
+Coach-selected date ranges are limited to 366 days. Reversed entries are
+hidden by default and may be included explicitly. CSV generation is streamed,
+private/no-store, formula-neutralized and never persisted.
+
+
+6. ACTIVITY HISTORY
+===================
+
+Activity History translates financial audit events into plain operational
+language. It supports search, event type, coach and date filters, stable
+pagination and an on-demand CSV export.
+
+The UI does not expose raw JSON, payload fingerprints, database IDs or other
+implementation metadata. Audit events remain immutable and are read through a
+dedicated presentation contract.
+
+
+7. PRIVATE FINANCIAL DOCUMENTS
+==============================
+
+Phase 3 adds two coach-only PDF documents:
+
+- Receipt: generated for one Payment and its current Refund/reversal state.
+- Player Fee Statement: generated from the player's complete current ledger.
+
+Both documents:
+
+- are created only after coach authorization;
+- use private, no-store responses and safe filenames;
+- are generated from current shared ledger projections;
+- support multi-page output;
+- omit private notes and internal identifiers;
+- persist no file and create no database write; and
+- fail with non-enumerating responses when a record is unavailable.
+
+
+8. FEE PLAN ENDING AND RESTART
+==============================
+
+An active Fee Plan may be ended through an explicit coach action containing:
+
+- the final fee month;
+- a required reason;
+- the expected record revision; and
+- an idempotency key.
+
+Ending a plan is transactional and audited exactly once. It changes only the
+agreement's effective end and lifecycle. Existing Charges, receipts,
+Adjustments and documents remain historical facts. Ending is rejected if an
+issued monthly Charge already exists after the selected final month.
+
+Restarting financial tracking creates a new effective-dated Fee Plan. The new
+plan cannot overlap any historical plan for that player. An ended plan is not
+reopened or rewritten.
+
+
+9. QUERY AND STORAGE CONTRACTS
+==============================
+
+Phase 3 exposes purpose-built read models:
+
+- FinanceRegisterRow
+- FinanceDayBookEvent
+- FinanceActivityItem
+- ReceiptDocument
+- StatementDocument
+
+Query contracts validate filters, date ranges, status values, page sizes and
+cursors at the service boundary. Database indexes support Charge register,
+Payment date/lifecycle, Refund date/lifecycle and audit type/time reads.
+Migration 0013 adds indexes only and changes no financial facts.
+
+
+10. AUTHORIZATION AND PRIVACY
+=============================
+
+- Financial Records, exports, receipts, statements and Fee Plan lifecycle
+  actions are coach-only.
+- Player and anonymous requests are rejected before financial data is loaded.
+- Private downloads are owner-scoped to the authenticated coach workspace and
+  are never served from public assets.
+- Player-facing Financials remains the existing restrained, read-only Phase 2
+  experience.
+
+The production authentication and managed-persistence work identified in the
+principal readiness audit remains a deployment prerequisite. Phase 3 does not
+replace or weaken that requirement.
+
+
+11. INTENTIONALLY DEFERRED
+==========================
+
+Phase 3 does not include:
+
+- a payment gateway, checkout, payment links or webhooks;
+- automatic bank reconciliation or online settlement state;
+- expenses, payroll, profit-and-loss or cash-flow accounting;
+- GST, tax invoices or statutory accounting reports;
+- period close, historical as-of statements or immutable document snapshots;
+- automated reminders by WhatsApp, SMS or email;
+- family billing accounts, wallets, credits or unapplied funds;
+- charts, collection-pressure metrics or financial hero KPIs; or
+- changes to the Player Portal financial experience.
+
+Further financial capabilities require a separate approved milestone based on
+observed academy operations.

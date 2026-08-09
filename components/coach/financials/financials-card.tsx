@@ -1,0 +1,80 @@
+import { WalletCards } from "lucide-react"
+
+import {
+  CoachDashboardAction,
+  CoachDashboardActions,
+  CoachDashboardCard,
+  CoachDashboardSummary,
+} from "@/components/coach/dashboard-card"
+
+function formatInr(paise: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(paise / 100)
+}
+
+function formatPeriod(period: string) {
+  const [year, month] = period.split("-").map(Number)
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, 1)))
+}
+
+export function FinancialsCard({
+  active,
+  attentionCount,
+  outstandingPaise,
+  period,
+  preparation,
+}: {
+  active: boolean
+  attentionCount: number
+  outstandingPaise: number
+  period: string
+  preparation: {
+    ready: number
+    alreadyPrepared: number
+  }
+}) {
+  const summary = attentionCount > 0
+    ? `${attentionCount} ${attentionCount === 1 ? "record needs" : "records need"} attention · ${formatInr(outstandingPaise)} outstanding`
+    : "Fee records are ready to review"
+  const month = formatPeriod(period)
+  const preparationState = preparation.ready > 0
+    ? `${month} fees not prepared`
+    : preparation.alreadyPrepared > 0
+      ? `${month} fees prepared`
+      : "No monthly fees to prepare"
+
+  return (
+    <CoachDashboardCard
+      eyebrow="Fee records"
+      icon={WalletCards}
+      title="Financials"
+      titleId="coach-financials-card-title"
+    >
+      {active ? (
+        <>
+          <CoachDashboardSummary detail={preparationState}>{summary}</CoachDashboardSummary>
+          <CoachDashboardActions ariaLabel="Financial actions">
+            <CoachDashboardAction href="/coach/financials/record">
+              Record payment
+            </CoachDashboardAction>
+            <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>
+              Fee records
+            </CoachDashboardAction>
+          </CoachDashboardActions>
+        </>
+      ) : (
+        <CoachDashboardActions ariaLabel="Financial actions">
+          <CoachDashboardAction href={`/coach/financials?period=${period}`}>
+            Set up Financials
+          </CoachDashboardAction>
+        </CoachDashboardActions>
+      )}
+    </CoachDashboardCard>
+  )
+}

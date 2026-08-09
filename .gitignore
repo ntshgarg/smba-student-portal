@@ -1,0 +1,19 @@
+/node_modules
+/.next
+/out
+/coverage
+/.data
+*.log
+*.tsbuildinfo
+.DS_Store
+.env*
+!.env.example
+
+# Local audit, browser-test, and visual-regression artifacts
+/output
+/snapshots
+/tmp
+/static_analysis_codeql_1
+/static_analysis_semgrep_1
+/audit-context
+/.supply-chain-risk-auditor

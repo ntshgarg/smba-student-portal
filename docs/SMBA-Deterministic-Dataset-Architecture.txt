@@ -1,0 +1,127 @@
+SMBA — Deterministic Dataset Architecture
+Frozen implementation contract
+
+Status
+
+APPROVED AND IMPLEMENTED
+
+Purpose
+
+Provide a clean empty-state profile plus three reproducible loaded academy
+profiles so daily product work, supported edge-case validation and performance
+testing do not compete inside one database.
+
+Profiles
+
+Demo
+
+- Daily development, product demonstrations, UI review and screenshots.
+- Represents a believable operating academy with one head administrator, two
+  junior coaches and approximately forty players.
+- Contains realistic schedules, assignments, attendance, reports and financial
+  records without looking artificially pathological.
+- Each major workflow has one successful example and one supported exceptional
+  example.
+- This is the canonical loaded-state profile for UI and workflow review.
+
+Edge
+
+- Compact, feature-diverse validation profile.
+- Contains one happy-path and one supported exceptional-path representative for
+  each implemented workflow where both states exist.
+- Intentionally covers states such as pending and approved registration,
+  assigned and unassigned enrollment, ordinary and adjusted attendance, draft
+  and published reports, active and ended fee plans, settled and outstanding
+  charges, concessions, refunds and reversals.
+- It is not required to look like a statistically typical academy.
+
+Stress
+
+- Performance, DOM-size, query-volume, large-list and complete-workflow validation.
+- Preserves one hundred approved players while distributing them across ninety-four
+  active, three paused, two unassigned and one archived lifecycle states.
+- Contains three pending player registrations and two junior coaches with forty
+  present/absent staff-attendance facts plus one cleared-state representative
+  (forty-one records total).
+- Adds a minimal representative set of supported variation without attempting
+  exhaustive combinations: attendance adjustments, cancellation and cross-weekday
+  replacement, multi-revision reporting, complete financial correction lifecycles,
+  and active, pinned, channel-specific, expired and withdrawn announcements.
+- Scale remains the primary purpose; exceptional representatives must not materially
+  reduce the active-player workload.
+
+Architecture invariants
+
+- Demo, Edge and Stress are named profiles; database filenames are implementation
+  details selected by the fixture tooling.
+- Builds are deterministic. Rebuilding a profile from the same source revision
+  produces equivalent Academy IDs, domain states, counts and verification
+  results.
+- Builds occur in isolated temporary databases and are promoted only after
+  verification succeeds.
+- Fixture tooling refuses to overwrite the clean `.data/smba.db` source or an
+  unrelated database.
+- Each profile has a machine-readable manifest containing expected counts and
+  representative login identities.
+- Tests locate scenarios through meaningful persisted state, not fixture-only
+  case IDs embedded in product records.
+- Fixture generation uses production domain rules and database constraints; it
+  does not bypass invariants with browser local storage or ad-hoc mock state.
+- Fresh profiles contain no legacy finance settlements.
+- Clean is the current default for `npm run dev`. Demo, Edge and Stress are opt-in.
+
+Operations
+
+Build:
+
+  npm run fixture:build:clean
+  npm run fixture:build:demo
+  npm run fixture:build:edge
+  npm run fixture:build:stress
+  npm run fixture:build:all
+
+Verify:
+
+  npm run fixture:verify:clean
+  npm run fixture:verify:demo
+  npm run fixture:verify:edge
+  npm run fixture:verify:stress
+  npm run fixture:verify:all
+
+Serve a production build:
+
+  npm run build
+  npm run fixture:start:demo
+  npm run fixture:start:edge
+  npm run fixture:start:stress
+
+Out of scope
+
+- Making one profile cover every purpose.
+- Random, time-dependent or nondeterministic fixture generation.
+- Exhaustive combinations of all supported states.
+- Using Stress as the default development or screenshot profile.
+- Preserving obsolete fixture-only behavior that production no longer supports.
+
+Validation contract
+
+- Every profile builds and verifies independently.
+- Repeated builds preserve logical checksums and representative identities.
+- Manifests agree with persisted accounts, roles and domain records.
+- Demo contains one head administrator, two distinct junior-coach attendance
+  histories and the intended player population.
+- Edge proves the supported happy and exceptional representatives declared by
+  its manifest.
+- Stress proves both its one-hundred-player scale invariant and its declared
+  representative supported variations. It is not required to mirror every Edge
+  permutation.
+- Foreign-key and SQLite integrity checks pass for all profiles.
+- No build mutates `.data/smba.db` or another profile on failure.
+- Profile publication requires a quiescent database; stop any server using the
+  target. The publisher rejects open handles and clears only closed WAL/SHM
+  sidecars immediately before atomic promotion.
+
+Change policy
+
+This contract is frozen. New fixture scenarios must represent supported product
+behavior and must preserve deterministic, isolated profile generation.

@@ -1,0 +1,493 @@
+.publicSection {
+  padding-block: clamp(64px, 7vw, 104px);
+  border-top: 1px solid var(--line);
+}
+
+.publicHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.55fr);
+  align-items: end;
+  gap: clamp(36px, 8vw, 110px);
+}
+
+.publicHeading h2 {
+  margin-top: 18px;
+  color: var(--navy);
+  font-size: clamp(44px, 5.2vw, 72px);
+  font-weight: 580;
+  letter-spacing: -0.065em;
+  line-height: 0.98;
+}
+
+.publicHeading > p {
+  max-width: 410px;
+  color: var(--steel);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.publicList {
+  margin-top: clamp(34px, 5vw, 56px);
+  border-top: 1px solid var(--line);
+}
+
+.publicItem {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.28fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(24px, 4vw, 54px);
+  padding-block: clamp(24px, 3vw, 34px);
+  border-bottom: 1px solid var(--line);
+}
+
+.publicMeta,
+.playerListMeta,
+.dashboardItemMeta,
+.detailMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.publicMeta {
+  align-self: start;
+}
+
+.publicMeta span,
+.labels > span,
+.detailMeta > span {
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.publicMeta time,
+.playerListMeta time,
+.dashboardItemMeta time,
+.detailHeading > time {
+  color: var(--steel);
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.publicCopy {
+  min-width: 0;
+}
+
+.publicCopy h3,
+.playerListItem h2 {
+  overflow-wrap: anywhere;
+  color: var(--navy);
+  font-size: clamp(24px, 2.5vw, 32px);
+  font-weight: 610;
+  letter-spacing: -0.045em;
+  line-height: 1.12;
+}
+
+.publicCopy h3 a,
+.playerListItem h2 a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+}
+
+.publicCopy h3 a:hover,
+.playerListItem h2 a:hover {
+  text-decoration: underline;
+}
+
+.publicCopy p,
+.playerListItem > p {
+  display: -webkit-box;
+  max-width: 680px;
+  margin-top: 10px;
+  overflow: hidden;
+  color: var(--steel);
+  font-size: 13px;
+  line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.publicOpen,
+.playerListOpen,
+.dashboardAll,
+.publicDisclosure,
+.publicBack {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.publicOpen svg,
+.playerListOpen svg,
+.dashboardAll svg,
+.publicDisclosure svg,
+.publicBack svg {
+  width: 15px;
+  height: 15px;
+}
+
+.publicOpen:hover,
+.playerListOpen:hover,
+.dashboardAll:hover,
+.publicBack:hover {
+  color: var(--red);
+}
+
+.publicDisclosure {
+  margin-top: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.publicDisclosure:hover {
+  color: var(--red);
+}
+
+.dashboardCard {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  padding: var(--player-dashboard-card-padding, clamp(24px, 3vw, 34px));
+}
+
+.dashboardHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--player-dashboard-header-gap, 16px);
+}
+
+.dashboardIcon {
+  display: grid;
+  width: var(--player-dashboard-icon-size, 44px);
+  height: var(--player-dashboard-icon-size, 44px);
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--line);
+  color: var(--red);
+}
+
+.dashboardIcon svg {
+  width: var(--player-dashboard-icon-glyph, 18px);
+  height: var(--player-dashboard-icon-glyph, 18px);
+  stroke-width: 1.7;
+}
+
+.dashboardHeader p {
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dashboardHeader h3 {
+  margin-top: 4px;
+  color: var(--navy);
+  font-size: clamp(21px, 2.5vw, 28px);
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.dashboardHeader .dashboardUnavailableTitle {
+  color: var(--steel);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+}
+
+.dashboardUnavailableCopy {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--steel);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dashboardList {
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.dashboardItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 20px;
+  min-height: 96px;
+  padding-block: 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--navy);
+}
+
+.dashboardItem > svg {
+  width: 17px;
+  height: 17px;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.dashboardItem:hover > svg {
+  color: var(--red);
+  transform: translateX(3px);
+}
+
+.dashboardItemCopy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.dashboardItemCopy > strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.dashboardItemCopy > span:last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--steel);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboardItemMeta {
+  min-height: 18px;
+}
+
+.labels {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.labels svg {
+  width: 12px;
+  height: 12px;
+  color: var(--red);
+  fill: none;
+}
+
+.dashboardAll {
+  margin-top: 16px;
+}
+
+.playerPage {
+  padding-top: clamp(28px, 4vw, 52px);
+}
+
+.playerToolbar {
+  margin-bottom: clamp(48px, 5vw, 72px);
+}
+
+.playerList {
+  margin-top: clamp(60px, 8vw, 100px);
+  border-top: 1px solid var(--line);
+}
+
+.playerListItem {
+  padding-block: clamp(26px, 3.5vw, 40px);
+  border-bottom: 1px solid var(--line);
+}
+
+.playerListItem h2 {
+  max-width: 780px;
+  margin-top: 12px;
+}
+
+.playerListOpen {
+  width: fit-content;
+  margin-top: 15px;
+}
+
+.publicDetail,
+.playerDetail {
+  width: min(100% - 48px, 920px);
+  margin-inline: auto;
+}
+
+.publicDetail {
+  padding-block: clamp(54px, 8vw, 110px);
+}
+
+.playerDetail {
+  padding-block: clamp(30px, 5vw, 74px) clamp(84px, 10vw, 140px);
+}
+
+.publicBack {
+  justify-content: flex-start;
+  color: var(--steel);
+}
+
+.detailHeading {
+  margin-top: clamp(46px, 7vw, 84px);
+  padding-bottom: clamp(30px, 5vw, 52px);
+  border-bottom: 1px solid var(--line);
+}
+
+.detailMeta > p {
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.detailMeta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.detailMeta svg {
+  width: 12px;
+  height: 12px;
+}
+
+.detailHeading h1 {
+  max-width: 880px;
+  margin-top: 18px;
+  overflow-wrap: anywhere;
+  color: var(--navy);
+  font-size: clamp(48px, 7vw, 86px);
+  font-weight: 570;
+  letter-spacing: -0.07em;
+  line-height: 0.96;
+}
+
+.detailHeading > time {
+  display: block;
+  margin-top: 26px;
+}
+
+.detailMessage {
+  max-width: 760px;
+  padding-block: clamp(34px, 6vw, 62px);
+  color: var(--ink);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(20px, 2.3vw, 27px);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.detailMessage p + p {
+  margin-top: 1.2em;
+}
+
+@media (max-width: 720px) {
+  .publicSection {
+    padding-block: var(--space-content);
+  }
+
+  .publicHeading {
+    grid-template-columns: 1fr;
+    gap: var(--space-copy);
+  }
+
+  .publicHeading h2 {
+    margin-top: var(--space-copy);
+    font-size: clamp(42px, 13vw, 58px);
+  }
+
+  .publicHeading > p {
+    max-width: 34ch;
+  }
+
+  .publicList {
+    margin-top: var(--space-block);
+  }
+
+  .publicItem {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 18px;
+    padding-block: 22px;
+  }
+
+  .publicMeta,
+  .publicCopy {
+    grid-column: 1;
+  }
+
+  .publicCopy h3 {
+    font-size: clamp(22px, 6.5vw, 27px);
+  }
+
+  .publicOpen {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .publicOpen {
+    width: 44px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    font-size: 0;
+  }
+
+  .dashboardItem {
+    gap: 14px;
+  }
+
+  .playerPage {
+    padding-top: 24px;
+  }
+
+  .playerToolbar {
+    margin-bottom: 28px;
+  }
+
+  .playerList {
+    margin-top: 42px;
+  }
+
+  .publicDetail,
+  .playerDetail {
+    width: min(100% - 32px, 920px);
+  }
+
+  .publicDetail {
+    padding-block: 28px 80px;
+  }
+
+  .playerDetail {
+    padding-block: 24px 80px;
+  }
+
+  .detailHeading {
+    margin-top: 34px;
+  }
+
+  .detailHeading h1 {
+    font-size: clamp(44px, 13vw, 64px);
+  }
+
+  .detailMessage {
+    font-size: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboardItem > svg,
+  .publicOpen,
+  .playerListOpen,
+  .dashboardAll {
+    transition: none;
+  }
+}

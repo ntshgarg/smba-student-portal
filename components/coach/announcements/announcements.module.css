@@ -1,0 +1,1150 @@
+.panelHeading > span,
+.archiveToolbar > div > span,
+.withdrawDialog > span {
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.newAnnouncementLink {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px;
+  border: 1px solid var(--navy);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 760;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.newAnnouncementLink:hover {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.newAnnouncementLink svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.workspace {
+  padding: 28px 0 clamp(110px, 12vw, 170px);
+}
+
+.backRow a {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  color: var(--steel);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.backRow svg {
+  width: 15px;
+  height: 15px;
+}
+
+.workspaceHeader {
+  max-width: 760px;
+  margin-top: clamp(42px, 6vw, 76px);
+}
+
+.workspaceHeader h1,
+.archiveHeader h1,
+.detailHeader h1 {
+  margin-top: 16px;
+  color: var(--navy);
+  font-size: clamp(58px, 7.5vw, 102px);
+  font-weight: 545;
+  letter-spacing: -0.075em;
+  line-height: 0.9;
+}
+
+.workspaceHeader p,
+.archiveHeader > div > p {
+  max-width: 650px;
+  margin-top: 22px;
+  color: var(--steel);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(18px, 1.9vw, 22px);
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.composerPanel,
+.archivePanel,
+.detailPanel {
+  margin-top: clamp(42px, 6vw, 72px);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 58%, transparent);
+}
+
+.panelHeading {
+  padding: clamp(26px, 4vw, 42px);
+  border-bottom: 1px solid var(--line);
+}
+
+.panelHeading h2,
+.archiveToolbar h2 {
+  margin-top: 9px;
+  color: var(--navy);
+  font-size: clamp(31px, 4vw, 48px);
+  font-weight: 590;
+  letter-spacing: -0.06em;
+  line-height: 0.98;
+}
+
+.composerFields {
+  display: grid;
+  gap: 30px;
+  padding: clamp(26px, 4vw, 42px);
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.field > span,
+.locationFieldset > legend {
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 790;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.field > span em {
+  margin-left: 5px;
+  color: var(--steel);
+  font-style: normal;
+  font-weight: 650;
+}
+
+.field input,
+.field textarea,
+.archiveSearch input,
+.archiveFilters select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--white);
+  color: var(--navy);
+  font: inherit;
+  font-size: 14px;
+}
+
+.field input {
+  min-height: 48px;
+  padding: 0 14px;
+}
+
+.field textarea {
+  min-height: 180px;
+  padding: 14px;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.field input[aria-invalid="true"],
+.field textarea[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--red) 72%, var(--line));
+}
+
+.fieldMessage {
+  min-height: 17px;
+  color: var(--steel);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+[aria-invalid="true"] + .fieldMessage {
+  color: var(--red);
+}
+
+.locationFieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.locationFieldset > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+}
+
+.locationFieldset > div > label,
+.checkOption {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--white) 68%, transparent);
+  cursor: pointer;
+}
+
+.locationFieldset > div > label + label {
+  border-left: 1px solid var(--line);
+}
+
+.locationFieldset input,
+.checkOption input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--navy);
+}
+
+.locationFieldset label > span,
+.checkOption > span {
+  display: grid;
+  gap: 4px;
+}
+
+.locationFieldset strong,
+.checkOption strong {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.locationFieldset small,
+.checkOption small {
+  color: var(--steel);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.optionsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.72fr);
+  align-items: start;
+  gap: 22px;
+}
+
+.checkOption {
+  border: 1px solid var(--line);
+}
+
+.composerActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px clamp(26px, 4vw, 42px);
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ivory) 62%, var(--white));
+}
+
+.composerActions p {
+  color: var(--steel);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.composerActions button,
+.dialogActions button,
+.detailActions button {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 18px;
+  border: 1px solid var(--navy);
+  background: var(--navy);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.composerActions svg,
+.dialogActions svg,
+.detailActions svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dialogBackdrop {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(780px, calc(100dvh - 32px));
+  margin: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+}
+
+.dialogBackdrop::backdrop {
+  background: color-mix(in srgb, var(--navy) 58%, transparent);
+}
+
+.reviewDialog,
+.withdrawDialog {
+  position: relative;
+  max-height: min(780px, calc(100dvh - 32px));
+  padding: clamp(28px, 5vw, 48px);
+  border: 1px solid color-mix(in srgb, var(--white) 30%, var(--line));
+  background: var(--ivory);
+  overflow-y: auto;
+}
+
+.dialogClose {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--navy);
+}
+
+.dialogClose svg {
+  width: 19px;
+  height: 19px;
+}
+
+.reviewCopy h3,
+.withdrawDialog h2 {
+  max-width: calc(100% - 42px);
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(31px, 5vw, 46px);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+}
+
+.reviewMessage {
+  display: grid;
+  gap: 14px;
+  margin-top: 26px;
+  color: var(--navy);
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.reviewMeta {
+  display: grid;
+  gap: 15px;
+  margin-top: 30px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.reviewMeta > p {
+  color: var(--steel);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.channelPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.channelPills > span {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  color: var(--navy);
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.035em;
+}
+
+.channelPills svg {
+  width: 12px;
+  height: 12px;
+}
+
+.dialogNotice {
+  margin-top: 10px;
+}
+
+.dialogActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.dialogActions button:first-child {
+  background: transparent;
+  color: var(--navy);
+}
+
+.dialogActions button:disabled,
+.composerActions button:disabled,
+.detailActions button:disabled,
+.dialogClose:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.dialogActions .dangerButton,
+.detailActions .withdrawButton {
+  border-color: var(--red);
+  background: transparent;
+  color: var(--red);
+}
+
+.withdrawDialog > p {
+  max-width: 500px;
+  margin: 18px 0 28px;
+  color: var(--steel);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.withdrawDialog > span {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.withdrawDialog .field textarea {
+  min-height: 110px;
+}
+
+.archiveHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: clamp(44px, 8vw, 120px);
+  margin-top: clamp(42px, 6vw, 76px);
+}
+
+.archiveHeader > div,
+.archiveToolbar > div {
+  min-width: 0;
+}
+
+.monthControl {
+  display: grid;
+  min-width: 300px;
+  grid-template-columns: 48px minmax(180px, 1fr) 48px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 60%, transparent);
+}
+
+.monthControl > a,
+.disabledMonthControl {
+  display: grid;
+  min-height: 62px;
+  place-items: center;
+  color: var(--navy);
+}
+
+.monthControl > a:first-child,
+.monthControl > div {
+  border-right: 1px solid var(--line);
+}
+
+.monthControl > div {
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  padding: 8px 14px;
+  text-align: center;
+}
+
+.monthControl > div span {
+  color: var(--steel);
+  font-size: 8px;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.monthControl > div strong {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.monthControl svg {
+  width: 17px;
+  height: 17px;
+}
+
+.disabledMonthControl {
+  color: color-mix(in srgb, var(--steel) 35%, transparent);
+}
+
+.archiveToolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  padding: clamp(24px, 3vw, 36px);
+  border-bottom: 1px solid var(--line);
+}
+
+.newAnnouncementLink {
+  min-height: 46px;
+}
+
+.archiveSearch {
+  display: grid;
+  gap: 8px;
+  padding: 20px clamp(20px, 3vw, 34px);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ivory) 58%, var(--white));
+}
+
+.archiveSearch > label {
+  color: var(--steel);
+  font-size: 9px;
+  font-weight: 790;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.archiveSearch > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.archiveSearch > div:focus-within {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.archiveSearch svg {
+  width: 16px;
+  height: 16px;
+  margin-left: 13px;
+  color: var(--steel);
+}
+
+.archiveSearch input {
+  min-height: 46px;
+  padding: 0 12px;
+  border: 0;
+  outline: 0;
+}
+
+.archiveSearch button,
+.archiveFilters button {
+  min-height: 46px;
+  padding: 0 17px;
+  border: 0;
+  background: var(--navy);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.archiveFilters {
+  border-bottom: 1px solid var(--line);
+}
+
+.archiveFilters summary {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 8px;
+  margin-left: clamp(20px, 3vw, 34px);
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 760;
+  cursor: pointer;
+  list-style: none;
+}
+
+.archiveFilters summary::-webkit-details-marker {
+  display: none;
+}
+
+.archiveFilters summary svg {
+  width: 14px;
+  height: 14px;
+}
+
+.archiveFilters > form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto auto;
+  align-items: end;
+  gap: 12px;
+  padding: 0 clamp(20px, 3vw, 34px) 20px;
+}
+
+.archiveFilters label {
+  display: grid;
+  gap: 7px;
+}
+
+.archiveFilters label > span {
+  color: var(--steel);
+  font-size: 9px;
+  font-weight: 790;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.archiveFilters select {
+  min-height: 46px;
+  padding: 0 11px;
+}
+
+.archiveFilters form > a {
+  display: grid;
+  min-height: 46px;
+  place-items: center;
+  padding: 0 12px;
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.resultBar {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px clamp(20px, 3vw, 34px);
+  border-bottom: 1px solid var(--line);
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.resultBar a {
+  color: var(--navy);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.announcementList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.announcementList > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.announcementRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr) auto;
+  align-items: center;
+  gap: 28px;
+  padding: 24px clamp(20px, 3vw, 34px);
+}
+
+.announcementIdentity {
+  min-width: 0;
+}
+
+.announcementIdentity > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.announcementIdentity > div:first-child > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--red);
+  fill: color-mix(in srgb, var(--red) 20%, transparent);
+}
+
+.announcementIdentity h3 {
+  min-width: 0;
+  color: var(--navy);
+  font-size: 17px;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.announcementIdentity > p {
+  max-width: 660px;
+  margin-top: 8px;
+  color: var(--steel);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.announcementIdentity .channelPills {
+  margin-top: 12px;
+}
+
+.rowMeta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(90px, 1fr));
+  gap: 18px;
+  margin: 0;
+}
+
+.rowMeta > div {
+  display: grid;
+  gap: 6px;
+}
+
+.rowMeta dt,
+.detailMeta dt {
+  color: var(--steel);
+  font-size: 8px;
+  font-weight: 790;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.rowMeta dd,
+.detailMeta dd {
+  margin: 0;
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.45;
+}
+
+.rowMeta dd[data-status="active"],
+.detailStatus[data-status="active"] {
+  color: var(--green);
+}
+
+.rowMeta dd[data-status="withdrawn"],
+.detailStatus[data-status="withdrawn"] {
+  color: var(--red);
+}
+
+.rowAction {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid var(--navy);
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.rowAction svg {
+  width: 14px;
+  height: 14px;
+}
+
+.emptyState {
+  display: grid;
+  min-height: 330px;
+  place-items: center;
+  align-content: center;
+  padding: 52px 24px;
+  text-align: center;
+}
+
+.emptyState > svg {
+  width: 28px;
+  height: 28px;
+  color: var(--red);
+  stroke-width: 1.4;
+}
+
+.emptyState h2,
+.emptyState h3 {
+  margin-top: 18px;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.emptyState p {
+  margin-top: 9px;
+  color: var(--steel);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.emptyState a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--navy);
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.compactEmptyState {
+  min-height: 250px;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 36px;
+  margin-top: clamp(42px, 6vw, 76px);
+}
+
+.detailHeader h1 {
+  max-width: 880px;
+  font-size: clamp(48px, 6.5vw, 84px);
+  overflow-wrap: anywhere;
+}
+
+.detailStatus {
+  flex: 0 0 auto;
+  padding-bottom: 7px;
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detailNotice {
+  margin-top: 18px;
+}
+
+.detailPanel {
+  padding: clamp(28px, 5vw, 58px);
+}
+
+.detailMessage {
+  display: grid;
+  gap: 18px;
+  max-width: 800px;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(19px, 2vw, 24px);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.detailMeta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  margin: clamp(38px, 6vw, 66px) 0 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.detailMeta > div {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.detailMeta dd {
+  font-size: 11px;
+}
+
+.withdrawalRecord {
+  margin-top: 28px;
+  padding: 18px 20px;
+  border-left: 3px solid var(--red);
+  background: color-mix(in srgb, var(--red) 5%, var(--ivory));
+}
+
+.withdrawalRecord > span {
+  color: var(--red);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.withdrawalRecord p {
+  margin-top: 8px;
+  color: var(--navy);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.withdrawalRecord time {
+  display: block;
+  margin-top: 6px;
+  color: var(--steel);
+  font-size: 9px;
+}
+
+.detailActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.detailActions button:first-child {
+  background: transparent;
+  color: var(--navy);
+}
+
+@media (max-width: 900px) {
+  .archiveHeader {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .monthControl {
+    width: min(100%, 390px);
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .announcementRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .rowMeta {
+    grid-column: 1;
+    grid-row: 2;
+    max-width: 300px;
+  }
+
+  .rowAction {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .detailMeta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace {
+    padding-top: 18px;
+  }
+
+  .workspaceHeader,
+  .archiveHeader,
+  .detailHeader {
+    margin-top: 30px;
+  }
+
+  .workspaceHeader h1,
+  .archiveHeader h1 {
+    font-size: clamp(47px, 14vw, 64px);
+  }
+
+  .workspaceHeader p,
+  .archiveHeader > div > p {
+    margin-top: 16px;
+    font-size: 17px;
+  }
+
+  .composerPanel,
+  .archivePanel,
+  .detailPanel {
+    margin-top: 32px;
+  }
+
+  .composerPanel > .panelHeading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .panelHeading,
+  .composerFields,
+  .detailPanel {
+    padding: 22px;
+  }
+
+  .composerFields {
+    gap: 25px;
+  }
+
+  .field input,
+  .field textarea,
+  .archiveSearch input,
+  .archiveFilters select {
+    font-size: 16px;
+  }
+
+  .locationFieldset > div,
+  .optionsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .locationFieldset > div > label + label {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .composerActions {
+    display: grid;
+    padding: 18px 22px 22px;
+  }
+
+  .composerActions button {
+    width: 100%;
+  }
+
+  .dialogBackdrop {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .reviewDialog,
+  .withdrawDialog {
+    max-height: calc(100dvh - 20px);
+    padding: 28px 20px 20px;
+  }
+
+  .reviewCopy h3,
+  .withdrawDialog h2 {
+    font-size: 32px;
+  }
+
+  .dialogActions {
+    grid-template-columns: 1fr;
+  }
+
+  .dialogActions .primaryButton {
+    grid-row: 1;
+  }
+
+  .archiveToolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    padding: 22px;
+  }
+
+  .archiveHeader h1 {
+    font-size: clamp(38px, 11vw, 52px);
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .newAnnouncementLink {
+    width: 100%;
+  }
+
+  .archiveSearch {
+    padding: 18px 22px;
+  }
+
+  .archiveSearch > div {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .archiveSearch button {
+    grid-column: 1 / -1;
+    margin: 0 -1px -1px;
+  }
+
+  .archiveFilters summary {
+    margin-left: 22px;
+  }
+
+  .archiveFilters > form {
+    grid-template-columns: 1fr;
+    padding: 0 22px 20px;
+  }
+
+  .announcementRow {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 22px;
+  }
+
+  .rowMeta,
+  .rowAction {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .rowAction {
+    width: 100%;
+  }
+
+  .detailHeader {
+    display: grid;
+  }
+
+  .detailHeader h1 {
+    font-size: clamp(42px, 12vw, 58px);
+  }
+
+  .detailStatus {
+    padding: 0;
+  }
+
+  .detailMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .detailActions {
+    display: grid;
+  }
+
+  .detailActions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 380px) {
+  .monthControl {
+    min-width: 0;
+    grid-template-columns: 46px minmax(0, 1fr) 46px;
+  }
+
+  .monthControl > div {
+    padding-inline: 7px;
+  }
+
+  .monthControl > div strong {
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardActions a,
+  .newAnnouncementLink {
+    transition: none;
+  }
+}
