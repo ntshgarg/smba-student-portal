@@ -1,7 +1,5 @@
 "use client"
 
-import { CalendarDays } from "lucide-react"
-
 import {
   CoachDashboardAction,
   CoachDashboardActions,
@@ -16,20 +14,26 @@ export function SessionsCard({
   nextSessionLabel: string | null
   todaySessionCount: number
 }) {
+  const status = todaySessionCount
+    ? `${todaySessionCount} today`
+    : nextSessionLabel
+      ? "Next session"
+      : "No sessions"
+  const detail = todaySessionCount
+    ? `${todaySessionCount} ${todaySessionCount === 1 ? "session" : "sessions"} today. Today’s running sheet and future schedules.`
+    : nextSessionLabel
+      ? `Next · ${nextSessionLabel}`
+      : "No training scheduled yet."
 
   return (
     <CoachDashboardCard
-      eyebrow="Training calendar"
-      icon={CalendarDays}
+      area="sessions"
+      status={status}
       title="Sessions"
       titleId="coach-sessions-card-title"
     >
-      <CoachDashboardSummary>
-        {todaySessionCount
-          ? `${todaySessionCount} ${todaySessionCount === 1 ? "session" : "sessions"} today`
-          : nextSessionLabel
-            ? `Next · ${nextSessionLabel}`
-            : "No training scheduled yet"}
+      <CoachDashboardSummary detail={detail}>
+        Training calendar
       </CoachDashboardSummary>
       <CoachDashboardActions ariaLabel="Session actions">
         <CoachDashboardAction href="/coach/calendar">Calendar</CoachDashboardAction>

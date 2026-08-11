@@ -1,0 +1,302 @@
+.hero .heroInner {
+  grid-template-rows: minmax(300px, 1fr) auto;
+}
+
+.heroCopy {
+  padding-bottom: clamp(38px, 5vh, 58px);
+}
+
+.attendanceSection {
+  padding-block: clamp(30px, 4vw, 52px) clamp(96px, 10vw, 136px);
+}
+
+.ledgerTicket {
+  position: relative;
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
+  overflow: visible;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 88%, var(--ivory));
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--navy) 8%, transparent);
+}
+
+.ledgerTicket::before,
+.ledgerTicket::after {
+  position: absolute;
+  top: 132px;
+  z-index: 3;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--ivory);
+  content: "";
+  transform: translateY(-50%);
+}
+
+.ledgerTicket::before {
+  left: -11px;
+}
+
+.ledgerTicket::after {
+  right: -11px;
+}
+
+.ledgerMasthead {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 22px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.ledgerMasthead h2 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ledgerMasthead > span {
+  flex: 0 0 auto;
+  padding: 6px 9px 5px;
+  border: 1px solid color-mix(in srgb, var(--red) 55%, var(--line));
+  color: var(--red);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.ledgerBody {
+  display: grid;
+  min-height: 204px;
+  grid-template-columns: 250px minmax(300px, 1fr) minmax(270px, 310px);
+  align-items: center;
+  gap: clamp(30px, 3.5vw, 48px);
+  padding: 28px 30px;
+}
+
+.primaryMetric {
+  display: grid;
+  align-content: center;
+  padding-left: 8px;
+}
+
+.primaryMetric strong {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(62px, 6vw, 82px);
+  font-style: italic;
+  font-weight: 430;
+  letter-spacing: -0.065em;
+  line-height: 0.86;
+}
+
+.primaryMetric span {
+  margin-top: 13px;
+  color: var(--steel);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.ledgerRows {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.ledgerRows > div {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ledgerRows dt {
+  color: var(--steel);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ledgerRows dd {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 26px;
+  font-style: italic;
+  font-weight: 460;
+  line-height: 1;
+}
+
+.ledgerAction {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+}
+
+.ledgerAction p {
+  margin: 0;
+  color: var(--steel);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.ledgerActionButton {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 17px;
+  border: 1px solid var(--navy);
+  background: transparent;
+  color: var(--navy);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 780;
+  text-align: left;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.ledgerActionButton:hover {
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.ledgerActionButton:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+
+.ledgerActionButton svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  stroke-width: 1.7;
+}
+
+.attendanceRegister {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(24px, 3vw, 34px);
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 980px) {
+  .hero .heroInner {
+    grid-template-rows: minmax(430px, 1fr) auto;
+  }
+
+  .ledgerBody {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 28px 38px;
+  }
+
+  .ledgerAction {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 310px);
+    align-items: center;
+  }
+
+  .ledgerTicket::before,
+  .ledgerTicket::after {
+    top: 153px;
+  }
+}
+
+@media (max-width: 720px) {
+  .hero .heroInner {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .heroCopy {
+    padding-bottom: clamp(24px, 4svh, 36px);
+  }
+
+  .attendanceSection {
+    padding-block: 24px 88px;
+  }
+
+  .ledgerMasthead {
+    min-height: 56px;
+    gap: 14px;
+    padding-inline: 18px;
+  }
+
+  .ledgerMasthead h2 {
+    font-size: 10px;
+  }
+
+  .ledgerBody {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+    padding: 26px 22px 24px;
+  }
+
+  .primaryMetric {
+    padding-left: 0;
+  }
+
+  .primaryMetric strong {
+    font-size: clamp(64px, 20vw, 82px);
+  }
+
+  .ledgerAction {
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .ledgerActionButton {
+    min-height: 50px;
+  }
+
+  .ledgerTicket::before,
+  .ledgerTicket::after,
+  .ledgerTicketOpen::before,
+  .ledgerTicketOpen::after {
+    top: 192px;
+  }
+
+  .attendanceRegister {
+    padding: 24px 20px;
+  }
+}
+
+@media (max-width: 380px) {
+  .ledgerMasthead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding-block: 14px;
+  }
+
+  .ledgerTicket::before,
+  .ledgerTicket::after,
+  .ledgerTicketOpen::before,
+  .ledgerTicketOpen::after {
+    top: 216px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledgerActionButton {
+    transition: none;
+  }
+}

@@ -169,7 +169,7 @@ test("Player attendance expansion and year restore through refresh and Back", as
   await loginAsPlayer(page)
   await page.goto("/player", { waitUntil: "networkidle" })
 
-  const toggle = page.getByRole("button", { name: "View attendance record" })
+  const toggle = page.getByRole("button", { name: "Open attendance record" })
   await expect(toggle).toBeVisible()
   await toggle.click()
   await expect(page).toHaveURL((url) => url.searchParams.get("attendance") === "register")

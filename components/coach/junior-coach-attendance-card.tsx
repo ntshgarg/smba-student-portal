@@ -1,11 +1,13 @@
 "use client"
 
-import { Check, ChevronDown, Clock3 } from "lucide-react"
+import { ArrowUpRight, ChevronUp } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { CSSProperties } from "react"
 
 import { Reveal } from "@/components/reveal"
 import { formatDateKey } from "@/lib/format"
+
+import styles from "./junior-coach-dashboard.module.css"
 
 type PersonalStaffAttendanceRecord = {
   choice: "present" | "absent" | "cleared"
@@ -104,60 +106,75 @@ export function JuniorCoachAttendanceCard({
     setScrollToToday(true)
   }
 
+  const recordedValue = String(attendance.summary.recorded).padStart(2, "0")
+  const presentValue = String(attendance.summary.present).padStart(2, "0")
+  const absentValue = String(attendance.summary.absent).padStart(2, "0")
+
   return (
-    <section id="coach-attendance" className="dashboard-section page-shell junior-coach-attendance-section">
+    <section
+      id="coach-attendance"
+      className={`dashboard-section page-shell junior-coach-attendance-section ${styles.attendanceSection}`}
+    >
       <Reveal
-        className={`attendance-card dashboard-card player-attendance-card junior-coach-attendance-card${isOpen ? " is-open" : ""}`}
+        className={`dashboard-card junior-coach-attendance-card ${styles.ledgerTicket}${isOpen ? ` ${styles.ledgerTicketOpen}` : ""}`}
       >
-        <div className="attendance-card-header">
-          <div className="card-icon">
-            {attendance.summary.recorded ? <Check aria-hidden="true" /> : <Clock3 aria-hidden="true" />}
+        <header className={styles.ledgerMasthead}>
+          <h2>Personal roll-call ledger</h2>
+          <span>{attendance.monthLabel}</span>
+        </header>
+
+        <div className={styles.ledgerBody}>
+          <div className={styles.primaryMetric}>
+            <strong>
+              {attendance.summary.percentage === null
+                ? "—"
+                : `${attendance.summary.percentage}%`}
+            </strong>
+            <span>Attendance</span>
           </div>
-          <h2 className="card-label">Attendance · {attendance.monthLabel}</h2>
+
+          <dl className={styles.ledgerRows} aria-label={`${attendance.monthLabel} attendance totals`}>
+            <div>
+              <dt>Recorded days</dt>
+              <dd>{recordedValue}</dd>
+            </div>
+            <div>
+              <dt>Present</dt>
+              <dd>{presentValue}</dd>
+            </div>
+            <div>
+              <dt>Absent</dt>
+              <dd>{absentValue}</dd>
+            </div>
+          </dl>
+
+          <div className={styles.ledgerAction}>
+            <p>
+              {attendance.summary.recorded
+                ? "Review your read-only annual attendance register whenever you need it."
+                : "Your record will appear after the head coach saves an attendance day."}
+            </p>
+            <button
+              className={styles.ledgerActionButton}
+              type="button"
+              aria-expanded={isOpen}
+              aria-controls="junior-coach-attendance-register"
+              onClick={() => setIsOpen((open) => {
+                if (!open && activeYear === currentYear) setScrollToToday(true)
+                return !open
+              })}
+            >
+              <span>{isOpen ? "Close attendance record" : "Open attendance record"}</span>
+              {isOpen ? <ChevronUp aria-hidden="true" /> : <ArrowUpRight aria-hidden="true" />}
+            </button>
+          </div>
         </div>
 
-        {attendance.summary.percentage !== null ? (
-          <>
-            <strong className="attendance-value">{attendance.summary.percentage}%</strong>
-            <p className="attendance-summary-copy">
-              {attendance.summary.present} of {attendance.summary.recorded} recorded days attended.
-            </p>
-            <div
-              className="attendance-track"
-              role="progressbar"
-              aria-label={`${attendance.summary.percentage}% attendance in ${attendance.monthLabel}`}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={attendance.summary.percentage}
-            >
-              <span style={{ width: `${attendance.summary.percentage}%` }} />
-            </div>
-          </>
-        ) : (
-          <>
-            <h3 className="empty-card-title">No attendance recorded yet</h3>
-            <p className="empty-card-copy">
-              Your record will appear after the head coach saves an attendance day.
-            </p>
-          </>
-        )}
-
-        <button
-          className="player-attendance-toggle"
-          type="button"
-          aria-expanded={isOpen}
-          aria-controls="junior-coach-attendance-register"
-          onClick={() => setIsOpen((open) => {
-            if (!open && activeYear === currentYear) setScrollToToday(true)
-            return !open
-          })}
-        >
-          <span>{isOpen ? "Close attendance record" : "View attendance record"}</span>
-          <ChevronDown aria-hidden="true" />
-        </button>
-
         {isOpen ? (
-          <div className="player-attendance-register" id="junior-coach-attendance-register">
+          <div
+            className={`player-attendance-register ${styles.attendanceRegister}`}
+            id="junior-coach-attendance-register"
+          >
             <div className="player-attendance-register-heading">
               <div>
                 <span>Your record</span>

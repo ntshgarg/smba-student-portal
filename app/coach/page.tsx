@@ -212,7 +212,7 @@ export default async function CoachDashboardPage({
         sessionCount={todaySessions.length}
         sessionPosition={sessionPosition}
       />
-      <CoachDashboardStack>
+      <CoachDashboardStack id="attendance">
         <AttendanceCard scheduleCount={series.length} />
         <SessionsCard
           nextSessionLabel={nextSessionLabel}
@@ -223,7 +223,6 @@ export default async function CoachDashboardPage({
           completedCount={completedReportCount}
           month={reportMonth}
         />
-        <AnnouncementCard activeCount={activeAnnouncementCount} />
         <FinancialsCard
           active={financeActive}
           attentionCount={finance.attentionCount}
@@ -231,6 +230,7 @@ export default async function CoachDashboardPage({
           period={financePeriod}
           preparation={finance.preparation}
         />
+        <AnnouncementCard activeCount={activeAnnouncementCount} />
         <MembersCard
           memberCount={playerRecords.members.length}
           pendingRegistrationCount={pendingRegistrationCount}

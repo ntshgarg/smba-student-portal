@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, FileText } from "lucide-react"
+import { Check } from "lucide-react"
 
 import {
   CoachDashboardAction,
@@ -36,16 +36,17 @@ export function ReportsCard({
 
   return (
     <CoachDashboardCard
-      eyebrow="Player development"
-      icon={FileText}
+      area="reports"
+      status={`${monthLabel} · ${completedCount}/${activePlayerIds.length}`}
       title="Monthly reports"
       titleId="coach-reports-card-title"
     >
       <CoachDashboardSummary
         ariaLabel={`${monthLabel}, ${completedCount} of ${activePlayerIds.length} reports published`}
+        detail={`Player development record for ${monthLabel}.`}
         icon={isComplete ? <Check aria-hidden="true" /> : undefined}
       >
-        {monthLabel} · {completedCount}/{activePlayerIds.length} published
+        {completedCount} of {activePlayerIds.length} published
       </CoachDashboardSummary>
       <CoachDashboardActions ariaLabel="Monthly report actions">
         <CoachDashboardAction href={`/coach/reports/write?${writeSearch.toString()}`}>

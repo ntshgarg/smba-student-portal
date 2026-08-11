@@ -148,6 +148,93 @@ async function expectContainedScrollableTable({
   }
 }
 
+test("Coach dashboard tickets keep the selected responsive composition", async ({ page }) => {
+  await loginAsCoach(page)
+
+  const cases = [
+    { height: 1000, mode: "web", width: 1440 },
+    { height: 1000, mode: "tablet", width: 820 },
+    { height: 844, mode: "mobile", width: 390 },
+  ] as const
+
+  for (const viewport of cases) {
+    await page.setViewportSize({ height: viewport.height, width: viewport.width })
+    await page.goto("/coach", { waitUntil: "domcontentloaded" })
+    await settleResponsiveLayout(page)
+    await page.getByRole("link", { name: "Today’s attendance" }).click()
+    await expect(page).toHaveURL((url) => url.hash === "#attendance")
+
+    await expect.poll(async () => page.evaluate(() => {
+      const grid = document.querySelector("[data-coach-dashboard-grid]")?.getBoundingClientRect()
+      const header = document.querySelector(".portal-header")?.getBoundingClientRect()
+      const hero = document.querySelector(".coach-welcome-hero")?.getBoundingClientRect()
+      if (!grid || !header || !hero) return Number.POSITIVE_INFINITY
+
+      return Math.max(
+        Math.abs(grid.top - header.bottom),
+        Math.abs(hero.bottom - header.bottom),
+      )
+    })).toBeLessThanOrEqual(2)
+
+    const grid = page.locator("[data-coach-dashboard-grid]")
+    await expect(grid).toBeVisible()
+    const cards = await grid.locator("[data-area]").evaluateAll((sections) => Object.fromEntries(
+      sections.map((section) => {
+        const bounds = section.getBoundingClientRect()
+        return [section.getAttribute("data-area"), {
+          height: bounds.height,
+          left: bounds.left,
+          top: bounds.top,
+          width: bounds.width,
+        }]
+      }),
+    )) as Record<string, { height: number; left: number; top: number; width: number }>
+    const gridBounds = await grid.boundingBox()
+    expect(gridBounds).not.toBeNull()
+
+    const expectSameRow = (first: string, second: string) => {
+      expect(Math.abs(cards[first].top - cards[second].top)).toBeLessThanOrEqual(2)
+    }
+
+    if (viewport.mode === "web") {
+      expect(Math.abs(cards.attendance.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
+      expectSameRow("sessions", "reports")
+      expectSameRow("financials", "announcements")
+      expectSameRow("announcements", "members")
+      expect(cards.sessions.left).toBeLessThan(cards.reports.left)
+      expect(cards.financials.left).toBeLessThan(cards.announcements.left)
+      expect(cards.announcements.left).toBeLessThan(cards.members.left)
+    } else if (viewport.mode === "tablet") {
+      expect(Math.abs(cards.attendance.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
+      expect(Math.abs(cards.sessions.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
+      expectSameRow("reports", "financials")
+      expectSameRow("announcements", "members")
+      expect(cards.reports.left).toBeLessThan(cards.financials.left)
+      expect(cards.announcements.left).toBeLessThan(cards.members.left)
+    } else {
+      const order = [
+        "attendance",
+        "sessions",
+        "reports",
+        "financials",
+        "announcements",
+        "members",
+      ]
+      for (let index = 1; index < order.length; index += 1) {
+        expect(cards[order[index]].top).toBeGreaterThan(cards[order[index - 1]].top)
+        expect(Math.abs(cards[order[index]].width - cards.attendance.width)).toBeLessThanOrEqual(2)
+      }
+    }
+
+    const actionHeights = await grid.getByRole("link").evaluateAll((links) => (
+      links.map((link) => link.getBoundingClientRect().height)
+    ))
+    expect(actionHeights.length).toBeGreaterThan(0)
+    expect(actionHeights.every((height) => height >= 44)).toBe(true)
+    await expectNoDocumentOverflow(page, `${viewport.width}x${viewport.height} coach tickets`)
+  }
+})
+
 test("Announcements remain contained at every supported portrait width", async ({ page }) => {
   await loginAsCoach(page)
 

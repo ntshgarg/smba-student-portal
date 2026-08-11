@@ -28,6 +28,8 @@
   --space-section-sm: 56px;
   --section-space-md: var(--space-editorial);
   --section-space-lg: var(--space-section-sm);
+  --page-scroll-padding: 88px;
+  --portal-header-height: 82px;
 }
 
 .coach-register-table td .coach-register-cell-control {
@@ -1148,7 +1150,7 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 88px;
+  scroll-padding-top: var(--page-scroll-padding);
 }
 
 body {
@@ -1251,7 +1253,7 @@ h3 {
   z-index: 50;
   display: grid;
   grid-template-columns: 1fr auto;
-  min-height: 82px;
+  min-height: var(--portal-header-height);
   align-items: center;
   gap: 32px;
   padding: 10px max(24px, calc((100vw - 1360px) / 2));
@@ -5777,13 +5779,17 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 @media (max-width: 720px) {
+  :root {
+    --portal-header-height: 70px;
+  }
+
   .page-shell,
   .welcome-inner {
     width: min(100% - 32px, 1240px);
   }
 
   .portal-header {
-    min-height: 70px;
+    min-height: var(--portal-header-height);
     padding: 8px 16px;
   }
 
@@ -9765,6 +9771,971 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .coach-published-report-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Selected coach dashboard direction: editorial greeting + daily scoreboard ribbon. */
+.coach-welcome-scoreboard {
+  min-height: calc(100svh - 82px);
+}
+
+.coach-welcome-scoreboard .welcome-inner {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(300px, 1fr) auto auto;
+  align-items: end;
+  column-gap: 0;
+  row-gap: clamp(24px, 3.5vh, 40px);
+  padding: clamp(60px, 8vh, 94px) 0 26px;
+}
+
+.coach-welcome-scoreboard .coach-scoreboard-court {
+  top: clamp(34px, 6vh, 68px);
+  right: auto;
+  left: 50%;
+  width: min(92vw, 1330px);
+  height: auto;
+  color: rgba(247, 245, 240, 0.055);
+  stroke-width: 1;
+  transform: translateX(-50%);
+  vector-effect: non-scaling-stroke;
+}
+
+.coach-welcome-scoreboard .coach-court-net {
+  stroke-width: 1.15;
+}
+
+.coach-welcome-scoreboard .coach-welcome-copy {
+  position: relative;
+  width: 100%;
+  max-width: 980px;
+}
+
+.coach-welcome-scoreboard .coach-welcome-copy h1 {
+  max-width: none;
+  margin: 0;
+  font-size: clamp(72px, 7.8vw, 118px);
+  line-height: 0.86;
+}
+
+.coach-welcome-scoreboard .coach-welcome-line {
+  margin-top: clamp(20px, 2.5vh, 30px);
+}
+
+.coach-welcome-scoreboard .coach-scoreboard-ribbon {
+  display: grid;
+  width: 100%;
+  min-height: 151px;
+  grid-template-columns:
+    minmax(190px, 1fr)
+    minmax(330px, 1.45fr)
+    minmax(270px, 1.15fr);
+  align-items: stretch;
+  padding: 0;
+}
+
+.coach-welcome-scoreboard .coach-ribbon-date {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: 26px clamp(24px, 2.6vw, 34px);
+}
+
+.coach-welcome-scoreboard .coach-ribbon-date > span {
+  font-size: 14px;
+}
+
+.coach-welcome-scoreboard .coach-welcome-card time {
+  font-size: clamp(18px, 1.6vw, 21px);
+  line-height: 1.3;
+}
+
+.coach-welcome-scoreboard .coach-briefing-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  border-left: 1px solid var(--line);
+}
+
+.coach-welcome-scoreboard .coach-briefing-metric {
+  align-content: center;
+  gap: 9px;
+  padding: 24px clamp(22px, 2.6vw, 36px);
+  text-align: center;
+}
+
+.coach-welcome-scoreboard .coach-briefing-metric + .coach-briefing-metric {
+  border-left: 1px solid var(--line);
+}
+
+.coach-welcome-scoreboard .coach-briefing-metric dd {
+  font-size: clamp(38px, 3.6vw, 50px);
+}
+
+.coach-welcome-scoreboard .coach-briefing-metric dt {
+  font-size: 11px;
+}
+
+.coach-welcome-scoreboard .coach-time-metric dd {
+  white-space: nowrap;
+}
+
+.coach-welcome-scoreboard .coach-message-card > .coach-welcome-session {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-self: stretch;
+  align-items: start;
+  align-content: center;
+  justify-content: stretch;
+  gap: 7px;
+  margin: 0;
+  padding: 24px clamp(24px, 2.8vw, 38px);
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+
+.coach-welcome-scoreboard .coach-welcome-session > span {
+  font-size: 12px;
+}
+
+.coach-welcome-scoreboard .coach-welcome-session strong {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.coach-welcome-scoreboard .coach-welcome-session p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.coach-welcome-scoreboard .coach-welcome-empty {
+  align-self: stretch;
+  margin: 0;
+  padding: 28px clamp(28px, 4vw, 54px);
+  border-left: 1px solid var(--line);
+  font-size: clamp(25px, 2.5vw, 36px);
+}
+
+.coach-welcome-scoreboard .scroll-cue {
+  min-height: 42px;
+}
+
+.player-welcome-scoreboard .player-scoreboard-message {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 22px clamp(24px, 2.5vw, 34px);
+  border-left: 1px solid var(--line);
+}
+
+.player-welcome-scoreboard .player-scoreboard-message > span {
+  color: var(--red);
+}
+
+.player-welcome-scoreboard .player-scoreboard-message blockquote {
+  margin: 0;
+  font-size: clamp(16px, 1.35vw, 20px);
+  line-height: 1.35;
+}
+
+.player-welcome-scoreboard .player-scoreboard-ribbon.is-empty {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.player-welcome-scoreboard .player-scoreboard-ribbon.is-empty .player-scoreboard-message {
+  grid-template-columns: minmax(170px, 0.35fr) minmax(0, 1.65fr);
+  align-items: center;
+  gap: clamp(28px, 4vw, 64px);
+  border-left: 0;
+}
+
+.player-welcome-scoreboard .player-scoreboard-ribbon.is-empty blockquote {
+  font-size: clamp(22px, 2.2vw, 30px);
+}
+
+@media (max-width: 980px) {
+  .coach-welcome-scoreboard .welcome-inner {
+    grid-template-rows: minmax(430px, 1fr) auto auto;
+    row-gap: 28px;
+    padding: 50px 0 22px;
+  }
+
+  .coach-welcome-scoreboard .coach-scoreboard-court {
+    top: 7%;
+    width: 138vw;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-copy {
+    max-width: 650px;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-copy h1 {
+    font-size: clamp(76px, 12vw, 112px);
+  }
+
+  .coach-welcome-scoreboard .coach-scoreboard-ribbon {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coach-welcome-scoreboard.coach-welcome-hero .coach-scoreboard-ribbon.has-session {
+    grid-template-areas:
+      "date session"
+      "metrics metrics";
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .coach-welcome-scoreboard .coach-ribbon-date {
+    padding: 26px 34px 22px;
+  }
+
+  .coach-welcome-scoreboard.coach-welcome-hero .coach-ribbon-date {
+    grid-area: date;
+  }
+
+  .coach-welcome-scoreboard .coach-ribbon-date > span {
+    font-size: 13px;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-card time {
+    font-size: 18px;
+  }
+
+  .coach-welcome-scoreboard .coach-briefing-metrics {
+    padding-inline: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .coach-welcome-scoreboard.coach-welcome-hero .coach-briefing-metrics {
+    grid-area: metrics;
+  }
+
+  .coach-welcome-scoreboard .coach-briefing-metric {
+    padding: 28px 34px;
+  }
+
+  .coach-welcome-scoreboard .coach-message-card > .coach-welcome-session {
+    grid-area: session;
+    padding: 24px 34px 28px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-empty {
+    padding: 28px 34px 32px;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .player-welcome-scoreboard .player-scoreboard-message {
+    padding: 24px 34px 28px;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .player-welcome-scoreboard .player-scoreboard-ribbon.is-empty .player-scoreboard-message {
+    border-top: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .coach-welcome-scoreboard {
+    min-height: calc(100svh - 70px);
+  }
+
+  .coach-welcome-scoreboard .welcome-inner {
+    width: min(100% - 32px, 1240px);
+    grid-template-rows: auto auto auto;
+    align-content: end;
+    row-gap: 8px;
+    padding: 28px 0 14px;
+  }
+
+  .coach-welcome-scoreboard .coach-scoreboard-court {
+    top: 74px;
+    width: 190vw;
+    color: rgba(247, 245, 240, 0.06);
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-copy {
+    display: flex;
+    min-height: clamp(340px, 42svh, 420px);
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-copy h1 {
+    font-size: clamp(58px, 17vw, 74px);
+    line-height: 0.84;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-line {
+    margin-top: 22px;
+    font-size: 20px;
+  }
+
+  .coach-welcome-scoreboard .coach-ribbon-date {
+    align-items: flex-start;
+    justify-content: center;
+    flex-flow: column nowrap;
+    gap: 8px;
+    padding: 18px 16px;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-card time {
+    margin: 0;
+    font-size: 17px;
+  }
+
+  .coach-welcome-scoreboard .coach-briefing-metrics {
+    padding-inline: 0;
+  }
+
+  .coach-welcome-scoreboard .coach-briefing-metric {
+    padding: 20px 16px;
+  }
+
+  .coach-welcome-scoreboard .coach-briefing-metric dd {
+    font-size: clamp(34px, 10vw, 42px);
+  }
+
+  .coach-welcome-scoreboard .coach-time-metric dd {
+    white-space: nowrap;
+  }
+
+  .coach-welcome-scoreboard .coach-message-card > .coach-welcome-session {
+    gap: 5px;
+    padding: 18px 16px 20px;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-session > span {
+    font-size: 11px;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-session strong {
+    font-size: 14px;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-session p {
+    font-size: 12px;
+  }
+
+  .coach-welcome-scoreboard .coach-welcome-empty {
+    padding: 24px;
+    font-size: 26px;
+  }
+
+  .player-welcome-scoreboard .player-scoreboard-message {
+    padding: 20px 24px 22px;
+  }
+
+  .player-welcome-scoreboard .player-scoreboard-message blockquote {
+    font-size: 16px;
+  }
+
+  .player-welcome-scoreboard .player-scoreboard-ribbon.is-empty .player-scoreboard-message {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 24px;
+  }
+
+  .player-welcome-scoreboard .player-scoreboard-ribbon.is-empty blockquote {
+    font-size: 22px;
+  }
+
+  .coach-welcome-scoreboard .scroll-cue {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 340px) {
+  .coach-welcome-scoreboard.coach-welcome-hero .coach-scoreboard-ribbon.has-session {
+    grid-template-areas:
+      "date"
+      "metrics"
+      "session";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coach-welcome-scoreboard .coach-message-card > .coach-welcome-session {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .coach-welcome-scoreboard .coach-briefing-metric {
+    padding: 18px 12px;
+  }
+
+  .coach-welcome-scoreboard .coach-briefing-metric dd {
+    font-size: 32px;
+  }
+}
+
+/* Selected player dashboard cards: 04A.1 compact Match Tickets with boxed actions. */
+.player-ticket-dashboard {
+  --player-ticket-paper: color-mix(in srgb, var(--white) 88%, var(--ivory));
+  --player-ticket-pad-x: 24px;
+  --player-ticket-pad-y: 22px;
+  min-height: calc(100svh - 82px);
+  padding-block: var(--space-group) clamp(96px, 10vw, 136px);
+  scroll-margin-top: -6px;
+}
+
+.player-ticket-dashboard .dashboard-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 0;
+}
+
+.player-ticket-dashboard .player-ticket-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 210px;
+  flex-direction: column;
+  overflow: visible;
+  padding: var(--player-ticket-pad-y) var(--player-ticket-pad-x);
+  border: 1px solid var(--line);
+  background: var(--player-ticket-paper);
+}
+
+.player-ticket-dashboard .player-ticket-card::before,
+.player-ticket-dashboard .player-ticket-card::after {
+  position: absolute;
+  top: calc(50% - 9px);
+  z-index: 2;
+  width: 10px;
+  height: 18px;
+  border: 1px solid var(--line);
+  background: var(--ivory);
+  content: "";
+  pointer-events: none;
+}
+
+.player-ticket-dashboard .player-ticket-card::before {
+  left: -1px;
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+}
+
+.player-ticket-dashboard .player-ticket-card::after {
+  right: -1px;
+  border-right: 0;
+  border-radius: 999px 0 0 999px;
+}
+
+.player-ticket-dashboard .player-ticket-masthead {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.player-ticket-dashboard .player-ticket-masthead .player-ticket-title {
+  min-width: 0;
+  margin: 0;
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 780;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.player-ticket-dashboard .player-ticket-context {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--red) 52%, var(--line));
+  color: var(--red);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.player-ticket-dashboard .player-ticket-action {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: auto;
+  padding: 0 15px;
+  border: 1px solid var(--navy);
+  background: transparent;
+  color: var(--navy);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 780;
+  line-height: 1.3;
+  text-align: left;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.player-ticket-dashboard .player-ticket-action:hover {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.player-ticket-dashboard .player-ticket-action:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+
+.player-ticket-dashboard .player-ticket-action svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  color: currentColor;
+  transition: transform 160ms ease;
+}
+
+.player-ticket-dashboard .player-ticket-action:hover svg {
+  transform: translateX(3px);
+}
+
+.player-ticket-dashboard .player-ticket-session {
+  --player-ticket-pad-x: 30px;
+  --player-ticket-pad-y: 28px;
+  display: grid;
+  min-height: 265px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 0.52fr);
+  grid-template-rows: auto 1fr auto auto;
+  column-gap: 48px;
+}
+
+.player-ticket-dashboard .player-ticket-session .player-ticket-masthead,
+.player-ticket-dashboard .player-ticket-session .session-moment,
+.player-ticket-dashboard .player-ticket-session .session-context,
+.player-ticket-dashboard .player-ticket-session .session-meta {
+  grid-column: 1;
+}
+
+.player-ticket-dashboard .player-ticket-session .session-moment {
+  margin-top: 26px;
+}
+
+.player-ticket-dashboard .player-ticket-session .session-time {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(66px, 6vw, 78px);
+  font-style: italic;
+  font-weight: 430;
+  letter-spacing: -0.055em;
+  line-height: 0.82;
+}
+
+.player-ticket-dashboard .player-ticket-session .session-date {
+  margin-top: 10px;
+  color: var(--steel);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 19px;
+  font-style: italic;
+  font-weight: 450;
+  line-height: 1.25;
+}
+
+.player-ticket-dashboard .player-ticket-session .session-context {
+  margin-top: 18px;
+  font-size: 18px;
+  font-weight: 740;
+  letter-spacing: -0.025em;
+}
+
+.player-ticket-dashboard .player-ticket-session .session-meta {
+  margin-top: 10px;
+  color: var(--steel);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.player-ticket-dashboard .player-ticket-session .session-meta span + span::before {
+  margin-inline: 11px;
+  color: var(--line);
+  content: "|";
+}
+
+.player-ticket-dashboard .player-ticket-session .session-arrival {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-items: center;
+  margin: calc(0px - var(--player-ticket-pad-y)) calc(0px - var(--player-ticket-pad-x))
+    calc(0px - var(--player-ticket-pad-y)) 0;
+  padding: 34px;
+  border-top: 0;
+  border-left: 1px dashed var(--line);
+  background: color-mix(in srgb, var(--ivory) 72%, var(--white));
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 21px;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.player-ticket-dashboard .player-ticket-session.is-empty {
+  display: flex;
+  min-height: 250px;
+}
+
+.player-ticket-dashboard .player-ticket-session.is-empty .empty-card-title {
+  max-width: 520px;
+  margin-top: 26px;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(32px, 4vw, 46px);
+  font-style: italic;
+  font-weight: 470;
+}
+
+.player-ticket-dashboard .player-ticket-session.is-empty .empty-card-copy {
+  margin-top: 12px;
+}
+
+.player-ticket-dashboard .player-ticket-attendance {
+  grid-column: 1;
+}
+
+.player-ticket-dashboard .player-ticket-report {
+  grid-column: 2;
+}
+
+.player-ticket-dashboard .player-ticket-fee {
+  grid-column: 3;
+}
+
+.player-ticket-dashboard .player-ticket-record-card {
+  min-height: 210px;
+}
+
+.player-ticket-dashboard .player-ticket-attendance-primary,
+.player-ticket-dashboard .player-ticket-record-primary {
+  margin-top: 18px;
+}
+
+.player-ticket-dashboard .player-ticket-record-primary {
+  margin-bottom: 16px;
+}
+
+.player-ticket-dashboard .player-ticket-attendance .attendance-value {
+  margin-top: 0;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 60px;
+  font-style: italic;
+  font-weight: 450;
+  letter-spacing: -0.06em;
+  line-height: 0.8;
+}
+
+.player-ticket-dashboard .player-ticket-attendance .attendance-summary-copy {
+  margin-top: 8px;
+  color: var(--steel);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.player-ticket-dashboard .player-ticket-attendance .attendance-track {
+  height: 2px;
+  margin-top: 14px;
+}
+
+.player-ticket-dashboard .player-ticket-attendance-primary .empty-card-title {
+  display: block;
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 29px;
+  font-style: italic;
+  font-weight: 470;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.player-ticket-dashboard .player-ticket-attendance-primary .empty-card-copy {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.player-ticket-dashboard .player-ticket-attendance .player-attendance-toggle {
+  padding: 0 15px;
+  border: 1px solid var(--navy);
+}
+
+.player-ticket-dashboard .player-ticket-attendance.is-open {
+  min-height: 0;
+  grid-column: 1 / -1;
+}
+
+.player-ticket-dashboard .player-ticket-attendance.is-open::before,
+.player-ticket-dashboard .player-ticket-attendance.is-open::after {
+  display: none;
+}
+
+.player-ticket-dashboard .player-ticket-attendance.is-open .player-attendance-toggle {
+  margin-top: 22px;
+}
+
+.player-ticket-dashboard .player-attendance-register {
+  max-width: none;
+  margin: 24px calc(0px - var(--player-ticket-pad-x)) calc(0px - var(--player-ticket-pad-y));
+  padding: 30px;
+}
+
+.player-ticket-dashboard .player-ticket-record-value {
+  display: block;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 29px;
+  font-style: italic;
+  font-weight: 470;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.player-ticket-dashboard .player-ticket-record-copy {
+  max-width: 360px;
+  margin-top: 7px;
+  color: var(--steel);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.player-ticket-dashboard .player-ticket-record-card .player-ticket-action {
+  margin-top: auto;
+}
+
+.player-ticket-dashboard .player-ticket-announcements {
+  min-height: 0;
+  grid-column: 1 / -1;
+  padding: 24px 28px;
+}
+
+.player-ticket-dashboard .player-ticket-announcement-state {
+  display: block;
+  margin-top: 22px;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 27px;
+  font-style: italic;
+  font-weight: 470;
+}
+
+.player-ticket-dashboard .player-ticket-announcements .player-ticket-announcement-list {
+  margin-top: 18px;
+}
+
+.player-ticket-dashboard .player-ticket-announcements .player-ticket-announcement-all {
+  width: fit-content;
+  margin-top: 16px;
+}
+
+.player-ticket-dashboard .player-ticket-announcements > p {
+  margin-top: 8px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.player-ticket-dashboard .player-profile-reveal {
+  margin-top: var(--space-group);
+}
+
+@media (min-width: 761px) and (max-width: 980px) {
+  .player-ticket-dashboard .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-ticket-dashboard .player-ticket-session {
+    --player-ticket-pad-x: 28px;
+    --player-ticket-pad-y: 26px;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 0.55fr);
+    column-gap: 36px;
+  }
+
+  .player-ticket-dashboard .player-ticket-session .session-arrival {
+    padding: 28px;
+    font-size: 19px;
+  }
+
+  .player-ticket-dashboard .player-ticket-attendance:not(.is-open) {
+    display: grid;
+    min-height: 150px;
+    grid-column: 1 / -1;
+    grid-template-columns: 150px minmax(0, 1fr) 210px;
+    align-items: center;
+    gap: 20px;
+    padding: 20px 24px;
+  }
+
+  .player-ticket-dashboard .player-ticket-attendance:not(.is-open):not(.has-record) {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .player-ticket-dashboard .player-ticket-attendance:not(.is-open) .player-ticket-masthead {
+    align-self: stretch;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 20px 0 0;
+    border-right: 1px dashed var(--line);
+    border-bottom: 0;
+  }
+
+  .player-ticket-dashboard .player-ticket-attendance:not(.is-open) .player-ticket-attendance-primary {
+    margin-top: 0;
+  }
+
+  .player-ticket-dashboard .player-ticket-attendance:not(.is-open) .player-attendance-toggle {
+    min-height: 52px;
+    align-self: center;
+    margin-top: 0;
+  }
+
+  .player-ticket-dashboard .player-ticket-report {
+    grid-column: 1;
+  }
+
+  .player-ticket-dashboard .player-ticket-fee {
+    grid-column: 2;
+  }
+
+  .player-ticket-dashboard .player-ticket-announcements {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .player-ticket-dashboard {
+    --player-ticket-pad-x: 22px;
+    --player-ticket-pad-y: 22px;
+    padding-block: var(--space-copy) 72px;
+  }
+
+  .player-ticket-dashboard .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .player-ticket-dashboard .player-ticket-card,
+  .player-ticket-dashboard .player-ticket-session,
+  .player-ticket-dashboard .player-ticket-attendance,
+  .player-ticket-dashboard .player-ticket-report,
+  .player-ticket-dashboard .player-ticket-fee,
+  .player-ticket-dashboard .player-ticket-announcements {
+    grid-column: 1;
+  }
+
+  .player-ticket-dashboard .player-ticket-session {
+    --player-ticket-pad-x: 22px;
+    --player-ticket-pad-y: 24px;
+    display: flex;
+    min-height: 380px;
+    padding: var(--player-ticket-pad-y) var(--player-ticket-pad-x);
+  }
+
+  .player-ticket-dashboard .player-ticket-session .session-moment {
+    margin-top: 24px;
+  }
+
+  .player-ticket-dashboard .player-ticket-session .session-time {
+    font-size: clamp(58px, 17vw, 66px);
+  }
+
+  .player-ticket-dashboard .player-ticket-session .session-date {
+    font-size: 17px;
+  }
+
+  .player-ticket-dashboard .player-ticket-session .session-context {
+    margin-top: 22px;
+    font-size: 18px;
+  }
+
+  .player-ticket-dashboard .player-ticket-session .session-arrival {
+    display: block;
+    margin: auto 0 0;
+    padding: 20px 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    background: transparent;
+    color: var(--steel);
+    font-size: 16px;
+  }
+
+  .player-ticket-dashboard .player-ticket-session.is-empty {
+    min-height: 220px;
+  }
+
+  .player-ticket-dashboard .player-ticket-attendance {
+    min-height: 216px;
+  }
+
+  .player-ticket-dashboard .player-ticket-record-card {
+    min-height: 214px;
+  }
+
+  .player-ticket-dashboard .player-ticket-action,
+  .player-ticket-dashboard .player-ticket-record-card .player-ticket-action {
+    min-height: 50px;
+    margin-top: 18px;
+  }
+
+  .player-ticket-dashboard .player-ticket-record-primary {
+    margin-bottom: 0;
+  }
+
+  .player-ticket-dashboard .player-ticket-attendance.is-open {
+    grid-column: 1;
+  }
+
+  .player-ticket-dashboard .player-ticket-attendance.is-open .player-attendance-toggle {
+    margin-top: 20px;
+  }
+
+  .player-ticket-dashboard .player-attendance-register {
+    max-width: none;
+    margin: 24px calc(0px - var(--player-ticket-pad-x)) calc(0px - var(--player-ticket-pad-y));
+    padding: 24px 22px;
+  }
+
+  .player-ticket-dashboard .player-ticket-announcements {
+    padding: 22px;
+  }
+
+  .player-ticket-dashboard .player-profile-reveal {
+    margin-top: var(--space-group);
+  }
+}
+
+@media (max-width: 720px) {
+  .player-ticket-dashboard {
+    min-height: calc(100svh - 70px);
+    scroll-margin-top: -18px;
+  }
+}
+
+@media (max-width: 340px) {
+  .player-ticket-dashboard .player-ticket-masthead {
+    gap: 10px;
+  }
+
+  .player-ticket-dashboard .player-ticket-context {
+    padding-inline: 7px;
+    font-size: 7px;
+  }
+
+  .player-ticket-dashboard .player-ticket-action {
+    padding-inline: 13px;
   }
 }
 

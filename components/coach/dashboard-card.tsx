@@ -1,45 +1,55 @@
-import type { LucideIcon } from "lucide-react"
 import { ArrowUpRight } from "lucide-react"
 import Link from "next/link"
 import type { ReactNode } from "react"
 
 import styles from "./dashboard-card.module.css"
 
-export function CoachDashboardStack({ children }: { children: ReactNode }) {
-  return <div className={styles.stack}>{children}</div>
+export type CoachDashboardArea =
+  | "attendance"
+  | "sessions"
+  | "reports"
+  | "financials"
+  | "announcements"
+  | "members"
+
+export function CoachDashboardStack({
+  children,
+  id,
+}: {
+  children: ReactNode
+  id?: string
+}) {
+  return (
+    <div id={id} className={`${styles.stack} page-shell`} data-coach-dashboard-grid>
+      {children}
+    </div>
+  )
 }
 
 export function CoachDashboardCard({
+  area,
   children,
-  eyebrow,
-  icon: Icon,
-  sectionId,
+  status,
   title,
   titleId,
 }: {
+  area: CoachDashboardArea
   children: ReactNode
-  eyebrow: string
-  icon: LucideIcon
-  sectionId?: string
+  status?: ReactNode
   title: string
   titleId: string
 }) {
   return (
     <section
-      id={sectionId}
-      className={`${styles.section} page-shell`}
+      className={styles.section}
+      data-area={area}
       aria-labelledby={titleId}
     >
       <article className={styles.card}>
-        <div className={styles.heading}>
-          <span className={styles.icon} aria-hidden="true">
-            <Icon />
-          </span>
-          <div>
-            <p className={styles.eyebrow}>{eyebrow}</p>
-            <h2 id={titleId}>{title}</h2>
-          </div>
-        </div>
+        <header className={styles.masthead}>
+          <h2 id={titleId}>{title}</h2>
+          {status ? <span className={styles.status}>{status}</span> : null}
+        </header>
         <div className={styles.meta}>{children}</div>
       </article>
     </section>
@@ -124,7 +134,7 @@ export function CoachDashboardGroup({
   label: string
 }) {
   return (
-    <div className={styles.group}>
+    <div className={styles.group} role="group" aria-label={label}>
       <p>{label}</p>
       {children}
     </div>

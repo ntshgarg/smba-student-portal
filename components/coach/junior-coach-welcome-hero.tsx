@@ -3,6 +3,8 @@
 import { ArrowDown } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 
+import styles from "./junior-coach-dashboard.module.css"
+
 export function JuniorCoachWelcomeHero({
   coachName,
   greeting,
@@ -17,23 +19,24 @@ export function JuniorCoachWelcomeHero({
 
   return (
     <section
-      className="welcome-hero coach-welcome-hero junior-coach-welcome-hero"
+      className={`welcome-hero welcome-scoreboard coach-welcome-hero coach-welcome-scoreboard junior-coach-welcome-hero ${styles.hero}`}
       aria-labelledby="junior-coach-welcome-title"
     >
       <svg
-        className="welcome-court"
-        viewBox="0 0 920 680"
+        className="welcome-court welcome-scoreboard-court coach-scoreboard-court"
+        viewBox="0 0 1340 610"
         fill="none"
+        preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
-        <path d="M288 86H642L822 620H98L288 86Z" />
-        <path d="M308 86L166 620M622 86L752 620M217 470H709M256 320H670M460 86V320M460 470V620" />
-        <path className="welcome-net" d="M210 350H714M218 427H706M210 350L218 427M714 350L706 427" />
+        <rect x="20" y="20" width="1300" height="570" />
+        <path d="M20 63H1320M20 547H1320M94 20V590M478 20V590M862 20V590M1246 20V590M20 305H478M862 305H1320" />
+        <path className="welcome-scoreboard-net coach-court-net" d="M670 20V590" />
       </svg>
 
-      <div className="welcome-inner">
+      <div className={`welcome-inner ${styles.heroInner}`}>
         <motion.div
-          className="welcome-copy coach-welcome-copy"
+          className={`welcome-copy coach-welcome-copy ${styles.heroCopy}`}
           initial={initial}
           animate={{ opacity: 1, transform: "translateY(0px)" }}
           transition={{ duration: reduceMotion ? 0 : 0.38, ease: "easeOut" }}

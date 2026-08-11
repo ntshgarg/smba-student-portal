@@ -1,10 +1,6 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
-import {
-  ArrowRight,
-  CalendarDays,
-  FileText,
-} from "lucide-react"
+import { ArrowUpRight } from "lucide-react"
 
 import { PlayerAnnouncementsCard } from "@/components/announcements/player-announcements"
 import { PlayerAttendanceCard } from "@/components/dashboard/player-attendance-card"
@@ -59,28 +55,16 @@ export default async function DashboardPage() {
       : dashboard.player.status === "unassigned"
         ? "schedule-pending"
         : "active"
-  const sectionCopy = {
-    "assessment-pending": {
-      eyebrow: "Your starting point",
-      title: "Begin with clarity.",
-      body: "After your assessment, your level, Academy Plan and first sessions will appear here.",
-    },
-    "schedule-pending": {
-      eyebrow: "Your training plan",
-      title: "Your plan is in place.",
-      body: "Your first session will appear once your coach confirms the schedule.",
-    },
-    active: {
-      eyebrow: "Your training week",
-      title: "Everything in view.",
-      body: "Your next session, attendance and coach reports stay together here.",
-    },
-    paused: {
-      eyebrow: "Your training record",
-      title: "Everything stays in place.",
-      body: "Your attendance and coach reports remain available while training is paused.",
-    },
+  const scrollLabel = {
+    "assessment-pending": "Your starting point",
+    "schedule-pending": "Your training plan",
+    active: "Your training week",
+    paused: "Your training record",
   }[playerState]
+  const sessionDateParts = session?.date.split(" ") ?? []
+  const sessionStamp = session
+    ? `${session.weekday.slice(0, 3)} · ${sessionDateParts[0]} ${sessionDateParts[1]?.slice(0, 3) ?? ""}`.trim()
+    : playerState === "paused" ? "Paused" : "Pending"
 
   return (
     <>
@@ -88,37 +72,34 @@ export default async function DashboardPage() {
         student={student.identity}
         coachMessage={dashboard.coachMessage}
         greeting={currentGreeting()}
-        scrollLabel={sectionCopy.eyebrow}
+        scrollLabel={scrollLabel}
       />
 
-      <section id="training-week" className="dashboard-section page-shell">
-        <Reveal className="dashboard-heading">
-          <div>
-            <p className="eyebrow">{sectionCopy.eyebrow}</p>
-            <h2>{sectionCopy.title}</h2>
-          </div>
-          <p>
-            {sectionCopy.body}
-          </p>
-        </Reveal>
-
+      <section
+        id="training-week"
+        className="dashboard-section player-ticket-dashboard page-shell"
+        aria-labelledby="player-dashboard-records"
+      >
+        <h2 id="player-dashboard-records" className="sr-only">
+          Training and academy records
+        </h2>
         <div className="dashboard-grid">
           <Reveal
-            className={`session-card dashboard-card${dashboard.nextSession ? "" : " is-empty"}`}
+            className={`session-card dashboard-card player-ticket-card player-ticket-session${dashboard.nextSession ? "" : " is-empty"}`}
             delay={0.04}
           >
-            <div className="session-card-header">
-              <div className="card-icon"><CalendarDays aria-hidden="true" /></div>
-              <p className="card-label">Next session</p>
-            </div>
+            <header className="session-card-header player-ticket-masthead">
+              <h3 className="player-ticket-title">Next session</h3>
+              <span className="player-ticket-context">{sessionStamp}</span>
+            </header>
             {dashboard.nextSession && session ? (
               <>
-                <h3 className="session-moment">
+                <div className="session-moment">
                   <time dateTime={dashboard.nextSession.startsAt}>
                     <span className="session-time">{session.time}</span>
                     <span className="session-date">{session.weekday}, {session.date}</span>
                   </time>
-                </h3>
+                </div>
                 <p className="session-context">
                   {dashboard.nextSession.trainingFocus} · {dashboard.nextSession.batch}
                 </p>
@@ -151,7 +132,7 @@ export default async function DashboardPage() {
                 {playerState === "assessment-pending" ? (
                   <a className="empty-card-link" href={`${publicSiteUrl}#trial`}>
                     Arrange your assessment
-                    <ArrowRight aria-hidden="true" />
+                    <ArrowUpRight aria-hidden="true" />
                   </a>
                 ) : null}
               </>
@@ -164,38 +145,35 @@ export default async function DashboardPage() {
             record={dashboard.attendanceRecord}
           />
 
-          <PlayerAnnouncementsCard announcements={announcements} />
-
-          <Reveal className="latest-report-card dashboard-card" delay={0.08}>
-            <Link
-              className="report-primary-link"
-              href="/player/reports"
-            >
-              <div>
-                <div className="report-card-header">
-                  <span className="card-icon" aria-hidden="true">
-                    <FileText />
-                  </span>
-                  <p className="card-label">
-                    {dashboard.latestReport
-                      ? `Latest feedback · ${dashboard.latestReport.monthLabel}`
-                      : "Your development record"}
-                  </p>
-                </div>
-                <h3>Monthly reports</h3>
-                <p>
-                  {dashboard.latestReport
-                    ? "Read your coach’s latest report and follow your development over time."
-                    : "Your coach’s feedback will appear here after your first month of training."}
-                </p>
-              </div>
-              <span className="report-arrow" aria-hidden="true">
-                <ArrowRight />
+          <Reveal
+            className="latest-report-card dashboard-card player-ticket-card player-ticket-record-card player-ticket-report"
+            delay={0.08}
+          >
+            <header className="player-ticket-masthead">
+              <h3 className="player-ticket-title">Monthly reports</h3>
+              <span className="player-ticket-context">
+                {dashboard.latestReport?.monthLabel ?? "Record"}
               </span>
+            </header>
+            <div className="player-ticket-record-primary">
+              <strong className="player-ticket-record-value">
+                {dashboard.latestReport ? "Latest feedback" : "Your development record"}
+              </strong>
+              <p className="player-ticket-record-copy">
+                {dashboard.latestReport
+                  ? "Read your coach’s latest report and follow your development over time."
+                  : "Your coach’s feedback will appear here after your first month of training."}
+              </p>
+            </div>
+            <Link className="player-ticket-action" href="/player/reports">
+              <span>Open report records</span>
+              <ArrowUpRight aria-hidden="true" />
             </Link>
           </Reveal>
 
           <PlayerFeeRecordCard summary={feeSummary} />
+
+          <PlayerAnnouncementsCard announcements={announcements} />
         </div>
 
         <Reveal className="player-profile-reveal" delay={0.1}>

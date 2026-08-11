@@ -1,77 +1,134 @@
 .stack {
+  --coach-ticket-paper: color-mix(in srgb, var(--white) 88%, var(--ivory));
   display: grid;
-  gap: clamp(48px, 5vw, 72px);
-  padding-block: clamp(72px, 8vw, 112px) clamp(96px, 10vw, 144px);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-areas:
+    "attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance"
+    "sessions sessions sessions sessions sessions sessions sessions reports reports reports reports reports"
+    "financials financials financials financials announcements announcements announcements announcements members members members members";
+  align-items: stretch;
+  gap: 22px;
+  padding-block: var(--space-group) clamp(96px, 10vw, 136px);
+  scroll-margin-top: calc(var(--portal-header-height) - var(--page-scroll-padding));
 }
 
 .section {
   min-width: 0;
 }
 
-.card {
-  display: grid;
-  min-height: clamp(230px, 21vw, 286px);
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 280px);
-  align-items: center;
-  gap: clamp(48px, 8vw, 120px);
-  padding: clamp(34px, 5vw, 62px);
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 58%, transparent);
+.section[data-area="attendance"] {
+  grid-area: attendance;
 }
 
-.heading {
+.section[data-area="sessions"] {
+  grid-area: sessions;
+}
+
+.section[data-area="reports"] {
+  grid-area: reports;
+}
+
+.section[data-area="financials"] {
+  grid-area: financials;
+}
+
+.section[data-area="announcements"] {
+  grid-area: announcements;
+}
+
+.section[data-area="members"] {
+  grid-area: members;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-height: 250px;
+  min-width: 0;
+  flex-direction: column;
+  overflow: visible;
+  border: 1px solid var(--line);
+  background: var(--coach-ticket-paper);
+}
+
+.card::before,
+.card::after {
+  position: absolute;
+  top: calc(50% - 9px);
+  z-index: 2;
+  width: 10px;
+  height: 18px;
+  border: 1px solid var(--line);
+  background: var(--ivory);
+  content: "";
+  pointer-events: none;
+}
+
+.card::before {
+  left: -1px;
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+}
+
+.card::after {
+  right: -1px;
+  border-right: 0;
+  border-radius: 999px 0 0 999px;
+}
+
+.section[data-area="attendance"] .card {
+  min-height: 262px;
+}
+
+.section[data-area="sessions"] .card,
+.section[data-area="reports"] .card {
+  min-height: 292px;
+}
+
+.masthead {
   display: flex;
   min-width: 0;
+  min-height: 56px;
   align-items: center;
-  gap: clamp(18px, 2.4vw, 30px);
+  justify-content: space-between;
+  gap: 16px;
+  padding: 17px 22px 14px;
+  border-bottom: 1px dashed var(--line);
 }
 
-.heading > div {
+.masthead h2 {
   min-width: 0;
-}
-
-.icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--line);
-  color: var(--red);
-}
-
-.icon svg {
-  width: 19px;
-  height: 19px;
-  stroke-width: 1.7;
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--red);
-  font-size: 11px;
+  color: var(--navy);
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.065em;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
-.heading h2 {
-  margin-top: 15px;
-  color: var(--navy);
-  font-size: clamp(48px, 6vw, 78px);
-  font-weight: 550;
-  letter-spacing: -0.068em;
-  line-height: 0.95;
-  overflow-wrap: normal;
-  word-break: normal;
+.status {
+  flex: 0 0 auto;
+  max-width: 58%;
+  padding: 6px 9px 5px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--red) 52%, var(--line));
+  color: var(--red);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .meta {
-  display: grid;
-  width: 100%;
+  display: flex;
   min-width: 0;
-  justify-self: end;
-  gap: 24px;
+  flex: 1;
+  flex-direction: column;
+  padding: 24px;
 }
 
 .summary {
@@ -84,13 +141,14 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 9px;
-  color: var(--steel);
-  font-size: 11px;
-  font-weight: 760;
-  letter-spacing: 0.045em;
-  line-height: 1.65;
-  text-transform: uppercase;
+  gap: 10px;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(28px, 2.55vw, 34px);
+  font-style: italic;
+  font-weight: 470;
+  letter-spacing: -0.045em;
+  line-height: 1.03;
 }
 
 .summary > p > span:last-child {
@@ -99,8 +157,8 @@
 
 .summaryIcon {
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
@@ -109,38 +167,42 @@
 }
 
 .summaryIcon svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   stroke-width: 2.6;
 }
 
 .summaryDetail {
-  color: var(--navy);
+  max-width: 520px;
+  color: var(--steel);
   font-size: 11px;
-  font-weight: 760;
-  letter-spacing: 0.035em;
+  font-weight: 600;
   line-height: 1.5;
 }
 
 .actions {
   display: grid;
   min-width: 0;
-  gap: 9px;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 20px;
 }
 
 .action {
   display: flex;
   min-width: 0;
-  min-height: 54px;
+  min-height: 50px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 18px;
+  gap: 14px;
+  padding: 0 15px;
   border: 1px solid var(--navy);
+  background: transparent;
   color: var(--navy);
   font-size: 12px;
-  font-weight: 760;
-  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+  font-weight: 780;
+  line-height: 1.3;
+  transition: background 160ms ease, color 160ms ease;
 }
 
 .action:hover {
@@ -148,76 +210,204 @@
   color: var(--white);
 }
 
+.action:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+
 .action svg {
   width: 17px;
   height: 17px;
   flex: 0 0 auto;
+  color: currentColor;
+  transition: transform 160ms ease;
+}
+
+.action:hover svg {
+  transform: translateX(3px);
 }
 
 .secondaryAction {
-  border-color: var(--line);
+  border-color: color-mix(in srgb, var(--navy) 36%, var(--line));
 }
 
 .secondaryAction:hover {
   border-color: var(--navy);
-  background: transparent;
-  color: var(--navy);
 }
 
 .groups {
   display: grid;
-  gap: 18px;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 20px;
 }
 
 .group {
   display: grid;
-  gap: 8px;
+  min-width: 0;
+  align-content: start;
 }
 
 .group + .group {
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
+  padding-left: 20px;
+  border-left: 1px solid var(--line);
 }
 
 .group > p {
   color: var(--steel);
   font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
+  line-height: 1;
   text-transform: uppercase;
+}
+
+.group .actions {
+  margin-top: 0;
+  padding-top: 10px;
+}
+
+.section[data-area="attendance"] .meta {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.78fr) minmax(0, 2.22fr);
+  align-items: start;
+  gap: clamp(32px, 4vw, 56px);
+}
+
+@media (min-width: 761px) and (max-width: 980px) {
+  .stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "attendance attendance"
+      "sessions sessions"
+      "reports financials"
+      "announcements members";
+    gap: 18px;
+  }
+
+  .section[data-area="attendance"] .card {
+    min-height: 330px;
+  }
+
+  .section[data-area="sessions"] .card {
+    min-height: 250px;
+  }
+
+  .section[data-area="reports"] .card,
+  .section[data-area="financials"] .card,
+  .section[data-area="announcements"] .card,
+  .section[data-area="members"] .card {
+    min-height: 278px;
+  }
+
+  .section[data-area="attendance"] .meta {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  .section[data-area="sessions"] .actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .section[data-area="sessions"] .action {
+    padding-inline: 13px;
+  }
+
+  .summary > p {
+    font-size: clamp(27px, 3.9vw, 32px);
+  }
 }
 
 @media (max-width: 760px) {
   .stack {
-    gap: 48px;
-    padding-block: 48px 72px;
-  }
-
-  .card {
-    min-height: 0;
     grid-template-columns: minmax(0, 1fr);
-    align-content: center;
-    gap: 28px;
-    padding: 30px 22px;
-  }
-
-  .heading {
-    align-items: center;
+    grid-template-areas:
+      "attendance"
+      "sessions"
+      "reports"
+      "financials"
+      "announcements"
+      "members";
     gap: 16px;
+    padding-block: var(--space-copy) 72px;
   }
 
-  .heading h2 {
-    margin-top: 11px;
-    font-size: clamp(28px, 8.7vw, 52px);
+  .card,
+  .section[data-area="attendance"] .card,
+  .section[data-area="sessions"] .card,
+  .section[data-area="reports"] .card,
+  .section[data-area="financials"] .card,
+  .section[data-area="announcements"] .card,
+  .section[data-area="members"] .card {
+    min-height: 0;
+  }
+
+  .masthead {
+    min-height: 52px;
+    padding: 16px 18px 13px;
+  }
+
+  .masthead h2 {
+    font-size: 12px;
   }
 
   .meta {
-    justify-self: stretch;
+    padding: 20px 18px;
+  }
+
+  .summary > p {
+    font-size: clamp(28px, 8.2vw, 34px);
+  }
+
+  .summaryDetail {
+    font-size: 11px;
+  }
+
+  .section[data-area="attendance"] .meta {
+    display: flex;
+    gap: 0;
+  }
+
+  .groups {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    margin-top: 22px;
+  }
+
+  .group + .group {
+    padding-top: 18px;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .actions {
+    padding-top: 18px;
+  }
+
+  .section[data-area="sessions"] .actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 340px) {
+  .masthead {
+    gap: 10px;
+  }
+
+  .status {
+    padding-inline: 7px;
+    font-size: 7px;
+  }
+
+  .action {
+    padding-inline: 13px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .action {
+  .action,
+  .action svg {
     transition: none;
   }
 }

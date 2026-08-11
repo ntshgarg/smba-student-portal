@@ -31,16 +31,20 @@ export function CoachWelcomeHero({
   const animate = { opacity: 1, transform: "translateY(0px)" }
 
   return (
-    <section className="welcome-hero coach-welcome-hero" aria-labelledby="coach-welcome-title">
+    <section
+      className="welcome-hero welcome-scoreboard coach-welcome-hero coach-welcome-scoreboard"
+      aria-labelledby="coach-welcome-title"
+    >
       <svg
-        className="welcome-court"
-        viewBox="0 0 920 680"
+        className="welcome-court welcome-scoreboard-court coach-scoreboard-court"
+        viewBox="0 0 1340 610"
         fill="none"
+        preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
-        <path d="M288 86H642L822 620H98L288 86Z" />
-        <path d="M308 86L166 620M622 86L752 620M217 470H709M256 320H670M460 86V320M460 470V620" />
-        <path className="welcome-net" d="M210 350H714M218 427H706M210 350L218 427M714 350L706 427" />
+        <rect x="20" y="20" width="1300" height="570" />
+        <path d="M20 63H1320M20 547H1320M94 20V590M478 20V590M862 20V590M1246 20V590M20 305H478M862 305H1320" />
+        <path className="welcome-scoreboard-net coach-court-net" d="M670 20V590" />
       </svg>
 
       <div className="welcome-inner">
@@ -61,7 +65,9 @@ export function CoachWelcomeHero({
         </motion.div>
 
         <motion.aside
-          className="coach-message-card coach-welcome-card"
+          className={`coach-message-card coach-welcome-card welcome-scoreboard-ribbon coach-scoreboard-ribbon ${
+            upcomingSession ? "has-session" : "is-empty"
+          }`}
           aria-label="Today’s training overview"
           initial={initial}
           animate={animate}
@@ -71,19 +77,19 @@ export function CoachWelcomeHero({
             ease: "easeOut",
           }}
         >
-          <div>
+          <div className="welcome-scoreboard-date coach-ribbon-date">
             <span>Today’s training</span>
             <time dateTime={dateTime}>{dateLabel}</time>
           </div>
           {upcomingSession ? (
             <>
               <dl className="coach-briefing-metrics">
-                <div className="coach-briefing-metric">
+                <div className="coach-briefing-metric coach-session-count-metric">
                   <dt>{sessionCount === 1 ? "Session today" : "Sessions today"}</dt>
                   <dd>{sessionCount}</dd>
                 </div>
-                <div className="coach-briefing-metric">
-                  <dt>{sessionPosition === "first" ? "First batch" : "Next batch"}</dt>
+                <div className="coach-briefing-metric coach-time-metric">
+                  <dt>{sessionPosition === "first" ? "First session" : "Next session"}</dt>
                   <dd>{upcomingSession.time}</dd>
                 </div>
               </dl>

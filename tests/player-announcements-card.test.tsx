@@ -133,6 +133,8 @@ describe("Player Dashboard announcement failure isolation", () => {
       expect(html).toContain("Player welcome remains available")
       expect(html).toContain("Attendance remains available")
       expect(html).toContain("Monthly reports")
+      expect(html).toContain('href="/player/reports"')
+      expect(html).toContain("Open report records")
       expect(html).toContain("Fee record remains available")
       expect(html).not.toContain("database unavailable")
       expect(log).toHaveBeenCalledOnce()

@@ -25,36 +25,39 @@ export function WelcomeHero({
   const animate = { opacity: 1, transform: "translateY(0px)" }
 
   return (
-    <section className="welcome-hero" aria-labelledby="welcome-title">
+    <section
+      className="welcome-hero welcome-scoreboard coach-welcome-scoreboard player-welcome-scoreboard"
+      aria-labelledby="welcome-title"
+    >
       <svg
-        className="welcome-court"
-        viewBox="0 0 920 680"
+        className="welcome-court welcome-scoreboard-court coach-scoreboard-court"
+        viewBox="0 0 1340 610"
         fill="none"
+        preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
-        <path d="M288 86H642L822 620H98L288 86Z" />
-        <path d="M308 86L166 620M622 86L752 620M217 470H709M256 320H670M460 86V320M460 470V620" />
-        <path className="welcome-net" d="M210 350H714M218 427H706M210 350L218 427M714 350L706 427" />
+        <rect x="20" y="20" width="1300" height="570" />
+        <path d="M20 63H1320M20 547H1320M94 20V590M478 20V590M862 20V590M1246 20V590M20 305H478M862 305H1320" />
+        <path className="welcome-scoreboard-net coach-court-net" d="M670 20V590" />
       </svg>
 
       <div className="welcome-inner">
         <motion.div
-          className="welcome-copy"
+          className="welcome-copy coach-welcome-copy player-welcome-copy"
           initial={initial}
           animate={animate}
           transition={{ duration: reduceMotion ? 0 : 0.38, ease: "easeOut" }}
         >
-          <p className="eyebrow eyebrow-light">Your training, in one place</p>
           <h1 id="welcome-title">
             {greeting},
             <br />
             <em>{student.firstName}.</em>
           </h1>
-          <p className="welcome-line">Ready for your next point?</p>
+          <p className="welcome-line coach-welcome-line">Ready for your next point?</p>
         </motion.div>
 
         <motion.aside
-          className="coach-message-card"
+          className="coach-message-card coach-welcome-card welcome-scoreboard-ribbon coach-scoreboard-ribbon player-scoreboard-ribbon is-empty"
           aria-label={`Message from ${coachMessage.coachName}`}
           initial={initial}
           animate={animate}
@@ -64,10 +67,10 @@ export function WelcomeHero({
             ease: "easeOut",
           }}
         >
-          <div>
+          <div className="player-scoreboard-message">
             <span>From {coachMessage.coachName}</span>
+            <blockquote>“{coachMessage.message}”</blockquote>
           </div>
-          <blockquote>“{coachMessage.message}”</blockquote>
         </motion.aside>
 
         <a className="scroll-cue" href="#training-week">

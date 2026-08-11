@@ -80,10 +80,10 @@ test.beforeEach(async ({ page }) => {
 
 test("Attendance card launches the focused player and staff workspaces", async ({ page }) => {
   await page.goto("/coach#attendance", { waitUntil: "domcontentloaded" })
-  const card = page.locator("#attendance")
+  const card = page.locator("#attendance [data-area=\"attendance\"]")
 
-  const players = card.locator(".coach-attendance-link-group").filter({ hasText: "Players" })
-  const staff = card.locator(".coach-attendance-link-group").filter({ hasText: "Staff" })
+  const players = card.getByRole("group", { name: "Players" })
+  const staff = card.getByRole("group", { name: "Staff" })
   await expect(players.getByRole("link", { name: "Attendance register" })).toHaveAttribute(
     "href",
     "/coach/attendance/players/register",
@@ -114,7 +114,7 @@ test("Attendance card launches the focused player and staff workspaces", async (
   await expect(page.locator("#attendance-register")).toHaveCount(0)
 
   await page.goto("/coach#attendance", { waitUntil: "domcontentloaded" })
-  await page.locator("#attendance")
+  await page.locator("#attendance [data-area=\"attendance\"]")
     .getByRole("link", { name: "Reschedule attendance" })
     .click()
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/adjustments")

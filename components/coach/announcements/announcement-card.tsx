@@ -1,5 +1,3 @@
-import { Megaphone } from "lucide-react"
-
 import {
   CoachDashboardAction,
   CoachDashboardActions,
@@ -10,16 +8,18 @@ import {
 export function AnnouncementCard({ activeCount = 0 }: { activeCount?: number }) {
   const summary = activeCount > 0
     ? `${activeCount} active ${activeCount === 1 ? "announcement" : "announcements"}`
-    : "The academy notice board is clear"
+    : "Notice board is clear"
 
   return (
     <CoachDashboardCard
-      eyebrow="Academy notice board"
-      icon={Megaphone}
+      area="announcements"
+      status={activeCount > 0 ? `${activeCount} active` : "Clear"}
       title="Announcements"
       titleId="coach-announcements-card-title"
     >
-      <CoachDashboardSummary>{summary}</CoachDashboardSummary>
+      <CoachDashboardSummary detail="Publish one academy message at a time.">
+        {summary}
+      </CoachDashboardSummary>
       <CoachDashboardActions ariaLabel="Announcement actions">
         <CoachDashboardAction href="/coach/announcements/new">
           New announcement

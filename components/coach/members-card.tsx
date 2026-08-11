@@ -1,7 +1,5 @@
 "use client"
 
-import { UsersRound } from "lucide-react"
-
 import {
   CoachDashboardAction,
   CoachDashboardActions,
@@ -16,18 +14,23 @@ export function MembersCard({
   memberCount: number
   pendingRegistrationCount: number
 }) {
+  const memberLabel = `${memberCount} enrolled ${memberCount === 1 ? "member" : "members"}`
+
   return (
     <CoachDashboardCard
-      eyebrow="Academy roster"
-      icon={UsersRound}
+      area="members"
+      status={pendingRegistrationCount
+        ? `${pendingRegistrationCount} pending`
+        : "Roster current"}
       title="Members"
       titleId="coach-members-card-title"
     >
-      <CoachDashboardSummary>
-        {memberCount} enrolled {memberCount === 1 ? "member" : "members"}
-        {pendingRegistrationCount
-          ? ` · ${pendingRegistrationCount} awaiting approval`
-          : ""}
+      <CoachDashboardSummary
+        detail={pendingRegistrationCount
+          ? `${pendingRegistrationCount} ${pendingRegistrationCount === 1 ? "registration awaits" : "registrations await"} approval.`
+          : "The academy directory is up to date."}
+      >
+        {memberLabel}
       </CoachDashboardSummary>
       <CoachDashboardActions ariaLabel="Member actions">
         <CoachDashboardAction href="/coach/members">View directory</CoachDashboardAction>

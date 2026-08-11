@@ -49,6 +49,22 @@
       "decision": "Use a separate /coach route and coach-specific shell. Treat its calm near-full-height hero as a morning briefing rather than a dashboard: a personalized greeting, one short encouraging operational line, one ivory daily briefing card, and a scroll cue into attendance. The encouragement stays specific to the coach's role and supports readiness without becoming sentimental or performance-driven. The hero remains editorial rather than analytical. Any future hero metric must answer an immediate operational question for today; historical trends, reporting, notifications, and general KPIs belong below the fold."
     },
     {
+      "area": "coach-dashboard-hero-scoreboard-ribbon",
+      "decision": "Use the selected Scoreboard Ribbon composition for the head-coach welcome. Desktop keeps the oversized greeting above one full-width ivory daily ribbon with a prominent date, a centered today’s-session count, a visible First session or Next session label beneath the time, and clearly spaced first/next-on-court context. Tablet and 341–980px mobile layouts use a compact two-by-two ribbon: date and on-court context share the top row while session count and time share the bottom row. At 340px and below, return to a stacked reading order to protect legibility. Mobile preserves the oversized greeting across the navy area, with one quiet orthographic badminton-court diagram behind it. Keep the hero operational and editorial; do not add historical metrics, generic KPI cards, decorative navigation or perspective court graphics."
+    },
+    {
+      "area": "player-dashboard-hero-scoreboard-ribbon",
+      "decision": "Keep the Player Journal hero personal rather than operational. Preserve the oversized time-aware greeting over the quiet orthographic court, but let the ivory ribbon contain only the current message from Coach Sathiya. Do not repeat next-session date, time, duration or other training logistics in the hero; the complete Next Session briefing belongs in the first dashboard card below. Desktop and tablet use a balanced attribution-and-quotation ribbon, while mobile stacks the attribution above the quotation for legibility."
+    },
+    {
+      "area": "shared-scoreboard-hero-rhythm",
+      "decision": "Keep the player and head-coach scoreboard heroes visually paired through the same navy field, quiet orthographic court, oversized greeting rhythm, desktop ribbon minimum height and fully visible 44px scroll cue at the 390 by 844 mobile viewport. Their ribbon content may differ by role: the coach retains operational training information, while the player receives only the coach's editorial message."
+    },
+    {
+      "area": "coach-dashboard-card-system",
+      "decision": "Use the selected Concept 01 Court Operations Board for the six head-coach dashboard workflows. Place all cards in one shared responsive ticket grid with fine borders, clipped circular notches, dashed mastheads, restrained red state stamps, Newsreader status statements and explicit navy-outlined action boxes. Attendance remains the full-width anchor and visibly separates Player and Staff destinations. Desktop places Sessions beside Monthly Reports, followed by equal Financials, Announcements and Members cards. Tablet keeps Attendance and Sessions full width, then pairs Monthly Reports with Financials and Announcements with Members so no orphaned column space remains. Mobile stacks the same accessible order: Attendance, Sessions, Monthly Reports, Financials, Announcements and Members. Preserve every dynamic, empty, complete, inactive, attention, preparation and pending state, every destination, report-resume behavior and the #attendance scroll target. This decision supersedes only the older frozen Coach Dashboard card presentation; attendance registers, calendar workspaces and their mobile contracts remain unchanged."
+    },
+    {
       "area": "portal-architecture",
       "decision": "Run the public homepage, Player Journal and Coach Workspace as one Next.js application and one session boundary. The public academy remains at /, players enter at /player, coaches enter at /coach, and protected areas retain dedicated layouts over the same academy database."
     },
@@ -170,11 +186,11 @@
     },
     {
       "area": "player-next-session",
-      "decision": "Present the Player Journal's Next Session card as a compact, time-led editorial briefing. Place the Next session label beside its calendar icon, then read through start time, date, session identity, practical details and arrival note with a tight internal rhythm. Preserve the existing time-aware occurrence resolution, empty states, bordered-card language and quiet palette; do not add countdowns, badges, actions or decorative motion."
+      "decision": "Present the Player Journal's Next Session card as the full-width anchor of the selected Match Tickets composition. Use one text-led ticket masthead with a restrained red date stamp, then read through start time, date, session identity and practical details before a pale perforated arrival-note stub on desktop and tablet; stack that note beneath the briefing on mobile. Preserve the existing time-aware occurrence resolution and every empty state. Do not add a decorative icon, countdown, action or motion."
     },
     {
       "area": "player-dashboard-companion-cards",
-      "decision": "Treat the Player Journal dashboard cards as one compact operational stack. Next Session and Attendance share an icon-and-label header and gain density through tighter spacing rather than smaller information or touch targets. Attendance preserves its percentage, factual recorded-session copy, progress track and annual-record disclosure. Monthly reports remains a shallower, medium-scale archive index and one full-card link to the complete report record. Preserve all loaded, pending and empty-state behavior."
+      "decision": "Use the selected 04A.1 Compact Match Tickets composition for the Player Dashboard cards, with no redundant visible section introduction. Desktop places the full-width Next Session ticket above an equal Attendance, Monthly Reports and Fee Record trio; tablet keeps Attendance shallow and full-width above half-width Reports and Fee tickets; mobile stacks the same reading order. Use fine borders, clipped circular ticket notches, dashed mastheads, restrained red context stamps and explicit navy-outlined actions labelled Open attendance record, Open report records and Open fee record. The Attendance action remains the URL-backed disclosure button, while Reports and Fee use those boxes as their sole link targets rather than whole-card links. Preserve percentage, progress, loaded, pending, paused, unavailable and empty states. Optional Announcements follow the primary four as one full-width compatible ticket. Begin the card section one compact spacing group after the hero and keep a viewport-height landing area so the training-week cue aligns directly below the sticky portal header, avoids a stranded navy strip or cue row, and keeps the passive player ledger visible on desktop and tablet."
     },
     {
       "area": "player-profile-ledger",
@@ -187,6 +203,10 @@
     {
       "area": "attendance-sessions-workflow-separation",
       "decision": "This decision supersedes the earlier coach-training-operations, coach-attendance, coach-dashboard-attendance-entry and mobile-calendar-attendance-freeze workflow contracts where they conflict. Treat Player Attendance and Staff Attendance as independent domains: their annual colour-coded registers are read-only current-truth views, ordinary player attendance is recorded only against an explicitly selected immutable occurrence, Staff Roll Call records one daily fact per currently supported junior coach, and player rescheduling remains the exceptional adjustment workflow. The Coach Dashboard Attendance card groups Player links for Register, Record and Reschedule separately from Staff links for Register and Roll Call. Calendar owns month/day visibility, static rosters and dated cancellation/replacement; it never edits attendance, though a started scheduled occurrence may open the focused player recorder through a fixed deep link. Sessions exposes Calendar, Create Schedule and Schedules & Rosters as three focused destinations. Preserve existing attendance and scheduling domain rules, SMBA typography, palette, bordered cards, mobile rhythm and personal player/junior-coach registers."
+    },
+    {
+      "area": "junior-coach-dashboard",
+      "decision": "Pair the junior-coach workspace with the approved head-coach hero system without its operational briefing ribbon: reuse the same oversized inward-aligned greeting, orthographic badminton-court geometry, quiet line opacity and attendance scroll cue, while retaining the personal attendance message. Present the junior coach's monthly summary as the selected Roll-Call Ledger ticket with a restrained month stamp, editorial attendance percentage, aligned Recorded days, Present and Absent rows, diameter-line-free side notches and one boxed Open attendance record disclosure. Keep the expanded annual register, read-only data rules, year navigation and Jump to today behaviour unchanged."
     },
     {
       "area": "announcements-notice-board",

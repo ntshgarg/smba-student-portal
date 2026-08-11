@@ -6,6 +6,21 @@ Newsreader editorial accents, fine borders, generous whitespace, and official lo
 
 The landing experience is a personal welcome. Dashboard metrics begin after the fold.
 Cards remain narrative and single-purpose; navigation must not resemble admin software.
+The selected Player Dashboard card system is 04A.1 Compact Match Tickets: one full-width
+Next Session briefing followed by compact Attendance, Monthly Reports and Fee Record tickets.
+Fine borders, clipped ticket notches, dashed mastheads and restrained red context stamps carry
+the event character. Attendance, reports and fees use explicit navy-outlined action boxes as
+their sole controls; reports and fees are not whole-card links. Tablet gives Attendance one
+shallow full-width row, mobile stacks the same reading order, and optional Announcements follow
+the primary four in a compatible full-width ticket. The card section begins directly without a
+redundant visible introduction, uses one compact spacing group after the hero, then closes with
+the passive Player, Level and Academy Plan ledger. Its training-week anchor lands directly below
+the sticky portal header without leaving the navy hero edge or cue row behind.
+The Player Journal hero keeps its oversized time-aware greeting and quiet orthographic
+court, while its ivory ribbon contains only the current message from Coach Sathiya.
+Next-session date, time, duration and practical details appear once, in the first dashboard
+card below the hero. The message ribbon uses a balanced attribution-and-quotation layout
+on desktop and tablet, then stacks the attribution above the quotation on mobile.
 Player reflections belong in the physical notebook supplied in the SMBA welcome kit, so
 the portal does not include a digital journal or encourage screen use during sessions.
 The header has no tab navigation. One Monthly reports card on the dashboard opens a
@@ -17,7 +32,7 @@ The coach experience lives at `/coach` in its own route shell. Its landing scree
 the student portal's calm full-height welcome rhythm: deep navy, oversized personal
 greeting, subtle court linework, one ivory daily briefing card, and a quiet scroll cue.
 Treat this hero as a morning briefing rather than a dashboard: its greeting, short
-encouraging operational context, today's sessions, first batch, and attendance cue answer
+encouraging operational context, today's session count, first or next session time, and attendance cue answer
 what the coach needs to know before stepping onto court. The encouragement stays specific
 to calm leadership and readiness rather than becoming sentimental or performance-driven.
 The hero remains editorial rather than analytical. Any future hero metric must
@@ -25,6 +40,17 @@ answer an immediate operational question for today; historical trends, reporting
 notifications, and general KPIs belong below the fold. It must still feel like a coach's
 desk rather than administration software, so analytics grids and sidebars remain out of
 scope.
+Below that briefing, the six head-coach workflows use the selected Concept 01 Court
+Operations Board. One shared responsive ticket grid carries the same fine borders, clipped
+notches, dashed mastheads, restrained red stamps, editorial Newsreader statements and
+explicit boxed actions as the Player Journal without becoming a duplicate interface.
+Attendance remains the full-width first workflow and keeps Player and Staff destinations
+visibly separate. Desktop places Sessions beside Monthly Reports, followed by equal
+Financials, Announcements and Members cards. Tablet keeps Attendance and Sessions full
+width, then pairs Monthly Reports with Financials and Announcements with Members so the
+lower grid has no orphaned whitespace. Mobile stacks that same logical order. Preserve all
+loaded, empty, complete, inactive, attention, preparation and pending states, all links,
+report-resume behavior and the attendance scroll target.
 Student and coach layouts stay separate in preparation for role-based login.
 The Session Calendar is SMBA's operational source of truth. A recurring schedule creates
 dated session occurrences. Its UUID is the immutable identity, while its Level, Batch and

@@ -1,7 +1,5 @@
 "use client"
 
-import { ClipboardList } from "lucide-react"
-
 import {
   CoachDashboardAction,
   CoachDashboardActions,
@@ -24,16 +22,17 @@ const staffAttendanceLinks = [
 ]
 
 export function AttendanceCard({ scheduleCount }: { scheduleCount: number }) {
+  const scheduleLabel = `${scheduleCount} ${scheduleCount === 1 ? "schedule" : "schedules"}`
+
   return (
     <CoachDashboardCard
-      eyebrow="Attendance register"
-      icon={ClipboardList}
-      sectionId="attendance"
+      area="attendance"
+      status={scheduleLabel}
       title="Attendance"
       titleId="attendance-card-title"
     >
-      <CoachDashboardSummary>
-        {scheduleCount} {scheduleCount === 1 ? "schedule" : "schedules"}
+      <CoachDashboardSummary detail="Current truth for every scheduled session and academy day.">
+        Player &amp; staff registers
       </CoachDashboardSummary>
 
       <CoachDashboardGroups>
@@ -51,7 +50,7 @@ export function AttendanceCard({ scheduleCount }: { scheduleCount: number }) {
           <CoachDashboardActions ariaLabel="Staff attendance actions">
             {staffAttendanceLinks.map((link) => (
               <CoachDashboardSecondaryAction key={link.href} href={link.href}>
-                    {link.label}
+                {link.label}
               </CoachDashboardSecondaryAction>
             ))}
           </CoachDashboardActions>

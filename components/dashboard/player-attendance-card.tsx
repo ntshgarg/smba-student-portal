@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, ChevronDown, Clock3 } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import type { CSSProperties } from "react"
@@ -182,66 +182,64 @@ export function PlayerAttendanceCard({
 
   return (
     <Reveal
-      className={`attendance-card dashboard-card player-attendance-card${attendance ? "" : " is-empty"}${isOpen ? " is-open" : ""}`}
+      className={`attendance-card dashboard-card player-attendance-card player-ticket-card player-ticket-attendance${attendance ? "" : " is-empty"}${hasRecord ? " has-record" : ""}${isOpen ? " is-open" : ""}`}
       delay={0.06}
     >
-      <div className="attendance-card-header">
-        <div className="card-icon">
-          {attendance?.recorded ? <Check aria-hidden="true" /> : <Clock3 aria-hidden="true" />}
-        </div>
-        <p className="card-label">
-          Attendance{attendance ? ` · ${attendance.month}` : ""}
-        </p>
+      <header className="attendance-card-header player-ticket-masthead">
+        <h3 className="player-ticket-title">Attendance</h3>
+        <span className="player-ticket-context">{attendance?.month ?? "Record"}</span>
+      </header>
+      <div className="player-ticket-attendance-primary">
+        {attendance && attendance.percentage !== null ? (
+          <>
+            <strong className="attendance-value">{attendance.percentage}%</strong>
+            <p className="attendance-summary-copy">
+              {attendance.attended} of {attendance.recorded} recorded sessions attended.
+              {attendance.pending
+                ? ` ${attendance.pending} ${attendance.pending === 1 ? "session is" : "sessions are"} pending.`
+                : ""}
+            </p>
+            <div
+              className="attendance-track"
+              role="progressbar"
+              aria-label={`${attendance.percentage}% attendance in ${attendance.month}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={attendance.percentage}
+            >
+              <span style={{ width: `${attendance.percentage}%` }} />
+            </div>
+          </>
+        ) : attendance?.pending ? (
+          <>
+            <strong className="empty-card-title">Attendance pending</strong>
+            <p className="empty-card-copy">
+              {attendance.pending} {attendance.pending === 1 ? "session is" : "sessions are"} waiting for the coach’s record.
+            </p>
+          </>
+        ) : (
+          <>
+            <strong className="empty-card-title">
+              {playerState === "active"
+                ? "No sessions yet this month"
+                : playerState === "paused"
+                  ? "Training paused"
+                  : "Not started"}
+            </strong>
+            <p className="empty-card-copy">
+              {playerState === "active"
+                ? "This month’s record begins when your first session starts."
+                : playerState === "paused"
+                  ? "Your existing attendance record remains available while training is paused."
+                  : "Your attendance record begins when your first session starts."}
+            </p>
+          </>
+        )}
       </div>
-      {attendance && attendance.percentage !== null ? (
-        <>
-          <strong className="attendance-value">{attendance.percentage}%</strong>
-          <p className="attendance-summary-copy">
-            {attendance.attended} of {attendance.recorded} recorded sessions attended.
-            {attendance.pending
-              ? ` ${attendance.pending} ${attendance.pending === 1 ? "session is" : "sessions are"} pending.`
-              : ""}
-          </p>
-          <div
-            className="attendance-track"
-            role="progressbar"
-            aria-label={`${attendance.percentage}% attendance in ${attendance.month}`}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={attendance.percentage}
-          >
-            <span style={{ width: `${attendance.percentage}%` }} />
-          </div>
-        </>
-      ) : attendance?.pending ? (
-        <>
-          <h3 className="empty-card-title">Attendance pending</h3>
-          <p className="empty-card-copy">
-            {attendance.pending} {attendance.pending === 1 ? "session is" : "sessions are"} waiting for the coach’s record.
-          </p>
-        </>
-      ) : (
-        <>
-          <h3 className="empty-card-title">
-            {playerState === "active"
-              ? "No sessions yet this month"
-              : playerState === "paused"
-                ? "Training paused"
-                : "Not started"}
-          </h3>
-          <p className="empty-card-copy">
-            {playerState === "active"
-              ? "This month’s record begins when your first session starts."
-              : playerState === "paused"
-                ? "Your existing attendance record remains available while training is paused."
-                : "Your attendance record begins when your first session starts."}
-          </p>
-        </>
-      )}
 
       {hasRecord ? (
         <button
-          className="player-attendance-toggle"
+          className="player-attendance-toggle player-ticket-action"
           type="button"
           aria-expanded={isOpen}
           aria-controls="player-attendance-register"
@@ -250,7 +248,7 @@ export function PlayerAttendanceCard({
             activeYear,
           })}
         >
-          <span>{isOpen ? "Close attendance record" : "View attendance record"}</span>
+          <span>{isOpen ? "Close attendance record" : "Open attendance record"}</span>
           <ChevronDown aria-hidden="true" />
         </button>
       ) : null}

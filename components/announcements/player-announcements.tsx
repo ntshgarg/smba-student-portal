@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, Bell, Pin } from "lucide-react"
+import { ArrowRight, ArrowUpRight, Pin } from "lucide-react"
 
 import {
   announcementDate,
@@ -33,16 +33,15 @@ export function PlayerAnnouncementsCard({
 }) {
   if (announcements === null) {
     return (
-      <Reveal className={`${styles.dashboardCard} dashboard-card`} delay={0.08}>
-        <div className={styles.dashboardHeader}>
-          <span className={styles.dashboardIcon} aria-hidden="true">
-            <Bell />
-          </span>
-          <div>
-            <p>Announcements</p>
-            <h3 className={styles.dashboardUnavailableTitle}>Announcements unavailable</h3>
-          </div>
-        </div>
+      <Reveal
+        className={`${styles.dashboardCard} dashboard-card player-ticket-card player-ticket-announcements`}
+        delay={0.08}
+      >
+        <header className="player-ticket-masthead">
+          <h3 className="player-ticket-title">Announcements</h3>
+          <span className="player-ticket-context">Unavailable</span>
+        </header>
+        <strong className="player-ticket-announcement-state">Announcements unavailable</strong>
         <p className={styles.dashboardUnavailableCopy}>
           Academy notices could not be loaded just now.
         </p>
@@ -54,18 +53,18 @@ export function PlayerAnnouncementsCard({
   if (ordered.length === 0) return null
 
   return (
-    <Reveal className={`${styles.dashboardCard} dashboard-card`} delay={0.08}>
-      <div className={styles.dashboardHeader}>
-        <span className={styles.dashboardIcon} aria-hidden="true">
-          <Bell />
+    <Reveal
+      className={`${styles.dashboardCard} dashboard-card player-ticket-card player-ticket-announcements`}
+      delay={0.08}
+    >
+      <header className="player-ticket-masthead">
+        <h3 className="player-ticket-title">Announcements</h3>
+        <span className="player-ticket-context">
+          {ordered.length} {ordered.length === 1 ? "notice" : "notices"}
         </span>
-        <div>
-          <p>Announcements</p>
-          <h3>From the academy</h3>
-        </div>
-      </div>
+      </header>
 
-      <div className={styles.dashboardList}>
+      <div className={`${styles.dashboardList} player-ticket-announcement-list`}>
         {ordered.slice(0, 2).map((announcement) => (
           <Link
             className={styles.dashboardItem}
@@ -82,15 +81,18 @@ export function PlayerAnnouncementsCard({
               <strong>{announcement.title}</strong>
               <span>{announcement.preview}</span>
             </span>
-            <ArrowRight aria-hidden="true" />
+            <ArrowUpRight aria-hidden="true" />
           </Link>
         ))}
       </div>
 
       {ordered.length > 2 ? (
-        <Link className={styles.dashboardAll} href="/player/announcements">
+        <Link
+          className={`${styles.dashboardAll} player-ticket-announcement-all`}
+          href="/player/announcements"
+        >
           View all announcements
-          <ArrowRight aria-hidden="true" />
+          <ArrowUpRight aria-hidden="true" />
         </Link>
       ) : null}
     </Reveal>
