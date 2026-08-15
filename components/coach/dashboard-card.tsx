@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 import styles from "./dashboard-card.module.css"
 
 export type CoachDashboardArea =
+  | "onboarding"
   | "attendance"
   | "sessions"
   | "reports"
@@ -29,18 +30,21 @@ export function CoachDashboardStack({
 export function CoachDashboardCard({
   area,
   children,
+  id,
   status,
   title,
   titleId,
 }: {
   area: CoachDashboardArea
   children: ReactNode
+  id?: string
   status?: ReactNode
   title: string
   titleId: string
 }) {
   return (
     <section
+      id={id}
       className={styles.section}
       data-area={area}
       aria-labelledby={titleId}

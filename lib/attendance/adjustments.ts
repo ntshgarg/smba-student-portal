@@ -4,11 +4,17 @@ import { randomUUID } from "node:crypto"
 
 import { and, desc, eq, inArray, isNull } from "drizzle-orm"
 
-import { operationalActionError } from "@/lib/actions/operational-result"
-import { isValidDateKey } from "@/lib/attendance/domain"
+import {
+  OperationalActionError,
+  operationalActionError,
+} from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
-import { initializeDatabase, type SmbaDatabase } from "@/lib/db/client"
+import {
+  initializeDatabase,
+  type SmbaDatabase,
+  type SmbaDatabaseExecutor,
+} from "@/lib/db/client"
 import {
   accounts,
   attendanceAdjustments,
@@ -33,9 +39,9 @@ type DatabaseOption = {
 
 export type PublishMakeupAttendanceAdjustmentInput = DatabaseOption & {
   coachId: string
+  completionOccurrenceId: string
   playerId: string
   sourceOccurrenceId: string
-  completedOn: string
   reason?: string | null
   now?: Date
 }
@@ -69,7 +75,7 @@ function assertApprovedCoach(database: SmbaDatabase, coachId: string) {
   requireHeadAdminAccess(coachId, { database })
 }
 
-function assertApprovedPlayer(database: SmbaDatabase, playerId: string) {
+function assertApprovedPlayer(database: SmbaDatabaseExecutor, playerId: string) {
   const player = database.select({ id: accounts.id }).from(accounts).where(and(
     eq(accounts.id, playerId),
     eq(accounts.role, "player"),
@@ -81,40 +87,31 @@ function assertApprovedPlayer(database: SmbaDatabase, playerId: string) {
   }
 }
 
-function assertSourceIsEligibleAbsence({
+function assertPlayerEligibleForOccurrence({
   database,
+  invalidMessage,
   now,
+  occurrenceId,
   playerId,
-  sourceOccurrenceId,
+  field,
 }: {
-  database: SmbaDatabase
+  database: SmbaDatabaseExecutor
+  invalidMessage: string
   now: Date
+  occurrenceId: string
   playerId: string
-  sourceOccurrenceId: string
+  field: "completionOccurrenceId" | "sourceOccurrenceId"
 }) {
   const sourceRow = database.select().from(sessionOccurrences)
-    .where(eq(sessionOccurrences.id, sourceOccurrenceId)).get()
+    .where(eq(sessionOccurrences.id, occurrenceId)).get()
   const source = sourceRow
     ? resolveOccurrenceEligibilityDates(database, [sourceRow])[0]
     : null
   if (!source || source.status !== "scheduled" || !occurrenceHasStarted(source, now)) {
     operationalActionError(
       "INVALID_INPUT",
-      "Choose a completed scheduled session.",
-      "sourceOccurrenceId",
-    )
-  }
-
-  const attendance = database.select({ choice: sessionAttendanceRecords.choice })
-    .from(sessionAttendanceRecords).where(and(
-      eq(sessionAttendanceRecords.accountId, playerId),
-      eq(sessionAttendanceRecords.occurrenceId, sourceOccurrenceId),
-    )).get()
-  if (attendance?.choice !== "absent") {
-    operationalActionError(
-      "BUSINESS_RULE",
-      "Only a saved absence can be reconciled.",
-      "sourceOccurrenceId",
+      invalidMessage,
+      field,
     )
   }
 
@@ -124,8 +121,10 @@ function assertSourceIsEligibleAbsence({
   if (!joinedOn || !playerWasEnrolledForOccurrence(joinedOn, source)) {
     operationalActionError(
       "BUSINESS_RULE",
-      "The player was not enrolled for the missed session.",
-      "sourceOccurrenceId",
+      field === "sourceOccurrenceId"
+        ? "The player was not enrolled for the missed session."
+        : "The player was not enrolled for the completion session.",
+      field,
     )
   }
 
@@ -149,12 +148,155 @@ function assertSourceIsEligibleAbsence({
   if (!assignment) {
     operationalActionError(
       "BUSINESS_RULE",
-      "The absence is not from an assigned session day.",
-      "sourceOccurrenceId",
+      field === "sourceOccurrenceId"
+        ? "The absence is not from an assigned session day."
+        : "The completion is not from an assigned session day.",
+      field,
     )
   }
 
   return source
+}
+
+function assertSourceIsEligibleAbsence({
+  database,
+  now,
+  playerId,
+  sourceOccurrenceId,
+}: {
+  database: SmbaDatabaseExecutor
+  now: Date
+  playerId: string
+  sourceOccurrenceId: string
+}) {
+  const source = assertPlayerEligibleForOccurrence({
+    database,
+    invalidMessage: "Choose a completed scheduled session.",
+    now,
+    occurrenceId: sourceOccurrenceId,
+    playerId,
+    field: "sourceOccurrenceId",
+  })
+  const attendance = database.select({ choice: sessionAttendanceRecords.choice })
+    .from(sessionAttendanceRecords).where(and(
+      eq(sessionAttendanceRecords.accountId, playerId),
+      eq(sessionAttendanceRecords.occurrenceId, sourceOccurrenceId),
+    )).get()
+  if (attendance?.choice !== "absent") {
+    operationalActionError(
+      "BUSINESS_RULE",
+      "Only a saved absence can be reconciled.",
+      "sourceOccurrenceId",
+    )
+  }
+  return source
+}
+
+function assertCompletionIsEligiblePresence({
+  completionOccurrenceId,
+  database,
+  now,
+  playerId,
+}: {
+  completionOccurrenceId: string
+  database: SmbaDatabaseExecutor
+  now: Date
+  playerId: string
+}) {
+  const completion = assertPlayerEligibleForOccurrence({
+    database,
+    invalidMessage: "Choose a completed attendance session.",
+    now,
+    occurrenceId: completionOccurrenceId,
+    playerId,
+    field: "completionOccurrenceId",
+  })
+  const attendance = database.select({ choice: sessionAttendanceRecords.choice })
+    .from(sessionAttendanceRecords).where(and(
+      eq(sessionAttendanceRecords.accountId, playerId),
+      eq(sessionAttendanceRecords.occurrenceId, completionOccurrenceId),
+    )).get()
+  if (attendance?.choice !== "present") {
+    operationalActionError(
+      "BUSINESS_RULE",
+      "Choose a session where this player has saved Present attendance.",
+      "completionOccurrenceId",
+    )
+  }
+  return completion
+}
+
+function isSamePublishRequest(
+  adjustment: AttendanceAdjustmentRecord,
+  input: {
+    coachId: string
+    completionOccurrenceId: string
+    playerId: string
+    reason: string | null
+    sourceOccurrenceId: string
+  },
+) {
+  return adjustment.playerId === input.playerId
+    && adjustment.sourceOccurrenceId === input.sourceOccurrenceId
+    && adjustment.completionOccurrenceId === input.completionOccurrenceId
+    && adjustment.reason === input.reason
+    && adjustment.publishedByAccountId === input.coachId
+}
+
+function isUniqueConstraintViolation(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const code = (error as Error & { code?: string }).code
+  return code === "SQLITE_CONSTRAINT_UNIQUE"
+    || error.message.includes("UNIQUE constraint failed")
+}
+
+function activeAdjustmentForSource(
+  database: SmbaDatabaseExecutor,
+  playerId: string,
+  sourceOccurrenceId: string,
+) {
+  return database.select().from(attendanceAdjustments).where(and(
+    eq(attendanceAdjustments.playerId, playerId),
+    eq(attendanceAdjustments.sourceOccurrenceId, sourceOccurrenceId),
+    isNull(attendanceAdjustments.voidedAt),
+  )).get()
+}
+
+function activeAdjustmentForCompletion(
+  database: SmbaDatabaseExecutor,
+  playerId: string,
+  completionOccurrenceId: string,
+) {
+  return database.select().from(attendanceAdjustments).where(and(
+    eq(attendanceAdjustments.playerId, playerId),
+    eq(attendanceAdjustments.completionOccurrenceId, completionOccurrenceId),
+    isNull(attendanceAdjustments.voidedAt),
+  )).get()
+}
+
+function activeLegacyAdjustmentForCompletionDate(
+  database: SmbaDatabaseExecutor,
+  playerId: string,
+  completedOn: string,
+) {
+  return database.select().from(attendanceAdjustments).where(and(
+    eq(attendanceAdjustments.playerId, playerId),
+    eq(attendanceAdjustments.completedOn, completedOn),
+    isNull(attendanceAdjustments.completionOccurrenceId),
+    isNull(attendanceAdjustments.voidedAt),
+  )).get()
+}
+
+function publishConflict(
+  field: "completionOccurrenceId" | "sourceOccurrenceId",
+): never {
+  operationalActionError(
+    "CONFLICT",
+    field === "sourceOccurrenceId"
+      ? "This absence already has a different published adjustment."
+      : "This completed session is already linked to another attendance adjustment.",
+    field,
+  )
 }
 
 export function listAttendanceAdjustments({
@@ -194,7 +336,7 @@ export function listActiveAttendanceAdjustments(
 
 export function publishMakeupAttendanceAdjustment({
   coachId,
-  completedOn,
+  completionOccurrenceId,
   database = initializeDatabase(),
   now = new Date(),
   playerId,
@@ -202,14 +344,6 @@ export function publishMakeupAttendanceAdjustment({
   sourceOccurrenceId,
 }: PublishMakeupAttendanceAdjustmentInput): AttendanceAdjustmentRecord {
   assertApprovedCoach(database, coachId)
-  assertApprovedPlayer(database, playerId)
-  if (!isValidDateKey(completedOn)) {
-    operationalActionError(
-      "INVALID_INPUT",
-      "Choose a valid completion date.",
-      "completedOn",
-    )
-  }
   const normalizedReason = normalizeReason(reason)
   if (normalizedReason && normalizedReason.length > 160) {
     operationalActionError(
@@ -219,79 +353,104 @@ export function publishMakeupAttendanceAdjustment({
     )
   }
 
-  const source = assertSourceIsEligibleAbsence({
-    database,
-    now,
+  const semanticInput = {
+    coachId,
+    completionOccurrenceId,
     playerId,
+    reason: normalizedReason,
     sourceOccurrenceId,
-  })
-  const today = getIndiaDateKey(now)
-  if (completedOn <= source.occurrenceDate) {
-    operationalActionError(
-      "BUSINESS_RULE",
-      "The make-up date must be after the missed session.",
-      "completedOn",
-    )
-  }
-  if (completedOn > addCalendarDays(source.occurrenceDate, 14)) {
-    operationalActionError(
-      "BUSINESS_RULE",
-      "The make-up date must be within 14 days of the missed session.",
-      "completedOn",
-    )
-  }
-  if (completedOn > today) {
-    operationalActionError(
-      "BUSINESS_RULE",
-      "A future make-up cannot be published.",
-      "completedOn",
-    )
   }
 
-  const completionOccurrences = database.select().from(sessionOccurrences).where(and(
-    eq(sessionOccurrences.occurrenceDate, completedOn),
-    eq(sessionOccurrences.status, "scheduled"),
-  )).all().filter((occurrence) => occurrenceHasStarted(occurrence, now))
-  if (!completionOccurrences.length) {
-    operationalActionError(
-      "BUSINESS_RULE",
-      "No completed academy session was found on this date.",
-      "completedOn",
-    )
-  }
+  try {
+    return database.transaction((tx) => {
+      const existing = activeAdjustmentForSource(tx, playerId, sourceOccurrenceId)
+      if (existing) {
+        if (isSamePublishRequest(existing, semanticInput)) return existing
+        publishConflict("sourceOccurrenceId")
+      }
+      assertApprovedPlayer(tx, playerId)
 
-  return database.transaction((tx) => {
-    const existing = tx.select({ id: attendanceAdjustments.id })
-      .from(attendanceAdjustments).where(and(
-        eq(attendanceAdjustments.playerId, playerId),
-        eq(attendanceAdjustments.sourceOccurrenceId, sourceOccurrenceId),
-        isNull(attendanceAdjustments.voidedAt),
-      )).get()
-    if (existing) {
-      operationalActionError(
-        "CONFLICT",
-        "This absence already has a published adjustment.",
-        "sourceOccurrenceId",
+      const source = assertSourceIsEligibleAbsence({
+        database: tx,
+        now,
+        playerId,
+        sourceOccurrenceId,
+      })
+      const completion = assertCompletionIsEligiblePresence({
+        completionOccurrenceId,
+        database: tx,
+        now,
+        playerId,
+      })
+      const completedOn = completion.occurrenceDate
+      const today = getIndiaDateKey(now)
+      if (completedOn <= source.occurrenceDate) {
+        operationalActionError(
+          "BUSINESS_RULE",
+          "The make-up session must be after the missed session.",
+          "completionOccurrenceId",
+        )
+      }
+      if (completedOn > addCalendarDays(source.occurrenceDate, 14)) {
+        operationalActionError(
+          "BUSINESS_RULE",
+          "The make-up session must be within 14 days of the missed session.",
+          "completionOccurrenceId",
+        )
+      }
+      if (completedOn > today) {
+        operationalActionError(
+          "BUSINESS_RULE",
+          "A future make-up cannot be published.",
+          "completionOccurrenceId",
+        )
+      }
+
+      if (activeLegacyAdjustmentForCompletionDate(tx, playerId, completedOn)) {
+        operationalActionError(
+          "CONFLICT",
+          "This training date is linked to a legacy adjustment that requires review. Void it before using this session.",
+          "completionOccurrenceId",
+        )
+      }
+
+      const usedCompletion = activeAdjustmentForCompletion(
+        tx,
+        playerId,
+        completionOccurrenceId,
       )
+      if (usedCompletion) publishConflict("completionOccurrenceId")
+
+      return tx.insert(attendanceAdjustments).values({
+        id: randomUUID(),
+        type: "makeup",
+        playerId,
+        sourceOccurrenceId,
+        completedOn,
+        completionOccurrenceId,
+        reason: normalizedReason,
+        publishedByAccountId: coachId,
+        publishedAt: now,
+        reviewRequiredAt: null,
+        voidedByAccountId: null,
+        voidedAt: null,
+      }).returning().get()
+    }, { behavior: "immediate" })
+  } catch (error) {
+    if (error instanceof OperationalActionError || !isUniqueConstraintViolation(error)) {
+      throw error
     }
 
-    return tx.insert(attendanceAdjustments).values({
-      id: randomUUID(),
-      type: "makeup",
-      playerId,
-      sourceOccurrenceId,
-      completedOn,
-      completionOccurrenceId: completionOccurrences.length === 1
-        ? completionOccurrences[0].id
-        : null,
-      reason: normalizedReason,
-      publishedByAccountId: coachId,
-      publishedAt: now,
-      reviewRequiredAt: null,
-      voidedByAccountId: null,
-      voidedAt: null,
-    }).returning().get()
-  })
+    const existingSource = activeAdjustmentForSource(database, playerId, sourceOccurrenceId)
+    if (existingSource) {
+      if (isSamePublishRequest(existingSource, semanticInput)) return existingSource
+      publishConflict("sourceOccurrenceId")
+    }
+    if (activeAdjustmentForCompletion(database, playerId, completionOccurrenceId)) {
+      publishConflict("completionOccurrenceId")
+    }
+    throw error
+  }
 }
 
 export function voidAttendanceAdjustment({
@@ -302,14 +461,20 @@ export function voidAttendanceAdjustment({
 }: VoidAttendanceAdjustmentInput): AttendanceAdjustmentRecord {
   assertApprovedCoach(database, coachId)
   return database.transaction((tx) => {
-    const adjustment = tx.select().from(attendanceAdjustments).where(and(
-      eq(attendanceAdjustments.id, adjustmentId),
-      isNull(attendanceAdjustments.voidedAt),
-    )).get()
+    const adjustment = tx.select().from(attendanceAdjustments)
+      .where(eq(attendanceAdjustments.id, adjustmentId)).get()
     if (!adjustment) {
       operationalActionError(
         "NOT_FOUND",
         "The active attendance adjustment was not found.",
+        "adjustmentId",
+      )
+    }
+    if (adjustment.voidedAt) {
+      if (adjustment.voidedByAccountId === coachId) return adjustment
+      operationalActionError(
+        "CONFLICT",
+        "This adjustment was already voided by another coach.",
         "adjustmentId",
       )
     }
@@ -318,8 +483,11 @@ export function voidAttendanceAdjustment({
       reviewRequiredAt: null,
       voidedByAccountId: coachId,
       voidedAt: now,
-    }).where(eq(attendanceAdjustments.id, adjustment.id)).returning().get()
-  })
+    }).where(and(
+      eq(attendanceAdjustments.id, adjustment.id),
+      isNull(attendanceAdjustments.voidedAt),
+    )).returning().get()
+  }, { behavior: "immediate" })
 }
 
 export function reconcileAttendanceAdjustmentReviewState({
@@ -329,29 +497,39 @@ export function reconcileAttendanceAdjustmentReviewState({
   now,
   playerId,
 }: ReconcileAttendanceAdjustmentReviewInput) {
-  const hasOrdinaryPresence = Boolean(database.select({ id: sessionAttendanceRecords.id })
-    .from(sessionAttendanceRecords)
-    .innerJoin(
-      sessionOccurrences,
-      eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
-    ).where(and(
-      eq(sessionAttendanceRecords.accountId, playerId),
-      eq(sessionAttendanceRecords.choice, "present"),
-      eq(sessionOccurrences.occurrenceDate, completedOn),
-    )).get())
-
-  if (hasOrdinaryPresence) {
-    return database.update(attendanceAdjustments).set({ reviewRequiredAt: null }).where(and(
-      eq(attendanceAdjustments.playerId, playerId),
-      eq(attendanceAdjustments.completedOn, completedOn),
-      isNull(attendanceAdjustments.voidedAt),
-    )).run().changes
-  }
-  if (!lostFinalPresence) return 0
-
-  return database.update(attendanceAdjustments).set({ reviewRequiredAt: now }).where(and(
+  const active = database.select().from(attendanceAdjustments).where(and(
     eq(attendanceAdjustments.playerId, playerId),
     eq(attendanceAdjustments.completedOn, completedOn),
     isNull(attendanceAdjustments.voidedAt),
-  )).run().changes
+  )).all()
+
+  return active.reduce((changes, adjustment) => {
+    const hasOrdinaryPresence = adjustment.completionOccurrenceId
+      ? Boolean(database.select({ id: sessionAttendanceRecords.id })
+          .from(sessionAttendanceRecords).where(and(
+            eq(sessionAttendanceRecords.accountId, playerId),
+            eq(sessionAttendanceRecords.occurrenceId, adjustment.completionOccurrenceId),
+            eq(sessionAttendanceRecords.choice, "present"),
+          )).get())
+      : Boolean(database.select({ id: sessionAttendanceRecords.id })
+          .from(sessionAttendanceRecords)
+          .innerJoin(
+            sessionOccurrences,
+            eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
+          ).where(and(
+            eq(sessionAttendanceRecords.accountId, playerId),
+            eq(sessionAttendanceRecords.choice, "present"),
+            eq(sessionOccurrences.occurrenceDate, completedOn),
+          )).get())
+
+    if (hasOrdinaryPresence) {
+      return changes + database.update(attendanceAdjustments)
+        .set({ reviewRequiredAt: null })
+        .where(eq(attendanceAdjustments.id, adjustment.id)).run().changes
+    }
+    if (!lostFinalPresence) return changes
+    return changes + database.update(attendanceAdjustments)
+      .set({ reviewRequiredAt: now })
+      .where(eq(attendanceAdjustments.id, adjustment.id)).run().changes
+  }, 0)
 }

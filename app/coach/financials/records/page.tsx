@@ -226,7 +226,7 @@ export default async function FinancialRecordsPage({
             view,
           }),
           preparation: preparation
-            ? <PrepareFees period={period} preparation={preparation} />
+            ? <PrepareFees compact period={period} preparation={preparation} />
             : null,
           rows: register.rows,
           summary: register.summary,

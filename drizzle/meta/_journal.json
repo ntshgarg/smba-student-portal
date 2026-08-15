@@ -120,6 +120,27 @@
       "when": 1786310000000,
       "tag": "0016_registration_request_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1786484715446,
+      "tag": "0017_mid_term_withdrawal_refunds",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1786830625507,
+      "tag": "0018_attendance_session_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1786832420573,
+      "tag": "0019_attendance_evidence_review_cleanup",
+      "breakpoints": true
     }
   ]
 }

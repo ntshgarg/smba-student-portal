@@ -1,9 +1,24 @@
 "use client"
 
-import { ArrowUpRight, ChevronUp } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
-import type { CSSProperties } from "react"
+import {
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+} from "lucide-react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useMemo } from "react"
 
+import { buildJuniorCoachAttendanceCalendar } from "@/components/coach/junior-coach-attendance-calendar"
+import {
+  playerAttendanceMonthLabels,
+  playerAttendanceWeekdayLabels,
+} from "@/components/dashboard/player-attendance-calendar"
+import {
+  parsePlayerAttendanceNavigation,
+  playerAttendanceSearch,
+  shiftPlayerAttendanceMonth,
+} from "@/components/dashboard/player-attendance-query"
 import { Reveal } from "@/components/reveal"
 import { formatDateKey } from "@/lib/format"
 
@@ -28,40 +43,8 @@ export type JuniorCoachAttendanceView = {
   years: number[]
 }
 
-type RegisterDate = {
-  date: string
-  day: string
-  key: string
-  label: string
-  month: string
-}
-
-function buildRegisterDates(year: number) {
-  const dates: RegisterDate[] = []
-  for (
-    const date = new Date(Date.UTC(year, 0, 1));
-    date.getUTCFullYear() === year;
-    date.setUTCDate(date.getUTCDate() + 1)
-  ) {
-    const key = date.toISOString().slice(0, 10)
-    dates.push({
-      key,
-      day: formatDateKey(key, { day: undefined, month: undefined, weekday: "short" }),
-      date: formatDateKey(key, { day: "numeric", month: "short", weekday: undefined }),
-      month: formatDateKey(key, { day: undefined, month: "long", weekday: undefined }),
-      label: formatDateKey(key, { year: "numeric" }),
-    })
-  }
-  return dates
-}
-
-function groupDatesByMonth(dates: RegisterDate[]) {
-  return dates.reduce<Array<{ count: number; label: string }>>((groups, date) => {
-    const last = groups[groups.length - 1]
-    if (last?.label === date.month) last.count += 1
-    else groups.push({ label: date.month, count: 1 })
-    return groups
-  }, [])
+function monthNavigationLabel(year: number, month: number) {
+  return `${playerAttendanceMonthLabels[month - 1]} ${year}`
 }
 
 export function JuniorCoachAttendanceCard({
@@ -69,41 +52,67 @@ export function JuniorCoachAttendanceCard({
 }: {
   attendance: JuniorCoachAttendanceView
 }) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const currentYear = Number(attendance.referenceDate.slice(0, 4))
-  const [activeYear, setActiveYear] = useState(currentYear)
-  const [isOpen, setIsOpen] = useState(false)
-  const [scrollToToday, setScrollToToday] = useState(false)
-  const registerScrollRef = useRef<HTMLDivElement>(null)
-  const dates = useMemo(() => buildRegisterDates(activeYear), [activeYear])
-  const monthGroups = useMemo(() => groupDatesByMonth(dates), [dates])
-  const choices = useMemo(() => new Map(
-    attendance.records
-      .filter((record) => record.choice !== "cleared")
-      .map((record) => [record.dateKey, record.choice]),
-  ), [attendance.records])
-  const tableStyle = {
-    "--player-register-width": `${190 + dates.length * 54}px`,
-    "--player-register-mobile-width": `${136 + dates.length * 50}px`,
-  } as CSSProperties
+  const currentMonth = Number(attendance.referenceDate.slice(5, 7))
+  const navigation = useMemo(() => parsePlayerAttendanceNavigation(
+    searchParams,
+    attendance.years,
+    currentYear,
+    currentMonth,
+  ), [attendance.years, currentMonth, currentYear, searchParams])
+  const { activeMonth, activeYear, isOpen } = navigation
+  const calendar = useMemo(() => buildJuniorCoachAttendanceCalendar(
+    attendance,
+    activeYear,
+    activeMonth,
+  ), [activeMonth, activeYear, attendance])
+  const previousMonth = shiftPlayerAttendanceMonth(navigation, -1, attendance.years)
+  const nextMonth = shiftPlayerAttendanceMonth(navigation, 1, attendance.years)
+  const canMovePrevious = previousMonth.activeYear !== activeYear
+    || previousMonth.activeMonth !== activeMonth
+  const canMoveNext = nextMonth.activeYear !== activeYear
+    || nextMonth.activeMonth !== activeMonth
 
   useEffect(() => {
-    if (!isOpen || !scrollToToday || activeYear !== currentYear) return
-    const frame = window.requestAnimationFrame(() => {
-      const container = registerScrollRef.current
-      const header = container?.querySelector<HTMLElement>(
-        `[data-junior-register-date="${attendance.referenceDate}"]`,
-      )
-      if (container && header) {
-        container.scrollTo({ left: Math.max(0, header.offsetLeft - 170), behavior: "auto" })
-      }
-      setScrollToToday(false)
+    const canonicalSearch = playerAttendanceSearch(
+      searchParams.toString(),
+      navigation,
+      currentYear,
+      currentMonth,
+    )
+    if (canonicalSearch === searchParams.toString()) return
+
+    router.replace(canonicalSearch ? `${pathname}?${canonicalSearch}` : pathname, {
+      scroll: false,
     })
-    return () => window.cancelAnimationFrame(frame)
-  }, [activeYear, attendance.referenceDate, currentYear, isOpen, scrollToToday])
+  }, [
+    currentMonth,
+    currentYear,
+    navigation,
+    pathname,
+    router,
+    searchParams,
+  ])
+
+  function updateNavigation(next: typeof navigation) {
+    const nextSearch = playerAttendanceSearch(
+      searchParams.toString(),
+      next,
+      currentYear,
+      currentMonth,
+    )
+    router.push(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false })
+  }
 
   function jumpToToday() {
-    if (activeYear !== currentYear) setActiveYear(currentYear)
-    setScrollToToday(true)
+    updateNavigation({
+      isOpen: true,
+      activeYear: currentYear,
+      activeMonth: currentMonth,
+    })
   }
 
   const recordedValue = String(attendance.summary.recorded).padStart(2, "0")
@@ -151,7 +160,7 @@ export function JuniorCoachAttendanceCard({
           <div className={styles.ledgerAction}>
             <p>
               {attendance.summary.recorded
-                ? "Review your read-only annual attendance register whenever you need it."
+                ? "Review your read-only attendance calendar whenever you need it."
                 : "Your record will appear after the head coach saves an attendance day."}
             </p>
             <button
@@ -159,9 +168,9 @@ export function JuniorCoachAttendanceCard({
               type="button"
               aria-expanded={isOpen}
               aria-controls="junior-coach-attendance-register"
-              onClick={() => setIsOpen((open) => {
-                if (!open && activeYear === currentYear) setScrollToToday(true)
-                return !open
+              onClick={() => updateNavigation({
+                ...navigation,
+                isOpen: !isOpen,
               })}
             >
               <span>{isOpen ? "Close attendance record" : "Open attendance record"}</span>
@@ -172,24 +181,27 @@ export function JuniorCoachAttendanceCard({
 
         {isOpen ? (
           <div
-            className={`player-attendance-register ${styles.attendanceRegister}`}
+            className={`player-attendance-register personal-attendance-register ${styles.attendanceRegister}`}
             id="junior-coach-attendance-register"
           >
             <div className="player-attendance-register-heading">
-              <div>
+              <div className="player-attendance-register-title">
                 <span>Your record</span>
                 <h3>Annual attendance</h3>
               </div>
               <div className="player-attendance-register-actions">
                 <div className="player-attendance-year-selector" role="group" aria-label="Choose attendance year">
-                  <span>Year</span>
                   {attendance.years.map((year) => (
                     <button
                       key={year}
                       type="button"
                       className={year === activeYear ? "is-active" : undefined}
                       aria-pressed={year === activeYear}
-                      onClick={() => setActiveYear(year)}
+                      onClick={() => updateNavigation({
+                        ...navigation,
+                        isOpen: true,
+                        activeYear: year,
+                      })}
                     >
                       {year}
                     </button>
@@ -201,83 +213,137 @@ export function JuniorCoachAttendanceCard({
               </div>
             </div>
 
-            <div className="player-attendance-legend" role="group" aria-label="Attendance status legend">
-              <span><i className="is-present" aria-hidden="true" />Present</span>
-              <span><i className="is-absent" aria-hidden="true" />Absent</span>
-              <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
-              <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
-            </div>
-
-            <div
-              className="player-attendance-register-scroll"
-              ref={registerScrollRef}
-              tabIndex={0}
-              role="region"
-              aria-label={`Scrollable personal attendance register for ${activeYear}`}
+            <section
+              className="player-attendance-month-sheet personal-attendance-calendar"
+              aria-label={`${monthNavigationLabel(activeYear, activeMonth)} attendance calendar`}
             >
-              <table
-                className="player-attendance-register-table"
-                style={tableStyle}
-                aria-label={`Your attendance register for ${activeYear}`}
-              >
-                <thead>
-                  <tr className="player-attendance-month-row">
-                    <th className="player-attendance-session-column" scope="col" rowSpan={2}>Record</th>
-                    {monthGroups.map((month) => (
-                      <th key={month.label} scope="colgroup" colSpan={month.count}><span>{month.label}</span></th>
+              <header className="player-attendance-month-toolbar">
+                <button
+                  className="player-attendance-month-nav is-previous"
+                  type="button"
+                  disabled={!canMovePrevious}
+                  aria-label={canMovePrevious
+                    ? `View ${monthNavigationLabel(previousMonth.activeYear, previousMonth.activeMonth)}`
+                    : "No previous attendance month available"}
+                  onClick={() => updateNavigation({ ...previousMonth, isOpen: true })}
+                >
+                  <ChevronLeft aria-hidden="true" />
+                  <span>{canMovePrevious
+                    ? monthNavigationLabel(previousMonth.activeYear, previousMonth.activeMonth)
+                    : "Previous"}</span>
+                </button>
+
+                <div
+                  className="player-attendance-month-current"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <span>Attendance month</span>
+                  <strong>{monthNavigationLabel(activeYear, activeMonth)}</strong>
+                </div>
+
+                <button
+                  className="player-attendance-month-nav is-next"
+                  type="button"
+                  disabled={!canMoveNext}
+                  aria-label={canMoveNext
+                    ? `View ${monthNavigationLabel(nextMonth.activeYear, nextMonth.activeMonth)}`
+                    : "No next attendance month available"}
+                  onClick={() => updateNavigation({ ...nextMonth, isOpen: true })}
+                >
+                  <span>{canMoveNext
+                    ? monthNavigationLabel(nextMonth.activeYear, nextMonth.activeMonth)
+                    : "Next"}</span>
+                  <ChevronRight aria-hidden="true" />
+                </button>
+              </header>
+
+              <div className="player-attendance-month-tools">
+                <div
+                  className="player-attendance-legend"
+                  role="group"
+                  aria-label="Attendance status legend"
+                >
+                  <span><i className="is-present" aria-hidden="true" />Present</span>
+                  <span><i className="is-absent" aria-hidden="true" />Absent</span>
+                  <span><i className="is-pending" aria-hidden="true" />Not recorded</span>
+                  <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
+                </div>
+                <p>Use the arrows to review each month.</p>
+              </div>
+
+              <div className="player-attendance-calendar-frame">
+                <div
+                  className="player-attendance-calendar"
+                  role="grid"
+                  aria-label={`Your attendance calendar for ${monthNavigationLabel(activeYear, activeMonth)}`}
+                  aria-colcount={7}
+                  aria-rowcount={7}
+                >
+                  <div className="player-attendance-calendar-weekdays" role="row">
+                    {playerAttendanceWeekdayLabels.map((weekday) => (
+                      <div
+                        className="player-attendance-calendar-weekday"
+                        role="columnheader"
+                        key={weekday}
+                      >
+                        <span className="player-attendance-weekday-long">{weekday}</span>
+                        <span className="player-attendance-weekday-short">{weekday.slice(0, 3)}</span>
+                      </div>
                     ))}
-                  </tr>
-                  <tr className="player-attendance-date-row">
-                    {dates.map((date) => {
-                      const unavailable = date.key < attendance.joinedOn || date.key > attendance.referenceDate
-                      return (
-                        <th
-                          key={date.key}
-                          scope="col"
-                          data-junior-register-date={date.key}
-                          className={[
-                            date.key === attendance.referenceDate ? "is-today" : "",
-                            unavailable ? "is-unavailable" : "",
-                          ].filter(Boolean).join(" ") || undefined}
-                        >
-                          <span>{date.day}</span>
-                          <strong>{date.date}</strong>
-                        </th>
-                      )
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <th className="player-attendance-session-column" scope="row">
-                      <strong>Attendance</strong>
-                      <small>Recorded days only</small>
-                    </th>
-                    {dates.map((date) => {
-                      const unavailable = date.key < attendance.joinedOn || date.key > attendance.referenceDate
-                      const choice = choices.get(date.key)
-                      const state = unavailable ? "not available" : choice ?? "not recorded"
-                      return (
-                        <td
-                          key={date.key}
-                          className={date.key === attendance.referenceDate ? "is-today" : undefined}
-                          aria-label={`${date.label}: ${state}`}
-                          title={`${date.label}: ${state}`}
-                        >
-                          <span
-                            className={[
-                              "player-attendance-cell",
-                              unavailable ? "is-unavailable" : choice ? `is-${choice}` : "is-unmarked",
-                            ].join(" ")}
-                            aria-hidden="true"
-                          />
-                        </td>
-                      )
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                  </div>
+                  <div className="player-attendance-calendar-weeks" role="rowgroup">
+                    {Array.from({ length: 6 }, (_, weekIndex) => (
+                      <div
+                        className="player-attendance-calendar-week"
+                        role="row"
+                        key={calendar.days[weekIndex * 7].key}
+                      >
+                        {calendar.days.slice(weekIndex * 7, weekIndex * 7 + 7).map((day) => {
+                          const stateClass = day.state === "unmarked"
+                            ? "is-pending"
+                            : day.state === "unavailable"
+                              ? "is-not-scheduled"
+                              : `is-${day.state}`
+                          const className = [
+                            "player-attendance-calendar-day",
+                            styles.staffCalendarDay,
+                            stateClass,
+                            day.inSelectedMonth ? "" : "is-outside-month",
+                            day.isToday ? "is-today" : "",
+                          ].filter(Boolean).join(" ")
+
+                          return (
+                            <div
+                              className={className}
+                              role="gridcell"
+                              key={day.key}
+                              aria-current={day.isToday ? "date" : undefined}
+                              aria-label={`${day.label}: ${day.stateLabel}`}
+                              title={`${day.label}: ${day.stateLabel}`}
+                            >
+                              <div aria-hidden="true">
+                                <div className="player-attendance-calendar-date">
+                                  <strong>{day.dayNumber}</strong>
+                                  <span>{day.monthShort}</span>
+                                </div>
+                                {day.isToday ? (
+                                  <span className="player-attendance-calendar-today">Today</span>
+                                ) : null}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="player-attendance-calendar-note">
+                  <span>Today · {formatDateKey(attendance.referenceDate, { year: "numeric" })}</span>
+                  <span>Attendance is recorded by the head coach.</span>
+                </div>
+              </div>
+            </section>
           </div>
         ) : null}
       </Reveal>

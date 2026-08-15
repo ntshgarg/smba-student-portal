@@ -8,6 +8,7 @@ import {
 import {
   parsePlayerAttendanceNavigation,
   playerAttendanceSearch,
+  shiftPlayerAttendanceMonth,
 } from "@/components/dashboard/player-attendance-query"
 
 describe("Member Directory URL state", () => {
@@ -78,51 +79,90 @@ describe("Member Directory URL state", () => {
 
 describe("Player attendance URL state", () => {
   const years = [2025, 2026, 2027]
+  const currentMonth = 8
 
-  it("restores an expanded register and selected supported year", () => {
+  it("restores an expanded calendar and selected supported year and month", () => {
     expect(parsePlayerAttendanceNavigation(
-      new URLSearchParams("attendance=register&year=2025"),
+      new URLSearchParams("attendance=register&year=2025&month=07"),
       years,
       2026,
-    )).toEqual({ isOpen: true, activeYear: 2025 })
+      currentMonth,
+    )).toEqual({ isOpen: true, activeYear: 2025, activeMonth: 7 })
   })
 
-  it("canonicalizes invalid state to the closed current-year default", () => {
+  it("canonicalizes invalid state to the closed current-month default", () => {
     const parsed = parsePlayerAttendanceNavigation(
-      new URLSearchParams("attendance=open&year=1999"),
+      new URLSearchParams("attendance=open&year=1999&month=13"),
       years,
       2026,
+      currentMonth,
     )
 
-    expect(parsed).toEqual({ isOpen: false, activeYear: 2026 })
+    expect(parsed).toEqual({
+      isOpen: false,
+      activeYear: 2026,
+      activeMonth: currentMonth,
+    })
     expect(playerAttendanceSearch(
-      "attendance=open&year=1999&source=dashboard",
+      "attendance=open&year=1999&month=13&source=dashboard",
       parsed,
       2026,
+      currentMonth,
     )).toBe("source=dashboard")
   })
 
-  it("keeps open, year-change and close entries independently restorable", () => {
+  it("keeps open, month/year changes and close entries independently restorable", () => {
     const opened = playerAttendanceSearch("", {
       isOpen: true,
       activeYear: 2026,
-    }, 2026)
+      activeMonth: currentMonth,
+    }, 2026, currentMonth)
+    const changedMonth = playerAttendanceSearch(opened, {
+      isOpen: true,
+      activeYear: 2026,
+      activeMonth: 7,
+    }, 2026, currentMonth)
     const changedYear = playerAttendanceSearch(opened, {
       isOpen: true,
       activeYear: 2025,
-    }, 2026)
+      activeMonth: 7,
+    }, 2026, currentMonth)
     const closed = playerAttendanceSearch(changedYear, {
       isOpen: false,
       activeYear: 2025,
-    }, 2026)
+      activeMonth: 7,
+    }, 2026, currentMonth)
 
     expect(opened).toBe("attendance=register")
-    expect(changedYear).toBe("attendance=register&year=2025")
-    expect(closed).toBe("year=2025")
+    expect(changedMonth).toBe("attendance=register&month=07")
+    expect(changedYear).toBe("attendance=register&year=2025&month=07")
+    expect(closed).toBe("year=2025&month=07")
     expect(parsePlayerAttendanceNavigation(
       new URLSearchParams(changedYear),
       years,
       2026,
-    )).toEqual({ isOpen: true, activeYear: 2025 })
+      currentMonth,
+    )).toEqual({ isOpen: true, activeYear: 2025, activeMonth: 7 })
+  })
+
+  it("moves across year boundaries without leaving the loaded record", () => {
+    expect(shiftPlayerAttendanceMonth({
+      isOpen: true,
+      activeYear: 2026,
+      activeMonth: 12,
+    }, 1, years)).toEqual({
+      isOpen: true,
+      activeYear: 2027,
+      activeMonth: 1,
+    })
+    expect(shiftPlayerAttendanceMonth({
+      isOpen: true,
+      activeYear: 2025,
+      activeMonth: 1,
+    }, -1, years)).toEqual({
+      isOpen: true,
+      activeYear: 2025,
+      activeMonth: 1,
+    })
   })
 })

@@ -4,7 +4,6 @@ import Link from "next/link"
 import { ArrowLeft, CircleAlert } from "lucide-react"
 
 import styles from "@/components/financials/player-financials.module.css"
-import { PageIntro } from "@/components/page-intro"
 
 export default function PlayerFinancialsError({ reset }: { reset: () => void }) {
   return (
@@ -15,11 +14,9 @@ export default function PlayerFinancialsError({ reset }: { reset: () => void }) 
           Back to dashboard
         </Link>
       </div>
-      <PageIntro
-        eyebrow="Fee record"
-        title="Academy fees, clearly recorded."
-        body="Review charges, due dates and payments in one read-only record."
-      />
+      <header className={styles.pageHeader}>
+        <h1>Your fee record.</h1>
+      </header>
       <section className={`${styles.pageState} empty-state`} role="alert">
         <CircleAlert aria-hidden="true" />
         <h2>Fee record unavailable.</h2>

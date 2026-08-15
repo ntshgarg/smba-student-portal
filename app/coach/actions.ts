@@ -38,6 +38,7 @@ import {
   cancelSessionOccurrence,
   createSessionSeriesRecords,
   endSessionAssignment,
+  endSessionSeriesRecords,
   replaceSessionOccurrence,
   saveSessionAttendanceRecords,
 } from "@/lib/sessions/service"
@@ -82,6 +83,7 @@ function revalidateAcademyData() {
   revalidatePath("/coach/schedules")
   revalidatePath("/coach/schedules/new")
   revalidatePath("/coach/members")
+  revalidatePath("/coach/onboarding")
   revalidatePath("/coach/reports")
   revalidatePath("/coach/reports/write")
   revalidatePath("/coach/financials")
@@ -121,7 +123,7 @@ export async function rejectRegistrationAction(registrationId: string) {
       )
     }
     rejectRegistration(registrationId, coach.subjectId)
-    revalidatePath("/coach/members")
+    revalidateAcademyData()
     return null
   })
 }
@@ -160,7 +162,7 @@ export async function saveAttendanceRegisterAction(input: {
     if (!Array.isArray(input?.changes) || !input.changes.length) return { applied: 0 }
     const db = initializeDatabase()
     const now = new Date()
-    saveSessionAttendanceRecords({
+    const result = saveSessionAttendanceRecords({
       changes: input.changes,
       coachId: coach.subjectId,
       database: db,
@@ -168,7 +170,7 @@ export async function saveAttendanceRegisterAction(input: {
       referenceDate: getIndiaDateKey(now),
     })
     revalidateAcademyData()
-    return { applied: input.changes.length }
+    return result
   })
 }
 
@@ -238,6 +240,20 @@ export async function endSessionAssignmentAction(input: {
       database: initializeDatabase(),
       ...input,
       now: new Date(),
+    })
+    revalidateAcademyData()
+    return getCoachSessionSnapshot()
+  })
+}
+
+export async function endSessionSeriesAction(seriesId: string) {
+  const coach = await requireCoach()
+  return runOperationalAction(() => {
+    endSessionSeriesRecords({
+      coachId: coach.subjectId,
+      database: initializeDatabase(),
+      now: new Date(),
+      seriesId,
     })
     revalidateAcademyData()
     return getCoachSessionSnapshot()

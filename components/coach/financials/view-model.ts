@@ -45,6 +45,7 @@ export function toPlayerFinancialLedgerView(ledger: PlayerFeeRecord): PlayerFina
     charges: [ledger.registrationCharge, ...ledger.monthlyCharges]
       .filter((charge): charge is ChargeView => Boolean(charge))
       .map(chargeView),
+    feePlanSetupReady: ledger.feePlanSetupReady,
     feePlan: ledger.feeAgreement ? {
       id: ledger.feeAgreement.id,
       academyPlan: ledger.feeAgreement.academyPlan,

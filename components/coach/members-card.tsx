@@ -9,27 +9,19 @@ import {
 
 export function MembersCard({
   memberCount,
-  pendingRegistrationCount,
 }: {
   memberCount: number
-  pendingRegistrationCount: number
 }) {
   const memberLabel = `${memberCount} enrolled ${memberCount === 1 ? "member" : "members"}`
 
   return (
     <CoachDashboardCard
       area="members"
-      status={pendingRegistrationCount
-        ? `${pendingRegistrationCount} pending`
-        : "Roster current"}
+      status="Roster current"
       title="Members"
       titleId="coach-members-card-title"
     >
-      <CoachDashboardSummary
-        detail={pendingRegistrationCount
-          ? `${pendingRegistrationCount} ${pendingRegistrationCount === 1 ? "registration awaits" : "registrations await"} approval.`
-          : "The academy directory is up to date."}
-      >
+      <CoachDashboardSummary detail="The academy directory is up to date.">
         {memberLabel}
       </CoachDashboardSummary>
       <CoachDashboardActions ariaLabel="Member actions">

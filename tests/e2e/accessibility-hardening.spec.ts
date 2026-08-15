@@ -165,7 +165,7 @@ test("Member Directory filters restore from the URL and browser history", async 
   await expect(page.getByLabel("Batch")).toHaveValue("Weekend")
 })
 
-test("Player attendance expansion and year restore through refresh and Back", async ({ page }) => {
+test("Player attendance month and year restore through refresh and Back", async ({ page }) => {
   await loginAsPlayer(page)
   await page.goto("/player", { waitUntil: "networkidle" })
 
@@ -173,6 +173,14 @@ test("Player attendance expansion and year restore through refresh and Back", as
   await expect(toggle).toBeVisible()
   await toggle.click()
   await expect(page).toHaveURL((url) => url.searchParams.get("attendance") === "register")
+  const calendar = page.getByRole("grid", { name: /Your attendance calendar/u })
+  await expect(calendar.getByRole("columnheader")).toHaveCount(7)
+  await expect(calendar.getByRole("gridcell")).toHaveCount(42)
+
+  await page.getByRole("button", { name: "View July 2026" }).click()
+  await expect(page).toHaveURL((url) => url.searchParams.get("month") === "07")
+  await expect(page.locator(".player-attendance-month-current > strong"))
+    .toHaveText("July 2026")
 
   const yearButtons = page.locator(".player-attendance-year-selector button")
   expect(await yearButtons.count()).toBeGreaterThan(1)
@@ -186,6 +194,8 @@ test("Player attendance expansion and year restore through refresh and Back", as
   await expect(page.locator(".player-attendance-year-selector button", {
     hasText: alternateYearLabel,
   })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.locator(".player-attendance-month-current > strong"))
+    .toHaveText(`July ${alternateYearLabel}`)
 
   await page.getByRole("button", { name: "Close attendance record" }).click()
   await expect(page).toHaveURL((url) => !url.searchParams.has("attendance"))
@@ -194,5 +204,11 @@ test("Player attendance expansion and year restore through refresh and Back", as
   await expect(page).toHaveURL((url) => (
     url.searchParams.get("attendance") === "register"
     && url.searchParams.get("year") === alternateYearLabel
+    && url.searchParams.get("month") === "07"
+  ))
+
+  await page.getByRole("button", { name: "Jump to today" }).click()
+  await expect(page).toHaveURL((url) => (
+    !url.searchParams.has("year") && !url.searchParams.has("month")
   ))
 })

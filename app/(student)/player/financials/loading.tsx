@@ -2,7 +2,6 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
 import styles from "@/components/financials/player-financials.module.css"
-import { PageIntro } from "@/components/page-intro"
 
 export default function PlayerFinancialsLoading() {
   return (
@@ -13,11 +12,9 @@ export default function PlayerFinancialsLoading() {
           Back to dashboard
         </Link>
       </div>
-      <PageIntro
-        eyebrow="Fee record"
-        title="Academy fees, clearly recorded."
-        body="Review charges, due dates and payments in one read-only record."
-      />
+      <header className={styles.pageHeader}>
+        <h1>Your fee record.</h1>
+      </header>
       <p className="sr-only" role="status">Loading your fee record.</p>
       <div className={styles.loadingOverview} aria-hidden="true" />
       <div className={styles.loadingSection} aria-hidden="true" />

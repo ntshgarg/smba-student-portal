@@ -30,9 +30,7 @@ function neutralRapidDeskHref({
   requestedScope: string | undefined
 }) {
   const search = new URLSearchParams()
-  if (requestedScope === "all" || requestedScope === "outstanding") {
-    search.set("scope", requestedScope)
-  }
+  if (requestedScope === "all") search.set("scope", requestedScope)
   if (query) search.set("query", query)
   const serialized = search.toString()
   return `/coach/financials/record${serialized ? `?${serialized}` : ""}`

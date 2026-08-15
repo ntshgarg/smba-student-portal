@@ -15,6 +15,7 @@ import {
 } from "@/lib/auth/coach-access"
 import {
   getStaffAttendanceSummary,
+  listJuniorCoachAttendanceRegisterProfiles,
   listJuniorCoachProfiles,
   listStaffAttendanceRecords,
   saveStaffAttendanceRecords,
@@ -247,7 +248,7 @@ describe("coach access profiles", () => {
 
     expect(() => attendanceAdjustments.publishMakeupAttendanceAdjustment({
       coachId: FIRST_JUNIOR_ID,
-      completedOn: "invalid",
+      completionOccurrenceId: "invalid",
       database,
       now,
       playerId: "missing",
@@ -263,6 +264,64 @@ describe("coach access profiles", () => {
 })
 
 describe("junior-coach staff attendance", () => {
+  it("keeps archived staff and their saved attendance in the head register only", () => {
+    const markedAt = new Date("2026-08-08T06:30:00.000Z")
+    database.update(schema.coachProfiles).set({ joinedOn: "2023-08-01" })
+      .where(eq(schema.coachProfiles.accountId, SECOND_JUNIOR_ID)).run()
+    saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now: markedAt,
+      changes: [
+        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2023-08-07", choice: "present", expectedChoice: "cleared" },
+      ],
+    })
+    database.update(schema.accounts).set({
+      archivedAt: new Date("2026-08-10T06:30:00.000Z"),
+    }).where(eq(schema.accounts.id, SECOND_JUNIOR_ID)).run()
+
+    expect(listJuniorCoachProfiles({
+      database,
+      requesterAccountId: HEAD_COACH_ID,
+    }).map((coach) => coach.accountId)).not.toContain(SECOND_JUNIOR_ID)
+    expect(listJuniorCoachAttendanceRegisterProfiles({
+      database,
+      requesterAccountId: HEAD_COACH_ID,
+    })).toContainEqual(expect.objectContaining({
+      accountId: SECOND_JUNIOR_ID,
+      archivedOn: "2026-08-10",
+      fullName: "Meera Nair",
+    }))
+    expect(() => listJuniorCoachAttendanceRegisterProfiles({
+      database,
+      requesterAccountId: FIRST_JUNIOR_ID,
+    })).toThrow("Head coach access")
+    expect(listStaffAttendanceRecords({
+      database,
+      requesterAccountId: HEAD_COACH_ID,
+      coachAccountId: SECOND_JUNIOR_ID,
+      from: "2023-08-01",
+      to: "2023-08-31",
+    })).toEqual([
+      expect.objectContaining({ dateKey: "2023-08-07", choice: "present" }),
+    ])
+    expect(() => listStaffAttendanceRecords({
+      database,
+      requesterAccountId: FIRST_JUNIOR_ID,
+      coachAccountId: SECOND_JUNIOR_ID,
+      from: "2026-08-01",
+      to: "2026-08-31",
+    })).toThrow("only view their own attendance")
+    expect(() => saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now: new Date("2026-08-11T06:30:00.000Z"),
+      changes: [
+        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-04", choice: "absent", expectedChoice: "cleared" },
+      ],
+    })).toThrow("selected junior coach is unavailable")
+  })
+
   it("persists one auditable record per date and excludes cleared days from summaries", () => {
     const firstSave = new Date("2026-08-08T06:30:00.000Z")
     expect(saveStaffAttendanceRecords({
@@ -270,11 +329,11 @@ describe("junior-coach staff attendance", () => {
       markedByAccountId: HEAD_COACH_ID,
       now: firstSave,
       changes: [
-        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-01", choice: "present" },
-        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-02", choice: "absent" },
-        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-03", choice: "cleared" },
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-01", choice: "present", expectedChoice: "cleared" },
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-02", choice: "absent", expectedChoice: "cleared" },
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-03", choice: "cleared", expectedChoice: "cleared" },
       ],
-    })).toEqual({ applied: 3 })
+    })).toEqual({ applied: 2 })
 
     const initialRecords = listStaffAttendanceRecords({
       database,
@@ -286,7 +345,6 @@ describe("junior-coach staff attendance", () => {
     expect(initialRecords.map(({ choice, dateKey }) => ({ choice, dateKey }))).toEqual([
       { choice: "present", dateKey: "2026-08-01" },
       { choice: "absent", dateKey: "2026-08-02" },
-      { choice: "cleared", dateKey: "2026-08-03" },
     ])
     expect(getStaffAttendanceSummary({
       database,
@@ -311,7 +369,7 @@ describe("junior-coach staff attendance", () => {
       markedByAccountId: HEAD_COACH_ID,
       now: correctionTime,
       changes: [
-        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-01", choice: "absent" },
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-01", choice: "absent", expectedChoice: "present" },
       ],
     })
     const corrected = listStaffAttendanceRecords({
@@ -324,7 +382,44 @@ describe("junior-coach staff attendance", () => {
     expect(corrected).toMatchObject({ id: original.id, choice: "absent" })
     expect(corrected.createdAt).toBe(original.createdAt)
     expect(corrected.updatedAt).toBe(correctionTime.toISOString())
-    expect(database.select().from(schema.staffAttendanceRecords).all()).toHaveLength(3)
+    expect(database.select().from(schema.staffAttendanceRecords).all()).toHaveLength(2)
+
+    expect(saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now: new Date("2026-08-10T06:30:00.000Z"),
+      changes: [{
+        coachAccountId: FIRST_JUNIOR_ID,
+        dateKey: "2026-08-01",
+        choice: "absent",
+        expectedChoice: "present",
+      }],
+    })).toEqual({ applied: 0 })
+    expect(listStaffAttendanceRecords({
+      database,
+      requesterAccountId: HEAD_COACH_ID,
+      coachAccountId: FIRST_JUNIOR_ID,
+      from: "2026-08-01",
+      to: "2026-08-01",
+    })[0].updatedAt).toBe(correctionTime.toISOString())
+    expect(() => saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now: new Date("2026-08-10T06:30:00.000Z"),
+      changes: [{
+        coachAccountId: FIRST_JUNIOR_ID,
+        dateKey: "2026-08-01",
+        choice: "cleared",
+        expectedChoice: "present",
+      }],
+    })).toThrow("changed since this page was opened")
+    expect(listStaffAttendanceRecords({
+      database,
+      requesterAccountId: HEAD_COACH_ID,
+      coachAccountId: FIRST_JUNIOR_ID,
+      from: "2026-08-01",
+      to: "2026-08-01",
+    })[0].choice).toBe("absent")
   })
 
   it("allows head reads and own junior reads without exposing another junior", () => {
@@ -347,7 +442,7 @@ describe("junior-coach staff attendance", () => {
       markedByAccountId: FIRST_JUNIOR_ID,
       now: new Date("2026-08-08T06:30:00.000Z"),
       changes: [
-        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-08", choice: "present" },
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-08", choice: "present", expectedChoice: "cleared" },
       ],
     })).toThrow("Head coach access")
   })
@@ -359,7 +454,7 @@ describe("junior-coach staff attendance", () => {
       markedByAccountId: HEAD_COACH_ID,
       now: justAfterIndiaMidnight,
       changes: [
-        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-09", choice: "present" },
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-09", choice: "present", expectedChoice: "cleared" },
       ],
     })).toEqual({ applied: 1 })
     expect(() => saveStaffAttendanceRecords({
@@ -367,7 +462,7 @@ describe("junior-coach staff attendance", () => {
       markedByAccountId: HEAD_COACH_ID,
       now: justAfterIndiaMidnight,
       changes: [
-        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-10", choice: "present" },
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-10", choice: "present", expectedChoice: "cleared" },
       ],
     })).toThrow("future date")
     expect(() => saveStaffAttendanceRecords({
@@ -375,7 +470,7 @@ describe("junior-coach staff attendance", () => {
       markedByAccountId: HEAD_COACH_ID,
       now: justAfterIndiaMidnight,
       changes: [
-        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-02", choice: "present" },
+        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-02", choice: "present", expectedChoice: "cleared" },
       ],
     })).toThrow("before the joining date")
     expect(() => saveStaffAttendanceRecords({
@@ -386,6 +481,7 @@ describe("junior-coach staff attendance", () => {
         coachAccountId: FIRST_JUNIOR_ID,
         dateKey: "2026-02-30",
         choice: "present",
+        expectedChoice: "cleared",
       }],
     })).toThrow("valid attendance date")
     expect(() => saveStaffAttendanceRecords({
@@ -396,6 +492,7 @@ describe("junior-coach staff attendance", () => {
         coachAccountId: FIRST_JUNIOR_ID,
         dateKey: "2026-08-04",
         choice: "late" as never,
+        expectedChoice: "cleared",
       }],
     })).toThrow("valid attendance result")
 
@@ -404,8 +501,8 @@ describe("junior-coach staff attendance", () => {
       markedByAccountId: HEAD_COACH_ID,
       now: justAfterIndiaMidnight,
       changes: [
-        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-03", choice: "present" },
-        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-03", choice: "absent" },
+        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-03", choice: "present", expectedChoice: "cleared" },
+        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-03", choice: "absent", expectedChoice: "cleared" },
       ],
     })).toThrow("duplicate changes")
     expect(database.select().from(schema.staffAttendanceRecords).all()

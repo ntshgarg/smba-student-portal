@@ -55,7 +55,6 @@ export default async function CoachReportsPage({
 
   return (
     <PublishedReportsArchive
-      earliestPublishedPeriod={publishedPeriods.at(-1) ?? null}
       hasPublishedReports={publishedPeriods.length > 0}
       latestCompletedPeriod={latestCompletedPeriod}
       period={period}

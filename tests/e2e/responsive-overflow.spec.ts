@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 import type { Locator, Page } from "@playwright/test"
 
 const COACH_ACADEMY_ID = "SMBA#0001"
+const PLAYER_ACADEMY_ID = process.env.SMBA_CAPTURE_PLAYER_ACADEMY_ID ?? "SMBA#0002"
 const WIDTH_TOLERANCE_PX = 1
 
 const announcementViewports = [
@@ -34,6 +35,17 @@ async function loginAsCoach(page: Page) {
   await page.getByLabel("Academy ID").fill(COACH_ACADEMY_ID)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/coach"), {
+    timeout: 20_000,
+  })
+}
+
+async function loginAsPlayer(page: Page) {
+  await page.goto("/login", { waitUntil: "domcontentloaded" })
+  if (new URL(page.url()).pathname.startsWith("/player")) return
+
+  await page.getByLabel("Academy ID").fill(PLAYER_ACADEMY_ID)
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.waitForURL((url) => url.pathname.startsWith("/player"), {
     timeout: 20_000,
   })
 }
@@ -167,13 +179,9 @@ test("Coach dashboard tickets keep the selected responsive composition", async (
     await expect.poll(async () => page.evaluate(() => {
       const grid = document.querySelector("[data-coach-dashboard-grid]")?.getBoundingClientRect()
       const header = document.querySelector(".portal-header")?.getBoundingClientRect()
-      const hero = document.querySelector(".coach-welcome-hero")?.getBoundingClientRect()
-      if (!grid || !header || !hero) return Number.POSITIVE_INFINITY
+      if (!grid || !header) return Number.POSITIVE_INFINITY
 
-      return Math.max(
-        Math.abs(grid.top - header.bottom),
-        Math.abs(hero.bottom - header.bottom),
-      )
+      return Math.abs(grid.top - header.bottom)
     })).toBeLessThanOrEqual(2)
 
     const grid = page.locator("[data-coach-dashboard-grid]")
@@ -197,6 +205,7 @@ test("Coach dashboard tickets keep the selected responsive composition", async (
     }
 
     if (viewport.mode === "web") {
+      expect(Math.abs(cards.onboarding.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
       expect(Math.abs(cards.attendance.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
       expectSameRow("sessions", "reports")
       expectSameRow("financials", "announcements")
@@ -205,6 +214,7 @@ test("Coach dashboard tickets keep the selected responsive composition", async (
       expect(cards.financials.left).toBeLessThan(cards.announcements.left)
       expect(cards.announcements.left).toBeLessThan(cards.members.left)
     } else if (viewport.mode === "tablet") {
+      expect(Math.abs(cards.onboarding.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
       expect(Math.abs(cards.attendance.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
       expect(Math.abs(cards.sessions.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
       expectSameRow("reports", "financials")
@@ -214,6 +224,7 @@ test("Coach dashboard tickets keep the selected responsive composition", async (
     } else {
       const order = [
         "attendance",
+        "onboarding",
         "sessions",
         "reports",
         "financials",
@@ -226,12 +237,128 @@ test("Coach dashboard tickets keep the selected responsive composition", async (
       }
     }
 
+    const attendanceActionWidths = await grid
+      .locator('[data-area="attendance"] [role="group"]')
+      .evaluateAll((groups) => groups.map((group) => {
+        const groupBounds = group.getBoundingClientRect()
+        const actions = [...group.querySelectorAll("a")].map((action) => (
+          action.getBoundingClientRect()
+        ))
+
+        return {
+          actionHeights: actions.map((action) => action.height),
+          actionWidth: actions[0]?.width ?? 0,
+          groupWidth: groupBounds.width,
+        }
+      }))
+
+    expect(attendanceActionWidths).toHaveLength(2)
+    expect(attendanceActionWidths.every(({ actionHeights }) => (
+      actionHeights.every((height) => height >= 50)
+    ))).toBe(true)
+    if (viewport.mode === "mobile") {
+      for (const { actionWidth, groupWidth } of attendanceActionWidths) {
+        expect(Math.abs(actionWidth - groupWidth)).toBeLessThanOrEqual(2)
+      }
+    } else {
+      expect(Math.abs(
+        attendanceActionWidths[0].actionWidth - attendanceActionWidths[1].actionWidth,
+      )).toBeLessThanOrEqual(2)
+    }
+
     const actionHeights = await grid.getByRole("link").evaluateAll((links) => (
       links.map((link) => link.getBoundingClientRect().height)
     ))
     expect(actionHeights.length).toBeGreaterThan(0)
     expect(actionHeights.every((height) => height >= 44)).toBe(true)
     await expectNoDocumentOverflow(page, `${viewport.width}x${viewport.height} coach tickets`)
+  }
+})
+
+test("Player attendance calendar stays seven columns without horizontal overflow", async ({ page }) => {
+  await loginAsPlayer(page)
+
+  const viewports = [
+    { height: 900, width: 1440 },
+    { height: 1024, width: 820 },
+    { height: 960, width: 740 },
+    { height: 844, width: 390 },
+    { height: 568, width: 320 },
+  ] as const
+
+  for (const viewport of viewports) {
+    const viewportLabel = viewport.width + "x" + viewport.height
+    await page.setViewportSize(viewport)
+    await page.goto("/player?attendance=register", { waitUntil: "domcontentloaded" })
+    await settleResponsiveLayout(page)
+
+    const calendar = page.getByRole("grid", { name: /Your attendance calendar/u })
+    await expect(calendar.getByRole("columnheader")).toHaveCount(7)
+    await expect(calendar.getByRole("gridcell")).toHaveCount(42)
+    const dimensions = await calendar.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }))
+    expect(
+      dimensions.scrollWidth,
+      viewportLabel + ": calendar should fit without local horizontal scrolling",
+    ).toBeLessThanOrEqual(dimensions.clientWidth + WIDTH_TOLERANCE_PX)
+
+    const controls = page.locator([
+      ".player-attendance-year-selector button",
+      ".player-attendance-month-nav",
+      ".player-attendance-today",
+    ].join(", "))
+    const controlHeights = await controls.evaluateAll((elements) => (
+      elements.map((element) => element.getBoundingClientRect().height)
+    ))
+    expect(controlHeights.length).toBeGreaterThan(0)
+    expect(controlHeights.every((height) => height >= 44)).toBe(true)
+
+    const headerLayout = await page.locator(".player-attendance-register-heading")
+      .evaluate((heading) => {
+        const title = heading.querySelector<HTMLElement>(".player-attendance-register-title")
+        const actions = heading.querySelector<HTMLElement>(".player-attendance-register-actions")
+        const years = heading.querySelector<HTMLElement>(".player-attendance-year-selector")
+        const today = heading.querySelector<HTMLElement>(".player-attendance-today")
+        if (!title || !actions || !years || !today) throw new Error("Attendance header is incomplete")
+
+        const box = (element: HTMLElement) => {
+          const rect = element.getBoundingClientRect()
+          return {
+            bottom: rect.bottom,
+            height: rect.height,
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            width: rect.width,
+          }
+        }
+
+        return {
+          actions: box(actions),
+          title: box(title),
+          today: box(today),
+          years: box(years),
+        }
+      })
+
+    if (viewport.width > 760) {
+      const titleCenter = headerLayout.title.top + headerLayout.title.height / 2
+      const actionsCenter = headerLayout.actions.top + headerLayout.actions.height / 2
+      const yearsCenter = headerLayout.years.top + headerLayout.years.height / 2
+      const todayCenter = headerLayout.today.top + headerLayout.today.height / 2
+      expect(Math.abs(titleCenter - actionsCenter)).toBeLessThanOrEqual(1)
+      expect(Math.abs(yearsCenter - todayCenter)).toBeLessThanOrEqual(1)
+      expect(headerLayout.today.left).toBeGreaterThan(headerLayout.years.right)
+    } else {
+      expect(headerLayout.actions.top).toBeGreaterThanOrEqual(headerLayout.title.bottom)
+      expect(Math.abs(headerLayout.years.width - headerLayout.actions.width))
+        .toBeLessThanOrEqual(1)
+      expect(headerLayout.today.top).toBeGreaterThanOrEqual(headerLayout.years.bottom)
+    }
+
+    await expectNoDocumentOverflow(page, viewportLabel + " player attendance calendar")
   }
 })
 

@@ -44,6 +44,44 @@ describe("Financials V1 service", () => {
   let activePlayerId = ""
   let monthlyChargeId = ""
 
+  function addMatchingAssignment({
+    batch,
+    effectiveFrom,
+    endsOn = null,
+    playerId,
+    programme,
+    suffix,
+  }: {
+    batch: "Weekday" | "Weekend"
+    effectiveFrom: string
+    endsOn?: string | null
+    playerId: string
+    programme: "Beginner" | "Intermediate" | "Advanced" | "Adult"
+    suffix: string
+  }) {
+    const seriesId = `finance-series-${suffix}`
+    database.insert(schema.sessionSeries).values({
+      id: seriesId,
+      title: `${programme}_${batch}_${suffix}`,
+      programme,
+      batch,
+      venue: "SMBA Court",
+      startsOn: effectiveFrom,
+      endsOn,
+      status: "active",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionAssignments).values({
+      id: `finance-assignment-${suffix}`,
+      accountId: playerId,
+      seriesId,
+      effectiveFrom,
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
+  }
+
   beforeAll(async () => {
     accountService = await import("@/lib/auth/account-service")
     const client = await import("@/lib/db/client")
@@ -102,12 +140,81 @@ describe("Financials V1 service", () => {
     expect(charge).toMatchObject({
       feeReference: "SMBA-7K4M2P8Q",
       originalAmountPaise: 100_000,
-      dueDate: "2026-08-11",
+      dueDate: "2026-08-08",
       lifecycle: "issued",
     })
     expect(database.select().from(schema.financialAuditEvents)
       .where(eq(schema.financialAuditEvents.entityId, charge?.id ?? "missing")).all())
       .toHaveLength(1)
+  })
+
+  it("issues and records a legacy registration fee without creating a monthly fee plan", () => {
+    const playerId = "registration-only-legacy-player"
+    const approvedAt = new Date("2026-08-01T10:00:00+05:30")
+    database.insert(schema.accounts).values({
+      id: playerId,
+      fullName: "Registration Only Player",
+      normalizedName: "registration only player",
+      requestedRole: "player",
+      role: "player",
+      approvalStatus: "approved",
+      approvedAt,
+      approvedByAccountId: coachId,
+      createdAt: approvedAt,
+      updatedAt: approvedAt,
+    }).run()
+    database.insert(schema.academyIdAllocations).values({
+      serial: 9_999,
+      accountId: playerId,
+      createdAt: approvedAt,
+    }).run()
+    database.insert(schema.playerEnrollments).values({
+      accountId: playerId,
+      academyPlan: "weekday-3-day",
+      level: "Beginner",
+      batch: "Weekday",
+      status: "active",
+      joinedAt: approvedAt,
+      updatedAt: approvedAt,
+    }).run()
+
+    const registration = finance.resolveExistingRegistrationFee({
+      playerId,
+      status: "pending",
+      idempotencyKey: "registration-only-resolution",
+    }, {
+      coachId,
+      createFeeReference: () => "SMBA-2D4F6H8J",
+      createId: ids,
+      database,
+      now,
+    })
+    expect(registration).toMatchObject({
+      dueDate: "2026-08-01",
+      outstandingPaise: 100_000,
+      status: "overdue",
+    })
+    expect(database.select().from(schema.feeAgreements).where(eq(
+      schema.feeAgreements.playerAccountId,
+      playerId,
+    )).all()).toHaveLength(0)
+    expect(finance.recordPayment({
+      chargeId: registration.id,
+      expectedChargeRevision: registration.recordRevision,
+      amountPaise: 100_000,
+      receivedOn: "2026-08-08",
+      method: "cash",
+      idempotencyKey: "registration-only-offline-payment",
+    }, { coachId, createId: ids, database, now })).toMatchObject({
+      reused: false,
+      charge: { status: "paid", outstandingPaise: 0 },
+    })
+    expect(finance.getPlayerFeeRecord(playerId, { database, now })?.receipts[0]?.allocations)
+      .toEqual([expect.objectContaining({
+        chargeId: registration.id,
+        chargeType: "registration",
+        billingPeriod: null,
+      })])
   })
 
   it("sets up an existing player and reads a persisted legacy credit as paid", () => {
@@ -116,6 +223,13 @@ describe("Financials V1 service", () => {
       level: "Adult",
       batch: "Weekend",
     }).where(eq(schema.playerEnrollments.accountId, legacyPlayerId)).run()
+    addMatchingAssignment({
+      batch: "Weekend",
+      effectiveFrom: "2026-12-01",
+      playerId: legacyPlayerId,
+      programme: "Adult",
+      suffix: "legacy",
+    })
 
     const record = finance.setupExistingPlayerFinance({
       playerId: legacyPlayerId,
@@ -250,6 +364,14 @@ describe("Financials V1 service", () => {
       level: "Beginner",
       batch: "Weekday",
     }).where(eq(schema.playerEnrollments.accountId, unresolvedPlayerId)).run()
+    addMatchingAssignment({
+      batch: "Weekday",
+      effectiveFrom: "2026-08-08",
+      endsOn: "2026-10-31",
+      playerId: unresolvedPlayerId,
+      programme: "Beginner",
+      suffix: "unresolved",
+    })
     const unresolved = finance.setupExistingPlayerFinance({
       playerId: unresolvedPlayerId,
       academyPlan: "weekday-3-day",
@@ -273,6 +395,14 @@ describe("Financials V1 service", () => {
       level: "Beginner",
       batch: "Weekday",
     }).where(eq(schema.playerEnrollments.accountId, activePlayerId)).run()
+    addMatchingAssignment({
+      batch: "Weekday",
+      effectiveFrom: "2026-08-08",
+      endsOn: "2026-10-31",
+      playerId: activePlayerId,
+      programme: "Beginner",
+      suffix: "active",
+    })
     expect(() => finance.createOrReplaceFeeAgreement({
       playerId: activePlayerId,
       academyPlan: "weekday-3-day",
@@ -305,35 +435,6 @@ describe("Financials V1 service", () => {
     }, { coachId, createId: ids, database, now })).toThrow(expect.objectContaining({
       code: "IDEMPOTENCY_CONFLICT",
     }))
-    database.insert(schema.sessionSeries).values({
-      id: "finance-series",
-      title: "Beginner_Weekday_6-7_AM",
-      programme: "Beginner",
-      batch: "Weekday",
-      venue: "SMBA Court",
-      startsOn: "2026-08-08",
-      endsOn: "2026-10-31",
-      status: "active",
-      createdByAccountId: coachId,
-      createdAt: now,
-    }).run()
-    database.insert(schema.sessionAssignments).values({
-      id: "finance-assignment",
-      accountId: activePlayerId,
-      seriesId: "finance-series",
-      effectiveFrom: "2026-08-08",
-      assignedByAccountId: coachId,
-      assignedAt: now,
-    }).run()
-    database.insert(schema.sessionAssignments).values({
-      id: "finance-assignment-unresolved",
-      accountId: unresolvedPlayerId,
-      seriesId: "finance-series",
-      effectiveFrom: "2026-08-08",
-      assignedByAccountId: coachId,
-      assignedAt: now,
-    }).run()
-
     const beforePreparation = finance.getCoachFinanceWorkspace({
       period: "2026-08",
       view: "attention",
@@ -803,5 +904,229 @@ describe("Financials V1 service", () => {
       receivedPaise: 0,
       outstandingPaise: 0,
     })
+  })
+
+  it("skips stale programme billing until the fee plan and assignment match", async () => {
+    const memberService = await import("@/lib/coach/member-service")
+    const sessionService = await import("@/lib/sessions/service")
+    const playerId = "programme-transition-player"
+    const feeReferences = ["SMBA-BCDFGHJK"]
+    const createFeeReference = () => feeReferences.shift() ?? "SMBA-UVWXYZ23"
+
+    finance.activateFinance({
+      trackingMonth: "2026-08",
+      idempotencyKey: "activate-programme-transition-test",
+    }, { coachId, createId: ids, database, now })
+    database.insert(schema.accounts).values({
+      id: playerId,
+      fullName: "Programme Transition Player",
+      normalizedName: "programme transition player",
+      requestedRole: "player",
+      role: "player",
+      approvalStatus: "approved",
+      approvedAt: now,
+      approvedByAccountId: coachId,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    database.insert(schema.academyIdAllocations).values({
+      serial: 9_998,
+      accountId: playerId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.playerEnrollments).values({
+      accountId: playerId,
+      status: "unassigned",
+      joinedAt: now,
+      updatedAt: now,
+    }).run()
+
+    const initialProfile = memberService.updateMemberRecord({
+      coachId,
+      database,
+      now,
+      input: {
+        memberId: playerId,
+        expectedRevision: 0,
+        profile: {
+          fullName: "Programme Transition Player",
+          joinedAt: "2026-08-08",
+          primaryContact: { name: "", relationship: "", phone: "" },
+        },
+        training: {
+          academyPlan: "weekday-3-day",
+          level: "Beginner",
+          batch: "Weekday",
+        },
+      },
+    })
+    expect(initialProfile).toMatchObject({
+      ok: true,
+      record: { training: { level: "Beginner", recordRevision: 1 } },
+    })
+
+    const beginnerSeriesId = sessionService.createSessionSeriesRecords({
+      coachId,
+      database,
+      now,
+      input: {
+        programme: "Beginner",
+        batch: "Weekday",
+        venue: "Transition Court",
+        startsOn: "2026-08-08",
+        endsOn: "2026-09-30",
+        weekdays: [1, 3, 5],
+        startTime: "18:00",
+        durationMinutes: 60,
+      },
+    })
+    sessionService.assignSessionRecords({
+      coachId,
+      database,
+      effectiveFrom: "2026-08-08",
+      now,
+      playerId,
+      seriesId: beginnerSeriesId,
+      weekdays: [1, 3, 5],
+    })
+    const beginnerAgreement = finance.createOrReplaceFeeAgreement({
+      playerId,
+      academyPlan: "weekday-3-day",
+      level: "Beginner",
+      batch: "Weekday",
+      agreedMonthlyFeePaise: 350_000,
+      effectiveFrom: "2026-08-01",
+      idempotencyKey: "programme-transition-beginner-agreement",
+    }, { coachId, createId: ids, database, now }).agreement
+    const beginnerAssignment = database.select().from(schema.sessionAssignments).where(and(
+      eq(schema.sessionAssignments.accountId, playerId),
+      eq(schema.sessionAssignments.seriesId, beginnerSeriesId),
+    )).get()
+    if (!beginnerAssignment) throw new Error("The Beginner assignment was not created.")
+    sessionService.endSessionAssignment({
+      assignmentId: beginnerAssignment.id,
+      coachId,
+      database,
+      effectiveTo: "2026-08-08",
+      now,
+    })
+
+    const transitionRevision = database.select({
+      recordRevision: schema.playerEnrollments.recordRevision,
+    }).from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get()?.recordRevision
+    if (transitionRevision === undefined) throw new Error("The enrollment revision is unavailable.")
+    const changedProfile = memberService.updateMemberRecord({
+      coachId,
+      database,
+      now,
+      input: {
+        memberId: playerId,
+        expectedRevision: transitionRevision,
+        profile: {
+          fullName: "Programme Transition Player",
+          joinedAt: "2026-08-08",
+          primaryContact: { name: "", relationship: "", phone: "" },
+        },
+        training: {
+          academyPlan: "weekday-3-day",
+          level: "Intermediate",
+          batch: "Weekday",
+        },
+      },
+    })
+    expect(changedProfile).toMatchObject({
+      ok: true,
+      record: { training: { level: "Intermediate" } },
+    })
+
+    finance.prepareMonthlyCharges({
+      period: "2026-09",
+      idempotencyKey: "prepare-programme-transition-stale-agreement",
+    }, { coachId, createFeeReference, createId: ids, database, now })
+    expect(database.select().from(schema.financialCharges).where(and(
+      eq(schema.financialCharges.playerAccountId, playerId),
+      eq(schema.financialCharges.billingPeriod, "2026-09"),
+    )).all()).toHaveLength(0)
+
+    expect(() => finance.createOrReplaceFeeAgreement({
+      playerId,
+      academyPlan: "weekday-3-day",
+      level: "Intermediate",
+      batch: "Weekday",
+      agreedMonthlyFeePaise: 425_000,
+      effectiveFrom: "2026-09-01",
+      expectedAgreementRevision: beginnerAgreement.recordRevision,
+      idempotencyKey: "programme-transition-intermediate-agreement",
+    }, { coachId, createId: ids, database, now })).toThrow(expect.objectContaining({
+      code: "SETUP_REQUIRED",
+      field: "playerId",
+    }))
+
+    const intermediateSeriesId = sessionService.createSessionSeriesRecords({
+      coachId,
+      database,
+      now,
+      input: {
+        programme: "Intermediate",
+        batch: "Weekday",
+        venue: "Transition Court",
+        startsOn: "2026-09-01",
+        endsOn: "2026-09-30",
+        weekdays: [1, 3, 5],
+        startTime: "19:00",
+        durationMinutes: 60,
+      },
+    })
+    sessionService.assignSessionRecords({
+      coachId,
+      database,
+      effectiveFrom: "2026-09-01",
+      now,
+      playerId,
+      seriesId: intermediateSeriesId,
+      weekdays: [1, 3, 5],
+    })
+    const intermediateAgreement = finance.createOrReplaceFeeAgreement({
+      playerId,
+      academyPlan: "weekday-3-day",
+      level: "Intermediate",
+      batch: "Weekday",
+      agreedMonthlyFeePaise: 425_000,
+      effectiveFrom: "2026-09-01",
+      expectedAgreementRevision: beginnerAgreement.recordRevision,
+      idempotencyKey: "programme-transition-intermediate-agreement",
+    }, { coachId, createId: ids, database, now }).agreement
+
+    const prepared = finance.prepareMonthlyCharges({
+      period: "2026-09",
+      idempotencyKey: "prepare-programme-transition-matching-profile",
+    }, { coachId, createFeeReference, createId: ids, database, now })
+    expect(prepared).toMatchObject({ ready: 1, reused: false })
+    expect(prepared.createdChargeIds).toHaveLength(1)
+    const charges = database.select().from(schema.financialCharges).where(and(
+      eq(schema.financialCharges.playerAccountId, playerId),
+      eq(schema.financialCharges.billingPeriod, "2026-09"),
+    )).all()
+    expect(charges).toEqual([
+      expect.objectContaining({
+        id: prepared.createdChargeIds[0],
+        feeAgreementId: intermediateAgreement.id,
+        originalAmountPaise: 425_000,
+      }),
+    ])
+
+    expect(finance.prepareMonthlyCharges({
+      period: "2026-09",
+      idempotencyKey: "prepare-programme-transition-matching-profile",
+    }, { coachId, createFeeReference, createId: ids, database, now })).toMatchObject({
+      createdChargeIds: prepared.createdChargeIds,
+      ready: 1,
+      reused: true,
+    })
+    expect(database.select().from(schema.financialCharges).where(and(
+      eq(schema.financialCharges.playerAccountId, playerId),
+      eq(schema.financialCharges.billingPeriod, "2026-09"),
+    )).all()).toHaveLength(1)
   })
 })

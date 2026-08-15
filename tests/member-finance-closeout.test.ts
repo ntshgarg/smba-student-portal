@@ -37,6 +37,27 @@ describe("member archival financial closeout", () => {
       status: "unassigned",
       updatedAt: now,
     }).where(eq(schema.playerEnrollments.accountId, playerId)).run()
+    const seriesId = `${playerId}:series`
+    database.insert(schema.sessionSeries).values({
+      id: seriesId,
+      title: `${name} Beginner Weekday`,
+      programme: "Beginner",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: "2026-08-20",
+      status: "active",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionAssignments).values({
+      id: `${playerId}:assignment`,
+      accountId: playerId,
+      seriesId,
+      effectiveFrom: "2026-08-20",
+      effectiveTo: "2026-08-20",
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
     const agreement = finance.createOrReplaceFeeAgreement({
       playerId,
       academyPlan: "weekday-3-day",

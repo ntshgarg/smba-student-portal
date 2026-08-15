@@ -24,6 +24,10 @@ function reportMonthName(report: PlayerReportArchiveItem) {
     : report.monthLabel
 }
 
+function reportYearLabel(year: string) {
+  return year === "Earlier" ? "Earlier reports" : year
+}
+
 export function ReportAccordion({
   playerName,
   reports,
@@ -89,10 +93,13 @@ export function ReportAccordion({
                 type="button"
               >
                 <span className="report-year-title">
-                  <strong>{yearGroup.year}</strong>
+                  <span className="report-season-label">Season record</span>
+                  <strong className="report-season-year">
+                    {reportYearLabel(yearGroup.year)}
+                  </strong>
                 </span>
                 <span className="report-year-count">
-                  {yearGroup.reports.length} {yearGroup.reports.length === 1 ? "report" : "reports"}
+                  {yearGroup.reports.length} coach {yearGroup.reports.length === 1 ? "report" : "reports"}
                 </span>
                 <span className="report-archive-toggle report-year-toggle" aria-hidden="true">
                   <ChevronDown />
@@ -116,11 +123,14 @@ export function ReportAccordion({
                   }}
                 >
                   <div className="report-year-months">
-                    {yearGroup.reports.map((report) => {
+                    {yearGroup.reports.map((report, reportIndex) => {
                       const isReportOpen = openReportId === report.id
                       const reportTriggerId = `${report.id}-trigger`
                       const reportPanelId = `${report.id}-panel`
                       const publishedLabel = formatDate(report.publishedAt)
+                      const folio = String(
+                        yearGroup.reports.length - reportIndex,
+                      ).padStart(2, "0")
 
                       return (
                         <article
@@ -139,6 +149,12 @@ export function ReportAccordion({
                               )}
                               type="button"
                             >
+                              <span
+                                aria-hidden="true"
+                                className="report-month-folio"
+                              >
+                                {folio}
+                              </span>
                               <span className="report-month-title">
                                 <strong>{reportMonthName(report)}</strong>
                               </span>
@@ -172,20 +188,22 @@ export function ReportAccordion({
                               >
                                 <div className="report-accordion-content">
                                   <div className="expanded-report-panel">
-                                    <p className="expanded-report-label">Coach’s report</p>
+                                    <div className="expanded-report-heading">
+                                      <p className="expanded-report-label">Coach’s report</p>
+                                      <p className="expanded-report-period">{report.monthLabel}</p>
+                                    </div>
                                     <div className="expanded-report-copy">
                                       {report.reportText.split(/\n\s*\n/).map((paragraph, paragraphIndex) => (
                                         <p key={`${report.id}-paragraph-${paragraphIndex}`}>{paragraph}</p>
                                       ))}
+                                      <div className="expanded-report-download">
+                                        <ReportExportButton
+                                          monthLabel={report.monthLabel}
+                                          playerName={playerName}
+                                          reportId={report.id}
+                                        />
+                                      </div>
                                     </div>
-                                  </div>
-
-                                  <div className="expanded-report-download">
-                                    <ReportExportButton
-                                      monthLabel={report.monthLabel}
-                                      playerName={playerName}
-                                      reportId={report.id}
-                                    />
                                   </div>
                                 </div>
                               </motion.div>

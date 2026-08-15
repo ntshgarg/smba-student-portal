@@ -211,8 +211,8 @@ describe("cross-weekday replacement eligibility", () => {
       now: setupNow,
       referenceDate: "2026-08-20",
       changes: [
-        { playerId: sourcePlayerId, occurrenceId: finalOccurrenceId, choice: "present" },
-        { playerId: targetDayPlayerId, occurrenceId: finalOccurrenceId, choice: "present" },
+        { playerId: sourcePlayerId, occurrenceId: finalOccurrenceId, choice: "present", expectedChoice: "cleared" },
+        { playerId: targetDayPlayerId, occurrenceId: finalOccurrenceId, choice: "present", expectedChoice: "cleared" },
       ],
     })).toThrow("assigned")
     expect(database.select().from(schema.sessionAttendanceRecords).where(and(
@@ -226,8 +226,8 @@ describe("cross-weekday replacement eligibility", () => {
       now: setupNow,
       referenceDate: "2026-08-20",
       changes: [
-        { playerId: sourcePlayerId, occurrenceId: finalOccurrenceId, choice: "present" },
-        { playerId: endedPlayerId, occurrenceId: finalOccurrenceId, choice: "present" },
+        { playerId: sourcePlayerId, occurrenceId: finalOccurrenceId, choice: "present", expectedChoice: "cleared" },
+        { playerId: endedPlayerId, occurrenceId: finalOccurrenceId, choice: "present", expectedChoice: "cleared" },
       ],
     })
     expect(() => sessionService.saveSessionAttendanceRecords({
@@ -236,7 +236,7 @@ describe("cross-weekday replacement eligibility", () => {
       now: setupNow,
       referenceDate: "2026-08-20",
       changes: [
-        { playerId: joinedLaterPlayerId, occurrenceId: finalOccurrenceId, choice: "present" },
+        { playerId: joinedLaterPlayerId, occurrenceId: finalOccurrenceId, choice: "present", expectedChoice: "cleared" },
       ],
     })).toThrow("enrolled")
   })
@@ -290,18 +290,38 @@ describe("cross-weekday replacement eligibility", () => {
   })
 
   it("uses root eligibility but the actual replacement date for rescheduling", () => {
+    database.insert(schema.sessionAssignments).values({
+      id: "replacement-source-completion-assignment",
+      accountId: sourcePlayerId,
+      seriesId: "replacement-completion-series",
+      effectiveFrom: "2026-08-15",
+      effectiveTo: "2026-08-16",
+      assignedByAccountId: coachId,
+      assignedAt: setupNow,
+    }).run()
+    database.insert(schema.sessionAssignmentWeekdays).values({
+      id: "replacement-source-completion-weekday",
+      assignmentId: "replacement-source-completion-assignment",
+      weekday: 6,
+    }).run()
     sessionService.saveSessionAttendanceRecords({
       database,
       coachId,
       now: setupNow,
       referenceDate: "2026-08-20",
       changes: [
-        { playerId: sourcePlayerId, occurrenceId: finalOccurrenceId, choice: "absent" },
+        { playerId: sourcePlayerId, occurrenceId: finalOccurrenceId, choice: "absent", expectedChoice: "present" },
+        {
+          playerId: sourcePlayerId,
+          occurrenceId: "replacement-completion-occurrence",
+          choice: "present",
+          expectedChoice: "cleared",
+        },
       ],
     })
     const published = adjustments.publishMakeupAttendanceAdjustment({
       coachId,
-      completedOn: "2026-08-15",
+      completionOccurrenceId: "replacement-completion-occurrence",
       database,
       now: setupNow,
       playerId: sourcePlayerId,

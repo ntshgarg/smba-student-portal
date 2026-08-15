@@ -231,14 +231,14 @@ export function FeeExplorer() {
         <p className="public-eyebrow public-eyebrow-light">Monthly fee guide</p>
         <h3 id="fee-guide-title">Choose your training rhythm.</h3>
         <p>
-          Review the verified monthly fee before you contact the academy. Exact batch
-          timing is confirmed during your trial conversation.
+          These standard guide prices are based on programme and schedule. Your coach
+          confirms each member’s final monthly fee directly.
         </p>
       </div>
 
       <section className="fee-panel" aria-labelledby="fee-guide-title" aria-describedby="fee-helper">
         <p id="fee-helper" className="fee-helper">
-          Select your schedule and program to view monthly fees.
+          Select your schedule and program to view the standard monthly fee guide.
         </p>
 
         <div className="segmented" role="group" aria-label="Training schedule">
@@ -313,7 +313,7 @@ export function FeeExplorer() {
             key={`${schedule}-${selected.name}-${sessionsPerWeek}`}
           >
             <div>
-              <span>{scheduleLabel} {selected.name}</span>
+              <span>Standard guide · {scheduleLabel} {selected.name}</span>
               <small>
                 {sessionsPerWeek} sessions/week · {selected.duration} each
               </small>
@@ -326,17 +326,15 @@ export function FeeExplorer() {
         </div>
 
         <div className="term-savings">
-          <p className="term-savings-label">Save with a longer plan</p>
-          {enrollmentTerms.longerPlanSavings.map((saving) => (
-            <span key={saving.label}>
-              {saving.label} <strong>{saving.percentage}% less</strong>
-            </span>
-          ))}
+          <p className="term-savings-label">Coach-agreed fee</p>
+          <span>
+            Any special concession is agreed directly with the coach for the individual member.
+          </span>
         </div>
 
         <p className="fee-note">
-          One-time registration: {formatInr(enrollmentTerms.registrationFee)}
-          {enrollmentTerms.registrationIsNonRefundable ? ", non-refundable." : "."}{" "}
+          One-time academy registration fee: {formatInr(enrollmentTerms.registrationFee)}, payable
+          when you register{enrollmentTerms.registrationIsNonRefundable ? " and non-refundable." : "."}{" "}
           Includes {enrollmentTerms.registrationIncludes.join(" and ")}.
         </p>
       </section>

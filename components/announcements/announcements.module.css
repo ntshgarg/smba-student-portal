@@ -42,7 +42,6 @@
 
 .publicMeta,
 .playerListMeta,
-.dashboardItemMeta,
 .detailMeta {
   display: flex;
   flex-wrap: wrap;
@@ -113,7 +112,6 @@
 
 .publicOpen,
 .playerListOpen,
-.dashboardAll,
 .publicDisclosure,
 .publicBack {
   display: inline-flex;
@@ -128,7 +126,6 @@
 
 .publicOpen svg,
 .playerListOpen svg,
-.dashboardAll svg,
 .publicDisclosure svg,
 .publicBack svg {
   width: 15px;
@@ -137,7 +134,6 @@
 
 .publicOpen:hover,
 .playerListOpen:hover,
-.dashboardAll:hover,
 .publicBack:hover {
   color: var(--red);
 }
@@ -215,58 +211,164 @@
   line-height: 1.6;
 }
 
-.dashboardList {
-  margin-top: 22px;
-  border-top: 1px solid var(--line);
-}
-
-.dashboardItem {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 20px;
-  align-items: center;
-  gap: 20px;
-  min-height: 96px;
-  padding-block: 18px;
-  border-bottom: 1px solid var(--line);
-  color: var(--navy);
-}
-
-.dashboardItem > svg {
-  width: 17px;
-  height: 17px;
-  transition: color 180ms ease, transform 180ms ease;
-}
-
-.dashboardItem:hover > svg {
-  color: var(--red);
-  transform: translateX(3px);
-}
-
-.dashboardItemCopy {
+.dashboardEmpty {
   display: grid;
   min-width: 0;
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.58fr);
+  align-items: end;
+  gap: 48px;
+  margin-top: 18px;
+  padding-bottom: 2px;
 }
 
-.dashboardItemCopy > strong {
-  overflow-wrap: anywhere;
-  font-size: 15px;
-  font-weight: 720;
-  line-height: 1.35;
+.dashboardEmptyTitle {
+  display: block;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 32px;
+  font-style: italic;
+  font-weight: 470;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
 }
 
-.dashboardItemCopy > span:last-child {
-  display: -webkit-box;
-  overflow: hidden;
+.dashboardEmptyCopy {
+  max-width: 430px;
+  margin: 0;
+  padding-bottom: 2px;
   color: var(--steel);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.dashboardFeatureLayout,
+.dashboardPairLayout {
+  min-width: 0;
+  flex: 1;
+  margin-top: 18px;
+}
+
+.dashboardFeatureLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: end;
+  gap: 38px;
+}
+
+.dashboardPairLayout {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.dashboardNoticeList {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboardPairList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboardNoticeItem {
+  min-width: 0;
+}
+
+.dashboardPairList .dashboardNoticeItem {
+  padding-right: 28px;
+}
+
+.dashboardPairList .dashboardNoticeItem + .dashboardNoticeItem {
+  margin-left: 28px;
+  padding-right: 0;
+  padding-left: 28px;
+  border-left: 1px dashed var(--line);
+}
+
+.dashboardNotice {
+  display: block;
+  min-width: 0;
+  color: var(--navy);
+}
+
+.dashboardNotice:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 4px;
+}
+
+.dashboardNoticeMeta {
+  display: flex;
+  min-height: 18px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  color: var(--steel);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.dashboardNoticeMeta time {
+  color: inherit;
+  font: inherit;
+}
+
+.dashboardLabels > span {
+  font-size: 8px;
+}
+
+.dashboardNoticeTitle {
+  display: block;
+  max-width: 760px;
+  margin-top: 9px;
+  overflow-wrap: anywhere;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 31px;
+  font-style: italic;
+  font-weight: 470;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+}
+
+.dashboardNotice:hover .dashboardNoticeTitle {
+  text-decoration: underline;
+}
+
+.dashboardPairList .dashboardNoticeTitle {
+  font-size: 27px;
+}
+
+.dashboardNoticeCopy {
+  display: -webkit-box;
+  max-width: 760px;
+  margin-top: 7px;
+  overflow: hidden;
+  color: var(--steel);
+  font-size: 12px;
+  line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.dashboardItemMeta {
-  min-height: 18px;
+.dashboardCard .dashboardFeatureLayout .dashboardArchiveAction,
+.dashboardCard .dashboardPairLayout .dashboardArchiveAction {
+  min-height: 50px;
+  align-self: end;
+  margin-top: 0;
+}
+
+.dashboardPairLayout .dashboardArchiveAction {
+  width: 100%;
+  align-self: stretch;
 }
 
 .labels {
@@ -280,10 +382,6 @@
   height: 12px;
   color: var(--red);
   fill: none;
-}
-
-.dashboardAll {
-  margin-top: 16px;
 }
 
 .playerPage {
@@ -389,6 +487,94 @@
   margin-top: 1.2em;
 }
 
+@media (min-width: 761px) and (max-width: 980px) {
+  .dashboardEmpty {
+    grid-template-columns: minmax(0, 1fr) minmax(245px, 0.72fr);
+    gap: 30px;
+  }
+
+  .dashboardEmptyTitle {
+    font-size: 29px;
+  }
+
+  .dashboardFeatureLayout {
+    grid-template-columns: minmax(0, 1fr) 230px;
+    gap: 26px;
+  }
+
+  .dashboardFeatureList .dashboardNoticeTitle {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboardEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    margin-top: 18px;
+    padding-bottom: 0;
+  }
+
+  .dashboardEmptyTitle {
+    font-size: 29px;
+  }
+
+  .dashboardEmptyCopy {
+    max-width: none;
+    margin-top: 9px;
+    padding-bottom: 0;
+  }
+
+  .dashboardFeatureLayout,
+  .dashboardPairLayout {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    margin-top: 18px;
+  }
+
+  .dashboardPairList {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dashboardPairList .dashboardNoticeItem {
+    padding-right: 0;
+  }
+
+  .dashboardPairList .dashboardNoticeItem + .dashboardNoticeItem {
+    margin-top: 18px;
+    margin-left: 0;
+    padding-top: 18px;
+    padding-left: 0;
+    border-top: 1px dashed var(--line);
+    border-left: 0;
+  }
+
+  .dashboardNoticeTitle {
+    margin-top: 10px;
+    font-size: 29px;
+  }
+
+  .dashboardPairList .dashboardNoticeTitle {
+    font-size: 27px;
+  }
+
+  .dashboardNoticeCopy {
+    -webkit-line-clamp: 3;
+  }
+
+  .dashboardCard .dashboardFeatureLayout .dashboardArchiveAction,
+  .dashboardCard .dashboardPairLayout .dashboardArchiveAction {
+    width: 100%;
+    align-self: stretch;
+    margin-top: 16px;
+  }
+}
+
 @media (max-width: 720px) {
   .publicSection {
     padding-block: var(--space-content);
@@ -441,10 +627,6 @@
     font-size: 0;
   }
 
-  .dashboardItem {
-    gap: 14px;
-  }
-
   .playerPage {
     padding-top: 24px;
   }
@@ -484,10 +666,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dashboardItem > svg,
   .publicOpen,
-  .playerListOpen,
-  .dashboardAll {
+  .playerListOpen {
     transition: none;
   }
 }

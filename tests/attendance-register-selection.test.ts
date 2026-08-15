@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { resolveAttendanceRegisterSelection } from "@/lib/attendance/register-workspace"
+import {
+  buildAttendanceRegisterYearOptions,
+  resolveAttendanceRegisterSelection,
+} from "@/lib/attendance/register-workspace"
 import type {
   TrainingSessionOccurrence,
   TrainingSessionSeries,
@@ -47,6 +50,24 @@ function occurrence(input: Partial<TrainingSessionOccurrence>): TrainingSessionO
 }
 
 describe("attendance register route selection", () => {
+  it("keeps persisted historical years selectable alongside current and future years", () => {
+    const supportedYears = buildAttendanceRegisterYearOptions({
+      persistedDateKeys: ["2023-08-01", "2030-01-01"],
+      today: "2026-08-09",
+    })
+
+    expect(supportedYears).toEqual([
+      2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030,
+    ])
+    expect(resolveAttendanceRegisterSelection({
+      occurrences: [],
+      query: { year: "2023" },
+      series,
+      supportedYears,
+      today: "2026-08-09",
+    }).year).toBe(2023)
+  })
+
   it("uses valid URL filters as the server-owned selection", () => {
     expect(resolveAttendanceRegisterSelection({
       occurrences: [],

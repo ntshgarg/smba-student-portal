@@ -38,7 +38,7 @@ export default async function AttendanceAdjustmentsPage({
       initialMembers={players.members}
       initialPendingRegistrations={[]}
       initialReports={[]}
-      initialSessionAssignments={[]}
+      initialSessionAssignments={sessions.sessionAssignments}
       initialSessionOccurrences={sessions.sessionOccurrences}
       initialSessionSeries={sessions.sessionSeries}
       initialTrainingProfiles={players.trainingProfiles}

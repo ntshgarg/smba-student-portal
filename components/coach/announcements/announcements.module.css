@@ -39,6 +39,331 @@
   padding: 28px 0 clamp(110px, 12vw, 170px);
 }
 
+.composerWorkspace {
+  padding: clamp(20px, 2.8vw, 34px) 0 clamp(76px, 9vw, 120px);
+}
+
+.composerBackRow a {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 9px;
+  color: var(--steel);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.composerBackRow svg {
+  width: 15px;
+  height: 15px;
+}
+
+.composerHeader {
+  width: 100%;
+  margin: clamp(18px, 2.7vw, 30px) 0 0;
+}
+
+.composerHeader h1 {
+  color: var(--navy);
+  font-size: clamp(32px, 3.2vw, 46px);
+  font-weight: 590;
+  letter-spacing: -0.055em;
+  line-height: 0.96;
+}
+
+.noticeSlip {
+  position: relative;
+  width: min(100%, 940px);
+  margin: clamp(18px, 2.4vw, 26px) auto 0;
+  border: 1px solid color-mix(in srgb, var(--navy) 48%, var(--line));
+  background: color-mix(in srgb, var(--white) 72%, var(--ivory));
+  overflow: hidden;
+}
+
+.noticeSlip::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 25px solid var(--red);
+  border-left: 25px solid transparent;
+  content: "";
+  pointer-events: none;
+}
+
+.slipMasthead {
+  min-height: 38px;
+  padding: 12px 34px 8px;
+  text-align: right;
+}
+
+.slipMasthead > span,
+.slipDocketLabel,
+.slipField > span,
+.slipExpiryField > span {
+  color: var(--navy);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.slipBody {
+  display: grid;
+  gap: 0;
+  padding: 6px clamp(20px, 3.1vw, 32px) 0;
+}
+
+.slipField {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  padding-bottom: 18px;
+}
+
+.slipField + .slipField {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.slipField input,
+.slipField textarea,
+.slipExpiryField input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--navy) 32%, var(--line));
+  border-radius: 0;
+  background: color-mix(in srgb, var(--white) 82%, transparent);
+  color: var(--navy);
+}
+
+.slipField input {
+  min-height: 46px;
+  padding: 0 14px;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 16px;
+}
+
+.slipField textarea {
+  height: 164px;
+  min-height: 164px;
+  padding: 13px 14px;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(17px, 1.6vw, 18px);
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.slipField input[aria-invalid="true"],
+.slipField textarea[aria-invalid="true"],
+.slipExpiryField input[aria-invalid="true"],
+.slipChannels[aria-invalid="true"] .slipChannelChoices {
+  border-color: color-mix(in srgb, var(--red) 76%, var(--line));
+}
+
+.slipFieldMeta {
+  display: grid;
+  min-height: 13px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.slipFieldError {
+  color: var(--red);
+}
+
+.slipCounter {
+  color: var(--steel);
+  text-align: right;
+}
+
+.slipDocket {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ivory) 62%, var(--white));
+}
+
+.slipChannels {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: stretch;
+  border: 0;
+}
+
+.slipDocketLabel {
+  display: flex;
+  min-height: 40px;
+  grid-column: 1;
+  grid-row: 1;
+  align-items: center;
+  padding: 0 clamp(20px, 3.1vw, 32px);
+}
+
+.slipChannelChoices {
+  display: grid;
+  min-width: 0;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+}
+
+.slipChannelChoices label,
+.slipPinOption {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.slipChannelChoices label + label {
+  border-left: 1px solid var(--line);
+}
+
+.slipChannelChoices input,
+.slipPinOption input {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  appearance: none;
+  place-content: center;
+  border: 1px solid color-mix(in srgb, var(--navy) 52%, var(--line));
+  border-radius: 0;
+  background: var(--white);
+}
+
+.slipChannelChoices input::before,
+.slipPinOption input::before {
+  width: 10px;
+  height: 10px;
+  background: var(--white);
+  clip-path: polygon(14% 44%, 0 60%, 40% 100%, 100% 18%, 82% 0, 38% 66%);
+  content: "";
+  transform: scale(0);
+}
+
+.slipChannelChoices input:checked,
+.slipPinOption input:checked {
+  border-color: var(--navy);
+  background: var(--navy);
+}
+
+.slipChannelChoices input:checked::before,
+.slipPinOption input:checked::before {
+  transform: scale(1);
+}
+
+.slipChannelChoices label > span {
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.slipChannelMessage {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+  padding: 4px clamp(12px, 2vw, 20px);
+  color: var(--red);
+  font-size: 9px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.slipPinOption {
+  min-height: 76px;
+  grid-column: 1;
+  grid-row: 2;
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+.slipPinOption > span {
+  min-width: 0;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.slipExpiryError {
+  color: var(--red);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.slipExpiryField {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  align-content: center;
+  grid-column: 2;
+  grid-row: 2;
+  gap: 5px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.slipExpiryField input {
+  min-height: 40px;
+  padding: 0 11px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.slipReviewButton {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 52px;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 10px 12px 12px;
+  padding: 0 18px;
+  border: 0;
+  background: var(--navy);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.slipReviewButton svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  color: var(--red);
+}
+
+.composerBackRow a:focus-visible,
+.slipChannels:focus-visible,
+.slipField input:focus-visible,
+.slipField textarea:focus-visible,
+.slipChannelChoices input:focus-visible,
+.slipPinOption input:focus-visible,
+.slipExpiryField input:focus-visible,
+.slipReviewButton:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 3px;
+}
+
 .backRow a {
   display: inline-flex;
   min-height: 38px;
@@ -917,6 +1242,11 @@
 }
 
 @media (max-width: 900px) {
+  .slipReviewButton {
+    width: auto;
+    min-height: 54px;
+  }
+
   .archiveHeader {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -948,6 +1278,141 @@
 }
 
 @media (max-width: 720px) {
+  .composerWorkspace {
+    padding-top: 12px;
+    padding-bottom: 84px;
+  }
+
+  .composerBackRow a {
+    min-height: 34px;
+    font-size: 10px;
+  }
+
+  .composerHeader {
+    margin-top: 5px;
+  }
+
+  .composerHeader h1 {
+    font-size: clamp(27px, 8vw, 33px);
+  }
+
+  .noticeSlip {
+    margin-top: 9px;
+  }
+
+  .noticeSlip::after {
+    border-top-width: 21px;
+    border-left-width: 21px;
+  }
+
+  .slipMasthead {
+    min-height: 28px;
+    padding: 8px 28px 4px 12px;
+  }
+
+  .slipBody {
+    gap: 0;
+    padding: 4px 12px 0;
+  }
+
+  .slipField {
+    padding-bottom: 12px;
+  }
+
+  .slipField + .slipField {
+    padding-top: 12px;
+  }
+
+  .slipField input,
+  .slipField textarea,
+  .slipExpiryField input {
+    font-size: 16px;
+  }
+
+  .slipField input {
+    min-height: 44px;
+    padding: 0 12px;
+  }
+
+  .slipField textarea {
+    height: 132px;
+    min-height: 132px;
+    padding: 12px;
+    font-size: 17px;
+  }
+
+  .slipChannels {
+    grid-template-columns: max-content minmax(0, 1fr);
+    padding: 0;
+  }
+
+  .slipDocketLabel {
+    min-height: 34px;
+    padding: 0;
+  }
+
+  .slipChannelChoices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    border: 1px solid var(--line);
+  }
+
+  .slipChannelChoices label {
+    min-height: 46px;
+    padding: 6px 12px;
+  }
+
+  .slipChannelChoices label + label {
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+
+  .slipChannelMessage {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 4px 0;
+  }
+
+  .slipDocket {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0 12px 10px;
+  }
+
+  .slipPinOption {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 46px;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-top: 0;
+  }
+
+  .slipExpiryField {
+    grid-column: 2;
+    grid-row: 2;
+    gap: 4px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-left: 0;
+  }
+
+  .slipExpiryField input {
+    min-height: 44px;
+  }
+
+  .slipReviewButton {
+    min-width: 0;
+    min-height: 48px;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-top: 8px;
+    margin-right: 0;
+    margin-bottom: 0;
+    margin-left: 0;
+    padding-inline: 14px;
+  }
+
   .workspace {
     padding-top: 18px;
   }
@@ -1128,6 +1593,26 @@
 }
 
 @media (max-width: 380px) {
+  .slipChannelChoices label,
+  .slipPinOption {
+    gap: 7px;
+    padding-inline: 8px;
+  }
+
+  .slipChannelChoices label > span,
+  .slipPinOption > span {
+    font-size: 10px;
+  }
+
+  .slipExpiryField {
+    padding-inline: 8px;
+  }
+
+  .slipExpiryField input {
+    padding-inline: 7px;
+    font-size: 11px;
+  }
+
   .monthControl {
     min-width: 0;
     grid-template-columns: 46px minmax(0, 1fr) 46px;

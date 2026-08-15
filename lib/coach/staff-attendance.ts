@@ -32,6 +32,7 @@ export type StaffAttendanceChange = {
   coachAccountId: string
   dateKey: string
   choice: StaffAttendanceChoice
+  expectedChoice: StaffAttendanceChoice
 }
 
 export type StaffAttendanceRecord = {
@@ -54,6 +55,10 @@ export type StaffAttendanceSummary = {
   percentage: number | null
 }
 
+export type StaffAttendanceRegisterProfile = JuniorCoachProfile & {
+  archivedOn: string | null
+}
+
 type AttendanceReadInput = {
   requesterAccountId: string
   coachAccountId: string
@@ -73,13 +78,41 @@ function requireAttendanceReadAccess({
   database,
   requesterAccountId,
 }: Pick<AttendanceReadInput, "coachAccountId" | "database" | "requesterAccountId">) {
-  const requester = getCoachAccessProfile(requesterAccountId, { database })
+  const attendanceDatabase = database ?? initializeDatabase()
+  const requester = getCoachAccessProfile(requesterAccountId, { database: attendanceDatabase })
   if (!requester) throw new Error("Coach access is required.")
-  const juniorCoach = requireJuniorCoachAccess(coachAccountId, { database })
-  if (requester.accessLevel !== "head_admin" && requester.accountId !== juniorCoach.accountId) {
+  const row = attendanceDatabase.select({
+    accountId: accounts.id,
+    academyIdSerial: academyIdAllocations.serial,
+    fullName: accounts.fullName,
+    joinedOn: coachProfiles.joinedOn,
+  }).from(coachProfiles)
+    .innerJoin(accounts, eq(accounts.id, coachProfiles.accountId))
+    .innerJoin(
+      academyIdAllocations,
+      eq(academyIdAllocations.accountId, accounts.id),
+    )
+    .where(and(
+      eq(accounts.id, coachAccountId),
+      eq(coachProfiles.accessLevel, "junior_coach"),
+      eq(accounts.role, "coach"),
+      eq(accounts.approvalStatus, "approved"),
+    ))
+    .get()
+  if (!row) throw new Error("Junior coach access is required.")
+  if (requester.accessLevel !== "head_admin" && requester.accountId !== row.accountId) {
     throw new Error("Junior coaches can only view their own attendance.")
   }
-  return juniorCoach
+  const { firstName, initials, normalizedName } = identityNameParts(row.fullName)
+  return {
+    accountId: row.accountId,
+    academyId: formatAcademyId(row.academyIdSerial),
+    fullName: normalizedName,
+    firstName,
+    initials,
+    accessLevel: "junior_coach" as const,
+    joinedOn: row.joinedOn,
+  }
 }
 
 export function listJuniorCoachProfiles({
@@ -114,6 +147,49 @@ export function listJuniorCoachProfiles({
       return {
         accountId: row.accountId,
         academyId: formatAcademyId(row.academyIdSerial),
+        fullName: normalizedName,
+        firstName,
+        initials,
+        accessLevel: "junior_coach" as const,
+        joinedOn: row.joinedOn,
+      }
+    })
+}
+
+/** Head-coach register projection that preserves archived staff history. */
+export function listJuniorCoachAttendanceRegisterProfiles({
+  database = initializeDatabase(),
+  requesterAccountId,
+}: {
+  database?: SmbaDatabaseExecutor
+  requesterAccountId: string
+}): StaffAttendanceRegisterProfile[] {
+  requireHeadAdminAccess(requesterAccountId, { database })
+  return database.select({
+    accountId: accounts.id,
+    academyIdSerial: academyIdAllocations.serial,
+    archivedAt: accounts.archivedAt,
+    fullName: accounts.fullName,
+    joinedOn: coachProfiles.joinedOn,
+  }).from(coachProfiles)
+    .innerJoin(accounts, eq(accounts.id, coachProfiles.accountId))
+    .innerJoin(
+      academyIdAllocations,
+      eq(academyIdAllocations.accountId, accounts.id),
+    )
+    .where(and(
+      eq(coachProfiles.accessLevel, "junior_coach"),
+      eq(accounts.role, "coach"),
+      eq(accounts.approvalStatus, "approved"),
+    ))
+    .orderBy(asc(accounts.fullName), asc(accounts.id))
+    .all()
+    .map((row) => {
+      const { firstName, initials, normalizedName } = identityNameParts(row.fullName)
+      return {
+        accountId: row.accountId,
+        academyId: formatAcademyId(row.academyIdSerial),
+        archivedOn: row.archivedAt ? getIndiaDateKey(row.archivedAt) : null,
         fullName: normalizedName,
         firstName,
         initials,
@@ -190,7 +266,8 @@ export function saveStaffAttendanceRecords({
   const referenceDate = getIndiaDateKey(now)
   const uniqueChanges = new Set<string>()
 
-  database.transaction((transaction) => {
+  const applied = database.transaction((transaction) => {
+    let appliedCount = 0
     requireHeadAdminAccess(markedByAccountId, { database: transaction })
     changes.forEach((change) => {
       const key = `${change.coachAccountId}:${change.dateKey}`
@@ -225,6 +302,15 @@ export function saveStaffAttendanceRecords({
           "changes",
         )
       }
+      if (change.expectedChoice !== "present"
+        && change.expectedChoice !== "absent"
+        && change.expectedChoice !== "cleared") {
+        operationalActionError(
+          "INVALID_INPUT",
+          "Attendance is missing its original result. Refresh and try again.",
+          "changes",
+        )
+      }
 
       const profile = getCoachAccessProfile(change.coachAccountId, {
         database: transaction,
@@ -247,6 +333,21 @@ export function saveStaffAttendanceRecords({
         )
       }
 
+      const stored = transaction.select({ choice: staffAttendanceRecords.choice })
+        .from(staffAttendanceRecords).where(and(
+          eq(staffAttendanceRecords.coachAccountId, juniorCoach.accountId),
+          eq(staffAttendanceRecords.dateKey, change.dateKey),
+        )).get()
+      const currentChoice: StaffAttendanceChoice = stored?.choice ?? "cleared"
+      if (currentChoice === change.choice) return
+      if (currentChoice !== change.expectedChoice) {
+        operationalActionError(
+          "CONFLICT",
+          "Staff attendance changed since this page was opened. Refresh and try again.",
+          "changes",
+        )
+      }
+
       transaction.insert(staffAttendanceRecords).values({
         id: randomUUID(),
         coachAccountId: juniorCoach.accountId,
@@ -263,8 +364,10 @@ export function saveStaffAttendanceRecords({
           updatedAt: now,
         },
       }).run()
+      appliedCount += 1
     })
-  })
+    return appliedCount
+  }, { behavior: "immediate" })
 
-  return { applied: changes.length }
+  return { applied }
 }

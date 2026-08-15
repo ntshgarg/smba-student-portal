@@ -118,12 +118,22 @@ export function readFirstAssignmentDate(database: Executor, playerId: string) {
     .get()?.effectiveFrom ?? null
 }
 
-export function hasAssignmentInPeriod(database: Executor, playerId: string, period: string) {
+export function hasAssignmentInPeriod(
+  database: Executor,
+  playerId: string,
+  period: string,
+  training?: {
+    programme: typeof feeAgreements.$inferSelect.level
+    batch: typeof feeAgreements.$inferSelect.batch
+  },
+) {
   return Boolean(database.select({ id: sessionAssignments.id })
     .from(sessionAssignments)
     .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
     .where(and(
       eq(sessionAssignments.accountId, playerId),
+      training ? eq(sessionSeries.programme, training.programme) : undefined,
+      training ? eq(sessionSeries.batch, training.batch) : undefined,
       lte(sessionAssignments.effectiveFrom, monthEnd(period)),
       or(
         isNull(sessionAssignments.effectiveTo),
@@ -132,6 +142,43 @@ export function hasAssignmentInPeriod(database: Executor, playerId: string, peri
       lte(sessionSeries.startsOn, monthEnd(period)),
       or(isNull(sessionSeries.endsOn), gte(sessionSeries.endsOn, monthStart(period))),
     )).get())
+}
+
+export function hasCurrentOrFutureMatchingAssignment(
+  database: Executor,
+  playerId: string,
+  referenceDate: string,
+  training: {
+    programme: typeof feeAgreements.$inferSelect.level
+    batch: typeof feeAgreements.$inferSelect.batch
+  },
+) {
+  return database.select({
+    effectiveFrom: sessionAssignments.effectiveFrom,
+    effectiveTo: sessionAssignments.effectiveTo,
+    seriesEndsOn: sessionSeries.endsOn,
+    seriesStartsOn: sessionSeries.startsOn,
+  }).from(sessionAssignments)
+    .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+    .where(and(
+      eq(sessionAssignments.accountId, playerId),
+      eq(sessionSeries.programme, training.programme),
+      eq(sessionSeries.batch, training.batch),
+      eq(sessionSeries.status, "active"),
+    )).all()
+    .some((assignment) => {
+      const startsOn = assignment.effectiveFrom > assignment.seriesStartsOn
+        ? assignment.effectiveFrom
+        : assignment.seriesStartsOn
+      const endsOn = [assignment.effectiveTo, assignment.seriesEndsOn]
+        .filter((value): value is string => value !== null)
+        .reduce<string | null>((earliest, value) => (
+          earliest === null || value < earliest ? value : earliest
+        ), null)
+
+      return (endsOn === null || endsOn >= startsOn)
+        && (endsOn === null || endsOn >= referenceDate)
+    })
 }
 
 export function readAuditEventByIdempotencyKey(database: Executor, idempotencyKey: string) {
@@ -238,7 +285,7 @@ function chargeView(
         : adjustment.reason,
       createdAt: adjustment.createdAt.toISOString(),
       reversed: adjustment.reversedAt !== null,
-      canReverse: adjustment.kind !== "legacy_settlement",
+      canReverse: !["legacy_settlement", "withdrawal_credit"].includes(adjustment.kind),
     }))
   }
   return view
@@ -258,6 +305,7 @@ function loadPlayerPhaseTwoHistory(
   database: Executor,
   playerId: string,
   includeInternal: boolean,
+  now: Date,
 ) {
   const paymentRows = database.select().from(payments)
     .where(eq(payments.playerAccountId, playerId))
@@ -276,11 +324,25 @@ function loadPlayerPhaseTwoHistory(
       .where(eq(refunds.paymentId, payment.id))
       .orderBy(desc(refunds.refundedOn), desc(refunds.recordedAt), desc(refunds.id))
       .all()
+    const activeAllocatedRefundPaise = database.select({
+      total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
+    }).from(refundAllocations)
+      .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+      .innerJoin(
+        paymentAllocations,
+        eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+      )
+      .where(and(
+        eq(paymentAllocations.paymentId, payment.id),
+        eq(refunds.lifecycle, "recorded"),
+      )).get()?.total ?? 0
     const publicRefunds = paymentRefunds.map((refund) => ({
       id: refund.id,
       paymentId: payment.id,
       receiptReference: payment.receiptReference,
       refundReference: refund.refundReference,
+      purpose: refund.purpose,
+      withdrawalEffectiveOn: refund.withdrawalEffectiveOn,
       amountPaise: refund.amountPaise,
       refundedOn: refund.refundedOn,
       lifecycle: refund.lifecycle,
@@ -296,15 +358,18 @@ function loadPlayerPhaseTwoHistory(
       allocations: allocations.map(({ allocation, charge }) => ({
         id: allocation.id,
         chargeId: charge.id,
+        chargeType: charge.type,
+        billingPeriod: charge.billingPeriod,
         feeReference: charge.feeReference,
         description: charge.description,
         amountPaise: allocation.amountPaise,
       })),
       refunds: publicRefunds,
+      refundedPaise: Number(activeAllocatedRefundPaise),
     }
     if (!includeInternal) return { publicReceipt, coachReceipt: null, coachRefunds: [] }
 
-    const coachAllocations = allocations.map(({ allocation }) => {
+    const coachAllocations = allocations.map(({ allocation, charge }) => {
       const activeRefunded = database.select({
         total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
       }).from(refundAllocations)
@@ -313,10 +378,65 @@ function loadPlayerPhaseTwoHistory(
           eq(refundAllocations.paymentAllocationId, allocation.id),
           eq(refunds.lifecycle, "recorded"),
         )).get()?.total ?? 0
+      const chargeLedger = chargeView(database, charge, now)
+      const agreement = charge.feeAgreementId
+        ? database.select().from(feeAgreements)
+          .where(eq(feeAgreements.id, charge.feeAgreementId)).get()
+        : null
+      const laterCharge = charge.billingPeriod
+        ? database.select({ id: financialCharges.id }).from(financialCharges).where(and(
+          eq(financialCharges.playerAccountId, charge.playerAccountId),
+          eq(financialCharges.type, "monthly_training"),
+          eq(financialCharges.lifecycle, "issued"),
+          gt(financialCharges.billingPeriod, charge.billingPeriod),
+        )).get()
+        : null
+      const activeWithdrawalRefund = database.select({ id: refunds.id })
+        .from(refundAllocations)
+        .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+        .innerJoin(
+          paymentAllocations,
+          eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+        )
+        .where(and(
+          eq(paymentAllocations.chargeId, charge.id),
+          eq(refunds.lifecycle, "recorded"),
+          eq(refunds.purpose, "mid_term_withdrawal"),
+        )).get()
+      const reversedWithdrawalRefund = database.select({
+        id: refunds.id,
+        withdrawalEffectiveOn: refunds.withdrawalEffectiveOn,
+      })
+        .from(refundAllocations)
+        .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+        .innerJoin(
+          paymentAllocations,
+          eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+        )
+        .where(and(
+          eq(paymentAllocations.chargeId, charge.id),
+          eq(refunds.lifecycle, "reversed"),
+          eq(refunds.purpose, "mid_term_withdrawal"),
+          agreement?.effectiveTo
+            ? eq(refunds.withdrawalEffectiveOn, agreement.effectiveTo)
+            : undefined,
+        )).get()
+      const agreementCanClose = agreement?.status === "active"
+        || (agreement?.status === "ended"
+          && reversedWithdrawalRefund?.withdrawalEffectiveOn === agreement.effectiveTo)
+      const withdrawalEligible = payment.lifecycle === "recorded"
+        && charge.type === "monthly_training"
+        && Boolean(charge.billingPeriod)
+        && agreementCanClose
+        && !laterCharge
+        && !activeWithdrawalRefund
+        && chargeLedger.effectiveAmountPaise > 0
+        && chargeLedger.outstandingPaise === 0
+        && chargeLedger.receivedPaise === chargeLedger.effectiveAmountPaise
       return {
         ...publicReceipt.allocations.find((item) => item.id === allocation.id)!,
         paymentAllocationId: allocation.id,
-        refundablePaise: payment.lifecycle === "recorded"
+        refundablePaise: withdrawalEligible
           ? Math.max(0, allocation.amountPaise - Number(activeRefunded))
           : 0,
       }
@@ -454,7 +574,6 @@ export function loadPlayerFeeRecord(
     charge.type === "registration" && charge.lifecycle === "issued"
   )) ?? [...charges].reverse().find((charge) => charge.type === "registration") ?? null
   const registrationResolutionRequired = readFinanceActivation(database) !== null
-    && agreement !== undefined
     && !activeCharges.some((charge) => charge.type === "registration")
   const suggestedAmount = player.academyPlan && player.level && player.batch
     ? defaultMonthlyFeePaise({
@@ -472,7 +591,16 @@ export function loadPlayerFeeRecord(
       suggestedMonthlyFeePaise: suggestedAmount,
     }
     : null
-  const phaseTwoHistory = loadPlayerPhaseTwoHistory(database, playerId, includeInternal)
+  const feePlanSetupReady = Boolean(enrollmentDefaults && hasCurrentOrFutureMatchingAssignment(
+    database,
+    playerId,
+    getAcademyDateKey(now),
+    {
+      programme: enrollmentDefaults.level,
+      batch: enrollmentDefaults.batch,
+    },
+  ))
+  const phaseTwoHistory = loadPlayerPhaseTwoHistory(database, playerId, includeInternal, now)
 
   return {
     playerId,
@@ -485,6 +613,7 @@ export function loadPlayerFeeRecord(
       (total, charge) => total + charge.outstandingPaise,
       0,
     ),
+    feePlanSetupReady,
     feeAgreement: agreement ? {
       id: agreement.id,
       academyPlan: agreement.academyPlan,
@@ -546,13 +675,21 @@ export function listFinancePlayers(
   const creditTotal = sql<number>`coalesce((
     select sum(${chargeAdjustments.amountPaise}) from ${chargeAdjustments}
     where ${chargeAdjustments.chargeId} = ${financialCharges.id}
-      and ${chargeAdjustments.kind} in ('manual_credit', 'legacy_settlement', 'concession_credit')
+      and ${chargeAdjustments.kind} in (
+        'manual_credit',
+        'legacy_settlement',
+        'concession_credit',
+        'withdrawal_credit'
+      )
       and ${chargeAdjustments.reversedAt} is null
   ), 0)`
   const hasActiveAgreement = sql<number>`exists (
     select 1 from ${feeAgreements}
     where ${feeAgreements.playerAccountId} = ${accounts.id}
       and ${feeAgreements.status} = 'active'
+      and ${feeAgreements.academyPlan} = ${playerEnrollments.academyPlan}
+      and ${feeAgreements.level} = ${playerEnrollments.level}
+      and ${feeAgreements.batch} = ${playerEnrollments.batch}
   )`
   const hasPaymentAgreementHistory = sql<number>`exists (
     select 1 from ${feeAgreements}
@@ -563,6 +700,8 @@ export function listFinancePlayers(
     select 1 from ${sessionAssignments}
     inner join ${sessionSeries} on ${sessionSeries.id} = ${sessionAssignments.seriesId}
     where ${sessionAssignments.accountId} = ${accounts.id}
+      and ${sessionSeries.programme} = ${playerEnrollments.level}
+      and ${sessionSeries.batch} = ${playerEnrollments.batch}
       and ${sessionAssignments.effectiveFrom} <= ${monthEnd(period)}
       and (${sessionAssignments.effectiveTo} is null
         or ${sessionAssignments.effectiveTo} > ${monthStart(period)})
@@ -672,7 +811,11 @@ export function listFinancePlayers(
       row.chargeType === "monthly_training" && row.billingPeriod === period
     ))
     const hasRegistrationCharge = chargeRows.some((row) => row.chargeType === "registration")
-    const status = !hasPaymentHistory || (hasAgreement && !hasRegistrationCharge)
+    const hasPayableRegistration = chargeRows.some((row) => (
+      row.chargeType === "registration" && row.outstanding > 0
+    ))
+    const status = (!hasPaymentHistory && !hasRegistrationCharge)
+      || (hasAgreement && !hasRegistrationCharge)
       ? "setup_required" as const
       : hasAgreement && hasAssignment && !hasMonthlyCharge
         ? combineFinanceStatuses([
@@ -696,7 +839,9 @@ export function listFinancePlayers(
       fullName: player.fullName,
       archived,
       hasActiveFeePlan: hasAgreement,
-      paymentEligible: !archived && hasPaymentHistory && outstandingPaise > 0,
+      paymentEligible: !archived
+        && outstandingPaise > 0
+        && (hasPaymentHistory || hasPayableRegistration),
       status,
       outstandingPaise,
       dueDate: representative.dueDate,
@@ -713,8 +858,14 @@ export function listMonthlyPreparationCandidates(database: Executor, period: str
       approvalStatus: accounts.approvalStatus,
       role: accounts.role,
     },
+    enrollment: {
+      academyPlan: playerEnrollments.academyPlan,
+      level: playerEnrollments.level,
+      batch: playerEnrollments.batch,
+    },
   }).from(feeAgreements)
     .innerJoin(accounts, eq(accounts.id, feeAgreements.playerAccountId))
+    .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, feeAgreements.playerAccountId))
     .innerJoin(
       academyIdAllocations,
       eq(academyIdAllocations.accountId, feeAgreements.playerAccountId),

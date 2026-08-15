@@ -39,6 +39,9 @@ describe("academy-time dashboard greetings", () => {
     expect(html).toContain("coach-welcome-scoreboard")
     expect(html).toContain("coach-scoreboard-ribbon is-empty")
     expect(html).toContain('<rect x="20" y="20" width="1300" height="570"></rect>')
+    expect(html).toContain('href="#attendance"')
+    expect(html).toContain("Today’s attendance")
+    expect(html).not.toContain('href="#onboarding"')
   })
 
   it("renders today’s session as a scoreboard ribbon", () => {

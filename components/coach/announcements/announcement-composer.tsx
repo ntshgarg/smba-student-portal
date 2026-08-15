@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Check, Eye, Send, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, Send, X } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 
@@ -277,29 +277,32 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
   }
 
   return (
-    <div className={`${styles.workspace} page-shell`}>
-      <div className={styles.backRow}>
-        <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
+    <div className={`${styles.composerWorkspace} page-shell`}>
+      <div className={styles.composerBackRow}>
+        <Link href="/coach/announcements">
+          <ArrowLeft aria-hidden="true" />
+          Back to announcements
+        </Link>
       </div>
 
-      <header className={styles.workspaceHeader}>
-        <span className="eyebrow">Announcements</span>
+      <header className={styles.composerHeader}>
         <h1>New announcement</h1>
-        <p>Write one clear notice, check where it will appear, then publish.</p>
       </header>
 
-      <section className={styles.composerPanel} aria-labelledby="announcement-editor-title">
-        <div className={styles.panelHeading}>
-          <span>Notice board</span>
-          <h2 id="announcement-editor-title">Write an announcement</h2>
+      <section className={styles.noticeSlip} aria-labelledby="announcement-editor-title">
+        <div className={styles.slipMasthead}>
+          <h2 id="announcement-editor-title" className="sr-only">Write an announcement</h2>
+          <span>Notice 01</span>
         </div>
 
-        <div className={styles.composerFields}>
-          <label className={styles.field}>
+        <div className={styles.slipBody}>
+          <label className={styles.slipField}>
             <span>Title</span>
             <input
               ref={titleRef}
-              aria-describedby={errors.title ? "announcement-title-error" : undefined}
+              aria-describedby={errors.title
+                ? "announcement-title-limit announcement-title-error"
+                : "announcement-title-limit"}
               aria-invalid={Boolean(errors.title)}
               autoComplete="off"
               maxLength={120}
@@ -308,43 +311,69 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
               type="text"
               value={values.title}
             />
-            <small id="announcement-title-error" className={styles.fieldMessage}>
-              {errors.title ?? `${values.title.length}/120`}
-            </small>
+            <span className={styles.slipFieldMeta}>
+              {errors.title ? (
+                <small id="announcement-title-error" className={styles.slipFieldError}>
+                  {errors.title}
+                </small>
+              ) : <span aria-hidden="true" />}
+              <small className={styles.slipCounter} aria-hidden="true">
+                {values.title.length} / 120
+              </small>
+              <small id="announcement-title-limit" className="sr-only">
+                Maximum 120 characters.
+              </small>
+            </span>
           </label>
 
-          <label className={styles.field}>
+          <label className={styles.slipField}>
             <span>Message</span>
             <textarea
               ref={contentRef}
-              aria-describedby={errors.content ? "announcement-content-error" : undefined}
+              aria-describedby={errors.content
+                ? "announcement-content-limit announcement-content-error"
+                : "announcement-content-limit"}
               aria-invalid={Boolean(errors.content)}
               maxLength={5000}
               onChange={(event) => updateValues({ content: event.target.value })}
               placeholder="Share the important details with the academy."
-              rows={8}
+              rows={5}
               value={values.content}
             />
-            <small id="announcement-content-error" className={styles.fieldMessage}>
-              {errors.content ?? `${values.content.length}/5000`}
-            </small>
+            <span className={styles.slipFieldMeta}>
+              {errors.content ? (
+                <small id="announcement-content-error" className={styles.slipFieldError}>
+                  {errors.content}
+                </small>
+              ) : <span aria-hidden="true" />}
+              <small className={styles.slipCounter} aria-hidden="true">
+                {values.content.length} / 5000
+              </small>
+              <small id="announcement-content-limit" className="sr-only">
+                Maximum 5,000 characters.
+              </small>
+            </span>
           </label>
+        </div>
 
+        <div className={styles.slipDocket}>
           <fieldset
             ref={channelGroupRef}
-            className={styles.locationFieldset}
-            aria-describedby={errors.channels ? "announcement-channels-error" : undefined}
+            className={styles.slipChannels}
+            aria-describedby="announcement-channels-help"
+            aria-invalid={Boolean(errors.channels)}
             tabIndex={errors.channels ? -1 : undefined}
           >
-            <legend>Where should it appear?</legend>
-            <div>
+            <legend className="sr-only">Send to destinations</legend>
+            <span className={styles.slipDocketLabel} aria-hidden="true">Send to</span>
+            <div className={styles.slipChannelChoices}>
               <label>
                 <input
                   checked={values.channels.includes("homepage")}
                   onChange={() => toggleChannel("homepage")}
                   type="checkbox"
                 />
-                <span><strong>Homepage</strong><small>Visible to everyone visiting SMBA.</small></span>
+                <span>Homepage</span>
               </label>
               <label>
                 <input
@@ -352,47 +381,56 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                   onChange={() => toggleChannel("player_dashboard")}
                   type="checkbox"
                 />
-                <span><strong>Player Dashboard</strong><small>Visible after a player signs in.</small></span>
+                <span>Player Dashboard</span>
               </label>
             </div>
-            <small id="announcement-channels-error" className={styles.fieldMessage}>
+            <small
+              id="announcement-channels-help"
+              className={errors.channels ? styles.slipChannelMessage : "sr-only"}
+            >
               {errors.channels ?? "Choose one or both locations."}
             </small>
           </fieldset>
 
-          <div className={styles.optionsGrid}>
-            <label className={styles.checkOption}>
-              <input
-                checked={values.pinned}
-                onChange={(event) => updateValues({ pinned: event.target.checked })}
-                type="checkbox"
-              />
-              <span><strong>Pin announcement</strong><small>Keep it above ordinary notices while active.</small></span>
-            </label>
+          <label className={styles.slipPinOption}>
+            <input
+              aria-describedby="announcement-pin-help"
+              checked={values.pinned}
+              onChange={(event) => updateValues({ pinned: event.target.checked })}
+              type="checkbox"
+            />
+            <span>Pin announcement</span>
+            <small id="announcement-pin-help" className="sr-only">
+              Keep it above ordinary notices while active.
+            </small>
+          </label>
 
-            <label className={styles.field}>
-              <span>Expiry date <em>Optional</em></span>
-              <input
-                ref={expiryRef}
-                aria-describedby={errors.expiresOn ? "announcement-expiry-error" : undefined}
-                aria-invalid={Boolean(errors.expiresOn)}
-                min={academyToday}
-                onChange={(event) => updateValues({ expiresOn: event.target.value })}
-                type="date"
-                value={values.expiresOn}
-              />
-              <small id="announcement-expiry-error" className={styles.fieldMessage}>
-                {errors.expiresOn ?? "The notice remains visible through this date."}
-              </small>
-            </label>
-          </div>
-        </div>
+          <label className={styles.slipExpiryField}>
+            <span>Expiry date</span>
+            <input
+              ref={expiryRef}
+              aria-describedby="announcement-expiry-help"
+              aria-invalid={Boolean(errors.expiresOn)}
+              min={academyToday}
+              onChange={(event) => updateValues({ expiresOn: event.target.value })}
+              type="date"
+              value={values.expiresOn}
+            />
+            <small
+              id="announcement-expiry-help"
+              className={errors.expiresOn ? styles.slipExpiryError : "sr-only"}
+            >
+              {errors.expiresOn ?? "The notice remains visible through this date."}
+            </small>
+          </label>
 
-        <div className={styles.composerActions}>
-          <p>Nothing is saved until you publish.</p>
-          <button type="button" onClick={reviewAnnouncement}>
-            <Eye aria-hidden="true" />
-            Review announcement
+          <button
+            className={styles.slipReviewButton}
+            type="button"
+            onClick={reviewAnnouncement}
+          >
+            <span>Review announcement</span>
+            <ArrowRight aria-hidden="true" />
           </button>
         </div>
       </section>

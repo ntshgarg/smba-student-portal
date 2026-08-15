@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   ArrowUpRight,
+  CalendarX2,
   Check,
   ChevronDown,
   MapPin,
@@ -107,6 +108,7 @@ export function SessionSchedules({
   const {
     assignSession,
     endSessionAssignment,
+    endSessionSeries,
     players,
     sessionAssignments,
     sessionOccurrences,
@@ -127,9 +129,12 @@ export function SessionSchedules({
   const [assignmentTouched, setAssignmentTouched] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
   const [endingAssignmentId, setEndingAssignmentId] = useState<string | null>(null)
+  const [endingSeriesId, setEndingSeriesId] = useState<string | null>(null)
   const [rosterFeedback, setRosterFeedback] = useState<RosterFeedback | null>(null)
   const [endingFeedback, setEndingFeedback] = useState<EndingFeedback | null>(null)
-  const hasPendingMutation = isAssigning || endingAssignmentId !== null
+  const hasPendingMutation = isAssigning
+    || endingAssignmentId !== null
+    || endingSeriesId !== null
   const assignmentIsDirty = assignmentTouched
     && Boolean(assignPlayerId || effectiveFrom || assignWeekdays.length)
   const assignmentGuard = useUnsavedWorkGuard({
@@ -137,9 +142,10 @@ export function SessionSchedules({
     message: "Leave without saving this player assignment?",
     scope: "coach-schedule-assignment",
   })
+  const activeSeries = sessionSeries.filter((series) => series.status === "active")
   const programmeGroups = programmes
     .map((programme) => {
-      const series = sessionSeries.filter((item) => item.programme === programme)
+      const series = activeSeries.filter((item) => item.programme === programme)
       const seriesIds = new Set(series.map((item) => item.id))
       const playerCount = new Set(sessionAssignments
         .filter((assignment) => !assignment.effectiveTo && seriesIds.has(assignment.seriesId))
@@ -152,7 +158,8 @@ export function SessionSchedules({
     ? players.find((player) => player.member.id === initialPlayerId) ?? null
     : null, [initialPlayerId, players])
   const guidedEligibleSeries = useMemo(() => guidedPlayer ? sessionSeries.filter((series) => (
-    series.programme === guidedPlayer.training.level
+    series.status === "active"
+    && series.programme === guidedPlayer.training.level
     && series.batch === guidedPlayer.training.batch
     && (!series.endsOn || guidedPlayer.member.joinedAt <= series.endsOn)
     && !activeAssignmentForSeries(guidedPlayer.member.id, series.id, sessionAssignments)
@@ -450,7 +457,7 @@ export function SessionSchedules({
           <span>Session assignments</span>
           <h2 id="series-rosters-title">Recurring sessions &amp; rosters</h2>
         </div>
-        {sessionSeries.length ? programmeGroups.map((group) => {
+        {activeSeries.length ? programmeGroups.map((group) => {
           const isProgrammeOpen = expandedProgramme === group.programme
           const programmeContentId = `schedule-programme-${group.programme.toLowerCase()}`
           const groupSummary = `${group.series.length} ${group.series.length === 1 ? "schedule" : "schedules"} · ${group.playerCount} ${group.playerCount === 1 ? "player" : "players"}`
@@ -629,7 +636,10 @@ export function SessionSchedules({
                             ? requiredWeekdays === null
                               ? `${academyPlanLabel(selectedAssignmentPlayer.training.academyPlan)} · choose one or two session days`
                               : `${academyPlanLabel(selectedAssignmentPlayer.training.academyPlan)} · ${projectedAssignedWeekdays.length} of ${requiredWeekdays} distinct weekdays covered across active schedules`
-                            : "Set this player’s Academy Plan in Members before assigning days."}
+                            : <>Complete this player’s Training plan in{" "}
+                                <Link href={`/coach/onboarding?player=${encodeURIComponent(assignPlayerId)}`}>
+                                  Player Onboarding
+                                </Link> before assigning days.</>}
                         </p>
                         <div>
                           {seriesWeekdays.map((day) => {
@@ -697,6 +707,39 @@ export function SessionSchedules({
                     message={rosterFeedback?.seriesId === series.id ? rosterFeedback.message : null}
                     tone={rosterFeedback?.seriesId === series.id ? rosterFeedback.tone : "info"}
                   />
+                  <button
+                    className="coach-series-end-action"
+                    type="button"
+                    disabled={hasPendingMutation}
+                    onClick={async () => {
+                      if (hasPendingMutation || !window.confirm(
+                        `End ${seriesLabel(series)} now? Upcoming sessions will be cancelled and every player will be removed from this schedule. This cannot be undone.`,
+                      )) return
+                      setEndingSeriesId(series.id)
+                      setEndingFeedback(null)
+                      setRosterFeedback(null)
+                      try {
+                        const result = await endSessionSeries(series.id)
+                        if (!result.ok) {
+                          setEndingFeedback({
+                            message: result.message,
+                            seriesId: series.id,
+                            tone: "error",
+                          })
+                        }
+                      } catch (error) {
+                        setEndingFeedback({
+                          message: error instanceof Error ? error.message : "Schedule could not be ended",
+                          seriesId: series.id,
+                          tone: "error",
+                        })
+                      } finally {
+                        setEndingSeriesId(null)
+                      }
+                    }}
+                  >
+                    <CalendarX2 aria-hidden="true" /> {endingSeriesId === series.id ? "Ending schedule…" : "End schedule"}
+                  </button>
                 </div>
               ) : null}
             </article>

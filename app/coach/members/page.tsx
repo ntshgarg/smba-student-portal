@@ -1,6 +1,5 @@
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import { MemberDirectory } from "@/components/coach/members/member-directory"
-import { listPendingRegistrations } from "@/lib/auth/account-service"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import {
   getCoachSessionSnapshot,
@@ -19,7 +18,6 @@ export default async function CoachMembersPage() {
   return (
     <CoachPortalProvider
       initialMembers={players.members}
-      initialPendingRegistrations={listPendingRegistrations()}
       initialSessionAssignments={sessions.sessionAssignments}
       initialSessionSeries={sessions.sessionSeries}
       initialTrainingProfiles={players.trainingProfiles}

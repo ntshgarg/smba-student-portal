@@ -210,4 +210,17 @@ describe("coach Financials entry points", () => {
       "/coach/financials/record?scope=all&query=Bina+Settled",
     )
   })
+
+  it("returns a stale default-scope player selection to the bare Record Payment finder", async () => {
+    mocks.getFinanceActivation.mockReturnValue({ trackingMonth: "2026-08" })
+
+    await expect(FinancialsRapidDeskPage({
+      searchParams: Promise.resolve({
+        player: "stale-player",
+        scope: "outstanding",
+      }),
+    })).rejects.toThrow("NEXT_REDIRECT")
+
+    expect(mocks.redirect).toHaveBeenLastCalledWith("/coach/financials/record")
+  })
 })

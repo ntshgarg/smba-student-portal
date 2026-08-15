@@ -4,6 +4,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 import Database from "better-sqlite3"
+import { and, eq } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/better-sqlite3"
 import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { readMigrationFiles } from "drizzle-orm/migrator"
@@ -45,6 +46,7 @@ const REQUIRED_CURRENT_TABLES = [
 ] as const
 const REQUIRED_CURRENT_COLUMNS = {
   accounts: ["registration_request_fingerprint", "registration_request_key"],
+  refunds: ["purpose", "withdrawal_effective_on", "charge_adjustment_id"],
 } as const
 const CLEAN_OPERATIONAL_TABLES = [
   "player_enrollments",
@@ -82,6 +84,29 @@ const selectedProfile = resolveFixtureProfile((() => {
   return index >= 0 ? args[index + 1] : process.env.SMBA_FIXTURE_PROFILE
 })())
 const DEFAULT_TARGET = selectedProfile.target
+
+const representativeReportHistory = selectedProfile.key === "demo" ? [
+  {
+    month: "2026-03",
+    publishedAt: "2026-04-03T18:00:00+05:30",
+    reportText: "has settled into the training rhythm with steady attention to grip, ready position, and a balanced split step. The clearest improvement is arriving behind the shuttle before starting the stroke.\n\nThe next focus is to keep the racket preparation compact and return to base without crossing the feet.",
+  },
+  {
+    month: "2026-04",
+    publishedAt: "2026-05-03T18:00:00+05:30",
+    reportText: "is moving into the rear court with better balance and is beginning to contact the shuttle higher. Recovery after the overhead stroke is calmer, which is helping the next movement begin on time.\n\nThe next step is to keep the non-racket arm active and maintain the same shape when the pace increases.",
+  },
+  {
+    month: "2026-05",
+    publishedAt: "2026-06-03T18:00:00+05:30",
+    reportText: "has become more deliberate in serve-and-return practice. Short serves are landing with better control, and the first three shots of the rally now show clearer intent instead of being rushed.\n\nThe coming month should build confidence in choosing when to lift, block, or move forward to the net.",
+  },
+  {
+    month: "2026-06",
+    publishedAt: "2026-07-03T18:00:00+05:30",
+    reportText: "is sustaining longer rallies with improved patience and a more reliable recovery step. The strongest progress this month has been keeping the body composed after a difficult defensive shot.\n\nThe next focus is to turn that control into purposeful rally construction, especially through the backhand side.",
+  },
+] as const : []
 
 type Stage = "default" | "registrations" | "enrollments" | "schedules" | "loaded"
 
@@ -377,6 +402,7 @@ async function applicationModules(target: string) {
     sessionService,
     financeService,
     financeConfig,
+    dbSchema,
     attendanceAdjustments,
     memberService,
     announcementService,
@@ -386,6 +412,7 @@ async function applicationModules(target: string) {
     import("../../lib/sessions/service"),
     import("../../lib/finance/service"),
     import("../../lib/finance/config"),
+    import("../../lib/db/schema"),
     import("../../lib/attendance/adjustments"),
     import("../../lib/coach/member-service"),
     import("../../lib/announcements/service"),
@@ -396,6 +423,7 @@ async function applicationModules(target: string) {
     sessionService,
     financeService,
     financeConfig,
+    dbSchema,
     attendanceAdjustments,
     memberService,
     announcementService,
@@ -681,6 +709,7 @@ async function seedAssignmentsAndAttendance(target: string) {
         playerId: row.playerId,
         occurrenceId: row.occurrenceId,
         choice: position === 8 ? "absent" as const : "present" as const,
+        expectedChoice: "cleared" as const,
       }]
     }))
     const { database, sessionService } = await applicationModules(target)
@@ -749,13 +778,31 @@ async function seedAttendanceAdjustmentExamples(target: string) {
     select ar.account_id as playerId, ar.occurrence_id as sourceOccurrenceId,
       o.occurrence_date as sourceDate,
       (
-        select min(candidate.occurrence_date)
+        select candidate.id
         from session_occurrences candidate
+        join session_attendance_records completion_attendance
+          on completion_attendance.occurrence_id = candidate.id
+          and completion_attendance.account_id = ar.account_id
+          and completion_attendance.choice = 'present'
         where candidate.status = 'scheduled'
           and candidate.occurrence_date > o.occurrence_date
           and candidate.occurrence_date <= date(o.occurrence_date, '+14 days')
           and candidate.occurrence_date <= ?
-      ) as completedOn
+          and exists (
+            select 1
+            from session_assignments assignment
+            join session_assignment_weekdays assignment_day
+              on assignment_day.assignment_id = assignment.id
+            where assignment.account_id = ar.account_id
+              and assignment.series_id = candidate.series_id
+              and candidate.occurrence_date >= assignment.effective_from
+              and (assignment.effective_to is null
+                or candidate.occurrence_date < assignment.effective_to)
+              and assignment_day.weekday = cast(strftime('%w', candidate.occurrence_date) as integer)
+          )
+        order by candidate.starts_at, candidate.id
+        limit 1
+      ) as completionOccurrenceId
     from session_attendance_records ar
     join session_occurrences o on o.id = ar.occurrence_id
     join accounts a on a.id = ar.account_id
@@ -764,7 +811,7 @@ async function seedAttendanceAdjustmentExamples(target: string) {
       and o.occurrence_date >= '2026-07-20'
     order by o.occurrence_date desc, x.serial
   `).all(CANONICAL_DATE) as Array<{
-    completedOn: string | null
+    completionOccurrenceId: string | null
     playerId: string
     sourceDate: string
     sourceOccurrenceId: string
@@ -772,7 +819,7 @@ async function seedAttendanceAdjustmentExamples(target: string) {
   read.close()
   const uniquePlayers = new Set<string>()
   const examples = candidates.filter((candidate) => {
-    if (!candidate.completedOn || uniquePlayers.has(candidate.playerId)) return false
+    if (!candidate.completionOccurrenceId || uniquePlayers.has(candidate.playerId)) return false
     uniquePlayers.add(candidate.playerId)
     return true
   }).slice(0, 2)
@@ -784,7 +831,7 @@ async function seedAttendanceAdjustmentExamples(target: string) {
   const published = examples.map((example, index) => (
     attendanceAdjustments.publishMakeupAttendanceAdjustment({
       coachId: COACH_ID,
-      completedOn: example.completedOn!,
+      completionOccurrenceId: example.completionOccurrenceId!,
       database,
       now,
       playerId: example.playerId,
@@ -969,11 +1016,27 @@ async function seedReports(target: string) {
     ))
   }
   for (let reportIndex = 0; reportIndex < reportIndexes.length; reportIndex += 1) {
-    const index = reportIndexes[reportIndex]
+    const historicalReport = selectedProfile.key === "demo"
+      ? representativeReportHistory[reportIndex - 1]
+      : undefined
+    const index = historicalReport ? 0 : reportIndexes[reportIndex]
     const player = players[index]
     const account = accounts[index]
     const reportId = randomUUID()
-    const publishedText = `${player.fullName} has trained with good attention this month. The most consistent progress has come from staying balanced through the first movement and recovering calmly after each shot.\n\nThe next step is to keep that same control when the rally becomes faster, without rushing the preparation.`
+    const reportMonth = historicalReport?.month ?? REPORT_MONTH
+    const reportReferenceDate = historicalReport
+      ? new Date(Date.UTC(
+          Number(reportMonth.slice(0, 4)),
+          Number(reportMonth.slice(5, 7)),
+          0,
+        )).toISOString().slice(0, 10)
+      : REPORT_REFERENCE_DATE
+    const reportCreatedAt = historicalReport
+      ? Date.parse(historicalReport.publishedAt)
+      : createdAt
+    const publishedText = historicalReport
+      ? `${player.fullName} ${historicalReport.reportText}`
+      : `${player.fullName} has trained with good attention this month. The most consistent progress has come from staying balanced through the first movement and recovering calmly after each shot.\n\nThe next step is to keep that same control when the rally becomes faster, without rushing the preparation.`
     const draftOnlyText = `${player.fullName} is becoming more composed through the weekly training rhythm. Movement quality is improving, and the focus now is to carry that consistency into longer rallies.`
     const isPublished = reportIndex < selectedProfile.reportMix.published
     const isRevision = isPublished
@@ -981,9 +1044,21 @@ async function seedReports(target: string) {
     const draftText = isRevision
       ? `${publishedText}\n\nRevision note: the latest sessions show better patience under pressure.`
       : isPublished ? publishedText : draftOnlyText
-    insertReport.run(reportId, account.id, REPORT_MONTH, draftText, COACH_ID, createdAt, createdAt)
+    insertReport.run(
+      reportId,
+      account.id,
+      reportMonth,
+      draftText,
+      COACH_ID,
+      reportCreatedAt,
+      reportCreatedAt,
+    )
     if (isPublished) {
-      const attendanceInput = getPlayerAttendanceInput(account.id, REPORT_MONTH, REPORT_REFERENCE_DATE)
+      const attendanceInput = getPlayerAttendanceInput(
+        account.id,
+        reportMonth,
+        reportReferenceDate,
+      )
       if (!attendanceInput) throw new Error(`Attendance input missing for ${player.fullName}.`)
       insertPublication.run(
         randomUUID(),
@@ -992,7 +1067,7 @@ async function seedReports(target: string) {
         publishedText,
         JSON.stringify(createAttendanceSnapshotV2(attendanceInput)),
         COACH_ID,
-        createdAt,
+        reportCreatedAt,
       )
       if (reportIndex === 0) {
         insertPublication.run(
@@ -1002,7 +1077,7 @@ async function seedReports(target: string) {
           `${publishedText}\n\nFollow-up: movement recovery remained composed through the final week.`,
           JSON.stringify(createAttendanceSnapshotV2(attendanceInput)),
           COACH_ID,
-          createdAt + 86_400_000,
+          reportCreatedAt + 86_400_000,
         )
       }
     }
@@ -1041,6 +1116,7 @@ const fixturePaymentMethods = [
 async function seedFinancials(target: string) {
   const {
     database,
+    dbSchema,
     financeConfig,
     financeService,
   } = await applicationModules(target)
@@ -1070,17 +1146,76 @@ async function seedFinancials(target: string) {
     if (!agreedMonthlyFeePaise) {
       throw new Error(`Missing canonical fee for ${player.level} ${player.academyPlan}.`)
     }
-    financeService.setupExistingPlayerFinance({
-      playerId: account.id,
-      academyPlan: player.academyPlan,
-      level: player.level,
-      batch: player.batch,
-      agreedMonthlyFeePaise,
-      effectiveFrom: SCHEDULE_START,
-      monthlyDueDay: 5,
-      registrationStatus: "pending",
-      idempotencyKey: `${prefix}.setup.${account.serial}`,
-    }, context)
+    if (player.finalState === "active") {
+      financeService.setupExistingPlayerFinance({
+        playerId: account.id,
+        academyPlan: player.academyPlan,
+        level: player.level,
+        batch: player.batch,
+        agreedMonthlyFeePaise,
+        effectiveFrom: SCHEDULE_START,
+        monthlyDueDay: 5,
+        registrationStatus: "pending",
+        idempotencyKey: `${prefix}.setup.${account.serial}`,
+      }, context)
+      return
+    }
+
+    // Paused and unassigned rows intentionally model imported Fee Plans that
+    // are awaiting a current/future assignment. Seed those historical facts
+    // directly; the guarded coach workflow must never manufacture this state.
+    const existingAgreement = database.select({ id: dbSchema.feeAgreements.id })
+      .from(dbSchema.feeAgreements)
+      .where(eq(dbSchema.feeAgreements.playerAccountId, account.id))
+      .get()
+    const agreementId = existingAgreement?.id
+      ?? `fixture-${selectedProfile.key}-legacy-agreement-${account.serial}`
+    if (!existingAgreement) {
+      database.insert(dbSchema.feeAgreements).values({
+        id: agreementId,
+        playerAccountId: account.id,
+        academyPlan: player.academyPlan,
+        level: player.level,
+        batch: player.batch,
+        agreedMonthlyFeePaise,
+        currency: "INR",
+        monthlyDueDay: 5,
+        effectiveFrom: SCHEDULE_START,
+        effectiveTo: null,
+        status: "active",
+        recordRevision: 0,
+        createdByAccountId: COACH_ID,
+        createdAt: now,
+        updatedByAccountId: COACH_ID,
+        updatedAt: now,
+      }).run()
+    }
+
+    const existingRegistration = database.select({ id: dbSchema.financialCharges.id })
+      .from(dbSchema.financialCharges)
+      .where(and(
+        eq(dbSchema.financialCharges.playerAccountId, account.id),
+        eq(dbSchema.financialCharges.type, "registration"),
+        eq(dbSchema.financialCharges.lifecycle, "issued"),
+      )).get()
+    if (!existingRegistration) {
+      database.insert(dbSchema.financialCharges).values({
+        id: `fixture-${selectedProfile.key}-legacy-registration-${account.serial}`,
+        feeReference: createFeeReference(),
+        playerAccountId: account.id,
+        feeAgreementId: null,
+        type: "registration",
+        billingPeriod: null,
+        description: "SMBA registration fee",
+        originalAmountPaise: 100_000,
+        currency: "INR",
+        dueDate: SCHEDULE_START,
+        lifecycle: "issued",
+        recordRevision: 0,
+        issuedByAccountId: COACH_ID,
+        issuedAt: now,
+      }).run()
+    }
   })
 
   financeService.prepareMonthlyCharges({
@@ -1182,11 +1317,15 @@ async function seedFinancials(target: string) {
     select p.id as paymentId, pa.id as allocationId
     from payments p
     join payment_allocations pa on pa.payment_id = p.id
+    join financial_charges c on c.id = pa.charge_id
     join academy_id_allocations x on x.account_id = p.player_account_id
     where p.idempotency_key like ? and p.lifecycle = 'recorded'
-    order by x.serial
+      and c.type = 'monthly_training' and c.billing_period = ?
+      and c.fee_agreement_id is not null
+      and pa.amount_paise = c.original_amount_paise
+    order by x.serial desc
     limit 2
-  `).all(`${prefix}.payment.2026-08.%`) as Array<{
+  `).all(`${prefix}.payment.2026-08.%`, CURRENT_FEE_PERIOD) as Array<{
     allocationId: string
     paymentId: string
   }>
@@ -1259,7 +1398,10 @@ async function seedFinancials(target: string) {
     // Both source receipts begin at revision zero. Reusing the original token
     // is required for an identical idempotent command on later seed passes.
     expectedPaymentRevision: 0,
+    expectedChargeRevision: 1,
+    expectedAgreementRevision: 0,
     amountPaise: index === 0 ? 50_000 : 25_000,
+    withdrawalEffectiveOn: FINANCE_REFERENCE_DATE,
     refundedOn: FINANCE_REFERENCE_DATE,
     method: index === 0 ? "upi" : "cash",
     externalReference: index === 0 ? `${selectedProfile.key.toUpperCase()}-REFUND` : undefined,
@@ -1912,6 +2054,29 @@ function verify(target: string, expectedStage?: Stage) {
           `Report mix must contain ${expectedReports} records and ${expectedPublications} publications.`,
         )
       }
+      if (selectedProfile.key === "demo") {
+        const representativeMonths = db.prepare(`
+          select distinct report.month
+          from monthly_reports report
+          join report_publications publication on publication.report_id = report.id
+          where report.account_id = (
+            select account.id
+            from accounts account
+            join academy_id_allocations allocation on allocation.account_id = account.id
+            where account.role = 'player'
+            order by allocation.serial
+            limit 1
+          )
+          order by report.month desc
+        `).all().map((row) => (row as { month: string }).month)
+        const expectedMonths = [
+          REPORT_MONTH,
+          ...representativeReportHistory.map((report) => report.month),
+        ].sort((first, second) => second.localeCompare(first))
+        if (JSON.stringify(representativeMonths) !== JSON.stringify(expectedMonths)) {
+          problems.push("Demo representative player must retain five published report months.")
+        }
+      }
       const multiRevisionReports = db.prepare(`
         select count(*) as count
         from (
@@ -2028,7 +2193,15 @@ function verify(target: string, expectedStage?: Stage) {
           (select count(*) from concession_applications where reversed_at is null) as activeApplications,
           (select count(*) from concession_applications where reversed_at is not null) as reversedApplications,
           (select count(*) from fee_agreements where status = 'active') as activeAgreements,
-          (select count(*) from fee_agreements where status = 'ended') as endedAgreements
+          (select count(*) from fee_agreements where status = 'ended') as endedAgreements,
+          (select count(distinct player_account_id) from refunds
+            where purpose = 'mid_term_withdrawal') as withdrawalPlayers,
+          (select count(*) from refunds
+            where purpose = 'mid_term_withdrawal'
+              and withdrawal_effective_on is not null
+              and charge_adjustment_id is not null) as linkedWithdrawalRefunds,
+          (select count(*) from charge_adjustments
+            where kind = 'withdrawal_credit') as withdrawalCredits
       `).get() as {
         activeAgreements: number
         activeApplications: number
@@ -2038,6 +2211,9 @@ function verify(target: string, expectedStage?: Stage) {
         reversedApplications: number
         reversedConcessions: number
         reversedRefunds: number
+        linkedWithdrawalRefunds: number
+        withdrawalCredits: number
+        withdrawalPlayers: number
       }
       if (financeLifecycle.recordedRefunds < 1 || financeLifecycle.reversedRefunds < 1) {
         problems.push("Refund coverage must contain one recorded and one reversed Refund.")
@@ -2048,9 +2224,14 @@ function verify(target: string, expectedStage?: Stage) {
         || financeLifecycle.reversedApplications < 1) {
         problems.push("Concession coverage must contain active and reversed lifecycle examples.")
       }
-      if (financeLifecycle.activeAgreements !== financePlayerCount
-        || financeLifecycle.endedAgreements < 1) {
-        problems.push("Fee Plan coverage must preserve current plans plus one ended-plan history row.")
+      if (financeLifecycle.linkedWithdrawalRefunds !== 2
+        || financeLifecycle.withdrawalCredits !== 2) {
+        problems.push("Withdrawal Refunds must retain their dates and linked unused-training credits.")
+      }
+      if (financeLifecycle.activeAgreements
+          !== financePlayerCount - financeLifecycle.withdrawalPlayers
+        || financeLifecycle.endedAgreements < financeLifecycle.withdrawalPlayers + 1) {
+        problems.push("Fee Plan coverage must reflect withdrawal closures plus restarted-plan history.")
       }
       const expectedPaid = selectedProfile.key === "stress" ? 55
         : selectedProfile.key === "demo" ? 20 : 12

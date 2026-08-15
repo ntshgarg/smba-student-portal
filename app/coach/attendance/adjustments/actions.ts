@@ -40,9 +40,9 @@ function revalidateAttendanceSurfaces() {
 }
 
 export async function publishAttendanceAdjustmentAction(input: {
+  completionOccurrenceId: string
   playerId: string
   sourceOccurrenceId: string
-  completedOn: string
   reason?: string
 }) {
   const coach = await requireCoach()

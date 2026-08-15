@@ -107,8 +107,8 @@ describe("regression fixture repeatability", () => {
       stage: "default",
       schema: {
         current: true,
-        latestMigrationTag: "0016_registration_request_idempotency",
-        migrationCount: 17,
+        latestMigrationTag: "0019_attendance_evidence_review_cleanup",
+        migrationCount: 20,
         missingColumns: [],
         missingTables: [],
       },
@@ -429,11 +429,11 @@ describe("regression fixture repeatability", () => {
   }, 120_000)
 
   it.each([
-    ["demo", 40, 2, 3, 40],
-    ["edge", 32, 3, 3, 41],
+    ["demo", 40, 2, 3, 40, 10, 9],
+    ["edge", 32, 3, 3, 41, 10, 7],
   ] as const)(
     "builds a deterministic %s profile with staff and supported exceptions",
-    (profile, players, pending, coachProfiles, staffAttendance) => {
+    (profile, players, pending, coachProfiles, staffAttendance, reports, publications) => {
       const firstDatabase = path.join(temporaryDirectory, `${profile}-first.db`)
       const secondDatabase = path.join(temporaryDirectory, `${profile}-second.db`)
       prepareAndLoad(firstDatabase, profile)
@@ -453,9 +453,34 @@ describe("regression fixture repeatability", () => {
           coachProfiles,
           pending,
           players,
+          publications,
+          reports,
           staffAttendance,
         },
       })
+
+      if (profile === "demo") {
+        const db = openFixture(firstDatabase)
+        try {
+          const months = db.prepare(`
+            select distinct report.month
+            from monthly_reports report
+            join report_publications publication on publication.report_id = report.id
+            join academy_id_allocations allocation on allocation.account_id = report.account_id
+            where allocation.serial = 4
+            order by report.month desc
+          `).all().map((row) => (row as { month: string }).month)
+          expect(months).toEqual([
+            "2026-07",
+            "2026-06",
+            "2026-05",
+            "2026-04",
+            "2026-03",
+          ])
+        } finally {
+          db.close()
+        }
+      }
       expect(normalizedVerification(second)).toEqual(normalizedVerification(first))
     },
     120_000,

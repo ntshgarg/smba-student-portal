@@ -141,6 +141,8 @@ describe("Financials Rapid Desk focused reads", () => {
     })
     createCharge("rapid-settled", settledAgreement, "PAIDMONTH", { settled: true })
 
+    createCharge("rapid-no-plan", "", "NOPLANREG", { type: "registration" })
+
     const futureAgreement = createAgreement("rapid-future")
     createCharge("rapid-future", futureAgreement, "FUTUREREG", {
       settled: true,
@@ -164,6 +166,7 @@ describe("Financials Rapid Desk focused reads", () => {
     expect(outstanding.scope).toBe("outstanding")
     expect(outstanding.players.map((player) => player.playerId)).toEqual([
       "rapid-due",
+      "rapid-no-plan",
     ])
     expect(outstanding.players[0]?.outstandingPaise).toBe(400_000)
     expect(outstanding.players[0]).toMatchObject({
@@ -183,7 +186,8 @@ describe("Financials Rapid Desk focused reads", () => {
     ])
     expect(all.players.find((player) => player.playerId === "rapid-no-plan")).toMatchObject({
       hasActiveFeePlan: false,
-      paymentEligible: false,
+      paymentEligible: true,
+      outstandingPaise: 1_000,
     })
     expect(all.players.find((player) => player.playerId === "rapid-settled")).toMatchObject({
       hasActiveFeePlan: true,
@@ -210,6 +214,7 @@ describe("Financials Rapid Desk focused reads", () => {
     }, { coachId, database, now })
     expect(settled.players.map((player) => player.playerId)).toEqual([
       "rapid-due",
+      "rapid-no-plan",
     ])
     expect(settled.selectedLedger).toBeNull()
 
@@ -238,7 +243,10 @@ describe("Financials Rapid Desk focused reads", () => {
       playerId: "rapid-no-plan",
       scope: "all",
     }, { coachId, database, now })
-    expect(noPlan.selectedLedger).toBeNull()
+    expect(noPlan.selectedLedger).toMatchObject({
+      playerId: "rapid-no-plan",
+      currentBalancePaise: 1_000,
+    })
     expect(finance.getCoachFinancePlayerRecord("rapid-due", {
       coachId,
       database,
@@ -246,7 +254,7 @@ describe("Financials Rapid Desk focused reads", () => {
     })?.playerId).toBe("rapid-due")
   })
 
-  it("settles ended-plan debt while preserving exact retries and rejecting no-plan players", () => {
+  it("settles ended-plan debt and registration-only debt while preserving exact retries", () => {
     createPlayer("rapid-plan-guard", "Esha Plan Guard", 5_005)
     const agreementId = createAgreement("rapid-plan-guard")
     createCharge("rapid-plan-guard", agreementId, "GUARDMONTH")
@@ -306,12 +314,24 @@ describe("Financials Rapid Desk focused reads", () => {
       playerId: "rapid-plan-guard",
       currentBalancePaise: 200_000,
     })
-    expect(() => finance.previewPaymentAllocations({
+    const registrationPreview = finance.previewPaymentAllocations({
       playerId: "rapid-no-plan",
-      amountPaise: 100_000,
-    }, { coachId, database, now })).toThrow(expect.objectContaining({
-      code: "SETUP_REQUIRED",
-    }))
+      amountPaise: 1_000,
+    }, { coachId, database, now })
+    expect(registrationPreview.allocations).toEqual([
+      expect.objectContaining({ amountPaise: 1_000 }),
+    ])
+    expect(finance.recordAllocatedPayment({
+      playerId: "rapid-no-plan",
+      amountPaise: 1_000,
+      receivedOn: "2026-08-20",
+      method: "cash",
+      allocations: registrationPreview.allocations,
+      mutationId: "00000000-0000-4000-8000-000000005008",
+    }, { coachId, createId, database, now })).toMatchObject({
+      reused: false,
+      charges: [expect.objectContaining({ status: "paid", outstandingPaise: 0 })],
+    })
   })
 
   it("does not collect future-prepared monthly charges", () => {

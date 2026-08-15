@@ -35,7 +35,12 @@ import {
   formatDateKey,
   formatSessionLabelFromInstant,
 } from "@/lib/format"
-import { calendarWindowForMonth, enumerateDateKeys } from "@/lib/sessions/domain"
+import {
+  assignmentCoversOccurrence,
+  calendarWindowForMonth,
+  enumerateDateKeys,
+  playerWasEnrolledForOccurrence,
+} from "@/lib/sessions/domain"
 import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
 
 const MAX_REASON_LENGTH = 160
@@ -103,6 +108,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     attendanceRecords,
     players,
     publishAttendanceAdjustment,
+    sessionAssignments,
     sessionOccurrences,
     sessionSeries,
     voidAttendanceAdjustment,
@@ -116,7 +122,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     validInitialPlayerId ?? "",
   )
   const [sourceOccurrenceId, setSourceOccurrenceId] = useState("")
-  const [completedOn, setCompletedOn] = useState("")
+  const [completionOccurrenceId, setCompletionOccurrenceId] = useState("")
   const [reason, setReason] = useState("")
   const [isReviewing, setIsReviewing] = useState(false)
   const [sourceMonth, setSourceMonth] = useState(() => getIndiaDateKey().slice(0, 7))
@@ -136,7 +142,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const feedbackId = "attendance-adjustment-feedback"
   const [todayKey] = useState(() => getIndiaDateKey())
   const [referenceInstant] = useState(() => Date.now())
-  const draftIsDirty = Boolean(sourceOccurrenceId || completedOn || reason.trim())
+  const draftIsDirty = Boolean(sourceOccurrenceId || completionOccurrenceId || reason.trim())
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: draftIsDirty,
     message: "Leave this adjustment and discard the draft?",
@@ -173,6 +179,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     () => new Map(players.map((player) => [player.member.id, player])),
     [players],
   )
+  const selectedPlayer = selectedPlayerId ? playerById.get(selectedPlayerId) : undefined
   const activeAdjustments = useMemo(
     () => attendanceAdjustments.filter((item) => !item.voidedAt),
     [attendanceAdjustments],
@@ -238,26 +245,65 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const sourceCalendarLeadingDays = (
     new Date(`${sourceCalendarWindow.from}T00:00:00.000Z`).getUTCDay() + 6
   ) % 7
+  const sourceCalendarTrailingDays = (
+    7 - ((sourceCalendarLeadingDays + sourceCalendarDates.length) % 7)
+  ) % 7
   const activeSourceDate = selectedSourceDate || sourceOccurrence?.occurrenceDate || ""
   const selectedSourceDateOptions = activeSourceDate
     ? sourceOptionsByDate.get(activeSourceDate) ?? []
     : []
   const completionOptions = useMemo(() => {
-    if (!sourceOccurrence) return []
+    if (!sourceOccurrence || !selectedPlayer) return []
     const min = shiftDateKey(sourceOccurrence.occurrenceDate, 1)
     const max = [shiftDateKey(sourceOccurrence.occurrenceDate, 14), todayKey].sort()[0]
+    const playerAssignments = sessionAssignments.filter(
+      (assignment) => assignment.playerId === selectedPlayerId,
+    )
+    const usedCompletionIds = new Set(activeAdjustments
+      .filter((adjustment) => adjustment.playerId === selectedPlayerId)
+      .flatMap((adjustment) => adjustment.completionOccurrenceId
+        ? [adjustment.completionOccurrenceId]
+        : []))
+    const legacyCompletionDates = new Set(activeAdjustments
+      .filter((adjustment) => (
+        adjustment.playerId === selectedPlayerId
+        && !adjustment.completionOccurrenceId
+      ))
+      .map((adjustment) => adjustment.completedOn))
 
-    return [...new Set(sessionOccurrences
+    return sessionOccurrences
       .filter((occurrence) => (
         occurrence.status === "scheduled"
         && occurrence.occurrenceDate >= min
         && occurrence.occurrenceDate <= max
         && !occurrenceIsUpcoming(occurrence, referenceInstant)
+        && attendanceRecords[occurrence.id]?.[selectedPlayerId] === "present"
+        && !usedCompletionIds.has(occurrence.id)
+        && !legacyCompletionDates.has(occurrence.occurrenceDate)
+        && playerWasEnrolledForOccurrence(selectedPlayer.member.joinedAt, occurrence)
+        && playerAssignments.some((assignment) => (
+          assignmentCoversOccurrence(assignment, occurrence)
+        ))
       ))
-      .map((occurrence) => occurrence.occurrenceDate))]
-      .sort()
-  }, [referenceInstant, sessionOccurrences, sourceOccurrence, todayKey])
-  const selectedPlayer = selectedPlayerId ? playerById.get(selectedPlayerId) : undefined
+      .sort((first, second) => (
+        first.startsAt.localeCompare(second.startsAt)
+        || first.id.localeCompare(second.id)
+      ))
+  }, [
+    activeAdjustments,
+    attendanceRecords,
+    referenceInstant,
+    selectedPlayer,
+    selectedPlayerId,
+    sessionAssignments,
+    sessionOccurrences,
+    sourceOccurrence,
+    todayKey,
+  ])
+  const completionOccurrence = completionOccurrenceId
+    ? occurrenceById.get(completionOccurrenceId)
+    : undefined
+  const completedOn = completionOccurrence?.occurrenceDate ?? ""
   const history = [...attendanceAdjustments]
     .filter((item) => !selectedPlayerId || item.playerId === selectedPlayerId)
     .sort((first, second) => (
@@ -285,7 +331,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
       const target = sourceTarget ?? playerSelectRef.current
       target?.focus()
     }
-    if (feedback.field === "completedOn") {
+    if (feedback.field === "completionOccurrenceId") {
       completionChoiceRef.current
         ?.querySelector<HTMLButtonElement>("button[aria-pressed='true'], button:not(:disabled)")
         ?.focus()
@@ -307,7 +353,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 
   function resetDraft() {
     setSourceOccurrenceId("")
-    setCompletedOn("")
+    setCompletionOccurrenceId("")
     setReason("")
     setIsReviewing(false)
     setSelectedSourceDate("")
@@ -325,7 +371,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     const occurrence = occurrenceById.get(occurrenceId)
     setSourceOccurrenceId(occurrenceId)
     setSelectedSourceDate(occurrence?.occurrenceDate ?? "")
-    setCompletedOn("")
+    setCompletionOccurrenceId("")
     setReason("")
     setIsReviewing(false)
     setFeedback(null)
@@ -334,7 +380,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   function clearSourceSelection() {
     setSourceOccurrenceId("")
     setSelectedSourceDate("")
-    setCompletedOn("")
+    setCompletionOccurrenceId("")
     setReason("")
     setIsReviewing(false)
     setFeedback(null)
@@ -368,7 +414,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 
     if (!occurrences.some((occurrence) => occurrence.id === sourceOccurrenceId)) {
       setSourceOccurrenceId("")
-      setCompletedOn("")
+      setCompletionOccurrenceId("")
       setReason("")
       setIsReviewing(false)
     }
@@ -381,12 +427,12 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   }
 
   async function publishAdjustment() {
-    if (!selectedPlayerId || !sourceOccurrenceId || !completedOn || pendingAction) return
+    if (!selectedPlayerId || !sourceOccurrenceId || !completionOccurrenceId || pendingAction) return
     setPendingAction("publish")
     setFeedback(null)
     try {
       const result = await publishAttendanceAdjustment({
-        completedOn,
+        completionOccurrenceId,
         playerId: selectedPlayerId,
         reason,
         sourceOccurrenceId,
@@ -446,12 +492,11 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     >
       <div className="coach-adjustments-grid">
         <section className="coach-adjustment-editor" aria-labelledby="makeup-editor-title">
-          <div className="coach-adjustment-editor-heading">
-            <div>
-              <span>{isReviewing ? "Review adjustment" : "New adjustment"}</span>
-              <h2 className="sr-only" id="makeup-editor-title">New attendance adjustment</h2>
-            </div>
-          </div>
+          <h2 className="sr-only" id="makeup-editor-title">Attendance adjustment editor</h2>
+
+          {isReviewing ? (
+            <p className="coach-adjustment-review-heading">Review adjustment</p>
+          ) : null}
 
           {feedback ? (
             <InlineNotice
@@ -484,7 +529,12 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
               </label>
 
               {selectedPlayer ? (
-                <fieldset ref={sourceChoiceRef} className="coach-adjustment-choice-group" aria-invalid={feedback?.field === "sourceOccurrenceId" || undefined} aria-describedby={feedback?.field === "sourceOccurrenceId" ? feedbackId : undefined}>
+                <fieldset
+                  ref={sourceChoiceRef}
+                  className={`coach-adjustment-choice-group${sourceOptions.length ? "" : " is-empty"}`}
+                  aria-invalid={feedback?.field === "sourceOccurrenceId" || undefined}
+                  aria-describedby={feedback?.field === "sourceOccurrenceId" ? feedbackId : undefined}
+                >
                   <legend><strong>Missed session</strong><small>2 of 3</small></legend>
                   {sourceOptions.length ? (
                     <div className="coach-adjustment-missed-session-picker">
@@ -498,18 +548,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                           >
                             <ChevronLeft aria-hidden="true" />
                           </button>
-                          <label>
-                            <span className="sr-only">Choose missed-session month</span>
-                            <select
-                              aria-label="Choose missed-session month"
-                              value={effectiveSourceMonth}
-                              onChange={(event) => chooseSourceMonth(event.target.value)}
-                            >
-                              {sourceMonths.map((monthKey) => (
-                                <option key={monthKey} value={monthKey}>{displayMonth(monthKey)}</option>
-                              ))}
-                            </select>
-                          </label>
+                          <strong aria-live="polite">{displayMonth(effectiveSourceMonth)}</strong>
                           <button
                             type="button"
                             aria-label="Show next month with missed sessions"
@@ -553,10 +592,13 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                                 aria-pressed={isSelected}
                                 onClick={() => chooseSourceDate(dateKey)}
                               >
-                                {day}
+                                <span aria-hidden="true">{day}</span>
                               </button>
                             )
                           })}
+                          {Array.from({ length: sourceCalendarTrailingDays }, (_, index) => (
+                            <i key={`missed-calendar-trailing-empty-${index}`} aria-hidden="true" />
+                          ))}
                         </div>
                       </div>
 
@@ -587,7 +629,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                       ) : null}
                     </div>
                   ) : (
-                    <div className="coach-adjustment-empty-step">
+                    <div className="coach-adjustment-empty-step is-compact">
                       <CalendarDays aria-hidden="true" />
                       <p>{selectedPlayer.member.fullName} has no unreconciled absences.</p>
                     </div>
@@ -596,33 +638,38 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
               ) : null}
 
               {sourceOccurrence ? (
-                <fieldset ref={completionChoiceRef} className="coach-adjustment-choice-group" aria-invalid={feedback?.field === "completedOn" || undefined} aria-describedby={feedback?.field === "completedOn" ? feedbackId : undefined}>
+                <fieldset ref={completionChoiceRef} className="coach-adjustment-choice-group" aria-invalid={feedback?.field === "completionOccurrenceId" || undefined} aria-describedby={feedback?.field === "completionOccurrenceId" ? feedbackId : undefined}>
                   <legend><strong>Completed on</strong><small>3 of 3</small></legend>
                   <p className="coach-adjustment-helper">
-                    Choose the academy training date when the make-up was completed.
+                    Choose the exact attended session where the make-up was completed.
                   </p>
                   {completionOptions.length ? (
-                    <div className="coach-adjustment-date-grid">
-                      {completionOptions.map((dateKey) => (
+                    <div className="coach-adjustment-choice-list">
+                      {completionOptions.map((occurrence) => (
                         <button
-                          key={dateKey}
+                          key={occurrence.id}
                           type="button"
-                          className={dateKey === completedOn ? "is-active" : undefined}
-                          aria-pressed={dateKey === completedOn}
+                          className={occurrence.id === completionOccurrenceId ? "is-active" : undefined}
+                          aria-pressed={occurrence.id === completionOccurrenceId}
                           onClick={() => {
-                            setCompletedOn(dateKey)
+                            setCompletionOccurrenceId(occurrence.id)
                             setFeedback(null)
                           }}
                         >
-                          <span>{formatDateKey(dateKey, { day: undefined, month: undefined, weekday: "short" })}</span>
-                          <strong>{formatDateKey(dateKey, { day: "numeric", month: "short", weekday: undefined })}</strong>
+                          <span>
+                            <strong>{displayDate(occurrence.occurrenceDate)}</strong>
+                            <small>{sessionLabel(occurrence.id)} · {occurrence.venue}</small>
+                          </span>
+                          {occurrence.id === completionOccurrenceId
+                            ? <Check aria-hidden="true" />
+                            : <ArrowRight aria-hidden="true" />}
                         </button>
                       ))}
                     </div>
                   ) : (
                     <div className="coach-adjustment-empty-step is-warning">
                       <CircleAlert aria-hidden="true" />
-                      <p>No eligible academy training dates are available in the 14-day window.</p>
+                      <p>No attended sessions are available in the 14-day window.</p>
                     </div>
                   )}
 
@@ -651,7 +698,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   <button
                     className="is-primary"
                     type="button"
-                    disabled={!completedOn}
+                    disabled={!completionOccurrenceId}
                     onClick={() => setIsReviewing(true)}
                   >
                     Review adjustment <ArrowRight aria-hidden="true" />
@@ -667,11 +714,13 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   <strong>{displayDate(sourceOccurrence.occurrenceDate)}</strong>
                   <small>{sessionLabel(sourceOccurrence.id)}</small>
                 </div>
-                <ArrowRight aria-hidden="true" />
+                <span className="coach-adjustment-transfer-arrow" aria-hidden="true">
+                  <ArrowRight />
+                </span>
                 <div>
-                  <span>Make-up completed</span>
+                  <span>Completed on</span>
                   <strong>{displayDate(completedOn)}</strong>
-                  <small>Academy training day</small>
+                  <small>{completionOccurrence ? sessionLabel(completionOccurrence.id) : "Attended session"}</small>
                 </div>
               </div>
 
@@ -692,7 +741,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   <ArrowLeft aria-hidden="true" /> Edit draft
                 </button>
                 <button className="is-primary" type="button" disabled={pendingAction !== null} onClick={() => void publishAdjustment()}>
-                  <Check aria-hidden="true" /> {pendingAction === "publish" ? "Publishing…" : "Publish make-up"}
+                  <Check aria-hidden="true" /> {pendingAction === "publish" ? "Publishing…" : "Publish reschedule"}
                 </button>
               </div>
             </div>
@@ -762,9 +811,19 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                             {" → "}{displayDate(adjustment.completedOn)}
                           </small>
                         </span>
-                        <em>{isVoided ? "Voided" : requiresReview ? "Requires review" : "Published"}</em>
                         <ChevronDown aria-hidden="true" />
                       </button>
+
+                      <div className="coach-adjustment-history-row-actions">
+                        <span
+                          className={[
+                            "coach-adjustment-history-status",
+                            isVoided ? "is-voided" : requiresReview ? "requires-review" : "is-published",
+                          ].join(" ")}
+                        >
+                          {isVoided ? "Voided" : requiresReview ? "Requires review" : "Published"}
+                        </span>
+                      </div>
 
                       {isExpanded ? (
                         <div id={`adjustment-details-${adjustment.id}`} className="coach-adjustment-history-details">
@@ -782,11 +841,15 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                             {adjustment.reason ? <div className="is-wide"><dt>Reason</dt><dd>{adjustment.reason}</dd></div> : null}
                           </dl>
                           {!isVoided ? (
-                            <div className="coach-adjustment-history-actions">
-                              <button type="button" disabled={pendingAction !== null} onClick={() => void voidAdjustment(adjustment)}>
-                                <RotateCcw aria-hidden="true" /> {pendingAction === adjustment.id ? "Voiding…" : "Void adjustment"}
-                              </button>
-                            </div>
+                            <button
+                              className="coach-adjustment-history-void"
+                              type="button"
+                              disabled={pendingAction !== null}
+                              onClick={() => void voidAdjustment(adjustment)}
+                            >
+                              <RotateCcw aria-hidden="true" />
+                              {pendingAction === adjustment.id ? "Voiding…" : "Void adjustment"}
+                            </button>
                           ) : (
                             <p className="coach-adjustment-voided-note">
                               Voided {adjustment.voidedAt ? adjustmentTimestamp(adjustment.voidedAt) : ""}. The original absence remains in the register.

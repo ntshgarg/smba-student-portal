@@ -47,6 +47,7 @@ export type SessionAttendanceChange = {
   playerId: string
   occurrenceId: string
   choice: SessionAttendanceChoice | "cleared"
+  expectedChoice: SessionAttendanceChoice | "cleared"
 }
 
 export type SessionAttendanceRecords = Record<

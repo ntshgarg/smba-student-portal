@@ -78,6 +78,7 @@ function revalidateFinance() {
   revalidatePath("/coach/financials/record")
   revalidatePath("/coach/financials/records")
   revalidatePath("/coach/financials/players/[playerId]", "page")
+  revalidatePath("/coach/onboarding")
   revalidatePath("/player")
   revalidatePath("/player/financials")
 }

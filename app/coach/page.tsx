@@ -11,14 +11,15 @@ import {
 } from "@/components/coach/junior-coach-attendance-card"
 import { JuniorCoachWelcomeHero } from "@/components/coach/junior-coach-welcome-hero"
 import { MembersCard } from "@/components/coach/members-card"
+import { PlayerOnboardingCard } from "@/components/coach/player-onboarding-card"
 import { ReportsCard } from "@/components/coach/reports-card"
 import { SessionsCard } from "@/components/coach/sessions-card"
 import { requireCoachPage } from "@/lib/auth/current-coach"
-import { listPendingRegistrations } from "@/lib/auth/account-service"
 import { listCoachAnnouncements } from "@/lib/announcements/queries"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   getCoachSessionSnapshot,
+  getPlayerOnboardingSummary,
   listOperationalPlayerRecords,
   listCoachMonthlyReports,
 } from "@/lib/coach/database"
@@ -190,7 +191,7 @@ export default async function CoachDashboardPage({
       report.playerId === playerId && report.month === reportMonth
     ))) === "published"
   )).length
-  const pendingRegistrationCount = listPendingRegistrations().length
+  const onboardingSummary = getPlayerOnboardingSummary(today)
 
   return (
     <>
@@ -214,6 +215,7 @@ export default async function CoachDashboardPage({
       />
       <CoachDashboardStack id="attendance">
         <AttendanceCard scheduleCount={series.length} />
+        <PlayerOnboardingCard summary={onboardingSummary} />
         <SessionsCard
           nextSessionLabel={nextSessionLabel}
           todaySessionCount={todaySessions.length}
@@ -231,10 +233,7 @@ export default async function CoachDashboardPage({
           preparation={finance.preparation}
         />
         <AnnouncementCard activeCount={activeAnnouncementCount} />
-        <MembersCard
-          memberCount={playerRecords.members.length}
-          pendingRegistrationCount={pendingRegistrationCount}
-        />
+        <MembersCard memberCount={playerRecords.members.length} />
       </CoachDashboardStack>
     </>
   )

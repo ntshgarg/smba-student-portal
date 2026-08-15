@@ -1,0 +1,63 @@
+"use client"
+
+import {
+  CoachDashboardAction,
+  CoachDashboardActions,
+  CoachDashboardCard,
+  CoachDashboardSummary,
+} from "@/components/coach/dashboard-card"
+import type { PlayerOnboardingSummary } from "@/lib/coach/onboarding"
+
+import styles from "./player-onboarding-card.module.css"
+
+const stages = [
+  { key: "newRequests", label: "New requests" },
+  { key: "assessment", label: "Assessment" },
+  { key: "session", label: "Session" },
+  { key: "feePlan", label: "Fee Plan" },
+] as const
+
+function displayCount(value: number) {
+  return String(value).padStart(2, "0")
+}
+
+export function PlayerOnboardingCard({
+  summary,
+}: {
+  summary: PlayerOnboardingSummary
+}) {
+  const playerLabel = summary.total === 1 ? "player needs" : "players need"
+
+  return (
+    <CoachDashboardCard
+      area="onboarding"
+      id="onboarding"
+      status={summary.total ? `${summary.total} in progress` : "All complete"}
+      title="Player onboarding"
+      titleId="player-onboarding-card-title"
+    >
+      <div className={styles.layout}>
+        <CoachDashboardSummary
+          detail="Move each player through approval, assessment, session and Fee Plan."
+        >
+          {summary.total ? `${summary.total} ${playerLabel} a next step` : "Every player is onboarded"}
+        </CoachDashboardSummary>
+
+        <dl className={styles.stages} aria-label="Player onboarding stages">
+          {stages.map(({ key, label }) => (
+            <div key={key} className={styles.stage}>
+              <dt>{label}</dt>
+              <dd aria-label={`${summary[key]} ${label.toLowerCase()}`}>
+                {displayCount(summary[key])}
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <CoachDashboardActions ariaLabel="Player onboarding actions">
+          <CoachDashboardAction href="/coach/onboarding">Open onboarding</CoachDashboardAction>
+        </CoachDashboardActions>
+      </div>
+    </CoachDashboardCard>
+  )
+}

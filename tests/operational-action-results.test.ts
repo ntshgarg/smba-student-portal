@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   cancelSessionOccurrence: vi.fn(),
   createSessionSeriesRecords: vi.fn(),
   endSessionAssignment: vi.fn(),
+  endSessionSeriesRecords: vi.fn(),
   findScheduledOccurrence: vi.fn(),
   getCoachCalendarMonthSessionSnapshot: vi.fn(),
   getCoachSessionSnapshot: vi.fn(),
@@ -62,12 +63,14 @@ vi.mock("@/lib/sessions/service", () => ({
   cancelSessionOccurrence: mocks.cancelSessionOccurrence,
   createSessionSeriesRecords: mocks.createSessionSeriesRecords,
   endSessionAssignment: mocks.endSessionAssignment,
+  endSessionSeriesRecords: mocks.endSessionSeriesRecords,
   replaceSessionOccurrence: mocks.replaceSessionOccurrence,
   saveSessionAttendanceRecords: mocks.saveSessionAttendanceRecords,
 }))
 
 import {
   approveRegistrationAction,
+  createSessionSeriesAction,
   replaceSessionOccurrenceAction,
 } from "@/app/coach/actions"
 import { publishAttendanceAdjustmentAction } from "@/app/coach/attendance/adjustments/actions"
@@ -109,6 +112,33 @@ describe("production-safe operational action results", () => {
       code: "INVALID_INPUT",
       field: "durationMinutes",
       message: "Choose a valid session duration.",
+    })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("returns crafted schedule category failures as structured action data", async () => {
+    mocks.createSessionSeriesRecords.mockImplementation(() => {
+      throw new OperationalActionError(
+        "INVALID_INPUT",
+        "Choose a valid training programme.",
+        "programme",
+      )
+    })
+
+    await expect(createSessionSeriesAction({
+      programme: "Elite",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: "2026-08-17",
+      endsOn: "2026-08-31",
+      weekdays: [1],
+      startTime: "06:00",
+      durationMinutes: 60,
+    } as never)).resolves.toEqual({
+      ok: false,
+      code: "INVALID_INPUT",
+      field: "programme",
+      message: "Choose a valid training programme.",
     })
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
   })
@@ -168,9 +198,9 @@ describe("production-safe operational action results", () => {
       )
     })
     await expect(publishAttendanceAdjustmentAction({
+      completionOccurrenceId: "completion-occurrence-1",
       playerId: "player-1",
       sourceOccurrenceId: "occurrence-1",
-      completedOn: "2026-08-12",
     })).resolves.toMatchObject({
       ok: false,
       code: "CONFLICT",
@@ -214,6 +244,8 @@ describe("replacement field accessibility", () => {
     expect(schedules).toContain("assignmentDateRef.current?.focus()")
     expect(adjustments).toContain("field: result.field")
     expect(adjustments).toContain('feedback.field === "sourceOccurrenceId"')
-    expect(adjustments).toContain('aria-invalid={feedback?.field === "completedOn" || undefined}')
+    expect(adjustments).toContain('aria-invalid={feedback?.field === "completionOccurrenceId" || undefined}')
+    expect(adjustments).toContain('attendanceRecords[occurrence.id]?.[selectedPlayerId] === "present"')
+    expect(adjustments).toContain("completionOccurrenceId,")
   })
 })

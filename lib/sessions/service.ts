@@ -4,7 +4,10 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 
 import { isValidDateKey } from "@/lib/attendance/domain"
 import { reconcileAttendanceAdjustmentReviewState } from "@/lib/attendance/adjustments"
-import { operationalActionError } from "@/lib/actions/operational-result"
+import {
+  OperationalActionError,
+  operationalActionError,
+} from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import type { SmbaDatabase } from "@/lib/db/client"
@@ -25,6 +28,7 @@ import {
   dateRangesOverlapInclusive,
   distinctAssignmentWeekdays,
   indiaLocalDateTime,
+  MAX_SCHEDULE_TERM_DAYS,
   playerWasEnrolledForOccurrence,
   sessionDisplayName,
   sessionSlotsOverlap,
@@ -42,6 +46,22 @@ import {
   academyPlanLabel,
   academyPlanRequiredWeekdayCount,
 } from "@/lib/training/academy-plans"
+
+function addCalendarDays(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function occurrenceIntervalsOverlap(
+  first: { durationMinutes: number; startsAt: Date },
+  second: { durationMinutes: number; startsAt: Date },
+) {
+  const firstStart = first.startsAt.getTime()
+  const secondStart = second.startsAt.getTime()
+  return firstStart < secondStart + second.durationMinutes * 60_000
+    && secondStart < firstStart + first.durationMinutes * 60_000
+}
 
 function assertActiveAssignmentCoverage(
   academyPlan: NonNullable<typeof playerEnrollments.$inferSelect.academyPlan>,
@@ -122,13 +142,25 @@ export function createSessionSeriesRecords({
         { startsOn: series.startsOn, endsOn: series.endsOn },
         { startsOn: input.startsOn, endsOn: input.endsOn },
       )
-      && existingRules.some((rule) => (
-        rule.seriesId === series.id
-        && rule.startTime === input.startTime
-        && rule.durationMinutes === input.durationMinutes
+      && sessionSlotsOverlap(
+        { slots: existingRules.filter((rule) => rule.seriesId === series.id) },
+        { slots },
+      )
+    ))
+    const draftDates = new Set(occurrenceDrafts.map((draft) => draft.occurrenceDate))
+    const scheduledOccurrences = existingSeriesIds.length && draftDates.size
+      ? tx.select().from(sessionOccurrences).where(and(
+          inArray(sessionOccurrences.seriesId, existingSeriesIds),
+          eq(sessionOccurrences.status, "scheduled"),
+        )).all().filter((occurrence) => draftDates.has(occurrence.occurrenceDate))
+      : []
+    const materializedConflict = occurrenceDrafts.some((draft) => (
+      scheduledOccurrences.some((occurrence) => (
+        occurrence.occurrenceDate === draft.occurrenceDate
+        && occurrenceIntervalsOverlap(draft, occurrence)
       ))
     ))
-    if (conflicts) {
+    if (conflicts || materializedConflict) {
       operationalActionError(
         "CONFLICT",
         "A schedule already uses this level, batch and time slot during the selected dates.",
@@ -193,6 +225,7 @@ export function assignSessionRecords({
   const player = database.select({
     approvalStatus: accounts.approvalStatus,
     archivedAt: accounts.archivedAt,
+    recordRevision: playerEnrollments.recordRevision,
     joinedAt: playerEnrollments.joinedAt,
     batch: playerEnrollments.batch,
     level: playerEnrollments.level,
@@ -291,58 +324,42 @@ export function assignSessionRecords({
     )
   }
 
-  const currentAssignments = database.select().from(sessionAssignments).where(and(
-    eq(sessionAssignments.accountId, playerId),
-    isNull(sessionAssignments.effectiveTo),
-  )).all()
-  if (currentAssignments.some((assignment) => assignment.seriesId === seriesId)) {
-    operationalActionError(
-      "CONFLICT",
-      "The player is already assigned to this session.",
-      "playerId",
-    )
-  }
-  const allSeries = database.select().from(sessionSeries).all()
-  const allRules = database.select().from(sessionRecurrenceRules).all()
-  const allAssignmentWeekdays = database.select().from(sessionAssignmentWeekdays).all()
-  const toDomainSeries = (row: typeof allSeries[number]) => ({
-    ...row,
-    slots: allRules.filter((rule) => rule.seriesId === row.id),
-  })
-  const targetDomainSeries = toDomainSeries(series)
-  const targetSeries = {
-    ...targetDomainSeries,
-    slots: targetDomainSeries.slots.filter((slot) => selectedWeekdays.includes(slot.weekday)),
-  }
-  const overlaps = currentAssignments.some((assignment) => {
-    const existingRow = allSeries.find((item) => item.id === assignment.seriesId)
-    if (!existingRow) return false
-    const existingDays = allAssignmentWeekdays
-      .filter((item) => item.assignmentId === assignment.id)
-      .map((item) => item.weekday)
-    const existingDomainSeries = toDomainSeries(existingRow)
-    const existingSeries = {
-      ...existingDomainSeries,
-      slots: existingDomainSeries.slots.filter((slot) => existingDays.includes(slot.weekday)),
-    }
-    const datesOverlap = dateRangesOverlapInclusive(
-      {
-        startsOn: assignment.effectiveFrom,
-        endsOn: assignment.effectiveTo ?? existingSeries.endsOn,
-      },
-      { startsOn: effectiveFrom, endsOn: targetSeries.endsOn },
-    )
-    return datesOverlap && sessionSlotsOverlap(existingSeries, targetSeries)
-  })
-  if (overlaps) {
-    operationalActionError(
-      "CONFLICT",
-      "This session overlaps another active assignment for the player.",
-      "seriesId",
-    )
-  }
-
   database.transaction((tx) => {
+    const transactionPlayer = tx.select({
+      approvalStatus: accounts.approvalStatus,
+      archivedAt: accounts.archivedAt,
+      recordRevision: playerEnrollments.recordRevision,
+      joinedAt: playerEnrollments.joinedAt,
+      batch: playerEnrollments.batch,
+      level: playerEnrollments.level,
+      academyPlan: playerEnrollments.academyPlan,
+    }).from(accounts).innerJoin(
+      playerEnrollments,
+      eq(playerEnrollments.accountId, accounts.id),
+    ).where(and(eq(accounts.id, playerId), eq(accounts.role, "player"))).get()
+    if (!transactionPlayer
+      || transactionPlayer.approvalStatus !== "approved"
+      || transactionPlayer.archivedAt) {
+      operationalActionError("NOT_FOUND", "Approved player was not found.", "playerId")
+    }
+    if (transactionPlayer.recordRevision !== player.recordRevision
+      || transactionPlayer.joinedAt.getTime() !== player.joinedAt.getTime()
+      || transactionPlayer.batch !== player.batch
+      || transactionPlayer.level !== player.level
+      || transactionPlayer.academyPlan !== player.academyPlan) {
+      operationalActionError(
+        "CONFLICT",
+        "The player changed while this assignment was being prepared. Refresh and try again.",
+        "playerId",
+      )
+    }
+    const transactionSeries = tx.select().from(sessionSeries).where(and(
+      eq(sessionSeries.id, seriesId),
+      eq(sessionSeries.status, "active"),
+    )).get()
+    if (!transactionSeries) {
+      operationalActionError("NOT_FOUND", "The selected schedule is unavailable.", "seriesId")
+    }
     const activeAssignments = tx.select().from(sessionAssignments).where(and(
       eq(sessionAssignments.accountId, playerId),
       isNull(sessionAssignments.effectiveTo),
@@ -352,6 +369,45 @@ export function assignSessionRecords({
         "CONFLICT",
         "The player is already assigned to this session.",
         "playerId",
+      )
+    }
+    const allSeries = tx.select().from(sessionSeries).all()
+    const allRules = tx.select().from(sessionRecurrenceRules).all()
+    const allAssignmentWeekdays = tx.select().from(sessionAssignmentWeekdays).all()
+    const toDomainSeries = (row: typeof allSeries[number]) => ({
+      ...row,
+      slots: allRules.filter((rule) => rule.seriesId === row.id),
+    })
+    const targetDomainSeries = toDomainSeries(transactionSeries)
+    const targetSeries = {
+      ...targetDomainSeries,
+      slots: targetDomainSeries.slots.filter((slot) => selectedWeekdays.includes(slot.weekday)),
+    }
+    const overlaps = activeAssignments.some((assignment) => {
+      const existingRow = allSeries.find((item) => item.id === assignment.seriesId)
+      if (!existingRow) return false
+      const existingDays = allAssignmentWeekdays
+        .filter((item) => item.assignmentId === assignment.id)
+        .map((item) => item.weekday)
+      const existingDomainSeries = toDomainSeries(existingRow)
+      const existingSeries = {
+        ...existingDomainSeries,
+        slots: existingDomainSeries.slots.filter((slot) => existingDays.includes(slot.weekday)),
+      }
+      const datesOverlap = dateRangesOverlapInclusive(
+        {
+          startsOn: assignment.effectiveFrom,
+          endsOn: assignment.effectiveTo ?? existingSeries.endsOn,
+        },
+        { startsOn: effectiveFrom, endsOn: targetSeries.endsOn },
+      )
+      return datesOverlap && sessionSlotsOverlap(existingSeries, targetSeries)
+    })
+    if (overlaps) {
+      operationalActionError(
+        "CONFLICT",
+        "This session overlaps another active assignment for the player.",
+        "seriesId",
       )
     }
     const activeAssignmentIds = new Set(activeAssignments.map((assignment) => assignment.id))
@@ -382,7 +438,7 @@ export function assignSessionRecords({
       status: "active",
       updatedAt: now,
     }).where(eq(playerEnrollments.accountId, playerId)).run()
-  })
+  }, { behavior: "immediate" })
 }
 
 export function endSessionAssignment({
@@ -403,6 +459,13 @@ export function endSessionAssignment({
     operationalActionError(
       "INVALID_INPUT",
       "Choose a valid assignment end date.",
+      "effectiveTo",
+    )
+  }
+  if (effectiveTo > getIndiaDateKey(now)) {
+    operationalActionError(
+      "INVALID_INPUT",
+      "Assignment end date cannot be in the future.",
       "effectiveTo",
     )
   }
@@ -455,7 +518,7 @@ export function endSessionAssignment({
       status: remaining ? "active" : "paused",
       updatedAt: now,
     }).where(eq(playerEnrollments.accountId, assignment.accountId)).run()
-  })
+  }, { behavior: "immediate" })
 }
 
 export function saveSessionAttendanceRecords({
@@ -472,9 +535,10 @@ export function saveSessionAttendanceRecords({
   referenceDate: string
 }) {
   requireHeadAdminAccess(coachId, { database })
-  if (!changes.length) return
+  if (!changes.length) return { applied: 0 }
   const unique = new Set<string>()
-  database.transaction((tx) => {
+  return database.transaction((tx) => {
+    let applied = 0
     const affectedDates = new Map<string, {
       completedOn: string
       hadOrdinaryPresence: boolean
@@ -498,6 +562,24 @@ export function saveSessionAttendanceRecords({
         )
       }
       unique.add(key)
+      if (change.choice !== "present"
+        && change.choice !== "absent"
+        && change.choice !== "cleared") {
+        operationalActionError(
+          "INVALID_INPUT",
+          "Choose a valid attendance result.",
+          "changes",
+        )
+      }
+      if (change.expectedChoice !== "present"
+        && change.expectedChoice !== "absent"
+        && change.expectedChoice !== "cleared") {
+        operationalActionError(
+          "INVALID_INPUT",
+          "Attendance is missing its original result. Refresh and try again.",
+          "changes",
+        )
+      }
       const occurrence = occurrenceById.get(change.occurrenceId)
       if (!occurrence || occurrence.status !== "scheduled") {
         operationalActionError(
@@ -514,11 +596,22 @@ export function saveSessionAttendanceRecords({
         )
       }
       const enrollment = tx.select({ joinedAt: playerEnrollments.joinedAt })
-        .from(playerEnrollments).where(eq(playerEnrollments.accountId, change.playerId)).get()
-      if (!enrollment || !playerWasEnrolledForOccurrence(
-        getIndiaDateKey(enrollment.joinedAt),
-        occurrence,
-      )) {
+        .from(playerEnrollments)
+        .innerJoin(accounts, eq(accounts.id, playerEnrollments.accountId))
+        .where(and(
+          eq(playerEnrollments.accountId, change.playerId),
+          eq(accounts.role, "player"),
+          eq(accounts.approvalStatus, "approved"),
+          isNull(accounts.archivedAt),
+        )).get()
+      if (!enrollment) {
+        operationalActionError(
+          "NOT_FOUND",
+          "The selected player is unavailable.",
+          "changes",
+        )
+      }
+      if (!playerWasEnrolledForOccurrence(getIndiaDateKey(enrollment.joinedAt), occurrence)) {
         operationalActionError(
           "BUSINESS_RULE",
           "The player was not enrolled for this session.",
@@ -546,6 +639,21 @@ export function saveSessionAttendanceRecords({
         operationalActionError(
           "BUSINESS_RULE",
           "The player was not assigned to this session day.",
+          "changes",
+        )
+      }
+
+      const stored = tx.select({ choice: sessionAttendanceRecords.choice })
+        .from(sessionAttendanceRecords).where(and(
+          eq(sessionAttendanceRecords.accountId, change.playerId),
+          eq(sessionAttendanceRecords.occurrenceId, change.occurrenceId),
+        )).get()
+      const currentChoice: SessionAttendanceChange["choice"] = stored?.choice ?? "cleared"
+      if (currentChoice === change.choice) return
+      if (currentChoice !== change.expectedChoice) {
+        operationalActionError(
+          "CONFLICT",
+          "Player attendance changed since this page was opened. Refresh and try again.",
           "changes",
         )
       }
@@ -595,6 +703,7 @@ export function saveSessionAttendanceRecords({
         target: [sessionAttendanceRecords.accountId, sessionAttendanceRecords.occurrenceId],
         set: { choice: change.choice, markedByAccountId: coachId, updatedAt: now },
       }).run()
+      applied += 1
     })
 
     affectedDates.forEach(({ completedOn, hadOrdinaryPresence, playerId }) => {
@@ -606,7 +715,8 @@ export function saveSessionAttendanceRecords({
         now,
       })
     })
-  })
+    return { applied }
+  }, { behavior: "immediate" })
 }
 
 export function cancelSessionOccurrence({
@@ -623,20 +733,59 @@ export function cancelSessionOccurrence({
   referenceDate: string
 }) {
   requireHeadAdminAccess(coachId, { database })
-  const occurrence = database.select().from(sessionOccurrences)
-    .where(eq(sessionOccurrences.id, occurrenceId)).get()
-  if (!occurrence || occurrence.status !== "scheduled") {
-    operationalActionError("NOT_FOUND", "Session was not found.", "occurrenceId")
-  }
-  if (occurrence.occurrenceDate < referenceDate || !occurrenceIsUpcoming(occurrence, now)) {
-    operationalActionError(
-      "BUSINESS_RULE",
-      "Completed sessions cannot be cancelled.",
-      "occurrenceId",
-    )
-  }
-  database.update(sessionOccurrences).set({ status: "cancelled" })
-    .where(eq(sessionOccurrences.id, occurrenceId)).run()
+  return database.transaction((tx) => {
+    const occurrence = tx.select().from(sessionOccurrences)
+      .where(eq(sessionOccurrences.id, occurrenceId)).get()
+    if (!occurrence) {
+      operationalActionError("NOT_FOUND", "Session was not found.", "occurrenceId")
+    }
+    const replacements = tx.select().from(sessionOccurrences).where(
+      eq(sessionOccurrences.replacementForOccurrenceId, occurrenceId),
+    ).all()
+    if (occurrence.status === "cancelled") {
+      if (replacements.length) {
+        operationalActionError(
+          "CONFLICT",
+          "This session was already replaced and cannot be cancelled separately.",
+          "occurrenceId",
+        )
+      }
+      return { alreadyCancelled: true }
+    }
+    if (replacements.length) {
+      operationalActionError(
+        "CONFLICT",
+        "This session has already changed. Reload the calendar and try again.",
+        "occurrenceId",
+      )
+    }
+    if (occurrence.occurrenceDate < referenceDate || !occurrenceIsUpcoming(occurrence, now)) {
+      operationalActionError(
+        "BUSINESS_RULE",
+        "Completed sessions cannot be cancelled.",
+        "occurrenceId",
+      )
+    }
+    const cancelled = tx.update(sessionOccurrences).set({ status: "cancelled" }).where(and(
+      eq(sessionOccurrences.id, occurrenceId),
+      eq(sessionOccurrences.status, "scheduled"),
+    )).run()
+    if (cancelled.changes !== 1) {
+      operationalActionError(
+        "CONFLICT",
+        "This session changed elsewhere. Reload the calendar and try again.",
+        "occurrenceId",
+      )
+    }
+    return { alreadyCancelled: false }
+  }, { behavior: "immediate" })
+}
+
+function isSessionOccurrenceUniqueConstraint(error: unknown) {
+  return error instanceof Error
+    && "code" in error
+    && String((error as Error & { code?: unknown }).code).startsWith("SQLITE_CONSTRAINT")
+    && /session_occurrences/u.test(error.message)
 }
 
 export function replaceSessionOccurrence({
@@ -661,24 +810,10 @@ export function replaceSessionOccurrence({
   venue: string
 }) {
   requireHeadAdminAccess(coachId, { database })
-  const occurrence = database.select().from(sessionOccurrences)
-    .where(eq(sessionOccurrences.id, occurrenceId)).get()
-  if (!occurrence || occurrence.status !== "scheduled") {
-    operationalActionError("NOT_FOUND", "Session was not found.", "occurrenceId")
-  }
   if (!isValidDateKey(dateKey)) {
     operationalActionError(
       "INVALID_INPUT",
       "Choose a valid replacement date.",
-      "dateKey",
-    )
-  }
-  if (occurrence.occurrenceDate < referenceDate
-    || dateKey < referenceDate
-    || !occurrenceIsUpcoming(occurrence, now)) {
-    operationalActionError(
-      "BUSINESS_RULE",
-      "Completed sessions cannot be replaced.",
       "dateKey",
     )
   }
@@ -688,6 +823,10 @@ export function replaceSessionOccurrence({
       "Choose a valid session duration.",
       "durationMinutes",
     )
+  }
+  const normalizedVenue = venue.trim()
+  if (normalizedVenue.length < 2 || normalizedVenue.length > 120) {
+    operationalActionError("INVALID_INPUT", "Enter a valid venue or court.", "venue")
   }
   let startsAt: Date
   try {
@@ -699,26 +838,254 @@ export function replaceSessionOccurrence({
       "startTime",
     )
   }
-  if (!occurrenceIsUpcoming({ startsAt }, now)) {
+  const [startHours, startMinutes] = startTime.split(":").map(Number)
+  if ((startHours * 60) + startMinutes + durationMinutes >= 24 * 60) {
     operationalActionError(
-      "BUSINESS_RULE",
-      "Choose a replacement time in the future.",
-      "startTime",
+      "INVALID_INPUT",
+      "A replacement session cannot cross midnight.",
+      "durationMinutes",
     )
   }
-  database.transaction((tx) => {
-    tx.update(sessionOccurrences).set({ status: "cancelled" })
-      .where(eq(sessionOccurrences.id, occurrenceId)).run()
-    tx.insert(sessionOccurrences).values({
-      id: randomUUID(),
-      seriesId: occurrence.seriesId,
-      occurrenceDate: dateKey,
-      startsAt,
-      durationMinutes,
-      venue: venue.trim() || occurrence.venue,
-      status: "scheduled",
-      replacementForOccurrenceId: occurrence.id,
-      createdAt: now,
-    }).run()
-  })
+  try {
+    return database.transaction((tx) => {
+      const occurrence = tx.select().from(sessionOccurrences)
+        .where(eq(sessionOccurrences.id, occurrenceId)).get()
+      if (!occurrence) {
+        operationalActionError("NOT_FOUND", "Session was not found.", "occurrenceId")
+      }
+      const sourceSeries = tx.select().from(sessionSeries)
+        .where(eq(sessionSeries.id, occurrence.seriesId)).get()
+      if (!sourceSeries || sourceSeries.status !== "active") {
+        operationalActionError("NOT_FOUND", "The recurring schedule is unavailable.", "occurrenceId")
+      }
+      const replacements = tx.select().from(sessionOccurrences).where(
+        eq(sessionOccurrences.replacementForOccurrenceId, occurrenceId),
+      ).all()
+      const exactReplacement = replacements.find((replacement) => (
+        replacement.status === "scheduled"
+        && replacement.occurrenceDate === dateKey
+        && replacement.startsAt.getTime() === startsAt.getTime()
+        && replacement.durationMinutes === durationMinutes
+        && replacement.venue === normalizedVenue
+      ))
+      if (occurrence.status === "cancelled") {
+        if (exactReplacement) {
+          return { alreadyReplaced: true, replacementOccurrenceId: exactReplacement.id }
+        }
+        operationalActionError(
+          "CONFLICT",
+          replacements.length
+            ? "This session was already replaced with different details."
+            : "This session was already cancelled.",
+          "occurrenceId",
+        )
+      }
+      if (replacements.length) {
+        operationalActionError(
+          "CONFLICT",
+          "This session has already changed. Reload the calendar and try again.",
+          "occurrenceId",
+        )
+      }
+      if (occurrence.occurrenceDate < referenceDate
+        || dateKey < referenceDate
+        || !occurrenceIsUpcoming(occurrence, now)) {
+        operationalActionError(
+          "BUSINESS_RULE",
+          "Completed sessions cannot be replaced.",
+          "dateKey",
+        )
+      }
+      if (!occurrenceIsUpcoming({ startsAt }, now)) {
+        operationalActionError(
+          "BUSINESS_RULE",
+          "Choose a replacement time in the future.",
+          "startTime",
+        )
+      }
+      const maximumTermEnd = addCalendarDays(
+        sourceSeries.startsOn,
+        MAX_SCHEDULE_TERM_DAYS - 1,
+      )
+      const latestReplacementDate = sourceSeries.endsOn && sourceSeries.endsOn < maximumTermEnd
+        ? sourceSeries.endsOn
+        : maximumTermEnd
+      if (dateKey < sourceSeries.startsOn || dateKey > latestReplacementDate) {
+        operationalActionError(
+          "INVALID_INPUT",
+          "Choose a replacement date within the recurring schedule term.",
+          "dateKey",
+        )
+      }
+      const occupiedTarget = tx.select().from(sessionOccurrences).where(and(
+        eq(sessionOccurrences.seriesId, occurrence.seriesId),
+        eq(sessionOccurrences.occurrenceDate, dateKey),
+        eq(sessionOccurrences.status, "scheduled"),
+      )).all().find((candidate) => candidate.id !== occurrence.id)
+      if (occupiedTarget) {
+        operationalActionError(
+          "CONFLICT",
+          "This schedule already has a session on the selected replacement date.",
+          "dateKey",
+        )
+      }
+      const sameDayOccurrences = tx.select().from(sessionOccurrences).where(and(
+        eq(sessionOccurrences.occurrenceDate, dateKey),
+        eq(sessionOccurrences.status, "scheduled"),
+      )).all().filter((candidate) => candidate.id !== occurrence.id)
+      const otherSeriesIds = [...new Set(sameDayOccurrences
+        .map((candidate) => candidate.seriesId)
+        .filter((candidateSeriesId) => candidateSeriesId !== occurrence.seriesId))]
+      const otherSeries = otherSeriesIds.length
+        ? tx.select().from(sessionSeries).where(inArray(sessionSeries.id, otherSeriesIds)).all()
+        : []
+      const otherSeriesById = new Map(otherSeries.map((series) => [series.id, series]))
+      const overlapsAnotherSchedule = sameDayOccurrences.some((candidate) => {
+        const candidateSeries = otherSeriesById.get(candidate.seriesId)
+        if (!candidateSeries
+          || candidateSeries.programme !== sourceSeries.programme
+          || candidateSeries.batch !== sourceSeries.batch) return false
+        return occurrenceIntervalsOverlap(
+          { durationMinutes, startsAt },
+          candidate,
+        )
+      })
+      if (overlapsAnotherSchedule) {
+        operationalActionError(
+          "CONFLICT",
+          "Another schedule for this level and batch overlaps the replacement time.",
+          "startTime",
+        )
+      }
+      const cancelled = tx.update(sessionOccurrences).set({ status: "cancelled" }).where(and(
+        eq(sessionOccurrences.id, occurrenceId),
+        eq(sessionOccurrences.status, "scheduled"),
+      )).run()
+      if (cancelled.changes !== 1) {
+        operationalActionError(
+          "CONFLICT",
+          "This session changed elsewhere. Reload the calendar and try again.",
+          "occurrenceId",
+        )
+      }
+      const replacementOccurrenceId = randomUUID()
+      tx.insert(sessionOccurrences).values({
+        id: replacementOccurrenceId,
+        seriesId: occurrence.seriesId,
+        occurrenceDate: dateKey,
+        startsAt,
+        durationMinutes,
+        venue: normalizedVenue,
+        status: "scheduled",
+        replacementForOccurrenceId: occurrence.id,
+        createdAt: now,
+      }).run()
+      return { alreadyReplaced: false, replacementOccurrenceId }
+    }, { behavior: "immediate" })
+  } catch (error) {
+    if (error instanceof OperationalActionError) throw error
+    if (isSessionOccurrenceUniqueConstraint(error)) {
+      operationalActionError(
+        "CONFLICT",
+        "This session or replacement changed elsewhere. Reload the calendar and try again.",
+        "dateKey",
+      )
+    }
+    throw error
+  }
+}
+
+export function endSessionSeriesRecords({
+  coachId,
+  database,
+  now = new Date(),
+  seriesId,
+}: {
+  coachId: string
+  database: SmbaDatabase
+  now?: Date
+  seriesId: string
+}) {
+  requireHeadAdminAccess(coachId, { database })
+  if (typeof seriesId !== "string" || !seriesId.trim()) {
+    operationalActionError("NOT_FOUND", "Schedule was not found.", "seriesId")
+  }
+  const referenceDate = getIndiaDateKey(now)
+
+  return database.transaction((tx) => {
+    const series = tx.select().from(sessionSeries)
+      .where(eq(sessionSeries.id, seriesId)).get()
+    if (!series) {
+      operationalActionError("NOT_FOUND", "Schedule was not found.", "seriesId")
+    }
+    if (series.status === "ended") {
+      return { alreadyEnded: true, cancelledOccurrences: 0, closedAssignments: 0 }
+    }
+    const occurrences = tx.select().from(sessionOccurrences).where(
+      eq(sessionOccurrences.seriesId, seriesId),
+    ).all()
+    const startedToday = occurrences.some((occurrence) => (
+      occurrence.status === "scheduled"
+      && occurrence.occurrenceDate === referenceDate
+      && !occurrenceIsUpcoming(occurrence, now)
+    ))
+    if (startedToday) {
+      operationalActionError(
+        "BUSINESS_RULE",
+        "This schedule has already started today. End it before the first session on another day.",
+        "seriesId",
+      )
+    }
+    const futureOccurrenceIds = occurrences.filter((occurrence) => (
+      occurrence.status === "scheduled" && occurrenceIsUpcoming(occurrence, now)
+    )).map((occurrence) => occurrence.id)
+    const openAssignments = tx.select().from(sessionAssignments).where(and(
+      eq(sessionAssignments.seriesId, seriesId),
+      isNull(sessionAssignments.effectiveTo),
+    )).all()
+    const ended = tx.update(sessionSeries).set({ status: "ended" }).where(and(
+      eq(sessionSeries.id, seriesId),
+      eq(sessionSeries.status, "active"),
+    )).run()
+    if (ended.changes !== 1) {
+      operationalActionError(
+        "CONFLICT",
+        "This schedule changed elsewhere. Reload the roster and try again.",
+        "seriesId",
+      )
+    }
+    if (futureOccurrenceIds.length) {
+      tx.update(sessionOccurrences).set({ status: "cancelled" }).where(and(
+        inArray(sessionOccurrences.id, futureOccurrenceIds),
+        eq(sessionOccurrences.status, "scheduled"),
+      )).run()
+    }
+    openAssignments.forEach((assignment) => {
+      tx.update(sessionAssignments).set({
+        effectiveTo: assignment.effectiveFrom > referenceDate
+          ? assignment.effectiveFrom
+          : referenceDate,
+      }).where(and(
+        eq(sessionAssignments.id, assignment.id),
+        isNull(sessionAssignments.effectiveTo),
+      )).run()
+    })
+    const affectedPlayerIds = [...new Set(openAssignments.map((assignment) => assignment.accountId))]
+    affectedPlayerIds.forEach((playerId) => {
+      const remaining = tx.select({ id: sessionAssignments.id }).from(sessionAssignments).where(and(
+        eq(sessionAssignments.accountId, playerId),
+        isNull(sessionAssignments.effectiveTo),
+      )).get()
+      tx.update(playerEnrollments).set({
+        recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
+        status: remaining ? "active" : "paused",
+        updatedAt: now,
+      }).where(eq(playerEnrollments.accountId, playerId)).run()
+    })
+    return {
+      alreadyEnded: false,
+      cancelledOccurrences: futureOccurrenceIds.length,
+      closedAssignments: openAssignments.length,
+    }
+  }, { behavior: "immediate" })
 }

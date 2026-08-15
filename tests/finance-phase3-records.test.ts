@@ -87,6 +87,29 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
     return id
   }
 
+  function addMatchingAssignment(playerId: string, suffix: string) {
+    const seriesId = `phase3-series-${suffix}`
+    database.insert(schema.sessionSeries).values({
+      id: seriesId,
+      title: `${suffix} Beginner Weekday`,
+      programme: "Beginner",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: "2026-09-01",
+      status: "active",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionAssignments).values({
+      id: `phase3-assignment-${suffix}`,
+      accountId: playerId,
+      seriesId,
+      effectiveFrom: "2026-09-01",
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
+  }
+
   beforeAll(async () => {
     const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
@@ -415,6 +438,7 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
     expect(repository.listMonthlyPreparationCandidates(database, "2026-09")
       .some(({ agreement }) => agreement.id === agreementId)).toBe(false)
 
+    addMatchingAssignment(playerId, "deepa")
     const restart = finance.createOrReplaceFeeAgreement({
       playerId,
       academyPlan: "weekday-3-day",
@@ -427,6 +451,7 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
     expect(restart).toMatchObject({ reused: false, agreement: { effectiveFrom: "2026-09-01" } })
 
     const historicalPlayer = createPlayer("Esha")
+    addMatchingAssignment(historicalPlayer, "esha")
     database.insert(schema.feeAgreements).values({
       id: "phase3-esha-ended",
       playerAccountId: historicalPlayer,

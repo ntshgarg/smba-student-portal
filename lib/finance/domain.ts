@@ -72,6 +72,28 @@ export function monthEnd(period: string) {
   return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10)
 }
 
+export function calculateUnusedMonthRefundLimit(
+  effectiveAmountPaise: number,
+  billingPeriod: string,
+  withdrawalEffectiveOn: string,
+) {
+  if (!Number.isInteger(effectiveAmountPaise) || effectiveAmountPaise <= 0
+    || !isValidMonthKey(billingPeriod)
+    || !isValidDateKey(withdrawalEffectiveOn)
+    || withdrawalEffectiveOn.slice(0, 7) !== billingPeriod) {
+    throw new Error("Invalid withdrawal refund period.")
+  }
+  const daysInMonth = Number(monthEnd(billingPeriod).slice(8, 10))
+  const withdrawalDay = Number(withdrawalEffectiveOn.slice(8, 10))
+  const unusedDays = daysInMonth - withdrawalDay
+  if (unusedDays <= 0 || unusedDays >= daysInMonth) {
+    throw new Error("A withdrawal refund requires a mid-month date.")
+  }
+  // Round down to the nearest paise so the refund never exceeds the
+  // calendar-day value of the unused training period.
+  return Math.floor((effectiveAmountPaise * unusedDays) / daysInMonth)
+}
+
 export function dateInMonth(period: string, day: number) {
   if (!isValidMonthKey(period) || !Number.isInteger(day) || day < 1 || day > 28) {
     throw new Error("Invalid billing due date.")

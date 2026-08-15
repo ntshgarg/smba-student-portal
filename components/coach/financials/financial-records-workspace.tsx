@@ -220,18 +220,153 @@ function RecordsNavigation({ activeView }: { activeView: FinancialRecordsView })
   )
 }
 
-function RegisterSummary({ summary }: { summary: FeeRegisterView["summary"] }) {
+function RegisterModeSwitch({
+  filterParams,
+  mode,
+}: {
+  filterParams: Record<string, string>
+  mode: FinanceRegisterMode
+}) {
   return (
-    <dl className={recordsStyles.summaryGrid}>
-      <div><dt>Records</dt><dd>{summary.totalRows}</dd></div>
-      <div><dt>Net billed</dt><dd>{formatFinancialRecordsAmount(summary.effectiveAmountPaise)}</dd></div>
-      <div><dt>Received</dt><dd>{formatFinancialRecordsAmount(summary.receivedPaise)}</dd></div>
-      <div><dt>Outstanding</dt><dd>{formatFinancialRecordsAmount(summary.outstandingPaise)}</dd></div>
-    </dl>
+    <div className={recordsStyles.modeSwitch} aria-label="Choose fee register" role="group">
+      <Link
+        className={mode === "monthly" ? recordsStyles.activeMode : undefined}
+        href={recordsHref("fees", { ...filterParams, mode: "monthly" })}
+        aria-current={mode === "monthly" ? "page" : undefined}
+      >
+        Monthly fees
+      </Link>
+      <Link
+        className={mode === "registration" ? recordsStyles.activeMode : undefined}
+        href={recordsHref("fees", { ...filterParams, mode: "registration" })}
+        aria-current={mode === "registration" ? "page" : undefined}
+      >
+        Registration fees
+      </Link>
+    </div>
+  )
+}
+
+function FeeTruthRail({
+  mode,
+  period,
+  summary,
+}: {
+  mode: FinanceRegisterMode
+  period: string
+  summary: FeeRegisterView["summary"]
+}) {
+  const isRegistration = mode === "registration"
+  const effective = formatFinancialRecordsAmount(summary.effectiveAmountPaise)
+  const received = formatFinancialRecordsAmount(summary.receivedPaise)
+  const outstanding = formatFinancialRecordsAmount(summary.outstandingPaise)
+  const feeLabel = isRegistration ? "Net registration fees" : "Net monthly fees"
+
+  return (
+    <div className={recordsStyles.registrationTruthRail}>
+      <div className={recordsStyles.registrationRecordCount}>
+        <span>{isRegistration ? "One-time academy entry" : `${formatPeriod(period)} fee cycle`}</span>
+        <strong>{summary.totalRows} {summary.totalRows === 1 ? "record" : "records"}</strong>
+      </div>
+      <p className="sr-only">
+        {feeLabel} {effective}, minus received {received}, equals outstanding {outstanding}.
+      </p>
+      <div className={recordsStyles.registrationEquation} aria-hidden="true">
+        <div><span>{feeLabel}</span><strong>{effective}</strong></div>
+        <b>−</b>
+        <div><span>Received</span><strong>{received}</strong></div>
+        <b>=</b>
+        <div><span>Outstanding</span><strong>{outstanding}</strong></div>
+      </div>
+    </div>
+  )
+}
+
+function FeeRegisterTable({
+  mode,
+  playerRecordHref,
+  register,
+}: {
+  mode: FinanceRegisterMode
+  playerRecordHref: (playerId: string) => string
+  register: FeeRegisterView
+}) {
+  const isRegistration = mode === "registration"
+  const visibleStart = Number.parseInt(register.pagination.label.match(/^\d+/u)?.[0] ?? "1", 10)
+
+  return (
+    <div className={`${recordsStyles.tableWrap} ${recordsStyles.registrationTableWrap}`}>
+      <table className={`${recordsStyles.recordsTable} ${recordsStyles.registrationTable}`}>
+        <caption className="sr-only">
+          {isRegistration ? "One-time academy registration fee records" : `${formatPeriod(register.filters.period)} monthly fee records`}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">No.</th>
+            <th scope="col">Player</th>
+            <th scope="col">{isRegistration ? "Registration entry" : "Monthly fee"}</th>
+            <th scope="col">Amounts</th>
+            <th scope="col">Status</th>
+            <th scope="col"><span className="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {register.rows.map((row, index) => {
+            const adjustments = [
+              row.creditAdjustmentsPaise
+                ? `${formatFinancialRecordsAmount(row.creditAdjustmentsPaise)} credit`
+                : null,
+              row.debitAdjustmentsPaise
+                ? `${formatFinancialRecordsAmount(row.debitAdjustmentsPaise)} debit`
+                : null,
+            ].filter(Boolean).join(" · ")
+            const dueLabel = row.dueDate
+              ? `Due ${formatDateKey(row.dueDate, { day: "numeric", month: "short", year: "numeric" })}`
+              : "No charge issued"
+
+            return (
+              <tr key={`${row.playerId}-${row.feeReference ?? "not-prepared"}`}>
+                <td className={recordsStyles.registrationFolio} data-label="Record number">
+                  {String(visibleStart + index).padStart(2, "0")}
+                </td>
+                <td className={recordsStyles.registrationPlayer} data-label="Player">
+                  <strong>{row.fullName}</strong>
+                  <small>{row.academyId}{row.archived ? " · Archived" : ""}</small>
+                </td>
+                <td className={recordsStyles.registrationEntry} data-label={isRegistration ? "Registration entry" : "Monthly fee"}>
+                  <strong>{row.feeReference ?? "Not prepared"}</strong>
+                  <small>{dueLabel}{adjustments ? ` · ${adjustments}` : " · No adjustments"}</small>
+                </td>
+                <td className={recordsStyles.registrationAmounts} data-label="Amounts">
+                  <dl>
+                    <div><dt>{isRegistration ? "Charged" : "Billed"}</dt><dd>{formatFinancialRecordsAmount(row.originalAmountPaise)}</dd></div>
+                    <div><dt>Received</dt><dd>{formatFinancialRecordsAmount(row.receivedPaise)}</dd></div>
+                    <div><dt>Balance</dt><dd>{formatFinancialRecordsAmount(row.outstandingPaise)}</dd></div>
+                  </dl>
+                </td>
+                <td className={recordsStyles.registrationStatus} data-label="Status">
+                  <StatusLabel status={row.status} />
+                </td>
+                <td className={recordsStyles.registrationAction} data-label="Record">
+                  <Link
+                    aria-label={`View fee record for ${row.fullName}`}
+                    className={recordsStyles.rowAction}
+                    href={playerRecordHref(row.playerId)}
+                  >
+                    <FileText aria-hidden="true" /> Open record
+                  </Link>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
 function FeeRegister({ register }: { register: FeeRegisterView }) {
+  const isRegistration = register.filters.mode === "registration"
   const filterParams = {
     period: register.filters.period,
     q: register.filters.query,
@@ -251,38 +386,33 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
   }
 
   return (
-    <section className={recordsStyles.panel} aria-labelledby="fee-register-title">
-      <header className={recordsStyles.panelHeader}>
+    <section
+      className={`${recordsStyles.panel} ${recordsStyles.registrationPanel}`}
+      aria-labelledby="fee-register-title"
+    >
+      <header className={`${recordsStyles.panelHeader} ${recordsStyles.registrationPanelHeader}`}>
         <div>
           <span>Player fees</span>
-          <h2 id="fee-register-title">Fee Register</h2>
+          <h2 id="fee-register-title">{isRegistration ? "Registration fees" : "Monthly fees"}</h2>
           <p>
-            {register.filters.mode === "monthly"
-              ? `${formatPeriod(register.filters.period)} monthly fee records.`
-              : "Current registration fee records."}
+            {!isRegistration
+              ? `${formatPeriod(register.filters.period)} player fee cycle.`
+              : "One-time academy registration fee records."}
           </p>
         </div>
-        <a className={recordsStyles.downloadLink} href={register.exportHref}>
-          <Download aria-hidden="true" /> Export CSV
-        </a>
+        <div className={recordsStyles.registrationHeaderActions}>
+          <RegisterModeSwitch filterParams={filterParams} mode={register.filters.mode} />
+          <a className={recordsStyles.downloadLink} href={register.exportHref}>
+            <Download aria-hidden="true" /> Export CSV
+          </a>
+        </div>
       </header>
 
-      <div className={recordsStyles.modeSwitch} aria-label="Choose fee register" role="group">
-        <Link
-          className={register.filters.mode === "monthly" ? recordsStyles.activeMode : undefined}
-          href={recordsHref("fees", { ...filterParams, mode: "monthly" })}
-          aria-current={register.filters.mode === "monthly" ? "page" : undefined}
-        >
-          Monthly fees
-        </Link>
-        <Link
-          className={register.filters.mode === "registration" ? recordsStyles.activeMode : undefined}
-          href={recordsHref("fees", { ...filterParams, mode: "registration" })}
-          aria-current={register.filters.mode === "registration" ? "page" : undefined}
-        >
-          Registration fees
-        </Link>
-      </div>
+      <FeeTruthRail
+        mode={register.filters.mode}
+        period={register.filters.period}
+        summary={register.summary}
+      />
 
       {register.filters.mode === "monthly" && register.preparation ? (
         <div className={recordsStyles.preparationEmbed}>
@@ -290,7 +420,12 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
         </div>
       ) : null}
 
-      <form className={recordsStyles.filters} action="/coach/financials/records" method="get" role="search">
+      <form
+        className={`${recordsStyles.filters} ${recordsStyles.registrationFilters} ${!isRegistration ? recordsStyles.monthlyFilters : ""}`}
+        action="/coach/financials/records"
+        method="get"
+        role="search"
+      >
         <input type="hidden" name="view" value="fees" />
         <input type="hidden" name="mode" value={register.filters.mode} />
         <label className={recordsStyles.searchField}>
@@ -336,60 +471,17 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
         <button type="submit">Apply filters</button>
       </form>
 
-      <RegisterSummary summary={register.summary} />
-
       {register.rows.length ? (
-        <div className={recordsStyles.tableWrap}>
-          <table className={recordsStyles.recordsTable}>
-            <caption className="sr-only">Player fee records</caption>
-            <thead>
-              <tr>
-                <th scope="col">Player</th>
-                <th scope="col">Fee</th>
-                <th scope="col">Billed</th>
-                <th scope="col">Adjustments</th>
-                <th scope="col">Received</th>
-                <th scope="col">Outstanding</th>
-                <th scope="col">Status</th>
-                <th scope="col"><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {register.rows.map((row) => (
-                <tr key={`${row.playerId}-${row.feeReference ?? "not-prepared"}`}>
-                  <td data-label="Player">
-                    <strong>{row.fullName}</strong>
-                    <small>{row.academyId}{row.archived ? " · Archived" : ""}</small>
-                  </td>
-                  <td data-label="Fee">
-                    <strong>{row.feeReference ?? "Not prepared"}</strong>
-                    <small>{row.dueDate ? `Due ${formatDateKey(row.dueDate, { day: "numeric", month: "short", year: "numeric" })}` : "No charge issued"}</small>
-                  </td>
-                  <td data-label="Billed">{formatFinancialRecordsAmount(row.originalAmountPaise)}</td>
-                  <td data-label="Adjustments">
-                    <strong>{formatFinancialRecordsAmount(row.creditAdjustmentsPaise)} credit</strong>
-                    <small>{formatFinancialRecordsAmount(row.debitAdjustmentsPaise)} debit</small>
-                  </td>
-                  <td data-label="Received">{formatFinancialRecordsAmount(row.receivedPaise)}</td>
-                  <td data-label="Outstanding"><strong>{formatFinancialRecordsAmount(row.outstandingPaise)}</strong></td>
-                  <td data-label="Status"><StatusLabel status={row.status} /></td>
-                  <td data-label="Record">
-                    <Link
-                      aria-label={`View fee record for ${row.fullName}`}
-                      className={recordsStyles.rowAction}
-                      href={playerRecordHref(row.playerId)}
-                    >
-                      <FileText aria-hidden="true" /> View record
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <FeeRegisterTable
+          mode={register.filters.mode}
+          playerRecordHref={playerRecordHref}
+          register={register}
+        />
       ) : (
         <EmptyRecords
-          body="Change the month or filters to review another part of the fee record."
+          body={isRegistration
+            ? "Change the filters to review another part of the registration fee record."
+            : "Change the month or filters to review another part of the fee record."}
           icon={WalletCards}
           title="No matching fee records"
         />
@@ -612,12 +704,12 @@ export function FinancialRecordsWorkspace({
   feeRegister,
 }: FinancialRecordsWorkspaceProps) {
   return (
-    <div className={`${financialStyles.workspace} page-shell`}>
+    <div className={`${financialStyles.workspace} ${financialStyles.recordsWorkspace} page-shell`}>
       <div className={financialStyles.backRow}>
         <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
       </div>
 
-      <header className={financialStyles.rapidDeskHeader}>
+      <header className={`${financialStyles.rapidDeskHeader} ${financialStyles.recordsPageHeader}`}>
         <span className="eyebrow">Financials</span>
         <h1>Fee records</h1>
         <p>Review fee records, collections and the history behind every change.</p>

@@ -28,11 +28,10 @@ type StaffRecord = {
 
 const choices: Array<{
   label: string
-  value: StaffAttendanceChoice
+  value: Exclude<StaffAttendanceChoice, "cleared">
 }> = [
   { label: "Present", value: "present" },
   { label: "Absent", value: "absent" },
-  { label: "Not recorded", value: "cleared" },
 ]
 
 export function StaffRollCall({
@@ -89,11 +88,18 @@ export function StaffRollCall({
   ) {
     if (isSaving) return
     const base = storedByCoach.get(coachAccountId) ?? "cleared"
+    const current = resolvedChoice(coachAccountId)
+    const next = current === choice ? "cleared" : choice
     setDrafts((current) => {
       const rest = current.filter((draft) => draft.coachAccountId !== coachAccountId)
-      return choice === base
+      return next === base
         ? rest
-        : [...rest, { choice, coachAccountId, dateKey: selectedDate }]
+        : [...rest, {
+          choice: next,
+          coachAccountId,
+          dateKey: selectedDate,
+          expectedChoice: base,
+        }]
     })
     setFeedback(null)
   }
@@ -145,7 +151,10 @@ export function StaffRollCall({
         </div>
       </header>
 
-      <section className="attendance-record-workspace staff-roll-call" aria-labelledby="staff-roll-call-title">
+      <section
+        className="attendance-record-workspace staff-roll-call staff-roll-call-ledger"
+        aria-labelledby="staff-roll-call-title"
+      >
         <div className="attendance-record-date-row">
           <label>
             <span>Roll-call date</span>
@@ -175,13 +184,19 @@ export function StaffRollCall({
           </div>
         ) : (
           <div className="staff-roll-call-list">
-            {juniorCoaches.map((coach) => {
+            <div className="staff-roll-call-register-head" aria-hidden="true">
+              <span>No.</span>
+              <span>Coach</span>
+              <span>Attendance status</span>
+            </div>
+            {juniorCoaches.map((coach, index) => {
               const unavailable = futureDate || selectedDate < coach.joinedOn
               const currentChoice = resolvedChoice(coach.accountId)
+              const folio = String(index + 1).padStart(2, "0")
               return (
                 <article key={coach.accountId}>
+                  <span className="staff-roll-call-folio" aria-hidden="true">{folio}</span>
                   <div className="staff-roll-call-person">
-                    <span>{coach.initials}</span>
                     <div>
                       <strong>{coach.fullName}</strong>
                       <small>{unavailable
@@ -189,7 +204,11 @@ export function StaffRollCall({
                         : "Junior coach"}</small>
                     </div>
                   </div>
-                  <div role="group" aria-label={`Attendance for ${coach.fullName}`}>
+                  <div
+                    className="staff-roll-call-choice-box"
+                    role="group"
+                    aria-label={`Attendance for ${coach.fullName}`}
+                  >
                     {choices.map((choice) => (
                       <button
                         key={choice.value}

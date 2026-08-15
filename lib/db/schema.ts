@@ -204,6 +204,9 @@ export const sessionOccurrences = sqliteTable("session_occurrences", {
   uniqueIndex("session_occurrences_series_date_idx")
     .on(table.seriesId, table.occurrenceDate)
     .where(sql`${table.status} = 'scheduled'`),
+  uniqueIndex("session_occurrences_active_replacement_idx")
+    .on(table.replacementForOccurrenceId)
+    .where(sql`${table.replacementForOccurrenceId} is not null and ${table.status} = 'scheduled'`),
   index("session_occurrences_date_idx").on(table.occurrenceDate),
   index("session_occurrences_series_idx").on(table.seriesId),
 ])
@@ -245,6 +248,10 @@ export const sessionAttendanceRecords = sqliteTable("session_attendance_records"
 }, (table) => [
   uniqueIndex("session_attendance_account_occurrence_idx").on(table.accountId, table.occurrenceId),
   index("session_attendance_occurrence_idx").on(table.occurrenceId),
+  check(
+    "session_attendance_choice_check",
+    sql`${table.choice} in ('present', 'absent', 'cleared')`,
+  ),
 ])
 
 export const attendanceAdjustments = sqliteTable("attendance_adjustments", {
@@ -270,6 +277,9 @@ export const attendanceAdjustments = sqliteTable("attendance_adjustments", {
   uniqueIndex("attendance_adjustments_active_source_idx")
     .on(table.playerId, table.sourceOccurrenceId)
     .where(sql`${table.voidedAt} is null`),
+  uniqueIndex("attendance_adjustments_active_completion_idx")
+    .on(table.playerId, table.completionOccurrenceId)
+    .where(sql`${table.voidedAt} is null and ${table.completionOccurrenceId} is not null`),
 ])
 
 export const monthlyReports = sqliteTable("monthly_reports", {
@@ -435,6 +445,12 @@ export const refunds = sqliteTable("refunds", {
   refundReference: text("refund_reference").notNull(),
   paymentId: text("payment_id").notNull().references(() => payments.id),
   playerAccountId: text("player_account_id").notNull().references(() => accounts.id),
+  purpose: text("purpose", {
+    enum: ["legacy_unclassified", "mid_term_withdrawal"],
+  }).notNull().default("legacy_unclassified"),
+  withdrawalEffectiveOn: text("withdrawal_effective_on"),
+  chargeAdjustmentId: text("charge_adjustment_id")
+    .references((): AnySQLiteColumn => chargeAdjustments.id),
   amountPaise: integer("amount_paise").notNull(),
   currency: text("currency").notNull().default("INR"),
   refundedOn: text("refunded_on").notNull(),
@@ -458,6 +474,9 @@ export const refunds = sqliteTable("refunds", {
   index("refunds_payment_idx").on(table.paymentId),
   index("refunds_player_date_idx").on(table.playerAccountId, table.refundedOn),
   index("refunds_date_lifecycle_idx").on(table.refundedOn, table.lifecycle),
+  uniqueIndex("refunds_charge_adjustment_idx")
+    .on(table.chargeAdjustmentId)
+    .where(sql`${table.chargeAdjustmentId} is not null`),
   check("refunds_amount_positive_check", sql`${table.amountPaise} > 0`),
   check("refunds_currency_check", sql`${table.currency} = 'INR'`),
   check(
@@ -485,7 +504,13 @@ export const chargeAdjustments = sqliteTable("charge_adjustments", {
   id: text("id").primaryKey(),
   chargeId: text("charge_id").notNull().references(() => financialCharges.id),
   kind: text("kind", {
-    enum: ["manual_credit", "manual_debit", "legacy_settlement", "concession_credit"],
+    enum: [
+      "manual_credit",
+      "manual_debit",
+      "legacy_settlement",
+      "concession_credit",
+      "withdrawal_credit",
+    ],
   }).notNull(),
   amountPaise: integer("amount_paise").notNull(),
   reason: text("reason").notNull(),

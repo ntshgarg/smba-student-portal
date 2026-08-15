@@ -14,8 +14,11 @@ import type {
 import { occurrenceHasStarted, type ReferenceInstant } from "@/lib/sessions/occurrence-time"
 
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/u
+const TRAINING_PROGRAMMES = new Set(["Beginner", "Intermediate", "Advanced", "Adult"])
+const TRAINING_BATCHES = new Set(["Weekday", "Weekend"])
 const WEEKDAY_DAYS = new Set([1, 2, 3, 4, 5])
 const WEEKEND_DAYS = new Set([0, 6])
+export const MAX_SCHEDULE_TERM_DAYS = 366
 
 export type CalendarDateWindow = {
   from: string
@@ -43,6 +46,12 @@ export function dateRangesOverlapInclusive(
 function minutesFromTime(time: string) {
   const [hours, minutes] = time.split(":").map(Number)
   return hours * 60 + minutes
+}
+
+function inclusiveCalendarDayCount(from: string, to: string) {
+  const first = new Date(`${from}T00:00:00.000Z`).getTime()
+  const last = new Date(`${to}T00:00:00.000Z`).getTime()
+  return Math.floor((last - first) / (24 * 60 * 60 * 1_000)) + 1
 }
 
 function twelveHourTime(totalMinutes: number) {
@@ -99,6 +108,20 @@ export function indiaLocalDateTime(dateKey: string, time: string) {
 }
 
 export function validateSeriesInput(input: CreateSessionSeriesInput) {
+  if (!TRAINING_PROGRAMMES.has(input.programme)) {
+    operationalActionError(
+      "INVALID_INPUT",
+      "Choose a valid training programme.",
+      "programme",
+    )
+  }
+  if (!TRAINING_BATCHES.has(input.batch)) {
+    operationalActionError(
+      "INVALID_INPUT",
+      "Choose a valid Weekday or Weekend batch.",
+      "batch",
+    )
+  }
   if (input.venue.trim().length < 2 || input.venue.trim().length > 120) {
     operationalActionError("INVALID_INPUT", "Enter a valid venue or court.", "venue")
   }
@@ -112,6 +135,13 @@ export function validateSeriesInput(input: CreateSessionSeriesInput) {
     operationalActionError(
       "INVALID_INPUT",
       "The schedule end date cannot precede its start date.",
+      "endsOn",
+    )
+  }
+  if (inclusiveCalendarDayCount(input.startsOn, input.endsOn) > MAX_SCHEDULE_TERM_DAYS) {
+    operationalActionError(
+      "INVALID_INPUT",
+      `A recurring schedule can cover at most ${MAX_SCHEDULE_TERM_DAYS} days.`,
       "endsOn",
     )
   }

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
 import { describe, expect, it } from "vitest"
 
 import {
@@ -31,21 +34,31 @@ describe("public academy facts", () => {
     ])
   })
 
-  it("keeps registration, longer-plan savings and official contact details verified", () => {
+  it("keeps registration and official contact details verified", () => {
     expect(enrollmentTerms).toEqual({
       registrationFee: 1000,
       registrationIsNonRefundable: true,
       registrationIncludes: ["a welcome kit", "assessment reports"],
-      longerPlanSavings: [
-        { label: "Quarterly", percentage: 5 },
-        { label: "Half-yearly", percentage: 7 },
-        { label: "Annual", percentage: 10 },
-      ],
     })
     expect(contact.phone).toBe("+917010928404")
     expect(contact.location).toBe("Just Play, Mahadevapura, Bengaluru")
     expect(contact.academyInstagram.handle).toBe("@sathiyamoorthybadmintonacademy")
     expect(contact.coachInstagram.handle).toBe("@badmintoncoach_sathiya")
+  })
+
+  it("describes monthly prices as a coach-agreed guide without automatic discounts", () => {
+    const feeExplorer = readFileSync(
+      path.join(process.cwd(), "components/public/home-interactions.tsx"),
+      "utf8",
+    )
+    const normalizedFeeExplorer = feeExplorer.replace(/\s+/gu, " ")
+
+    expect(normalizedFeeExplorer).toContain("These standard guide prices are based on programme and schedule.")
+    expect(normalizedFeeExplorer).toContain("Standard guide · {scheduleLabel} {selected.name}")
+    expect(normalizedFeeExplorer).toContain("Any special concession is agreed directly with the coach")
+    expect(normalizedFeeExplorer).toContain("payable when you register")
+    expect(feeExplorer).not.toContain("verified monthly fee")
+    expect(feeExplorer).not.toContain("Save with a longer plan")
   })
 
   it("prepares the free-trial WhatsApp handoff without storing form data", () => {

@@ -1,3 +1,4 @@
+import { isValidDateKey } from "@/lib/date-keys"
 import type {
   TrainingBatch,
   TrainingProgramme,
@@ -25,6 +26,25 @@ export type AttendanceRegisterSelection = {
   year: number
 }
 
+export function buildAttendanceRegisterYearOptions({
+  persistedDateKeys = [],
+  today,
+}: {
+  persistedDateKeys?: readonly string[]
+  today: string
+}) {
+  const currentYear = Number(today.slice(0, 4))
+  const persistedYears = persistedDateKeys
+    .filter(isValidDateKey)
+    .map((dateKey) => Number(dateKey.slice(0, 4)))
+  const firstYear = Math.min(currentYear - 1, ...persistedYears)
+  const lastYear = Math.max(currentYear + 2, ...persistedYears)
+  return Array.from(
+    { length: lastYear - firstYear + 1 },
+    (_, index) => firstYear + index,
+  )
+}
+
 function firstQueryValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
 }
@@ -41,20 +61,19 @@ export function resolveAttendanceRegisterSelection({
   occurrences,
   query,
   series,
+  supportedYears,
   today,
 }: {
   occurrences: TrainingSessionOccurrence[]
   query: AttendanceRegisterQuery
   series: TrainingSessionSeries[]
+  supportedYears?: readonly number[]
   today: string
 }): AttendanceRegisterSelection {
   const currentYear = Number(today.slice(0, 4))
-  const supportedYears = new Set([
-    currentYear - 1,
-    currentYear,
-    currentYear + 1,
-    currentYear + 2,
-  ])
+  const selectableYears = new Set(supportedYears?.length
+    ? supportedYears
+    : buildAttendanceRegisterYearOptions({ today }))
   const requestedYear = Number(firstQueryValue(query.year))
   const firstTodayOccurrence = [...occurrences]
     .filter((occurrence) => (
@@ -73,6 +92,6 @@ export function resolveAttendanceRegisterSelection({
     programme: isProgramme(requestedProgramme)
       ? requestedProgramme
       : defaultSeries?.programme ?? "Beginner",
-    year: supportedYears.has(requestedYear) ? requestedYear : currentYear,
+    year: selectableYears.has(requestedYear) ? requestedYear : currentYear,
   }
 }

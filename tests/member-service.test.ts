@@ -225,7 +225,7 @@ describe("member directory service", () => {
       assignmentId: assignment.id,
       coachId: coach.accountId,
       database,
-      effectiveTo: "2026-08-03",
+      effectiveTo: "2026-08-02",
       now,
     })
     expect(database.select({ revision: schema.playerEnrollments.recordRevision })

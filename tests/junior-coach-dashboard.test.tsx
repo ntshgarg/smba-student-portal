@@ -1,5 +1,20 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const navigation = vi.hoisted(() => ({
+  push: vi.fn(),
+  replace: vi.fn(),
+  search: "",
+}))
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/coach",
+  useRouter: () => ({
+    push: navigation.push,
+    replace: navigation.replace,
+  }),
+  useSearchParams: () => new URLSearchParams(navigation.search),
+}))
 
 import {
   JuniorCoachAttendanceCard,
@@ -27,6 +42,11 @@ const attendance: JuniorCoachAttendanceView = {
 }
 
 describe("junior coach dashboard", () => {
+  beforeEach(() => {
+    navigation.search = ""
+    vi.clearAllMocks()
+  })
+
   it("reuses the head-coach hero geometry without an operational ribbon", () => {
     const html = renderToStaticMarkup(
       <JuniorCoachWelcomeHero coachName="Arun" greeting="Good morning" />,
@@ -79,5 +99,25 @@ describe("junior coach dashboard", () => {
     expect(html).toContain("Your record will appear after the head coach saves an attendance day.")
     expect(html).toContain(">00<")
     expect(html).toContain("Open attendance record")
+  })
+
+  it("opens the same focused monthly calendar pattern as the player record", () => {
+    navigation.search = "attendance=register"
+    const html = renderToStaticMarkup(
+      <JuniorCoachAttendanceCard attendance={attendance} />,
+    )
+
+    expect(html).toContain('id="junior-coach-attendance-register"')
+    expect(html).toContain("Your record")
+    expect(html).toContain("Annual attendance")
+    expect(html).toContain("Attendance month")
+    expect(html).toContain("August 2026")
+    expect(html).toContain("Not recorded")
+    expect(html).toContain("Not available")
+    expect(html.match(/role="columnheader"/g)).toHaveLength(7)
+    expect(html.match(/role="gridcell"/g)).toHaveLength(42)
+    expect(html).toContain('aria-rowcount="7"')
+    expect(html).not.toContain("player-attendance-register-scroll")
+    expect(html).not.toContain("player-attendance-register-table")
   })
 })

@@ -1,7 +1,7 @@
 .viewNavigation {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 34px;
+  margin-top: 18px;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--white) 46%, transparent);
 }
@@ -9,13 +9,13 @@
 .viewNavigation a {
   display: flex;
   min-width: 0;
-  min-height: 54px;
+  min-height: 48px;
   align-items: center;
   justify-content: center;
   gap: 9px;
   padding: 10px 16px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 760;
   text-align: center;
   transition: background 160ms ease, color 160ms ease;
@@ -38,7 +38,7 @@
 }
 
 .panel {
-  margin-top: 22px;
+  margin-top: 10px;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--white) 55%, transparent);
 }
@@ -47,8 +47,8 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 32px;
-  padding: clamp(24px, 3vw, 36px);
+  gap: 24px;
+  padding: clamp(20px, 2.2vw, 28px);
 }
 
 .panelHeader > div > span {
@@ -60,19 +60,19 @@
 }
 
 .panelHeader h2 {
-  margin-top: 9px;
+  margin-top: 7px;
   color: var(--navy);
-  font-size: clamp(31px, 4vw, 48px);
+  font-size: clamp(31px, 3.5vw, 42px);
   font-weight: 590;
   letter-spacing: -0.06em;
   line-height: 0.98;
 }
 
 .panelHeader p {
-  margin-top: 12px;
+  margin-top: 8px;
   color: var(--steel);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .downloadLink,
@@ -84,7 +84,7 @@
   gap: 8px;
   border: 1px solid var(--navy);
   color: var(--navy);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 760;
   white-space: nowrap;
 }
@@ -122,7 +122,7 @@
   place-items: center;
   padding: 9px 14px;
   color: var(--steel);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 760;
   text-align: center;
 }
@@ -136,41 +136,154 @@
   color: var(--navy);
 }
 
+.registrationPanelHeader {
+  align-items: stretch;
+  padding: 0;
+}
+
+.registrationPanelHeader > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: clamp(16px, 1.6vw, 20px);
+}
+
+.registrationPanelHeader h2 {
+  font-size: clamp(31px, 3.2vw, 40px);
+}
+
+.registrationPanelHeader p {
+  margin-top: 9px;
+  font-size: 13px;
+}
+
+.registrationHeaderActions {
+  display: grid;
+  min-width: min(470px, 44%);
+  grid-template-columns: minmax(270px, 1fr) minmax(130px, 0.48fr);
+  border-left: 1px solid var(--line);
+}
+
+.registrationHeaderActions .modeSwitch {
+  height: 100%;
+  border-block: 0;
+}
+
+.registrationHeaderActions .downloadLink {
+  min-height: 100%;
+  border: 0;
+  border-left: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.registrationHeaderActions .modeSwitch a {
+  font-size: 11px;
+}
+
+.registrationTruthRail {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.62fr) minmax(0, 2fr);
+  border-block: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ivory) 54%, var(--white));
+}
+
+.registrationRecordCount {
+  display: grid;
+  min-height: 64px;
+  align-content: center;
+  gap: 5px;
+  padding: 10px clamp(16px, 2vw, 22px);
+  border-right: 1px solid var(--line);
+}
+
+.registrationRecordCount span,
+.registrationEquation span,
+.registrationAmounts dt {
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 790;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.registrationRecordCount span {
+  color: var(--red);
+}
+
+.registrationRecordCount strong {
+  color: var(--navy);
+  font-size: 18px;
+  font-weight: 720;
+}
+
+.registrationEquation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr) auto) minmax(140px, 1fr);
+  align-items: center;
+  gap: clamp(12px, 2vw, 28px);
+  padding: 8px clamp(16px, 2vw, 22px);
+}
+
+.registrationEquation > div {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.registrationEquation strong {
+  color: var(--red);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(24px, 2.3vw, 31px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.registrationEquation b {
+  color: var(--red);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+}
+
 .preparationEmbed {
-  padding: 0 clamp(20px, 3vw, 34px) 22px;
+  padding: 0;
   border-bottom: 1px solid var(--line);
 }
 
 .preparationEmbed > section {
-  margin-top: 22px;
+  margin-top: 0;
   padding: 0;
   border: 0;
   background: transparent;
 }
 
 .preparationEmbed > section > dl {
-  margin-top: 20px;
+  margin-top: 0;
 }
 
 .filters {
   display: grid;
   grid-template-columns: minmax(230px, 1.5fr) repeat(3, minmax(140px, 0.72fr)) auto;
   align-items: end;
-  gap: 12px;
-  padding: 20px clamp(20px, 3vw, 34px);
+  gap: 9px;
+  padding: 10px clamp(16px, 2vw, 22px);
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--ivory) 58%, var(--white));
 }
 
 .filters label {
   display: grid;
-  gap: 7px;
+  gap: 4px;
   min-width: 0;
 }
 
 .filters label > span:first-child {
   color: var(--steel);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -187,7 +300,7 @@
   background: var(--white);
   color: var(--navy);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .searchInput {
@@ -221,7 +334,7 @@
   border: 1px solid var(--navy);
   background: var(--navy);
   color: var(--white);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 760;
   white-space: nowrap;
 }
@@ -232,6 +345,29 @@
 
 .activityFilters {
   grid-template-columns: minmax(220px, 1.35fr) repeat(4, minmax(130px, 0.7fr)) auto;
+}
+
+.registrationFilters {
+  grid-template-columns: minmax(270px, 1.7fr) repeat(2, minmax(150px, 0.68fr)) auto;
+  gap: 9px;
+  padding: 10px clamp(18px, 2.5vw, 28px);
+}
+
+.monthlyFilters {
+  grid-template-columns: minmax(260px, 1.5fr) repeat(3, minmax(135px, 0.62fr)) auto;
+}
+
+.registrationFilters label > span:first-child {
+  font-size: 10px;
+}
+
+.registrationFilters input:not([type="checkbox"]),
+.registrationFilters select {
+  font-size: 13px;
+}
+
+.registrationFilters > button {
+  font-size: 11px;
 }
 
 .checkboxField {
@@ -254,7 +390,7 @@
 
 .checkboxField > span {
   color: var(--navy) !important;
-  font-size: 10px !important;
+  font-size: 12px !important;
   letter-spacing: 0 !important;
   text-transform: none !important;
 }
@@ -268,10 +404,10 @@
 .summaryGrid > div {
   display: grid;
   min-width: 0;
-  min-height: 88px;
+  min-height: 72px;
   align-content: center;
-  gap: 7px;
-  padding: 16px clamp(16px, 2.2vw, 26px);
+  gap: 5px;
+  padding: 12px clamp(14px, 1.8vw, 20px);
 }
 
 .summaryGrid > div + div {
@@ -281,7 +417,7 @@
 .summaryGrid dt,
 .methodSummary dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -290,23 +426,27 @@
 .summaryGrid dd {
   min-width: 0;
   color: var(--navy);
-  font-size: clamp(19px, 2.1vw, 28px);
+  font-size: clamp(21px, 2vw, 26px);
   font-weight: 600;
   letter-spacing: -0.045em;
   overflow-wrap: anywhere;
+}
+
+.summaryWide {
+  grid-column: span 2;
 }
 
 .methodSummary {
   display: flex;
   flex-wrap: wrap;
   gap: 0;
-  padding: 0 clamp(20px, 3vw, 34px);
+  padding: 0 clamp(16px, 2vw, 22px);
   border-bottom: 1px solid var(--line);
 }
 
 .methodSummary > div {
   display: flex;
-  min-height: 45px;
+  min-height: 40px;
   align-items: center;
   gap: 9px;
   padding-right: 18px;
@@ -319,7 +459,7 @@
 
 .methodSummary dd {
   color: var(--navy);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 760;
 }
 
@@ -339,10 +479,10 @@
 }
 
 .recordsTable th {
-  padding: 13px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--line);
   color: var(--steel);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 790;
   letter-spacing: 0.075em;
   text-align: left;
@@ -360,10 +500,10 @@
 }
 
 .recordsTable td {
-  padding: 15px 12px;
+  padding: 11px 12px;
   border-bottom: 1px solid var(--line);
   color: var(--navy);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
   vertical-align: middle;
 }
@@ -374,14 +514,123 @@
 }
 
 .recordsTable td > strong {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 740;
 }
 
 .recordsTable td > small {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: 10px;
+}
+
+.registrationTable {
+  min-width: 930px;
+}
+
+.registrationTable th {
+  padding-block: 10px;
+  font-size: 10px;
+}
+
+.registrationTable td {
+  padding-block: 8px;
+  font-size: 12px;
+}
+
+.registrationTable td > strong {
+  font-size: 13px;
+}
+
+.registrationTable td > small {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.registrationTable th:first-child,
+.registrationTable td:first-child {
+  width: 70px;
+}
+
+.registrationTable th:nth-child(2) {
+  width: 18%;
+}
+
+.registrationTable th:nth-child(3) {
+  width: 25%;
+}
+
+.registrationTable th:nth-child(4) {
+  width: 29%;
+}
+
+.registrationTable th:nth-child(5) {
+  width: 12%;
+}
+
+.registrationTable tbody tr {
+  transition: background 150ms ease;
+}
+
+.registrationTable tbody tr:hover {
+  background: color-mix(in srgb, var(--ivory) 68%, var(--white));
+}
+
+.registrationFolio {
+  color: var(--red) !important;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 19px !important;
+  font-style: italic;
+  font-weight: 560;
+}
+
+.registrationEntry small {
+  overflow-wrap: anywhere;
+}
+
+.registrationAmounts > dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.registrationAmounts > dl > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.registrationAmounts dd {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 730;
+  white-space: nowrap;
+}
+
+.registrationAmounts > dl > div:last-child dd {
+  font-size: 15px;
+}
+
+.registrationAction .rowAction {
+  width: 100%;
+  font-size: 12px;
+}
+
+.registrationStatus .status {
+  min-height: 29px;
+  font-size: 10px;
+}
+
+.registrationPanel .pagination {
+  min-height: 56px;
+  padding-block: 8px;
+}
+
+.registrationPanel .pagination > span,
+.registrationPanel .pagination a,
+.registrationPanel .pagination > div > span {
+  font-size: 11px;
 }
 
 .feeReferences {
@@ -400,7 +649,7 @@
   align-items: center;
   padding: 4px 8px;
   border: 1px solid currentColor;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.06em;
   line-height: 1.2;
@@ -459,16 +708,16 @@
 
 .pagination {
   display: flex;
-  min-height: 68px;
+  min-height: 56px;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 12px clamp(20px, 3vw, 34px);
+  padding: 8px clamp(16px, 2vw, 22px);
 }
 
 .pagination > span {
   color: var(--steel);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .pagination > div {
@@ -485,7 +734,7 @@
   padding: 0 12px;
   border: 1px solid var(--line);
   color: var(--navy);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
 }
 
@@ -511,8 +760,8 @@
   display: grid;
   grid-template-columns: minmax(155px, 0.48fr) minmax(0, 1.5fr) auto;
   align-items: start;
-  gap: 24px;
-  padding: 22px clamp(20px, 3vw, 34px);
+  gap: 18px;
+  padding: 16px clamp(16px, 2vw, 22px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -521,7 +770,7 @@
   align-items: flex-start;
   gap: 9px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -534,7 +783,7 @@
 
 .activityBody > span {
   color: var(--red);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -543,14 +792,14 @@
 .activityBody h3 {
   margin-top: 5px;
   color: var(--navy);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .activityBody p {
   margin-top: 5px;
   color: var(--steel);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -560,14 +809,14 @@
   border-left: 2px solid var(--line);
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 12px;
+  font-size: 13px;
   font-style: italic;
   line-height: 1.45;
 }
 
 .activityAmount {
   color: var(--navy);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 680;
   letter-spacing: -0.025em;
   white-space: nowrap;
@@ -577,14 +826,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: clamp(36px, 7vw, 100px);
-  margin-top: clamp(34px, 5vw, 58px);
+  gap: clamp(28px, 5vw, 72px);
+  margin-top: clamp(18px, 2vw, 28px);
 }
 
 .playerRecordHeader h1 {
-  margin-top: 13px;
+  margin-top: 10px;
   color: var(--navy);
-  font-size: clamp(46px, 6vw, 72px);
+  font-size: clamp(48px, 5.4vw, 66px);
   font-weight: 560;
   letter-spacing: -0.067em;
   line-height: 0.94;
@@ -592,16 +841,16 @@
 
 .playerRecordHeader p {
   max-width: 600px;
-  margin-top: 16px;
+  margin-top: 12px;
   color: var(--steel);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
 .playerRecordActions {
   display: grid;
-  min-width: 220px;
-  gap: 9px;
+  min-width: 232px;
+  gap: 8px;
 }
 
 .playerRecordActions a {
@@ -612,7 +861,7 @@
   padding: 0 14px;
   border: 1px solid var(--line);
   color: var(--navy);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 760;
 }
 
@@ -632,7 +881,7 @@
 }
 
 .playerRecordLedger {
-  margin-top: 28px;
+  margin-top: 18px;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--white) 55%, transparent);
 }
@@ -641,6 +890,128 @@
   .filters,
   .activityFilters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .registrationPanelHeader {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .registrationHeaderActions {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 0.38fr);
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .registrationTruthRail {
+    grid-template-columns: minmax(175px, 0.55fr) minmax(0, 1.75fr);
+  }
+
+  .registrationEquation {
+    gap: 10px;
+    padding-inline: 20px;
+  }
+
+  .registrationEquation strong {
+    font-size: clamp(22px, 3.5vw, 27px);
+  }
+
+  .registrationFilters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monthlyFilters .searchField {
+    grid-column: 1 / -1;
+  }
+
+  .registrationTableWrap {
+    overflow: visible;
+  }
+
+  .registrationTable,
+  .registrationTable tbody,
+  .registrationTable tr,
+  .registrationTable td {
+    display: block;
+    width: 100%;
+  }
+
+  .registrationTable {
+    min-width: 0;
+  }
+
+  .registrationTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .registrationTable tr {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 0.9fr) minmax(0, 1.25fr);
+    padding: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .registrationTable td,
+  .registrationTable td:first-child,
+  .registrationTable td:last-child {
+    min-height: 0;
+    padding: 8px 14px;
+    border: 0;
+    text-align: left;
+  }
+
+  .registrationTable td::before {
+    content: none;
+  }
+
+  .registrationFolio {
+    grid-row: 1 / 4;
+    display: grid !important;
+    width: 48px !important;
+    place-items: start center;
+    padding: 14px 8px !important;
+    border-right: 1px solid var(--line) !important;
+  }
+
+  .registrationPlayer,
+  .registrationEntry {
+    border-bottom: 1px solid var(--line) !important;
+  }
+
+  .registrationPlayer {
+    grid-column: 2;
+  }
+
+  .registrationEntry {
+    grid-column: 3;
+    border-left: 1px solid var(--line) !important;
+  }
+
+  .registrationAmounts {
+    grid-column: 2 / 4;
+  }
+
+  .registrationStatus {
+    grid-column: 2;
+    border-top: 1px solid var(--line) !important;
+  }
+
+  .registrationAction {
+    grid-column: 3;
+    border-top: 1px solid var(--line) !important;
+    border-left: 1px solid var(--line) !important;
+  }
+
+  .registrationAction .rowAction {
+    min-height: 44px;
   }
 
   .searchField {
@@ -658,30 +1029,76 @@
 
 @media (max-width: 720px) {
   .viewNavigation {
-    margin-top: 28px;
+    margin-top: 16px;
   }
 
   .viewNavigation a {
-    min-height: 56px;
+    min-height: 50px;
     flex-direction: column;
     gap: 5px;
     padding-inline: 7px;
-    font-size: 9px;
+    font-size: 11px;
   }
 
   .panel {
-    margin: 16px -16px 0;
-  }
-
-  .preparationEmbed {
-    padding-inline: 22px;
+    margin: 12px -16px 0;
   }
 
   .panelHeader {
     align-items: stretch;
     flex-direction: column;
-    gap: 18px;
-    padding: 24px 22px;
+    gap: 12px;
+    padding: 18px 16px;
+  }
+
+  .registrationPanelHeader {
+    display: block;
+    padding: 0;
+  }
+
+  .registrationPanelHeader > div:first-child {
+    padding: 16px;
+  }
+
+  .registrationHeaderActions {
+    grid-template-columns: 1fr;
+  }
+
+  .registrationHeaderActions .modeSwitch {
+    min-height: 50px;
+  }
+
+  .registrationHeaderActions .downloadLink {
+    min-height: 46px;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .registrationTruthRail {
+    grid-template-columns: 1fr;
+  }
+
+  .registrationRecordCount {
+    min-height: 56px;
+    padding: 9px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .registrationEquation {
+    grid-template-columns: repeat(2, minmax(0, 1fr) auto) minmax(0, 1fr);
+    gap: 7px;
+    padding: 10px 8px;
+  }
+
+  .registrationEquation span {
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    line-height: 1.25;
+  }
+
+  .registrationEquation strong {
+    font-size: clamp(18px, 6vw, 24px);
   }
 
   .panelHeader h2 {
@@ -696,8 +1113,25 @@
   .activityFilters,
   .dayBookFilters {
     grid-template-columns: 1fr;
-    gap: 13px;
-    padding: 18px 22px 20px;
+    gap: 10px;
+    padding: 12px 16px 14px;
+  }
+
+  .filters.registrationFilters {
+    gap: 9px;
+    padding: 12px 16px 14px;
+  }
+
+  .filters.monthlyFilters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monthlyFilters .searchField {
+    grid-column: 1 / -1;
+  }
+
+  .monthlyFilters > button {
+    grid-column: 1 / -1;
   }
 
   .searchField {
@@ -720,8 +1154,8 @@
   }
 
   .summaryGrid > div {
-    min-height: 80px;
-    padding: 14px 18px;
+    min-height: 68px;
+    padding: 11px 14px;
   }
 
   .summaryGrid > div:nth-child(odd) {
@@ -739,12 +1173,12 @@
   .methodSummary {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 0 22px;
+    padding: 0 16px;
   }
 
   .methodSummary > div {
     min-width: 0;
-    padding: 12px 10px 12px 0;
+    padding: 10px 8px 10px 0;
   }
 
   .methodSummary > div + div {
@@ -764,19 +1198,17 @@
     overflow: visible;
   }
 
-  .recordsTable,
-  .recordsTable tbody,
-  .recordsTable tr,
-  .recordsTable td {
+  .recordsTable:not(.registrationTable),
+  .recordsTable:not(.registrationTable) tbody {
     display: block;
     width: 100%;
   }
 
-  .recordsTable {
+  .recordsTable:not(.registrationTable) {
     min-width: 0;
   }
 
-  .recordsTable thead {
+  .recordsTable:not(.registrationTable) thead {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -786,47 +1218,151 @@
     white-space: nowrap;
   }
 
-  .recordsTable tr {
-    padding: 17px 22px;
+  .recordsTable:not(.registrationTable) tr {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0;
     border-bottom: 1px solid var(--line);
   }
 
-  .recordsTable td,
-  .recordsTable td:first-child,
-  .recordsTable td:last-child {
+  .recordsTable:not(.registrationTable) td,
+  .recordsTable:not(.registrationTable) td:first-child,
+  .recordsTable:not(.registrationTable) td:last-child {
     display: grid;
-    min-height: 31px;
-    grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1.3fr);
-    align-items: baseline;
-    gap: 12px;
-    padding: 7px 0;
+    width: auto;
+    min-height: 58px;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    align-items: start;
+    gap: 4px;
+    padding: 9px 12px;
     border: 0;
-    font-size: 11px;
-    text-align: right;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    text-align: left;
   }
 
-  .recordsTable td::before {
+  .recordsTable:not(.registrationTable) td:nth-child(even) {
+    border-left: 1px solid var(--line);
+  }
+
+  .recordsTable:not(.registrationTable) td::before {
     content: attr(data-label);
     color: var(--steel);
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 790;
     letter-spacing: 0.075em;
     text-align: left;
     text-transform: uppercase;
   }
 
-  .recordsTable td > strong,
-  .recordsTable td > small {
-    justify-self: end;
+  .recordsTable:not(.registrationTable) td > strong,
+  .recordsTable:not(.registrationTable) td > small {
+    justify-self: start;
   }
 
-  .recordsTable td > small {
+  .recordsTable:not(.registrationTable) td > small {
+    grid-column: auto;
+  }
+
+  .recordsTable:not(.registrationTable) td .status,
+  .recordsTable:not(.registrationTable) td .rowAction {
+    justify-self: start;
+  }
+
+  .recordsTable:not(.registrationTable) td .rowAction {
+    width: 100%;
+  }
+
+  .registrationTable tr {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    padding: 0;
+  }
+
+  .registrationTable td,
+  .registrationTable td:first-child,
+  .registrationTable td:last-child {
+    display: block;
+    width: auto;
+    min-height: 0;
+    grid-template-columns: none;
+    gap: 0;
+    padding: 8px 10px;
+    text-align: left;
+  }
+
+  .registrationTable td > strong,
+  .registrationTable td > small,
+  .registrationTable td .status,
+  .registrationTable td .rowAction {
+    justify-self: auto;
+  }
+
+  .registrationTable td > small {
+    grid-column: auto;
+  }
+
+  .registrationTable td::before {
+    content: none;
+  }
+
+  .registrationFolio {
+    width: 42px !important;
+    grid-column: 1;
+    grid-row: 1 / 5;
+    padding: 13px 6px !important;
+    font-size: 17px !important;
+  }
+
+  .registrationPlayer {
     grid-column: 2;
+    grid-row: 1;
   }
 
-  .recordsTable td .status,
-  .recordsTable td .rowAction {
-    justify-self: end;
+  .registrationStatus {
+    grid-column: 3;
+    grid-row: 1;
+    display: grid !important;
+    align-items: center;
+    border-top: 0 !important;
+    border-bottom: 1px solid var(--line) !important;
+  }
+
+  .registrationEntry {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    border-left: 0 !important;
+  }
+
+  .registrationAmounts {
+    grid-column: 2 / 4;
+    grid-row: 3;
+    border-bottom: 1px solid var(--line) !important;
+  }
+
+  .registrationAmounts > dl {
+    gap: 8px;
+  }
+
+  .registrationAmounts dd {
+    font-size: 12px;
+  }
+
+  .registrationAmounts > dl > div:last-child dd {
+    font-size: 14px;
+  }
+
+  .registrationAction {
+    grid-column: 2 / 4;
+    grid-row: 4;
+    border-top: 0 !important;
+    border-left: 0 !important;
+  }
+
+  .registrationAction .rowAction {
+    min-height: 44px;
   }
 
   .feeReferences {
@@ -834,11 +1370,11 @@
   }
 
   .pagination {
-    min-height: 78px;
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
-    padding: 15px 22px 20px;
+    min-height: 60px;
+    align-items: center;
+    flex-direction: row;
+    gap: 8px;
+    padding: 8px 16px;
   }
 
   .pagination > div {
@@ -853,8 +1389,8 @@
 
   .activityList > li {
     grid-template-columns: 1fr auto;
-    gap: 12px 18px;
-    padding: 20px 22px;
+    gap: 10px 14px;
+    padding: 14px 16px;
   }
 
   .activityTime {
@@ -871,12 +1407,12 @@
 
   .playerRecordHeader {
     grid-template-columns: 1fr;
-    gap: 22px;
-    margin-top: 34px;
+    gap: 18px;
+    margin-top: 24px;
   }
 
   .playerRecordHeader h1 {
-    font-size: clamp(44px, 14vw, 62px);
+    font-size: clamp(40px, 12vw, 48px);
   }
 
   .playerRecordActions {
@@ -894,7 +1430,7 @@
   }
 
   .playerRecordLedger {
-    margin: 24px -16px 0;
+    margin: 18px -16px 0;
   }
 }
 
@@ -903,10 +1439,10 @@
     max-width: 76px;
   }
 
-  .recordsTable td,
-  .recordsTable td:first-child,
-  .recordsTable td:last-child {
-    grid-template-columns: 82px minmax(0, 1fr);
+  .recordsTable:not(.registrationTable) td,
+  .recordsTable:not(.registrationTable) td:first-child,
+  .recordsTable:not(.registrationTable) td:last-child {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .activityList > li {

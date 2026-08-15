@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}))
 
 const mocks = vi.hoisted(() => ({
   initializeDatabase: vi.fn(),
+  listAttendanceRegisterPlayerRecords: vi.fn(),
   listOperationalPlayerRecords: vi.fn(),
   listSessionAssignmentsForSeries: vi.fn(),
   listSessionAttendanceRecordsForOccurrences: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@/lib/coach/database", () => ({
+  listAttendanceRegisterPlayerRecords: mocks.listAttendanceRegisterPlayerRecords,
   listOperationalPlayerRecords: mocks.listOperationalPlayerRecords,
 }))
 vi.mock("@/lib/db/client", () => ({ initializeDatabase: mocks.initializeDatabase }))
@@ -107,6 +109,10 @@ describe("route-scoped coach session read models", () => {
       members: [{ id: "player-1" }],
       trainingProfiles: [{ memberId: "player-1" }],
     })
+    mocks.listAttendanceRegisterPlayerRecords.mockReturnValue({
+      members: [{ id: "player-1" }],
+      trainingProfiles: [{ memberId: "player-1" }],
+    })
   })
 
   it("loads Calendar occurrences for one exact month and only its roster players", () => {
@@ -115,6 +121,7 @@ describe("route-scoped coach session read models", () => {
     expect(mocks.listSessionOccurrences).toHaveBeenCalledWith("2026-08-01", "2026-08-31")
     expect(mocks.listSessionAssignmentsForSeries).toHaveBeenCalledWith(["beginner-weekday"])
     expect(mocks.listOperationalPlayerRecords).toHaveBeenCalledWith(["player-1"])
+    expect(mocks.listAttendanceRegisterPlayerRecords).not.toHaveBeenCalled()
     expect(snapshot.sessionOccurrences).toEqual([occurrence])
   })
 
@@ -132,7 +139,7 @@ describe("route-scoped coach session read models", () => {
     )
     expect(mocks.listSessionAssignmentsForSeries).toHaveBeenCalledWith(["beginner-weekday"])
     expect(mocks.listSessionAttendanceRecordsForOccurrences).toHaveBeenCalledWith(["occurrence-1"])
-    expect(mocks.listOperationalPlayerRecords).toHaveBeenCalledWith(["player-1"])
+    expect(mocks.listAttendanceRegisterPlayerRecords).toHaveBeenCalledWith(["player-1"])
     expect(snapshot.sessionSeries).toEqual(series)
   })
 
@@ -161,6 +168,6 @@ describe("route-scoped coach session read models", () => {
     }, series)
 
     expect(snapshot.sessionAssignments).toEqual([priorYearAssignment])
-    expect(mocks.listOperationalPlayerRecords).toHaveBeenCalledWith(["player-1"])
+    expect(mocks.listAttendanceRegisterPlayerRecords).toHaveBeenCalledWith(["player-1"])
   })
 })

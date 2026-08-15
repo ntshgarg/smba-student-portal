@@ -76,6 +76,7 @@ const ADJUSTMENT_LABELS: Record<AdjustmentKind, string> = {
   concession_credit: "Fee concession",
   manual_credit: "Credit adjustment",
   manual_debit: "Debit adjustment",
+  withdrawal_credit: "Unused-training credit",
 }
 
 function statusTone(value: string) {

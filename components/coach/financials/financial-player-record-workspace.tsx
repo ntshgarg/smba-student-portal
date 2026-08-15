@@ -32,14 +32,13 @@ export function FinancialPlayerRecordWorkspace({
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [ledger.playerId])
-  const hasActiveFeePlan = ledger.feePlan?.status === "active"
   const hasPayableBalance = ledger.charges.some((charge) => (
     charge.outstandingPaise > 0
       && (charge.type === "registration" || (charge.billingPeriod ?? paymentPeriod) <= paymentPeriod)
   ))
 
   return (
-    <div className={`${financialStyles.workspace} page-shell`}>
+    <div className={`${financialStyles.workspace} ${financialStyles.recordsWorkspace} page-shell`}>
       <div className={financialStyles.backRow}>
         <Link href={backHref}><ArrowLeft aria-hidden="true" /> Back to Fee Records</Link>
       </div>
@@ -51,7 +50,7 @@ export function FinancialPlayerRecordWorkspace({
           <p>Review the player’s fee plan, charges, receipts and corrections.</p>
         </div>
         <div className={recordsStyles.playerRecordActions}>
-          {hasActiveFeePlan && hasPayableBalance && !ledger.archived ? (
+          {hasPayableBalance && !ledger.archived ? (
             <Link href={recordPaymentHref(ledger)}>
               <ReceiptIndianRupee aria-hidden="true" /> Record payment
             </Link>
@@ -64,6 +63,7 @@ export function FinancialPlayerRecordWorkspace({
 
       <div className={recordsStyles.playerRecordLedger}>
         <PlayerLedger
+          focused
           ledger={ledger}
           period={period}
           showReceiptDownloads

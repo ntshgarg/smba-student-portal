@@ -4,7 +4,10 @@ import { and, desc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm"
 
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
 import type { AttendanceRegisterSelection } from "@/lib/attendance/register-workspace"
-import { listOperationalPlayerRecords } from "@/lib/coach/database"
+import {
+  listAttendanceRegisterPlayerRecords,
+  listOperationalPlayerRecords,
+} from "@/lib/coach/database"
 import { initializeDatabase } from "@/lib/db/client"
 import {
   attendanceAdjustments,
@@ -39,7 +42,7 @@ export type CoachCalendarMonthSnapshot = CoachSessionWindowSnapshot & ReturnType
 >
 
 export type CoachAttendanceRegisterSnapshot = CoachSessionWindowSnapshot & ReturnType<
-  typeof listOperationalPlayerRecords
+  typeof listAttendanceRegisterPlayerRecords
 > & {
   attendanceAdjustments: AttendanceAdjustmentRecord[]
   attendanceRecords: SessionAttendanceRecords
@@ -184,7 +187,7 @@ export function getCoachAttendanceRegisterSnapshot(
   const playerIds = unique(sessionAssignments.map((assignment) => assignment.playerId))
 
   return {
-    ...listOperationalPlayerRecords(playerIds),
+    ...listAttendanceRegisterPlayerRecords(playerIds),
     attendanceAdjustments: listAttendanceRegisterAdjustments({
       from: yearStart,
       seriesIds: categorySeriesIds,

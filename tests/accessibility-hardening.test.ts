@@ -48,7 +48,7 @@ describe("operational mobile controls", () => {
     expect(antiZoomRule).toContain(".coach-member-filter select")
     expect(antiZoomRule).toContain(".coach-member-form-grid input:not(")
     expect(antiZoomRule).toContain(".coach-adjustment-field select")
-    expect(antiZoomRule).toContain(".coach-adjustment-missed-calendar-toolbar select")
+    expect(antiZoomRule).not.toContain(".coach-adjustment-missed-calendar-toolbar select")
     expect(antiZoomRule).toContain(".coach-adjustment-reason input:not(")
     expect(antiZoomRule).toContain(".coach-calendar-controls input:not(")
     expect(antiZoomRule).toContain(".coach-occurrence-actions input:not(")

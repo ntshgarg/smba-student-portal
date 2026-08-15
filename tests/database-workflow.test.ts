@@ -181,7 +181,7 @@ describe("shared academy session workflow", () => {
       weekdays: [weekday],
     })).toThrow("batch")
 
-    const overlappingSeriesId = createSessionSeriesRecords({
+    expect(() => createSessionSeriesRecords({
       coachId: coach.accountId,
       database,
       now,
@@ -195,7 +195,27 @@ describe("shared academy session workflow", () => {
         startTime: "06:30",
         durationMinutes: 60,
       },
-    })
+    })).toThrow("time slot")
+    const overlappingSeriesId = "legacy-overlapping-series"
+    database.insert(schema.sessionSeries).values({
+      id: overlappingSeriesId,
+      batch,
+      createdAt: now,
+      createdByAccountId: coach.accountId,
+      endsOn: future.toISOString().slice(0, 10),
+      programme: "Beginner",
+      startsOn: joinedOn,
+      status: "active",
+      title: "Legacy overlapping schedule",
+      venue: "SMBA Court",
+    }).run()
+    database.insert(schema.sessionRecurrenceRules).values({
+      id: "legacy-overlapping-rule",
+      durationMinutes: 60,
+      seriesId: overlappingSeriesId,
+      startTime: "06:30",
+      weekday,
+    }).run()
     expect(() => assignSessionRecords({
       coachId: coach.accountId,
       database,
@@ -234,8 +254,8 @@ describe("shared academy session workflow", () => {
       referenceDate: todayKey,
       now,
       changes: [
-        { playerId: firstId, occurrenceId: todayOccurrence.id, choice: "present" },
-        { playerId: firstId, occurrenceId: secondTodayOccurrence.id, choice: "present" },
+        { playerId: firstId, occurrenceId: todayOccurrence.id, choice: "present", expectedChoice: "cleared" },
+        { playerId: firstId, occurrenceId: secondTodayOccurrence.id, choice: "present", expectedChoice: "cleared" },
       ],
     })
 
@@ -292,14 +312,61 @@ describe("shared academy session workflow", () => {
       laterTodaySeriesId,
     ]))
 
+    const originalAttendance = database.select().from(schema.sessionAttendanceRecords)
+      .where(and(
+        eq(schema.sessionAttendanceRecords.accountId, firstId),
+        eq(schema.sessionAttendanceRecords.occurrenceId, todayOccurrence.id),
+      )).get()
+    expect(saveSessionAttendanceRecords({
+      database,
+      coachId: coach.accountId,
+      referenceDate: todayKey,
+      now: new Date(now.getTime() + 60_000),
+      changes: [{
+        playerId: firstId,
+        occurrenceId: todayOccurrence.id,
+        choice: "present",
+        expectedChoice: "cleared",
+      }],
+    })).toEqual({ applied: 0 })
+    expect(database.select().from(schema.sessionAttendanceRecords)
+      .where(and(
+        eq(schema.sessionAttendanceRecords.accountId, firstId),
+        eq(schema.sessionAttendanceRecords.occurrenceId, todayOccurrence.id),
+      )).get()?.updatedAt).toEqual(originalAttendance?.updatedAt)
+    expect(() => saveSessionAttendanceRecords({
+      database,
+      coachId: coach.accountId,
+      referenceDate: todayKey,
+      now,
+      changes: [{
+        playerId: firstId,
+        occurrenceId: todayOccurrence.id,
+        choice: "absent",
+        expectedChoice: "cleared",
+      }],
+    })).toThrow("changed since this page was opened")
+    expect(() => saveSessionAttendanceRecords({
+      database,
+      coachId: coach.accountId,
+      referenceDate: todayKey,
+      now,
+      changes: [{
+        playerId: firstId,
+        occurrenceId: todayOccurrence.id,
+        choice: "late" as never,
+        expectedChoice: "present",
+      }],
+    })).toThrow("valid attendance result")
+
     expect(() => saveSessionAttendanceRecords({
       database,
       coachId: coach.accountId,
       referenceDate: todayKey,
       now,
       changes: [
-        { playerId: firstId, occurrenceId: todayOccurrence.id, choice: "absent" },
-        { playerId: firstId, occurrenceId: laterTodayOccurrence.id, choice: "present" },
+        { playerId: firstId, occurrenceId: todayOccurrence.id, choice: "absent", expectedChoice: "present" },
+        { playerId: firstId, occurrenceId: laterTodayOccurrence.id, choice: "present", expectedChoice: "cleared" },
       ],
     })).toThrow("future session")
     expect(database.select({ choice: schema.sessionAttendanceRecords.choice })
@@ -313,7 +380,7 @@ describe("shared academy session workflow", () => {
       referenceDate: todayKey,
       now: new Date(`${todayKey}T11:00:00+05:30`),
       changes: [
-        { playerId: firstId, occurrenceId: laterTodayOccurrence.id, choice: "present" },
+        { playerId: firstId, occurrenceId: laterTodayOccurrence.id, choice: "present", expectedChoice: "cleared" },
       ],
     })
     expect((await new SqlitePortalRepository().getDashboard(firstId))?.attendance)
@@ -325,8 +392,8 @@ describe("shared academy session workflow", () => {
       referenceDate: todayKey,
       now,
       changes: [
-        { playerId: firstId, occurrenceId: todayOccurrence.id, choice: "absent" },
-        { playerId: firstId, occurrenceId: futureOccurrence.id, choice: "present" },
+        { playerId: firstId, occurrenceId: todayOccurrence.id, choice: "absent", expectedChoice: "present" },
+        { playerId: firstId, occurrenceId: futureOccurrence.id, choice: "present", expectedChoice: "cleared" },
       ],
     })).toThrow("future session")
     expect(database.select({ choice: schema.sessionAttendanceRecords.choice })
@@ -339,7 +406,7 @@ describe("shared academy session workflow", () => {
       database,
       occurrenceId: futureOccurrence.id,
       dateKey: futureOccurrence.occurrenceDate,
-      startTime: "07:00",
+      startTime: "12:00",
       durationMinutes: 75,
       venue: "SMBA Court 2",
       referenceDate: todayKey,
@@ -356,6 +423,26 @@ describe("shared academy session workflow", () => {
       durationMinutes: 75,
       venue: "SMBA Court 2",
     })
+
+    database.update(schema.accounts).set({ archivedAt: now })
+      .where(eq(schema.accounts.id, firstId)).run()
+    expect(() => saveSessionAttendanceRecords({
+      database,
+      coachId: coach.accountId,
+      referenceDate: todayKey,
+      now,
+      changes: [{
+        playerId: firstId,
+        occurrenceId: todayOccurrence.id,
+        choice: "absent",
+        expectedChoice: "present",
+      }],
+    })).toThrow("selected player is unavailable")
+    expect(database.select({ choice: schema.sessionAttendanceRecords.choice })
+      .from(schema.sessionAttendanceRecords).where(and(
+        eq(schema.sessionAttendanceRecords.accountId, firstId),
+        eq(schema.sessionAttendanceRecords.occurrenceId, todayOccurrence.id),
+      )).get()?.choice).toBe("present")
   })
 
   it("enforces exact distinct weekdays across active Weekday assignments", async () => {
@@ -518,20 +605,28 @@ describe("shared academy session workflow", () => {
       database,
       effectiveTo: "2026-08-10",
       now,
+    })).toThrow("cannot be in the future")
+    const assignmentEndNow = new Date("2026-08-10T06:00:00+05:30")
+    expect(() => endSessionAssignment({
+      assignmentId: firstAssignment.id,
+      coachId: coach.accountId,
+      database,
+      effectiveTo: "2026-08-10",
+      now: assignmentEndNow,
     })).toThrow("exactly 3")
     endSessionAssignment({
       assignmentId: secondAssignment.id,
       coachId: coach.accountId,
       database,
       effectiveTo: "2026-08-10",
-      now,
+      now: assignmentEndNow,
     })
     endSessionAssignment({
       assignmentId: firstAssignment.id,
       coachId: coach.accountId,
       database,
       effectiveTo: "2026-08-10",
-      now,
+      now: assignmentEndNow,
     })
     expect(database.select().from(schema.playerEnrollments)
       .where(eq(schema.playerEnrollments.accountId, threeDayPlayerId)).get()?.status).toBe("paused")

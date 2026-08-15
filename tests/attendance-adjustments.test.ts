@@ -15,6 +15,7 @@ describe("attendance adjustments", () => {
   let database: ReturnType<typeof import("@/lib/db/client")["initializeDatabase"]>
   let schema: typeof import("@/lib/db/schema")
   const coachId = "00000000-0000-4000-8000-000000000001"
+  const otherCoachId = "attendance-adjustments-other-head-coach"
   const now = new Date("2026-08-20T12:00:00+05:30")
 
   beforeAll(async () => {
@@ -22,6 +23,29 @@ describe("attendance adjustments", () => {
     schema = await import("@/lib/db/schema")
     adjustments = await import("@/lib/attendance/adjustments")
     database = client.initializeDatabase()
+    database.insert(schema.accounts).values({
+      id: otherCoachId,
+      fullName: "Other Head Coach",
+      normalizedName: "other head coach",
+      requestedRole: "coach",
+      role: "coach",
+      approvalStatus: "approved",
+      approvedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    database.insert(schema.academyIdAllocations).values({
+      serial: 999,
+      accountId: otherCoachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.coachProfiles).values({
+      accountId: otherCoachId,
+      accessLevel: "head_admin",
+      joinedOn: "2026-08-01",
+      createdAt: now,
+      updatedAt: now,
+    }).run()
   })
 
   afterAll(() => {
@@ -41,6 +65,7 @@ describe("attendance adjustments", () => {
     const assignmentId = `${prefix}-assignment`
     const completionSeriesId = `${prefix}-completion-series`
     const completionOccurrenceId = `${prefix}-completion-occurrence`
+    const completionAssignmentId = `${prefix}-completion-assignment`
 
     database.insert(schema.accounts).values({
       id: playerId,
@@ -110,31 +135,112 @@ describe("attendance adjustments", () => {
         createdAt: now,
       },
     ]).run()
+    database.insert(schema.sessionAssignments).values([
+      {
+        id: assignmentId,
+        accountId: playerId,
+        seriesId: sourceSeriesId,
+        effectiveFrom: "2026-08-01",
+        effectiveTo: null,
+        assignedByAccountId: coachId,
+        assignedAt: now,
+      },
+      {
+        id: completionAssignmentId,
+        accountId: playerId,
+        seriesId: completionSeriesId,
+        effectiveFrom: "2026-08-01",
+        effectiveTo: null,
+        assignedByAccountId: coachId,
+        assignedAt: now,
+      },
+    ]).run()
+    database.insert(schema.sessionAssignmentWeekdays).values([
+      {
+        id: `${prefix}-assignment-weekday`,
+        assignmentId,
+        weekday: new Date(`${sourceDate}T00:00:00.000Z`).getUTCDay(),
+      },
+      {
+        id: `${prefix}-completion-assignment-weekday`,
+        assignmentId: completionAssignmentId,
+        weekday: new Date(`${completedOn}T00:00:00.000Z`).getUTCDay(),
+      },
+    ]).run()
+    database.insert(schema.sessionAttendanceRecords).values([
+      {
+        id: `${prefix}-attendance`,
+        accountId: playerId,
+        occurrenceId: sourceOccurrenceId,
+        choice: "absent",
+        markedByAccountId: coachId,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: `${prefix}-completion-attendance`,
+        accountId: playerId,
+        occurrenceId: completionOccurrenceId,
+        choice: "present",
+        markedByAccountId: coachId,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]).run()
+
+    return { completedOn, completionOccurrenceId, playerId, sourceOccurrenceId }
+  }
+
+  function addAbsentSource(prefix: string, playerId: string, sourceDate: string) {
+    const seriesId = `${prefix}-series`
+    const occurrenceId = `${prefix}-occurrence`
+    const assignmentId = `${prefix}-assignment`
+    database.insert(schema.sessionSeries).values({
+      id: seriesId,
+      title: `${prefix} source`,
+      programme: "Adult",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: "2026-08-01",
+      endsOn: "2026-08-31",
+      status: "active",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionOccurrences).values({
+      id: occurrenceId,
+      seriesId,
+      occurrenceDate: sourceDate,
+      startsAt: new Date(`${sourceDate}T08:00:00+05:30`),
+      durationMinutes: 60,
+      venue: "SMBA Court",
+      status: "scheduled",
+      createdAt: now,
+    }).run()
     database.insert(schema.sessionAssignments).values({
       id: assignmentId,
       accountId: playerId,
-      seriesId: sourceSeriesId,
+      seriesId,
       effectiveFrom: "2026-08-01",
       effectiveTo: null,
       assignedByAccountId: coachId,
       assignedAt: now,
     }).run()
     database.insert(schema.sessionAssignmentWeekdays).values({
-      id: `${prefix}-assignment-weekday`,
+      id: `${prefix}-weekday`,
       assignmentId,
       weekday: new Date(`${sourceDate}T00:00:00.000Z`).getUTCDay(),
     }).run()
     database.insert(schema.sessionAttendanceRecords).values({
       id: `${prefix}-attendance`,
       accountId: playerId,
-      occurrenceId: sourceOccurrenceId,
+      occurrenceId,
       choice: "absent",
       markedByAccountId: coachId,
       createdAt: now,
       updatedAt: now,
     }).run()
-
-    return { completedOn, completionOccurrenceId, playerId, sourceOccurrenceId }
+    return occurrenceId
   }
 
   it("publishes, lists and soft-voids one auditable make-up", () => {
@@ -143,9 +249,9 @@ describe("attendance adjustments", () => {
       coachId,
       database,
       now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
       playerId: fixture.playerId,
       sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
       reason: "  Tournament  ",
     })
 
@@ -161,14 +267,24 @@ describe("attendance adjustments", () => {
     })
     expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database))
       .toEqual([published])
+    expect(adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
+      playerId: fixture.playerId,
+      sourceOccurrenceId: fixture.sourceOccurrenceId,
+      reason: "Tournament",
+    })).toEqual(published)
     expect(() => adjustments.publishMakeupAttendanceAdjustment({
       coachId,
       database,
       now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
       playerId: fixture.playerId,
       sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
-    })).toThrow("already has a published adjustment")
+      reason: "Different reason",
+    })).toThrow("different published adjustment")
     expect(database.select().from(schema.sessionAttendanceRecords).where(and(
       eq(schema.sessionAttendanceRecords.accountId, fixture.playerId),
       eq(schema.sessionAttendanceRecords.occurrenceId, fixture.sourceOccurrenceId),
@@ -182,6 +298,12 @@ describe("attendance adjustments", () => {
     })
     expect(voided).toMatchObject({ voidedByAccountId: coachId })
     expect(voided.voidedAt).toBeInstanceOf(Date)
+    expect(adjustments.voidAttendanceAdjustment({
+      adjustmentId: published.id,
+      coachId,
+      database,
+      now: new Date("2026-08-22T12:00:00+05:30"),
+    })).toEqual(voided)
     expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database)).toEqual([])
     expect(adjustments.listAttendanceAdjustments({
       database,
@@ -193,56 +315,79 @@ describe("attendance adjustments", () => {
       coachId,
       database,
       now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
       playerId: fixture.playerId,
       sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
     })
     expect(replacement.id).not.toBe(published.id)
   })
 
-  it("keeps completion occurrence optional when several sessions happened that day", () => {
-    const fixture = createScenario("ambiguous")
-    database.insert(schema.sessionSeries).values([
-      {
-        id: "ambiguous-second-completion-series",
-        title: "Ambiguous second completion",
-        programme: "Adult",
-        batch: "Weekday",
-        venue: "SMBA Court",
-        startsOn: "2026-08-01",
-        endsOn: "2026-08-31",
-        status: "active",
-        createdByAccountId: coachId,
-        createdAt: now,
-      },
-      {
-        id: "ambiguous-second-source-series",
-        title: "Ambiguous second source",
-        programme: "Adult",
-        batch: "Weekday",
-        venue: "SMBA Court",
-        startsOn: "2026-08-01",
-        endsOn: "2026-08-31",
-        status: "active",
-        createdByAccountId: coachId,
-        createdAt: now,
-      },
-    ]).run()
-    database.insert(schema.sessionOccurrences).values({
-      id: "ambiguous-second-completion",
-      seriesId: "ambiguous-second-completion-series",
-      occurrenceDate: fixture.completedOn,
-      startsAt: new Date(`${fixture.completedOn}T09:00:00+05:30`),
-      durationMinutes: 60,
+  it("revalidates archival in the write transaction while preserving exact retries", () => {
+    const raced = createScenario("archival-race")
+    const transaction = database.transaction.bind(database)
+    database.transaction = ((callback, config) => {
+      database.update(schema.accounts).set({ archivedAt: now })
+        .where(eq(schema.accounts.id, raced.playerId)).run()
+      return transaction(callback, config)
+    }) as typeof database.transaction
+
+    try {
+      expect(() => adjustments.publishMakeupAttendanceAdjustment({
+        coachId,
+        database,
+        now,
+        completionOccurrenceId: raced.completionOccurrenceId,
+        playerId: raced.playerId,
+        sourceOccurrenceId: raced.sourceOccurrenceId,
+      })).toThrowError(expect.objectContaining({
+        code: "NOT_FOUND",
+        field: "playerId",
+      }))
+    } finally {
+      database.transaction = transaction
+    }
+    expect(adjustments.listActiveAttendanceAdjustments(raced.playerId, database)).toEqual([])
+
+    const retry = createScenario("archival-retry")
+    const published = adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: retry.completionOccurrenceId,
+      playerId: retry.playerId,
+      sourceOccurrenceId: retry.sourceOccurrenceId,
+    })
+    database.update(schema.accounts).set({ archivedAt: now })
+      .where(eq(schema.accounts.id, retry.playerId)).run()
+    expect(adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now: new Date("2026-08-20T12:01:00+05:30"),
+      completionOccurrenceId: retry.completionOccurrenceId,
+      playerId: retry.playerId,
+      sourceOccurrenceId: retry.sourceOccurrenceId,
+    })).toEqual(published)
+    expect(adjustments.listActiveAttendanceAdjustments(retry.playerId, database)).toEqual([published])
+  })
+
+  it("prevents one attended completion occurrence from reconciling two absences", () => {
+    const fixture = createScenario("completion-reuse")
+    const secondSourceDate = "2026-08-11"
+    database.insert(schema.sessionSeries).values({
+      id: "completion-reuse-second-source-series",
+      title: "Completion reuse second source",
+      programme: "Adult",
+      batch: "Weekday",
       venue: "SMBA Court",
-      status: "scheduled",
+      startsOn: "2026-08-01",
+      endsOn: "2026-08-31",
+      status: "active",
+      createdByAccountId: coachId,
       createdAt: now,
     }).run()
-
-    const secondSourceDate = "2026-08-11"
     database.insert(schema.sessionOccurrences).values({
-      id: "ambiguous-second-source",
-      seriesId: "ambiguous-second-source-series",
+      id: "completion-reuse-second-source",
+      seriesId: "completion-reuse-second-source-series",
       occurrenceDate: secondSourceDate,
       startsAt: new Date(`${secondSourceDate}T08:00:00+05:30`),
       durationMinutes: 60,
@@ -251,118 +396,266 @@ describe("attendance adjustments", () => {
       createdAt: now,
     }).run()
     database.insert(schema.sessionAssignments).values({
-      id: "ambiguous-second-source-assignment",
+      id: "completion-reuse-second-source-assignment",
       accountId: fixture.playerId,
-      seriesId: "ambiguous-second-source-series",
+      seriesId: "completion-reuse-second-source-series",
       effectiveFrom: "2026-08-01",
       effectiveTo: null,
       assignedByAccountId: coachId,
       assignedAt: now,
     }).run()
     database.insert(schema.sessionAssignmentWeekdays).values({
-      id: "ambiguous-second-source-weekday",
-      assignmentId: "ambiguous-second-source-assignment",
+      id: "completion-reuse-second-source-weekday",
+      assignmentId: "completion-reuse-second-source-assignment",
       weekday: new Date(`${secondSourceDate}T00:00:00.000Z`).getUTCDay(),
     }).run()
     database.insert(schema.sessionAttendanceRecords).values({
-      id: "ambiguous-second-source-attendance",
+      id: "completion-reuse-second-source-attendance",
       accountId: fixture.playerId,
-      occurrenceId: "ambiguous-second-source",
+      occurrenceId: "completion-reuse-second-source",
       choice: "absent",
       markedByAccountId: coachId,
       createdAt: now,
       updatedAt: now,
     }).run()
 
-    expect(adjustments.publishMakeupAttendanceAdjustment({
+    const first = adjustments.publishMakeupAttendanceAdjustment({
       coachId,
       database,
       now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
       playerId: fixture.playerId,
       sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
-    }).completionOccurrenceId).toBeNull()
-    expect(adjustments.publishMakeupAttendanceAdjustment({
+    })
+    expect(first.completionOccurrenceId).toBe(fixture.completionOccurrenceId)
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
       coachId,
       database,
       now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
       playerId: fixture.playerId,
-      sourceOccurrenceId: "ambiguous-second-source",
-      completedOn: fixture.completedOn,
-    }).completionOccurrenceId).toBeNull()
-    expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database)).toHaveLength(2)
+      sourceOccurrenceId: "completion-reuse-second-source",
+    })).toThrow("already linked")
+    expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database)).toEqual([first])
   })
 
-  it("rejects invalid source and completion dates", () => {
-    const fixture = createScenario("validation")
-    expect(() => adjustments.publishMakeupAttendanceAdjustment({
-      coachId,
-      database,
-      now,
-      playerId: fixture.playerId,
-      sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: "2026-08-10",
-    })).toThrow("must be after")
-    expect(() => adjustments.publishMakeupAttendanceAdjustment({
-      coachId,
-      database,
-      now,
-      playerId: fixture.playerId,
-      sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: "2026-08-25",
-    })).toThrow("within 14 days")
-    expect(() => adjustments.publishMakeupAttendanceAdjustment({
-      coachId,
-      database,
-      now,
-      playerId: fixture.playerId,
-      sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: "2026-08-13",
-    })).toThrow("No completed academy session")
-    expect(() => adjustments.publishMakeupAttendanceAdjustment({
-      coachId,
-      database,
-      now,
+  it("does not reuse a date claimed by an unresolved legacy adjustment", () => {
+    const fixture = createScenario("legacy-completion-date")
+    const secondSourceOccurrenceId = addAbsentSource(
+      "legacy-completion-date-second-source",
+      fixture.playerId,
+      "2026-08-11",
+    )
+    database.insert(schema.attendanceAdjustments).values({
+      id: "legacy-completion-date-adjustment",
+      type: "makeup",
       playerId: fixture.playerId,
       sourceOccurrenceId: fixture.sourceOccurrenceId,
       completedOn: fixture.completedOn,
-      reason: "x".repeat(161),
-    })).toThrow("within 160 characters")
+      completionOccurrenceId: null,
+      reason: null,
+      publishedByAccountId: coachId,
+      publishedAt: now,
+      reviewRequiredAt: now,
+      voidedByAccountId: null,
+      voidedAt: null,
+    }).run()
 
-    database.update(schema.sessionAttendanceRecords).set({ choice: "present" }).where(and(
-      eq(schema.sessionAttendanceRecords.accountId, fixture.playerId),
-      eq(schema.sessionAttendanceRecords.occurrenceId, fixture.sourceOccurrenceId),
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
+      playerId: fixture.playerId,
+      sourceOccurrenceId: secondSourceOccurrenceId,
+    })).toThrowError(expect.objectContaining({
+      code: "CONFLICT",
+      field: "completionOccurrenceId",
+      message: expect.stringContaining("legacy adjustment"),
+    }))
+    expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database))
+      .toHaveLength(1)
+  })
+
+  it("returns a stable void retry and rejects a conflicting actor", () => {
+    const fixture = createScenario("void-retry")
+    const published = adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      completionOccurrenceId: fixture.completionOccurrenceId,
+      database,
+      now,
+      playerId: fixture.playerId,
+      sourceOccurrenceId: fixture.sourceOccurrenceId,
+    })
+    const voided = adjustments.voidAttendanceAdjustment({
+      adjustmentId: published.id,
+      coachId: otherCoachId,
+      database,
+      now,
+    })
+    expect(adjustments.voidAttendanceAdjustment({
+      adjustmentId: published.id,
+      coachId: otherCoachId,
+      database,
+      now: new Date("2026-08-21T12:00:00+05:30"),
+    })).toEqual(voided)
+    expect(() => adjustments.voidAttendanceAdjustment({
+      adjustmentId: published.id,
+      coachId,
+      database,
+      now: new Date("2026-08-21T12:00:00+05:30"),
+    })).toThrow("already voided by another coach")
+  })
+
+  it("requires an exact eligible, started and saved-present completion occurrence", () => {
+    const sameDay = createScenario("validation-same-day", {
+      completedOn: "2026-08-10",
+      sourceDate: "2026-08-10",
+    })
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: sameDay.completionOccurrenceId,
+      playerId: sameDay.playerId,
+      sourceOccurrenceId: sameDay.sourceOccurrenceId,
+    })).toThrow("must be after")
+
+    const tooLate = createScenario("validation-too-late", {
+      completedOn: "2026-08-20",
+      sourceDate: "2026-08-05",
+    })
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: tooLate.completionOccurrenceId,
+      playerId: tooLate.playerId,
+      sourceOccurrenceId: tooLate.sourceOccurrenceId,
+    })).toThrow("within 14 days")
+
+    const missing = createScenario("validation-missing")
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: "missing-completion-occurrence",
+      playerId: missing.playerId,
+      sourceOccurrenceId: missing.sourceOccurrenceId,
+    })).toThrow("Choose a completed attendance session")
+
+    const future = createScenario("validation-future", { completedOn: "2026-08-21" })
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: future.completionOccurrenceId,
+      playerId: future.playerId,
+      sourceOccurrenceId: future.sourceOccurrenceId,
+    })).toThrow("Choose a completed attendance session")
+
+    const absentCompletion = createScenario("validation-completion-absent")
+    database.update(schema.sessionAttendanceRecords).set({ choice: "absent" }).where(and(
+      eq(schema.sessionAttendanceRecords.accountId, absentCompletion.playerId),
+      eq(schema.sessionAttendanceRecords.occurrenceId, absentCompletion.completionOccurrenceId),
     )).run()
     expect(() => adjustments.publishMakeupAttendanceAdjustment({
       coachId,
       database,
       now,
-      playerId: fixture.playerId,
-      sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
+      completionOccurrenceId: absentCompletion.completionOccurrenceId,
+      playerId: absentCompletion.playerId,
+      sourceOccurrenceId: absentCompletion.sourceOccurrenceId,
+    })).toThrow("saved Present")
+
+    const unassignedCompletion = createScenario("validation-completion-unassigned")
+    database.update(schema.sessionAssignments).set({
+      effectiveTo: unassignedCompletion.completedOn,
+    }).where(eq(
+      schema.sessionAssignments.id,
+      "validation-completion-unassigned-completion-assignment",
+    )).run()
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: unassignedCompletion.completionOccurrenceId,
+      playerId: unassignedCompletion.playerId,
+      sourceOccurrenceId: unassignedCompletion.sourceOccurrenceId,
+    })).toThrow("not from an assigned session day")
+
+    const reason = createScenario("validation-reason")
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: reason.completionOccurrenceId,
+      playerId: reason.playerId,
+      sourceOccurrenceId: reason.sourceOccurrenceId,
+      reason: "x".repeat(161),
+    })).toThrow("within 160 characters")
+
+    const sourceNotAbsent = createScenario("validation-source-present")
+    database.update(schema.sessionAttendanceRecords).set({ choice: "present" }).where(and(
+      eq(schema.sessionAttendanceRecords.accountId, sourceNotAbsent.playerId),
+      eq(schema.sessionAttendanceRecords.occurrenceId, sourceNotAbsent.sourceOccurrenceId),
+    )).run()
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: sourceNotAbsent.completionOccurrenceId,
+      playerId: sourceNotAbsent.playerId,
+      sourceOccurrenceId: sourceNotAbsent.sourceOccurrenceId,
     })).toThrow("Only a saved absence")
   })
 
-  it("marks only a lost ordinary presence for review and clears it when presence returns", () => {
+  it("reviews the exact completion occurrence rather than any presence on that date", () => {
     const fixture = createScenario("review")
     const published = adjustments.publishMakeupAttendanceAdjustment({
       coachId,
       database,
       now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
       playerId: fixture.playerId,
       sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
     })
 
-    expect(adjustments.reconcileAttendanceAdjustmentReviewState({
-      completedOn: fixture.completedOn,
-      database,
-      lostFinalPresence: false,
-      now,
-      playerId: fixture.playerId,
-    })).toBe(0)
-    expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database)[0]
-      .reviewRequiredAt).toBeNull()
+    database.update(schema.sessionAttendanceRecords).set({ choice: "cleared" }).where(and(
+      eq(schema.sessionAttendanceRecords.accountId, fixture.playerId),
+      eq(schema.sessionAttendanceRecords.occurrenceId, fixture.completionOccurrenceId),
+    )).run()
+    database.insert(schema.sessionSeries).values({
+      id: "review-unrelated-completion-series",
+      title: "Review unrelated completion",
+      programme: "Adult",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: fixture.completedOn,
+      endsOn: fixture.completedOn,
+      status: "ended",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionOccurrences).values({
+      id: "review-unrelated-completion-occurrence",
+      seriesId: "review-unrelated-completion-series",
+      occurrenceDate: fixture.completedOn,
+      startsAt: new Date(`${fixture.completedOn}T09:00:00+05:30`),
+      durationMinutes: 60,
+      venue: "SMBA Court",
+      status: "scheduled",
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionAttendanceRecords).values({
+      id: "review-unrelated-completion-attendance",
+      accountId: fixture.playerId,
+      occurrenceId: "review-unrelated-completion-occurrence",
+      choice: "present",
+      markedByAccountId: coachId,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
 
     expect(adjustments.reconcileAttendanceAdjustmentReviewState({
       completedOn: fixture.completedOn,
@@ -374,15 +667,10 @@ describe("attendance adjustments", () => {
     expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database)[0]
       .reviewRequiredAt).toBeInstanceOf(Date)
 
-    database.insert(schema.sessionAttendanceRecords).values({
-      id: "review-completion-attendance",
-      accountId: fixture.playerId,
-      occurrenceId: fixture.completionOccurrenceId,
-      choice: "present",
-      markedByAccountId: coachId,
-      createdAt: now,
-      updatedAt: now,
-    }).run()
+    database.update(schema.sessionAttendanceRecords).set({ choice: "present" }).where(and(
+      eq(schema.sessionAttendanceRecords.accountId, fixture.playerId),
+      eq(schema.sessionAttendanceRecords.occurrenceId, fixture.completionOccurrenceId),
+    )).run()
     expect(adjustments.reconcileAttendanceAdjustmentReviewState({
       completedOn: fixture.completedOn,
       database,
@@ -396,51 +684,39 @@ describe("attendance adjustments", () => {
 
   it("reconciles review state through attendance saves and protects the source absence", async () => {
     const fixture = createScenario("attendance-save")
-    database.insert(schema.sessionAssignments).values({
-      id: "attendance-save-completion-assignment",
-      accountId: fixture.playerId,
-      seriesId: "attendance-save-completion-series",
-      effectiveFrom: "2026-08-01",
-      effectiveTo: null,
-      assignedByAccountId: coachId,
-      assignedAt: now,
-    }).run()
-    database.insert(schema.sessionAssignmentWeekdays).values({
-      id: "attendance-save-completion-weekday",
-      assignmentId: "attendance-save-completion-assignment",
-      weekday: new Date(`${fixture.completedOn}T00:00:00.000Z`).getUTCDay(),
-    }).run()
-
     const { saveSessionAttendanceRecords } = await import("@/lib/sessions/service")
-    const saveChoice = (occurrenceId: string, choice: "present" | "absent" | "cleared") => (
+    const saveChoice = (
+      occurrenceId: string,
+      choice: "present" | "absent" | "cleared",
+      expectedChoice: "present" | "absent" | "cleared",
+    ) => (
       saveSessionAttendanceRecords({
         database,
         coachId,
         now,
         referenceDate: "2026-08-20",
-        changes: [{ playerId: fixture.playerId, occurrenceId, choice }],
+        changes: [{ playerId: fixture.playerId, occurrenceId, choice, expectedChoice }],
       })
     )
 
-    saveChoice(fixture.completionOccurrenceId, "present")
     const published = adjustments.publishMakeupAttendanceAdjustment({
       coachId,
       database,
       now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
       playerId: fixture.playerId,
       sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
     })
 
-    saveChoice(fixture.completionOccurrenceId, "cleared")
+    saveChoice(fixture.completionOccurrenceId, "cleared", "present")
     expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database)[0]
       .reviewRequiredAt).toBeInstanceOf(Date)
 
-    saveChoice(fixture.completionOccurrenceId, "present")
+    saveChoice(fixture.completionOccurrenceId, "present", "cleared")
     expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database)[0]
       .reviewRequiredAt).toBeNull()
 
-    expect(() => saveChoice(fixture.sourceOccurrenceId, "present"))
+    expect(() => saveChoice(fixture.sourceOccurrenceId, "present", "absent"))
       .toThrow("Void the attendance adjustment")
     expect(database.select().from(schema.sessionAttendanceRecords).where(and(
       eq(schema.sessionAttendanceRecords.accountId, fixture.playerId),

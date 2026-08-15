@@ -430,6 +430,7 @@ function OccurrenceDetails({
   const dateInputRef = useRef<HTMLInputElement>(null)
   const timeInputRef = useRef<HTMLInputElement>(null)
   const durationInputRef = useRef<HTMLInputElement>(null)
+  const venueInputRef = useRef<HTMLInputElement>(null)
   const feedbackId = `occurrence-feedback-${occurrence.id}`
 
   useEffect(() => {
@@ -437,6 +438,7 @@ function OccurrenceDetails({
     if (feedback.field === "dateKey") dateInputRef.current?.focus()
     if (feedback.field === "startTime") timeInputRef.current?.focus()
     if (feedback.field === "durationMinutes") durationInputRef.current?.focus()
+    if (feedback.field === "venue") venueInputRef.current?.focus()
   }, [feedback])
 
   return (
@@ -488,7 +490,7 @@ function OccurrenceDetails({
               <label><span>Date</span><input ref={dateInputRef} type="date" disabled={pendingAction !== null} min={today} value={replacement.dateKey} aria-invalid={feedback?.field === "dateKey" || undefined} aria-describedby={feedback?.field === "dateKey" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, dateKey: event.target.value })} /></label>
               <label><span>Time</span><input ref={timeInputRef} type="time" disabled={pendingAction !== null} value={replacement.startTime} aria-invalid={feedback?.field === "startTime" || undefined} aria-describedby={feedback?.field === "startTime" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, startTime: event.target.value })} /></label>
               <label><span>Duration</span><input ref={durationInputRef} type="number" disabled={pendingAction !== null} min={30} max={300} step={15} value={replacement.durationMinutes} aria-invalid={feedback?.field === "durationMinutes" || undefined} aria-describedby={feedback?.field === "durationMinutes" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, durationMinutes: event.target.value })} /></label>
-              <label><span>Venue</span><input disabled={pendingAction !== null} value={replacement.venue} onChange={(event) => setReplacement({ ...replacement, venue: event.target.value })} /></label>
+              <label><span>Venue</span><input ref={venueInputRef} required maxLength={120} disabled={pendingAction !== null} value={replacement.venue} aria-invalid={feedback?.field === "venue" || undefined} aria-describedby={feedback?.field === "venue" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, venue: event.target.value })} /></label>
               <button type="button" disabled={pendingAction !== null} onClick={onReplace}>
                 {pendingAction === "replace" ? "Creating…" : "Create replacement"}
               </button>

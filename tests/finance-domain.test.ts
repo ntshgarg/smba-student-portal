@@ -4,6 +4,7 @@ import {
   addCalendarDays,
   calculateChargeLedger,
   calculateConcessionAmount,
+  calculateUnusedMonthRefundLimit,
   combineFinanceStatuses,
   deriveFinanceStatus,
   financialPayloadFingerprint,
@@ -102,6 +103,15 @@ describe("finance domain", () => {
       value: 5_000,
       valueKind: "percentage",
     })).toBe(20)
+  })
+
+  it("prorates mid-month withdrawal refunds by unused calendar days and rounds down to paise", () => {
+    expect(calculateUnusedMonthRefundLimit(350_000, "2026-08", "2026-08-16"))
+      .toBe(169_354)
+    expect(calculateUnusedMonthRefundLimit(350_000, "2028-02", "2028-02-28"))
+      .toBe(12_068)
+    expect(() => calculateUnusedMonthRefundLimit(350_000, "2026-08", "2026-08-31"))
+      .toThrow("mid-month")
   })
 
   it("creates independent deterministic receipt/refund references and canonical fingerprints", () => {

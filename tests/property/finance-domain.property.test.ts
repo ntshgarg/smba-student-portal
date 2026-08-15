@@ -31,6 +31,7 @@ const adjustmentArbitrary: fc.Arbitrary<LedgerAdjustmentFact> = fc.record({
     "manual_credit",
     "manual_debit",
     "concession_credit",
+    "withdrawal_credit",
     "legacy_settlement",
   ),
   reversedAt: fc.boolean().map((reversed) => (reversed ? REVERSED_AT : null)),

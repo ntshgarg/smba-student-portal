@@ -122,7 +122,7 @@ function toReceiptDocument(
   player: { playerId: string; fullName: string; academyId: string },
   generatedAt: string,
 ): FinanceReceiptDocument {
-  const refundedPaise = receipt.refunds
+  const refundedPaise = receipt.refundedPaise ?? receipt.refunds
     .filter((refund) => refund.lifecycle === "recorded")
     .reduce((total, refund) => total + refund.amountPaise, 0)
 

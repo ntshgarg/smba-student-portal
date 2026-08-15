@@ -1,6 +1,7 @@
 import { PlayerAttendanceRegister } from "@/components/coach/player-attendance-register"
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import {
+  buildAttendanceRegisterYearOptions,
   resolveAttendanceRegisterSelection,
   type AttendanceRegisterQuery,
 } from "@/lib/attendance/register-workspace"
@@ -22,10 +23,17 @@ export default async function PlayerAttendanceRegisterPage({
   const query = await searchParams
   const today = getIndiaDateKey()
   const sessionSeries = listSessionSeries()
+  const yearOptions = buildAttendanceRegisterYearOptions({
+    persistedDateKeys: sessionSeries.flatMap((series) => (
+      series.endsOn ? [series.startsOn, series.endsOn] : [series.startsOn]
+    )),
+    today,
+  })
   const selection = resolveAttendanceRegisterSelection({
     occurrences: listSessionOccurrences(today, today),
     query,
     series: sessionSeries,
+    supportedYears: yearOptions,
     today,
   })
   const snapshot = getCoachAttendanceRegisterSnapshot(selection, sessionSeries)
@@ -44,7 +52,7 @@ export default async function PlayerAttendanceRegisterPage({
       initialSessionSeries={snapshot.sessionSeries}
       initialTrainingProfiles={snapshot.trainingProfiles}
     >
-      <PlayerAttendanceRegister selection={selection} />
+      <PlayerAttendanceRegister selection={selection} yearOptions={yearOptions} />
     </CoachPortalProvider>
   )
 }

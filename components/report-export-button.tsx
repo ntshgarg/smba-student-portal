@@ -19,8 +19,8 @@ export function ReportExportButton({
       download={fileName}
       href={`/player/reports/${reportId}/download`}
     >
+      <span>Download {monthLabel} report</span>
       <FileDown aria-hidden="true" />
-      <span>Download report</span>
     </a>
   )
 }

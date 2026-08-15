@@ -10,6 +10,7 @@ import { AttendanceCard } from "@/components/coach/attendance-card"
 import { CoachDashboardStack } from "@/components/coach/dashboard-card"
 import { FinancialsCard } from "@/components/coach/financials/financials-card"
 import { MembersCard } from "@/components/coach/members-card"
+import { PlayerOnboardingCard } from "@/components/coach/player-onboarding-card"
 import { ReportsCard } from "@/components/coach/reports-card"
 import { SessionsCard } from "@/components/coach/sessions-card"
 
@@ -17,6 +18,13 @@ function renderDashboard() {
   return renderToStaticMarkup(
     <CoachDashboardStack id="attendance">
       <AttendanceCard scheduleCount={12} />
+      <PlayerOnboardingCard summary={{
+        assessment: 3,
+        feePlan: 1,
+        newRequests: 2,
+        session: 1,
+        total: 7,
+      }} />
       <SessionsCard nextSessionLabel="Beginner · Weekday · 6–7 am" todaySessionCount={8} />
       <ReportsCard activePlayerIds={["player-1", "player-2"]} completedCount={1} month="2026-07" />
       <FinancialsCard
@@ -27,16 +35,17 @@ function renderDashboard() {
         preparation={{ alreadyPrepared: 8, ready: 0 }}
       />
       <AnnouncementCard activeCount={0} />
-      <MembersCard memberCount={39} pendingRegistrationCount={2} />
+      <MembersCard memberCount={39} />
     </CoachDashboardStack>,
   )
 }
 
 describe("coach dashboard Court Operations Board", () => {
-  it("keeps the six workflows in one accessible responsive-grid order", () => {
+  it("keeps the seven workflows in one accessible responsive-grid order", () => {
     const html = renderDashboard()
     const orderedAreas = [
       "attendance",
+      "onboarding",
       "sessions",
       "reports",
       "financials",
@@ -52,7 +61,8 @@ describe("coach dashboard Court Operations Board", () => {
       previousIndex = index
     }
 
-    expect(html.match(/<a /g)).toHaveLength(15)
+    expect(html.match(/<a /g)).toHaveLength(16)
+    expect(html).toContain('id="onboarding"')
     expect(html).toContain('id="attendance"')
     expect(html).toContain('role="group" aria-label="Players"')
     expect(html).toContain('role="group" aria-label="Staff"')
@@ -62,6 +72,13 @@ describe("coach dashboard Court Operations Board", () => {
     const html = renderDashboard()
 
     expect(html).toContain("Player &amp; staff registers")
+    expect(html).toContain("7 players need a next step")
+    expect(html).toContain("7 in progress")
+    expect(html).toContain("New requests")
+    expect(html).toContain("Assessment")
+    expect(html).toContain("Session")
+    expect(html).toContain("Fee Plan")
+    expect(html).toContain('href="/coach/onboarding">Open onboarding')
     expect(html).toContain("12 schedules")
     expect(html).toContain("Training calendar")
     expect(html).toContain("8 today")
@@ -71,7 +88,8 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain("14 attention")
     expect(html).toContain("Notice board is clear")
     expect(html).toContain("39 enrolled members")
-    expect(html).toContain("2 pending")
+    expect(html).toContain("Roster current")
+    expect(html).not.toContain("registrations await approval")
   })
 
   it.each([

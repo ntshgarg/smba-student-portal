@@ -4,6 +4,7 @@
   grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-template-areas:
     "attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance"
+    "onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding"
     "sessions sessions sessions sessions sessions sessions sessions reports reports reports reports reports"
     "financials financials financials financials announcements announcements announcements announcements members members members members";
   align-items: stretch;
@@ -14,6 +15,11 @@
 
 .section {
   min-width: 0;
+}
+
+.section[data-area="onboarding"] {
+  grid-area: onboarding;
+  scroll-margin-top: calc(var(--portal-header-height) - var(--page-scroll-padding));
 }
 
 .section[data-area="attendance"] {
@@ -79,6 +85,10 @@
 
 .section[data-area="attendance"] .card {
   min-height: 262px;
+}
+
+.section[data-area="onboarding"] .card {
+  min-height: 220px;
 }
 
 .section[data-area="sessions"] .card,
@@ -237,9 +247,10 @@
 
 .groups {
   display: grid;
+  width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 40px;
 }
 
 .group {
@@ -249,8 +260,16 @@
 }
 
 .group + .group {
-  padding-left: 20px;
+  position: relative;
+}
+
+.group + .group::before {
+  position: absolute;
+  inset-block: 0;
+  left: -20px;
   border-left: 1px solid var(--line);
+  content: "";
+  pointer-events: none;
 }
 
 .group > p {
@@ -279,6 +298,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
       "attendance attendance"
+      "onboarding onboarding"
       "sessions sessions"
       "reports financials"
       "announcements members";
@@ -287,6 +307,10 @@
 
   .section[data-area="attendance"] .card {
     min-height: 330px;
+  }
+
+  .section[data-area="onboarding"] .card {
+    min-height: 286px;
   }
 
   .section[data-area="sessions"] .card {
@@ -323,6 +347,7 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "attendance"
+      "onboarding"
       "sessions"
       "reports"
       "financials"
@@ -333,6 +358,7 @@
   }
 
   .card,
+  .section[data-area="onboarding"] .card,
   .section[data-area="attendance"] .card,
   .section[data-area="sessions"] .card,
   .section[data-area="reports"] .card,
@@ -365,6 +391,7 @@
 
   .section[data-area="attendance"] .meta {
     display: flex;
+    align-items: stretch;
     gap: 0;
   }
 
@@ -376,9 +403,11 @@
 
   .group + .group {
     padding-top: 18px;
-    padding-left: 0;
     border-top: 1px solid var(--line);
-    border-left: 0;
+  }
+
+  .group + .group::before {
+    display: none;
   }
 
   .actions {

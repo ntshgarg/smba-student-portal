@@ -67,15 +67,38 @@ describe("PlayerAnnouncementsCard", () => {
     expect(html).toContain("Academy notices could not be loaded just now.")
     expect(html).not.toContain("href=")
     expect(html).not.toContain("Error")
+    expect(html).not.toContain("The notice board is clear.")
   })
 
-  it("remains silent when the announcement query succeeds with no results", () => {
-    expect(renderToStaticMarkup(
+  it("renders a calm all-clear ticket when the query succeeds with no results", () => {
+    const html = renderToStaticMarkup(
       <PlayerAnnouncementsCard announcements={[]} />,
-    )).toBe("")
+    )
+
+    expect(html).toContain('data-announcement-state="empty"')
+    expect(html).toContain("Clear")
+    expect(html).toContain("The notice board is clear.")
+    expect(html).toContain("New notices from your coach will appear here when they are published.")
+    expect(html).not.toContain("Academy notice board")
+    expect(html).not.toContain("href=")
+    expect(html).not.toContain("Latest announcements")
+    expect(html).not.toContain("Announcements unavailable")
+    expect(html).not.toContain("Unavailable")
   })
 
-  it("retains announcement links and the archive action for populated results", () => {
+  it("uses the featured layout and keeps the shared archive action for one notice", () => {
+    const html = renderToStaticMarkup(
+      <PlayerAnnouncementsCard announcements={[announcement()]} />,
+    )
+
+    expect(html).toContain('data-announcement-layout="single"')
+    expect(html).toContain("1 notice")
+    expect(html).toContain('href="/player/announcements/announcement-1"')
+    expect(html).toContain('href="/player/announcements"')
+    expect(html).toContain("Open all announcements")
+  })
+
+  it("shows at most two prioritized notice links and one shared archive action", () => {
     const html = renderToStaticMarkup(
       <PlayerAnnouncementsCard announcements={[
         announcement(),
@@ -88,8 +111,12 @@ describe("PlayerAnnouncementsCard", () => {
     expect(html).toContain("Training update")
     expect(html).toContain("Tournament reminder")
     expect(html).not.toContain("Holiday notice")
+    expect(html).toContain('data-announcement-layout="pair"')
+    expect(html).toContain("3 notices")
     expect(html).toContain('href="/player/announcements"')
-    expect(html).toContain("View all announcements")
+    expect(html.match(/href="\/player\/announcements\/announcement-/gu)).toHaveLength(2)
+    expect(html.match(/href="\/player\/announcements"/gu)).toHaveLength(1)
+    expect(html).toContain("Open all announcements")
   })
 })
 

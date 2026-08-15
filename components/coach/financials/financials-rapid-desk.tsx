@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, ReceiptIndianRupee, Search } from "lucide-react"
+import { ArrowLeft, ChevronDown, Search } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -43,7 +43,8 @@ function rapidDeskHref({
   playerId?: string
   scope: FinanceRapidScope
 }) {
-  const params = new URLSearchParams({ scope })
+  const params = new URLSearchParams()
+  if (scope === "all") params.set("scope", scope)
   const normalizedQuery = query.trim().slice(0, 120)
   if (normalizedQuery) params.set("query", normalizedQuery)
   if (playerId) params.set("player", playerId)
@@ -82,6 +83,10 @@ function PaymentForm({
     (total, charge) => total + charge.outstandingPaise,
     0,
   )
+  const enteredAmountPaise = parseRupeesToPaise(amount)
+  const projectedBalancePaise = enteredAmountPaise === null
+    ? null
+    : totalOutstandingPaise - enteredAmountPaise
   const allocationValidation = reviewedAmountPaise === null
     ? null
     : validateAllocationDraft({
@@ -207,18 +212,20 @@ function PaymentForm({
   }
 
   return (
-    <section className={styles.paymentPanel} aria-labelledby="quick-payment-title">
-      <div className={styles.paymentHeading}>
-        <span>Quick record</span>
-        <h3 id="quick-payment-title" tabIndex={-1}>Record payment</h3>
-        <p>Enter one receipt, then review how it will be applied across outstanding fees.</p>
-      </div>
+    <section className={styles.balancePaymentPanel} aria-labelledby="quick-payment-title">
+      <form className={styles.balanceForm} onSubmit={(event) => void submit(event)}>
+        <div className={styles.balanceEquation}>
+          <div className={styles.balanceMetric}>
+            <span>Outstanding</span>
+            <strong>{formatInr(totalOutstandingPaise)}</strong>
+            <small>Current outstanding fees</small>
+          </div>
 
-      <form onSubmit={(event) => void submit(event)}>
-        <div className={styles.fieldRow}>
-          <label className={styles.field}>
+          <span className={styles.balanceOperator} aria-hidden="true">−</span>
+
+          <label className={`${styles.balanceMetric} ${styles.balanceAmountMetric}`}>
             <span>Amount received</span>
-            <div className={styles.moneyInput}>
+            <span className={styles.balanceMoneyInput}>
               <span aria-hidden="true">₹</span>
               <input
                 ref={amountRef}
@@ -229,10 +236,29 @@ function PaymentForm({
                 aria-describedby="payment-amount-help"
                 onChange={(event) => editAmount(event.target.value)}
               />
-            </div>
+            </span>
             <small id="payment-amount-help">Total outstanding {formatInr(totalOutstandingPaise)}</small>
           </label>
-          <label className={styles.field}>
+
+          <span className={styles.balanceOperator} aria-hidden="true">=</span>
+
+          <div className={`${styles.balanceMetric} ${styles.balanceProjectedMetric}`}>
+            <span>Projected balance</span>
+            <strong>
+              {projectedBalancePaise === null || projectedBalancePaise < 0
+                ? "—"
+                : formatInr(projectedBalancePaise)}
+            </strong>
+            <small>
+              {projectedBalancePaise !== null && projectedBalancePaise < 0
+                ? `Exceeds balance by ${formatInr(Math.abs(projectedBalancePaise))}`
+                : "After this payment is recorded"}
+            </small>
+          </div>
+        </div>
+
+        <div className={styles.balanceMetadata}>
+          <label className={styles.balanceField}>
             <span>Received on</span>
             <input
               type="date"
@@ -245,12 +271,11 @@ function PaymentForm({
               }}
             />
           </label>
-        </div>
 
-        <div className={styles.fieldRow}>
-          <label className={styles.field}>
+          <label className={styles.balanceField}>
             <span>Payment method</span>
             <select
+              aria-label="Offline payment method"
               value={method}
               disabled={Boolean(pending)}
               onChange={(event) => {
@@ -261,7 +286,8 @@ function PaymentForm({
               {paymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
-          <label className={styles.field}>
+
+          <label className={styles.balanceField}>
             <span>Reference <em>Optional</em></span>
             <input
               value={externalReference}
@@ -273,25 +299,34 @@ function PaymentForm({
               }}
             />
           </label>
+
+          <label className={`${styles.balanceField} ${styles.balanceNoteField}`}>
+            <span>Internal note <em>Optional</em></span>
+            <textarea
+              rows={2}
+              value={internalNote}
+              disabled={Boolean(pending)}
+              placeholder="Visible only to authorised academy staff"
+              onChange={(event) => {
+                setInternalNote(event.target.value)
+                resetMutation()
+              }}
+            />
+          </label>
         </div>
 
-        <label className={styles.field}>
-          <span>Internal note <em>Optional</em></span>
-          <textarea
-            rows={3}
-            value={internalNote}
-            disabled={Boolean(pending)}
-            placeholder="Visible only to authorised academy staff"
-            onChange={(event) => {
-              setInternalNote(event.target.value)
-              resetMutation()
-            }}
-          />
-        </label>
-
         {reviewedAmountPaise === null ? (
-          <div className={styles.paymentFooter}>
-            <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+          <div className={styles.balanceReviewPrompt}>
+            <InlineNotice
+              className={styles.notice}
+              message={feedback?.message}
+              reserveSpace={false}
+              tone={feedback?.tone}
+            />
+            <div>
+              <span>Allocation review</span>
+              <p>Review exactly how this payment will be applied.</p>
+            </div>
             <button
               className={styles.primaryButton}
               type="button"
@@ -302,8 +337,8 @@ function PaymentForm({
             </button>
           </div>
         ) : (
-          <div className={styles.allocationReview}>
-            <div className={styles.allocationHeading}>
+          <div className={styles.balanceAllocationReview}>
+            <div className={styles.balanceAllocationHeading}>
               <div>
                 <span>Allocation review</span>
                 <strong>{formatInr(reviewedAmountPaise)} across outstanding fees</strong>
@@ -313,14 +348,14 @@ function PaymentForm({
               </button>
             </div>
 
-            <div className={styles.allocationRows}>
+            <div className={styles.balanceAllocationRows}>
               {payableCharges.map((charge) => (
-                <label key={charge.id} className={styles.allocationRow}>
+                <label key={charge.id} className={styles.balanceAllocationRow}>
                   <span>
                     <strong>{charge.description}</strong>
                     <small>{charge.feeReference} · Available {formatInr(charge.outstandingPaise)}</small>
                   </span>
-                  <span className={styles.allocationInput}>
+                  <span className={styles.balanceAllocationInput}>
                     <span aria-hidden="true">₹</span>
                     <input
                       id={`payment-allocation-${charge.id}`}
@@ -341,14 +376,7 @@ function PaymentForm({
               ))}
             </div>
 
-            <div className={styles.allocationTotal}>
-              <span>Allocated</span>
-              <strong>
-                {formatInr(allocationValidation?.totalPaise ?? 0)} of {formatInr(reviewedAmountPaise)}
-              </strong>
-            </div>
-
-            <div className={styles.paymentFooter}>
+            <div className={styles.balancePaymentFooter}>
               <InlineNotice
                 className={styles.notice}
                 message={feedback?.message ?? (
@@ -356,10 +384,17 @@ function PaymentForm({
                     ? allocationValidation.message
                     : undefined
                 )}
+                reserveSpace={false}
                 tone={feedback?.tone ?? (
                   allocationValidation && !allocationValidation.ok ? "error" : undefined
                 )}
               />
+              <div className={styles.balanceAllocationTotal}>
+                <span>Allocated</span>
+                <strong>
+                  {formatInr(allocationValidation?.totalPaise ?? 0)} of {formatInr(reviewedAmountPaise)}
+                </strong>
+              </div>
               <button
                 className={styles.primaryButton}
                 type="submit"
@@ -385,12 +420,14 @@ export function FinancialsRapidDesk({
 }) {
   const router = useRouter()
   const [query, setQuery] = useState(initialQuery.slice(0, 120))
+  const [resultsExpanded, setResultsExpanded] = useState(Boolean(initialQuery))
   const [completionFeedback, setCompletionFeedback] = useState<ActionFeedback | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectedPlayerId = workspace.selectedLedger?.playerId ?? null
   const selectedPlayerCanPay = workspace.players.find(
     (player) => player.playerId === selectedPlayerId,
   )?.paymentEligible ?? false
+  const finderHref = rapidDeskHref({ query: initialQuery, scope: workspace.scope })
   const { confirmNavigation } = useUnsavedWorkGuard({
     isDirty: false,
     scope: "financial-rapid-desk-navigation",
@@ -398,7 +435,7 @@ export function FinancialsRapidDesk({
 
   useEffect(() => {
     if (!selectedPlayerId) return
-    document.getElementById("quick-payment-title")?.focus()
+    document.getElementById("quick-payment-title")?.focus({ preventScroll: true })
   }, [selectedPlayerId])
 
   function navigate(href: string, replace = false) {
@@ -410,12 +447,14 @@ export function FinancialsRapidDesk({
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setResultsExpanded(true)
     navigate(rapidDeskHref({ query, scope: workspace.scope }))
   }
 
   function readyForNextPlayer(message: string) {
     setCompletionFeedback({ message, tone: "success" })
     setQuery("")
+    setResultsExpanded(true)
     router.replace(rapidDeskHref({ query: "", scope: workspace.scope }))
     window.setTimeout(() => searchInputRef.current?.focus(), 0)
   }
@@ -423,152 +462,200 @@ export function FinancialsRapidDesk({
   return (
     <div className={`${styles.workspace} page-shell`}>
       <div className={styles.backRow}>
-        <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
+        <Link href={workspace.selectedLedger ? finderHref : "/coach"}>
+          <ArrowLeft aria-hidden="true" />
+          {workspace.selectedLedger ? "Back to player list" : "Back to dashboard"}
+        </Link>
       </div>
 
-      <header className={styles.rapidDeskHeader}>
-        <span className="eyebrow">Financials</span>
-        <h1>Record payment</h1>
-        <p>Find a player, review the receipt allocation and continue to the next payment.</p>
+      <header className={`${styles.rapidDeskHeader} ${styles.balanceHeader}`}>
+        <div>
+          <span className="eyebrow">Financials</span>
+          <h1>Record offline payment</h1>
+        </div>
+        <p>Find a player and record a payment the coach has already received outside the portal.</p>
       </header>
 
-      <section className={styles.rapidDesk} aria-labelledby="rapid-desk-search-title">
-        <div className={styles.rapidSearchPanel}>
-          <div className={styles.directoryHeading}>
-            <span>Quick record</span>
-            <h2 id="rapid-desk-search-title">Find a player</h2>
-          </div>
+      {completionFeedback ? (
+        <InlineNotice
+          className={styles.rapidCompletionNotice}
+          message={completionFeedback.message}
+          reserveSpace={false}
+          tone={completionFeedback.tone}
+        />
+      ) : null}
 
-          <form className={styles.search} role="search" onSubmit={submitSearch}>
-            <Search aria-hidden="true" />
-            <label className="sr-only" htmlFor="rapid-financial-player-search">Search players</label>
-            <input
-              ref={searchInputRef}
-              id="rapid-financial-player-search"
-              type="search"
-              maxLength={120}
-              value={query}
-              placeholder="Name, Academy ID or fee reference"
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <button type="submit">Search</button>
-          </form>
+      <section
+        className={workspace.selectedLedger ? styles.balanceWorkspace : styles.rapidDesk}
+        aria-labelledby={workspace.selectedLedger ? "quick-payment-title" : "rapid-desk-search-title"}
+      >
+        {!workspace.selectedLedger ? (
+          <div className={styles.rapidSearchPanel}>
+            <div className={styles.rapidFinderToolbar}>
+              <div className={styles.directoryHeading}>
+                <span>Quick record</span>
+                <h2 id="rapid-desk-search-title">Find a player</h2>
+              </div>
 
-          <div className={styles.rapidScope} role="group" aria-label="Choose payment list">
-            {([
-              ["outstanding", "Outstanding"],
-              ["all", "All players"],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={workspace.scope === value}
-                className={workspace.scope === value ? styles.activeRapidScope : undefined}
-                onClick={() => navigate(rapidDeskHref({
-                  playerId: selectedPlayerCanPay ? selectedPlayerId ?? undefined : undefined,
-                  query: initialQuery,
-                  scope: value,
-                }))}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {workspace.scope === "all" ? (
-            <p className={styles.rapidScopeHelp}>
-              Only players with an outstanding balance from a Fee Plan can be selected.
-            </p>
-          ) : null}
+              <div className={styles.rapidFinderControls}>
+                <form className={styles.search} role="search" onSubmit={submitSearch}>
+                  <Search aria-hidden="true" />
+                  <label className="sr-only" htmlFor="rapid-financial-player-search">Search players</label>
+                  <input
+                    ref={searchInputRef}
+                    id="rapid-financial-player-search"
+                    type="search"
+                    maxLength={120}
+                    value={query}
+                    placeholder="Name, Academy ID or fee reference"
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                  <button type="submit">Search</button>
+                </form>
 
-          <div className={styles.rapidResults}>
-            {workspace.players.length ? (
-              <>
-                <span role="status">
-                  {workspace.players.length} {workspace.players.length === 1 ? "player" : "players"}
-                </span>
-                <ul className={styles.playerList}>
-                  {workspace.players.map((player) => {
-                    const displayStatus = player.paymentEligible
-                      ? statusLabels[player.status]
-                      : player.hasActiveFeePlan ? statusLabels[player.status] : "Fee plan required"
-                    const displayStatusClass = player.paymentEligible
-                      ? styles[`status_${player.status}`]
-                      : styles[player.hasActiveFeePlan
-                        ? `status_${player.status}`
-                        : "status_setup_required"]
-                    const content = (
-                      <>
-                        <span className={styles.playerInitials} aria-hidden="true">
-                          {player.fullName.split(/\s+/u).slice(0, 2).map((part) => part[0]).join("")}
-                        </span>
-                        <span>
-                          <strong>{player.fullName}</strong>
-                          <small>{player.academyId}</small>
-                        </span>
-                        <span className={styles.playerAmount}>
-                          <strong>{formatInr(player.outstandingPaise)}</strong>
-                          <small className={displayStatusClass}>{displayStatus}</small>
-                        </span>
-                      </>
-                    )
-
-                    if (!player.paymentEligible) {
-                      return (
-                        <li key={player.playerId}>
-                          <div className={styles.staticPlayer}>{content}</div>
-                        </li>
-                      )
-                    }
-
-                    return (
-                      <li key={player.playerId}>
-                        <button
-                          type="button"
-                          className={selectedPlayerId === player.playerId ? styles.activePlayer : undefined}
-                          aria-current={selectedPlayerId === player.playerId ? "true" : undefined}
-                          onClick={() => navigate(rapidDeskHref({
-                            query: initialQuery,
-                            playerId: player.playerId,
-                            scope: workspace.scope,
-                          }))}
-                        >
-                          {content}
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </>
-            ) : (
-              <p role="status">
-                {workspace.scope === "outstanding"
-                  ? "No outstanding payments match this search."
-                  : "No matching players. Check the name or Academy ID and try again."}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className={styles.rapidPaymentPanel}>
-          {completionFeedback ? (
-            <InlineNotice
-              className={styles.rapidCompletionNotice}
-              message={completionFeedback.message}
-              reserveSpace={false}
-              tone={completionFeedback.tone}
-            />
-          ) : null}
-          {workspace.selectedLedger ? (
-            <div key={workspace.selectedLedger.playerId}>
-              <header className={styles.rapidPlayerHeader}>
-                <div>
-                  <span>{workspace.selectedLedger.academyId}</span>
-                  <h2>{workspace.selectedLedger.fullName}</h2>
+                <div className={styles.rapidScope} role="group" aria-label="Choose payment list">
+                  {([
+                    ["outstanding", "Outstanding"],
+                    ["all", "All players"],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={workspace.scope === value}
+                      className={workspace.scope === value ? styles.activeRapidScope : undefined}
+                      onClick={() => {
+                        setResultsExpanded(true)
+                        navigate(rapidDeskHref({
+                          playerId: selectedPlayerCanPay ? selectedPlayerId ?? undefined : undefined,
+                          query: initialQuery,
+                          scope: value,
+                        }))
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-                <div>
+                {workspace.scope === "all" ? (
+                  <p className={styles.rapidScopeHelp}>
+                    Only players with an outstanding registration or monthly fee can be selected.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className={styles.rapidResults}>
+              {workspace.players.length ? (
+                <>
+                  <button
+                    type="button"
+                    className={styles.rapidResultsToggle}
+                    aria-controls="rapid-financial-player-results"
+                    aria-expanded={resultsExpanded}
+                    onClick={() => setResultsExpanded((current) => !current)}
+                  >
+                    <span>
+                      <strong role="status">
+                        {workspace.players.length} {workspace.players.length === 1 ? "player" : "players"}
+                      </strong>
+                      <small>
+                        {workspace.scope === "outstanding" ? "With payment due" : "Current directory"}
+                      </small>
+                    </span>
+                    <span>
+                      {resultsExpanded ? "Hide list" : "Show list"}
+                      <ChevronDown aria-hidden="true" />
+                    </span>
+                  </button>
+                  {resultsExpanded ? (
+                    <div id="rapid-financial-player-results">
+                      <ul className={styles.playerList}>
+                        {workspace.players.map((player) => {
+                          const displayStatus = player.paymentEligible
+                            ? statusLabels[player.status]
+                            : player.hasActiveFeePlan ? statusLabels[player.status] : "Fee plan required"
+                          const displayStatusClass = player.paymentEligible
+                            ? styles[`status_${player.status}`]
+                            : styles[player.hasActiveFeePlan
+                              ? `status_${player.status}`
+                              : "status_setup_required"]
+                          const content = (
+                            <>
+                              <span className={styles.playerInitials} aria-hidden="true">
+                                {player.fullName.split(/\s+/u).slice(0, 2).map((part) => part[0]).join("")}
+                              </span>
+                              <span>
+                                <strong>{player.fullName}</strong>
+                                <small>{player.academyId}</small>
+                              </span>
+                              <span className={styles.playerAmount}>
+                                <strong>{formatInr(player.outstandingPaise)}</strong>
+                                <small className={displayStatusClass}>{displayStatus}</small>
+                              </span>
+                            </>
+                          )
+
+                          if (!player.paymentEligible) {
+                            return (
+                              <li key={player.playerId}>
+                                <div className={styles.staticPlayer}>{content}</div>
+                              </li>
+                            )
+                          }
+
+                          return (
+                            <li key={player.playerId}>
+                              <button
+                                type="button"
+                                className={selectedPlayerId === player.playerId ? styles.activePlayer : undefined}
+                                aria-current={selectedPlayerId === player.playerId ? "true" : undefined}
+                                onClick={() => navigate(rapidDeskHref({
+                                  query: initialQuery,
+                                  playerId: player.playerId,
+                                  scope: workspace.scope,
+                                }))}
+                              >
+                                {content}
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p role="status">
+                  {workspace.scope === "outstanding"
+                    ? "No outstanding payments match this search."
+                    : "No matching players. Check the name or Academy ID and try again."}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {workspace.selectedLedger ? (
+          <div className={styles.balancePaymentWorkspace}>
+            <div key={workspace.selectedLedger.playerId}>
+              <header className={styles.balancePlayerRail}>
+                <span className={styles.balancePlayerLabel}>Selected player</span>
+                <div className={styles.balancePlayerIdentity}>
+                  <h2 id="quick-payment-title" tabIndex={-1}>{workspace.selectedLedger.fullName}</h2>
+                  <span>
+                    {workspace.selectedLedger.academyId} · {statusLabels[workspace.selectedLedger.status]}
+                  </span>
+                </div>
+                <div className={styles.balancePlayerOutstanding}>
                   <span>Outstanding</span>
                   <strong>{formatInr(workspace.selectedLedger.outstandingPaise)}</strong>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(finderHref)}
+                >
+                  Change player
+                </button>
               </header>
               <PaymentForm
                 charges={workspace.selectedLedger.charges}
@@ -576,15 +663,8 @@ export function FinancialsRapidDesk({
                 player={workspace.selectedLedger}
               />
             </div>
-          ) : (
-            <div className={styles.rapidEmpty}>
-              <ReceiptIndianRupee aria-hidden="true" />
-              <span>Receipt desk</span>
-              <h2>Select a player</h2>
-              <p>The payment form will open here with the player’s current outstanding fees.</p>
-            </div>
-          )}
-        </div>
+          </div>
+        ) : null}
       </section>
     </div>
   )

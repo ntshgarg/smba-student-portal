@@ -335,7 +335,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     case "attendance-session-selected":
       await clickRequired(
-        page.locator(".attendance-occurrence-list button:not([disabled])"),
+        page.locator(".attendance-occurrence-list > button.is-available"),
         action,
       )
       break
@@ -565,7 +565,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     }
     case "student-report-open":
-      await clickRequired(page.locator(".report-accordion-trigger"), action)
+      await clickRequired(page.locator(".report-month-trigger").first(), action)
       break
   }
   await settlePage(page)

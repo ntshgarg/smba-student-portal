@@ -13,6 +13,7 @@ import { useAttendanceRegisterWindow } from "@/components/coach/use-attendance-r
 
 type StaffRow = {
   accountId: string
+  archivedOn: string | null
   fullName: string
   joinedOn: string
 }
@@ -31,14 +32,15 @@ export function StaffAttendanceRegister({
   initialRecords,
   juniorCoaches,
   referenceDate,
+  yearOptions,
 }: {
   initialRecords: StaffRecord[]
   juniorCoaches: StaffRow[]
   referenceDate: string
+  yearOptions: number[]
 }) {
   const currentYear = Number(referenceDate.slice(0, 4))
   const [activeYear, setActiveYear] = useState(currentYear)
-  const years = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2]
   const dates = useMemo(() => buildAttendanceRegisterDates(activeYear), [activeYear])
   const todayIndex = dates.findIndex((date) => date.key === referenceDate)
   const {
@@ -104,7 +106,7 @@ export function StaffAttendanceRegister({
         <div className="coach-attendance-register staff-attendance-register">
           <div className="coach-register-controls">
             <div className="coach-year-selector" aria-label="Choose attendance year">
-              {years.map((year) => (
+              {yearOptions.map((year) => (
                 <button
                   key={year}
                   type="button"
@@ -235,7 +237,9 @@ export function StaffAttendanceRegister({
                         />
                       ) : null}
                       {visibleDates.map((date, visibleIndex) => {
-                        const unavailable = date.key < coach.joinedOn || date.key > referenceDate
+                        const unavailable = date.key < coach.joinedOn
+                          || date.key > referenceDate
+                          || Boolean(coach.archivedOn && date.key > coach.archivedOn)
                         const choice = resolvedChoice(coach.accountId, date.key)
                         const state = unavailable ? "not available" : choice === "cleared" || !choice ? "not recorded" : choice
                         return (

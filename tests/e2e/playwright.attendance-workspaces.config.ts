@@ -15,7 +15,7 @@ export default defineConfig({
   testMatch: "attendance-workspaces.spec.ts",
   timeout: 90_000,
   use: {
-    baseURL: process.env.SMBA_ATTENDANCE_WORKSPACES_BASE_URL ?? "http://127.0.0.1:3000",
+    baseURL: process.env.SMBA_ATTENDANCE_WORKSPACES_BASE_URL ?? "http://localhost:3000",
     channel: "chrome",
     colorScheme: "light",
     locale: "en-IN",

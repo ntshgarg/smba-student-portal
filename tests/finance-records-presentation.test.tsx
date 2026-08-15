@@ -151,16 +151,42 @@ describe("Financial Records presentation", () => {
       <FinancialRecordsWorkspace activeView="fees" feeRegister={feeRegister} />,
     )
 
-    expect(html).toContain("Fee Register")
-    expect(html).toContain("Net billed")
+    expect(html).toContain("Monthly fees")
+    expect(html).toContain("August 2026 fee cycle")
+    expect(html).toContain("1 record")
+    expect(html).toContain("Net monthly fees")
+    expect(html).toContain("Monthly fee")
     expect(html).toContain("Partially paid")
     expect(html).toContain("₹500 credit")
     expect(html).toContain(
       "/coach/financials/players/player-42?mode=monthly&amp;period=2026-08&amp;scope=active&amp;status=all&amp;q=Aarav&amp;cursors=player-before",
     )
-    expect(html).toContain("View record")
+    expect(html).toContain("Open record")
+    expect(html).toContain("01</td>")
     expect(html).toContain('aria-label="View fee record for Aarav Bhat"')
     expect(html).toContain("Player, Academy ID or fee reference")
+  })
+
+  it("renders registration fees as a numbered one-time academy entry register", () => {
+    const registrationRegister: FeeRegisterView = {
+      ...feeRegister,
+      filters: { ...feeRegister.filters, mode: "registration" },
+      pagination: { ...pagination, label: "11–11 of 11" },
+      summary: { ...feeRegister.summary, totalRows: 11 },
+    }
+    const html = renderToStaticMarkup(
+      <FinancialRecordsWorkspace activeView="fees" feeRegister={registrationRegister} />,
+    )
+
+    expect(html).toContain("Registration fees")
+    expect(html).toContain("One-time academy entry")
+    expect(html).toContain("11 records")
+    expect(html).toContain("Net registration fees")
+    expect(html).toContain("Registration entry")
+    expect(html).toContain("11</td>")
+    expect(html).toContain("₹500 credit")
+    expect(html).toContain("Open record")
+    expect(html).not.toContain("Current registration fee records.")
   })
 
   it("links receipts only for payment rows and keeps refund rows in the day book", () => {

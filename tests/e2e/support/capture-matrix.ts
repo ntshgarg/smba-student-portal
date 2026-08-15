@@ -525,6 +525,16 @@ export const captureDefinitions: CaptureDefinition[] = [
     scenarios: populatedScenarios,
   },
   {
+    actor: "player",
+    critical: true,
+    description: "Player expanded attendance in the focused month calendar",
+    focusSelector: "#player-attendance-register",
+    id: "player-dashboard-attendance-calendar",
+    route: "/player?attendance=register",
+    scenarios: ["loaded"],
+    segmentPolicy: "always",
+  },
+  {
     actions: ["profile-menu-open"],
     actor: "player",
     critical: true,

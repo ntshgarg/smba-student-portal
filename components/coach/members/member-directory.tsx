@@ -3,18 +3,15 @@
 import {
   Archive,
   ArrowLeft,
-  Check,
   ChevronDown,
-  Copy,
   Eye,
   PencilLine,
   Phone,
   Search,
   SearchX,
-  X,
 } from "lucide-react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 
 import { useMemberDirectoryPortal } from "@/components/coach/coach-portal-provider"
@@ -43,7 +40,6 @@ import {
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
-import { tryCopyText } from "@/lib/client/clipboard"
 import type {
   ArchiveMemberResult,
   MemberField,
@@ -75,11 +71,6 @@ type MemberFeedback = ActionFeedback & {
   memberId: string
   recoveryHref?: string
 }
-type PendingQueueAction = {
-  registrationId: string
-  type: "approve" | "reject"
-}
-
 const relationships = ["Parent", "Guardian", "Self", "Other"]
 
 function draftFromPlayer(player: PlayerMemberRecord): MemberDraft {
@@ -169,24 +160,12 @@ function validateDraft(draft: MemberDraft) {
   return errors
 }
 
-function completesInitialEvaluation(player: PlayerMemberRecord, draft: MemberDraft) {
-  return (player.training.level === "Assessment pending"
-      || player.training.batch === "Assessment pending")
-    && draft.level !== "Assessment pending"
-    && draft.batch !== "Assessment pending"
-    && draft.academyPlan !== null
-}
-
 export function MemberDirectory() {
   const pathname = usePathname()
-  const router = useRouter()
   const searchParams = useSearchParams()
   const {
     archiveMember,
-    approveRegistration,
-    pendingRegistrations,
     players,
-    rejectRegistration,
     saveMember: persistMember,
     sessionAssignments,
     sessionSeries,
@@ -209,17 +188,7 @@ export function MemberDirectory() {
   const [archivingMemberId, setArchivingMemberId] = useState<string | null>(null)
   const [directoryFeedback, setDirectoryFeedback] = useState<ActionFeedback | null>(null)
   const [memberFeedback, setMemberFeedback] = useState<MemberFeedback | null>(null)
-  const [approvalResult, setApprovalResult] = useState<{
-    academyId: string
-    fullName: string
-    role: "player" | "coach"
-  } | null>(null)
-  const [pendingQueueAction, setPendingQueueAction] = useState<PendingQueueAction | null>(null)
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "unavailable">("idle")
   const memberFormRef = useRef<HTMLFormElement>(null)
-  const academyIdFieldRef = useRef<HTMLInputElement>(null)
-  const academyIdCopyButtonRef = useRef<HTMLButtonElement>(null)
-  const registrationQueueHeadingRef = useRef<HTMLHeadingElement>(null)
   const directorySummaryRef = useRef<HTMLHeadingElement>(null)
   const editButtonRefs = useRef(new Map<string, HTMLButtonElement>())
   const contactLinkRefs = useRef(new Map<string, HTMLAnchorElement>())
@@ -271,7 +240,6 @@ export function MemberDirectory() {
     + Number(status !== "all")
     + Number(batch !== "All batches")
   const hasDirectoryCriteria = Boolean(query.trim()) || activeFilterCount > 0
-  const queueIsBusy = pendingQueueAction !== null
 
   useEffect(() => {
     const canonicalSearch = memberDirectorySearch(searchParams.toString(), urlCriteria)
@@ -416,7 +384,6 @@ export function MemberDirectory() {
       return
     }
 
-    const shouldContinueToAssignment = completesInitialEvaluation(player, draft)
     setIsSaving(true)
     setMemberFeedback(null)
     try {
@@ -479,11 +446,7 @@ export function MemberDirectory() {
         message: "Member details saved",
         tone: "success",
       })
-      if (shouldContinueToAssignment) {
-        router.push(`/coach/schedules?player=${encodeURIComponent(player.member.id)}&from=evaluation`)
-      } else {
-        restoreEditFocus(player.member.id)
-      }
+      restoreEditFocus(player.member.id)
     } catch (error) {
       setMemberFeedback({
         memberId: player.member.id,
@@ -545,78 +508,6 @@ export function MemberDirectory() {
       })
     } finally {
       setArchivingMemberId(null)
-    }
-  }
-
-  async function handleApproval(registrationId: string) {
-    if (pendingQueueAction) return
-    setPendingQueueAction({ registrationId, type: "approve" })
-    setDirectoryFeedback(null)
-    setCopyState("idle")
-    try {
-      const result = await approveRegistration(registrationId)
-      if (!result.ok) {
-        setDirectoryFeedback({ message: result.message, tone: "error" })
-        return
-      }
-      const approved = result.data
-      setApprovalResult(approved)
-      setDirectoryFeedback({ message: `${approved.fullName} approved`, tone: "success" })
-      focusAfterRender(() => academyIdCopyButtonRef.current)
-    } catch (error) {
-      setDirectoryFeedback({
-        message: error instanceof Error ? error.message : "The registration could not be approved",
-        tone: "error",
-      })
-    } finally {
-      setPendingQueueAction(null)
-    }
-  }
-
-  async function handleRejection(registrationId: string, fullName: string) {
-    if (pendingQueueAction) return
-    const confirmed = window.confirm(
-      `Reject ${fullName}’s registration? They will need to register again before they can join the academy.`,
-    )
-    if (!confirmed) return
-
-    setPendingQueueAction({ registrationId, type: "reject" })
-    setDirectoryFeedback(null)
-    try {
-      const result = await rejectRegistration(registrationId)
-      if (!result.ok) {
-        setDirectoryFeedback({ message: result.message, tone: "error" })
-        return
-      }
-      setDirectoryFeedback({ message: "Registration rejected", tone: "success" })
-      focusAfterRender(() => registrationQueueHeadingRef.current)
-    } catch (error) {
-      setDirectoryFeedback({
-        message: error instanceof Error ? error.message : "The registration could not be rejected",
-        tone: "error",
-      })
-    } finally {
-      setPendingQueueAction(null)
-    }
-  }
-
-  async function copyAcademyId() {
-    if (!approvalResult) return
-
-    const copied = await tryCopyText(approvalResult.academyId, navigator.clipboard)
-    if (copied) {
-      setCopyState("copied")
-      setDirectoryFeedback({ message: "Academy ID copied", tone: "success" })
-    } else {
-      setCopyState("unavailable")
-      setDirectoryFeedback({
-        message: "Unable to copy automatically. Select and copy the Academy ID manually",
-        tone: "error",
-      })
-      window.requestAnimationFrame(() => {
-        academyIdFieldRef.current?.focus()
-        academyIdFieldRef.current?.select()
-      })
     }
   }
 
@@ -697,211 +588,116 @@ export function MemberDirectory() {
 
       <header className="coach-members-directory-header">
         <div>
-          <span className="eyebrow">Academy roster</span>
+          <span className="eyebrow">Court roster register</span>
           <h1>Member Directory</h1>
         </div>
-        <p>
-          A clear record of every player currently training at SMBA.
-        </p>
       </header>
 
       <section className="coach-member-directory-panel" aria-labelledby="member-directory-title">
-        <div
-          className={`coach-registration-queue${!pendingRegistrations.length && !approvalResult ? " is-empty" : ""}`}
-          aria-labelledby="registration-queue-title"
-          aria-busy={queueIsBusy}
-        >
-          <div className="coach-registration-queue-heading">
-            <div>
-              <span>New registrations</span>
-              <h2
-                ref={registrationQueueHeadingRef}
-                id="registration-queue-title"
-                tabIndex={-1}
-              >
-                Awaiting approval
-              </h2>
-            </div>
-            <strong>{pendingRegistrations.length}</strong>
-          </div>
-
-          {approvalResult ? (
-            <div className="coach-registration-approved">
-              <div>
-                <Check aria-hidden="true" />
-                <p>
-                  <strong>{approvalResult.fullName} approved</strong>
-                  <span>Share this Academy ID privately</span>
-                  <input
-                    ref={academyIdFieldRef}
-                    aria-label={`${approvalResult.fullName} Academy ID`}
-                    readOnly
-                    value={approvalResult.academyId}
-                    onFocus={(event) => event.currentTarget.select()}
-                  />
-                </p>
-              </div>
-              <button
-                ref={academyIdCopyButtonRef}
-                type="button"
-                onClick={() => void copyAcademyId()}
-              >
-                {copyState === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                {copyState === "copied" ? "Copied" : copyState === "unavailable" ? "Try again" : "Copy ID"}
-              </button>
-            </div>
-          ) : null}
-
-          {pendingRegistrations.length ? (
-            <div className="coach-registration-list">
-              <span className="sr-only" role="status" aria-live="polite">
-                {pendingQueueAction
-                  ? `${pendingQueueAction.type === "approve" ? "Approving" : "Rejecting"} registration`
-                  : ""}
-              </span>
-              {pendingRegistrations.map((registration) => (
-                <article key={registration.id}>
-                  <div>
-                    <strong>{registration.fullName}</strong>
-                    <span>{registration.requestedRole === "coach"
-                      ? "Coach request · controlled provisioning required"
-                      : "Player"}</span>
-                  </div>
-                  <div>
-                    <button
-                      type="button"
-                      disabled={queueIsBusy}
-                      aria-label={`${pendingQueueAction?.registrationId === registration.id
-                        && pendingQueueAction.type === "reject" ? "Rejecting" : "Reject"} ${registration.fullName}`}
-                      onClick={() => void handleRejection(registration.id, registration.fullName)}
-                    >
-                      <X aria-hidden="true" /> {pendingQueueAction?.registrationId === registration.id
-                        && pendingQueueAction.type === "reject" ? "Rejecting…" : "Reject"}
-                    </button>
-                    {registration.requestedRole === "player" ? (
-                      <button
-                        className="is-primary"
-                        type="button"
-                        disabled={queueIsBusy}
-                        aria-label={`${pendingQueueAction?.registrationId === registration.id
-                          && pendingQueueAction.type === "approve" ? "Approving" : "Approve"} ${registration.fullName}`}
-                        onClick={() => void handleApproval(registration.id)}
-                      >
-                        <Check aria-hidden="true" /> {pendingQueueAction?.registrationId === registration.id
-                          && pendingQueueAction.type === "approve" ? "Approving…" : "Approve"}
-                      </button>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <p className="coach-registration-empty">No registrations are waiting.</p>
-          )}
-        </div>
-
         <InlineNotice
           className="coach-directory-notice"
           message={directoryFeedback?.message}
           tone={directoryFeedback?.tone}
         />
 
-        <div className={`coach-member-directory-controls${filtersOpen ? " is-filters-open" : ""}`}>
-          <label className="coach-member-search">
-            <span className="sr-only">Search members or primary contacts</span>
-            <Search aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              placeholder="Search members"
-              onChange={(event) => {
-                const nextQuery = event.target.value
-                updateDirectoryCriteria({
-                  ...urlCriteria,
-                  query: nextQuery,
-                }, "replace")
-              }}
-            />
-          </label>
-
-          <button
-            className="coach-member-filter-toggle"
-            type="button"
-            aria-expanded={filtersOpen}
-            aria-controls="coach-member-filters"
-            onClick={() => setFiltersOpen((current) => !current)}
-          >
-            <span>
-              <strong>Filters</strong>
-              <small>{activeFilterCount ? `${activeFilterCount} active` : "Optional"}</small>
-            </span>
-            <ChevronDown aria-hidden="true" />
-          </button>
-
-          <div id="coach-member-filters" className="coach-member-filters">
-            <label className="coach-member-filter">
-              <span>Level</span>
-              <select
-                value={level}
+        <div className="coach-member-register-tools">
+          <div className={`coach-member-directory-controls${filtersOpen ? " is-filters-open" : ""}`}>
+            <label className="coach-member-search">
+              <span className="sr-only">Search members or primary contacts</span>
+              <Search aria-hidden="true" />
+              <input
+                type="search"
+                value={query}
+                placeholder="Search members"
                 onChange={(event) => {
+                  const nextQuery = event.target.value
                   updateDirectoryCriteria({
                     ...urlCriteria,
-                    level: event.target.value as MemberDirectoryLevel,
-                  }, "push")
+                    query: nextQuery,
+                  }, "replace")
                 }}
-              >
-                <option>All levels</option>
-                {memberDirectoryLevels.map((item) => <option key={item}>{item}</option>)}
-              </select>
+              />
             </label>
 
-            <label className="coach-member-filter">
-              <span>Status</span>
-              <select
-                value={status}
-                onChange={(event) => {
-                  updateDirectoryCriteria({
-                    ...urlCriteria,
-                    status: event.target.value as MemberDirectoryStatus,
-                  }, "push")
-                }}
-              >
-                <option value="all">All members</option>
-                <option value="unassigned">Unassigned</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-              </select>
-            </label>
+            <button
+              className="coach-member-filter-toggle"
+              type="button"
+              aria-expanded={filtersOpen}
+              aria-controls="coach-member-filters"
+              onClick={() => setFiltersOpen((current) => !current)}
+            >
+              <span>
+                <strong>Filters</strong>
+                <small>{activeFilterCount ? `${activeFilterCount} active` : "Optional"}</small>
+              </span>
+              <ChevronDown aria-hidden="true" />
+            </button>
 
-            <label className="coach-member-filter">
-              <span>Batch</span>
-              <select
-                value={batch}
-                onChange={(event) => {
-                  updateDirectoryCriteria({
-                    ...urlCriteria,
-                    batch: event.target.value as MemberDirectoryBatch,
-                  }, "push")
-                }}
-              >
-                <option>All batches</option>
-                {memberDirectoryBatches.map((item) => <option key={item}>{item}</option>)}
-              </select>
-            </label>
+            <div id="coach-member-filters" className="coach-member-filters">
+              <label className="coach-member-filter">
+                <span>Level</span>
+                <select
+                  value={level}
+                  onChange={(event) => {
+                    updateDirectoryCriteria({
+                      ...urlCriteria,
+                      level: event.target.value as MemberDirectoryLevel,
+                    }, "push")
+                  }}
+                >
+                  <option>All levels</option>
+                  {memberDirectoryLevels.map((item) => <option key={item}>{item}</option>)}
+                </select>
+              </label>
+
+              <label className="coach-member-filter">
+                <span>Status</span>
+                <select
+                  value={status}
+                  onChange={(event) => {
+                    updateDirectoryCriteria({
+                      ...urlCriteria,
+                      status: event.target.value as MemberDirectoryStatus,
+                    }, "push")
+                  }}
+                >
+                  <option value="all">All members</option>
+                  <option value="unassigned">Unassigned</option>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                </select>
+              </label>
+
+              <label className="coach-member-filter">
+                <span>Batch</span>
+                <select
+                  value={batch}
+                  onChange={(event) => {
+                    updateDirectoryCriteria({
+                      ...urlCriteria,
+                      batch: event.target.value as MemberDirectoryBatch,
+                    }, "push")
+                  }}
+                >
+                  <option>All batches</option>
+                  {memberDirectoryBatches.map((item) => <option key={item}>{item}</option>)}
+                </select>
+              </label>
+            </div>
           </div>
-        </div>
 
-        <div className="coach-member-directory-summary">
-          <h2
-            ref={directorySummaryRef}
-            id="member-directory-title"
-            aria-live="polite"
-            aria-atomic="true"
-            tabIndex={-1}
-          >
-            {memberWindowSummary(visiblePlayers.length, filteredPlayers.length)}
-          </h2>
-          <p>Contact details stay hidden until you need them.</p>
+          <div className="coach-member-directory-summary">
+            <h2
+              ref={directorySummaryRef}
+              id="member-directory-title"
+              aria-live="polite"
+              aria-atomic="true"
+              tabIndex={-1}
+            >
+              {memberWindowSummary(visiblePlayers.length, filteredPlayers.length)}
+            </h2>
+            <p>Private contacts remain concealed.</p>
+          </div>
         </div>
 
         {filteredPlayers.length ? (
@@ -909,9 +705,9 @@ export function MemberDirectory() {
             <table className="coach-member-table">
               <thead>
                 <tr>
+                  <th scope="col"><span className="sr-only">Roster number</span></th>
                   <th scope="col">Member</th>
-                  <th scope="col">Level</th>
-                  <th scope="col">Batch</th>
+                  <th scope="col">Training</th>
                   <th scope="col">Sessions</th>
                   <th scope="col">Joined</th>
                   <th scope="col">Status</th>
@@ -919,7 +715,7 @@ export function MemberDirectory() {
                 </tr>
               </thead>
               <tbody id="coach-member-results">
-                {visiblePlayers.map((player) => {
+                {visiblePlayers.map((player, index) => {
                   const memberId = player.member.id
                   const isExpanded = expandedMemberId === memberId
                   const isEditing = editingMemberId === memberId
@@ -937,37 +733,28 @@ export function MemberDirectory() {
                   return (
                     <Fragment key={memberId}>
                       <tr className={isExpanded ? "is-expanded" : undefined}>
+                        <td className="coach-member-folio" aria-hidden="true">
+                          {String(index + 1).padStart(2, "0")}
+                        </td>
                         <th scope="row" data-label="Member">
-                          <span className="coach-member-initials" aria-hidden="true">
-                            {player.member.initials}
-                          </span>
                           <span className="coach-member-name">
                             <strong>{player.member.fullName}</strong>
                             <small>{player.member.academyId}</small>
-                            <span className="coach-member-mobile-meta">
-                              <span>
-                                {player.training.level} · {player.training.batch} · {academyPlanLabel(player.training.academyPlan)}
-                              </span>
-                              <span className={`coach-member-status is-${player.training.status}`}>
-                                {player.training.status}
-                              </span>
-                            </span>
                           </span>
                         </th>
-                        <td className="coach-member-mobile-hide" data-label="Level">{player.training.level}</td>
-                        <td className="coach-member-mobile-hide" data-label="Batch">
-                          <span className="coach-member-batch-plan">
-                            <strong>{player.training.batch}</strong>
+                        <td className="coach-member-training" data-label="Training">
+                          <span>
+                            <strong>{player.training.level} · {player.training.batch}</strong>
                             <small>{academyPlanLabel(player.training.academyPlan)}</small>
                           </span>
                         </td>
-                        <td className="coach-member-mobile-hide" data-label="Sessions">
+                        <td className="coach-member-sessions" data-label="Sessions">
                           <span>{activeSessionLabels.length
                             ? `${activeSessionLabels.length} active`
                             : "Not assigned"}</span>
                         </td>
-                        <td className="coach-member-mobile-hide" data-label="Joined">{formatJoinedDate(player.member.joinedAt)}</td>
-                        <td className="coach-member-mobile-hide" data-label="Status">
+                        <td className="coach-member-joined" data-label="Joined">{formatJoinedDate(player.member.joinedAt)}</td>
+                        <td className="coach-member-status-cell" data-label="Status">
                           <span className={`coach-member-status is-${player.training.status}`}>
                             {player.training.status}
                           </span>
@@ -1190,11 +977,7 @@ export function MemberDirectory() {
                                     <div className="coach-member-editor-actions">
                                       <button type="button" disabled={isSaving} onClick={cancelEditing}>Cancel</button>
                                       <button className="is-primary" type="submit" disabled={isSaving}>
-                                        <Check aria-hidden="true" /> {isSaving
-                                          ? "Saving…"
-                                          : completesInitialEvaluation(player, draft)
-                                            ? "Save & assign sessions"
-                                            : "Save member"}
+                                        {isSaving ? "Saving…" : "Save member"}
                                       </button>
                                     </div>
                                   </div>

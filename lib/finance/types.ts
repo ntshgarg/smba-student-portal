@@ -7,6 +7,7 @@ export type FinanceCurrency = typeof FINANCE_CURRENCY
 export type ChargeType = "registration" | "monthly_training"
 export type ChargeLifecycle = "issued" | "void"
 export type PaymentLifecycle = "recorded" | "reversed"
+export type RefundPurpose = "legacy_unclassified" | "mid_term_withdrawal"
 export type PaymentMethod =
   | "cash"
   | "upi"
@@ -18,6 +19,7 @@ export type AdjustmentKind =
   | "manual_credit"
   | "manual_debit"
   | "concession_credit"
+  | "withdrawal_credit"
 export type ManualAdjustmentKind = "manual_credit" | "manual_debit"
 export type ConcessionMode = "one_off" | "recurring"
 export type ConcessionValueKind = "fixed" | "percentage"
@@ -45,6 +47,8 @@ export type PaymentView = {
 export type PlayerReceiptAllocationView = {
   id: string
   chargeId: string
+  chargeType: ChargeType
+  billingPeriod: string | null
   feeReference: string
   description: string
   amountPaise: number
@@ -60,6 +64,7 @@ export type PlayerReceiptView = {
   lifecycle: PaymentLifecycle
   allocations: PlayerReceiptAllocationView[]
   refunds: PlayerRefundView[]
+  refundedPaise?: number
 }
 
 export type PlayerRefundView = {
@@ -67,6 +72,8 @@ export type PlayerRefundView = {
   paymentId: string
   receiptReference: string
   refundReference: string
+  purpose: RefundPurpose
+  withdrawalEffectiveOn: string | null
   amountPaise: number
   refundedOn: string
   lifecycle: PaymentLifecycle
@@ -186,6 +193,7 @@ export type PlayerFeeRecord = {
   academyId: string
   fullName: string
   archived: boolean
+  feePlanSetupReady: boolean
   registrationResolutionRequired: boolean
   status: FinanceStatus
   currentBalancePaise: number
@@ -381,26 +389,34 @@ export type PreviewRefundAllocationsInput = {
   paymentId: string
   expectedPaymentRevision: number
   amountPaise: number
+  withdrawalEffectiveOn: string
   allocations?: RefundAllocationInput[]
 }
 
 export type RefundAllocationPreviewItem = RefundAllocationInput & {
   chargeId: string
+  billingPeriod: string
   feeReference: string
   description: string
   refundablePaise: number
+  expectedChargeRevision: number
+  expectedAgreementRevision: number
 }
 
 export type RefundAllocationPreview = {
   paymentId: string
   amountPaise: number
+  maximumRefundPaise: number
   allocations: RefundAllocationPreviewItem[]
 }
 
 export type RecordRefundInput = {
   paymentId: string
   expectedPaymentRevision: number
+  expectedChargeRevision: number
+  expectedAgreementRevision: number
   amountPaise: number
+  withdrawalEffectiveOn: string
   refundedOn: string
   method: PaymentMethod
   externalReference?: string
@@ -689,6 +705,7 @@ export type FinanceField =
   | "concessionId"
   | "adjustmentId"
   | "amountPaise"
+  | "withdrawalEffectiveOn"
   | "receivedOn"
   | "method"
   | "reason"

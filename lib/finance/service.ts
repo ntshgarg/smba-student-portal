@@ -27,6 +27,7 @@ import { formatAcademyId } from "@/lib/auth/identity"
 import { DEFAULT_MONTHLY_DUE_DAY, REGISTRATION_FEE_PAISE } from "@/lib/finance/config"
 import {
   addCalendarDays,
+  calculateUnusedMonthRefundLimit,
   createOpaqueFeeReference,
   calculateConcessionAmount,
   dateInMonth,
@@ -36,6 +37,7 @@ import {
   isValidIdempotencyKey,
   isValidMutationId,
   monthEnd,
+  monthStart,
 } from "@/lib/finance/domain"
 import {
   FinanceRecordsCursorError,
@@ -59,6 +61,7 @@ import {
   readFinanceActivation,
   readFirstAssignmentDate,
   hasAssignmentInPeriod,
+  hasCurrentOrFutureMatchingAssignment,
   readPaymentByIdempotencyKey,
   readPeriodReceivedPaise,
 } from "@/lib/finance/repository"
@@ -226,17 +229,24 @@ function requireActiveFinanceTarget(
   return player
 }
 
-function requirePaymentFeePlanHistory(
+function readPaymentFeePlanHistory(
   database: SmbaDatabaseExecutor,
   playerId: string,
 ) {
-  const agreement = database.select().from(feeAgreements).where(and(
+  return database.select().from(feeAgreements).where(and(
     eq(feeAgreements.playerAccountId, playerId),
     or(
       eq(feeAgreements.status, "active"),
       eq(feeAgreements.status, "ended"),
     ),
   )).orderBy(desc(feeAgreements.effectiveFrom), desc(feeAgreements.createdAt)).get()
+}
+
+function requirePaymentFeePlanHistory(
+  database: SmbaDatabaseExecutor,
+  playerId: string,
+) {
+  const agreement = readPaymentFeePlanHistory(database, playerId)
   if (!agreement) {
     financeError("SETUP_REQUIRED", "Create the player’s Fee Plan first.", "playerId")
   }
@@ -628,12 +638,19 @@ function agreementMatchesInput(
 function monthlyPreparationCandidates(
   database: SmbaDatabaseExecutor,
   period: string,
+  now: Date,
 ) {
   const candidatesByPlayer = new Map<
     string,
     ReturnType<typeof listMonthlyPreparationCandidates>[number]
   >()
+  const currentPeriod = getAcademyDateKey(now).slice(0, 7)
   listMonthlyPreparationCandidates(database, period).forEach((candidate) => {
+    const matchesCurrentEnrollment = candidate.agreement.academyPlan
+        === candidate.enrollment.academyPlan
+      && candidate.agreement.level === candidate.enrollment.level
+      && candidate.agreement.batch === candidate.enrollment.batch
+    if (period >= currentPeriod && !matchesCurrentEnrollment) return
     const playerId = candidate.agreement.playerAccountId
     const existing = candidatesByPlayer.get(playerId)
     if (!existing
@@ -646,15 +663,24 @@ function monthlyPreparationCandidates(
   return [...candidatesByPlayer.values()].map((candidate) => ({
     ...candidate,
     firstAssignment: readFirstAssignmentDate(database, candidate.agreement.playerAccountId),
-    hasAssignment: hasAssignmentInPeriod(database, candidate.agreement.playerAccountId, period),
+    hasAssignment: hasAssignmentInPeriod(
+      database,
+      candidate.agreement.playerAccountId,
+      period,
+      {
+        programme: candidate.agreement.level,
+        batch: candidate.agreement.batch,
+      },
+    ),
   }))
 }
 
 function monthlyPreparationPreview(
   database: SmbaDatabaseExecutor,
   period: string,
+  now: Date,
 ): MonthlyPreparationPreview {
-  const candidates = monthlyPreparationCandidates(database, period)
+  const candidates = monthlyPreparationCandidates(database, period, now)
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
@@ -707,6 +733,18 @@ function createAgreement(
     || player.level !== input.level
     || player.batch !== input.batch) {
     financeError("INVALID_INPUT", "The Fee Plan must match the player’s current training profile.")
+  }
+  if (!hasCurrentOrFutureMatchingAssignment(
+    database,
+    input.playerId,
+    getAcademyDateKey(now),
+    { programme: input.level, batch: input.batch },
+  )) {
+    financeError(
+      "SETUP_REQUIRED",
+      "Assign the player to a matching current or future session before creating a Fee Plan.",
+      "playerId",
+    )
   }
 
   const existing = readActiveFeeAgreement(database, input.playerId)
@@ -961,7 +999,7 @@ export function issueRegistrationChargeForApprovedPlayer({
     createFeeReference,
     createId,
     description: "SMBA registration fee",
-    dueDate: addCalendarDays(approvedOn, 3),
+    dueDate: approvedOn,
     now: approvedAt,
     playerId,
     type: "registration",
@@ -1032,7 +1070,7 @@ export function setupExistingPlayerFinance(
         createFeeReference,
         createId,
         description: "SMBA registration fee",
-        dueDate: addCalendarDays(getAcademyDateKey(approvedAt), 3),
+        dueDate: getAcademyDateKey(approvedAt),
         now,
         playerId: input.playerId,
         type: "registration",
@@ -1094,7 +1132,7 @@ export function prepareMonthlyCharges(
       return { ...result, reused: true }
     }
 
-    const candidates = monthlyPreparationCandidates(tx, input.period)
+    const candidates = monthlyPreparationCandidates(tx, input.period, now)
     const approvedPlayerIds = listApprovedPlayerIds(tx)
     const candidateIds = new Set(candidates.map(({ agreement }) => agreement.playerAccountId))
     const result: PrepareMonthlyChargesResult = {
@@ -1229,13 +1267,17 @@ function recordAllocatedPaymentCommand(
     requireUnusedMutationId(tx, idempotencyKey)
 
     requireActiveFinanceTarget(tx, input.playerId)
-    requirePaymentFeePlanHistory(tx, input.playerId)
     const currentPeriod = getAcademyDateKey(now).slice(0, 7)
+    let monthlyFeePlanChecked = false
     allocations.forEach((allocation) => {
       const charge = readCharge(tx, allocation.chargeId)
       if (!charge || charge.lifecycle !== "issued" || charge.playerAccountId !== input.playerId
         || !isChargeWithinPaymentHorizon(charge, currentPeriod)) {
         financeError("NOT_FOUND", "Choose an active Charge belonging to this player.", "chargeId")
+      }
+      if (charge.type === "monthly_training" && !monthlyFeePlanChecked) {
+        requirePaymentFeePlanHistory(tx, input.playerId)
+        monthlyFeePlanChecked = true
       }
       const current = loadChargeView(tx, charge.id, now)
       if (!current) throw new Error("The Charge ledger is unavailable.")
@@ -1339,7 +1381,7 @@ export function previewPaymentAllocations(
   requireCoach(database, coachId)
   requireFinanceActive(database)
   requireActiveFinanceTarget(database, input.playerId)
-  requirePaymentFeePlanHistory(database, input.playerId)
+  const hasFeePlanHistory = Boolean(readPaymentFeePlanHistory(database, input.playerId))
   const amountPaise = validateMoney(input.amountPaise)
   const currentPeriod = getAcademyDateKey(now).slice(0, 7)
   const chargeRows = database.select().from(financialCharges).where(and(
@@ -1347,10 +1389,10 @@ export function previewPaymentAllocations(
     eq(financialCharges.lifecycle, "issued"),
     or(
       eq(financialCharges.type, "registration"),
-      and(
+      hasFeePlanHistory ? and(
         eq(financialCharges.type, "monthly_training"),
         lte(financialCharges.billingPeriod, currentPeriod),
-      ),
+      ) : undefined,
     ),
   )).orderBy(
     asc(financialCharges.dueDate),
@@ -1502,10 +1544,16 @@ export function reversePayment(
     if (!payment) financeError("NOT_FOUND", "Payment not found.")
     requireActiveFinanceTarget(tx, payment.playerAccountId)
     if (payment.lifecycle === "reversed") financeError("CONFLICT", "Payment is already reversed.")
-    const activeRefund = tx.select({ id: refunds.id }).from(refunds).where(and(
-      eq(refunds.paymentId, payment.id),
-      eq(refunds.lifecycle, "recorded"),
-    )).get()
+    const activeRefund = tx.select({ id: refunds.id }).from(refundAllocations)
+      .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+      .innerJoin(
+        paymentAllocations,
+        eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+      )
+      .where(and(
+        eq(paymentAllocations.paymentId, payment.id),
+        eq(refunds.lifecycle, "recorded"),
+      )).get()
     if (activeRefund) financeError("CONFLICT", "Reverse active Refunds before reversing this receipt.")
     const allocations = tx.select().from(paymentAllocations)
       .where(eq(paymentAllocations.paymentId, payment.id)).all()
@@ -1539,12 +1587,13 @@ export function reversePayment(
   }, { behavior: "immediate" })
 }
 
-function refundablePaymentAllocations(
+function withdrawalRefundablePaymentAllocations(
   database: SmbaDatabaseExecutor,
   paymentId: string,
+  withdrawalEffectiveOn: string,
+  now: Date,
 ) {
   return database.select({
-    allocation: paymentAllocations,
     charge: financialCharges,
   }).from(paymentAllocations)
     .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
@@ -1553,29 +1602,157 @@ function refundablePaymentAllocations(
       desc(financialCharges.dueDate),
       desc(financialCharges.issuedAt),
       desc(financialCharges.id),
-    ).all().map(({ allocation, charge }) => {
-      const refunded = database.select({
-        total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
-      }).from(refundAllocations)
-        .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
-        .where(and(
-          eq(refundAllocations.paymentAllocationId, allocation.id),
-          eq(refunds.lifecycle, "recorded"),
-        )).get()?.total ?? 0
-      return {
-        allocation,
-        charge,
-        refundablePaise: Math.max(0, allocation.amountPaise - Number(refunded)),
+    ).all().flatMap(({ charge }) => {
+      const period = charge.billingPeriod
+      if (charge.type !== "monthly_training" || !period || !charge.feeAgreementId
+        || period !== withdrawalEffectiveOn.slice(0, 7)
+        || withdrawalEffectiveOn <= monthStart(period)
+        || withdrawalEffectiveOn >= monthEnd(period)) {
+        return []
       }
+      const agreement = database.select().from(feeAgreements)
+        .where(eq(feeAgreements.id, charge.feeAgreementId)).get()
+      const chargeLedger = loadChargeView(database, charge.id, now)
+      const reversedWithdrawalRefund = database.select({
+        id: refunds.id,
+        withdrawalEffectiveOn: refunds.withdrawalEffectiveOn,
+      })
+        .from(refundAllocations)
+        .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+        .innerJoin(
+          paymentAllocations,
+          eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+        )
+        .where(and(
+          eq(paymentAllocations.chargeId, charge.id),
+          eq(refunds.lifecycle, "reversed"),
+          eq(refunds.purpose, "mid_term_withdrawal"),
+          agreement?.effectiveTo
+            ? eq(refunds.withdrawalEffectiveOn, agreement.effectiveTo)
+            : undefined,
+        )).get()
+      const agreementCanClose = agreement?.status === "active"
+        || (agreement?.status === "ended"
+          && reversedWithdrawalRefund?.withdrawalEffectiveOn === agreement.effectiveTo)
+      if (!agreement || !agreementCanClose
+        || agreement.playerAccountId !== charge.playerAccountId
+        || agreement.effectiveFrom > withdrawalEffectiveOn
+        || !chargeLedger
+        || chargeLedger.lifecycle !== "issued"
+        || chargeLedger.effectiveAmountPaise <= 0
+        || chargeLedger.outstandingPaise !== 0
+        || chargeLedger.receivedPaise !== chargeLedger.effectiveAmountPaise) {
+        return []
+      }
+      const laterCharge = database.select({ id: financialCharges.id })
+        .from(financialCharges).where(and(
+          eq(financialCharges.playerAccountId, charge.playerAccountId),
+          eq(financialCharges.type, "monthly_training"),
+          eq(financialCharges.lifecycle, "issued"),
+          gt(financialCharges.billingPeriod, period),
+        )).get()
+      if (laterCharge) return []
+      const activeWithdrawalRefund = database.select({ id: refunds.id })
+        .from(refundAllocations)
+        .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+        .innerJoin(
+          paymentAllocations,
+          eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+        )
+        .where(and(
+          eq(paymentAllocations.chargeId, charge.id),
+          eq(refunds.lifecycle, "recorded"),
+          eq(refunds.purpose, "mid_term_withdrawal"),
+        )).get()
+      if (activeWithdrawalRefund) return []
+      const coveredAllocations = database.select({
+        allocation: paymentAllocations,
+        payment: payments,
+      }).from(paymentAllocations)
+        .innerJoin(payments, eq(payments.id, paymentAllocations.paymentId))
+        .where(and(
+          eq(paymentAllocations.chargeId, charge.id),
+          eq(payments.lifecycle, "recorded"),
+        )).all()
+      if (coveredAllocations.some(({ payment }) => (
+        payment.receivedOn > withdrawalEffectiveOn
+      ))) return []
+      return coveredAllocations.sort((left, right) => (
+        Number(right.payment.id === paymentId) - Number(left.payment.id === paymentId)
+          || right.payment.receivedOn.localeCompare(left.payment.receivedOn)
+          || right.allocation.id.localeCompare(left.allocation.id)
+      )).flatMap(({ allocation, payment: allocationPayment }) => {
+        const refunded = database.select({
+          total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
+        }).from(refundAllocations)
+          .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+          .where(and(
+            eq(refundAllocations.paymentAllocationId, allocation.id),
+            eq(refunds.lifecycle, "recorded"),
+          )).get()?.total ?? 0
+        const refundablePaise = Math.max(0, allocation.amountPaise - Number(refunded))
+        return refundablePaise > 0 ? [{
+          allocation,
+          agreement,
+          charge,
+          chargeLedger,
+          payment: allocationPayment,
+          refundablePaise,
+        }] : []
+      })
     })
+}
+
+function validateWithdrawalEffectiveOn(value: unknown, now: Date) {
+  if (typeof value !== "string" || !isValidDateKey(value)
+    || value > getAcademyDateKey(now)) {
+    financeError(
+      "INVALID_INPUT",
+      "Choose a valid member withdrawal date not later than today.",
+      "withdrawalEffectiveOn",
+    )
+  }
+  return value
+}
+
+function enforceUnusedDaysRefundLimit(
+  amountPaise: number,
+  charge: ChargeView,
+  withdrawalEffectiveOn: string,
+) {
+  const billingPeriod = charge.billingPeriod
+  if (!billingPeriod) {
+    financeError("INVALID_INPUT", "Choose the final paid monthly fee.", "amountPaise")
+  }
+  const maximumRefundPaise = calculateUnusedMonthRefundLimit(
+    charge.effectiveAmountPaise,
+    billingPeriod,
+    withdrawalEffectiveOn,
+  )
+  if (amountPaise > maximumRefundPaise) {
+    financeError(
+      "INVALID_INPUT",
+      `The maximum refund for unused days after ${withdrawalEffectiveOn} is INR ${(maximumRefundPaise / 100).toFixed(2)}.`,
+      "amountPaise",
+    )
+  }
+  return maximumRefundPaise
 }
 
 function validateRefundAllocationSet(
   allocations: RecordRefundInput["allocations"],
   expectedTotal: number,
+  { requireSingleAllocation = true }: { requireSingleAllocation?: boolean } = {},
 ) {
   if (!Array.isArray(allocations) || !allocations.length) {
-    financeError("INVALID_INPUT", "Allocate the complete Refund.", "amountPaise")
+    financeError("INVALID_INPUT", "Choose the paid monthly fee being refunded.", "amountPaise")
+  }
+  if (requireSingleAllocation && allocations.length !== 1) {
+    financeError(
+      "INVALID_INPUT",
+      "A mid-term withdrawal refund must belong to one monthly fee.",
+      "amountPaise",
+    )
   }
   const seen = new Set<string>()
   const normalized = allocations.map((allocation) => {
@@ -1600,11 +1777,16 @@ export function previewRefundAllocations(
   {
     coachId,
     database = initializeDatabase(),
+    now = new Date(),
   }: CoachContext,
 ): RefundAllocationPreview {
   requireCoach(database, coachId)
   requireFinanceActive(database)
   const amountPaise = validateMoney(input.amountPaise)
+  const withdrawalEffectiveOn = validateWithdrawalEffectiveOn(
+    input.withdrawalEffectiveOn,
+    now,
+  )
   const expectedPaymentRevision = validateRevision(
     input.expectedPaymentRevision,
     "Review the receipt before preparing a Refund.",
@@ -1617,35 +1799,81 @@ export function previewRefundAllocations(
   if (payment.recordRevision !== expectedPaymentRevision) {
     financeError("BALANCE_CHANGED", "Receipt changed. Review the refundable amount.")
   }
-  const available = refundablePaymentAllocations(database, payment.id)
+  if (payment.receivedOn > withdrawalEffectiveOn) {
+    financeError(
+      "INVALID_INPUT",
+      "The member withdrawal date cannot precede the offline payment.",
+      "withdrawalEffectiveOn",
+    )
+  }
+  const available = withdrawalRefundablePaymentAllocations(
+    database,
+    payment.id,
+    withdrawalEffectiveOn,
+    now,
+  )
   let allocations: RecordRefundInput["allocations"]
   if (input.allocations) {
-    allocations = validateRefundAllocationSet(input.allocations, amountPaise)
+    allocations = validateRefundAllocationSet(input.allocations, amountPaise, {
+      requireSingleAllocation: false,
+    })
   } else {
     let remaining = amountPaise
     allocations = available.flatMap((item) => {
-      if (!remaining || !item.refundablePaise) return []
+      if (remaining <= 0) return []
       const allocated = Math.min(remaining, item.refundablePaise)
       remaining -= allocated
-      return [{ paymentAllocationId: item.allocation.id, amountPaise: allocated }]
+      return allocated > 0
+        ? [{ paymentAllocationId: item.allocation.id, amountPaise: allocated }]
+        : []
     })
-    if (remaining > 0) financeError("INVALID_INPUT", "Refund exceeds the refundable amount.", "amountPaise")
+    if (remaining > 0) {
+      financeError(
+        "INVALID_INPUT",
+        "A refund requires a fully paid monthly fee for the member’s final month.",
+        "amountPaise",
+      )
+    }
   }
   const byAllocation = new Map(available.map((item) => [item.allocation.id, item]))
+  const selectedItems = allocations.map((allocation) => {
+    const item = byAllocation.get(allocation.paymentAllocationId)
+    if (!item || allocation.amountPaise > item.refundablePaise) {
+      financeError("BALANCE_CHANGED", "Refundable amount changed. Review the Refund.")
+    }
+    return item
+  })
+  const selectedChargeIds = new Set(selectedItems.map((item) => item.charge.id))
+  const selectedCharge = selectedItems[0]?.chargeLedger
+  if (selectedChargeIds.size !== 1 || !selectedCharge
+    || !selectedItems.some((item) => item.payment.id === payment.id)) {
+    financeError(
+      "INVALID_INPUT",
+      "A mid-term withdrawal refund must belong to one monthly fee.",
+      "amountPaise",
+    )
+  }
+  const maximumRefundPaise = enforceUnusedDaysRefundLimit(
+    amountPaise,
+    selectedCharge,
+    withdrawalEffectiveOn,
+  )
   return {
     paymentId: payment.id,
     amountPaise,
+    maximumRefundPaise,
     allocations: allocations.map((allocation) => {
       const item = byAllocation.get(allocation.paymentAllocationId)
-      if (!item || allocation.amountPaise > item.refundablePaise) {
-        financeError("BALANCE_CHANGED", "Refundable amount changed. Review the Refund.")
-      }
+      if (!item) throw new Error("The reviewed Refund allocation is unavailable.")
       return {
         ...allocation,
         chargeId: item.charge.id,
+        billingPeriod: item.charge.billingPeriod as string,
         feeReference: item.charge.feeReference,
         description: item.charge.description,
         refundablePaise: item.refundablePaise,
+        expectedChargeRevision: item.charge.recordRevision,
+        expectedAgreementRevision: item.agreement.recordRevision,
       }
     }),
   }
@@ -1661,18 +1889,94 @@ export function recordRefund(
   }: CoachContext,
 ): RecordRefundResult {
   const mutationId = validateMutationId(input.mutationId)
+  const legacyReplay = database.select().from(refunds)
+    .where(and(
+      eq(refunds.idempotencyKey, mutationId),
+      eq(refunds.purpose, "legacy_unclassified"),
+    )).get()
+  if (legacyReplay) {
+    const legacyAmountPaise = validateMoney(input.amountPaise)
+    validateRevision(
+      input.expectedPaymentRevision,
+      "Review the receipt before recording a Refund.",
+    )
+    if (!isValidDateKey(input.refundedOn) || input.refundedOn > getAcademyDateKey(now)) {
+      financeError("INVALID_INPUT", "Choose a valid Refund date not later than today.")
+    }
+    if (!PAYMENT_METHODS.includes(input.method)) {
+      financeError("INVALID_INPUT", "Choose a valid method.")
+    }
+    const legacyExternalReference = optionalText(
+      input.externalReference,
+      "externalReference",
+      120,
+    )
+    const legacyInternalNote = optionalText(input.internalNote, "internalNote")
+    const legacyAllocations = validateRefundAllocationSet(
+      input.allocations,
+      legacyAmountPaise,
+      { requireSingleAllocation: false },
+    )
+    const legacyFingerprint = financialPayloadFingerprint({
+      ...input,
+      allocations: legacyAllocations,
+      externalReference: legacyExternalReference,
+      internalNote: legacyInternalNote,
+    })
+    return database.transaction((tx) => {
+      requireCoach(tx, coachId)
+      requireFinanceActive(tx)
+      const replay = tx.select().from(refunds).where(eq(refunds.id, legacyReplay.id)).get()
+      if (!replay || replay.payloadFingerprint !== legacyFingerprint) {
+        financeError("IDEMPOTENCY_CONFLICT", "This Refund request was already used differently.")
+      }
+      const record = loadPlayerFeeRecord(tx, replay.playerAccountId, now)
+      const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
+        .find((item) => item.id === replay.id)
+      if (!refund) throw new Error("The idempotent Refund is unavailable.")
+      const chargeIds = new Set(legacyAllocations.flatMap((allocation) => {
+        const paymentAllocation = tx.select().from(paymentAllocations)
+          .where(eq(paymentAllocations.id, allocation.paymentAllocationId)).get()
+        return paymentAllocation ? [paymentAllocation.chargeId] : []
+      }))
+      const charges = [...chargeIds].map((chargeId) => loadChargeView(tx, chargeId, now))
+        .filter((charge): charge is ChargeView => Boolean(charge))
+      return { refund, charges, reused: true }
+    }, { behavior: "immediate" })
+  }
   const amountPaise = validateMoney(input.amountPaise)
+  const withdrawalEffectiveOn = validateWithdrawalEffectiveOn(
+    input.withdrawalEffectiveOn,
+    now,
+  )
   const expectedPaymentRevision = validateRevision(
     input.expectedPaymentRevision,
     "Review the receipt before recording a Refund.",
   )
+  const expectedChargeRevision = validateRevision(
+    input.expectedChargeRevision,
+    "Review the monthly fee before recording a Refund.",
+  )
+  const expectedAgreementRevision = validateRevision(
+    input.expectedAgreementRevision,
+    "Review the fee agreement before recording a Refund.",
+  )
   if (!isValidDateKey(input.refundedOn) || input.refundedOn > getAcademyDateKey(now)) {
     financeError("INVALID_INPUT", "Choose a valid Refund date not later than today.")
+  }
+  if (withdrawalEffectiveOn > input.refundedOn) {
+    financeError(
+      "INVALID_INPUT",
+      "The refund date cannot precede the member withdrawal date.",
+      "withdrawalEffectiveOn",
+    )
   }
   if (!PAYMENT_METHODS.includes(input.method)) financeError("INVALID_INPUT", "Choose a valid method.")
   const externalReference = optionalText(input.externalReference, "externalReference", 120)
   const internalNote = optionalText(input.internalNote, "internalNote")
-  const allocations = validateRefundAllocationSet(input.allocations, amountPaise)
+  const allocations = validateRefundAllocationSet(input.allocations, amountPaise, {
+    requireSingleAllocation: false,
+  })
   const payloadFingerprint = financialPayloadFingerprint({
     ...input,
     allocations,
@@ -1710,17 +2014,75 @@ export function recordRefund(
     if (payment.recordRevision !== expectedPaymentRevision) {
       financeError("BALANCE_CHANGED", "Receipt changed. Review the Refund.")
     }
-    if (input.refundedOn < payment.receivedOn) {
-      financeError("INVALID_INPUT", "A Refund cannot be dated before its receipt.")
+    if (payment.receivedOn > withdrawalEffectiveOn) {
+      financeError(
+        "INVALID_INPUT",
+        "The member withdrawal date cannot precede the offline payment.",
+        "withdrawalEffectiveOn",
+      )
     }
-    const available = new Map(refundablePaymentAllocations(tx, payment.id)
-      .map((item) => [item.allocation.id, item]))
-    allocations.forEach((allocation) => {
-      const item = available.get(allocation.paymentAllocationId)
-      if (!item || allocation.amountPaise > item.refundablePaise) {
-        financeError("BALANCE_CHANGED", "Refundable amount changed. Review the Refund.")
+    const available = new Map(withdrawalRefundablePaymentAllocations(
+      tx,
+      payment.id,
+      withdrawalEffectiveOn,
+      now,
+    ).map((item) => [item.allocation.id, item]))
+    const selectedItems = allocations.map((allocation) => {
+      const availableItem = available.get(allocation.paymentAllocationId)
+      if (!availableItem || allocation.amountPaise > availableItem.refundablePaise) {
+        financeError(
+          "BALANCE_CHANGED",
+          "A refund requires a fully paid monthly fee for the member’s final month.",
+        )
       }
+      return availableItem
     })
+    const item = selectedItems[0]
+    if (!item || new Set(selectedItems.map((selected) => selected.charge.id)).size !== 1
+      || !selectedItems.some((selected) => selected.payment.id === payment.id)) {
+      financeError(
+        "INVALID_INPUT",
+        "A mid-term withdrawal refund must belong to one monthly fee.",
+        "amountPaise",
+      )
+    }
+    enforceUnusedDaysRefundLimit(
+      amountPaise,
+      item.chargeLedger,
+      withdrawalEffectiveOn,
+    )
+    if (item.charge.recordRevision !== expectedChargeRevision
+      || item.agreement.recordRevision !== expectedAgreementRevision) {
+      financeError("BALANCE_CHANGED", "Fee details changed. Review the Refund.")
+    }
+    const overlappingAgreement = tx.select({ id: feeAgreements.id }).from(feeAgreements)
+      .where(and(
+        eq(feeAgreements.playerAccountId, item.agreement.playerAccountId),
+        ne(feeAgreements.id, item.agreement.id),
+        lte(feeAgreements.effectiveFrom, withdrawalEffectiveOn),
+        or(
+          isNull(feeAgreements.effectiveTo),
+          gte(feeAgreements.effectiveTo, withdrawalEffectiveOn),
+        ),
+      )).get()
+    if (overlappingAgreement) {
+      financeError(
+        "CONFLICT",
+        "The corrected withdrawal date overlaps another Fee Plan.",
+        "withdrawalEffectiveOn",
+      )
+    }
+
+    const adjustmentId = createId()
+    tx.insert(chargeAdjustments).values({
+      id: adjustmentId,
+      chargeId: item.charge.id,
+      kind: "withdrawal_credit",
+      amountPaise,
+      reason: `Unused training after mid-term withdrawal on ${withdrawalEffectiveOn}`,
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
     const refundId = createId()
     const refundReference = allocateFinancialReference(tx, "refund", input.refundedOn, now)
     tx.insert(refunds).values({
@@ -1728,6 +2090,9 @@ export function recordRefund(
       refundReference,
       paymentId: payment.id,
       playerAccountId: payment.playerAccountId,
+      purpose: "mid_term_withdrawal",
+      withdrawalEffectiveOn,
+      chargeAdjustmentId: adjustmentId,
       amountPaise,
       currency: FINANCE_CURRENCY,
       refundedOn: input.refundedOn,
@@ -1741,9 +2106,7 @@ export function recordRefund(
       recordedByAccountId: coachId,
       recordedAt: now,
     }).run()
-    const chargeIds = new Set<string>()
     allocations.forEach((allocation) => {
-      const item = available.get(allocation.paymentAllocationId)!
       tx.insert(refundAllocations).values({
         id: createId(),
         refundId,
@@ -1751,7 +2114,6 @@ export function recordRefund(
         amountPaise: allocation.amountPaise,
         createdAt: now,
       }).run()
-      chargeIds.add(item.charge.id)
     })
     const paymentUpdate = tx.update(payments).set({
       recordRevision: sql`${payments.recordRevision} + 1`,
@@ -1759,12 +2121,38 @@ export function recordRefund(
       eq(payments.id, payment.id),
       eq(payments.recordRevision, expectedPaymentRevision),
     )).run()
-    if (paymentUpdate.changes !== 1) financeError("BALANCE_CHANGED", "Receipt changed. Review the Refund.")
-    chargeIds.forEach((chargeId) => {
-      tx.update(financialCharges).set({
-        recordRevision: sql`${financialCharges.recordRevision} + 1`,
-      }).where(eq(financialCharges.id, chargeId)).run()
-    })
+    const secondaryPaymentUpdates = [...new Set(selectedItems.map((selected) => (
+      selected.payment.id
+    )))].filter((selectedPaymentId) => selectedPaymentId !== payment.id)
+      .map((selectedPaymentId) => tx.update(payments).set({
+        recordRevision: sql`${payments.recordRevision} + 1`,
+      }).where(and(
+        eq(payments.id, selectedPaymentId),
+        eq(payments.lifecycle, "recorded"),
+      )).run())
+    const chargeUpdate = tx.update(financialCharges).set({
+      recordRevision: sql`${financialCharges.recordRevision} + 1`,
+    }).where(and(
+      eq(financialCharges.id, item.charge.id),
+      eq(financialCharges.recordRevision, expectedChargeRevision),
+    )).run()
+    const agreementUpdate = tx.update(feeAgreements).set({
+      effectiveTo: withdrawalEffectiveOn,
+      status: "ended",
+      recordRevision: sql`${feeAgreements.recordRevision} + 1`,
+      updatedByAccountId: coachId,
+      updatedAt: now,
+    }).where(and(
+      eq(feeAgreements.id, item.agreement.id),
+      eq(feeAgreements.status, item.agreement.status),
+      eq(feeAgreements.recordRevision, expectedAgreementRevision),
+    )).run()
+    if (paymentUpdate.changes !== 1
+      || secondaryPaymentUpdates.some((update) => update.changes !== 1)
+      || chargeUpdate.changes !== 1
+      || agreementUpdate.changes !== 1) {
+      financeError("BALANCE_CHANGED", "Fee details changed. Review the Refund.")
+    }
     insertAudit(tx, {
       actorId: coachId,
       createId,
@@ -1772,15 +2160,24 @@ export function recordRefund(
       entityType: "refund",
       eventType: "refund_recorded",
       idempotencyKey: mutationId,
-      metadata: { amountPaise, paymentId: payment.id, refundReference },
+      metadata: {
+        adjustmentId,
+        agreementId: item.agreement.id,
+        amountPaise,
+        chargeId: item.charge.id,
+        paymentId: payment.id,
+        purpose: "mid_term_withdrawal",
+        refundReference,
+        withdrawalEffectiveOn,
+      },
       now,
     })
     const record = loadPlayerFeeRecord(tx, payment.playerAccountId, now)
     const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
       .find((item) => item.id === refundId)
     if (!refund) throw new Error("The recorded Refund is unavailable.")
-    const charges = [...chargeIds].map((chargeId) => loadChargeView(tx, chargeId, now))
-      .filter((charge): charge is ChargeView => Boolean(charge))
+    const updatedCharge = loadChargeView(tx, item.charge.id, now)
+    const charges = updatedCharge ? [updatedCharge] : []
     return { refund, charges, reused: false }
   }, { behavior: "immediate" })
 }
@@ -1842,6 +2239,32 @@ export function reverseRefund(
         eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
       )
       .where(eq(refundAllocations.refundId, refundRow.id)).all()
+    const withdrawalAdjustment = refundRow.purpose === "mid_term_withdrawal"
+      && refundRow.chargeAdjustmentId
+      ? tx.select().from(chargeAdjustments)
+        .where(eq(chargeAdjustments.id, refundRow.chargeAdjustmentId)).get()
+      : null
+    const withdrawalAllocationTotal = allocations.reduce(
+      (total, item) => total + item.allocation.amountPaise,
+      0,
+    )
+    const withdrawalChargeIds = new Set(allocations.map(
+      (item) => item.paymentAllocation.chargeId,
+    ))
+    if (refundRow.purpose === "mid_term_withdrawal"
+      && (!withdrawalAdjustment
+        || withdrawalAdjustment.kind !== "withdrawal_credit"
+        || withdrawalAdjustment.amountPaise !== refundRow.amountPaise
+        || allocations.length === 0
+        || withdrawalAllocationTotal !== refundRow.amountPaise
+        || !allocations.some((item) => (
+          item.paymentAllocation.paymentId === refundRow.paymentId
+        ))
+        || withdrawalChargeIds.size !== 1
+        || !withdrawalChargeIds.has(withdrawalAdjustment.chargeId)
+        || withdrawalAdjustment.reversedAt !== null)) {
+      throw new Error("The withdrawal Refund credit is inconsistent.")
+    }
     const update = tx.update(refunds).set({
       lifecycle: "reversed",
       recordRevision: sql`${refunds.recordRevision} + 1`,
@@ -1854,9 +2277,27 @@ export function reverseRefund(
       eq(refunds.recordRevision, expectedRefundRevision),
     )).run()
     if (update.changes !== 1) financeError("BALANCE_CHANGED", "Refund changed. Review it.")
-    tx.update(payments).set({
-      recordRevision: sql`${payments.recordRevision} + 1`,
-    }).where(eq(payments.id, refundRow.paymentId)).run()
+    if (withdrawalAdjustment) {
+      const adjustmentUpdate = tx.update(chargeAdjustments).set({
+        reversedByAccountId: coachId,
+        reversedAt: now,
+        reversalReason: reason,
+      }).where(and(
+        eq(chargeAdjustments.id, withdrawalAdjustment.id),
+        isNull(chargeAdjustments.reversedAt),
+      )).run()
+      if (adjustmentUpdate.changes !== 1) {
+        financeError("BALANCE_CHANGED", "Withdrawal credit changed. Review the Refund.")
+      }
+    }
+    const paymentIds = [...new Set(allocations.map(({ paymentAllocation }) => (
+      paymentAllocation.paymentId
+    )))]
+    paymentIds.forEach((paymentId) => {
+      tx.update(payments).set({
+        recordRevision: sql`${payments.recordRevision} + 1`,
+      }).where(eq(payments.id, paymentId)).run()
+    })
     const chargeIds = [...new Set(allocations.map(({ paymentAllocation }) => (
       paymentAllocation.chargeId
     )))]
@@ -1872,7 +2313,12 @@ export function reverseRefund(
       entityType: "refund",
       eventType: "refund_reversed",
       idempotencyKey: mutationId,
-      metadata: { chargeIds, fingerprint, refundId: refundRow.id },
+      metadata: {
+        adjustmentId: withdrawalAdjustment?.id ?? null,
+        chargeIds,
+        fingerprint,
+        refundId: refundRow.id,
+      },
       now,
     })
     const record = loadPlayerFeeRecord(tx, refundRow.playerAccountId, now)
@@ -1970,6 +2416,7 @@ type ApplyConcessionCommand = {
   expectedConcessionRevision: number
   fingerprint: string
   mutationId: string
+  reusePriorApplication?: boolean
   skipIfSettled?: boolean
 }
 
@@ -2025,8 +2472,23 @@ function applyConcessionInTransaction(
       || (concession.endsPeriod !== null && period > concession.endsPeriod)) {
       financeError("INVALID_INPUT", "This Charge is outside the recurring Concession period.")
     }
-    const activeApplication = database.select({ id: concessionApplications.id })
-      .from(concessionApplications).where(and(
+    if (input.reusePriorApplication) {
+      const priorApplication = database.select().from(concessionApplications).where(and(
+        eq(concessionApplications.concessionId, concession.id),
+        eq(concessionApplications.chargeId, chargeRow.id),
+      )).orderBy(desc(concessionApplications.createdAt), desc(concessionApplications.id)).get()
+      if (priorApplication) {
+        const charge = loadChargeView(database, chargeRow.id, now)
+        if (!charge) throw new Error("The Concession Charge is unavailable.")
+        return {
+          applicationId: priorApplication.id,
+          concession: toConcessionView(concession),
+          charge,
+          reused: true,
+        }
+      }
+    }
+    const activeApplication = database.select().from(concessionApplications).where(and(
         eq(concessionApplications.concessionId, concession.id),
         eq(concessionApplications.chargeId, chargeRow.id),
         isNull(concessionApplications.reversedAt),
@@ -2356,6 +2818,7 @@ function applyRecurringConcessionForCharge(
     expectedConcessionRevision: concession.recordRevision,
     fingerprint,
     mutationId,
+    reusePriorApplication: true,
     skipIfSettled: true,
   }, { actorId, createId, now })
 }
@@ -2454,6 +2917,13 @@ export function reverseChargeAdjustment(
       financeError(
         "CONFLICT",
         "Reverse this credit through its Concession application so the ledger remains consistent.",
+        "adjustmentId",
+      )
+    }
+    if (adjustment.kind === "withdrawal_credit") {
+      financeError(
+        "CONFLICT",
+        "Reverse this credit through its linked Refund so the ledger remains consistent.",
         "adjustmentId",
       )
     }
@@ -2650,9 +3120,6 @@ export function resolveExistingRegistrationFee(
       return charge
     }
     requireActiveFinanceTarget(tx, input.playerId)
-    if (!readActiveFeeAgreement(tx, input.playerId)) {
-      financeError("SETUP_REQUIRED", "Create the player’s Fee Plan first.")
-    }
     const issued = tx.select().from(financialCharges).where(and(
       eq(financialCharges.playerAccountId, input.playerId),
       eq(financialCharges.type, "registration"),
@@ -2669,7 +3136,7 @@ export function resolveExistingRegistrationFee(
         createFeeReference,
         createId,
         description: "SMBA registration fee",
-        dueDate: addCalendarDays(getAcademyDateKey(approvedAt), 3),
+        dueDate: getAcademyDateKey(approvedAt),
         now,
         playerId: input.playerId,
         type: "registration",
@@ -2745,6 +3212,7 @@ export function getCoachMonthlyPreparationPreview(
   {
     coachId,
     database = initializeDatabase(),
+    now = new Date(),
   }: CoachContext,
 ): MonthlyPreparationPreview {
   requireCoach(database, coachId)
@@ -2752,7 +3220,7 @@ export function getCoachMonthlyPreparationPreview(
   if (!isValidMonthKey(period)) {
     financeError("INVALID_INPUT", "Choose a valid fee month.", "period")
   }
-  return monthlyPreparationPreview(database, period)
+  return monthlyPreparationPreview(database, period, now)
 }
 
 export function getCoachFinanceRapidDesk(
@@ -2881,7 +3349,7 @@ export function getCoachFinanceWorkspace(
     selectedLedger: input.playerId
       ? loadPlayerFeeRecord(database, input.playerId, now, true)
       : null,
-    preparation: monthlyPreparationPreview(database, input.period),
+    preparation: monthlyPreparationPreview(database, input.period, now),
   }
 }
 
@@ -2898,7 +3366,7 @@ export function getCoachFinanceDashboardSummary(
     financeError("INVALID_INPUT", "Choose a valid fee month.", "period")
   }
   const players = listFinancePlayers(database, { now, period })
-  const candidates = monthlyPreparationCandidates(database, period)
+  const candidates = monthlyPreparationCandidates(database, period, now)
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth

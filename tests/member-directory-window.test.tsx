@@ -93,6 +93,19 @@ describe("Member Directory reveal window", () => {
     expect(html).toContain('aria-controls="coach-member-results"')
   })
 
+  it("uses the Court Register folio order for every visible roster row", () => {
+    mocks.players = players(13)
+
+    const html = renderToStaticMarkup(<MemberDirectory />)
+
+    expect(html).toContain("Court roster register")
+    expect(html.match(/coach-member-folio/g)).toHaveLength(12)
+    expect(html).toMatch(/coach-member-folio[^>]*>01</u)
+    expect(html).toMatch(/coach-member-folio[^>]*>12</u)
+    expect(html).not.toMatch(/coach-member-folio[^>]*>13</u)
+    expect(html).toContain('<th scope="col">Training</th>')
+  })
+
   it("removes Show more when every filtered member is visible", () => {
     mocks.players = players(MEMBERS_INCREMENT)
 

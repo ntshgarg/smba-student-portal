@@ -53,6 +53,26 @@ describe("Financials archived-player mutation guard", () => {
       joinedAt: now,
       updatedAt: now,
     }).run()
+    const seriesId = `${playerId}-series`
+    database.insert(schema.sessionSeries).values({
+      id: seriesId,
+      title: `${label} Beginner Weekday`,
+      programme: "Beginner",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: "2026-08-20",
+      status: "active",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionAssignments).values({
+      id: `${playerId}-assignment`,
+      accountId: playerId,
+      seriesId,
+      effectiveFrom: "2026-08-20",
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
     return playerId
   }
 
@@ -144,17 +164,15 @@ describe("Financials archived-player mutation guard", () => {
       { coachId, createId, database, now },
     ).agreement
     const paymentChargeId = createCharge(playerId, agreement.id, "payment", "2026-08")
-    const concessionChargeId = createCharge(playerId, agreement.id, "concession", "2026-09")
-    const adjustmentChargeId = createCharge(playerId, agreement.id, "adjustment", "2026-10")
 
     const paymentInput = {
       playerId,
-      amountPaise: 100_000,
+      amountPaise: 400_000,
       receivedOn: "2026-08-20",
       method: "upi" as const,
       allocations: [{
         chargeId: paymentChargeId,
-        amountPaise: 100_000,
+        amountPaise: 400_000,
         expectedChargeRevision: 0,
       }],
       mutationId: mutationId(1),
@@ -168,13 +186,32 @@ describe("Financials archived-player mutation guard", () => {
     const refundInput = {
       paymentId: payment.receipt.id,
       expectedPaymentRevision: 0,
+      expectedChargeRevision: 1,
+      expectedAgreementRevision: 0,
       amountPaise: 10_000,
+      withdrawalEffectiveOn: "2026-08-20",
       refundedOn: "2026-08-20",
       method: "upi" as const,
       allocations: [{ paymentAllocationId: paymentAllocation.id, amountPaise: 10_000 }],
       mutationId: mutationId(2),
     }
     const refund = finance.recordRefund(refundInput, { coachId, createId, database, now })
+    const continuingAgreement = finance.createOrReplaceFeeAgreement({
+      ...agreementInput(playerId, "archive-forged-continuing-agreement"),
+      effectiveFrom: "2026-09-01",
+    }, { coachId, createId, database, now }).agreement
+    const concessionChargeId = createCharge(
+      playerId,
+      continuingAgreement.id,
+      "concession",
+      "2026-09",
+    )
+    const adjustmentChargeId = createCharge(
+      playerId,
+      continuingAgreement.id,
+      "adjustment",
+      "2026-10",
+    )
     const concession = finance.createConcession({
       playerId,
       mode: "one_off",
@@ -210,8 +247,8 @@ describe("Financials archived-player mutation guard", () => {
         expectedAgreementRevision: 0,
       }, { coachId, createId, database, now })],
       ["end fee plan", () => finance.endFeeAgreement({
-        agreementId: agreement.id,
-        effectiveThroughPeriod: "2026-08",
+        agreementId: continuingAgreement.id,
+        effectiveThroughPeriod: "2026-09",
         reason: "Forged end",
         expectedRevision: 0,
         idempotencyKey: "archive-forged-end",
@@ -260,7 +297,8 @@ describe("Financials archived-player mutation guard", () => {
         paymentId: payment.receipt.id,
         expectedPaymentRevision: 1,
         amountPaise: 1_000,
-      }, { coachId, database })],
+        withdrawalEffectiveOn: "2026-08-20",
+      }, { coachId, database, now })],
       ["refund", () => finance.recordRefund({
         ...refundInput,
         amountPaise: 1_000,
@@ -336,18 +374,15 @@ describe("Financials archived-player mutation guard", () => {
       coachId, createId, database, now,
     }).agreement
     const paymentChargeId = createCharge(playerId, agreement.id, "replaypay", "2026-08")
-    const concessionChargeId = createCharge(playerId, agreement.id, "replayconc", "2026-09")
-    const adjustmentChargeId = createCharge(playerId, agreement.id, "replayadj", "2026-10")
-    const voidChargeId = createCharge(playerId, agreement.id, "replayvoid", "2026-11")
 
     const paymentInput = {
       playerId,
-      amountPaise: 100_000,
+      amountPaise: 400_000,
       receivedOn: "2026-08-20",
       method: "upi" as const,
       allocations: [{
         chargeId: paymentChargeId,
-        amountPaise: 100_000,
+        amountPaise: 400_000,
         expectedChargeRevision: 0,
       }],
       mutationId: mutationId(30),
@@ -361,7 +396,10 @@ describe("Financials archived-player mutation guard", () => {
     const refundInput = {
       paymentId: payment.receipt.id,
       expectedPaymentRevision: 0,
+      expectedChargeRevision: 1,
+      expectedAgreementRevision: 0,
       amountPaise: 10_000,
+      withdrawalEffectiveOn: "2026-08-20",
       refundedOn: "2026-08-20",
       method: "upi" as const,
       allocations: [{ paymentAllocationId: paymentAllocation.id, amountPaise: 10_000 }],
@@ -381,6 +419,28 @@ describe("Financials archived-player mutation guard", () => {
       idempotencyKey: "archive-replay-payment-reversal",
     }
     finance.reversePayment(paymentReversalInput, { coachId, createId, database, now })
+    const endingAgreement = finance.createOrReplaceFeeAgreement({
+      ...agreementInput(playerId, "archive-replay-ending-agreement"),
+      effectiveFrom: "2026-09-01",
+    }, { coachId, createId, database, now }).agreement
+    const concessionChargeId = createCharge(
+      playerId,
+      endingAgreement.id,
+      "replayconc",
+      "2026-09",
+    )
+    const adjustmentChargeId = createCharge(
+      playerId,
+      endingAgreement.id,
+      "replayadj",
+      "2026-10",
+    )
+    const voidChargeId = createCharge(
+      playerId,
+      endingAgreement.id,
+      "replayvoid",
+      "2026-11",
+    )
 
     const concessionInput = {
       playerId,
@@ -446,7 +506,7 @@ describe("Financials archived-player mutation guard", () => {
     }
     finance.voidCharge(voidInput, { coachId, createId, database, now })
     const endInput = {
-      agreementId: agreement.id,
+      agreementId: endingAgreement.id,
       effectiveThroughPeriod: "2026-11",
       reason: "Replay plan end",
       expectedRevision: 0,

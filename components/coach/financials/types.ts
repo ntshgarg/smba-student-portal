@@ -60,6 +60,7 @@ export type PlayerFinancialLedgerView = {
   academyId: string
   archived: boolean
   charges: FinancialChargeView[]
+  feePlanSetupReady: boolean
   feePlan: {
     id: string
     academyPlan: import("@/lib/training/academy-plans").AcademyPlan

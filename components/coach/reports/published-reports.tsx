@@ -25,7 +25,6 @@ function reportCountLabel(count: number) {
 }
 
 export function PublishedReportsArchive({
-  earliestPublishedPeriod,
   hasPublishedReports,
   latestCompletedPeriod,
   period,
@@ -34,7 +33,6 @@ export function PublishedReportsArchive({
   reports,
   shown,
 }: {
-  earliestPublishedPeriod: string | null
   hasPublishedReports: boolean
   latestCompletedPeriod: string
   period: string
@@ -46,7 +44,6 @@ export function PublishedReportsArchive({
   const previousPeriod = shiftReportMonth(period, -1)
   const nextPeriod = shiftReportMonth(period, 1)
   const previousDisabled = !hasPublishedReports
-    || (earliestPublishedPeriod !== null && period <= earliestPublishedPeriod)
   const nextDisabled = period >= latestCompletedPeriod
   const periodLabel = formatReportMonth(period)
 
@@ -57,13 +54,9 @@ export function PublishedReportsArchive({
       </div>
 
       <header className="coach-published-reports-header">
-        <div>
-          <span className="eyebrow">Player development</span>
-          <h1>Published reports</h1>
-          <p>Review and download the monthly reports already shared with players.</p>
-        </div>
+        <h1>Published reports</h1>
 
-        <div className="coach-report-month-control" aria-label="Choose published report month">
+        <nav className="coach-report-month-control" aria-label="Published report month">
           {previousDisabled ? (
             <span className="coach-published-month-disabled" aria-hidden="true">
               <ChevronLeft />
@@ -77,8 +70,8 @@ export function PublishedReportsArchive({
             </Link>
           )}
           <div>
-            <span>Reporting month</span>
-            <strong>{periodLabel}</strong>
+            <span className="coach-published-visually-hidden">Reporting month</span>
+            <strong><time dateTime={period}>{periodLabel}</time></strong>
           </div>
           {nextDisabled ? (
             <span className="coach-published-month-disabled" aria-hidden="true">
@@ -92,19 +85,43 @@ export function PublishedReportsArchive({
               <ChevronRight aria-hidden="true" />
             </Link>
           )}
-        </div>
+        </nav>
       </header>
 
       <section className="coach-published-reports-workspace" aria-labelledby="published-report-list-title">
+        <h2 className="coach-published-visually-hidden" id="published-report-list-title">
+          {periodLabel} published report register
+        </h2>
         <div className="coach-published-reports-toolbar">
-          <div>
-            <span>Report archive</span>
-            <h2 id="published-report-list-title">{periodLabel}</h2>
+          <div className="coach-published-reports-summary" aria-live="polite">
+            <p>
+              {query ? (
+                <>
+                  {reports.length} {reports.length === 1 ? "result" : "results"} for <q>{query}</q>
+                </>
+              ) : reportCountLabel(reports.length)}
+            </p>
+            {query ? (
+              <Link
+                aria-label="Clear player search"
+                href={getCoachReportArchiveHref({ period })}
+              >
+                Clear search
+              </Link>
+            ) : null}
           </div>
 
-          <form action="/coach/reports" className="coach-published-reports-search" method="get" role="search">
+          <form
+            action="/coach/reports"
+            aria-label="Search published reports"
+            className="coach-published-reports-search"
+            method="get"
+            role="search"
+          >
             <input name="period" type="hidden" value={period} />
-            <label htmlFor="published-report-search">Find a player</label>
+            <label className="coach-published-visually-hidden" htmlFor="published-report-search">
+              Find a player by name or Academy ID
+            </label>
             <div>
               <Search aria-hidden="true" />
               <input
@@ -116,21 +133,10 @@ export function PublishedReportsArchive({
                 placeholder="Name or Academy ID"
                 type="search"
               />
-              <button type="submit">Search</button>
+              <button aria-label="Search reports" type="submit">Search</button>
             </div>
           </form>
         </div>
-
-        {hasPublishedReports && (periodHasPublications || Boolean(query)) ? (
-          <div className="coach-published-reports-result-bar" aria-live="polite">
-            <p>
-              {query
-                ? `${reports.length} ${reports.length === 1 ? "result" : "results"} for “${query}”`
-                : reportCountLabel(reports.length)}
-            </p>
-            {query ? <Link href={getCoachReportArchiveHref({ period })}>Clear search</Link> : null}
-          </div>
-        ) : null}
 
         {!hasPublishedReports ? (
           <div className="coach-published-reports-empty">

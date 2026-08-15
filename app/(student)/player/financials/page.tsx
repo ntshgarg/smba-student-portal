@@ -4,7 +4,6 @@ import { redirect } from "next/navigation"
 
 import { PlayerFeeRecordView } from "@/components/financials/player-fee-record"
 import styles from "@/components/financials/player-financials.module.css"
-import { PageIntro } from "@/components/page-intro"
 import { getPlayerFeeRecord } from "@/lib/finance/service"
 import { getCurrentStudent } from "@/lib/student/current-student"
 
@@ -12,11 +11,29 @@ export const metadata = {
   title: "Fee record",
 }
 
-export default async function PlayerFinancialsPage() {
+type PlayerFinancialsPageProps = {
+  searchParams?: Promise<PlayerFinancialsSearchParams>
+}
+
+type PlayerFinancialsSearchParams = {
+  month?: string | string[]
+  year?: string | string[]
+}
+
+function firstSearchValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+export default async function PlayerFinancialsPage({
+  searchParams,
+}: PlayerFinancialsPageProps = {}) {
   const student = await getCurrentStudent()
   if (!student) redirect("/login")
 
-  const record = await getPlayerFeeRecord(student.identity.playerId)
+  const [record, requestedSelection] = await Promise.all([
+    getPlayerFeeRecord(student.identity.playerId),
+    searchParams ?? Promise.resolve<PlayerFinancialsSearchParams>({}),
+  ])
 
   return (
     <div className={`${styles.page} interior-page page-shell`}>
@@ -27,14 +44,16 @@ export default async function PlayerFinancialsPage() {
         </Link>
       </div>
 
-      <PageIntro
-        eyebrow="Fee record"
-        title="Academy fees, clearly recorded."
-        body="Review charges, due dates, receipts and recorded refunds in one read-only record."
-      />
+      <header className={styles.pageHeader}>
+        <h1>Your fee record.</h1>
+      </header>
 
       {record ? (
-        <PlayerFeeRecordView record={record} />
+        <PlayerFeeRecordView
+          record={record}
+          requestedMonth={firstSearchValue(requestedSelection.month)}
+          requestedYear={firstSearchValue(requestedSelection.year)}
+        />
       ) : (
         <section className={`${styles.pageState} empty-state`} aria-labelledby="fee-record-empty-title">
           <ReceiptText aria-hidden="true" />

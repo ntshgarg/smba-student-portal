@@ -14,6 +14,7 @@ import {
   cancelSessionOccurrenceAction,
   createSessionSeriesAction,
   endSessionAssignmentAction,
+  endSessionSeriesAction,
   publishReportAction,
   rejectRegistrationAction,
   replaceSessionOccurrenceAction,
@@ -86,6 +87,9 @@ type CoachPortalContextValue = {
     assignmentId: string
     effectiveTo: string
   }) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
+  endSessionSeries: (
+    seriesId: string,
+  ) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
   replaceSessionOccurrence: (input: {
     occurrenceId: string
     dateKey: string
@@ -98,7 +102,7 @@ type CoachPortalContextValue = {
   ) => Promise<OperationalActionResult<{ applied: number }>>
   publishReport: (input: PublishReportInput) => Promise<ReportMutationResult>
   publishAttendanceAdjustment: (input: {
-    completedOn: string
+    completionOccurrenceId: string
     playerId: string
     reason?: string
     sourceOccurrenceId: string
@@ -249,7 +253,7 @@ export function CoachPortalProvider({
   }
 
   async function publishAttendanceAdjustment(input: {
-    completedOn: string
+    completionOccurrenceId: string
     playerId: string
     reason?: string
     sourceOccurrenceId: string
@@ -307,6 +311,17 @@ export function CoachPortalProvider({
     effectiveTo: string
   }) {
     const result = await endSessionAssignmentAction(input)
+    if (!result.ok) return result
+    const snapshot = result.data
+    setSessionAssignments(snapshot.sessionAssignments)
+    setSessionOccurrences(snapshot.sessionOccurrences)
+    setSessionSeries(snapshot.sessionSeries)
+    router.refresh()
+    return result
+  }
+
+  async function endSeries(seriesId: string) {
+    const result = await endSessionSeriesAction(seriesId)
     if (!result.ok) return result
     const snapshot = result.data
     setSessionAssignments(snapshot.sessionAssignments)
@@ -407,6 +422,7 @@ export function CoachPortalProvider({
     cancelSessionOccurrence: cancelOccurrence,
     createSessionSeries,
     endSessionAssignment: endSession,
+    endSessionSeries: endSeries,
     publishReport,
     publishAttendanceAdjustment,
     rejectRegistration,

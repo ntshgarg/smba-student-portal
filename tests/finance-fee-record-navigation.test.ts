@@ -26,7 +26,7 @@ describe("coach Fee Records navigation", () => {
 
     expect(records).toContain('register.filters.mode === "monthly" && register.preparation')
     expect(records).toContain("register.preparation")
-    expect(route).toContain("<PrepareFees")
+    expect(route).toContain("<PrepareFees compact")
     expect(route).toContain('const preparation = mode === "monthly"')
     expect(route).toContain("getCoachMonthlyPreparationPreview")
   })
@@ -35,7 +35,7 @@ describe("coach Fee Records navigation", () => {
     const records = source("components/coach/financials/financial-records-workspace.tsx")
     const route = source("app/coach/financials/players/[playerId]/page.tsx")
 
-    expect(records).toContain("View record")
+    expect(records).toContain("Open record")
     expect(route).toContain("FinancialPlayerRecordWorkspace")
     expect(route).toContain("getCoachFinancePlayerRecord")
     expect(route).toContain("notFound()")
@@ -48,8 +48,8 @@ describe("coach Fee Records navigation", () => {
     const route = source("app/coach/financials/players/[playerId]/page.tsx")
 
     expect(records).not.toContain("showPaymentEntry")
-    expect(records).toContain("hasActiveFeePlan && hasPayableBalance && !ledger.archived")
-    expect(records).toContain('ledger.feePlan?.status === "active"')
+    expect(records).toContain("hasPayableBalance && !ledger.archived")
+    expect(records).not.toContain("hasActiveFeePlan && hasPayableBalance")
     expect(records).toContain('charge.type === "registration"')
     expect(records).toContain("charge.billingPeriod ?? paymentPeriod")
     expect(route).toContain("paymentPeriod={paymentPeriod}")

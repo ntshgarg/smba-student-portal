@@ -20,7 +20,6 @@ import {
   reverseConcessionApplicationAction,
   reversePaymentAction,
   reverseRefundAction,
-  setupExistingPlayerFinanceAction,
   type FinanceActionResult,
   voidChargeAction,
 } from "@/app/coach/financials/actions"
@@ -35,6 +34,7 @@ import type {
   ConcessionMode,
   ConcessionValueKind,
   PaymentMethod,
+  RefundAllocationPreviewItem,
 } from "@/lib/finance/types"
 
 import {
@@ -59,12 +59,14 @@ import type { FinancialChargeView, PlayerFinancialLedgerView } from "./types"
 
 function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   const router = useRouter()
-  const [amount, setAmount] = useState(String(receipt.refundablePaise / 100))
+  const [amount, setAmount] = useState("")
+  const [withdrawalEffectiveOn, setWithdrawalEffectiveOn] = useState(getAcademyDateKey())
   const [refundedOn, setRefundedOn] = useState(getAcademyDateKey())
   const [method, setMethod] = useState<PaymentMethod>(receipt.method)
   const [externalReference, setExternalReference] = useState("")
   const [internalNote, setInternalNote] = useState("")
   const [allocationValues, setAllocationValues] = useState<Record<string, string>>({})
+  const [reviewedAllocations, setReviewedAllocations] = useState<RefundAllocationPreviewItem[]>([])
   const [reviewedAmountPaise, setReviewedAmountPaise] = useState<number | null>(null)
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState<"preview" | "record" | null>(null)
@@ -76,7 +78,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
     ? null
     : validateAllocationDraft({
         expectedTotalPaise: reviewedAmountPaise,
-        limits: receipt.allocations.map((allocation) => ({
+        limits: reviewedAllocations.map((allocation) => ({
           id: allocation.paymentAllocationId,
           availablePaise: allocation.refundablePaise,
         })),
@@ -98,6 +100,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   function editAmount(next: string) {
     setAmount(next)
     setReviewedAmountPaise(null)
+    setReviewedAllocations([])
     setAllocationValues({})
     resetMutation()
   }
@@ -116,6 +119,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
         amountPaise,
         expectedPaymentRevision: receipt.recordRevision,
         paymentId: receipt.id,
+        withdrawalEffectiveOn,
       })
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
@@ -126,7 +130,8 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
         allocation.paymentAllocationId,
         allocation.amountPaise,
       ]))
-      setAllocationValues(createAllocationDraft(receipt.allocations.map((allocation) => ({
+      setReviewedAllocations(result.data.allocations)
+      setAllocationValues(createAllocationDraft(result.data.allocations.map((allocation) => ({
         id: allocation.paymentAllocationId,
         amountPaise: suggested.get(allocation.paymentAllocationId) ?? 0,
       }))))
@@ -146,8 +151,12 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending || reviewedAmountPaise === null || !allocationValidation?.ok) return
-    if (!window.confirm(`Record a ${formatInr(reviewedAmountPaise)} refund for ${receipt.receiptReference}?`)) return
+    if (!window.confirm(
+      `Record a ${formatInr(reviewedAmountPaise)} refund for ${receipt.receiptReference} and end the fee plan on ${formatDueDate(withdrawalEffectiveOn)}?`,
+    )) return
 
+    const reviewedAllocation = reviewedAllocations[0]
+    if (!reviewedAllocation) return
     setPending("record")
     try {
       const result = await recordRefundAction({
@@ -156,6 +165,8 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
           paymentAllocationId: allocation.id,
         })),
         amountPaise: reviewedAmountPaise,
+        expectedAgreementRevision: reviewedAllocation.expectedAgreementRevision,
+        expectedChargeRevision: reviewedAllocation.expectedChargeRevision,
         expectedPaymentRevision: receipt.recordRevision,
         externalReference: externalReference.trim() || undefined,
         internalNote: internalNote.trim() || undefined,
@@ -163,6 +174,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
         mutationId: requestKey.current(),
         paymentId: receipt.id,
         refundedOn,
+        withdrawalEffectiveOn,
       })
       setFeedback(resultFeedback(result))
       if (result.ok) {
@@ -172,6 +184,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
         setExternalReference("")
         setInternalNote("")
         setAllocationValues({})
+        setReviewedAllocations([])
         setReviewedAmountPaise(null)
         router.refresh()
       }
@@ -187,8 +200,12 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
 
   return (
     <details className={styles.refundForm}>
-      <summary>Record refund</summary>
+      <summary>Record mid-term withdrawal refund</summary>
       <form onSubmit={(event) => void submit(event)}>
+        <p className={styles.concessionHelp}>
+          Use this only when a fully paid member leaves mid-month. The unused-training
+          credit and offline refund are recorded together, so no new balance is created.
+        </p>
         <div className={styles.fieldRow}>
           <label className={styles.field}>
             <span>Refund amount</span>
@@ -202,33 +219,51 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
                 onChange={(event) => editAmount(event.target.value)}
               />
             </div>
-            <small>Refundable {formatInr(receipt.refundablePaise)}</small>
+            <small>Enter the coach-approved amount for the unused training period.</small>
           </label>
           <label className={styles.field}>
-            <span>Refunded on</span>
+            <span>Member withdrew on</span>
             <input
               type="date"
               min={receipt.receivedOn}
               max={getAcademyDateKey()}
-              value={refundedOn}
+              value={withdrawalEffectiveOn}
               disabled={Boolean(pending)}
-              onChange={(event) => { setRefundedOn(event.target.value); resetMutation() }}
+              onChange={(event) => {
+                setWithdrawalEffectiveOn(event.target.value)
+                setReviewedAmountPaise(null)
+                setReviewedAllocations([])
+                setAllocationValues({})
+                resetMutation()
+              }}
             />
           </label>
         </div>
 
         <div className={styles.fieldRow}>
           <label className={styles.field}>
+            <span>Refunded on</span>
+            <input
+              type="date"
+              min={withdrawalEffectiveOn || receipt.receivedOn}
+              max={getAcademyDateKey()}
+              value={refundedOn}
+              disabled={Boolean(pending)}
+              onChange={(event) => { setRefundedOn(event.target.value); resetMutation() }}
+            />
+          </label>
+          <label className={styles.field}>
             <span>Refund method</span>
             <select value={method} disabled={Boolean(pending)} onChange={(event) => { setMethod(event.target.value as PaymentMethod); resetMutation() }}>
               {paymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
-          <label className={styles.field}>
-            <span>Reference <em>Optional</em></span>
-            <input value={externalReference} disabled={Boolean(pending)} onChange={(event) => { setExternalReference(event.target.value); resetMutation() }} />
-          </label>
         </div>
+
+        <label className={styles.field}>
+          <span>Reference <em>Optional</em></span>
+          <input value={externalReference} disabled={Boolean(pending)} onChange={(event) => { setExternalReference(event.target.value); resetMutation() }} />
+        </label>
 
         <label className={styles.field}>
           <span>Internal note <em>Optional</em></span>
@@ -249,7 +284,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
               <button type="button" disabled={Boolean(pending)} onClick={() => editAmount(amount)}>Recalculate</button>
             </div>
             <div className={styles.allocationRows}>
-              {receipt.allocations.map((allocation) => (
+              {reviewedAllocations.map((allocation) => (
                 <label key={allocation.paymentAllocationId} className={styles.allocationRow}>
                   <span>
                     <strong>{allocation.description}</strong>
@@ -309,7 +344,9 @@ function RefundReversal({ refund }: { refund: CoachRefundView }) {
       reasonRef.current?.focus()
       return
     }
-    if (!window.confirm(`Reverse refund ${refund.refundReference}?`)) return
+    if (!window.confirm(
+      `Reverse refund ${refund.refundReference}? The fee plan will remain ended until it is corrected or replaced.`,
+    )) return
     setPending(true)
     try {
       const result = await reverseRefundAction({
@@ -350,10 +387,12 @@ function RefundReversal({ refund }: { refund: CoachRefundView }) {
 }
 
 function ReceiptHistory({
+  focused = false,
   ledger,
   readOnly = false,
   showDownloads = false,
 }: {
+  focused?: boolean
   ledger: PlayerFinancialLedgerView
   readOnly?: boolean
   showDownloads?: boolean
@@ -370,11 +409,12 @@ function ReceiptHistory({
 
       {receipts.length ? (
         <div className={styles.receiptList}>
-          {receipts.map((receipt) => {
+          {receipts.map((receipt, index) => {
             const receiptRefunds = refunds.filter((refund) => refund.paymentId === receipt.id)
             return (
               <details key={receipt.id} className={styles.receipt}>
                 <summary>
+                  {focused ? <span className={styles.receiptFolio} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span> : null}
                   <span><strong>{receipt.receiptReference}</strong><small>{formatDueDate(receipt.receivedOn)} · {paymentMethodLabel(receipt.method)}</small></span>
                   <span><strong>{formatInr(receipt.amountPaise)}</strong><small>{receipt.lifecycle === "reversed" ? "Reversed" : receipt.refundablePaise > 0 ? `${formatInr(receipt.refundablePaise)} refundable` : "Settled"}</small></span>
                 </summary>
@@ -414,9 +454,17 @@ function ReceiptHistory({
                       {receiptRefunds.map((refund) => (
                         <article key={refund.id}>
                           <div>
-                            <strong>{refund.refundReference}</strong>
+                            <strong>
+                              {refund.purpose === "mid_term_withdrawal"
+                                ? "Mid-term withdrawal"
+                                : "Legacy refund"}
+                              {" · "}{refund.refundReference}
+                            </strong>
                             <small>
-                              {formatDueDate(refund.refundedOn)} · {paymentMethodLabel(refund.method)} · {refund.lifecycle === "reversed" ? "Reversed" : "Recorded"}
+                              {refund.withdrawalEffectiveOn
+                                ? `Member withdrew ${formatDueDate(refund.withdrawalEffectiveOn)} · `
+                                : ""}
+                              Refunded {formatDueDate(refund.refundedOn)} · {paymentMethodLabel(refund.method)} · {refund.lifecycle === "reversed" ? "Reversed" : "Recorded"}
                             </small>
                           </div>
                           <strong>{formatInr(refund.amountPaise)}</strong>
@@ -458,7 +506,6 @@ function FeeSetupForm({
   const defaults = ledger.setupDefaults
   const [amount, setAmount] = useState(defaults ? String(defaults.suggestedMonthlyFeePaise / 100) : "")
   const [trackingMonth, setTrackingMonth] = useState(period)
-  const [registrationStatus, setRegistrationStatus] = useState<"pending" | "unresolved">("unresolved")
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
@@ -483,7 +530,7 @@ function FeeSetupForm({
 
     setPending(true)
     try {
-      const result = await setupExistingPlayerFinanceAction({
+      const result = await replaceFeeAgreementAction({
         academyPlan: defaults.academyPlan,
         agreedMonthlyFeePaise,
         batch: defaults.batch,
@@ -491,7 +538,6 @@ function FeeSetupForm({
         idempotencyKey: requestKey.current(),
         level: defaults.level,
         playerId: ledger.playerId,
-        registrationStatus,
       })
       setFeedback(resultFeedback(result))
       if (result.ok) {
@@ -517,8 +563,21 @@ function FeeSetupForm({
         <CircleAlert aria-hidden="true" />
         <div>
           <strong>Complete the player’s training details first</strong>
-          <p>A valid Level, Batch and Academy Plan are required before financial tracking can begin.</p>
-          <Link href={`/coach/members?member=${ledger.playerId}`}>Open member record</Link>
+          <p>A valid Level, Batch and Training plan are required before financial tracking can begin.</p>
+          <Link href={`/coach/onboarding?player=${ledger.playerId}`}>Open Player Onboarding</Link>
+        </div>
+      </section>
+    )
+  }
+
+  if (!ledger.feePlanSetupReady) {
+    return (
+      <section className={styles.setupState}>
+        <CircleAlert aria-hidden="true" />
+        <div>
+          <strong>Assign a matching session before creating the Fee Plan</strong>
+          <p>The player needs a current or future session for their assessed Level and Batch.</p>
+          <Link href={`/coach/onboarding?player=${ledger.playerId}`}>Continue Player Onboarding</Link>
         </div>
       </section>
     )
@@ -529,7 +588,7 @@ function FeeSetupForm({
       <div className={styles.setupHeading}>
         <span>One-time setup</span>
         <h3 id="fee-setup-title">Create fee plan</h3>
-        <p>Confirm the player’s current plan and where registration tracking should begin.</p>
+        <p>Confirm the player’s current programme and the monthly fee agreed with the coach.</p>
       </div>
 
       <dl className={styles.setupDefaults}>
@@ -575,24 +634,8 @@ function FeeSetupForm({
           </label>
         </div>
 
-        <label className={styles.field}>
-          <span>Registration fee record</span>
-          <select
-            value={registrationStatus}
-            disabled={pending}
-            onChange={(event) => {
-              setRegistrationStatus(event.target.value as typeof registrationStatus)
-              setDirty(true)
-              requestKey.reset()
-            }}
-          >
-            <option value="unresolved">No record — review later</option>
-            <option value="pending">Pending — issue registration fee</option>
-          </select>
-        </label>
-
         <div className={styles.paymentFooter}>
-          <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+          <InlineNotice className={styles.notice} message={feedback?.message} reserveSpace={false} tone={feedback?.tone} />
           <button className={styles.primaryButton} type="submit" disabled={pending}>
             {pending ? "Creating…" : "Create fee plan"}
           </button>
@@ -662,6 +705,19 @@ function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView }) {
 
   if (!agreement || !defaults) return null
 
+  if (!ledger.feePlanSetupReady) {
+    return (
+      <section className={styles.setupState}>
+        <CircleAlert aria-hidden="true" />
+        <div>
+          <strong>Assign a matching session before changing the Fee Plan</strong>
+          <p>The player needs a current or future session for their assessed Level and Batch.</p>
+          <Link href={`/coach/onboarding?player=${ledger.playerId}`}>Continue Player Onboarding</Link>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <details className={styles.planEditor}>
       <summary>Change fee plan</summary>
@@ -696,7 +752,7 @@ function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView }) {
             </label>
           </div>
           <div className={styles.paymentFooter}>
-            <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+            <InlineNotice className={styles.notice} message={feedback?.message} reserveSpace={false} tone={feedback?.tone} />
             <button className={styles.primaryButton} type="submit" disabled={pending}>
               {pending ? "Updating…" : "Update fee plan"}
             </button>
@@ -981,8 +1037,8 @@ function ConcessionCreationForm({
 
         <p className={styles.concessionHelp}>
           {mode === "one_off"
-            ? "Create this concession, then choose the fee it should reduce."
-            : "It will apply automatically when eligible monthly fees are prepared."}
+            ? "Record a concession agreed offline, then choose the fee it should reduce."
+            : "Record the offline agreement once; it will apply to eligible monthly fees."}
         </p>
         <div className={styles.paymentFooter}>
           <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
@@ -1323,7 +1379,7 @@ function RegistrationReconciliation({ ledger }: { ledger: PlayerFinancialLedgerV
       <div>
         <span>Registration fee</span>
         <h3 id="registration-resolution-title">Record unresolved</h3>
-        <p>Issue the registration fee so it can be collected through the ledger.</p>
+        <p>Issue the one-time academy fee so its offline payment can be recorded.</p>
       </div>
       <div className={styles.registrationResolutionAction}>
         <button className={styles.primaryButton} type="button" disabled={pending} onClick={() => void reconcile()}>
@@ -1554,16 +1610,18 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
 }
 
 export function PlayerLedger({
+  focused = false,
   ledger,
   period,
   showReceiptDownloads = false,
 }: {
+  focused?: boolean
   ledger: PlayerFinancialLedgerView
   period: string
   showReceiptDownloads?: boolean
 }) {
   return (
-    <article className={styles.ledger} aria-labelledby="selected-ledger-title">
+    <article className={`${styles.ledger} ${focused ? styles.focusedLedger : ""}`} aria-labelledby="selected-ledger-title">
       <header className={styles.ledgerHeader}>
         <div>
           <span>{ledger.academyId}{ledger.archived ? " · Archived" : ""}</span>
@@ -1593,7 +1651,7 @@ export function PlayerLedger({
         </>
       ) : ledger.archived ? null : <FeeSetupForm ledger={ledger} period={period} />}
 
-      {!ledger.archived && ledger.feePlan && !ledger.charges.some((charge) => (
+      {!ledger.archived && !ledger.charges.some((charge) => (
         charge.type === "registration" && charge.status !== "void"
       )) ? (
         <RegistrationReconciliation ledger={ledger} />
@@ -1605,6 +1663,7 @@ export function PlayerLedger({
       ) : null}
 
       <ReceiptHistory
+        focused={focused}
         ledger={ledger}
         readOnly={ledger.archived}
         showDownloads={showReceiptDownloads}
@@ -1621,9 +1680,10 @@ export function PlayerLedger({
 
         {ledger.charges.length ? (
           <div className={styles.chargeList}>
-            {ledger.charges.map((charge) => (
+            {ledger.charges.map((charge, index) => (
               <article key={charge.id} className={styles.charge}>
                 <div className={styles.chargeHeading}>
+                  {focused ? <span className={styles.chargeFolio} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span> : null}
                   <div>
                     <span>{charge.type === "registration" ? "Registration" : "Monthly training"}</span>
                     <h4>{charge.description}</h4>

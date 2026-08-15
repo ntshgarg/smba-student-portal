@@ -80,11 +80,6 @@ export const enrollmentTerms = {
   registrationFee: rupees(REGISTRATION_FEE_PAISE),
   registrationIsNonRefundable: true,
   registrationIncludes: ["a welcome kit", "assessment reports"],
-  longerPlanSavings: [
-    { label: "Quarterly", percentage: 5 },
-    { label: "Half-yearly", percentage: 7 },
-    { label: "Annual", percentage: 10 },
-  ],
 } as const
 
 export const trainingPrograms = [

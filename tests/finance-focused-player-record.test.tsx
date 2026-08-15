@@ -2,6 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}))
+vi.mock("@/components/unsaved-work-guard", () => ({
+  useUnsavedWorkGuard: vi.fn(),
+}))
 
 import { PlayerLedger } from "@/components/coach/financials/player-ledger"
 import type { PlayerFinancialLedgerView } from "@/components/coach/financials/types"
@@ -11,6 +17,7 @@ const archivedLedger: PlayerFinancialLedgerView = {
   archived: true,
   charges: [],
   enrollmentDefaults: null,
+  feePlanSetupReady: false,
   feePlan: null,
   fullName: "Aarav Bhat",
   management: {
@@ -42,7 +49,9 @@ const archivedLedger: PlayerFinancialLedgerView = {
     receipts: [{
       allocations: [{
         amountPaise: 50_000,
+        billingPeriod: "2026-08",
         chargeId: "charge-42",
+        chargeType: "monthly_training",
         description: "August monthly training fee",
         feeReference: "SMBA-FEE-42",
         id: "allocation-42",
@@ -92,5 +101,72 @@ describe("focused player fee record", () => {
     expect(html).not.toContain("End concession")
     expect(html).not.toContain("Corrections")
     expect(html).not.toContain("Record payment")
+  })
+
+  it("keeps the compact first-time fee-plan workflow available", () => {
+    const setupLedger: PlayerFinancialLedgerView = {
+      ...archivedLedger,
+      archived: false,
+      enrollmentDefaults: {
+        academyPlan: "weekday-3-day",
+        academyPlanLabel: "3-day plan",
+        batch: "Weekday",
+        level: "Beginner",
+        suggestedMonthlyFeePaise: 350_000,
+      },
+      feePlanSetupReady: true,
+      setupDefaults: {
+        academyPlan: "weekday-3-day",
+        academyPlanLabel: "3-day plan",
+        batch: "Weekday",
+        level: "Beginner",
+        suggestedMonthlyFeePaise: 350_000,
+      },
+      management: { concessions: [], receipts: [], refunds: [] },
+      status: "setup_required",
+    }
+
+    const html = renderToStaticMarkup(
+      <PlayerLedger focused ledger={setupLedger} period="2026-08" />,
+    )
+
+    expect(html).toContain("Create fee plan")
+    expect(html).toContain("Agreed monthly fee")
+    expect(html).toContain("Track from")
+    expect(html).toContain("Academy Plan")
+  })
+
+  it("keeps the old finance route from bypassing session assignment", () => {
+    const setupLedger: PlayerFinancialLedgerView = {
+      ...archivedLedger,
+      archived: false,
+      enrollmentDefaults: {
+        academyPlan: "weekday-3-day",
+        academyPlanLabel: "3-day plan",
+        batch: "Weekday",
+        level: "Beginner",
+        suggestedMonthlyFeePaise: 350_000,
+      },
+      feePlanSetupReady: false,
+      setupDefaults: {
+        academyPlan: "weekday-3-day",
+        academyPlanLabel: "3-day plan",
+        batch: "Weekday",
+        level: "Beginner",
+        suggestedMonthlyFeePaise: 350_000,
+      },
+      management: { concessions: [], receipts: [], refunds: [] },
+      status: "setup_required",
+    }
+
+    const html = renderToStaticMarkup(
+      <PlayerLedger focused ledger={setupLedger} period="2026-08" />,
+    )
+
+    expect(html).toContain("Assign a matching session before creating the Fee Plan")
+    expect(html).toContain("Continue Player Onboarding")
+    expect(html).toContain(`/coach/onboarding?player=${setupLedger.playerId}`)
+    expect(html).not.toContain("Agreed monthly fee")
+    expect(html).not.toContain("Create fee plan")
   })
 })

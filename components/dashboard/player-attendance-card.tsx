@@ -1,73 +1,55 @@
 "use client"
 
-import { ChevronDown } from "lucide-react"
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef } from "react"
-import type { CSSProperties } from "react"
+import { useEffect, useMemo } from "react"
 
+import {
+  buildPlayerAttendanceCalendar,
+  playerAttendanceMonthLabels,
+  playerAttendanceWeekdayLabels,
+  type PlayerAttendanceCalendarDay,
+  type PlayerAttendanceCalendarSessionState,
+} from "@/components/dashboard/player-attendance-calendar"
 import {
   parsePlayerAttendanceNavigation,
   playerAttendanceSearch,
+  shiftPlayerAttendanceMonth,
 } from "@/components/dashboard/player-attendance-query"
 import { Reveal } from "@/components/reveal"
-import { formatDateKey, formatSessionLabel, formatSessionTimeRange } from "@/lib/format"
-import {
-  assignmentCoversOccurrence,
-  playerWasEnrolledForOccurrence,
-} from "@/lib/sessions/domain"
-import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
+import { formatDateKey } from "@/lib/format"
 import type { AttendanceSummary, PlayerAttendanceRecord } from "@/lib/types"
-
-const weekdayShortLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 type PlayerState = "assessment-pending" | "schedule-pending" | "active" | "paused"
 
-type RegisterDate = {
-  key: string
-  day: string
-  date: string
-  month: string
-  label: string
+function visibleStateLabel(state: PlayerAttendanceCalendarSessionState) {
+  if (state === "rescheduled") return "Rescheduled"
+  if (state === "future") return "Scheduled"
+  return state.charAt(0).toUpperCase() + state.slice(1)
 }
 
-function buildRegisterDates(year: number) {
-  const dates: RegisterDate[] = []
-  for (
-    const date = new Date(Date.UTC(year, 0, 1));
-    date.getUTCFullYear() === year;
-    date.setUTCDate(date.getUTCDate() + 1)
-  ) {
-    const key = date.toISOString().slice(0, 10)
-    dates.push({
-      key,
-      day: formatDateKey(key, {
-        day: undefined,
-        month: undefined,
-        weekday: "short",
-      }),
-      date: formatDateKey(key, {
-        day: "numeric",
-        month: "short",
-        weekday: undefined,
-      }),
-      month: formatDateKey(key, {
-        day: undefined,
-        month: "long",
-        weekday: undefined,
-      }),
-      label: formatDateKey(key, { year: "numeric" }),
-    })
-  }
-  return dates
+function calendarDayLabel(day: PlayerAttendanceCalendarDay) {
+  const sessionDetails = day.sessions.length
+    ? day.sessions.map((session) => (
+        session.sessionLabel + ": " + session.stateLabel
+      )).join("; ")
+    : day.inLoadedYear
+      ? "not scheduled"
+      : "outside the available attendance record"
+  const completionDetails = day.completionCount
+    ? "; " + day.completionCount + " completed rescheduled "
+      + (day.completionCount === 1 ? "session" : "sessions")
+    : ""
+
+  return day.label + ": " + sessionDetails + completionDetails
 }
 
-function groupDatesByMonth(dates: RegisterDate[]) {
-  return dates.reduce<Array<{ label: string; count: number }>>((groups, date) => {
-    const last = groups[groups.length - 1]
-    if (last?.label === date.month) last.count += 1
-    else groups.push({ label: date.month, count: 1 })
-    return groups
-  }, [])
+function monthNavigationLabel(year: number, month: number) {
+  return playerAttendanceMonthLabels[month - 1] + " " + year
 }
 
 export function PlayerAttendanceCard({
@@ -83,106 +65,78 @@ export function PlayerAttendanceCard({
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentYear = Number(record.referenceDate.slice(0, 4))
+  const currentMonth = Number(record.referenceDate.slice(5, 7))
   const navigation = useMemo(() => parsePlayerAttendanceNavigation(
     searchParams,
     record.years,
     currentYear,
-  ), [currentYear, record.years, searchParams])
-  const { activeYear, isOpen } = navigation
-  const registerScrollRef = useRef<HTMLDivElement>(null)
-  const dates = useMemo(() => buildRegisterDates(activeYear), [activeYear])
-  const monthGroups = useMemo(() => groupDatesByMonth(dates), [dates])
-  const yearStart = `${activeYear}-01-01`
-  const nextYearStart = `${activeYear + 1}-01-01`
-  const rows = record.assignments.flatMap((assignment) => {
-    const overlapsDisplayedYear = assignment.effectiveFrom < nextYearStart
-      && (!assignment.effectiveTo || assignment.effectiveTo > yearStart)
-    const coversReplacementInDisplayedYear = record.occurrences.some((occurrence) => (
-      occurrence.status === "scheduled"
-      && occurrence.occurrenceDate >= yearStart
-      && occurrence.occurrenceDate < nextYearStart
-      && assignmentCoversOccurrence(assignment, occurrence)
-    ))
-    if (!overlapsDisplayedYear && !coversReplacementInDisplayedYear) return []
-    const session = record.sessions.find((item) => item.id === assignment.seriesId)
-    return session ? [{ assignment, session }] : []
-  }).sort((first, second) => (
-    first.session.startTime.localeCompare(second.session.startTime)
-    || first.assignment.id.localeCompare(second.assignment.id)
-  ))
-  const occurrenceBySeriesDate = new Map(
-    [...record.occurrences]
-      .filter((occurrence) => occurrence.occurrenceDate.startsWith(`${activeYear}-`))
-      .sort((first, second) => (
-        Number(first.status === "scheduled") - Number(second.status === "scheduled")
-      ))
-      .map((occurrence) => [`${occurrence.seriesId}:${occurrence.occurrenceDate}`, occurrence]),
-  )
-  const occurrenceById = new Map(record.occurrences.map((occurrence) => [occurrence.id, occurrence]))
-  const choiceByOccurrence = new Map(record.records.map((item) => [item.occurrenceId, item.choice]))
-  const adjustmentByOccurrence = new Map(
-    record.adjustments.map((adjustment) => [adjustment.sourceOccurrenceId, adjustment]),
-  )
-  const todayTarget = dates.reduce(
-    (latest, date) => date.key <= record.referenceDate ? date.key : latest,
-    dates[0]?.key ?? "",
-  )
+    currentMonth,
+  ), [currentMonth, currentYear, record.years, searchParams])
+  const { activeMonth, activeYear, isOpen } = navigation
+  const calendar = useMemo(() => buildPlayerAttendanceCalendar(
+    record,
+    activeYear,
+    activeMonth,
+  ), [activeMonth, activeYear, record])
+  const previousMonth = shiftPlayerAttendanceMonth(navigation, -1, record.years)
+  const nextMonth = shiftPlayerAttendanceMonth(navigation, 1, record.years)
+  const canMovePrevious = previousMonth.activeYear !== activeYear
+    || previousMonth.activeMonth !== activeMonth
+  const canMoveNext = nextMonth.activeYear !== activeYear
+    || nextMonth.activeMonth !== activeMonth
   const hasRecord = record.assignments.length > 0 || record.records.length > 0
-  const tableStyle = {
-    "--player-register-width": `${190 + dates.length * 54}px`,
-    "--player-register-mobile-width": `${136 + dates.length * 50}px`,
-  } as CSSProperties
+  const completionCount = calendar.days.reduce(
+    (total, day) => total + day.completionCount,
+    0,
+  )
 
   useEffect(() => {
     const canonicalSearch = playerAttendanceSearch(
       searchParams.toString(),
       navigation,
       currentYear,
+      currentMonth,
     )
     if (canonicalSearch === searchParams.toString()) return
 
-    router.replace(canonicalSearch ? `${pathname}?${canonicalSearch}` : pathname, {
+    router.replace(canonicalSearch ? pathname + "?" + canonicalSearch : pathname, {
       scroll: false,
     })
-  }, [currentYear, navigation, pathname, router, searchParams])
-
-  const scrollRegisterToToday = useCallback(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const container = registerScrollRef.current
-      const header = container?.querySelector<HTMLElement>(`[data-player-register-date="${todayTarget}"]`)
-      if (container && header) {
-        container.scrollTo({ left: Math.max(0, header.offsetLeft - 170), behavior: "auto" })
-      }
-    })
-    return frame
-  }, [todayTarget])
-
-  useEffect(() => {
-    if (!isOpen || activeYear !== currentYear) return
-    const frame = scrollRegisterToToday()
-    return () => window.cancelAnimationFrame(frame)
-  }, [activeYear, currentYear, isOpen, scrollRegisterToToday])
+  }, [
+    currentMonth,
+    currentYear,
+    navigation,
+    pathname,
+    router,
+    searchParams,
+  ])
 
   function updateNavigation(next: typeof navigation) {
     const nextSearch = playerAttendanceSearch(
       searchParams.toString(),
       next,
       currentYear,
+      currentMonth,
     )
-    router.push(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false })
+    router.push(nextSearch ? pathname + "?" + nextSearch : pathname, { scroll: false })
   }
 
   function jumpToToday() {
-    if (activeYear !== currentYear) {
-      updateNavigation({ isOpen: true, activeYear: currentYear })
-      return
-    }
-    scrollRegisterToToday()
+    updateNavigation({
+      isOpen: true,
+      activeYear: currentYear,
+      activeMonth: currentMonth,
+    })
   }
 
   return (
     <Reveal
-      className={`attendance-card dashboard-card player-attendance-card player-ticket-card player-ticket-attendance${attendance ? "" : " is-empty"}${hasRecord ? " has-record" : ""}${isOpen ? " is-open" : ""}`}
+      className={
+        "attendance-card dashboard-card player-attendance-card player-ticket-card player-ticket-attendance"
+        + (attendance ? "" : " is-empty")
+        + (hasRecord ? " has-record" : "")
+        + (isOpen ? " is-open" : "")
+      }
       delay={0.06}
     >
       <header className="attendance-card-header player-ticket-masthead">
@@ -196,18 +150,22 @@ export function PlayerAttendanceCard({
             <p className="attendance-summary-copy">
               {attendance.attended} of {attendance.recorded} recorded sessions attended.
               {attendance.pending
-                ? ` ${attendance.pending} ${attendance.pending === 1 ? "session is" : "sessions are"} pending.`
+                ? " " + attendance.pending + " "
+                  + (attendance.pending === 1 ? "session is" : "sessions are")
+                  + " pending."
                 : ""}
             </p>
             <div
               className="attendance-track"
               role="progressbar"
-              aria-label={`${attendance.percentage}% attendance in ${attendance.month}`}
+              aria-label={
+                attendance.percentage + "% attendance in " + attendance.month
+              }
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={attendance.percentage}
             >
-              <span style={{ width: `${attendance.percentage}%` }} />
+              <span style={{ width: String(attendance.percentage) + "%" }} />
             </div>
           </>
         ) : attendance?.pending ? (
@@ -244,8 +202,8 @@ export function PlayerAttendanceCard({
           aria-expanded={isOpen}
           aria-controls="player-attendance-register"
           onClick={() => updateNavigation({
+            ...navigation,
             isOpen: !isOpen,
-            activeYear,
           })}
         >
           <span>{isOpen ? "Close attendance record" : "Open attendance record"}</span>
@@ -254,173 +212,267 @@ export function PlayerAttendanceCard({
       ) : null}
 
       {isOpen ? (
-        <div className="player-attendance-register" id="player-attendance-register">
+        <div
+          className="player-attendance-register personal-attendance-register"
+          id="player-attendance-register"
+        >
           <div className="player-attendance-register-heading">
-            <div>
+            <div className="player-attendance-register-title">
               <span>Your record</span>
               <h3>Annual attendance</h3>
             </div>
             <div className="player-attendance-register-actions">
-              <div className="player-attendance-year-selector" role="group" aria-label="Choose attendance year">
-                <span>Year</span>
+              <div
+                className="player-attendance-year-selector"
+                role="group"
+                aria-label="Choose attendance year"
+              >
                 {record.years.map((year) => (
                   <button
                     key={year}
                     type="button"
                     className={year === activeYear ? "is-active" : undefined}
                     aria-pressed={year === activeYear}
-                    onClick={() => updateNavigation({ isOpen: true, activeYear: year })}
+                    onClick={() => updateNavigation({
+                      ...navigation,
+                      isOpen: true,
+                      activeYear: year,
+                    })}
                   >
                     {year}
                   </button>
                 ))}
               </div>
-              <button className="player-attendance-today" type="button" onClick={jumpToToday}>
+              <button
+                className="player-attendance-today"
+                type="button"
+                onClick={jumpToToday}
+              >
                 Jump to today
               </button>
             </div>
           </div>
 
-          <div
-            className="player-attendance-legend"
-            role="group"
-            aria-label="Attendance status legend"
+          <section
+            className="player-attendance-month-sheet personal-attendance-calendar"
+            aria-label={
+              monthNavigationLabel(activeYear, activeMonth)
+              + " attendance calendar"
+            }
           >
-            <span><i className="is-present" aria-hidden="true" />Present</span>
-            <span><i className="is-absent" aria-hidden="true" />Absent</span>
-            <span><i className="is-pending" aria-hidden="true" />Pending</span>
-            <span><i className="is-makeup" aria-hidden="true" />Rescheduled</span>
-            <span><i className="is-unavailable" aria-hidden="true" />Not scheduled</span>
-          </div>
-
-          {!rows.length ? (
-            <div className="player-attendance-empty-year">
-              <p>No assigned sessions appear in {activeYear}.</p>
-            </div>
-          ) : (
-            <div
-              className="player-attendance-register-scroll"
-              ref={registerScrollRef}
-              tabIndex={0}
-              role="region"
-              aria-label={`Scrollable personal attendance register for ${activeYear}`}
-            >
-              <table
-                className="player-attendance-register-table"
-                style={tableStyle}
-                aria-label={`Your attendance register for ${activeYear}`}
-              >
-                <thead>
-                  <tr className="player-attendance-month-row">
-                    <th className="player-attendance-session-column" scope="col" rowSpan={2}>Session</th>
-                    {monthGroups.map((month) => (
-                      <th key={month.label} scope="colgroup" colSpan={month.count}>
-                        <span>{month.label}</span>
-                      </th>
-                    ))}
-                  </tr>
-                  <tr className="player-attendance-date-row">
-                    {dates.map((date) => {
-                      const available = rows.some(({ assignment, session }) => {
-                        const occurrence = occurrenceBySeriesDate.get(`${session.id}:${date.key}`)
-                        return Boolean(occurrence
-                          && occurrence.status === "scheduled"
-                          && playerWasEnrolledForOccurrence(record.joinedOn, occurrence)
-                          && assignmentCoversOccurrence(assignment, occurrence))
-                      })
-                      return (
-                        <th
-                          key={date.key}
-                          scope="col"
-                          data-player-register-date={date.key}
-                          className={[
-                            date.key === record.referenceDate ? "is-today" : "",
-                            !available ? "is-unavailable" : "",
-                          ].filter(Boolean).join(" ") || undefined}
-                        >
-                          <span>{date.day}</span>
-                          <strong>{date.date}</strong>
-                        </th>
+            <header className="player-attendance-month-toolbar">
+              <button
+                className="player-attendance-month-nav is-previous"
+                type="button"
+                disabled={!canMovePrevious}
+                aria-label={
+                  canMovePrevious
+                    ? "View " + monthNavigationLabel(
+                        previousMonth.activeYear,
+                        previousMonth.activeMonth,
                       )
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ assignment, session }) => {
-                    const sessionLabel = formatSessionLabel(session)
-                    const timeLabel = formatSessionTimeRange(session)
-                    const assignedDays = assignment.weekdays
-                      .map((weekday) => weekdayShortLabels[weekday])
-                      .join(", ")
-                    const rowAdjustments = record.adjustments.filter((adjustment) => {
-                      const source = occurrenceById.get(adjustment.sourceOccurrenceId)
-                      return Boolean(source
-                        && source.seriesId === session.id
-                        && playerWasEnrolledForOccurrence(record.joinedOn, source)
-                        && assignmentCoversOccurrence(assignment, source))
-                    })
-                    const completionByDate = rowAdjustments.reduce<Map<string, number>>((map, adjustment) => {
-                      map.set(adjustment.completedOn, (map.get(adjustment.completedOn) ?? 0) + 1)
-                      return map
-                    }, new Map())
+                    : "No previous attendance month available"
+                }
+                onClick={() => updateNavigation({
+                  ...previousMonth,
+                  isOpen: true,
+                })}
+              >
+                <ChevronLeft aria-hidden="true" />
+                <span>
+                  {canMovePrevious
+                    ? monthNavigationLabel(
+                        previousMonth.activeYear,
+                        previousMonth.activeMonth,
+                      )
+                    : "Previous"}
+                </span>
+              </button>
 
-                    return (
-                      <tr key={assignment.id}>
-                        <th className="player-attendance-session-column" scope="row" aria-label={`${sessionLabel}, assigned ${assignedDays}`}>
-                          <strong>{timeLabel}</strong>
-                          <small>{assignedDays}</small>
-                        </th>
-                        {dates.map((date) => {
-                          const occurrence = occurrenceBySeriesDate.get(`${session.id}:${date.key}`)
-                          const unavailable = !occurrence
-                            || occurrence.status !== "scheduled"
-                            || !playerWasEnrolledForOccurrence(record.joinedOn, occurrence)
-                            || !assignmentCoversOccurrence(assignment, occurrence)
-                          const future = occurrence
-                            ? occurrenceIsUpcoming(occurrence, record.referenceInstant)
-                            : false
-                          const choice = occurrence ? choiceByOccurrence.get(occurrence.id) : undefined
-                          const adjustment = occurrence ? adjustmentByOccurrence.get(occurrence.id) : undefined
-                          const completionCount = completionByDate.get(date.key) ?? 0
-                          const ordinaryState = unavailable
-                            ? "not scheduled"
-                            : future
-                              ? "future session"
-                              : choice ?? "pending"
-                          const state = adjustment
-                            ? "rescheduled attendance recorded"
-                            : ordinaryState
-                          const stateWithCompletion = completionCount
-                            ? `${state}; ${completionCount} completed rescheduled ${completionCount === 1 ? "session" : "sessions"}`
-                            : state
+              <div
+                className="player-attendance-month-current"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <span>Attendance month</span>
+                <strong>{monthNavigationLabel(activeYear, activeMonth)}</strong>
+              </div>
+
+              <button
+                className="player-attendance-month-nav is-next"
+                type="button"
+                disabled={!canMoveNext}
+                aria-label={
+                  canMoveNext
+                    ? "View " + monthNavigationLabel(
+                        nextMonth.activeYear,
+                        nextMonth.activeMonth,
+                      )
+                    : "No next attendance month available"
+                }
+                onClick={() => updateNavigation({
+                  ...nextMonth,
+                  isOpen: true,
+                })}
+              >
+                <span>
+                  {canMoveNext
+                    ? monthNavigationLabel(
+                        nextMonth.activeYear,
+                        nextMonth.activeMonth,
+                      )
+                    : "Next"}
+                </span>
+                <ChevronRight aria-hidden="true" />
+              </button>
+            </header>
+
+            {calendar.schedules.length ? (
+              <div
+                className="player-attendance-calendar-schedules"
+                aria-label="Assigned sessions in the selected month"
+              >
+                {calendar.schedules.map((schedule) => (
+                  <div className="player-attendance-calendar-schedule" key={schedule.id}>
+                    <div>
+                      <span>Training group</span>
+                      <strong>{schedule.groupLabel}</strong>
+                    </div>
+                    <div>
+                      <span>Session</span>
+                      <strong>{schedule.timeLabel || "Time pending"}</strong>
+                    </div>
+                    <div>
+                      <span>Training days</span>
+                      <strong>{schedule.assignedDays || "Days pending"}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="player-attendance-calendar-empty">
+                No assigned sessions appear in {playerAttendanceMonthLabels[activeMonth - 1]} {activeYear}.
+              </div>
+            )}
+
+            <div className="player-attendance-month-tools">
+              <div
+                className="player-attendance-legend"
+                role="group"
+                aria-label="Attendance status legend"
+              >
+                <span><i className="is-present" aria-hidden="true" />Present</span>
+                <span><i className="is-absent" aria-hidden="true" />Absent</span>
+                <span><i className="is-pending" aria-hidden="true" />Pending</span>
+                <span><i className="is-makeup" aria-hidden="true" />Rescheduled</span>
+                <span><i className="is-unavailable" aria-hidden="true" />Not scheduled</span>
+              </div>
+              <p>Select the month above or use the arrows.</p>
+            </div>
+
+            <div className="player-attendance-calendar-frame">
+              <div
+                className="player-attendance-calendar"
+                role="grid"
+                aria-label={
+                  "Your attendance calendar for "
+                  + monthNavigationLabel(activeYear, activeMonth)
+                }
+                aria-colcount={7}
+                aria-rowcount={6}
+              >
+                <div className="player-attendance-calendar-weekdays" role="row">
+                  {playerAttendanceWeekdayLabels.map((weekday) => (
+                    <div
+                      className="player-attendance-calendar-weekday"
+                      role="columnheader"
+                      key={weekday}
+                    >
+                      <span className="player-attendance-weekday-long">{weekday}</span>
+                      <span className="player-attendance-weekday-short">
+                        {weekday.slice(0, 3)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="player-attendance-calendar-weeks" role="rowgroup">
+                  {Array.from({ length: 6 }, (_, weekIndex) => (
+                    <div
+                      className="player-attendance-calendar-week"
+                      role="row"
+                      key={calendar.days[weekIndex * 7].key}
+                    >
+                      {calendar.days.slice(weekIndex * 7, weekIndex * 7 + 7)
+                        .map((day) => {
+                          const singleState = day.sessions.length === 1
+                            ? day.sessions[0].state
+                            : null
+                          const className = [
+                            "player-attendance-calendar-day",
+                            day.inSelectedMonth ? "" : "is-outside-month",
+                            day.inLoadedYear ? "" : "is-outside-record",
+                            day.isToday ? "is-today" : "",
+                            !day.sessions.length ? "is-not-scheduled" : "",
+                            day.sessions.length > 1 ? "has-multiple-sessions" : "",
+                            singleState ? "is-" + singleState : "",
+                          ].filter(Boolean).join(" ")
 
                           return (
-                            <td
-                              key={date.key}
-                              className={date.key === record.referenceDate ? "is-today" : undefined}
-                              aria-label={`${sessionLabel}, ${date.label}: ${stateWithCompletion}`}
-                              title={`${date.label}: ${stateWithCompletion}`}
+                            <div
+                              className={className}
+                              role="gridcell"
+                              key={day.key}
+                              aria-current={day.isToday ? "date" : undefined}
+                              aria-label={calendarDayLabel(day)}
+                              title={calendarDayLabel(day)}
                             >
-                              <span
-                                className={[
-                                  "player-attendance-cell",
-                                  adjustment ? "is-makeup" : unavailable ? "is-unavailable" : future ? "is-future" : choice ? `is-${choice}` : "is-pending",
-                                  completionCount ? "has-makeup-completion" : "",
-                                ].filter(Boolean).join(" ")}
-                                aria-hidden="true"
-                              >
-                                {completionCount ? <b aria-hidden="true">+{completionCount}</b> : null}
-                              </span>
-                            </td>
+                              <div aria-hidden="true">
+                                <div className="player-attendance-calendar-date">
+                                  <strong>{day.dayNumber}</strong>
+                                  <span>{day.monthShort}</span>
+                                </div>
+                                <div className="player-attendance-calendar-session-list">
+                                  {day.sessions.map((session) => (
+                                    <span
+                                      className={
+                                        "player-attendance-calendar-session is-"
+                                        + session.state
+                                      }
+                                      key={session.assignmentId + ":" + session.occurrenceId}
+                                    >
+                                      <strong>{session.timeLabel}</strong>
+                                      <small>{visibleStateLabel(session.state)}</small>
+                                    </span>
+                                  ))}
+                                </div>
+                                {day.completionCount ? (
+                                  <b className="player-attendance-calendar-completion">
+                                    +{day.completionCount}
+                                  </b>
+                                ) : null}
+                                {day.isToday ? (
+                                  <span className="player-attendance-calendar-today">Today</span>
+                                ) : null}
+                              </div>
+                            </div>
                           )
                         })}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="player-attendance-calendar-note">
+                <span>
+                  Today · {formatDateKey(record.referenceDate, { year: "numeric" })}
+                </span>
+                {completionCount ? (
+                  <span>
+                    +N marks completed rescheduled sessions.
+                  </span>
+                ) : null}
+              </div>
             </div>
-          )}
+          </section>
         </div>
       ) : null}
     </Reveal>

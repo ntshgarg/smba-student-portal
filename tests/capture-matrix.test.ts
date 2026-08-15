@@ -75,3 +75,20 @@ describe("financial regression capture matrix", () => {
     ))).toBe(true)
   })
 })
+
+describe("player attendance regression capture matrix", () => {
+  it("captures the expanded focused-month calendar at every critical mobile width", () => {
+    const definition = captureDefinitions.find((item) => (
+      item.id === "player-dashboard-attendance-calendar"
+    ))
+
+    expect(definition).toMatchObject({
+      actor: "player",
+      critical: true,
+      route: "/player?attendance=register",
+      scenarios: ["loaded"],
+      segmentPolicy: "always",
+    })
+    expect(definition && viewportsForCapture(definition)).toEqual(criticalViewports)
+  })
+})

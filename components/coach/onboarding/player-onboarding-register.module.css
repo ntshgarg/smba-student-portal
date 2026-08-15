@@ -1,0 +1,1074 @@
+.page {
+  min-height: calc(100vh - var(--portal-header-height));
+  padding: clamp(26px, 3.6vw, 52px) clamp(22px, 4.5vw, 68px) clamp(54px, 7vw, 96px);
+  border-top: 1px solid var(--line);
+  background: var(--ivory);
+  color: var(--navy);
+}
+
+.backRow a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  color: var(--steel);
+  font-size: 11px;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.backRow svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pageHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.52fr);
+  align-items: end;
+  gap: clamp(36px, 8vw, 120px);
+  margin-top: clamp(26px, 3.8vw, 48px);
+  padding-bottom: clamp(22px, 2.8vw, 34px);
+  border-bottom: 1px solid var(--line);
+}
+
+.pageHeader h1 {
+  max-width: 840px;
+  margin-top: 13px;
+  color: var(--navy);
+  font-size: clamp(48px, 5.2vw, 72px);
+  font-weight: 560;
+  letter-spacing: -0.065em;
+  line-height: 0.94;
+}
+
+.pageHeader > p {
+  max-width: 430px;
+  color: var(--steel);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(17px, 1.55vw, 21px);
+  font-style: italic;
+  line-height: 1.42;
+}
+
+.workspaceNotice {
+  margin-top: 12px;
+}
+
+.stageSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: clamp(24px, 3vw, 38px);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 64%, transparent);
+}
+
+.stageSummary > div {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 86px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 13px;
+  padding: 16px 20px;
+  border-right: 1px solid var(--line);
+}
+
+.stageSummary > div:last-child {
+  border-right: 0;
+}
+
+.stageSummary > div::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  background: transparent;
+  content: "";
+}
+
+.stageSummary > .activeStage {
+  background: var(--ivory-deep);
+}
+
+.stageSummary > .activeStage::after {
+  background: var(--red);
+}
+
+.stageSummary strong {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(30px, 2.8vw, 40px);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.stageSummary p {
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.register {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.registerHeading {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.registerHeading h2 {
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 830;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.registerHeading p {
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.registerHeading p strong {
+  color: var(--navy);
+  font-weight: 800;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rows > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  display: grid;
+  min-height: 78px;
+  grid-template-columns: 44px minmax(180px, 1.15fr) minmax(96px, 0.58fr) minmax(190px, 1fr) 132px;
+  align-items: center;
+  gap: clamp(12px, 1.6vw, 26px);
+  padding: 12px 16px;
+  transition: background-color 150ms ease;
+}
+
+.row:hover {
+  background: var(--ivory);
+}
+
+.expandedRow > .row {
+  background: var(--ivory-deep);
+  box-shadow: inset 0 -3px var(--red);
+}
+
+.folio {
+  color: var(--red);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 27px;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.identity,
+.nextAction {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.identity strong {
+  overflow: hidden;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 21px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity small,
+.nextAction small {
+  overflow-wrap: anywhere;
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 1.35;
+}
+
+.stageStamp {
+  justify-self: start;
+  padding: 6px 9px;
+  border: 1px solid var(--steel);
+  color: var(--navy);
+  font-size: 9px;
+  font-weight: 830;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.nextAction strong {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 780;
+  line-height: 1.25;
+}
+
+.openButton,
+.formActions > a,
+.formActions > button,
+.primaryButton,
+.approvalReceipt button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid var(--navy);
+  border-radius: 0;
+  background: transparent;
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 790;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.openButton {
+  width: 100%;
+  padding: 0 13px;
+}
+
+.openButton svg,
+.formActions svg,
+.primaryButton svg,
+.approvalReceipt button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.openButton:hover,
+.formActions > a:hover {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: minmax(135px, 0.22fr) minmax(0, 1fr);
+  gap: clamp(24px, 3vw, 46px);
+  padding: clamp(22px, 3vw, 38px) clamp(18px, 3vw, 42px);
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.stepRail {
+  display: grid;
+  align-content: start;
+  gap: 15px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepRail li {
+  display: grid;
+  grid-template-columns: 29px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--steel);
+}
+
+.stepRail li > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--white);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 650;
+}
+
+.stepRail li > span svg {
+  width: 13px;
+  height: 13px;
+}
+
+.stepRail li strong {
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.stepRail .completeStep > span {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.stepRail .currentStep {
+  color: var(--navy);
+}
+
+.stepRail .currentStep > span {
+  border: 2px solid var(--red);
+  color: var(--red);
+}
+
+.editorWork {
+  min-width: 0;
+}
+
+.editorHeading > span {
+  color: var(--red);
+  font-size: 9px;
+  font-weight: 830;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.editorHeading h3 {
+  margin-top: 6px;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(27px, 2.5vw, 35px);
+  font-style: italic;
+  font-weight: 560;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+}
+
+.editorHeading p {
+  margin-top: 5px;
+  color: var(--steel);
+  font-size: 11px;
+  font-weight: 620;
+  line-height: 1.45;
+}
+
+.compactForm,
+.sessionForm,
+.feePlanForm,
+.requestStep,
+.recoveryPanel {
+  margin-top: 20px;
+}
+
+.threeFieldGrid,
+.feeFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--line);
+}
+
+.threeFieldGrid > label,
+.feeFields > label {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 13px;
+  border-right: 1px solid var(--line);
+}
+
+.threeFieldGrid > label:last-child,
+.feeFields > label:last-child {
+  border-right: 0;
+}
+
+.threeFieldGrid label > span,
+.feeFields label > span:first-child,
+.sessionDetails label > span,
+.seriesChoices legend,
+.sessionDetails legend {
+  color: var(--steel);
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.threeFieldGrid select,
+.feeFields input,
+.sessionDetails input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--white);
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.threeFieldGrid select:focus,
+.feeFields input:focus,
+.sessionDetails input:focus {
+  border-color: var(--red);
+  outline: 2px solid color-mix(in srgb, var(--red) 15%, transparent);
+  outline-offset: 1px;
+}
+
+.threeFieldGrid select[aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+.threeFieldGrid label > small {
+  color: var(--red-dark);
+  font-size: 10px;
+  font-weight: 660;
+  line-height: 1.35;
+}
+
+.formActions {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.72fr) minmax(220px, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.formActions > a,
+.formActions > button {
+  width: 100%;
+  padding: 0 18px;
+}
+
+.formActions > .primaryButton,
+.primaryButton {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: var(--white);
+}
+
+.formActions > .primaryButton:hover,
+.primaryButton:hover {
+  border-color: var(--red);
+  background: var(--red);
+}
+
+.formActions button:disabled,
+.primaryButton:disabled,
+.approvalReceipt button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.requestFacts,
+.trainingFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--line);
+}
+
+.requestFacts > div,
+.trainingFacts > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+}
+
+.requestFacts > div:last-child,
+.trainingFacts > div:last-child {
+  border-right: 0;
+}
+
+.requestFacts dt,
+.trainingFacts dt {
+  color: var(--steel);
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.requestFacts dd,
+.trainingFacts dd {
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+.approvalReceipt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.58fr);
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--green);
+  background: var(--green-soft);
+}
+
+.approvalReceipt > div,
+.approvalReceipt label {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.approvalReceipt > div > svg {
+  width: 20px;
+  height: 20px;
+  color: var(--green);
+}
+
+.approvalReceipt p {
+  display: grid;
+  gap: 2px;
+}
+
+.approvalReceipt p strong {
+  color: var(--navy);
+  font-size: 12px;
+}
+
+.approvalReceipt p span {
+  color: var(--steel);
+  font-size: 10px;
+}
+
+.approvalReceipt input {
+  min-width: 0;
+  height: 44px;
+  flex: 1;
+  padding: 0 11px;
+  border: 1px solid var(--green);
+  background: var(--white);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.approvalReceipt button {
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.seriesChoices,
+.sessionDetails fieldset {
+  min-width: 0;
+  border: 0;
+}
+
+.seriesChoices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.seriesChoices legend {
+  margin-bottom: 9px;
+}
+
+.seriesChoices > label {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 68px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  cursor: pointer;
+}
+
+.seriesChoices > label.selectedChoice {
+  border-color: var(--navy);
+  background: var(--ivory-deep);
+  box-shadow: inset 0 -3px var(--red);
+}
+
+.seriesChoices input {
+  accent-color: var(--red);
+}
+
+.seriesChoices label > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.seriesChoices label strong {
+  overflow: hidden;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seriesChoices label small,
+.seriesChoices label em {
+  color: var(--steel);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 620;
+}
+
+.seriesChoices label em {
+  text-align: right;
+}
+
+.sessionDetails {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.42fr);
+  align-items: end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.sessionDetails fieldset > legend {
+  margin-bottom: 8px;
+}
+
+.sessionDetails > label {
+  display: grid;
+  gap: 8px;
+}
+
+.weekdayChoices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  gap: 7px;
+}
+
+.weekdayChoices label {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.weekdayChoices input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.weekdayChoices span {
+  display: grid;
+  min-height: 44px;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 780;
+}
+
+.weekdayChoices label.selectedDay span {
+  border-color: var(--navy);
+  background: var(--ivory-deep);
+  color: var(--navy);
+}
+
+.weekdayChoices input:focus-visible + span {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.feeFields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.moneyInput {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.moneyInput b {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  border-right: 1px solid var(--line);
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 19px;
+  font-weight: 560;
+}
+
+.moneyInput input {
+  border: 0;
+}
+
+.feeNote {
+  margin-top: 9px;
+  color: var(--steel);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.backdateNote {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--makeup);
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.recoveryPanel {
+  display: grid;
+  gap: 7px;
+  padding: 17px;
+  border: 1px solid var(--line);
+  background: var(--ivory-deep);
+}
+
+.recoveryPanel strong {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 20px;
+  font-style: italic;
+  font-weight: 570;
+}
+
+.recoveryPanel p {
+  color: var(--steel);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.recoveryPanel .primaryButton {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 0 18px;
+  text-decoration: none;
+}
+
+.emptyState {
+  display: grid;
+  justify-items: center;
+  padding: clamp(38px, 6vw, 72px) 22px;
+  text-align: center;
+}
+
+.emptyState > svg {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 13px;
+  padding: 8px;
+  border: 1px solid var(--green);
+  border-radius: 50%;
+  color: var(--green);
+}
+
+.emptyState h3 {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 27px;
+  font-style: italic;
+  font-weight: 570;
+}
+
+.emptyState p {
+  max-width: 470px;
+  margin-top: 5px;
+  color: var(--steel);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.emptyState a {
+  margin-top: 17px;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 790;
+  text-underline-offset: 4px;
+}
+
+@media (max-width: 1000px) {
+  .pageHeader {
+    display: block;
+  }
+
+  .pageHeader > p {
+    margin-top: 11px;
+  }
+
+  .row {
+    grid-template-columns: 38px minmax(145px, 1fr) 96px minmax(135px, 0.9fr) 112px;
+    gap: 10px;
+  }
+
+  .identity strong {
+    font-size: 19px;
+  }
+
+  .editor {
+    grid-template-columns: 118px minmax(0, 1fr);
+    gap: 22px;
+  }
+
+  .seriesChoices {
+    grid-template-columns: 1fr;
+  }
+
+  .seriesChoices > label {
+    grid-template-columns: 18px minmax(0, 1fr) minmax(90px, auto);
+  }
+}
+
+@media (max-width: 700px) {
+  .page {
+    padding: 20px 14px 54px;
+  }
+
+  .pageHeader {
+    margin-top: 20px;
+    padding-bottom: 19px;
+  }
+
+  .pageHeader h1 {
+    margin-top: 9px;
+    font-size: clamp(38px, 12vw, 48px);
+    line-height: 0.98;
+  }
+
+  .pageHeader > p {
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  .stageSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 20px;
+  }
+
+  .stageSummary > div {
+    min-height: 66px;
+    gap: 9px;
+    padding: 11px 12px;
+  }
+
+  .stageSummary > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .stageSummary > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .stageSummary strong {
+    font-size: 27px;
+  }
+
+  .stageSummary p {
+    font-size: 8px;
+  }
+
+  .registerHeading {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .registerHeading p {
+    max-width: 105px;
+    text-align: right;
+  }
+
+  .row {
+    grid-template-areas:
+      "folio identity open"
+      "folio stamp open";
+    grid-template-columns: 36px minmax(0, 1fr) 44px;
+    gap: 7px 9px;
+    min-height: 84px;
+    padding: 11px 10px;
+  }
+
+  .folio {
+    grid-area: folio;
+    align-self: start;
+    padding-top: 3px;
+    font-size: 24px;
+  }
+
+  .identity {
+    grid-area: identity;
+  }
+
+  .identity strong {
+    font-size: 18px;
+  }
+
+  .identity small {
+    font-size: 8px;
+  }
+
+  .stageStamp {
+    grid-area: stamp;
+    padding: 5px 7px;
+    font-size: 8px;
+  }
+
+  .nextAction {
+    display: none;
+  }
+
+  .openButton {
+    grid-area: open;
+    width: 44px;
+    padding: 0;
+    align-self: center;
+    font-size: 0;
+  }
+
+  .openButton svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .editor {
+    display: block;
+    padding: 18px 10px 12px;
+  }
+
+  .stepRail {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 21px;
+  }
+
+  .stepRail li {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 6px;
+    text-align: center;
+  }
+
+  .stepRail li strong {
+    font-size: 7px;
+    letter-spacing: 0.03em;
+  }
+
+  .stepRail li > span {
+    width: 27px;
+    height: 27px;
+  }
+
+  .editorHeading h3 {
+    font-size: 26px;
+  }
+
+  .editorHeading p {
+    font-size: 10px;
+  }
+
+  .threeFieldGrid,
+  .feeFields,
+  .requestFacts,
+  .trainingFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .threeFieldGrid > label,
+  .feeFields > label,
+  .requestFacts > div,
+  .trainingFacts > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .threeFieldGrid > label:last-child,
+  .feeFields > label:last-child,
+  .requestFacts > div:last-child,
+  .trainingFacts > div:last-child {
+    border-bottom: 0;
+  }
+
+  .threeFieldGrid select,
+  .feeFields input,
+  .sessionDetails input {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .formActions {
+    grid-template-columns: 1fr;
+  }
+
+  .formActions > a,
+  .formActions > button {
+    min-height: 48px;
+  }
+
+  .formActions > .primaryButton {
+    grid-row: 1;
+  }
+
+  .approvalReceipt {
+    grid-template-columns: 1fr;
+  }
+
+  .approvalReceipt label {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .seriesChoices > label {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .seriesChoices label em {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .sessionDetails {
+    grid-template-columns: 1fr;
+  }
+
+  .weekdayChoices {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .recoveryPanel .primaryButton {
+    width: 100%;
+  }
+}

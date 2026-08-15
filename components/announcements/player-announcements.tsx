@@ -10,17 +10,25 @@ import type { AnnouncementSummary } from "@/components/announcements/types"
 import styles from "@/components/announcements/announcements.module.css"
 import { Reveal } from "@/components/reveal"
 
-function AnnouncementLabels({ announcement }: { announcement: AnnouncementSummary }) {
+function AnnouncementLabels({
+  announcement,
+  dashboard = false,
+}: {
+  announcement: AnnouncementSummary
+  dashboard?: boolean
+}) {
   const isNew = announcementIsNew(announcement.publishedAt)
 
   if (!announcement.pinned && !isNew) return null
 
   return (
-    <span className={styles.labels} aria-label={[
+    <span className={`${styles.labels}${dashboard ? ` ${styles.dashboardLabels}` : ""}`} aria-label={[
       announcement.pinned ? "Pinned" : null,
       isNew ? "New" : null,
     ].filter(Boolean).join(", ")}>
-      {announcement.pinned ? <Pin aria-hidden="true" /> : null}
+      {announcement.pinned ? (
+        dashboard ? <span>Pinned</span> : <Pin aria-hidden="true" />
+      ) : null}
       {isNew ? <span>New</span> : null}
     </span>
   )
@@ -50,7 +58,27 @@ export function PlayerAnnouncementsCard({
   }
 
   const ordered = sortAnnouncements(announcements)
-  if (ordered.length === 0) return null
+  if (ordered.length === 0) {
+    return (
+      <Reveal
+        className={`${styles.dashboardCard} dashboard-card player-ticket-card player-ticket-announcements`}
+        delay={0.08}
+      >
+        <header className="player-ticket-masthead">
+          <h3 className="player-ticket-title">Announcements</h3>
+          <span className="player-ticket-context">Clear</span>
+        </header>
+        <div className={styles.dashboardEmpty} data-announcement-state="empty">
+          <strong className={styles.dashboardEmptyTitle}>The notice board is clear.</strong>
+          <p className={styles.dashboardEmptyCopy}>
+            New notices from your coach will appear here when they are published.
+          </p>
+        </div>
+      </Reveal>
+    )
+  }
+  const visible = ordered.slice(0, 2)
+  const isPair = visible.length === 2
 
   return (
     <Reveal
@@ -64,37 +92,41 @@ export function PlayerAnnouncementsCard({
         </span>
       </header>
 
-      <div className={`${styles.dashboardList} player-ticket-announcement-list`}>
-        {ordered.slice(0, 2).map((announcement) => (
-          <Link
-            className={styles.dashboardItem}
-            href={`/player/announcements/${announcement.id}`}
-            key={announcement.id}
-          >
-            <span className={styles.dashboardItemCopy}>
-              <span className={styles.dashboardItemMeta}>
-                <time dateTime={announcement.publishedAt}>
-                  {announcementDate(announcement.publishedAt)}
-                </time>
-                <AnnouncementLabels announcement={announcement} />
-              </span>
-              <strong>{announcement.title}</strong>
-              <span>{announcement.preview}</span>
-            </span>
-            <ArrowUpRight aria-hidden="true" />
-          </Link>
-        ))}
-      </div>
+      <div
+        className={isPair ? styles.dashboardPairLayout : styles.dashboardFeatureLayout}
+        data-announcement-layout={isPair ? "pair" : "single"}
+      >
+        <ol
+          className={`${styles.dashboardNoticeList} ${isPair ? styles.dashboardPairList : styles.dashboardFeatureList}`}
+          aria-label="Latest announcements"
+        >
+          {visible.map((announcement) => (
+            <li className={styles.dashboardNoticeItem} key={announcement.id}>
+              <Link
+                className={styles.dashboardNotice}
+                href={`/player/announcements/${announcement.id}`}
+              >
+                <span className={styles.dashboardNoticeMeta}>
+                  <time dateTime={announcement.publishedAt}>
+                    {announcementDate(announcement.publishedAt)}
+                  </time>
+                  <AnnouncementLabels announcement={announcement} dashboard />
+                </span>
+                <strong className={styles.dashboardNoticeTitle}>{announcement.title}</strong>
+                <span className={styles.dashboardNoticeCopy}>{announcement.preview}</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
 
-      {ordered.length > 2 ? (
         <Link
-          className={`${styles.dashboardAll} player-ticket-announcement-all`}
+          className={`${styles.dashboardArchiveAction} player-ticket-action`}
           href="/player/announcements"
         >
-          View all announcements
+          <span>Open all announcements</span>
           <ArrowUpRight aria-hidden="true" />
         </Link>
-      ) : null}
+      </div>
     </Reveal>
   )
 }

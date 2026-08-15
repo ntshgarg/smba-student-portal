@@ -28,8 +28,10 @@ const weekdayShortLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 export function PlayerAttendanceRegister({
   selection,
+  yearOptions,
 }: {
   selection: AttendanceRegisterSelection
+  yearOptions: number[]
 }) {
   const {
     attendanceAdjustments,
@@ -44,7 +46,6 @@ export function PlayerAttendanceRegister({
   const searchParams = useSearchParams()
   const todayKey = getIndiaDateKey()
   const currentYear = Number(todayKey.slice(0, 4))
-  const yearOptions = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2]
   const activeYear = selection.year
   const selectedProgramme = selection.programme
   const selectedBatch = selection.batch
@@ -228,6 +229,13 @@ export function PlayerAttendanceRegister({
                   <span>Annual register</span>
                   <button type="button" onClick={jumpToToday}>Jump to today</button>
                 </div>
+              </div>
+
+              <div className="player-attendance-legend staff-attendance-legend" role="group" aria-label="Attendance status legend">
+                <span><i className="is-present" aria-hidden="true" />Present</span>
+                <span><i className="is-absent" aria-hidden="true" />Absent</span>
+                <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
+                <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
               </div>
 
               {!categorySeries.length ? (

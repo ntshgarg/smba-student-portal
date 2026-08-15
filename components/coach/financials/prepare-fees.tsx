@@ -16,9 +16,11 @@ import {
 import styles from "./financials.module.css"
 
 export function PrepareFees({
+  compact = false,
   period,
   preparation,
 }: {
+  compact?: boolean
   period: string
   preparation: MonthlyPreparationPreview
 }) {
@@ -53,7 +55,7 @@ export function PrepareFees({
   }
 
   return (
-    <section className={styles.preparation} aria-labelledby="financial-preparation-title">
+    <section className={`${styles.preparation} ${compact ? styles.compactPreparation : ""}`} aria-labelledby="financial-preparation-title">
       <div className={styles.preparationHeading}>
         <div>
           <span>Monthly preparation</span>
@@ -95,7 +97,7 @@ export function PrepareFees({
         </div>
       ) : null}
 
-      <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+      <InlineNotice className={styles.notice} message={feedback?.message} reserveSpace={!compact} tone={feedback?.tone} />
     </section>
   )
 }
