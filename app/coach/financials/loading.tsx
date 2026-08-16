@@ -14,7 +14,7 @@ export default function CoachFinancialsLoading() {
         <h1>Financials</h1>
         <p>Track fees clearly, one player at a time.</p>
       </header>
-      <p className="sr-only" role="status">Loading Financials.</p>
+      <p className="sr-only" role="status">Loading Financials…</p>
       <div className={styles.loadingSummary} aria-hidden="true" />
       <div className={styles.loadingWorkspace} aria-hidden="true" />
     </div>

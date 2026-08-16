@@ -25,9 +25,9 @@ describe("member directory service", () => {
     coachDatabase = await import("@/lib/coach/database")
     memberService = await import("@/lib/coach/member-service")
     sessionService = await import("@/lib/sessions/service")
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
   })
 
   afterAll(() => {

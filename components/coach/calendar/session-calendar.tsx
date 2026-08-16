@@ -15,7 +15,10 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Fragment, useEffect, useRef, useState } from "react"
 
-import { useCoachPortal } from "@/components/coach/coach-portal-provider"
+import {
+  useMemberPortal,
+  useSessionPortal,
+} from "@/components/coach/coach-portal-provider"
 import {
   InlineNotice,
   type ActionFeedback,
@@ -28,7 +31,6 @@ import {
   playerWasEnrolledForOccurrence,
 } from "@/lib/sessions/domain"
 import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { isValidDateKey } from "@/lib/attendance/domain"
 import {
   academyTimeInputValue,
@@ -99,20 +101,28 @@ function replacementDraftFor(occurrence: TrainingSessionOccurrence): Replacement
   }
 }
 
-export function SessionCalendar({ selectedDate }: { selectedDate: string }) {
+export function SessionCalendar({
+  referenceDate,
+  referenceInstant: initialReferenceInstant,
+  selectedDate,
+}: {
+  referenceDate: string
+  referenceInstant: number
+  selectedDate: string
+}) {
+  const { players } = useMemberPortal()
   const {
     cancelSessionOccurrence,
-    players,
     replaceSessionOccurrence,
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,
-  } = useCoachPortal()
-  const [referenceInstant, setReferenceInstant] = useState(() => Date.now())
+  } = useSessionPortal()
+  const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const today = getIndiaDateKey()
+  const today = referenceDate
   const selectedMonth = selectedDate.slice(0, 7)
   const monthWindow = calendarWindowForMonth(selectedMonth)
   const monthOccurrences = sessionOccurrences.filter((occurrence) => (
@@ -214,6 +224,7 @@ export function SessionCalendar({ selectedDate }: { selectedDate: string }) {
             <label>
               <span className="sr-only">Choose calendar month</span>
               <input
+                name="calendarMonth"
                 type="month"
                 value={selectedMonth}
                 onChange={(event) => {
@@ -421,7 +432,7 @@ function OccurrenceDetails({
   pendingAction: "cancel" | "replace" | null
   referenceInstant: number
   replacement: { dateKey: string; startTime: string; durationMinutes: string; venue: string }
-  roster: ReturnType<typeof useCoachPortal>["players"]
+  roster: ReturnType<typeof useMemberPortal>["players"]
   series: TrainingSessionSeries
   setReplacement: React.Dispatch<React.SetStateAction<typeof replacement>>
   today: string
@@ -487,10 +498,10 @@ function OccurrenceDetails({
               }}
             ><RefreshCw aria-hidden="true" /> Replace session</summary>
             <div>
-              <label><span>Date</span><input ref={dateInputRef} type="date" disabled={pendingAction !== null} min={today} value={replacement.dateKey} aria-invalid={feedback?.field === "dateKey" || undefined} aria-describedby={feedback?.field === "dateKey" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, dateKey: event.target.value })} /></label>
-              <label><span>Time</span><input ref={timeInputRef} type="time" disabled={pendingAction !== null} value={replacement.startTime} aria-invalid={feedback?.field === "startTime" || undefined} aria-describedby={feedback?.field === "startTime" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, startTime: event.target.value })} /></label>
-              <label><span>Duration</span><input ref={durationInputRef} type="number" disabled={pendingAction !== null} min={30} max={300} step={15} value={replacement.durationMinutes} aria-invalid={feedback?.field === "durationMinutes" || undefined} aria-describedby={feedback?.field === "durationMinutes" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, durationMinutes: event.target.value })} /></label>
-              <label><span>Venue</span><input ref={venueInputRef} required maxLength={120} disabled={pendingAction !== null} value={replacement.venue} aria-invalid={feedback?.field === "venue" || undefined} aria-describedby={feedback?.field === "venue" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, venue: event.target.value })} /></label>
+              <label><span>Date</span><input ref={dateInputRef} name="replacementDate" type="date" disabled={pendingAction !== null} min={today} value={replacement.dateKey} aria-invalid={feedback?.field === "dateKey" || undefined} aria-describedby={feedback?.field === "dateKey" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, dateKey: event.target.value })} /></label>
+              <label><span>Time</span><input ref={timeInputRef} name="replacementStartTime" type="time" disabled={pendingAction !== null} value={replacement.startTime} aria-invalid={feedback?.field === "startTime" || undefined} aria-describedby={feedback?.field === "startTime" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, startTime: event.target.value })} /></label>
+              <label><span>Duration</span><input ref={durationInputRef} name="replacementDurationMinutes" type="number" disabled={pendingAction !== null} min={30} max={300} step={15} value={replacement.durationMinutes} aria-invalid={feedback?.field === "durationMinutes" || undefined} aria-describedby={feedback?.field === "durationMinutes" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, durationMinutes: event.target.value })} /></label>
+              <label><span>Venue</span><input ref={venueInputRef} name="replacementVenue" required maxLength={120} disabled={pendingAction !== null} value={replacement.venue} aria-invalid={feedback?.field === "venue" || undefined} aria-describedby={feedback?.field === "venue" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, venue: event.target.value })} /></label>
               <button type="button" disabled={pendingAction !== null} onClick={onReplace}>
                 {pendingAction === "replace" ? "Creating…" : "Create replacement"}
               </button>

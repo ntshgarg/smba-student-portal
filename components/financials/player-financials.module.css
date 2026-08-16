@@ -370,7 +370,7 @@ a.monthCell:hover {
 }
 
 .monthCell[data-tone="quiet"] strong {
-  color: color-mix(in srgb, var(--steel) 74%, var(--white));
+  color: var(--steel);
   font-weight: 640;
 }
 

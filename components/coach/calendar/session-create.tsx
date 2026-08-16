@@ -5,7 +5,10 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 
-import { useCoachPortal } from "@/components/coach/coach-portal-provider"
+import {
+  useMemberPortal,
+  useSessionPortal,
+} from "@/components/coach/coach-portal-provider"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
@@ -73,7 +76,8 @@ export function SessionScheduleCreate({
   initialPlayerId?: string | null
   initialProgramme?: TrainingProgramme
 }) {
-  const { createSessionSeries, players } = useCoachPortal()
+  const { players } = useMemberPortal()
+  const { createSessionSeries } = useSessionPortal()
   const router = useRouter()
   const today = getIndiaDateKey()
   const guidedPlayer = initialPlayerId
@@ -206,7 +210,7 @@ export function SessionScheduleCreate({
         </div>
       ) : null}
 
-      <form className="coach-series-form" onSubmit={submitSeries}>
+      <form className="coach-series-form" autoComplete="off" onSubmit={submitSeries}>
         <div className="coach-series-form-heading">
           <span>Recurring schedule</span>
           <h2>Create the training rhythm.</h2>
@@ -214,13 +218,13 @@ export function SessionScheduleCreate({
         <div className="coach-series-form-grid">
           <label>
             <span>Programme</span>
-            <select disabled={isCreating || Boolean(guidedProgramme)} value={seriesForm.programme} onChange={(event) => setSeriesForm({ ...seriesForm, programme: event.target.value as TrainingProgramme })}>
+            <select name="programme" disabled={isCreating || Boolean(guidedProgramme)} value={seriesForm.programme} onChange={(event) => setSeriesForm({ ...seriesForm, programme: event.target.value as TrainingProgramme })}>
               {programmes.map((programme) => <option key={programme}>{programme}</option>)}
             </select>
           </label>
           <label>
             <span>Batch</span>
-            <select disabled={isCreating || Boolean(guidedBatch)} value={seriesForm.batch} onChange={(event) => {
+            <select name="batch" disabled={isCreating || Boolean(guidedBatch)} value={seriesForm.batch} onChange={(event) => {
               const batch = event.target.value as TrainingBatch
               setSeriesForm({ ...seriesForm, batch, selectedDays: defaultSelectedDays(batch) })
             }}>
@@ -230,25 +234,25 @@ export function SessionScheduleCreate({
           </label>
           <label>
             <span>Start time</span>
-            <input ref={startTimeRef} type="time" required disabled={isCreating} value={seriesForm.startTime} aria-invalid={feedback?.field === "startTime" || undefined} aria-describedby={feedback?.field === "startTime" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, startTime: event.target.value })} />
+            <input ref={startTimeRef} name="startTime" type="time" required disabled={isCreating} value={seriesForm.startTime} aria-invalid={feedback?.field === "startTime" || undefined} aria-describedby={feedback?.field === "startTime" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, startTime: event.target.value })} />
           </label>
           <label>
             <span>Duration</span>
-            <select ref={durationRef} disabled={isCreating} value={seriesForm.durationMinutes} aria-invalid={feedback?.field === "durationMinutes" || undefined} aria-describedby={feedback?.field === "durationMinutes" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, durationMinutes: event.target.value })}>
+            <select ref={durationRef} name="durationMinutes" disabled={isCreating} value={seriesForm.durationMinutes} aria-invalid={feedback?.field === "durationMinutes" || undefined} aria-describedby={feedback?.field === "durationMinutes" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, durationMinutes: event.target.value })}>
               {[60, 90, 120, 180].map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}
             </select>
           </label>
           <label className="is-wide">
             <span>Venue or court</span>
-            <input ref={venueRef} required disabled={isCreating} maxLength={120} value={seriesForm.venue} aria-invalid={feedback?.field === "venue" || undefined} aria-describedby={feedback?.field === "venue" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, venue: event.target.value })} />
+            <input ref={venueRef} name="venue" required disabled={isCreating} maxLength={120} value={seriesForm.venue} aria-invalid={feedback?.field === "venue" || undefined} aria-describedby={feedback?.field === "venue" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, venue: event.target.value })} />
           </label>
           <label>
             <span>Starts</span>
-            <input ref={startsOnRef} type="date" required disabled={isCreating} value={seriesForm.startsOn} aria-invalid={feedback?.field === "startsOn" || undefined} aria-describedby={feedback?.field === "startsOn" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, startsOn: event.target.value })} />
+            <input ref={startsOnRef} name="startsOn" type="date" required disabled={isCreating} value={seriesForm.startsOn} aria-invalid={feedback?.field === "startsOn" || undefined} aria-describedby={feedback?.field === "startsOn" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, startsOn: event.target.value })} />
           </label>
           <label>
             <span>Ends</span>
-            <input ref={endsOnRef} type="date" required disabled={isCreating} min={seriesForm.startsOn} value={seriesForm.endsOn} aria-invalid={feedback?.field === "endsOn" || undefined} aria-describedby={feedback?.field === "endsOn" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, endsOn: event.target.value })} />
+            <input ref={endsOnRef} name="endsOn" type="date" required disabled={isCreating} min={seriesForm.startsOn} value={seriesForm.endsOn} aria-invalid={feedback?.field === "endsOn" || undefined} aria-describedby={feedback?.field === "endsOn" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, endsOn: event.target.value })} />
           </label>
           <div className="coach-series-name-preview is-wide">
             <span>Session name</span>
@@ -271,7 +275,7 @@ export function SessionScheduleCreate({
             return (
               <div key={day.value} className={isSelected ? "is-selected" : undefined}>
                 <label className="coach-slot-day">
-                  <input type="checkbox" disabled={!isAllowed || isCreating} checked={isSelected} onChange={(event) => setSeriesForm({
+                  <input name="weekdays" value={day.value} type="checkbox" disabled={!isAllowed || isCreating} checked={isSelected} onChange={(event) => setSeriesForm({
                     ...seriesForm,
                     selectedDays: { ...seriesForm.selectedDays, [day.value]: event.target.checked },
                   })} />

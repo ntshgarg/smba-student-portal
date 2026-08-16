@@ -11,12 +11,13 @@ const mocks = vi.hoisted(() => ({
   rejectRegistration: vi.fn(),
   routerPush: vi.fn(),
   saveMember: vi.fn(),
+  search: "",
 }))
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/coach/members",
   useRouter: () => ({ push: mocks.routerPush }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(mocks.search),
 }))
 
 vi.mock("@/components/coach/coach-portal-provider", () => ({
@@ -79,6 +80,7 @@ describe("Member Directory reveal window", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.players = []
+    mocks.search = ""
   })
 
   it("renders the first 12 filtered members and a quiet one-way reveal", () => {
@@ -112,6 +114,19 @@ describe("Member Directory reveal window", () => {
     const html = renderToStaticMarkup(<MemberDirectory />)
 
     expect(html).toContain("12 members")
+    expect(html).not.toContain("Show more members")
+  })
+
+  it("opens and reveals a player linked from onboarding beyond the initial window", () => {
+    mocks.players = players(13)
+    mocks.search = "player=player-13"
+
+    const html = renderToStaticMarkup(<MemberDirectory />)
+
+    expect(html).toContain("13 members")
+    expect(html).toContain('id="member-details-player-13"')
+    expect(html).toContain('id="member-details-title-player-13" tabindex="-1"')
+    expect(html).toContain('aria-expanded="true"')
     expect(html).not.toContain("Show more members")
   })
 

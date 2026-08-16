@@ -110,6 +110,7 @@ function WithdrawDialog({
           <span>Private reason</span>
           <textarea
             ref={reasonRef}
+            name="withdrawalReason"
             aria-describedby="withdraw-reason-help"
             maxLength={250}
             onChange={(event) => {

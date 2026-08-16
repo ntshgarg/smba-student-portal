@@ -201,7 +201,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   return (
     <details className={styles.refundForm}>
       <summary>Record mid-term withdrawal refund</summary>
-      <form onSubmit={(event) => void submit(event)}>
+      <form autoComplete="off" onSubmit={(event) => void submit(event)}>
         <p className={styles.concessionHelp}>
           Use this only when a fully paid member leaves mid-month. The unused-training
           credit and offline refund are recorded together, so no new balance is created.
@@ -213,6 +213,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
               <span aria-hidden="true">₹</span>
               <input
                 ref={amountRef}
+                name="refundAmount"
                 inputMode="decimal"
                 value={amount}
                 disabled={Boolean(pending)}
@@ -224,6 +225,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
           <label className={styles.field}>
             <span>Member withdrew on</span>
             <input
+              name="withdrawalEffectiveOn"
               type="date"
               min={receipt.receivedOn}
               max={getAcademyDateKey()}
@@ -244,6 +246,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
           <label className={styles.field}>
             <span>Refunded on</span>
             <input
+              name="refundedOn"
               type="date"
               min={withdrawalEffectiveOn || receipt.receivedOn}
               max={getAcademyDateKey()}
@@ -254,7 +257,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
           </label>
           <label className={styles.field}>
             <span>Refund method</span>
-            <select value={method} disabled={Boolean(pending)} onChange={(event) => { setMethod(event.target.value as PaymentMethod); resetMutation() }}>
+            <select name="refundMethod" value={method} disabled={Boolean(pending)} onChange={(event) => { setMethod(event.target.value as PaymentMethod); resetMutation() }}>
               {paymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
@@ -262,12 +265,12 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
 
         <label className={styles.field}>
           <span>Reference <em>Optional</em></span>
-          <input value={externalReference} disabled={Boolean(pending)} onChange={(event) => { setExternalReference(event.target.value); resetMutation() }} />
+          <input name="externalReference" value={externalReference} disabled={Boolean(pending)} onChange={(event) => { setExternalReference(event.target.value); resetMutation() }} />
         </label>
 
         <label className={styles.field}>
           <span>Internal note <em>Optional</em></span>
-          <textarea rows={2} value={internalNote} disabled={Boolean(pending)} onChange={(event) => { setInternalNote(event.target.value); resetMutation() }} />
+          <textarea name="internalNote" rows={2} value={internalNote} disabled={Boolean(pending)} onChange={(event) => { setInternalNote(event.target.value); resetMutation() }} />
         </label>
 
         {reviewedAmountPaise === null ? (
@@ -293,6 +296,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
                   <span className={styles.allocationInput}>
                     <span aria-hidden="true">₹</span>
                     <input
+                      name={`refundAllocation.${allocation.paymentAllocationId}`}
                       inputMode="decimal"
                       aria-label={`Refund allocated from ${allocation.description}`}
                       value={allocationValues[allocation.paymentAllocationId] ?? "0"}
@@ -376,7 +380,7 @@ function RefundReversal({ refund }: { refund: CoachRefundView }) {
       <summary>Reverse refund</summary>
       <label className={styles.field}>
         <span>Reason</span>
-        <textarea ref={reasonRef} rows={2} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); setDirty(true); setFeedback(null); requestKey.reset() }} />
+        <textarea name="reason" ref={reasonRef} rows={2} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); setDirty(true); setFeedback(null); requestKey.reset() }} />
       </label>
       <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.correctionButton} type="button" disabled={pending} onClick={() => void reverse()}>
@@ -597,7 +601,7 @@ function FeeSetupForm({
         <div><dt>Academy Plan</dt><dd>{defaults.academyPlanLabel}</dd></div>
       </dl>
 
-      <form onSubmit={(event) => void submit(event)}>
+      <form autoComplete="off" onSubmit={(event) => void submit(event)}>
         <div className={styles.fieldRow}>
           <label className={styles.field}>
             <span>Agreed monthly fee</span>
@@ -605,6 +609,7 @@ function FeeSetupForm({
               <span aria-hidden="true">₹</span>
               <input
                 ref={amountRef}
+                name="agreedMonthlyFee"
                 inputMode="decimal"
                 autoComplete="off"
                 value={amount}
@@ -621,6 +626,7 @@ function FeeSetupForm({
           <label className={styles.field}>
             <span>Track from</span>
             <input
+              name="trackingMonth"
               type="month"
               max={getAcademyDateKey().slice(0, 7)}
               value={trackingMonth}
@@ -728,18 +734,19 @@ function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView }) {
           <div><dt>Batch</dt><dd>{defaults.batch}</dd></div>
           <div><dt>Academy Plan</dt><dd>{defaults.academyPlanLabel}</dd></div>
         </dl>
-        <form onSubmit={(event) => void submit(event)}>
+        <form autoComplete="off" onSubmit={(event) => void submit(event)}>
           <div className={styles.fieldRow}>
             <label className={styles.field}>
               <span>Agreed monthly fee</span>
               <div className={styles.moneyInput}>
                 <span aria-hidden="true">₹</span>
-                <input ref={amountRef} inputMode="decimal" value={amount} disabled={pending} onChange={(event) => { setAmount(event.target.value); setDirty(true); requestKey.reset() }} />
+                <input name="agreedMonthlyFee" ref={amountRef} inputMode="decimal" value={amount} disabled={pending} onChange={(event) => { setAmount(event.target.value); setDirty(true); requestKey.reset() }} />
               </div>
             </label>
             <label className={styles.field}>
               <span>Effective month</span>
               <input
+                name="effectiveMonth"
                 type="month"
                 value={effectiveMonth}
                 disabled={pending}
@@ -837,10 +844,11 @@ function FeePlanEnder({
       <summary>End fee plan</summary>
       <div className={styles.planEditorBody}>
         <p>Future months will stop after the selected final month. Existing fee records remain unchanged.</p>
-        <form onSubmit={(event) => void submit(event)}>
+        <form autoComplete="off" onSubmit={(event) => void submit(event)}>
           <label className={styles.field}>
             <span>Final fee month</span>
             <input
+              name="effectiveThroughPeriod"
               type="month"
               min={agreement.effectiveFrom.slice(0, 7)}
               value={effectiveThroughPeriod}
@@ -854,6 +862,7 @@ function FeePlanEnder({
           <label className={styles.field}>
             <span>Reason</span>
             <textarea
+              name="reason"
               ref={reasonRef}
               maxLength={500}
               rows={3}
@@ -979,18 +988,18 @@ function ConcessionCreationForm({
   return (
     <details className={styles.concessionCreate}>
       <summary>Add concession</summary>
-      <form onSubmit={(event) => void submit(event)}>
+      <form autoComplete="off" onSubmit={(event) => void submit(event)}>
         <div className={styles.fieldRow}>
           <label className={styles.field}>
             <span>Concession type</span>
-            <select value={mode} disabled={pending} onChange={(event) => { setMode(event.target.value as ConcessionMode); markDirty() }}>
+            <select name="concessionMode" value={mode} disabled={pending} onChange={(event) => { setMode(event.target.value as ConcessionMode); markDirty() }}>
               <option value="one_off">One-off</option>
               <option value="recurring">Recurring monthly</option>
             </select>
           </label>
           <label className={styles.field}>
             <span>Value type</span>
-            <select value={valueKind} disabled={pending} onChange={(event) => { setValueKind(event.target.value as ConcessionValueKind); setValue(""); markDirty() }}>
+            <select name="concessionValueKind" value={valueKind} disabled={pending} onChange={(event) => { setValueKind(event.target.value as ConcessionValueKind); setValue(""); markDirty() }}>
               <option value="fixed">Fixed amount</option>
               <option value="percentage">Percentage</option>
             </select>
@@ -1003,6 +1012,7 @@ function ConcessionCreationForm({
             {valueKind === "fixed" ? <span aria-hidden="true">₹</span> : null}
             <input
               ref={valueRef}
+              name="concessionValue"
               inputMode="decimal"
               value={value}
               disabled={pending}
@@ -1021,18 +1031,18 @@ function ConcessionCreationForm({
           <div className={styles.fieldRow}>
             <label className={styles.field}>
               <span>Starts</span>
-              <input type="month" value={startsPeriod} disabled={pending} onChange={(event) => { setStartsPeriod(event.target.value); markDirty() }} />
+              <input name="startsPeriod" type="month" value={startsPeriod} disabled={pending} onChange={(event) => { setStartsPeriod(event.target.value); markDirty() }} />
             </label>
             <label className={styles.field}>
               <span>Ends <em>Optional</em></span>
-              <input type="month" min={startsPeriod} value={endsPeriod} disabled={pending} onChange={(event) => { setEndsPeriod(event.target.value); markDirty() }} />
+              <input name="endsPeriod" type="month" min={startsPeriod} value={endsPeriod} disabled={pending} onChange={(event) => { setEndsPeriod(event.target.value); markDirty() }} />
             </label>
           </div>
         ) : null}
 
         <label className={styles.field}>
           <span>Reason</span>
-          <textarea ref={reasonRef} rows={3} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); markDirty() }} />
+          <textarea name="reason" ref={reasonRef} rows={3} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); markDirty() }} />
         </label>
 
         <p className={styles.concessionHelp}>
@@ -1113,10 +1123,10 @@ function ApplyConcessionForm({
   }
 
   return (
-    <form className={styles.concessionApply} onSubmit={(event) => void apply(event)}>
+    <form autoComplete="off" className={styles.concessionApply} onSubmit={(event) => void apply(event)}>
       <label className={styles.field}>
         <span>{concession.mode === "recurring" ? "Apply to existing fee" : "Apply to fee"}</span>
-        <select value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); setFeedback(null); requestKey.reset() }}>
+        <select name="chargeId" value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); setFeedback(null); requestKey.reset() }}>
           {eligibleCharges.map((charge) => (
             <option key={charge.id} value={charge.id}>
               {charge.description} · {charge.feeReference} · {formatInr(charge.outstandingPaise)} remaining
@@ -1186,7 +1196,7 @@ function ConcessionApplicationReversal({
       <summary>Reverse application</summary>
       <label className={styles.field}>
         <span>Reason</span>
-        <textarea ref={reasonRef} rows={2} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); setDirty(true); setFeedback(null); requestKey.reset() }} />
+        <textarea name="reason" ref={reasonRef} rows={2} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); setDirty(true); setFeedback(null); requestKey.reset() }} />
       </label>
       <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.correctionButton} type="button" disabled={pending} onClick={() => void reverse()}>
@@ -1248,7 +1258,7 @@ function ConcessionReversal({ concession }: { concession: CoachConcessionView })
       <p>Stops future use. Concessions already applied remain in the ledger.</p>
       <label className={styles.field}>
         <span>Reason</span>
-        <textarea ref={reasonRef} rows={2} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); setDirty(true); setFeedback(null); requestKey.reset() }} />
+        <textarea name="reason" ref={reasonRef} rows={2} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); setDirty(true); setFeedback(null); requestKey.reset() }} />
       </label>
       <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.correctionButton} type="button" disabled={pending} onClick={() => void reverse()}>
@@ -1526,10 +1536,11 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
       <summary>Corrections</summary>
       <div className={styles.correctionsBody}>
         <p>Use corrections only when a recorded fee or payment needs to be reconciled. Nothing is deleted.</p>
-        <form onSubmit={(event) => void submit(event)}>
+        <form autoComplete="off" onSubmit={(event) => void submit(event)}>
           <label className={styles.field}>
             <span>Correction</span>
             <select
+              name="correctionType"
               value={mode}
               disabled={pending}
               onChange={(event) => {
@@ -1552,7 +1563,7 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
           {mode === "reverse_payment" ? (
             <label className={styles.field}>
               <span>Recorded payment</span>
-              <select value={paymentId} disabled={pending} onChange={(event) => { setPaymentId(event.target.value); markDirty() }}>
+              <select name="paymentId" value={paymentId} disabled={pending} onChange={(event) => { setPaymentId(event.target.value); markDirty() }}>
                 {receipts.map((receipt) => (
                   <option key={receipt.id} value={receipt.id}>
                     {formatInr(receipt.amountPaise)} · {receipt.receiptReference} · {formatDueDate(receipt.receivedOn)}
@@ -1563,7 +1574,7 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
           ) : mode === "reverse_adjustment" ? (
             <label className={styles.field}>
               <span>Recorded adjustment</span>
-              <select value={adjustmentId} disabled={pending} onChange={(event) => { setAdjustmentId(event.target.value); markDirty() }}>
+              <select name="adjustmentId" value={adjustmentId} disabled={pending} onChange={(event) => { setAdjustmentId(event.target.value); markDirty() }}>
                 {adjustments.map(({ adjustment, charge }) => (
                   <option key={adjustment.id} value={adjustment.id}>
                     {adjustment.kind.replaceAll("_", " ")} · {formatInr(adjustment.amountPaise)} · {charge.feeReference}
@@ -1574,7 +1585,7 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
           ) : (
             <label className={styles.field}>
               <span>Charge</span>
-              <select value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
+              <select name="chargeId" value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
                 {(mode === "void_charge" ? voidableCharges : activeCharges).map((charge) => (
                   <option key={charge.id} value={charge.id}>{charge.description} · {charge.feeReference}</option>
                 ))}
@@ -1587,14 +1598,14 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
               <span>Amount</span>
               <div className={styles.moneyInput}>
                 <span aria-hidden="true">₹</span>
-                <input ref={amountRef} inputMode="decimal" value={amount} disabled={pending} onChange={(event) => { setAmount(event.target.value); markDirty() }} />
+                <input name="amount" ref={amountRef} inputMode="decimal" value={amount} disabled={pending} onChange={(event) => { setAmount(event.target.value); markDirty() }} />
               </div>
             </label>
           ) : null}
 
           <label className={styles.field}>
             <span>Reason</span>
-            <textarea ref={reasonRef} rows={3} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); markDirty() }} />
+            <textarea name="reason" ref={reasonRef} rows={3} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); markDirty() }} />
           </label>
 
           <div className={styles.paymentFooter}>

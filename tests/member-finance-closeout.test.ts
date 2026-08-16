@@ -87,8 +87,8 @@ describe("member archival financial closeout", () => {
     finance = await import("@/lib/finance/service")
     memberService = await import("@/lib/coach/member-service")
     schema = await import("@/lib/db/schema")
-    const client = await import("@/lib/db/client")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
     finance.activateFinance({
       trackingMonth: "2026-08",
       idempotencyKey: "member-closeout-activation",

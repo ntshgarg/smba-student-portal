@@ -45,6 +45,11 @@ Local `npm run dev` uses the clean head-coach-only profile in
 workflow review. The clean `.data/smba.db` remains an untouched source for
 rebuilding fixtures.
 
+`npm run dev` explicitly migrates that local database and ensures the baseline
+head-coach records before Next.js starts. For another configured database, run
+`npm run db:migrate`. Application requests only open an already prepared database;
+they never run migrations or seed writes.
+
 ### Deterministic academy profiles
 
 ```bash
@@ -109,11 +114,13 @@ preview database after pulling Vercel's development environment, run:
 npm run preview:seed:turso
 ```
 
-The copier is create-only, omits local authentication sessions and refuses to
-modify a database that already contains application tables.
+The copier omits local authentication sessions and refuses to modify a database
+containing application data. It accepts either a completely empty database or an
+empty schema already prepared by the Vercel build.
 
-Migrations run automatically when the database is first used. The local SQLite database is
-ignored by Git.
+Vercel runs migrations as an explicit build step before starting application
+functions. Request handling never migrates or seeds the remote database. The local
+SQLite database is ignored by Git.
 
 ## Prototype access
 

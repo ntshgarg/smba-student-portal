@@ -19,9 +19,9 @@ describe("stored session occurrence lifecycle", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-03T04:30:00.000Z"))
     accountService = await import("@/lib/auth/account-service")
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
   })
 
   afterAll(() => {

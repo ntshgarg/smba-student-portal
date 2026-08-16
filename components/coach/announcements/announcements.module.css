@@ -45,7 +45,7 @@
 
 .composerBackRow a {
   display: inline-flex;
-  min-height: 40px;
+  min-height: 44px;
   align-items: center;
   gap: 9px;
   color: var(--steel);
@@ -167,8 +167,12 @@
   min-height: 13px;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.45;
+}
+
+.slipFieldMeta > small {
+  font-size: inherit;
 }
 
 .slipFieldError {
@@ -366,7 +370,7 @@
 
 .backRow a {
   display: inline-flex;
-  min-height: 38px;
+  min-height: 44px;
   align-items: center;
   gap: 9px;
   color: var(--steel);
@@ -618,6 +622,7 @@
   background: transparent;
   color: inherit;
   overflow: visible;
+  overscroll-behavior: contain;
 }
 
 .dialogBackdrop::backdrop {
@@ -632,6 +637,7 @@
   border: 1px solid color-mix(in srgb, var(--white) 30%, var(--line));
   background: var(--ivory);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dialogClose {
@@ -1284,7 +1290,7 @@
   }
 
   .composerBackRow a {
-    min-height: 34px;
+    min-height: 44px;
     font-size: 10px;
   }
 

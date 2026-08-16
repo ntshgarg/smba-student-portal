@@ -32,7 +32,6 @@ describe("cross-weekday replacement eligibility", () => {
   const setupNow = new Date("2026-08-20T12:00:00+05:30")
 
   beforeAll(async () => {
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
     adjustments = await import("@/lib/attendance/adjustments")
     attendanceDatabase = await import("@/lib/attendance/database")
@@ -40,7 +39,8 @@ describe("cross-weekday replacement eligibility", () => {
     reports = await import("@/lib/reports/service")
     sessionDatabase = await import("@/lib/sessions/database")
     sessionService = await import("@/lib/sessions/service")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
 
     database.insert(schema.sessionSeries).values([
       {

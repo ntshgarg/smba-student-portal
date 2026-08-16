@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 
 import {
   publishAttendanceAdjustmentAction,
@@ -10,13 +10,11 @@ import {
 import {
   assignSessionAction,
   archiveMemberAction,
-  approveRegistrationAction,
   cancelSessionOccurrenceAction,
   createSessionSeriesAction,
   endSessionAssignmentAction,
   endSessionSeriesAction,
   publishReportAction,
-  rejectRegistrationAction,
   replaceSessionOccurrenceAction,
   saveAttendanceRegisterAction,
   saveMemberAction,
@@ -32,7 +30,6 @@ import type {
   MemberMutationResult,
   OperationalAcademyMember,
   OperationalPlayerMemberRecord,
-  PendingRegistration,
   PlayerMemberRecord,
   PlayerTrainingProfile,
   UpdateMemberInput,
@@ -51,32 +48,40 @@ import type {
   SaveReportDraftInput,
 } from "@/lib/reports/contracts"
 
-type ApprovalResult = {
-  academyId: string
-  fullName: string
-  role: "player" | "coach"
+type MemberPortalContextValue = {
+  activePlayers: OperationalPlayerMemberRecord[]
+  players: OperationalPlayerMemberRecord[]
+  archiveMember: (input: ArchiveMemberInput) => Promise<ArchiveMemberResult>
+  saveMember: (input: UpdateMemberInput) => Promise<MemberMutationResult>
 }
 
-type CoachPortalContextValue = {
-  activePlayers: OperationalPlayerMemberRecord[]
+type AttendancePortalContextValue = {
   attendanceAdjustments: AttendanceAdjustmentRecord[]
   attendanceRecords: SessionAttendanceRecords
+  publishAttendanceAdjustment: (input: {
+    completionOccurrenceId: string
+    playerId: string
+    reason?: string
+    sourceOccurrenceId: string
+  }) => Promise<OperationalActionResult<AttendanceAdjustmentRecord>>
+  saveAttendanceRegister: (
+    changes: SessionAttendanceChange[],
+  ) => Promise<OperationalActionResult<{ applied: number }>>
+  voidAttendanceAdjustment: (
+    adjustmentId: string,
+  ) => Promise<OperationalActionResult<AttendanceAdjustmentRecord>>
+}
+
+type SessionPortalContextValue = {
   sessionAssignments: SessionAssignment[]
   sessionOccurrences: TrainingSessionOccurrence[]
   sessionSeries: TrainingSessionSeries[]
-  pendingRegistrations: PendingRegistration[]
-  players: OperationalPlayerMemberRecord[]
-  reports: CoachMonthlyReportRecord[]
-  approveRegistration: (
-    registrationId: string,
-  ) => Promise<OperationalActionResult<ApprovalResult>>
   assignSession: (input: {
     effectiveFrom: string
     playerId: string
     seriesId: string
     weekdays: number[]
   }) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
-  archiveMember: (input: ArchiveMemberInput) => Promise<ArchiveMemberResult>
   cancelSessionOccurrence: (
     occurrenceId: string,
   ) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
@@ -97,24 +102,12 @@ type CoachPortalContextValue = {
     durationMinutes: number
     venue: string
   }) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
-  saveAttendanceRegister: (
-    changes: SessionAttendanceChange[],
-  ) => Promise<OperationalActionResult<{ applied: number }>>
+}
+
+type ReportPortalContextValue = {
+  reports: CoachMonthlyReportRecord[]
   publishReport: (input: PublishReportInput) => Promise<ReportMutationResult>
-  publishAttendanceAdjustment: (input: {
-    completionOccurrenceId: string
-    playerId: string
-    reason?: string
-    sourceOccurrenceId: string
-  }) => Promise<OperationalActionResult<AttendanceAdjustmentRecord>>
-  rejectRegistration: (
-    registrationId: string,
-  ) => Promise<OperationalActionResult<null>>
-  saveMember: (input: UpdateMemberInput) => Promise<MemberMutationResult>
   saveReportDraft: (input: SaveReportDraftInput) => Promise<ReportMutationResult>
-  voidAttendanceAdjustment: (
-    adjustmentId: string,
-  ) => Promise<OperationalActionResult<AttendanceAdjustmentRecord>>
 }
 
 type ReturnTypeSnapshot = {
@@ -125,12 +118,14 @@ type ReturnTypeSnapshot = {
 
 type CreatedSessionSnapshot = ReturnTypeSnapshot & { createdSeriesId: string }
 
-const CoachPortalContext = createContext<CoachPortalContextValue | null>(null)
+const MemberPortalContext = createContext<MemberPortalContextValue | null>(null)
+const AttendancePortalContext = createContext<AttendancePortalContextValue | null>(null)
+const SessionPortalContext = createContext<SessionPortalContextValue | null>(null)
+const ReportPortalContext = createContext<ReportPortalContextValue | null>(null)
 
 const EMPTY_ATTENDANCE_ADJUSTMENTS: AttendanceAdjustmentRecord[] = []
 const EMPTY_ATTENDANCE_RECORDS: SessionAttendanceRecords = {}
 const EMPTY_MEMBERS: OperationalAcademyMember[] = []
-const EMPTY_PENDING_REGISTRATIONS: PendingRegistration[] = []
 const EMPTY_REPORTS: CoachMonthlyReportRecord[] = []
 const EMPTY_SESSION_ASSIGNMENTS: SessionAssignment[] = []
 const EMPTY_SESSION_OCCURRENCES: TrainingSessionOccurrence[] = []
@@ -152,7 +147,6 @@ export function CoachPortalProvider({
   initialAttendanceAdjustments = EMPTY_ATTENDANCE_ADJUSTMENTS,
   initialAttendanceRecords = EMPTY_ATTENDANCE_RECORDS,
   initialMembers = EMPTY_MEMBERS,
-  initialPendingRegistrations = EMPTY_PENDING_REGISTRATIONS,
   initialReports = EMPTY_REPORTS,
   initialSessionAssignments = EMPTY_SESSION_ASSIGNMENTS,
   initialSessionOccurrences = EMPTY_SESSION_OCCURRENCES,
@@ -163,7 +157,6 @@ export function CoachPortalProvider({
   initialAttendanceAdjustments?: AttendanceAdjustmentRecord[]
   initialAttendanceRecords?: SessionAttendanceRecords
   initialMembers?: OperationalAcademyMember[]
-  initialPendingRegistrations?: PendingRegistration[]
   initialReports?: CoachMonthlyReportRecord[]
   initialSessionAssignments?: SessionAssignment[]
   initialSessionOccurrences?: TrainingSessionOccurrence[]
@@ -177,7 +170,6 @@ export function CoachPortalProvider({
   const [sessionOccurrences, setSessionOccurrences] = useState(initialSessionOccurrences)
   const [sessionSeries, setSessionSeries] = useState(initialSessionSeries)
   const [members, setMembers] = useState(initialMembers)
-  const [pendingRegistrations, setPendingRegistrations] = useState(initialPendingRegistrations)
   const [reports, setReports] = useState(initialReports)
   const [trainingProfiles, setTrainingProfiles] = useState(initialTrainingProfiles)
   const players = useMemo(
@@ -197,7 +189,6 @@ export function CoachPortalProvider({
       setAttendanceAdjustments(initialAttendanceAdjustments)
       setAttendanceRecords(initialAttendanceRecords)
       setMembers(initialMembers)
-      setPendingRegistrations(initialPendingRegistrations)
       setReports(initialReports)
       setSessionAssignments(initialSessionAssignments)
       setSessionOccurrences(initialSessionOccurrences)
@@ -210,7 +201,6 @@ export function CoachPortalProvider({
     initialAttendanceAdjustments,
     initialAttendanceRecords,
     initialMembers,
-    initialPendingRegistrations,
     initialReports,
     initialSessionAssignments,
     initialSessionOccurrences,
@@ -218,25 +208,9 @@ export function CoachPortalProvider({
     initialTrainingProfiles,
   ])
 
-  async function approveRegistration(registrationId: string) {
-    const result = await approveRegistrationAction(registrationId)
-    if (!result.ok) return result
-    setPendingRegistrations((current) => current.filter((item) => item.id !== registrationId))
-    router.refresh()
-    return result
-  }
-
-  async function rejectRegistration(registrationId: string) {
-    const result = await rejectRegistrationAction(registrationId)
-    if (!result.ok) return result
-    setPendingRegistrations((current) => current.filter((item) => item.id !== registrationId))
-    router.refresh()
-    return result
-  }
-
-  async function saveAttendanceRegister(
+  const saveAttendanceRegister = useCallback(async (
     changes: SessionAttendanceChange[],
-  ) {
+  ) => {
     const result = await saveAttendanceRegisterAction({ changes })
     if (!result.ok) return result
     setAttendanceRecords((current) => {
@@ -250,14 +224,14 @@ export function CoachPortalProvider({
       return next
     })
     return result
-  }
+  }, [])
 
-  async function publishAttendanceAdjustment(input: {
+  const publishAttendanceAdjustment = useCallback(async (input: {
     completionOccurrenceId: string
     playerId: string
     reason?: string
     sourceOccurrenceId: string
-  }) {
+  }) => {
     const result = await publishAttendanceAdjustmentAction(input)
     if (!result.ok) return result
     const published = result.data
@@ -267,9 +241,9 @@ export function CoachPortalProvider({
     ])
     router.refresh()
     return result
-  }
+  }, [router])
 
-  async function voidAdjustment(adjustmentId: string) {
+  const voidAdjustment = useCallback(async (adjustmentId: string) => {
     const result = await voidAttendanceAdjustmentAction(adjustmentId)
     if (!result.ok) return result
     const voided = result.data
@@ -278,9 +252,9 @@ export function CoachPortalProvider({
     )))
     router.refresh()
     return result
-  }
+  }, [router])
 
-  async function createSessionSeries(input: CreateSessionSeriesInput) {
+  const createSessionSeries = useCallback(async (input: CreateSessionSeriesInput) => {
     const result = await createSessionSeriesAction(input)
     if (!result.ok) return result
     const created = result.data
@@ -288,14 +262,14 @@ export function CoachPortalProvider({
     setSessionOccurrences(created.sessionOccurrences)
     setSessionSeries(created.sessionSeries)
     return result
-  }
+  }, [])
 
-  async function assignSession(input: {
+  const assignSession = useCallback(async (input: {
     effectiveFrom: string
     playerId: string
     seriesId: string
     weekdays: number[]
-  }) {
+  }) => {
     const result = await assignSessionAction(input)
     if (!result.ok) return result
     const snapshot = result.data
@@ -304,12 +278,12 @@ export function CoachPortalProvider({
     setSessionSeries(snapshot.sessionSeries)
     router.refresh()
     return result
-  }
+  }, [router])
 
-  async function endSession(input: {
+  const endSession = useCallback(async (input: {
     assignmentId: string
     effectiveTo: string
-  }) {
+  }) => {
     const result = await endSessionAssignmentAction(input)
     if (!result.ok) return result
     const snapshot = result.data
@@ -318,9 +292,9 @@ export function CoachPortalProvider({
     setSessionSeries(snapshot.sessionSeries)
     router.refresh()
     return result
-  }
+  }, [router])
 
-  async function endSeries(seriesId: string) {
+  const endSeries = useCallback(async (seriesId: string) => {
     const result = await endSessionSeriesAction(seriesId)
     if (!result.ok) return result
     const snapshot = result.data
@@ -329,9 +303,9 @@ export function CoachPortalProvider({
     setSessionSeries(snapshot.sessionSeries)
     router.refresh()
     return result
-  }
+  }, [router])
 
-  async function cancelOccurrence(occurrenceId: string) {
+  const cancelOccurrence = useCallback(async (occurrenceId: string) => {
     const result = await cancelSessionOccurrenceAction(occurrenceId)
     if (!result.ok) return result
     const snapshot = result.data
@@ -339,15 +313,15 @@ export function CoachPortalProvider({
     setSessionOccurrences(snapshot.sessionOccurrences)
     setSessionSeries(snapshot.sessionSeries)
     return result
-  }
+  }, [])
 
-  async function replaceOccurrence(input: {
+  const replaceOccurrence = useCallback(async (input: {
     occurrenceId: string
     dateKey: string
     startTime: string
     durationMinutes: number
     venue: string
-  }) {
+  }) => {
     const result = await replaceSessionOccurrenceAction(input)
     if (!result.ok) return result
     const snapshot = result.data
@@ -355,26 +329,26 @@ export function CoachPortalProvider({
     setSessionOccurrences(snapshot.sessionOccurrences)
     setSessionSeries(snapshot.sessionSeries)
     return result
-  }
+  }, [])
 
-  async function saveReportDraft(input: SaveReportDraftInput) {
+  const saveReportDraft = useCallback(async (input: SaveReportDraftInput) => {
     const result = await saveReportDraftAction(input)
     if (result.ok) {
       setReports((current) => replaceReport(current, result.report))
     }
     return result
-  }
+  }, [])
 
-  async function publishReport(input: PublishReportInput) {
+  const publishReport = useCallback(async (input: PublishReportInput) => {
     const result = await publishReportAction(input)
     if (result.ok) {
       setReports((current) => replaceReport(current, result.report))
       router.refresh()
     }
     return result
-  }
+  }, [router])
 
-  async function saveMember(input: UpdateMemberInput) {
+  const saveMember = useCallback(async (input: UpdateMemberInput) => {
     const result = await saveMemberAction(input)
     if (result.ok) {
       setMembers((current) => current.map((member) => (
@@ -390,9 +364,9 @@ export function CoachPortalProvider({
       router.refresh()
     }
     return result
-  }
+  }, [router])
 
-  async function archiveMember(input: ArchiveMemberInput) {
+  const archiveMember = useCallback(async (input: ArchiveMemberInput) => {
     const result = await archiveMemberAction(input)
     if (result.ok) {
       setMembers((current) => current.filter((member) => member.id !== result.memberId))
@@ -404,57 +378,106 @@ export function CoachPortalProvider({
       router.refresh()
     }
     return result
-  }
+  }, [router])
 
-  const value: CoachPortalContextValue = {
+  const memberValue = useMemo<MemberPortalContextValue>(() => ({
     activePlayers,
-    assignSession,
     archiveMember,
+    players,
+    saveMember,
+  }), [activePlayers, archiveMember, players, saveMember])
+  const attendanceValue = useMemo<AttendancePortalContextValue>(() => ({
     attendanceAdjustments,
     attendanceRecords,
-    sessionAssignments,
-    sessionOccurrences,
-    sessionSeries,
-    pendingRegistrations,
-    players,
-    reports,
-    approveRegistration,
+    publishAttendanceAdjustment,
+    saveAttendanceRegister,
+    voidAttendanceAdjustment: voidAdjustment,
+  }), [
+    attendanceAdjustments,
+    attendanceRecords,
+    publishAttendanceAdjustment,
+    saveAttendanceRegister,
+    voidAdjustment,
+  ])
+  const sessionValue = useMemo<SessionPortalContextValue>(() => ({
+    assignSession,
     cancelSessionOccurrence: cancelOccurrence,
     createSessionSeries,
     endSessionAssignment: endSession,
     endSessionSeries: endSeries,
-    publishReport,
-    publishAttendanceAdjustment,
-    rejectRegistration,
     replaceSessionOccurrence: replaceOccurrence,
-    saveMember,
-    saveAttendanceRegister,
+    sessionAssignments,
+    sessionOccurrences,
+    sessionSeries,
+  }), [
+    assignSession,
+    cancelOccurrence,
+    createSessionSeries,
+    endSeries,
+    endSession,
+    replaceOccurrence,
+    sessionAssignments,
+    sessionOccurrences,
+    sessionSeries,
+  ])
+  const reportValue = useMemo<ReportPortalContextValue>(() => ({
+    publishReport,
+    reports,
     saveReportDraft,
-    voidAttendanceAdjustment: voidAdjustment,
-  }
+  }), [publishReport, reports, saveReportDraft])
 
-  return <CoachPortalContext.Provider value={value}>{children}</CoachPortalContext.Provider>
+  return (
+    <MemberPortalContext.Provider value={memberValue}>
+      <AttendancePortalContext.Provider value={attendanceValue}>
+        <SessionPortalContext.Provider value={sessionValue}>
+          <ReportPortalContext.Provider value={reportValue}>
+            {children}
+          </ReportPortalContext.Provider>
+        </SessionPortalContext.Provider>
+      </AttendancePortalContext.Provider>
+    </MemberPortalContext.Provider>
+  )
 }
 
-export function useCoachPortal() {
-  const context = useContext(CoachPortalContext)
+function useRequiredContext<Value>(
+  context: React.Context<Value | null>,
+  hookName: string,
+) {
+  const value = useContext(context)
+  if (!value) throw new Error(`${hookName} must be used within CoachPortalProvider`)
+  return value
+}
 
-  if (!context) throw new Error("useCoachPortal must be used within CoachPortalProvider")
-  return context
+export function useMemberPortal() {
+  return useRequiredContext(MemberPortalContext, "useMemberPortal")
+}
+
+export function useAttendancePortal() {
+  return useRequiredContext(AttendancePortalContext, "useAttendancePortal")
+}
+
+export function useSessionPortal() {
+  return useRequiredContext(SessionPortalContext, "useSessionPortal")
+}
+
+export function useReportPortal() {
+  return useRequiredContext(ReportPortalContext, "useReportPortal")
 }
 
 export function useMemberDirectoryPortal() {
-  const context = useCoachPortal()
-  const players = context.players.filter(
+  const memberContext = useMemberPortal()
+  const sessionContext = useSessionPortal()
+  const players = memberContext.players.filter(
     (player): player is PlayerMemberRecord => isAcademyMember(player.member),
   )
 
-  if (players.length !== context.players.length) {
+  if (players.length !== memberContext.players.length) {
     throw new Error("Member Directory requires complete private member records")
   }
 
   return {
-    ...context,
+    ...memberContext,
+    ...sessionContext,
     activePlayers: players.filter((player) => player.training.status === "active"),
     players,
   }

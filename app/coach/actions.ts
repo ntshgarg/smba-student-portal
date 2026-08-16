@@ -12,9 +12,12 @@ import {
   type OperationalActionResult,
 } from "@/lib/actions/operational-result"
 import { requireHeadAdminAction } from "@/lib/auth/current-coach"
-import { getCoachSessionSnapshot, listCoachMonthlyReports } from "@/lib/coach/database"
+import { listCoachMonthlyReports } from "@/lib/coach/database"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
-import { getCoachCalendarMonthSessionSnapshot } from "@/lib/coach/session-read-models"
+import {
+  getCoachCalendarMonthSessionSnapshot,
+  getCoachScheduleMutationSnapshot,
+} from "@/lib/coach/session-read-models"
 import {
   saveStaffAttendanceRecords,
   type StaffAttendanceChange,
@@ -206,7 +209,7 @@ export async function createSessionSeriesAction(input: CreateSessionSeriesInput)
       now,
     })
     revalidateAcademyData()
-    return { createdSeriesId: id, ...getCoachSessionSnapshot() }
+    return { createdSeriesId: id, ...getCoachScheduleMutationSnapshot() }
   })
 }
 
@@ -225,7 +228,7 @@ export async function assignSessionAction(input: {
       now: new Date(),
     })
     revalidateAcademyData()
-    return getCoachSessionSnapshot()
+    return getCoachScheduleMutationSnapshot()
   })
 }
 
@@ -242,7 +245,7 @@ export async function endSessionAssignmentAction(input: {
       now: new Date(),
     })
     revalidateAcademyData()
-    return getCoachSessionSnapshot()
+    return getCoachScheduleMutationSnapshot()
   })
 }
 
@@ -256,7 +259,7 @@ export async function endSessionSeriesAction(seriesId: string) {
       seriesId,
     })
     revalidateAcademyData()
-    return getCoachSessionSnapshot()
+    return getCoachScheduleMutationSnapshot()
   })
 }
 

@@ -50,7 +50,7 @@ export function AccountMenu({
         className="profile-chip"
         type="button"
         aria-expanded={open}
-        aria-controls="portal-account-menu"
+        aria-controls={open ? "portal-account-menu" : undefined}
         aria-label={`${open ? "Close" : "Open"} account menu for ${account.fullName}`}
         onClick={() => setOpen((value) => !value)}
       >

@@ -83,15 +83,21 @@ export function listSessionOccurrencesForSeries(
   return occurrenceRecords(from, to, seriesIds)
 }
 
-function assignmentRecords(seriesIds?: readonly string[]): SessionAssignment[] {
-  if (seriesIds && !seriesIds.length) return []
+function assignmentRecords({
+  playerIds,
+  seriesIds,
+}: {
+  playerIds?: readonly string[]
+  seriesIds?: readonly string[]
+} = {}): SessionAssignment[] {
+  if ((playerIds && !playerIds.length) || (seriesIds && !seriesIds.length)) return []
   const database = initializeDatabase()
-  const rows = seriesIds
-    ? database.select().from(sessionAssignments)
-        .where(inArray(sessionAssignments.seriesId, [...seriesIds]))
-        .orderBy(asc(sessionAssignments.effectiveFrom), asc(sessionAssignments.id)).all()
-    : database.select().from(sessionAssignments)
-        .orderBy(asc(sessionAssignments.effectiveFrom), asc(sessionAssignments.id)).all()
+  const rows = database.select().from(sessionAssignments)
+    .where(and(
+      playerIds ? inArray(sessionAssignments.accountId, [...playerIds]) : undefined,
+      seriesIds ? inArray(sessionAssignments.seriesId, [...seriesIds]) : undefined,
+    ))
+    .orderBy(asc(sessionAssignments.effectiveFrom), asc(sessionAssignments.id)).all()
   const assignmentIds = rows.map((assignment) => assignment.id)
   const weekdays = assignmentIds.length
     ? database.select().from(sessionAssignmentWeekdays)
@@ -122,10 +128,22 @@ export function listSessionAssignments(): SessionAssignment[] {
 export function listSessionAssignmentsForSeries(
   seriesIds: readonly string[],
 ): SessionAssignment[] {
-  return assignmentRecords(seriesIds)
+  return assignmentRecords({ seriesIds })
 }
 
-function attendanceRecords(occurrenceIds?: readonly string[]): SessionAttendanceRecords {
+export function listSessionAssignmentsForPlayers(
+  playerIds: readonly string[],
+): SessionAssignment[] {
+  return assignmentRecords({ playerIds })
+}
+
+function attendanceRecords({
+  occurrenceIds,
+  playerId,
+}: {
+  occurrenceIds?: readonly string[]
+  playerId?: string
+} = {}): SessionAttendanceRecords {
   if (occurrenceIds && !occurrenceIds.length) return {}
   const database = initializeDatabase()
   const selection = {
@@ -133,13 +151,13 @@ function attendanceRecords(occurrenceIds?: readonly string[]): SessionAttendance
     playerId: sessionAttendanceRecords.accountId,
     choice: sessionAttendanceRecords.choice,
   }
-  const rows = occurrenceIds
-    ? database.select(selection).from(sessionAttendanceRecords).where(and(
-        inArray(sessionAttendanceRecords.occurrenceId, [...occurrenceIds]),
-        ne(sessionAttendanceRecords.choice, "cleared"),
-      )).all()
-    : database.select(selection).from(sessionAttendanceRecords)
-        .where(ne(sessionAttendanceRecords.choice, "cleared")).all()
+  const rows = database.select(selection).from(sessionAttendanceRecords).where(and(
+    occurrenceIds
+      ? inArray(sessionAttendanceRecords.occurrenceId, [...occurrenceIds])
+      : undefined,
+    playerId ? eq(sessionAttendanceRecords.accountId, playerId) : undefined,
+    ne(sessionAttendanceRecords.choice, "cleared"),
+  )).all()
 
   return rows.reduce<SessionAttendanceRecords>((records, row) => {
     if (row.choice === "cleared") return records
@@ -156,7 +174,34 @@ export function listSessionAttendanceRecords(): SessionAttendanceRecords {
 export function listSessionAttendanceRecordsForOccurrences(
   occurrenceIds: readonly string[],
 ): SessionAttendanceRecords {
-  return attendanceRecords(occurrenceIds)
+  return attendanceRecords({ occurrenceIds })
+}
+
+export function listSessionAttendanceRecordsForPlayer(
+  playerId: string,
+): SessionAttendanceRecords {
+  return attendanceRecords({ playerId })
+}
+
+export function listSessionOccurrencesByIds(
+  occurrenceIds: readonly string[],
+): TrainingSessionOccurrence[] {
+  if (!occurrenceIds.length) return []
+  const database = initializeDatabase()
+  const occurrences = database.select().from(sessionOccurrences)
+    .where(inArray(sessionOccurrences.id, [...occurrenceIds]))
+    .orderBy(asc(sessionOccurrences.startsAt), asc(sessionOccurrences.id)).all()
+    .map((occurrence) => ({
+      id: occurrence.id,
+      seriesId: occurrence.seriesId,
+      occurrenceDate: occurrence.occurrenceDate,
+      startsAt: occurrence.startsAt.toISOString(),
+      durationMinutes: occurrence.durationMinutes,
+      venue: occurrence.venue,
+      status: occurrence.status,
+      replacementForOccurrenceId: occurrence.replacementForOccurrenceId,
+    }))
+  return resolveOccurrenceEligibilityDates(database, occurrences)
 }
 
 export function sessionPortalWindow(referenceDate: string) {

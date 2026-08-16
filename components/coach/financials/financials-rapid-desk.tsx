@@ -213,7 +213,7 @@ function PaymentForm({
 
   return (
     <section className={styles.balancePaymentPanel} aria-labelledby="quick-payment-title">
-      <form className={styles.balanceForm} onSubmit={(event) => void submit(event)}>
+      <form className={styles.balanceForm} autoComplete="off" onSubmit={(event) => void submit(event)}>
         <div className={styles.balanceEquation}>
           <div className={styles.balanceMetric}>
             <span>Outstanding</span>
@@ -229,6 +229,7 @@ function PaymentForm({
               <span aria-hidden="true">₹</span>
               <input
                 ref={amountRef}
+                name="amountReceived"
                 inputMode="decimal"
                 autoComplete="off"
                 value={amount}
@@ -261,6 +262,7 @@ function PaymentForm({
           <label className={styles.balanceField}>
             <span>Received on</span>
             <input
+              name="receivedOn"
               type="date"
               max={getAcademyDateKey()}
               value={receivedOn}
@@ -276,6 +278,7 @@ function PaymentForm({
             <span>Payment method</span>
             <select
               aria-label="Offline payment method"
+              name="paymentMethod"
               value={method}
               disabled={Boolean(pending)}
               onChange={(event) => {
@@ -290,6 +293,7 @@ function PaymentForm({
           <label className={styles.balanceField}>
             <span>Reference <em>Optional</em></span>
             <input
+              name="externalReference"
               value={externalReference}
               disabled={Boolean(pending)}
               placeholder="UPI or cheque reference"
@@ -303,6 +307,7 @@ function PaymentForm({
           <label className={`${styles.balanceField} ${styles.balanceNoteField}`}>
             <span>Internal note <em>Optional</em></span>
             <textarea
+              name="internalNote"
               rows={2}
               value={internalNote}
               disabled={Boolean(pending)}
@@ -359,6 +364,7 @@ function PaymentForm({
                     <span aria-hidden="true">₹</span>
                     <input
                       id={`payment-allocation-${charge.id}`}
+                      name={`allocation.${charge.id}`}
                       inputMode="decimal"
                       aria-label={`Amount allocated to ${charge.description}`}
                       value={allocationValues[charge.id] ?? "0"}
@@ -504,7 +510,9 @@ export function FinancialsRapidDesk({
                   <input
                     ref={searchInputRef}
                     id="rapid-financial-player-search"
+                    name="q"
                     type="search"
+                    autoComplete="off"
                     maxLength={120}
                     value={query}
                     placeholder="Name, Academy ID or fee reference"
@@ -550,7 +558,7 @@ export function FinancialsRapidDesk({
                   <button
                     type="button"
                     className={styles.rapidResultsToggle}
-                    aria-controls="rapid-financial-player-results"
+                    aria-controls={resultsExpanded ? "rapid-financial-player-results" : undefined}
                     aria-expanded={resultsExpanded}
                     onClick={() => setResultsExpanded((current) => !current)}
                   >

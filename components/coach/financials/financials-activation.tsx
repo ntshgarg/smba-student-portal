@@ -66,10 +66,11 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
           </p>
         </div>
 
-        <form onSubmit={(event) => void activate(event)}>
+        <form autoComplete="off" onSubmit={(event) => void activate(event)}>
           <label className={styles.field}>
             <span>Tracking starts</span>
             <input
+              name="trackingMonth"
               type="month"
               value={trackingMonth}
               disabled={pending}
@@ -79,6 +80,7 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
 
           <label className={styles.activationConfirmation}>
             <input
+              name="confirmPermanentLedger"
               type="checkbox"
               checked={confirmed}
               disabled={pending}

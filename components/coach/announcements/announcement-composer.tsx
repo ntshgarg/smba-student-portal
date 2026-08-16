@@ -306,6 +306,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
               aria-invalid={Boolean(errors.title)}
               autoComplete="off"
               maxLength={120}
+              name="title"
               onChange={(event) => updateValues({ title: event.target.value })}
               placeholder="Holiday training schedule"
               type="text"
@@ -334,7 +335,9 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                 ? "announcement-content-limit announcement-content-error"
                 : "announcement-content-limit"}
               aria-invalid={Boolean(errors.content)}
+              autoComplete="off"
               maxLength={5000}
+              name="content"
               onChange={(event) => updateValues({ content: event.target.value })}
               placeholder="Share the important details with the academy."
               rows={5}
@@ -370,16 +373,20 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
               <label>
                 <input
                   checked={values.channels.includes("homepage")}
+                  name="channels"
                   onChange={() => toggleChannel("homepage")}
                   type="checkbox"
+                  value="homepage"
                 />
                 <span>Homepage</span>
               </label>
               <label>
                 <input
                   checked={values.channels.includes("player_dashboard")}
+                  name="channels"
                   onChange={() => toggleChannel("player_dashboard")}
                   type="checkbox"
+                  value="player_dashboard"
                 />
                 <span>Player Dashboard</span>
               </label>
@@ -396,6 +403,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
             <input
               aria-describedby="announcement-pin-help"
               checked={values.pinned}
+              name="pinned"
               onChange={(event) => updateValues({ pinned: event.target.checked })}
               type="checkbox"
             />
@@ -412,6 +420,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
               aria-describedby="announcement-expiry-help"
               aria-invalid={Boolean(errors.expiresOn)}
               min={academyToday}
+              name="expiresOn"
               onChange={(event) => updateValues({ expiresOn: event.target.value })}
               type="date"
               value={values.expiresOn}

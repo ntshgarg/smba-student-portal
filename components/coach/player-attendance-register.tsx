@@ -10,14 +10,17 @@ import {
   buildAttendanceRegisterDates,
   groupAttendanceDatesByMonth,
 } from "@/components/coach/attendance-register-utils"
-import { useCoachPortal } from "@/components/coach/coach-portal-provider"
+import {
+  useAttendancePortal,
+  useMemberPortal,
+  useSessionPortal,
+} from "@/components/coach/coach-portal-provider"
 import { useAttendanceRegisterWindow } from "@/components/coach/use-attendance-register-window"
 import {
   attendanceRegisterBatches,
   attendanceRegisterProgrammes,
   type AttendanceRegisterSelection,
 } from "@/lib/attendance/register-workspace"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { formatSessionLabel, formatSessionTimeRange } from "@/lib/format"
 import {
   assignmentCoversOccurrence,
@@ -27,29 +30,35 @@ import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
 const weekdayShortLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 export function PlayerAttendanceRegister({
+  referenceDate,
+  referenceInstant: initialReferenceInstant,
   selection,
   yearOptions,
 }: {
+  referenceDate: string
+  referenceInstant: number
   selection: AttendanceRegisterSelection
   yearOptions: number[]
 }) {
+  const { players } = useMemberPortal()
   const {
     attendanceAdjustments,
     attendanceRecords,
-    players,
+  } = useAttendancePortal()
+  const {
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,
-  } = useCoachPortal()
+  } = useSessionPortal()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const todayKey = getIndiaDateKey()
+  const todayKey = referenceDate
   const currentYear = Number(todayKey.slice(0, 4))
   const activeYear = selection.year
   const selectedProgramme = selection.programme
   const selectedBatch = selection.batch
-  const [referenceInstant, setReferenceInstant] = useState(() => Date.now())
+  const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
 
   const dates = useMemo(() => buildAttendanceRegisterDates(activeYear), [activeYear])
   const scrollTargetIndex = dates.reduce(

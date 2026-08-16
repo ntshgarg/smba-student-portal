@@ -13,11 +13,17 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { RefObject } from "react"
 
 import { calculateMonthlyAttendance } from "@/lib/attendance/domain"
-import { useCoachPortal } from "@/components/coach/coach-portal-provider"
+import {
+  useAttendancePortal,
+  useMemberPortal,
+  useReportPortal,
+  useSessionPortal,
+} from "@/components/coach/coach-portal-provider"
 import {
   shouldPersistResumeForDirtyTransition,
   useReportResume,
@@ -53,14 +59,7 @@ const stateLabels: Record<ReportState, string> = {
   revision: "Revision draft",
   published: "Published",
 }
-
-function reportFor(
-  reports: CoachMonthlyReportRecord[],
-  playerId: string,
-  month: string,
-) {
-  return reports.find((report) => report.playerId === playerId && report.month === month)
-}
+const reportCategories: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
 
 function reportCategory(player: OperationalPlayerMemberRecord) {
   return player.training.level
@@ -83,10 +82,10 @@ function attendanceLabel(attendance: CoachReportAttendance) {
 function getReportAttendance(
   player: OperationalPlayerMemberRecord,
   month: string,
-  records: ReturnType<typeof useCoachPortal>["attendanceRecords"],
-  assignments: ReturnType<typeof useCoachPortal>["sessionAssignments"],
-  occurrences: ReturnType<typeof useCoachPortal>["sessionOccurrences"],
-  adjustments: ReturnType<typeof useCoachPortal>["attendanceAdjustments"],
+  records: ReturnType<typeof useAttendancePortal>["attendanceRecords"],
+  assignments: ReturnType<typeof useSessionPortal>["sessionAssignments"],
+  occurrences: ReturnType<typeof useSessionPortal>["sessionOccurrences"],
+  adjustments: ReturnType<typeof useAttendancePortal>["attendanceAdjustments"],
   referenceInstant: string,
 ): CoachReportAttendance {
   const playerAssignments = assignments.filter((assignment) => assignment.playerId === player.member.id)
@@ -235,7 +234,7 @@ function ReportEditor({
   report?: CoachMonthlyReportRecord
   requiresAdjustmentReview: boolean
 }) {
-  const { publishReport, saveReportDraft } = useCoachPortal()
+  const { publishReport, saveReportDraft } = useReportPortal()
   const [reportText, setReportText] = useState(report?.reportText ?? "")
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
@@ -372,7 +371,7 @@ function ReportEditor({
         </div>
       </dl>
 
-      <form onSubmit={(event) => event.preventDefault()}>
+      <form autoComplete="off" onSubmit={(event) => event.preventDefault()}>
         <label className="coach-report-field" htmlFor={`report-${player.member.id}-${month}`}>
           <span>
             <strong>Coach’s report</strong>
@@ -381,6 +380,7 @@ function ReportEditor({
           <textarea
             ref={reportTextRef}
             id={`report-${player.member.id}-${month}`}
+            name="reportText"
             rows={10}
             maxLength={REPORT_TEXT_MAX_LENGTH}
             disabled={pendingAction !== null}
@@ -435,25 +435,42 @@ export function ReportWritingWorkspace({
   initialMonth?: string
   initialPlayerId?: string
 }) {
+  const { activePlayers: players } = useMemberPortal()
   const {
-    activePlayers: players,
     attendanceAdjustments,
     attendanceRecords,
-    reports,
+  } = useAttendancePortal()
+  const { reports } = useReportPortal()
+  const {
     sessionAssignments,
     sessionOccurrences,
-  } = useCoachPortal()
+  } = useSessionPortal()
+  const playerById = useMemo(
+    () => new Map(players.map((player) => [player.member.id, player])),
+    [players],
+  )
+  const reportByPlayerMonth = useMemo(
+    () => new Map(reports.map((report) => [`${report.playerId}:${report.month}`, report])),
+    [reports],
+  )
+  const occurrenceById = useMemo(
+    () => new Map(sessionOccurrences.map((occurrence) => [occurrence.id, occurrence])),
+    [sessionOccurrences],
+  )
+  const router = useRouter()
   const { resumePoint, setReportResume } = useReportResume()
   const validInitialMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(initialMonth ?? "")
     && (initialMonth as string) < getCurrentIndiaMonth()
     ? initialMonth as string
     : getLatestCompletedReportMonth()
-  const initialPlayer = players.find((player) => player.member.id === initialPlayerId)
+  const initialPlayer = (initialPlayerId ? playerById.get(initialPlayerId) : undefined)
     ?? players.find((player) => (
-      getCoachReportState(reportFor(reports, player.member.id, validInitialMonth)) !== "published"
+      getCoachReportState(reportByPlayerMonth.get(
+        `${player.member.id}:${validInitialMonth}`,
+      )) !== "published"
     ))
     ?? players[0]
-  const [month, setMonth] = useState(validInitialMonth)
+  const month = validInitialMonth
   const [category, setCategory] = useState(initialPlayer ? reportCategory(initialPlayer) : "Beginner")
   const [selectedPlayerId, setSelectedPlayerId] = useState(initialPlayer?.member.id ?? "")
   const [editorDirty, setEditorDirty] = useState(false)
@@ -465,18 +482,27 @@ export function ReportWritingWorkspace({
     message: "You have unsaved changes. Leave this report without saving?",
     scope: "coach-report-editor",
   })
-  const allCategories: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
-  const categories = allCategories.filter((item) => (
-    players.some((player) => reportCategory(player) === item)
-  ))
+  const categories = useMemo(() => {
+    const populated = new Set(players.map(reportCategory))
+    return reportCategories.filter((item) => populated.has(item))
+  }, [players])
   const currentMonth = getCurrentIndiaMonth()
   const previewReferenceInstant = useMemo(() => new Date().toISOString(), [])
+
+  const reportStateByPlayer = useMemo(() => new Map(players.map((player) => {
+    const report = reportByPlayerMonth.get(`${player.member.id}:${month}`)
+    return [player.member.id, { report, state: getCoachReportState(report) }] as const
+  })), [month, players, reportByPlayerMonth])
 
   const queue = useMemo(() => players
     .filter((player) => reportCategory(player) === category)
     .map((player) => {
-      const report = reportFor(reports, player.member.id, month)
-      return { player, report, state: getCoachReportState(report) }
+      const reportState = reportStateByPlayer.get(player.member.id)
+      return {
+        player,
+        report: reportState?.report,
+        state: reportState?.state ?? "not-started" as ReportState,
+      }
     })
     .sort((a, b) => {
       if (a.player.member.id === resumePoint?.playerId && month === resumePoint.month) return -1
@@ -489,16 +515,16 @@ export function ReportWritingWorkspace({
       }
       if (stateOrder[a.state] !== stateOrder[b.state]) return stateOrder[a.state] - stateOrder[b.state]
       return a.player.member.fullName.localeCompare(b.player.member.fullName)
-    }), [category, month, players, reports, resumePoint])
+    }), [category, month, players, reportStateByPlayer, resumePoint])
 
-  const unfinishedCount = players.filter((player) => (
-    getCoachReportState(reportFor(reports, player.member.id, month)) !== "published"
-  )).length
+  const unfinishedCount = [...reportStateByPlayer.values()].filter(
+    ({ state }) => state !== "published",
+  ).length
   const completedCount = players.length - unfinishedCount
   const isComplete = players.length > 0 && completedCount === players.length
-  const selectedPlayer = players.find((player) => player.member.id === selectedPlayerId) ?? players[0]
+  const selectedPlayer = playerById.get(selectedPlayerId) ?? players[0]
   const selectedReport = selectedPlayer
-    ? reportFor(reports, selectedPlayer.member.id, month)
+    ? reportStateByPlayer.get(selectedPlayer.member.id)?.report
     : undefined
   const canResumeElsewhere = Boolean(resumePoint
     && (resumePoint.playerId !== selectedPlayer?.member.id || resumePoint.month !== month))
@@ -517,9 +543,7 @@ export function ReportWritingWorkspace({
     if (adjustment.playerId !== selectedPlayer.member.id
       || adjustment.voidedAt !== null
       || adjustment.reviewRequiredAt === null) return false
-    const source = sessionOccurrences.find((occurrence) => (
-      occurrence.id === adjustment.sourceOccurrenceId
-    ))
+    const source = occurrenceById.get(adjustment.sourceOccurrenceId)
     return source?.occurrenceDate.startsWith(`${month}-`) ?? false
   }))
 
@@ -537,6 +561,13 @@ export function ReportWritingWorkspace({
       "",
       `${window.location.pathname}?${params.toString()}`,
     )
+  }
+
+  function navigateToReportMonth(nextMonth: string, playerId: string) {
+    const params = new URLSearchParams(window.location.search)
+    params.set("month", nextMonth)
+    params.set("player", playerId)
+    router.replace(`${window.location.pathname}?${params.toString()}`, { scroll: false })
   }
 
   function focusEditorOnMobile() {
@@ -570,7 +601,7 @@ export function ReportWritingWorkspace({
     if (nextCategory === category || !canLeaveEditor()) return
     const categoryPlayers = players.filter((player) => reportCategory(player) === nextCategory)
     const firstPlayer = categoryPlayers.find((player) => (
-      getCoachReportState(reportFor(reports, player.member.id, month)) !== "published"
+      reportStateByPlayer.get(player.member.id)?.state !== "published"
     )) ?? categoryPlayers[0]
     if (!firstPlayer) return
 
@@ -583,19 +614,22 @@ export function ReportWritingWorkspace({
 
   function chooseMonth(nextMonth: string) {
     if (!canLeaveEditor()) return
-    setMonth(nextMonth)
     setEditorDirty(false)
     const playerId = selectedPlayerId || players[0]?.member.id
     if (playerId) {
       setReportResume({ month: nextMonth, playerId })
-      updateReportUrl(nextMonth, playerId)
+      navigateToReportMonth(nextMonth, playerId)
     }
   }
 
   function continueFromResume() {
     if (!resumePoint || !canLeaveEditor()) return
-    const resumePlayer = players.find((player) => player.member.id === resumePoint.playerId)
-    setMonth(resumePoint.month)
+    if (resumePoint.month !== month) {
+      setEditorDirty(false)
+      navigateToReportMonth(resumePoint.month, resumePoint.playerId)
+      return
+    }
+    const resumePlayer = playerById.get(resumePoint.playerId)
     setSelectedPlayerId(resumePoint.playerId)
     if (resumePlayer) setCategory(reportCategory(resumePlayer))
     setEditorDirty(false)

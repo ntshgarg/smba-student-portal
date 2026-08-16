@@ -20,10 +20,10 @@ describe("monthly report service", () => {
   const now = new Date("2026-08-03T10:00:00+05:30")
 
   beforeAll(async () => {
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
     reports = await import("@/lib/reports/service")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
 
     database.insert(schema.accounts).values({
       id: playerId,

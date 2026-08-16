@@ -35,6 +35,10 @@
   --portal-header-height: 82px;
 }
 
+:where(a, button, input, select, textarea, summary, [role="button"]) {
+  touch-action: manipulation;
+}
+
 .coach-register-table td .coach-register-cell-control {
   position: relative;
   display: grid;
@@ -5278,7 +5282,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-category-filter button {
-  min-height: 34px;
+  min-height: 44px;
   flex: 0 0 auto;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -5588,6 +5592,7 @@ tr.is-expanded .coach-member-row-action button svg {
   place-items: center;
   padding: 28px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(7, 27, 50, 0.7);
   backdrop-filter: blur(8px);
 }
@@ -12940,7 +12945,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .player-attendance-recorder .attendance-roster-choices button {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 8px;
   border: 0;
   background: var(--paper);
@@ -13399,7 +13404,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 7px;
   border: 0;
   background: var(--paper);
@@ -13470,7 +13475,7 @@ tr.is-expanded .coach-member-row-action button svg {
     > .staff-roll-call-choice-box button,
   .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
     > .staff-roll-call-choice-box button + button {
-    min-height: 38px;
+    min-height: 44px;
     padding-inline: 8px;
   }
 }

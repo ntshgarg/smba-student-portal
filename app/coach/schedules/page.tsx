@@ -1,7 +1,8 @@
 import { SessionSchedules } from "@/components/coach/calendar/session-schedules"
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
-import { getCoachSessionSnapshot, listOperationalPlayerRecords } from "@/lib/coach/database"
+import { listOperationalPlayerRecords } from "@/lib/coach/database"
+import { getCoachScheduleRosterSnapshot } from "@/lib/coach/session-read-models"
 import type { TrainingProgramme } from "@/lib/sessions/types"
 
 export const metadata = { title: "Schedules & rosters" }
@@ -20,20 +21,20 @@ export default async function CoachSchedulesPage({
   const params = await searchParams
   const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
   const players = listOperationalPlayerRecords()
-  const sessions = getCoachSessionSnapshot()
+  const sessions = getCoachScheduleRosterSnapshot()
   return (
     <CoachPortalProvider
       initialAttendanceAdjustments={[]}
       initialAttendanceRecords={{}}
       initialMembers={players.members}
-      initialPendingRegistrations={[]}
       initialReports={[]}
       initialSessionAssignments={sessions.sessionAssignments}
-      initialSessionOccurrences={sessions.sessionOccurrences}
+      initialSessionOccurrences={[]}
       initialSessionSeries={sessions.sessionSeries}
       initialTrainingProfiles={players.trainingProfiles}
     >
       <SessionSchedules
+        backfillOccurrences={sessions.backfillOccurrences}
         guidedFromEvaluation={params.from === "evaluation"}
         initialPlayerId={params.player ?? null}
         initialProgramme={programmes.find((programme) => programme === params.programme) ?? null}

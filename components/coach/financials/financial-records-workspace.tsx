@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   ArrowRight,
-  CalendarDays,
   Download,
   FileClock,
   FileText,
@@ -84,12 +83,25 @@ export type FinancialActivityView = {
   pagination: FinancialRecordsPagination
 }
 
-export type FinancialRecordsWorkspaceProps = {
-  activeView: FinancialRecordsView
-  activity?: FinancialActivityView
-  dayBook?: CollectionsDayBookView
-  feeRegister?: FeeRegisterView
-}
+export type FinancialRecordsWorkspaceProps =
+  | {
+    activeView: "fees"
+    activity?: never
+    dayBook?: never
+    feeRegister: FeeRegisterView
+  }
+  | {
+    activeView: "collections"
+    activity?: never
+    dayBook: CollectionsDayBookView
+    feeRegister?: never
+  }
+  | {
+    activeView: "activity"
+    activity: FinancialActivityView
+    dayBook?: never
+    feeRegister?: never
+  }
 
 const statusLabels: Record<FinanceStatus, string> = {
   not_prepared: "Not prepared",
@@ -697,12 +709,8 @@ function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
   )
 }
 
-export function FinancialRecordsWorkspace({
-  activeView,
-  activity,
-  dayBook,
-  feeRegister,
-}: FinancialRecordsWorkspaceProps) {
+export function FinancialRecordsWorkspace(props: FinancialRecordsWorkspaceProps) {
+  const { activeView } = props
   return (
     <div className={`${financialStyles.workspace} ${financialStyles.recordsWorkspace} page-shell`}>
       <div className={financialStyles.backRow}>
@@ -717,19 +725,9 @@ export function FinancialRecordsWorkspace({
 
       <RecordsNavigation activeView={activeView} />
 
-      {activeView === "fees" && feeRegister ? <FeeRegister register={feeRegister} /> : null}
-      {activeView === "collections" && dayBook ? <CollectionsDayBook dayBook={dayBook} /> : null}
-      {activeView === "activity" && activity ? <ActivityHistory activity={activity} /> : null}
-
-      {activeView === "fees" && !feeRegister ? (
-        <EmptyRecords body="The fee register could not be loaded." icon={WalletCards} title="Fee records unavailable" />
-      ) : null}
-      {activeView === "collections" && !dayBook ? (
-        <EmptyRecords body="The collections record could not be loaded." icon={CalendarDays} title="Collections unavailable" />
-      ) : null}
-      {activeView === "activity" && !activity ? (
-        <EmptyRecords body="The activity record could not be loaded." icon={History} title="Activity unavailable" />
-      ) : null}
+      {props.activeView === "fees" ? <FeeRegister register={props.feeRegister} /> : null}
+      {props.activeView === "collections" ? <CollectionsDayBook dayBook={props.dayBook} /> : null}
+      {props.activeView === "activity" ? <ActivityHistory activity={props.activity} /> : null}
     </div>
   )
 }

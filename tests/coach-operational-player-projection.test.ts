@@ -21,9 +21,9 @@ describe("coach operational player projection", () => {
     accountService = await import("@/lib/auth/account-service")
     coachDatabase = await import("@/lib/coach/database")
     sessionReadModels = await import("@/lib/coach/session-read-models")
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
   })
 
   afterAll(() => {

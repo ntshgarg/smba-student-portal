@@ -5,10 +5,8 @@ import path from "node:path"
 
 import BetterSqlite3 from "better-sqlite3"
 import { drizzle } from "drizzle-orm/better-sqlite3"
-import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import LibsqlDatabase from "libsql"
 
-import { seedDatabase } from "@/lib/db/seed"
 import * as schema from "@/lib/db/schema"
 
 function shouldUseTurso() {
@@ -53,19 +51,8 @@ export type SmbaTransaction = Parameters<Parameters<SmbaDatabase["transaction"]>
 export type SmbaDatabaseExecutor = SmbaDatabase | SmbaTransaction
 
 let database: SmbaDatabase | null = null
-let initialized = false
 
 export function initializeDatabase() {
   database ??= openDatabase()
-  if (initialized) return database
-
-  migrate(database, {
-    migrationsFolder: path.resolve(
-      /* turbopackIgnore: true */ process.cwd(),
-      "drizzle",
-    ),
-  })
-  seedDatabase(database)
-  initialized = true
   return database
 }
