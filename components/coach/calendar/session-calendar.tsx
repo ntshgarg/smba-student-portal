@@ -163,7 +163,7 @@ export function SessionCalendar({
   useEffect(() => {
     if (!shouldFocusDay.current) return
     shouldFocusDay.current = false
-    dayHeadingRef.current?.focus()
+    dayHeadingRef.current?.focus({ preventScroll: true })
   }, [selectedDate])
 
   function occurrenceRoster(occurrence: TrainingSessionOccurrence) {
