@@ -303,27 +303,20 @@ export function listAttendanceAdjustments({
   database = initializeDatabase(),
   includeVoided = false,
   playerId,
+  sourceOccurrenceIds,
 }: DatabaseOption & {
   includeVoided?: boolean
   playerId?: string
+  sourceOccurrenceIds?: readonly string[]
 } = {}): AttendanceAdjustmentRecord[] {
-  if (playerId && includeVoided) {
-    return database.select().from(attendanceAdjustments)
-      .where(eq(attendanceAdjustments.playerId, playerId))
-      .orderBy(desc(attendanceAdjustments.publishedAt), desc(attendanceAdjustments.id)).all()
-  }
-  if (playerId) {
-    return database.select().from(attendanceAdjustments).where(and(
-      eq(attendanceAdjustments.playerId, playerId),
-      isNull(attendanceAdjustments.voidedAt),
-    )).orderBy(desc(attendanceAdjustments.publishedAt), desc(attendanceAdjustments.id)).all()
-  }
-  if (includeVoided) {
-    return database.select().from(attendanceAdjustments)
-      .orderBy(desc(attendanceAdjustments.publishedAt), desc(attendanceAdjustments.id)).all()
-  }
-  return database.select().from(attendanceAdjustments)
-    .where(isNull(attendanceAdjustments.voidedAt))
+  if (sourceOccurrenceIds && !sourceOccurrenceIds.length) return []
+  return database.select().from(attendanceAdjustments).where(and(
+    playerId ? eq(attendanceAdjustments.playerId, playerId) : undefined,
+    sourceOccurrenceIds
+      ? inArray(attendanceAdjustments.sourceOccurrenceId, [...sourceOccurrenceIds])
+      : undefined,
+    includeVoided ? undefined : isNull(attendanceAdjustments.voidedAt),
+  ))
     .orderBy(desc(attendanceAdjustments.publishedAt), desc(attendanceAdjustments.id)).all()
 }
 

@@ -235,6 +235,7 @@ function ApprovalReceiptBox({ receipt }: { receipt: ApprovalReceipt }) {
         <span className="sr-only">Academy ID</span>
         <input
           ref={inputRef}
+          name="academyId"
           readOnly
           value={receipt.academyId}
           onFocus={(event) => event.currentTarget.select()}
@@ -406,12 +407,13 @@ function AssessmentStep({
   }
 
   return (
-    <form className={styles.compactForm} onSubmit={(event) => void submit(event)} aria-busy={busy}>
+    <form className={styles.compactForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
       <div className={styles.threeFieldGrid}>
         <label>
           <span>Level</span>
           <select
             ref={levelRef}
+            name="level"
             value={level}
             aria-invalid={Boolean(errors.level)}
             aria-describedby={errors.level ? `onboarding-${item.id}-level-error` : undefined}
@@ -426,6 +428,7 @@ function AssessmentStep({
           <span>Batch</span>
           <select
             ref={batchRef}
+            name="batch"
             value={batch}
             aria-invalid={Boolean(errors.batch)}
             aria-describedby={errors.batch ? `onboarding-${item.id}-batch-error` : undefined}
@@ -440,6 +443,7 @@ function AssessmentStep({
           <span>Training plan</span>
           <select
             ref={planRef}
+            name="academyPlan"
             value={trainingPlan}
             disabled={!level || !batch}
             aria-invalid={Boolean(errors.academyPlan)}
@@ -570,7 +574,7 @@ function SessionStep({
   const requiredDays = item.academyPlan ? academyPlanRequiredWeekdayCount(item.academyPlan) : null
 
   return (
-    <form className={styles.sessionForm} onSubmit={(event) => void submit(event)} aria-busy={busy}>
+    <form className={styles.sessionForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
       <fieldset className={styles.seriesChoices}>
         <legend>Matching recurring session</legend>
         {options.map((series) => {
@@ -603,7 +607,9 @@ function SessionStep({
             {offeredWeekdays.map((weekday) => (
               <label key={weekday} className={weekdays.includes(weekday) ? styles.selectedDay : ""}>
                 <input
+                  name="weekdays"
                   type="checkbox"
+                  value={weekday}
                   checked={weekdays.includes(weekday)}
                   onChange={() => toggleWeekday(weekday)}
                 />
@@ -615,6 +621,7 @@ function SessionStep({
         <label>
           <span>Effective from</span>
           <input
+            name="effectiveFrom"
             type="date"
             min={selectedSeries ? firstDayForSeries(item, selectedSeries) : item.joinedAt ?? undefined}
             max={selectedSeries?.endsOn ?? undefined}
@@ -722,7 +729,7 @@ function FeePlanStep({
   }
 
   return (
-    <form className={styles.feePlanForm} onSubmit={(event) => void submit(event)} aria-busy={busy}>
+    <form className={styles.feePlanForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
       <dl className={styles.trainingFacts}>
         <div><dt>Level</dt><dd>{item.level}</dd></div>
         <div><dt>Batch</dt><dd>{item.batch}</dd></div>
@@ -732,6 +739,7 @@ function FeePlanStep({
         <label>
           <span>Agreed monthly fee</span>
           <span className={styles.moneyInput}><b>₹</b><input
+            name="monthlyFee"
             inputMode="numeric"
             min="1"
             step="1"
@@ -744,6 +752,7 @@ function FeePlanStep({
         <label>
           <span>Track from month</span>
           <input
+            name="effectiveMonth"
             type="month"
             value={effectiveMonth}
             onChange={(event) => setEffectiveMonth(event.target.value)}
@@ -881,7 +890,7 @@ export function PlayerOnboardingRegister({
   }
 
   return (
-    <main className={`${styles.page} page-shell`}>
+    <div className={`${styles.page} page-shell`}>
       <div className={styles.backRow}>
         <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
       </div>
@@ -951,7 +960,7 @@ export function PlayerOnboardingRegister({
                       href={href}
                       scroll={false}
                       aria-expanded={expanded}
-                      aria-controls={`onboarding-editor-${item.id}`}
+                      aria-controls={expanded ? `onboarding-editor-${item.id}` : undefined}
                     >
                       {expanded ? "Close" : index === 0 ? "Open" : "Continue"}
                       {expanded ? <X aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
@@ -981,6 +990,6 @@ export function PlayerOnboardingRegister({
           </div>
         )}
       </section>
-    </main>
+    </div>
   )
 }

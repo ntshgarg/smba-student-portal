@@ -50,9 +50,9 @@ describe("authenticated route recovery", () => {
   })
 
   it("retains the more specific Financials boundaries", () => {
-    expect(source("app/coach/financials/loading.tsx")).toContain("Loading Financials.")
+    expect(source("app/coach/financials/loading.tsx")).toContain("Loading Financials…")
     expect(source("app/coach/financials/error.tsx")).toContain("Financials are unavailable.")
-    expect(source("app/(student)/player/financials/loading.tsx")).toContain("Loading your fee record.")
+    expect(source("app/(student)/player/financials/loading.tsx")).toContain("Loading your fee record…")
     expect(source("app/(student)/player/financials/error.tsx")).toContain("Fee record unavailable.")
   })
 })

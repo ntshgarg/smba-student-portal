@@ -134,7 +134,7 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
                   className="header-account-button"
                   type="button"
                   aria-expanded={accountOpen}
-                  aria-controls="header-account-menu"
+                  aria-controls={accountOpen ? "header-account-menu" : undefined}
                   aria-label={`${accountOpen ? "Close" : "Open"} account menu for ${account.name}`}
                   onClick={() => {
                     setOpen(false)
@@ -186,7 +186,7 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
           className="menu-button"
           type="button"
           aria-expanded={open}
-          aria-controls="mobile-navigation"
+          aria-controls={open ? "mobile-navigation" : undefined}
           aria-label={open ? "Close navigation" : "Open navigation"}
           onClick={() => {
             setAccountOpen(false)

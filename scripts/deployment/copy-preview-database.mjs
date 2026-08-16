@@ -53,19 +53,6 @@ function orderTablesByDependencies(tables) {
 }
 
 try {
-  const existingTables = target.prepare(`
-    SELECT name
-    FROM sqlite_master
-    WHERE type = 'table'
-      AND name NOT LIKE 'sqlite_%'
-  `).all()
-
-  if (existingTables.length > 0) {
-    throw new Error(
-      "The Turso database is not empty. Preview copying is intentionally create-only.",
-    )
-  }
-
   const tables = source.prepare(`
     SELECT name, sql
     FROM sqlite_master
@@ -83,13 +70,50 @@ try {
     ORDER BY name
   `).all()
   const orderedTables = orderTablesByDependencies(tables)
+  const sourceTableNames = new Set(tables.map((table) => table.name))
+  const existingTables = target.prepare(`
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table'
+      AND name NOT LIKE 'sqlite_%'
+  `).all()
+  const targetHasPreparedSchema = existingTables.length > 0
+
+  if (targetHasPreparedSchema) {
+    const unexpectedTables = existingTables
+      .map((table) => table.name)
+      .filter((name) => !sourceTableNames.has(name))
+    const missingTables = tables
+      .map((table) => table.name)
+      .filter((name) => !existingTables.some((table) => table.name === name))
+
+    if (unexpectedTables.length > 0 || missingTables.length > 0) {
+      throw new Error("The prepared Turso schema does not match the preview source schema.")
+    }
+
+    const populatedTables = existingTables
+      .map((table) => table.name)
+      .filter((name) => name !== "__drizzle_migrations")
+      .filter((name) => target.prepare(
+        `SELECT 1 FROM ${quoteIdentifier(name)} LIMIT 1`,
+      ).get())
+
+    if (populatedTables.length > 0) {
+      throw new Error(
+        "The Turso database contains application data. Preview copying is create-only.",
+      )
+    }
+  }
 
   let copiedRows = 0
   const copy = target.transaction(() => {
-    for (const table of tables) target.exec(table.sql)
+    if (!targetHasPreparedSchema) {
+      for (const table of tables) target.exec(table.sql)
+    }
 
     for (const table of orderedTables) {
       if (table.name === "auth_sessions") continue
+      if (targetHasPreparedSchema && table.name === "__drizzle_migrations") continue
 
       const rows = source.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all()
       if (rows.length === 0) continue
@@ -109,7 +133,9 @@ try {
       }
     }
 
-    for (const index of indexes) target.exec(index.sql)
+    if (!targetHasPreparedSchema) {
+      for (const index of indexes) target.exec(index.sql)
+    }
   })
 
   copy.immediate()

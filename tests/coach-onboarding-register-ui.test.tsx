@@ -97,6 +97,7 @@ describe("Player Onboarding Next-Step Register", () => {
     expect(html.match(/role="region"/gu)).toHaveLength(1)
     expect(html).toContain('aria-expanded="true"')
     expect(html).toContain('aria-current="step"')
+    expect(html).not.toContain("<main")
     expect(html).not.toContain("View application")
   })
 })

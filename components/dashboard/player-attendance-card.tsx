@@ -200,7 +200,7 @@ export function PlayerAttendanceCard({
           className="player-attendance-toggle player-ticket-action"
           type="button"
           aria-expanded={isOpen}
-          aria-controls="player-attendance-register"
+          aria-controls={isOpen ? "player-attendance-register" : undefined}
           onClick={() => updateNavigation({
             ...navigation,
             isOpen: !isOpen,

@@ -16,7 +16,8 @@ export default async function CoachCalendarPage({
 }) {
   await requireHeadAdminPage()
   const query = await searchParams
-  const today = getIndiaDateKey()
+  const now = new Date()
+  const today = getIndiaDateKey(now)
   const requestedDate = Array.isArray(query.date) ? query.date[0] : query.date
   if (!requestedDate || !isValidDateKey(requestedDate)) {
     redirect(`/coach/calendar?date=${encodeURIComponent(today)}`)
@@ -30,14 +31,17 @@ export default async function CoachCalendarPage({
       initialAttendanceAdjustments={[]}
       initialAttendanceRecords={{}}
       initialMembers={snapshot.members}
-      initialPendingRegistrations={[]}
       initialReports={[]}
       initialSessionAssignments={snapshot.sessionAssignments}
       initialSessionOccurrences={snapshot.sessionOccurrences}
       initialSessionSeries={snapshot.sessionSeries}
       initialTrainingProfiles={snapshot.trainingProfiles}
     >
-      <SessionCalendar selectedDate={requestedDate} />
+      <SessionCalendar
+        referenceDate={today}
+        referenceInstant={now.getTime()}
+        selectedDate={requestedDate}
+      />
     </CoachPortalProvider>
   )
 }

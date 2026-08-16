@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Manrope, Newsreader } from "next/font/google"
 import { siteOrigin } from "@/lib/config"
 import "./globals.css"
@@ -58,6 +58,10 @@ export const metadata: Metadata = {
     description: "Professional badminton coaching in Mahadevapura, Bengaluru.",
     images: ["/og.png"],
   },
+}
+
+export const viewport: Viewport = {
+  themeColor: "#071b32",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

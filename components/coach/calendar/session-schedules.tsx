@@ -14,7 +14,15 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
 
-import { useCoachPortal } from "@/components/coach/coach-portal-provider"
+import {
+  useMemberPortal,
+  useSessionPortal,
+} from "@/components/coach/coach-portal-provider"
+import {
+  assignmentKey,
+  buildProgrammeGroups,
+  buildSessionScheduleIndex,
+} from "@/components/coach/calendar/session-schedule-index"
 import {
   InlineNotice,
   type ActionFeedback,
@@ -23,10 +31,10 @@ import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { formatSessionLabel } from "@/lib/format"
 import { assignmentCoversOccurrence, distinctAssignmentWeekdays } from "@/lib/sessions/domain"
-import { occurrenceHasStarted } from "@/lib/sessions/occurrence-time"
 import type {
   SessionAssignment,
   TrainingProgramme,
+  TrainingSessionOccurrence,
   TrainingSessionSeries,
 } from "@/lib/sessions/types"
 import {
@@ -35,7 +43,6 @@ import {
   academyPlanRequiredWeekdayCount,
 } from "@/lib/training/academy-plans"
 
-const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
 const weekdays = [
   { value: 1, short: "Mon", label: "Monday" },
   { value: 2, short: "Tue", label: "Tuesday" },
@@ -59,18 +66,6 @@ function earliestAssignmentDate(joinedOn: string, scheduleStartsOn: string) {
   return joinedOn > scheduleStartsOn ? joinedOn : scheduleStartsOn
 }
 
-function activeAssignmentForSeries(
-  playerId: string,
-  seriesId: string,
-  assignments: ReturnType<typeof useCoachPortal>["sessionAssignments"],
-) {
-  return assignments.find((assignment) => (
-    assignment.playerId === playerId
-    && assignment.seriesId === seriesId
-    && !assignment.effectiveTo
-  ))
-}
-
 function assignmentDayLabel(assignedDays: number[]) {
   return weekdays
     .filter((day) => assignedDays.includes(day.value))
@@ -78,9 +73,8 @@ function assignmentDayLabel(assignedDays: number[]) {
     .join(", ")
 }
 
-function activeAssignedWeekdays(playerId: string, assignments: SessionAssignment[]) {
+function activeAssignedWeekdays(assignments: SessionAssignment[]) {
   return distinctAssignmentWeekdays(assignments
-    .filter((assignment) => assignment.playerId === playerId && !assignment.effectiveTo)
     .map((assignment) => assignment.weekdays))
 }
 
@@ -95,29 +89,42 @@ function seriesLabel(series: TrainingSessionSeries) {
 }
 
 export function SessionSchedules({
+  backfillOccurrences = [],
   guidedFromEvaluation = false,
   initialPlayerId = null,
   initialProgramme = null,
   initialSeriesId = null,
 }: {
+  backfillOccurrences?: Array<Pick<TrainingSessionOccurrence, "eligibilityDate" | "seriesId">>
   guidedFromEvaluation?: boolean
   initialPlayerId?: string | null
   initialProgramme?: TrainingProgramme | null
   initialSeriesId?: string | null
 }) {
+  const { players } = useMemberPortal()
   const {
     assignSession,
     endSessionAssignment,
     endSessionSeries,
-    players,
     sessionAssignments,
-    sessionOccurrences,
     sessionSeries,
-  } = useCoachPortal()
+  } = useSessionPortal()
+  const playerById = useMemo(
+    () => new Map(players.map((player) => [player.member.id, player])),
+    [players],
+  )
+  const seriesById = useMemo(
+    () => new Map(sessionSeries.map((series) => [series.id, series])),
+    [sessionSeries],
+  )
+  const assignmentIndex = useMemo(
+    () => buildSessionScheduleIndex(sessionAssignments),
+    [sessionAssignments],
+  )
   const router = useRouter()
   const today = getIndiaDateKey()
   const requestedSeries = initialSeriesId
-    ? sessionSeries.find((series) => series.id === initialSeriesId) ?? null
+    ? seriesById.get(initialSeriesId) ?? null
     : null
   const [expandedSeriesId, setExpandedSeriesId] = useState<string | null>(requestedSeries?.id ?? null)
   const [expandedProgramme, setExpandedProgramme] = useState<TrainingProgramme | null>(
@@ -142,33 +149,25 @@ export function SessionSchedules({
     message: "Leave without saving this player assignment?",
     scope: "coach-schedule-assignment",
   })
-  const activeSeries = sessionSeries.filter((series) => series.status === "active")
-  const programmeGroups = programmes
-    .map((programme) => {
-      const series = activeSeries.filter((item) => item.programme === programme)
-      const seriesIds = new Set(series.map((item) => item.id))
-      const playerCount = new Set(sessionAssignments
-        .filter((assignment) => !assignment.effectiveTo && seriesIds.has(assignment.seriesId))
-        .map((assignment) => assignment.playerId)).size
-
-      return { playerCount, programme, series }
-    })
-    .filter((group) => group.series.length)
+  const programmeGroups = useMemo(
+    () => buildProgrammeGroups(sessionSeries, assignmentIndex.activeBySeries),
+    [assignmentIndex.activeBySeries, sessionSeries],
+  )
   const guidedPlayer = useMemo(() => initialPlayerId
-    ? players.find((player) => player.member.id === initialPlayerId) ?? null
-    : null, [initialPlayerId, players])
+    ? playerById.get(initialPlayerId) ?? null
+    : null, [initialPlayerId, playerById])
   const guidedEligibleSeries = useMemo(() => guidedPlayer ? sessionSeries.filter((series) => (
     series.status === "active"
     && series.programme === guidedPlayer.training.level
     && series.batch === guidedPlayer.training.batch
     && (!series.endsOn || guidedPlayer.member.joinedAt <= series.endsOn)
-    && !activeAssignmentForSeries(guidedPlayer.member.id, series.id, sessionAssignments)
-  )) : [], [guidedPlayer, sessionAssignments, sessionSeries])
-  const guidedActiveAssignments = useMemo(() => guidedPlayer ? sessionAssignments.filter(
-    (assignment) => assignment.playerId === guidedPlayer.member.id && !assignment.effectiveTo,
-  ) : [], [guidedPlayer, sessionAssignments])
+    && !assignmentIndex.activeByPlayerSeries.has(assignmentKey(guidedPlayer.member.id, series.id))
+  )) : [], [assignmentIndex.activeByPlayerSeries, guidedPlayer, sessionSeries])
+  const guidedActiveAssignments = useMemo(() => guidedPlayer
+    ? assignmentIndex.activeByPlayer.get(guidedPlayer.member.id) ?? []
+    : [], [assignmentIndex.activeByPlayer, guidedPlayer])
   const guidedAssignedWeekdays = guidedPlayer
-    ? activeAssignedWeekdays(guidedPlayer.member.id, sessionAssignments)
+    ? activeAssignedWeekdays(guidedActiveAssignments)
     : []
   const guidedRequiredWeekdays = guidedPlayer?.training.academyPlan
     ? academyPlanRequiredWeekdayCount(guidedPlayer.training.academyPlan)
@@ -199,9 +198,7 @@ export function SessionSchedules({
       if (seriesToOpen) {
         const series = seriesToOpen
         const offeredWeekdays = new Set(series.slots.map((slot) => slot.weekday))
-        const activeAssignments = sessionAssignments.filter((assignment) => (
-          assignment.playerId === guidedPlayer.member.id && !assignment.effectiveTo
-        ))
+        const activeAssignments = assignmentIndex.activeByPlayer.get(guidedPlayer.member.id) ?? []
         const preselectedWeekdays = guidedPlayer.training.academyPlan === "weekday-5-day"
           && !activeAssignments.length
           && [1, 2, 3, 4, 5].every((weekday) => offeredWeekdays.has(weekday))
@@ -221,9 +218,7 @@ export function SessionSchedules({
           tone: "info",
         })
       } else if (!guidedEligibleSeries.length && guidedActiveAssignments.length) {
-        const assignedSeries = sessionSeries.find((series) => (
-          series.id === guidedActiveAssignments[0]?.seriesId
-        ))
+        const assignedSeries = seriesById.get(guidedActiveAssignments[0]?.seriesId ?? "")
         if (assignedSeries) {
           setExpandedProgramme(assignedSeries.programme)
           setExpandedSeriesId(assignedSeries.id)
@@ -250,8 +245,8 @@ export function SessionSchedules({
     initialPlayerId,
     initialSeriesId,
     router,
-    sessionAssignments,
-    sessionSeries,
+    assignmentIndex.activeByPlayer,
+    seriesById,
   ])
 
   useEffect(() => {
@@ -272,10 +267,29 @@ export function SessionSchedules({
     setAssignmentTouched(false)
   }
 
+  function replaceExpandedScheduleUrl(
+    programme: TrainingProgramme | null,
+    seriesId: string | null,
+  ) {
+    const params = new URLSearchParams(window.location.search)
+    if (programme) params.set("programme", programme)
+    else params.delete("programme")
+    if (seriesId) params.set("series", seriesId)
+    else params.delete("series")
+    const query = params.toString()
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}`,
+    )
+  }
+
   function toggleProgramme(programme: TrainingProgramme) {
     if (hasPendingMutation || !assignmentGuard.confirmDiscard()) return
-    setExpandedProgramme((current) => current === programme ? null : programme)
+    const nextProgramme = expandedProgramme === programme ? null : programme
+    setExpandedProgramme(nextProgramme)
     setExpandedSeriesId(null)
+    replaceExpandedScheduleUrl(nextProgramme, null)
     clearAssignmentDraft()
     setRosterFeedback(null)
   }
@@ -295,13 +309,15 @@ export function SessionSchedules({
     setRosterFeedback(null)
     setAssignPlayerId(playerId)
     setAssignmentTouched(markTouched)
-    const player = players.find((item) => item.member.id === playerId)
+    const player = playerById.get(playerId)
     if (!player) {
       setAssignWeekdays([])
       return setEffectiveFrom("")
     }
     const offeredWeekdays = new Set(series.slots.map((slot) => slot.weekday))
-    const existingWeekdays = activeAssignedWeekdays(playerId, sessionAssignments)
+    const existingWeekdays = activeAssignedWeekdays(
+      assignmentIndex.activeByPlayer.get(playerId) ?? [],
+    )
     const preselectedWeekdays = player.training.academyPlan === "weekday-5-day"
       && !existingWeekdays.length
       && [1, 2, 3, 4, 5].every((weekday) => offeredWeekdays.has(weekday))
@@ -339,9 +355,11 @@ export function SessionSchedules({
 
   async function assignPlayer(series: TrainingSessionSeries) {
     if (hasPendingMutation) return
-    const player = players.find((item) => item.member.id === assignPlayerId)
+    const player = playerById.get(assignPlayerId)
     if (!player || !effectiveFrom || !assignWeekdays.length) return
-    const existingWeekdays = activeAssignedWeekdays(player.member.id, sessionAssignments)
+    const existingWeekdays = activeAssignedWeekdays(
+      assignmentIndex.activeByPlayer.get(player.member.id) ?? [],
+    )
     const projectedWeekdays = distinctAssignmentWeekdays([existingWeekdays, assignWeekdays])
     const requiredWeekdays = player.training.academyPlan
       ? academyPlanRequiredWeekdayCount(player.training.academyPlan)
@@ -357,13 +375,9 @@ export function SessionSchedules({
     }
     const earliestDate = earliestAssignmentDate(player.member.joinedAt, series.startsOn)
     const assignmentDate = effectiveFrom < earliestDate ? earliestDate : effectiveFrom
-    const referenceInstant = new Date()
     if (assignmentDate !== effectiveFrom) setEffectiveFrom(assignmentDate)
-    const backfillCount = sessionOccurrences.filter((occurrence) => (
-      occurrence.status === "scheduled"
-      && occurrence.occurrenceDate <= today
-      && occurrenceHasStarted(occurrence, referenceInstant)
-      && assignmentCoversOccurrence({
+    const backfillCount = backfillOccurrences.filter((occurrence) => (
+      assignmentCoversOccurrence({
         seriesId: series.id,
         effectiveFrom: assignmentDate,
         effectiveTo: null,
@@ -457,7 +471,7 @@ export function SessionSchedules({
           <span>Session assignments</span>
           <h2 id="series-rosters-title">Recurring sessions &amp; rosters</h2>
         </div>
-        {activeSeries.length ? programmeGroups.map((group) => {
+        {programmeGroups.length ? programmeGroups.map((group) => {
           const isProgrammeOpen = expandedProgramme === group.programme
           const programmeContentId = `schedule-programme-${group.programme.toLowerCase()}`
           const groupSummary = `${group.series.length} ${group.series.length === 1 ? "schedule" : "schedules"} · ${group.playerCount} ${group.playerCount === 1 ? "player" : "players"}`
@@ -490,14 +504,14 @@ export function SessionSchedules({
               >
                 {group.series.map((series) => {
           const isExpanded = expandedSeriesId === series.id
-          const roster = players.filter((player) => Boolean(
-            activeAssignmentForSeries(player.member.id, series.id, sessionAssignments),
-          ))
+          const roster = (assignmentIndex.activeBySeries.get(series.id) ?? []).flatMap(
+            (assignment) => playerById.get(assignment.playerId) ?? [],
+          )
           const availablePlayers = players.filter((player) => (
             player.training.level === series.programme
             && player.training.batch === series.batch
             && (!series.endsOn || player.member.joinedAt <= series.endsOn)
-            && !activeAssignmentForSeries(player.member.id, series.id, sessionAssignments)
+            && !assignmentIndex.activeByPlayerSeries.has(assignmentKey(player.member.id, series.id))
           ))
           const selectedAssignmentPlayer = availablePlayers.find((player) => (
             player.member.id === assignPlayerId
@@ -509,7 +523,9 @@ export function SessionSchedules({
             ? academyPlanRequiredWeekdayCount(selectedAssignmentPlayer.training.academyPlan)
             : null
           const existingAssignedWeekdays = selectedAssignmentPlayer
-            ? activeAssignedWeekdays(selectedAssignmentPlayer.member.id, sessionAssignments)
+            ? activeAssignedWeekdays(
+                assignmentIndex.activeByPlayer.get(selectedAssignmentPlayer.member.id) ?? [],
+              )
             : []
           const projectedAssignedWeekdays = distinctAssignmentWeekdays([
             existingAssignedWeekdays,
@@ -529,6 +545,7 @@ export function SessionSchedules({
                 const opening = !isExpanded
                 setExpandedProgramme(series.programme)
                 setExpandedSeriesId(opening ? series.id : null)
+                replaceExpandedScheduleUrl(series.programme, opening ? series.id : null)
                 clearAssignmentDraft()
                 setRosterFeedback(null)
                 if (opening && guidedPlayer && availablePlayers.some((player) => (
@@ -555,10 +572,8 @@ export function SessionSchedules({
                   </div>
                   <div className="coach-roster-list">
                     {roster.length ? roster.map((player) => {
-                      const assignment = activeAssignmentForSeries(
-                        player.member.id,
-                        series.id,
-                        sessionAssignments,
+                      const assignment = assignmentIndex.activeByPlayerSeries.get(
+                        assignmentKey(player.member.id, series.id),
                       )
                       return (
                         <div key={player.member.id}>
@@ -615,7 +630,7 @@ export function SessionSchedules({
                     <div><UserPlus aria-hidden="true" /><span><strong>Add an eligible player</strong><small>Showing only {series.programme} · {series.batch} players.</small></span></div>
                     <label>
                       <span>Player</span>
-                      <select ref={assignmentPlayerRef} disabled={hasPendingMutation} value={assignPlayerId} aria-invalid={rosterFeedback?.seriesId === series.id && rosterFeedback.field === "playerId" || undefined} aria-describedby={rosterFeedback?.seriesId === series.id && rosterFeedback.field === "playerId" ? assignmentFeedbackId : undefined} onChange={(event) => chooseAssignmentPlayer(event.target.value, series)}>
+                      <select ref={assignmentPlayerRef} name="playerId" disabled={hasPendingMutation} value={assignPlayerId} aria-invalid={rosterFeedback?.seriesId === series.id && rosterFeedback.field === "playerId" || undefined} aria-describedby={rosterFeedback?.seriesId === series.id && rosterFeedback.field === "playerId" ? assignmentFeedbackId : undefined} onChange={(event) => chooseAssignmentPlayer(event.target.value, series)}>
                         <option value="">Choose eligible player</option>
                         {availablePlayers.map((player) => <option key={player.member.id} value={player.member.id}>{player.member.fullName}</option>)}
                       </select>
@@ -650,6 +665,8 @@ export function SessionSchedules({
                             return (
                               <label key={day.value} className={selected ? "is-selected" : undefined}>
                                 <input
+                                  name="weekdays"
+                                  value={day.value}
                                   type="checkbox"
                                   checked={selected}
                                   disabled={hasPendingMutation
@@ -672,11 +689,12 @@ export function SessionSchedules({
                       <span>Effective from</span>
                       <input
                         ref={assignmentDateRef}
+                        name="effectiveFrom"
                         type="date"
                         disabled={!assignPlayerId || hasPendingMutation}
                         min={assignPlayerId
                           ? earliestAssignmentDate(
-                              players.find((player) => player.member.id === assignPlayerId)?.member.joinedAt ?? series.startsOn,
+                              playerById.get(assignPlayerId)?.member.joinedAt ?? series.startsOn,
                               series.startsOn,
                             )
                           : undefined}
@@ -685,7 +703,7 @@ export function SessionSchedules({
                         aria-invalid={rosterFeedback?.seriesId === series.id && rosterFeedback.field === "effectiveFrom" || undefined}
                         aria-describedby={rosterFeedback?.seriesId === series.id && rosterFeedback.field === "effectiveFrom" ? assignmentFeedbackId : undefined}
                         onChange={(event) => {
-                          const player = players.find((item) => item.member.id === assignPlayerId)
+                          const player = playerById.get(assignPlayerId)
                           const minimum = earliestAssignmentDate(player?.member.joinedAt ?? series.startsOn, series.startsOn)
                           setAssignmentTouched(true)
                           setEffectiveFrom(event.target.value < minimum ? minimum : event.target.value)

@@ -4,8 +4,8 @@ export default function CoachLoading() {
   return (
     <RouteLoadingState
       eyebrow="Coach Workspace"
-      status="Loading Coach Workspace."
-      title="Opening your workspace."
+      status="Loading Coach Workspace…"
+      title="Opening your workspace…"
     />
   )
 }

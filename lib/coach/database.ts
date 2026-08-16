@@ -333,7 +333,7 @@ export function getPlayerOnboardingWorkspace(
   })
 }
 
-export function listCoachMonthlyReports(): CoachMonthlyReportRecord[] {
+export function listCoachMonthlyReports(month?: string): CoachMonthlyReportRecord[] {
   const db = initializeDatabase()
   const newerPublication = alias(reportPublications, "newer_coach_report_publication")
   const reports = db.select({
@@ -355,6 +355,7 @@ export function listCoachMonthlyReports(): CoachMonthlyReportRecord[] {
           )),
       ),
     ))
+    .where(month ? eq(monthlyReports.month, month) : undefined)
     .orderBy(desc(monthlyReports.month))
     .all()
 

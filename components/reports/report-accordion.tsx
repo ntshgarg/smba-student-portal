@@ -85,7 +85,7 @@ export function ReportAccordion({
           >
             <h2>
               <button
-                aria-controls={yearPanelId}
+                aria-controls={isYearOpen ? yearPanelId : undefined}
                 aria-expanded={isYearOpen}
                 className="report-year-trigger"
                 id={yearTriggerId}
@@ -139,7 +139,7 @@ export function ReportAccordion({
                         >
                           <h3>
                             <button
-                              aria-controls={reportPanelId}
+                              aria-controls={isReportOpen ? reportPanelId : undefined}
                               aria-expanded={isReportOpen}
                               className="report-month-trigger"
                               id={reportTriggerId}

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { redirect } from "next/navigation"
+import { cache } from "react"
 
 import {
   getCoachAccessProfile,
@@ -10,15 +11,18 @@ import {
 import type { SessionIdentity } from "@/lib/auth/identity"
 import { sessionProvider } from "@/lib/data"
 
+const getRequestIdentity = cache(() => sessionProvider.getCurrentIdentity())
+const getRequestCoachAccess = cache((coachId: string) => getCoachAccessProfile(coachId))
+
 export type CurrentCoachContext = {
   access: CoachAccessProfile
   identity: SessionIdentity
 }
 
 export async function getCurrentCoachContext(): Promise<CurrentCoachContext | null> {
-  const identity = await sessionProvider.getCurrentIdentity()
+  const identity = await getRequestIdentity()
   if (!identity || identity.role !== "coach") return null
-  const access = getCoachAccessProfile(identity.subjectId)
+  const access = getRequestCoachAccess(identity.subjectId)
   return access ? { access, identity } : null
 }
 
@@ -30,10 +34,10 @@ export async function requireHeadAdminAction() {
 }
 
 export async function requireCoachPage() {
-  const identity = await sessionProvider.getCurrentIdentity()
+  const identity = await getRequestIdentity()
   if (!identity) redirect("/login")
   if (identity.role !== "coach") redirect("/player")
-  const access = getCoachAccessProfile(identity.subjectId)
+  const access = getRequestCoachAccess(identity.subjectId)
   if (!access) redirect("/login")
   return { access, identity }
 }

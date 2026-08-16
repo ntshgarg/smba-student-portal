@@ -15,7 +15,11 @@ import { useRouter } from "next/navigation"
 import type { CSSProperties } from "react"
 import { useEffect, useMemo, useState } from "react"
 
-import { useCoachPortal } from "@/components/coach/coach-portal-provider"
+import {
+  useAttendancePortal,
+  useMemberPortal,
+  useSessionPortal,
+} from "@/components/coach/coach-portal-provider"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import {
@@ -58,27 +62,31 @@ export function PlayerAttendanceRecorder({
   initialDate,
   initialFromCalendar,
   initialOccurrenceId,
+  initialReferenceInstant,
 }: {
   initialDate: string
   initialFromCalendar: boolean
   initialOccurrenceId: string | null
+  initialReferenceInstant: number
 }) {
+  const { players } = useMemberPortal()
   const {
     attendanceAdjustments,
     attendanceRecords,
-    players,
     saveAttendanceRegister,
+  } = useAttendancePortal()
+  const {
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,
-  } = useCoachPortal()
+  } = useSessionPortal()
   const router = useRouter()
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [selectedOccurrenceId, setSelectedOccurrenceId] = useState(initialOccurrenceId)
   const [draftChanges, setDraftChanges] = useState<SessionAttendanceChange[]>([])
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [referenceInstant, setReferenceInstant] = useState(() => Date.now())
+  const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: draftChanges.length > 0,
     message: "Leave this session and discard the unsaved attendance changes?",
@@ -406,6 +414,7 @@ export function PlayerAttendanceRecorder({
           <label>
             <span>Training date</span>
             <input
+              name="attendanceDate"
               type="date"
               value={selectedDate}
               onChange={(event) => chooseDate(event.target.value)}

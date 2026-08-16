@@ -3,10 +3,8 @@ import Link from "next/link"
 
 import { AttendanceAdjustmentsWorkspace } from "@/components/coach/attendance-adjustments-workspace"
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
-import { listAttendanceAdjustments } from "@/lib/attendance/adjustments"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
-import { getCoachSessionSnapshot, listOperationalPlayerRecords } from "@/lib/coach/database"
-import { listSessionAttendanceRecords } from "@/lib/sessions/database"
+import { getCoachAttendanceAdjustmentsSnapshot } from "@/lib/coach/session-read-models"
 
 export const metadata = {
   title: "Reschedule attendance",
@@ -21,27 +19,27 @@ export default async function AttendanceAdjustmentsPage({
 }: {
   searchParams: Promise<{
     adjustment?: string | string[]
+    history?: string | string[]
     player?: string | string[]
   }>
 }) {
   await requireHeadAdminPage()
   const query = await searchParams
   const adjustment = firstSearchValue(query.adjustment)
+  const historyOpen = firstSearchValue(query.history) === "open"
   const player = firstSearchValue(query.player)
-  const players = listOperationalPlayerRecords()
-  const sessions = getCoachSessionSnapshot()
+  const snapshot = getCoachAttendanceAdjustmentsSnapshot({ adjustmentId: adjustment, playerId: player })
 
   return (
     <CoachPortalProvider
-      initialAttendanceAdjustments={listAttendanceAdjustments({ includeVoided: true })}
-      initialAttendanceRecords={listSessionAttendanceRecords()}
-      initialMembers={players.members}
-      initialPendingRegistrations={[]}
+      initialAttendanceAdjustments={snapshot.attendanceAdjustments}
+      initialAttendanceRecords={snapshot.attendanceRecords}
+      initialMembers={snapshot.members}
       initialReports={[]}
-      initialSessionAssignments={sessions.sessionAssignments}
-      initialSessionOccurrences={sessions.sessionOccurrences}
-      initialSessionSeries={sessions.sessionSeries}
-      initialTrainingProfiles={players.trainingProfiles}
+      initialSessionAssignments={snapshot.sessionAssignments}
+      initialSessionOccurrences={snapshot.sessionOccurrences}
+      initialSessionSeries={snapshot.sessionSeries}
+      initialTrainingProfiles={snapshot.trainingProfiles}
     >
       <div className="coach-calendar coach-attendance-workspace page-shell">
         <nav className="coach-calendar-back-row coach-route-nav" aria-label="Attendance navigation">
@@ -59,10 +57,12 @@ export default async function AttendanceAdjustmentsPage({
 
         <article className="coach-attendance-card is-workspace">
           <AttendanceAdjustmentsWorkspace
+            key={`${snapshot.selectedPlayerId ?? "none"}:${adjustment ?? "none"}`}
             id="attendance-adjustments-workspace"
             labelledBy="reschedule-attendance-title"
             initialAdjustmentId={adjustment}
-            initialPlayerId={player}
+            initialHistoryOpen={historyOpen}
+            initialPlayerId={snapshot.selectedPlayerId ?? undefined}
           />
         </article>
       </div>

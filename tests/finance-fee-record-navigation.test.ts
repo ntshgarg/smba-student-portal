@@ -96,7 +96,7 @@ describe("coach Fee Records navigation", () => {
     expect(playerRecord).toContain("Back to Fee Records")
     expect(route).toContain('title: "Fee records"')
     expect(records).toContain('aria-label="Fee record views"')
-    expect(source("app/coach/financials/loading.tsx")).toContain("Loading Financials.")
+    expect(source("app/coach/financials/loading.tsx")).toContain("Loading Financials…")
     expect(source("app/coach/financials/error.tsx")).toContain("Financials are unavailable.")
   })
 })

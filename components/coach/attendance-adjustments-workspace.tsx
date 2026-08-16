@@ -12,6 +12,7 @@ import {
   RotateCcw,
   X,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import {
   forwardRef,
   useEffect,
@@ -21,7 +22,11 @@ import {
   useState,
 } from "react"
 
-import { useCoachPortal } from "@/components/coach/coach-portal-provider"
+import {
+  useAttendancePortal,
+  useMemberPortal,
+  useSessionPortal,
+} from "@/components/coach/coach-portal-provider"
 import {
   InlineNotice,
   type ActionFeedback,
@@ -86,6 +91,7 @@ export type AttendanceAdjustmentsWorkspaceHandle = {
 type AttendanceAdjustmentsWorkspaceProps = {
   id?: string
   initialAdjustmentId?: string
+  initialHistoryOpen?: boolean
   initialPlayerId?: string
   labelledBy?: string
 }
@@ -100,19 +106,23 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 >(function AttendanceAdjustmentsWorkspace({
   id = "attendance-reschedule-panel",
   initialAdjustmentId,
+  initialHistoryOpen = false,
   initialPlayerId,
   labelledBy = "reschedule-attendance-trigger",
 }, ref) {
+  const { players } = useMemberPortal()
   const {
     attendanceAdjustments,
     attendanceRecords,
-    players,
     publishAttendanceAdjustment,
+    voidAttendanceAdjustment,
+  } = useAttendancePortal()
+  const {
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,
-    voidAttendanceAdjustment,
-  } = useCoachPortal()
+  } = useSessionPortal()
+  const router = useRouter()
   const initialAdjustment = attendanceAdjustments.find((item) => item.id === initialAdjustmentId)
   const requestedInitialPlayerId = initialAdjustment?.playerId ?? initialPlayerId
   const validInitialPlayerId = players.some(
@@ -132,7 +142,9 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const [expandedAdjustmentId, setExpandedAdjustmentId] = useState<string | null>(
     initialAdjustment?.id ?? null,
   )
-  const [isHistoryOpen, setIsHistoryOpen] = useState(Boolean(initialAdjustment))
+  const [isHistoryOpen, setIsHistoryOpen] = useState(
+    initialHistoryOpen || Boolean(initialAdjustment),
+  )
   const deepLinkedAdjustmentRef = useRef<HTMLButtonElement>(null)
   const hasFocusedDeepLinkRef = useRef(false)
   const playerSelectRef = useRef<HTMLSelectElement>(null)
@@ -359,12 +371,32 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     setSelectedSourceDate("")
   }
 
+  function replaceHistoryUrl(historyOpen: boolean, adjustmentId: string | null) {
+    const params = new URLSearchParams(window.location.search)
+    if (historyOpen) params.set("history", "open")
+    else params.delete("history")
+    if (adjustmentId) params.set("adjustment", adjustmentId)
+    else params.delete("adjustment")
+    const query = params.toString()
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}`,
+    )
+  }
+
   function choosePlayer(playerId: string) {
     if (playerId === selectedPlayerId) return
     if (draftIsDirty && !confirmDiscard("Change player and discard this adjustment draft?")) return
     resetDraft()
     setSelectedPlayerId(playerId)
     setFeedback(null)
+    const params = new URLSearchParams(window.location.search)
+    params.delete("adjustment")
+    if (playerId) params.set("player", playerId)
+    else params.delete("player")
+    const query = params.toString()
+    router.replace(`${window.location.pathname}${query ? `?${query}` : ""}`, { scroll: false })
   }
 
   function chooseSource(occurrenceId: string) {
@@ -446,6 +478,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
       resetDraft()
       setIsHistoryOpen(true)
       setExpandedAdjustmentId(published.id)
+      replaceHistoryUrl(true, published.id)
       setFeedback({ message: "Attendance rescheduled", tone: "success" })
     } catch (error) {
       setFeedback({
@@ -514,6 +547,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                 <span><strong>Player</strong><small>1 of 3</small></span>
                 <select
                   ref={playerSelectRef}
+                  name="playerId"
                   value={selectedPlayerId}
                   aria-invalid={feedback?.field === "playerId" || undefined}
                   aria-describedby={feedback?.field === "playerId" ? feedbackId : undefined}
@@ -677,6 +711,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                     <span><strong>Reason</strong><small>Optional</small></span>
                     <input
                       ref={reasonRef}
+                      name="reason"
                       type="text"
                       maxLength={MAX_REASON_LENGTH}
                       value={reason}
@@ -755,8 +790,13 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
           className="coach-adjustment-history-disclosure"
           type="button"
           aria-expanded={isHistoryOpen}
-          aria-controls="attendance-adjustment-history"
-          onClick={() => setIsHistoryOpen((current) => !current)}
+          aria-controls={isHistoryOpen ? "attendance-adjustment-history" : undefined}
+          onClick={() => {
+            const nextOpen = !isHistoryOpen
+            setIsHistoryOpen(nextOpen)
+            if (!nextOpen) setExpandedAdjustmentId(null)
+            replaceHistoryUrl(nextOpen, nextOpen ? expandedAdjustmentId : null)
+          }}
         >
           <span>
             <strong>Previous reschedules ({history.length})</strong>
@@ -798,8 +838,12 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                           : undefined}
                         type="button"
                         aria-expanded={isExpanded}
-                        aria-controls={`adjustment-details-${adjustment.id}`}
-                        onClick={() => setExpandedAdjustmentId(isExpanded ? null : adjustment.id)}
+                        aria-controls={isExpanded ? `adjustment-details-${adjustment.id}` : undefined}
+                        onClick={() => {
+                          const nextAdjustmentId = isExpanded ? null : adjustment.id
+                          setExpandedAdjustmentId(nextAdjustmentId)
+                          replaceHistoryUrl(true, nextAdjustmentId)
+                        }}
                       >
                         <span className="coach-adjustment-history-mark" aria-hidden="true">
                           {isVoided ? <RotateCcw /> : requiresReview ? <CircleAlert /> : <Check />}

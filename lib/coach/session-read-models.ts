@@ -2,10 +2,15 @@ import "server-only"
 
 import { and, desc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm"
 
-import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
+import {
+  listAttendanceAdjustments,
+  type AttendanceAdjustmentRecord,
+} from "@/lib/attendance/adjustments"
 import type { AttendanceRegisterSelection } from "@/lib/attendance/register-workspace"
+import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   listAttendanceRegisterPlayerRecords,
+  listCoachMonthlyReports,
   listOperationalPlayerRecords,
 } from "@/lib/coach/database"
 import { initializeDatabase } from "@/lib/db/client"
@@ -19,11 +24,16 @@ import {
 } from "@/lib/sessions/domain"
 import {
   listSessionAssignmentsForSeries,
+  listSessionAssignments,
+  listSessionAssignmentsForPlayers,
+  listSessionAttendanceRecordsForPlayer,
   listSessionAttendanceRecordsForOccurrences,
   listSessionOccurrences,
+  listSessionOccurrencesByIds,
   listSessionOccurrencesForSeries,
   listSessionSeries,
 } from "@/lib/sessions/database"
+import { occurrenceHasStarted } from "@/lib/sessions/occurrence-time"
 import type {
   SessionAssignment,
   SessionAttendanceRecords,
@@ -46,6 +56,36 @@ export type CoachAttendanceRegisterSnapshot = CoachSessionWindowSnapshot & Retur
 > & {
   attendanceAdjustments: AttendanceAdjustmentRecord[]
   attendanceRecords: SessionAttendanceRecords
+}
+
+export type CoachAttendanceRecorderSnapshot = CoachSessionWindowSnapshot & ReturnType<
+  typeof listOperationalPlayerRecords
+> & {
+  attendanceAdjustments: AttendanceAdjustmentRecord[]
+  attendanceRecords: SessionAttendanceRecords
+}
+
+export type CoachReportWritingSnapshot = CoachAttendanceRecorderSnapshot & {
+  reports: ReturnType<typeof listCoachMonthlyReports>
+}
+
+export type CoachAttendanceAdjustmentsSnapshot = CoachSessionWindowSnapshot & ReturnType<
+  typeof listOperationalPlayerRecords
+> & {
+  attendanceAdjustments: AttendanceAdjustmentRecord[]
+  attendanceRecords: SessionAttendanceRecords
+  selectedPlayerId: string | null
+}
+
+export type CoachScheduleBackfillOccurrence = Pick<
+  TrainingSessionOccurrence,
+  "eligibilityDate" | "seriesId"
+>
+
+export type CoachScheduleRosterSnapshot = {
+  backfillOccurrences: CoachScheduleBackfillOccurrence[]
+  sessionAssignments: SessionAssignment[]
+  sessionSeries: TrainingSessionSeries[]
 }
 
 function unique(items: readonly string[]) {
@@ -110,6 +150,113 @@ export function getCoachCalendarMonthSnapshot(month: string): CoachCalendarMonth
 
 export function getCoachCalendarMonthSessionSnapshot(month: string): CoachSessionWindowSnapshot {
   return getCoachSessionSnapshotForWindow(calendarWindowForMonth(month))
+}
+
+export function getCoachAttendanceRecorderSnapshot(
+  dateKey: string,
+): CoachAttendanceRecorderSnapshot {
+  const sessions = getCoachSessionSnapshotForWindow({ from: dateKey, to: dateKey })
+  const occurrenceIds = sessions.sessionOccurrences.map((occurrence) => occurrence.id)
+  const playerIds = unique(sessions.sessionAssignments.map((assignment) => assignment.playerId))
+
+  return {
+    ...sessions,
+    ...listOperationalPlayerRecords(playerIds),
+    attendanceAdjustments: listAttendanceAdjustments({
+      includeVoided: true,
+      sourceOccurrenceIds: occurrenceIds,
+    }),
+    attendanceRecords: listSessionAttendanceRecordsForOccurrences(occurrenceIds),
+  }
+}
+
+export function getCoachReportWritingSnapshot(month: string): CoachReportWritingSnapshot {
+  const sessions = getCoachCalendarMonthSessionSnapshot(month)
+  const occurrenceIds = sessions.sessionOccurrences.map((occurrence) => occurrence.id)
+
+  return {
+    ...sessions,
+    ...listOperationalPlayerRecords(),
+    attendanceAdjustments: listAttendanceAdjustments({
+      includeVoided: true,
+      sourceOccurrenceIds: occurrenceIds,
+    }),
+    attendanceRecords: listSessionAttendanceRecordsForOccurrences(occurrenceIds),
+    reports: listCoachMonthlyReports(month),
+  }
+}
+
+export function getCoachAttendanceAdjustmentsSnapshot({
+  adjustmentId,
+  playerId,
+}: {
+  adjustmentId?: string
+  playerId?: string
+} = {}): CoachAttendanceAdjustmentsSnapshot {
+  const players = listOperationalPlayerRecords()
+  const attendanceAdjustments = listAttendanceAdjustments({ includeVoided: true })
+  const adjustmentPlayerId = attendanceAdjustments.find(
+    (adjustment) => adjustment.id === adjustmentId,
+  )?.playerId
+  const requestedPlayerId = adjustmentPlayerId ?? playerId
+  const selectedPlayerId = players.members.some((member) => member.id === requestedPlayerId)
+    ? requestedPlayerId ?? null
+    : null
+  const attendanceRecords = selectedPlayerId
+    ? listSessionAttendanceRecordsForPlayer(selectedPlayerId)
+    : {}
+  const occurrenceIds = unique([
+    ...Object.keys(attendanceRecords),
+    ...attendanceAdjustments.flatMap((adjustment) => [
+      adjustment.sourceOccurrenceId,
+      ...(adjustment.completionOccurrenceId ? [adjustment.completionOccurrenceId] : []),
+    ]),
+  ])
+
+  return {
+    ...players,
+    attendanceAdjustments,
+    attendanceRecords,
+    selectedPlayerId,
+    sessionAssignments: selectedPlayerId
+      ? listSessionAssignmentsForPlayers([selectedPlayerId])
+      : [],
+    sessionOccurrences: listSessionOccurrencesByIds(occurrenceIds),
+    sessionSeries: listSessionSeries(),
+  }
+}
+
+export function getCoachScheduleRosterSnapshot(
+  referenceDate = getIndiaDateKey(),
+  referenceInstant = new Date(),
+): CoachScheduleRosterSnapshot {
+  const sessionSeries = listSessionSeries()
+  const earliestStart = sessionSeries.reduce<string | null>(
+    (earliest, series) => !earliest || series.startsOn < earliest ? series.startsOn : earliest,
+    null,
+  )
+  const backfillOccurrences = earliestStart
+    ? listSessionOccurrences(earliestStart, referenceDate)
+        .filter((occurrence) => (
+          occurrence.status === "scheduled"
+          && occurrenceHasStarted(occurrence, referenceInstant)
+        ))
+        .map(({ eligibilityDate, seriesId }) => ({ eligibilityDate, seriesId }))
+    : []
+
+  return {
+    backfillOccurrences,
+    sessionAssignments: listSessionAssignments(),
+    sessionSeries,
+  }
+}
+
+export function getCoachScheduleMutationSnapshot(): CoachSessionWindowSnapshot {
+  return {
+    sessionAssignments: listSessionAssignments(),
+    sessionOccurrences: [],
+    sessionSeries: listSessionSeries(),
+  }
 }
 
 function listAttendanceRegisterAdjustments({

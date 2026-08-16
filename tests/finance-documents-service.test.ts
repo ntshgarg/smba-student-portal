@@ -40,10 +40,10 @@ describe("Financials document read models", () => {
   }
 
   beforeAll(async () => {
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
     documents = await import("@/lib/finance/documents")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
 
     const createdAt = new Date("2026-07-01T10:00:00+05:30")
     database.insert(schema.accounts).values({

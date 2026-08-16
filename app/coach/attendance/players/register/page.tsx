@@ -21,7 +21,8 @@ export default async function PlayerAttendanceRegisterPage({
 }) {
   await requireHeadAdminPage()
   const query = await searchParams
-  const today = getIndiaDateKey()
+  const now = new Date()
+  const today = getIndiaDateKey(now)
   const sessionSeries = listSessionSeries()
   const yearOptions = buildAttendanceRegisterYearOptions({
     persistedDateKeys: sessionSeries.flatMap((series) => (
@@ -45,14 +46,18 @@ export default async function PlayerAttendanceRegisterPage({
       initialAttendanceAdjustments={snapshot.attendanceAdjustments}
       initialAttendanceRecords={snapshot.attendanceRecords}
       initialMembers={snapshot.members}
-      initialPendingRegistrations={[]}
       initialReports={[]}
       initialSessionAssignments={snapshot.sessionAssignments}
       initialSessionOccurrences={snapshot.sessionOccurrences}
       initialSessionSeries={snapshot.sessionSeries}
       initialTrainingProfiles={snapshot.trainingProfiles}
     >
-      <PlayerAttendanceRegister selection={selection} yearOptions={yearOptions} />
+      <PlayerAttendanceRegister
+        referenceDate={today}
+        referenceInstant={now.getTime()}
+        selection={selection}
+        yearOptions={yearOptions}
+      />
     </CoachPortalProvider>
   )
 }

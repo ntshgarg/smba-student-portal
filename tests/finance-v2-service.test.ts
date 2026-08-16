@@ -116,10 +116,10 @@ describe("Financials V2 service", () => {
   }
 
   beforeAll(async () => {
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
     finance = await import("@/lib/finance/service")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
     finance.activateFinance({
       trackingMonth: "2026-08",
       idempotencyKey: "phase-two-service-activation",

@@ -111,11 +111,11 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
   }
 
   beforeAll(async () => {
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
     finance = await import("@/lib/finance/service")
     repository = await import("@/lib/finance/repository")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
     finance.activateFinance({
       trackingMonth: "2026-08",
       idempotencyKey: "phase3-finance-activation",

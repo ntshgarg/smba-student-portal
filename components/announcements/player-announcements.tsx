@@ -22,12 +22,11 @@ function AnnouncementLabels({
   if (!announcement.pinned && !isNew) return null
 
   return (
-    <span className={`${styles.labels}${dashboard ? ` ${styles.dashboardLabels}` : ""}`} aria-label={[
-      announcement.pinned ? "Pinned" : null,
-      isNew ? "New" : null,
-    ].filter(Boolean).join(", ")}>
+    <span className={`${styles.labels}${dashboard ? ` ${styles.dashboardLabels}` : ""}`}>
       {announcement.pinned ? (
-        dashboard ? <span>Pinned</span> : <Pin aria-hidden="true" />
+        dashboard
+          ? <span>Pinned</span>
+          : <><Pin aria-hidden="true" /><span className="sr-only">Pinned</span></>
       ) : null}
       {isNew ? <span>New</span> : null}
     </span>

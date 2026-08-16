@@ -7,7 +7,6 @@ import {
   Eye,
   PencilLine,
   Phone,
-  Search,
   SearchX,
 } from "lucide-react"
 import Link from "next/link"
@@ -15,6 +14,8 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 
 import { useMemberDirectoryPortal } from "@/components/coach/coach-portal-provider"
+import { MemberDirectoryFilters } from "@/components/coach/members/member-directory-filters"
+import { buildMemberDirectoryIndex } from "@/components/coach/members/member-directory-index"
 import {
   initialMemberWindow,
   memberWindowAfterCriteriaChange,
@@ -30,10 +31,7 @@ import {
   memberDirectoryLevels,
   memberDirectorySearch,
   parseMemberDirectoryCriteria,
-  type MemberDirectoryBatch,
   type MemberDirectoryCriteria,
-  type MemberDirectoryLevel,
-  type MemberDirectoryStatus,
 } from "@/components/coach/members/member-directory-query"
 import {
   InlineNotice,
@@ -46,7 +44,7 @@ import type {
   PlayerMemberRecord,
 } from "@/lib/coach/types"
 import { isValidDateKey } from "@/lib/attendance/domain"
-import { formatDateKey, formatSessionLabel } from "@/lib/format"
+import { formatDateKey } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanIsValid,
@@ -170,15 +168,24 @@ export function MemberDirectory() {
     sessionAssignments,
     sessionSeries,
   } = useMemberDirectoryPortal()
+  const memberIndex = useMemo(
+    () => buildMemberDirectoryIndex(players, sessionAssignments, sessionSeries),
+    [players, sessionAssignments, sessionSeries],
+  )
+  const { playerById, sessionLabelsByPlayer } = memberIndex
   const urlCriteria = useMemo(
     () => parseMemberDirectoryCriteria(searchParams),
     [searchParams],
   )
   const query = urlCriteria.query
   const { batch, level, status } = urlCriteria
+  const requestedMemberId = searchParams.get("player")
+  const deepLinkedMemberId = requestedMemberId && playerById.has(requestedMemberId)
+    ? requestedMemberId
+    : null
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [memberWindow, setMemberWindow] = useState(initialMemberWindow)
-  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null)
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(deepLinkedMemberId)
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
   const [editingRevision, setEditingRevision] = useState<number | null>(null)
   const [revealedContacts, setRevealedContacts] = useState<Set<string>>(() => new Set())
@@ -194,6 +201,7 @@ export function MemberDirectory() {
   const contactLinkRefs = useRef(new Map<string, HTMLAnchorElement>())
   const criteriaKey = memberDirectoryCriteriaKey(urlCriteria)
   const previousCriteriaKeyRef = useRef(criteriaKey)
+  const focusedDeepLinkRef = useRef(false)
 
   const filteredPlayers = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -210,24 +218,28 @@ export function MemberDirectory() {
         const matchesBatch = batch === "All batches" || player.training.batch === batch
 
         return player.member.id === editingMemberId
+          || player.member.id === expandedMemberId
           || (matchesSearch && matchesLevel && matchesBatch && matchesStatus)
       })
       .sort((a, b) => a.member.fullName.localeCompare(b.member.fullName))
-  }, [batch, editingMemberId, level, players, query, status])
+  }, [batch, editingMemberId, expandedMemberId, level, players, query, status])
 
   const editingMemberIndex = editingMemberId
     ? filteredPlayers.findIndex((player) => player.member.id === editingMemberId)
     : -1
+  const expandedMemberIndex = expandedMemberId
+    ? filteredPlayers.findIndex((player) => player.member.id === expandedMemberId)
+    : -1
   const visibleCount = visibleMemberCount(
     filteredPlayers.length,
     memberWindow,
-    editingMemberIndex,
+    Math.max(editingMemberIndex, expandedMemberIndex),
   )
   const visiblePlayers = filteredPlayers.slice(0, visibleCount)
   const hasMoreMembers = visiblePlayers.length < filteredPlayers.length
 
   const editingPlayer = editingMemberId
-    ? players.find((player) => player.member.id === editingMemberId) ?? null
+    ? playerById.get(editingMemberId) ?? null
     : null
   const isDirty = Boolean(editingPlayer && draft
     && JSON.stringify(draft) !== JSON.stringify(draftFromPlayer(editingPlayer)))
@@ -251,6 +263,27 @@ export function MemberDirectory() {
       memberDirectoryHref(pathname, canonicalSearch),
     )
   }, [pathname, searchParams, urlCriteria])
+
+  useEffect(() => {
+    if (!requestedMemberId || deepLinkedMemberId) return
+    const parameters = new URLSearchParams(window.location.search)
+    parameters.delete("player")
+    window.history.replaceState(null, "", memberDirectoryHref(pathname, parameters.toString()))
+  }, [deepLinkedMemberId, pathname, requestedMemberId])
+
+  useEffect(() => {
+    if (!deepLinkedMemberId
+      || expandedMemberId !== deepLinkedMemberId
+      || focusedDeepLinkRef.current) return
+    const frame = window.requestAnimationFrame(() => {
+      const heading = document.getElementById(`member-details-title-${deepLinkedMemberId}`)
+      if (!heading) return
+      focusedDeepLinkRef.current = true
+      heading.focus({ preventScroll: true })
+      heading.scrollIntoView({ block: "center", behavior: "auto" })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [deepLinkedMemberId, expandedMemberId])
 
   useEffect(() => {
     if (criteriaKey === previousCriteriaKeyRef.current) return
@@ -340,6 +373,9 @@ export function MemberDirectory() {
       setDraft(null)
       setErrors({})
       setRevealedContacts(new Set())
+      const parameters = new URLSearchParams(window.location.search)
+      parameters.delete("player")
+      window.history.replaceState(null, "", memberDirectoryHref(pathname, parameters.toString()))
       return
     }
 
@@ -351,6 +387,9 @@ export function MemberDirectory() {
     setErrors({})
     setMemberFeedback(null)
     setRevealedContacts(new Set())
+    const parameters = new URLSearchParams(window.location.search)
+    parameters.set("player", memberId)
+    window.history.replaceState(null, "", memberDirectoryHref(pathname, parameters.toString()))
   }
 
   function beginEditing(player: PlayerMemberRecord) {
@@ -541,28 +580,6 @@ export function MemberDirectory() {
     setErrors((current) => ({ ...current, batch: undefined, academyPlan: undefined }))
   }
 
-  function sessionLabels(player: PlayerMemberRecord) {
-    return sessionAssignments
-      .filter((assignment) => (
-        assignment.playerId === player.member.id
-        && !assignment.effectiveTo
-      ))
-      .map((assignment) => {
-        const series = sessionSeries.find((item) => item.id === assignment.seriesId)
-        const dayLabel = assignment.weekdays
-          .map((weekday) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekday])
-          .join(", ")
-        const slot = series?.slots[0]
-        return series ? `${formatSessionLabel({
-          programme: series.programme,
-          batch: series.batch,
-          startTime: slot?.startTime ?? "",
-          durationMinutes: slot?.durationMinutes ?? 0,
-        })} · ${dayLabel}` : null
-      })
-      .filter((label): label is string => Boolean(label))
-  }
-
   function revealContact(memberId: string) {
     setRevealedContacts((current) => new Set(current).add(memberId))
     focusAfterRender(() => contactLinkRefs.current.get(memberId))
@@ -601,90 +618,13 @@ export function MemberDirectory() {
         />
 
         <div className="coach-member-register-tools">
-          <div className={`coach-member-directory-controls${filtersOpen ? " is-filters-open" : ""}`}>
-            <label className="coach-member-search">
-              <span className="sr-only">Search members or primary contacts</span>
-              <Search aria-hidden="true" />
-              <input
-                type="search"
-                value={query}
-                placeholder="Search members"
-                onChange={(event) => {
-                  const nextQuery = event.target.value
-                  updateDirectoryCriteria({
-                    ...urlCriteria,
-                    query: nextQuery,
-                  }, "replace")
-                }}
-              />
-            </label>
-
-            <button
-              className="coach-member-filter-toggle"
-              type="button"
-              aria-expanded={filtersOpen}
-              aria-controls="coach-member-filters"
-              onClick={() => setFiltersOpen((current) => !current)}
-            >
-              <span>
-                <strong>Filters</strong>
-                <small>{activeFilterCount ? `${activeFilterCount} active` : "Optional"}</small>
-              </span>
-              <ChevronDown aria-hidden="true" />
-            </button>
-
-            <div id="coach-member-filters" className="coach-member-filters">
-              <label className="coach-member-filter">
-                <span>Level</span>
-                <select
-                  value={level}
-                  onChange={(event) => {
-                    updateDirectoryCriteria({
-                      ...urlCriteria,
-                      level: event.target.value as MemberDirectoryLevel,
-                    }, "push")
-                  }}
-                >
-                  <option>All levels</option>
-                  {memberDirectoryLevels.map((item) => <option key={item}>{item}</option>)}
-                </select>
-              </label>
-
-              <label className="coach-member-filter">
-                <span>Status</span>
-                <select
-                  value={status}
-                  onChange={(event) => {
-                    updateDirectoryCriteria({
-                      ...urlCriteria,
-                      status: event.target.value as MemberDirectoryStatus,
-                    }, "push")
-                  }}
-                >
-                  <option value="all">All members</option>
-                  <option value="unassigned">Unassigned</option>
-                  <option value="active">Active</option>
-                  <option value="paused">Paused</option>
-                </select>
-              </label>
-
-              <label className="coach-member-filter">
-                <span>Batch</span>
-                <select
-                  value={batch}
-                  onChange={(event) => {
-                    updateDirectoryCriteria({
-                      ...urlCriteria,
-                      batch: event.target.value as MemberDirectoryBatch,
-                    }, "push")
-                  }}
-                >
-                  <option>All batches</option>
-                  {memberDirectoryBatches.map((item) => <option key={item}>{item}</option>)}
-                </select>
-              </label>
-            </div>
-          </div>
+          <MemberDirectoryFilters
+            activeFilterCount={activeFilterCount}
+            criteria={urlCriteria}
+            onChange={updateDirectoryCriteria}
+            onToggle={() => setFiltersOpen((current) => !current)}
+            open={filtersOpen}
+          />
 
           <div className="coach-member-directory-summary">
             <h2
@@ -719,11 +659,8 @@ export function MemberDirectory() {
                   const memberId = player.member.id
                   const isExpanded = expandedMemberId === memberId
                   const isEditing = editingMemberId === memberId
-                  const activeSessionLabels = sessionLabels(player)
-                  const hasActiveAssignments = sessionAssignments.some((assignment) => (
-                    assignment.playerId === memberId
-                    && !assignment.effectiveTo
-                  ))
+                  const activeSessionLabels = sessionLabelsByPlayer.get(memberId) ?? []
+                  const hasActiveAssignments = activeSessionLabels.length > 0
                   const contactRevealed = revealedContacts.has(memberId)
                   const classificationLockId = `member-${memberId}-classification-lock`
                   const currentMemberFeedback = memberFeedback?.memberId === memberId
@@ -763,7 +700,7 @@ export function MemberDirectory() {
                           <button
                             type="button"
                             aria-expanded={isExpanded}
-                            aria-controls={`member-details-${memberId}`}
+                            aria-controls={isExpanded ? `member-details-${memberId}` : undefined}
                             onClick={() => openMember(memberId)}
                           >
                             <span>{isExpanded ? "Close" : "Details"}</span>
@@ -779,7 +716,7 @@ export function MemberDirectory() {
                               <div className="coach-member-detail-heading">
                                 <div>
                                   <span>Member record</span>
-                                  <h3>{player.member.fullName}</h3>
+                                  <h3 id={`member-details-title-${memberId}`} tabIndex={-1}>{player.member.fullName}</h3>
                                   <p>{player.member.academyId} · {player.training.level}</p>
                                 </div>
                                 {!isEditing ? (
@@ -797,6 +734,7 @@ export function MemberDirectory() {
                                 <form
                                   ref={memberFormRef}
                                   className="coach-member-edit-form"
+                                  autoComplete="on"
                                   onSubmit={(event) => {
                                     event.preventDefault()
                                     saveMember(player)
@@ -809,7 +747,9 @@ export function MemberDirectory() {
                                         <span>Full name</span>
                                         <input
                                           id={`member-${memberId}-full-name`}
+                                          name="fullName"
                                           type="text"
+                                          autoComplete="name"
                                           maxLength={80}
                                           value={draft.fullName}
                                           aria-invalid={Boolean(errors.fullName)}
@@ -822,11 +762,9 @@ export function MemberDirectory() {
                                         <span>Joined date</span>
                                         <input
                                           id={`member-${memberId}-joined-at`}
+                                          name="joinedAt"
                                           type="date"
-                                          max={sessionAssignments
-                                            .filter((assignment) => assignment.playerId === memberId)
-                                            .map((assignment) => assignment.effectiveFrom)
-                                            .sort()[0]}
+                                          max={memberIndex.earliestByPlayer.get(memberId)}
                                           value={draft.joinedAt}
                                           aria-invalid={Boolean(errors.joinedAt)}
                                           aria-describedby={errors.joinedAt ? `member-${memberId}-joined-at-error` : undefined}
@@ -838,7 +776,9 @@ export function MemberDirectory() {
                                         <span>Primary contact</span>
                                         <input
                                           id={`member-${memberId}-contact-name`}
+                                          name="contactName"
                                           type="text"
+                                          autoComplete="name"
                                           maxLength={80}
                                           value={draft.contactName}
                                           aria-invalid={Boolean(errors.contactName)}
@@ -851,6 +791,7 @@ export function MemberDirectory() {
                                         <span>Relationship</span>
                                         <select
                                           id={`member-${memberId}-relationship`}
+                                          name="relationship"
                                           value={draft.relationship}
                                           aria-invalid={Boolean(errors.relationship)}
                                           aria-describedby={errors.relationship ? `member-${memberId}-relationship-error` : undefined}
@@ -865,7 +806,10 @@ export function MemberDirectory() {
                                         <span>Phone</span>
                                         <input
                                           id={`member-${memberId}-phone`}
+                                          name="phone"
                                           type="tel"
+                                          autoComplete="tel"
+                                          inputMode="tel"
                                           maxLength={32}
                                           value={draft.phone}
                                           aria-invalid={Boolean(errors.phone)}
@@ -895,6 +839,7 @@ export function MemberDirectory() {
                                         <span>Level</span>
                                         <select
                                           id={`member-${memberId}-level`}
+                                          name="level"
                                           value={draft.level}
                                           disabled={hasActiveAssignments}
                                           aria-invalid={Boolean(errors.level)}
@@ -913,6 +858,7 @@ export function MemberDirectory() {
                                         <span>Batch</span>
                                         <select
                                           id={`member-${memberId}-batch`}
+                                          name="batch"
                                           value={draft.batch}
                                           disabled={hasActiveAssignments}
                                           aria-invalid={Boolean(errors.batch)}
@@ -931,6 +877,7 @@ export function MemberDirectory() {
                                         <span>Academy Plan</span>
                                         <select
                                           id={`member-${memberId}-academy-plan`}
+                                          name="academyPlan"
                                           value={draft.academyPlan ?? ""}
                                           disabled={hasActiveAssignments
                                             || draft.level === "Assessment pending"
@@ -1019,7 +966,6 @@ export function MemberDirectory() {
                                             <button
                                               className="coach-member-contact-reveal"
                                               type="button"
-                                              aria-controls={`member-${memberId}-primary-contact`}
                                               aria-label={`Reveal primary contact for ${player.member.fullName}`}
                                               onClick={() => revealContact(memberId)}
                                             >

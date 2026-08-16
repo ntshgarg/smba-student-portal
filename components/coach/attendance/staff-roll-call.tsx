@@ -159,6 +159,7 @@ export function StaffRollCall({
           <label>
             <span>Roll-call date</span>
             <input
+              name="attendanceDate"
               type="date"
               max={referenceDate}
               value={selectedDate}

@@ -31,9 +31,9 @@ describe("Phase 3 accessibility corrections", () => {
 
     expect(header).not.toContain("aria-haspopup")
     expect(header).toContain("aria-expanded={accountOpen}")
-    expect(header).toContain('aria-controls="header-account-menu"')
+    expect(header).toContain('aria-controls={accountOpen ? "header-account-menu" : undefined}')
     expect(header).toContain("aria-expanded={open}")
-    expect(header).toContain('aria-controls="mobile-navigation"')
+    expect(header).toContain('aria-controls={open ? "mobile-navigation" : undefined}')
   })
 
   it("uses sequential headings in populated report and attendance views", () => {

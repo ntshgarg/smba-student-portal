@@ -19,10 +19,10 @@ describe("attendance adjustments", () => {
   const now = new Date("2026-08-20T12:00:00+05:30")
 
   beforeAll(async () => {
-    const client = await import("@/lib/db/client")
     schema = await import("@/lib/db/schema")
     adjustments = await import("@/lib/attendance/adjustments")
-    database = client.initializeDatabase()
+    const { prepareDatabase } = await import("@/lib/db/setup")
+    database = prepareDatabase({ seed: true })
     database.insert(schema.accounts).values({
       id: otherCoachId,
       fullName: "Other Head Coach",

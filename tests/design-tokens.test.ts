@@ -28,4 +28,14 @@ describe("design color tokens", () => {
     expect(globals.match(/--rose-strong:\s*#f18b92;/giu)).toHaveLength(1)
     expect(strongRoseLiterals).toHaveLength(1)
   })
+
+  it("keeps quiet player fee states at readable body-text contrast", () => {
+    const stylesheet = readFileSync(
+      path.join(process.cwd(), "components/financials/player-financials.module.css"),
+      "utf8",
+    )
+
+    expect(stylesheet).toMatch(/\.monthCell\[data-tone="quiet"\] strong \{\s*color: var\(--steel\);/u)
+    expect(stylesheet).not.toMatch(/\.monthCell\[data-tone="quiet"\] strong \{[^}]*color-mix/u)
+  })
 })

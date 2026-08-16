@@ -167,7 +167,7 @@ export function JuniorCoachAttendanceCard({
               className={styles.ledgerActionButton}
               type="button"
               aria-expanded={isOpen}
-              aria-controls="junior-coach-attendance-register"
+              aria-controls={isOpen ? "junior-coach-attendance-register" : undefined}
               onClick={() => updateNavigation({
                 ...navigation,
                 isOpen: !isOpen,
