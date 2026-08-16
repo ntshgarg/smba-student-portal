@@ -234,7 +234,7 @@ export function SessionSchedules({
         return
       }
 
-      guidanceHeadingRef.current?.focus()
+      guidanceHeadingRef.current?.focus({ preventScroll: true })
     })
     return () => window.cancelAnimationFrame(frame)
   }, [

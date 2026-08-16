@@ -865,7 +865,9 @@ export function PlayerOnboardingRegister({
     previousSelectionRef.current = `${selectedItem.id}:${selectedItem.stage}`
     if (!focusChanged) return
     window.requestAnimationFrame(() => {
-      document.getElementById(`onboarding-editor-title-${selectedItem.id}`)?.focus()
+      document.getElementById(`onboarding-editor-title-${selectedItem.id}`)?.focus({
+        preventScroll: true,
+      })
     })
   }, [pathname, router, searchParams, selectedId, selectedItem, workspace.cases])
 
