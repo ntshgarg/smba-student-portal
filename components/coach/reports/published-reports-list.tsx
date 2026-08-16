@@ -40,7 +40,7 @@ export function PublishedReportsList({
     if (newReportFocusIndex === null) return
 
     const frame = window.requestAnimationFrame(() => {
-      firstNewReportRef.current?.focus()
+      firstNewReportRef.current?.focus({ preventScroll: true })
     })
     return () => window.cancelAnimationFrame(frame)
   }, [newReportFocusIndex, shown])
