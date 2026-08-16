@@ -17,3 +17,4 @@
 /static_analysis_semgrep_1
 /audit-context
 /.supply-chain-risk-auditor
+.vercel

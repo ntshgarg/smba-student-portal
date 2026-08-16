@@ -92,6 +92,26 @@ The configured origin is used by canonical metadata, Open Graph URLs, `robots.tx
 header. Keep the locality-only address in structured data until SMBA's full street
 address, postal code and coordinates have been verified.
 
+## Remote development preview
+
+The disposable Vercel workspace preview is available at
+[`https://smba-student-portal.vercel.app`](https://smba-student-portal.vercel.app).
+It uses the synthetic 100-player Stress fixture in a Turso database and keeps the
+prototype Academy-ID login enabled for development. It must not be used for real
+academy, player, attendance or financial data.
+
+Vercel injects `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` through its Marketplace
+integration. Local development remains on `DB_FILE_NAME` unless
+`SMBA_USE_TURSO=true` is explicitly set. To populate a newly provisioned, empty
+preview database after pulling Vercel's development environment, run:
+
+```bash
+npm run preview:seed:turso
+```
+
+The copier is create-only, omits local authentication sessions and refuses to
+modify a database that already contains application tables.
+
 Migrations run automatically when the database is first used. The local SQLite database is
 ignored by Git.
 
