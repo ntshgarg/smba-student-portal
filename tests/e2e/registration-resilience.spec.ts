@@ -8,7 +8,7 @@ import {
 import path from "node:path"
 
 import { expect, test } from "@playwright/test"
-import type { Page, Route, TestInfo } from "@playwright/test"
+import type { Browser, Page, Route, TestInfo } from "@playwright/test"
 import Database from "better-sqlite3"
 
 const projectRoot = path.resolve(process.cwd())
@@ -104,6 +104,31 @@ function registrationRows(fullName: string) {
     WHERE full_name = ?
     ORDER BY created_at, id
   `).all(fullName) as RegistrationRow[])
+}
+
+function academyIdFor(accountId: string) {
+  return readDatabase((database) => (
+    database.prepare(`
+      SELECT identifier FROM auth_methods
+      WHERE account_id = ? AND method = 'academy_id' AND revoked_at IS NULL
+    `).get(accountId) as { identifier: string } | undefined
+  )?.identifier ?? null)
+}
+
+function credentialEvidence(accountId: string) {
+  return readDatabase((database) => ({
+    activationCodeCount: (database.prepare(`
+      SELECT count(*) AS count FROM auth_access_codes
+      WHERE account_id = ? AND purpose = 'activation'
+    `).get(accountId) as { count: number }).count,
+    claim: database.prepare(`
+      SELECT token_hash AS tokenHash, consumed_at AS consumedAt
+      FROM auth_activation_claims WHERE account_id = ?
+    `).get(accountId) as { consumedAt: number | null; tokenHash: string } | undefined,
+    pin: database.prepare(`
+      SELECT pin_hash AS pinHash FROM auth_pin_credentials WHERE account_id = ?
+    `).get(accountId) as { pinHash: string } | undefined,
+  }))
 }
 
 function databaseHealth() {
@@ -300,4 +325,95 @@ test("an aborted committed response retries idempotently", async ({ page }, test
     path: testInfo.outputPath("ambiguous-retry-confirmation.png"),
   })
   await attachDatabaseEvidence(testInfo, fullName, "ambiguous-retry-database.json")
+})
+
+async function loginAsHeadCoach(browser: Browser) {
+  const baseURL = process.env.SMBA_REGISTRATION_RESILIENCE_BASE_URL!
+  const context = await browser.newContext({ baseURL, viewport: { height: 900, width: 1440 } })
+  const page = await context.newPage()
+  await page.goto("/login", { waitUntil: "domcontentloaded" })
+  await page.getByLabel("Academy ID").fill("SMBA#0001")
+  await page.getByLabel("Password").fill(
+    process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!",
+  )
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.waitForURL((url) => url.pathname.startsWith("/coach"), { timeout: 20_000 })
+  return { context, page }
+}
+
+async function loginAsActivatedPlayer(
+  browser: Browser,
+  academyId: string,
+  factor: { password: string } | { pin: string },
+) {
+  const baseURL = process.env.SMBA_REGISTRATION_RESILIENCE_BASE_URL!
+  const context = await browser.newContext({ baseURL, viewport: { height: 844, width: 390 } })
+  const page = await context.newPage()
+  await page.goto("/login", { waitUntil: "domcontentloaded" })
+  if ("pin" in factor) await page.getByRole("button", { name: "6-digit PIN" }).click()
+  await page.getByLabel("Academy ID").fill(academyId)
+  await page.getByLabel("pin" in factor ? "6-digit PIN" : "Password").fill(
+    "pin" in factor ? factor.pin : factor.password,
+  )
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.waitForURL((url) => url.pathname.startsWith("/player"), { timeout: 20_000 })
+  await context.close()
+}
+
+test("a player completes code-free browser activation, optional PIN, and password fallback", async ({ browser, page }) => {
+  const fullName = "Browser Claim Activation Player"
+  const password = "A durable browser password!"
+  const pin = "246810"
+  await openRegistration(page)
+  await page.getByLabel("Full name").fill(fullName)
+  await page.getByRole("button", { name: "Request registration" }).click()
+  await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
+  await page.getByRole("link", { name: "View activation status" }).click()
+  await expect(page.getByRole("heading", { name: "Approval is pending." })).toBeVisible()
+
+  const wrongBrowser = await browser.newContext({
+    baseURL: process.env.SMBA_REGISTRATION_RESILIENCE_BASE_URL!,
+    viewport: { height: 844, width: 390 },
+  })
+  const wrongBrowserPage = await wrongBrowser.newPage()
+  await wrongBrowserPage.goto("/activate", { waitUntil: "domcontentloaded" })
+  await expect(wrongBrowserPage.getByRole("heading", { name: "Open your account." })).toBeVisible()
+  await wrongBrowser.close()
+
+  const account = registrationRows(fullName)[0]
+  expect(account).toBeTruthy()
+  const coach = await loginAsHeadCoach(browser)
+  await coach.page.goto(`/coach/onboarding?player=${encodeURIComponent(account.id)}`, {
+    waitUntil: "domcontentloaded",
+  })
+  await coach.page.getByRole("button", { name: "Approve & continue" }).click()
+  await expect(
+    coach.page.getByRole("status").filter({ hasText: /approved as SMBA#[0-9]{4}/u }),
+  ).toContainText(/approved as SMBA#[0-9]{4}/u)
+  await expect(coach.page.getByRole("button", { name: "Copy ID" })).toHaveCount(0)
+  await coach.context.close()
+
+  await expect.poll(() => registrationRows(fullName)[0]?.approvalStatus).toBe("approved")
+  const academyId = academyIdFor(account.id)
+  expect(academyId).toMatch(/^SMBA#[0-9]{4}$/u)
+  expect(credentialEvidence(account.id).activationCodeCount).toBe(0)
+
+  await page.goto("/activate", { waitUntil: "domcontentloaded" })
+  await expect(page.getByRole("heading", { name: "Create your password." })).toBeVisible()
+  await expect(page.getByLabel("Academy ID")).toHaveValue(academyId!)
+  await page.getByLabel("Create password").fill(password)
+  await page.getByLabel("Confirm password").fill(password)
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.waitForURL((url) => url.pathname === "/auth/pin/setup", { timeout: 20_000 })
+  await page.getByLabel("Enter PIN").fill(pin)
+  await page.getByLabel("Confirm PIN").fill(pin)
+  await page.getByRole("button", { name: "Set up PIN" }).click()
+  await page.waitForURL((url) => url.pathname.startsWith("/player"), { timeout: 20_000 })
+
+  const evidence = credentialEvidence(account.id)
+  expect(evidence.claim?.consumedAt).not.toBeNull()
+  expect(evidence.claim?.tokenHash).toMatch(/^[0-9a-f]{64}$/u)
+  expect(evidence.pin?.pinHash).toMatch(/^[0-9a-f]+:[0-9a-f]+$/u)
+  await loginAsActivatedPlayer(browser, academyId!, { pin })
+  await loginAsActivatedPlayer(browser, academyId!, { password })
 })

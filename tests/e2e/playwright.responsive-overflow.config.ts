@@ -14,6 +14,7 @@ export default defineConfig({
   testDir: ".",
   testMatch: [
     "accessibility-hardening.spec.ts",
+    "authentication-responsive.spec.ts",
     "phase3c-interface-correctness.spec.ts",
     "responsive-overflow.spec.ts",
   ],

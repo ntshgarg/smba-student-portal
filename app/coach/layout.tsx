@@ -1,8 +1,11 @@
 import type { Metadata } from "next"
 
 import { CoachShell } from "@/components/coach/coach-shell"
+import { AdminPreviewBanner } from "@/components/admin-preview-banner"
 import { UnsavedWorkProvider } from "@/components/unsaved-work-guard"
 import { requireCoachPage } from "@/lib/auth/current-coach"
+import { recoveryEmailEnrollmentRequired } from "@/lib/auth/recovery-service"
+import { redirect } from "next/navigation"
 
 export const metadata: Metadata = {
   title: {
@@ -18,6 +21,9 @@ export const metadata: Metadata = {
 
 export default async function CoachLayout({ children }: { children: React.ReactNode }) {
   const { access, identity } = await requireCoachPage()
+  if (!identity.previewMode && recoveryEmailEnrollmentRequired(identity.subjectId)) {
+    redirect("/account/recovery-email/setup")
+  }
 
   const coach = {
     id: identity.subjectId,
@@ -28,15 +34,21 @@ export default async function CoachLayout({ children }: { children: React.ReactN
 
   if (access.accessLevel === "junior_coach") {
     return (
-      <UnsavedWorkProvider>
-        <CoachShell coach={coach}>{children}</CoachShell>
-      </UnsavedWorkProvider>
+      <>
+        {identity.previewMode ? <AdminPreviewBanner label={`${identity.fullName} · Junior coach`} /> : null}
+        <UnsavedWorkProvider>
+          <CoachShell coach={coach}>{children}</CoachShell>
+        </UnsavedWorkProvider>
+      </>
     )
   }
 
   return (
-    <UnsavedWorkProvider>
-      <CoachShell coach={coach}>{children}</CoachShell>
-    </UnsavedWorkProvider>
+    <>
+      {identity.previewMode ? <AdminPreviewBanner label={`${identity.fullName} · Head coach`} /> : null}
+      <UnsavedWorkProvider>
+        <CoachShell coach={coach}>{children}</CoachShell>
+      </UnsavedWorkProvider>
+    </>
   )
 }

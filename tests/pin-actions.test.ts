@@ -1,0 +1,81 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const mocks = vi.hoisted(() => ({
+  getCurrentIdentity: vi.fn(),
+  redirect: vi.fn(),
+  setPinCredential: vi.fn(),
+}))
+
+vi.mock("server-only", () => ({}))
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
+vi.mock("@/lib/data", () => ({
+  sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
+}))
+vi.mock("@/lib/auth/credential-service", () => ({
+  setPinCredential: mocks.setPinCredential,
+  validatePin: (pin: string) => /^\d{6}$/u.test(pin) ? null : "Enter exactly 6 digits.",
+}))
+vi.mock("@/lib/auth/coach-access", () => ({
+  getCoachAccessProfile: () => ({ accessLevel: "junior_coach" }),
+}))
+
+import { setupPinAction, skipPinSetupAction } from "@/app/auth/pin/actions"
+
+function pinData(pin: string, confirmPin: string) {
+  const formData = new FormData()
+  formData.set("pin", pin)
+  formData.set("confirmPin", confirmPin)
+  return formData
+}
+
+describe("optional PIN setup", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getCurrentIdentity.mockResolvedValue({ role: "player", subjectId: "player-one" })
+    mocks.setPinCredential.mockResolvedValue({ created: true })
+  })
+
+  it("rejects non-six-digit PINs and confirmation mismatches before persistence", async () => {
+    await expect(setupPinAction({ error: null, errorField: null }, pinData("12345", "12345")))
+      .resolves.toEqual({ error: "Enter exactly 6 digits.", errorField: "pin" })
+    await expect(setupPinAction({ error: null, errorField: null }, pinData("123456", "654321")))
+      .resolves.toEqual({ error: "The PINs do not match.", errorField: "confirmPin" })
+    expect(mocks.setPinCredential).not.toHaveBeenCalled()
+  })
+
+  it("persists a confirmed PIN and routes the player to their dashboard", async () => {
+    await setupPinAction({ error: null, errorField: null }, pinData("123456", "123456"))
+    expect(mocks.setPinCredential).toHaveBeenCalledWith({
+      accountId: "player-one",
+      pin: "123456",
+    })
+    expect(mocks.redirect).toHaveBeenCalledWith("/player")
+  })
+
+  it("skips credential creation and routes a junior coach to the restricted workspace", async () => {
+    mocks.getCurrentIdentity.mockResolvedValue({ role: "coach", subjectId: "junior-one" })
+    await skipPinSetupAction()
+    expect(mocks.setPinCredential).not.toHaveBeenCalled()
+    expect(mocks.redirect).toHaveBeenCalledWith("/coach")
+  })
+
+  it("creates a mandatory platform-owner PIN and cannot skip it", async () => {
+    mocks.getCurrentIdentity.mockResolvedValue({
+      role: "platform_admin",
+      subjectId: "platform-owner",
+    })
+    await setupPinAction(
+      { error: null, errorField: null },
+      pinData("246810", "246810"),
+    )
+    expect(mocks.setPinCredential).toHaveBeenCalledWith({
+      accountId: "platform-owner",
+      pin: "246810",
+    })
+    expect(mocks.redirect).toHaveBeenCalledWith("/admin")
+
+    mocks.redirect.mockClear()
+    await skipPinSetupAction()
+    expect(mocks.redirect).toHaveBeenCalledWith("/auth/pin/setup")
+  })
+})

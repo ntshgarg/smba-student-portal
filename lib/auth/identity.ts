@@ -1,4 +1,12 @@
-export type AccountRole = "player" | "coach"
+export type AccountRole = "player" | "coach" | "platform_admin"
+
+export const PLATFORM_ADMIN_ACADEMY_ID = "SMBA-ADMIN-0001"
+export const HEAD_COACH_ACADEMY_ID = "SMBA-HC-0001"
+
+const LEGACY_SERIAL_MAX = 9_999
+const JUNIOR_COACH_SERIAL_BASE = 10_000
+const PLAYER_SERIAL_BASE = 20_000
+const HEAD_COACH_SERIAL_BASE = 30_000
 
 export type SessionIdentity = {
   subjectId: string
@@ -7,6 +15,8 @@ export type SessionIdentity = {
   firstName: string
   initials: string
   academyId: string
+  actorSubjectId?: string
+  previewMode?: true
 }
 
 export type StudentIdentity = {
@@ -15,6 +25,8 @@ export type StudentIdentity = {
   firstName: string
   initials: string
   academyId: string
+  actorSubjectId?: string
+  previewMode?: true
 }
 
 export function normalizeFullName(value: string) {
@@ -30,16 +42,34 @@ export function normalizeAcademyId(value: string) {
 }
 
 export function isAcademyId(value: string) {
-  return /^SMBA#\d{4}$/u.test(normalizeAcademyId(value))
+  const normalized = normalizeAcademyId(value)
+  return /^SMBA#\d{4}$/u.test(normalized)
+    || /^SMBA-(?:HC|JC|PL)-\d{4}$/u.test(normalized)
+    || normalized === PLATFORM_ADMIN_ACADEMY_ID
 }
 
 export function formatAcademyId(serial: number) {
-  if (!Number.isInteger(serial) || serial < 1 || serial > 9999) {
-    throw new Error("Academy ID serial is outside the supported four-digit range.")
+  if (!Number.isInteger(serial) || serial < 1 || serial >= 40_000) {
+    throw new Error("Academy ID serial is outside the supported range.")
   }
-
-  return `SMBA#${String(serial).padStart(4, "0")}`
+  if (serial <= LEGACY_SERIAL_MAX) {
+    return `SMBA#${String(serial).padStart(4, "0")}`
+  }
+  if (serial < PLAYER_SERIAL_BASE) {
+    return `SMBA-JC-${String(serial - JUNIOR_COACH_SERIAL_BASE).padStart(4, "0")}`
+  }
+  if (serial < HEAD_COACH_SERIAL_BASE) {
+    return `SMBA-PL-${String(serial - PLAYER_SERIAL_BASE).padStart(4, "0")}`
+  }
+  return `SMBA-HC-${String(serial - HEAD_COACH_SERIAL_BASE).padStart(4, "0")}`
 }
+
+export const ACADEMY_ID_SERIAL_RANGES = {
+  headCoach: { first: HEAD_COACH_SERIAL_BASE + 1, last: HEAD_COACH_SERIAL_BASE + 1 },
+  juniorCoach: { first: JUNIOR_COACH_SERIAL_BASE + 1, last: JUNIOR_COACH_SERIAL_BASE + 9_999 },
+  player: { first: PLAYER_SERIAL_BASE + 1, last: PLAYER_SERIAL_BASE + 9_999 },
+  legacy: { first: 2, last: LEGACY_SERIAL_MAX },
+} as const
 
 export function identityNameParts(fullName: string) {
   const normalizedName = normalizeFullName(fullName)
@@ -56,6 +86,8 @@ export function createSessionIdentity(input: {
   academyId: string
   fullName: string
   role: AccountRole
+  actorSubjectId?: string
+  previewMode?: true
 }): SessionIdentity {
   const { normalizedName, firstName, initials } = identityNameParts(input.fullName)
 
@@ -66,6 +98,8 @@ export function createSessionIdentity(input: {
     fullName: normalizedName,
     firstName,
     initials,
+    actorSubjectId: input.actorSubjectId,
+    previewMode: input.previewMode,
   }
 }
 
@@ -76,5 +110,7 @@ export function createStudentIdentity(session: SessionIdentity): StudentIdentity
     fullName: session.fullName,
     firstName: session.firstName,
     initials: session.initials,
+    actorSubjectId: session.actorSubjectId,
+    previewMode: session.previewMode,
   }
 }

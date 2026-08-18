@@ -125,7 +125,7 @@ export const captureSettings = {
   playerAcademyId: process.env.SMBA_CAPTURE_PLAYER_ACADEMY_ID
     ?? (typeof fixtureSummary?.representativeAcademyId === "string"
       ? fixtureSummary.representativeAcademyId
-      : "SMBA#0002"),
+      : "SMBA#0004"),
   playerStorageState: process.env.SMBA_CAPTURE_PLAYER_STORAGE_STATE
     ? path.resolve(process.env.SMBA_CAPTURE_PLAYER_STORAGE_STATE)
     : undefined,

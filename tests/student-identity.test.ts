@@ -4,6 +4,7 @@ import {
   createSessionIdentity,
   createStudentIdentity,
   formatAcademyId,
+  isAcademyId,
   normalizeAcademyId,
   normalizeFullName,
 } from "@/lib/auth/identity"
@@ -16,6 +17,10 @@ describe("shared account identity", () => {
   it("normalizes and formats human-friendly Academy IDs", () => {
     expect(normalizeAcademyId(" smba#0007 ")).toBe("SMBA#0007")
     expect(formatAcademyId(7)).toBe("SMBA#0007")
+    expect(formatAcademyId(10_001)).toBe("SMBA-JC-0001")
+    expect(formatAcademyId(20_001)).toBe("SMBA-PL-0001")
+    expect(formatAcademyId(30_001)).toBe("SMBA-HC-0001")
+    expect(isAcademyId("smba-admin-0001")).toBe(true)
   })
 
   it("creates role-aware session identities around immutable account IDs", () => {

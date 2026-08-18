@@ -39,6 +39,16 @@ const DEFAULT_SOURCE = path.resolve(process.cwd(), ".data/smba.db")
 const CLEAN_TARGET = path.resolve(process.cwd(), ".data/academy-clean.db")
 const MIGRATIONS_DIRECTORY = path.resolve(process.cwd(), "drizzle")
 const REQUIRED_CURRENT_TABLES = [
+  "auth_access_codes",
+  "auth_credential_states",
+  "auth_login_attempts",
+  "auth_provider_accounts",
+  "auth_rate_limits",
+  "auth_runtime_sessions",
+  "auth_security_events",
+  "auth_two_factors",
+  "auth_users",
+  "auth_verifications",
   "broadcasts",
   "broadcast_audience_targets",
   "broadcast_channels",
@@ -391,6 +401,7 @@ async function prepare(source: string, target: string) {
     sourceDatabase.close()
   }
   migrateFixtureTarget(target)
+  await provisionFixtureCredentials(target)
   return verify(target, "default")
 }
 
@@ -406,6 +417,7 @@ async function applicationModules(target: string) {
     attendanceAdjustments,
     memberService,
     announcementService,
+    credentialService,
   ] = await Promise.all([
     import("../../lib/db/client"),
     import("../../lib/auth/account-service"),
@@ -416,6 +428,7 @@ async function applicationModules(target: string) {
     import("../../lib/attendance/adjustments"),
     import("../../lib/coach/member-service"),
     import("../../lib/announcements/service"),
+    import("../../lib/auth/credential-service"),
   ])
   return {
     database: initializeDatabase(),
@@ -427,7 +440,30 @@ async function applicationModules(target: string) {
     attendanceAdjustments,
     memberService,
     announcementService,
+    credentialService,
   }
+}
+
+async function provisionFixtureCredentials(target: string) {
+  const { credentialService } = await applicationModules(target)
+  const db = openReadonly(target)
+  const approvedAccounts = db.prepare(`
+    select a.id, a.full_name as fullName, m.identifier as academyId
+    from accounts a
+    join auth_methods m on m.account_id = a.id
+      and m.method = 'academy_id'
+      and m.revoked_at is null
+    where a.approval_status = 'approved' and a.archived_at is null
+    order by m.identifier
+  `).all() as Array<{ academyId: string; fullName: string; id: string }>
+  db.close()
+
+  approvedAccounts.forEach((account) => credentialService.provisionDevelopmentCredential({
+    academyId: account.academyId,
+    accountId: account.id,
+    fullName: account.fullName,
+    password: process.env.SMBA_FIXTURE_PASSWORD ?? credentialService.FIXTURE_PASSWORD,
+  }))
 }
 
 function pendingAccounts(db: Database.Database) {
@@ -486,7 +522,8 @@ async function seedEnrollments(target: string) {
     + selectedProfile.pendingPlayerNames.length
   if (summary.players === players.length
     && summary.pending === selectedProfile.pendingPlayerNames.length) {
-    return verify(target, "enrollments")
+    await provisionFixtureCredentials(target)
+    return
   }
   if (summary.pending !== registrationCount || summary.players !== 0) {
     throw new Error(`Enrollment stage requires exactly ${registrationCount} pending registrations.`)
@@ -507,12 +544,12 @@ async function seedEnrollments(target: string) {
   juniorRegistrations.forEach((registration) => accountService.approveRegistration(
     registration.id,
     COACH_ID,
-    { now: approvalTime, requestedRole: "coach" },
+    { chooseAcademyIdIndex: () => 0, now: approvalTime, requestedRole: "coach" },
   ))
   registrations.forEach((registration) => accountService.approveRegistration(
     registration.id,
     COACH_ID,
-    { now: approvalTime, requestedRole: "player" },
+    { chooseAcademyIdIndex: () => 0, now: approvalTime, requestedRole: "player" },
   ))
 
   const db = new Database(target)
@@ -566,12 +603,13 @@ async function seedEnrollments(target: string) {
     })
   })()
   db.close()
+  await provisionFixtureCredentials(target)
   return verify(target, "enrollments")
 }
 
 async function seedSchedules(target: string) {
   const current = summaryFor(target)
-  if (current.series === schedules.length) return verify(target, "schedules")
+  if (current.series === schedules.length) return
   if (current.players !== players.length
     || current.pending !== selectedProfile.pendingPlayerNames.length
     || current.series !== 0) {
@@ -1694,6 +1732,13 @@ function summaryFor(target: string) {
       announcements: safeTableCount(db, "broadcasts"),
       announcementChannels: safeTableCount(db, "broadcast_channels"),
       announcementWithdrawals: safeTableCount(db, "broadcast_withdrawals"),
+      authUsers: safeTableCount(db, "auth_users"),
+      activeCredentials: tableExists(db, "auth_credential_states")
+        ? scalar("select count(*) as count from auth_credential_states where status = 'active'")
+        : 0,
+      revokedCredentials: tableExists(db, "auth_credential_states")
+        ? scalar("select count(*) as count from auth_credential_states where status = 'revoked'")
+        : 0,
     }
   } finally {
     db.close()
@@ -1937,6 +1982,17 @@ function verify(target: string, expectedStage?: Stage) {
     if (coach.count !== 1) problems.push("The seed coach must remain SMBA#0001.")
     if (stage === "default" && (summary.accounts !== 1 || summary.players || summary.series)) {
       problems.push("Default stage must contain only the coach and reference batches.")
+    }
+    const expectedCredentialAccounts = ["enrollments", "schedules", "loaded"].includes(stage)
+      ? approvedAccountCount
+      : 1
+    const expectedRevokedCredentials = stage === "loaded" ? 1 : 0
+    if (summary.authUsers !== expectedCredentialAccounts
+      || summary.activeCredentials !== expectedCredentialAccounts - expectedRevokedCredentials
+      || summary.revokedCredentials !== expectedRevokedCredentials) {
+      problems.push(
+        `Auth fixtures must contain ${expectedCredentialAccounts} credential users, ${expectedCredentialAccounts - expectedRevokedCredentials} active and ${expectedRevokedCredentials} revoked credentials.`,
+      )
     }
     if (stage === "registrations"
       && (summary.pending !== registrationStageCount || summary.players !== 0)) {

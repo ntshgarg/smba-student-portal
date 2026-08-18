@@ -23,7 +23,9 @@ import type { SmbaDatabaseExecutor, SmbaDatabase } from "@/lib/db/client"
 import {
   academyIdAllocations,
   accounts,
+  authCredentialStates,
   authMethods,
+  authRuntimeSessions,
   authSessions,
   playerEnrollments,
   sessionAssignments,
@@ -460,6 +462,11 @@ export function archiveMemberRecord({
       isNull(authMethods.revokedAt),
     )).run()
     tx.delete(authSessions).where(eq(authSessions.accountId, input.memberId)).run()
+    tx.delete(authRuntimeSessions).where(eq(authRuntimeSessions.userId, input.memberId)).run()
+    tx.update(authCredentialStates).set({
+      status: "revoked",
+      updatedAt: now,
+    }).where(eq(authCredentialStates.accountId, input.memberId)).run()
 
     return { ok: true, memberId: input.memberId }
   }, { behavior: "immediate" })

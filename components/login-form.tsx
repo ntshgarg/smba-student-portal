@@ -1,56 +1,157 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useActionState, useEffect, useRef, useState } from "react"
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 
-import { loginWithAcademyId, type LoginFormState } from "@/app/login/actions"
+import {
+  loginWithAcademyId,
+  loginWithPin,
+  type LoginFormState,
+} from "@/app/login/actions"
 
-const initialLoginFormState: LoginFormState = { error: null }
+const initialState: LoginFormState = { error: null }
 
-export function LoginForm() {
-  const [state, formAction, pending] = useActionState(
-    loginWithAcademyId,
-    initialLoginFormState,
+function AcademyIdField({
+  academyIdRef,
+  error,
+}: {
+  academyIdRef: React.RefObject<HTMLInputElement | null>
+  error: string | null
+}) {
+  return (
+    <div className="login-field">
+      <label htmlFor="academy-id">SMBA username</label>
+      <input
+        ref={academyIdRef}
+        id="academy-id"
+        name="academyId"
+        type="text"
+        autoComplete="username"
+        inputMode="text"
+        maxLength={15}
+        required
+        aria-describedby={error ? "academy-id-error" : "academy-id-help"}
+        aria-invalid={error ? true : undefined}
+        placeholder="SMBA-HC-0001"
+      />
+      {error ? (
+        <p id="academy-id-error" className="login-error" role="alert">{error}</p>
+      ) : (
+        <p id="academy-id-help" className="login-helper">Use your permanent SMBA username.</p>
+      )}
+    </div>
   )
+}
+
+function PasswordLoginForm() {
+  const [state, formAction, pending] = useActionState(loginWithAcademyId, initialState)
   const academyIdRef = useRef<HTMLInputElement>(null)
-
+  const submissionStartedRef = useRef(false)
   useEffect(() => {
-    if (state.error) academyIdRef.current?.focus()
-  }, [state])
-
+    if (pending) {
+      submissionStartedRef.current = true
+      return
+    }
+    if (!submissionStartedRef.current || !state.error) return
+    submissionStartedRef.current = false
+    const timeout = window.setTimeout(() => academyIdRef.current?.focus(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [pending, state])
   return (
     <form className="login-form" action={formAction} noValidate>
+      <AcademyIdField academyIdRef={academyIdRef} error={state.error} />
       <div className="login-field">
-        <label htmlFor="academy-id">Academy ID</label>
+        <label htmlFor="password">Password</label>
         <input
-          ref={academyIdRef}
-          id="academy-id"
-          name="academyId"
-          type="text"
-          autoComplete="username"
-          inputMode="text"
-          maxLength={9}
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          maxLength={128}
           required
-          aria-describedby={state.error ? "academy-id-error" : "academy-id-help"}
-          aria-invalid={state.error ? true : undefined}
-          placeholder="SMBA#0001"
+          aria-describedby="password-help"
         />
-        {state.error ? (
-          <p id="academy-id-error" className="login-error" role="alert">{state.error}</p>
-        ) : (
-          <p id="academy-id-help" className="login-helper">Use the ID shared by your coach.</p>
-        )}
+        <p id="password-help" className="login-helper">Passwords are case-sensitive.</p>
       </div>
-
       <button className="login-submit" type="submit" disabled={pending}>
         <span>{pending ? "Opening your portal…" : "Continue"}</span>
         <ArrowRight aria-hidden="true" />
       </button>
-
-      <p className="login-register-link">
-        New to the portal? <Link href="/register">Request registration</Link>
-      </p>
     </form>
+  )
+}
+
+function PinLoginForm() {
+  const [state, formAction, pending] = useActionState(loginWithPin, initialState)
+  const academyIdRef = useRef<HTMLInputElement>(null)
+  const submissionStartedRef = useRef(false)
+  useEffect(() => {
+    if (pending) {
+      submissionStartedRef.current = true
+      return
+    }
+    if (!submissionStartedRef.current || !state.error) return
+    submissionStartedRef.current = false
+    const timeout = window.setTimeout(() => academyIdRef.current?.focus(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [pending, state])
+  return (
+    <form className="login-form" action={formAction} noValidate>
+      <AcademyIdField academyIdRef={academyIdRef} error={state.error} />
+      <div className="login-field">
+        <label htmlFor="pin">6-digit PIN</label>
+        <input
+          className="login-pin-input"
+          id="pin"
+          name="pin"
+          type="password"
+          autoComplete="off"
+          inputMode="numeric"
+          pattern="[0-9]{6}"
+          minLength={6}
+          maxLength={6}
+          required
+          aria-describedby="pin-help"
+        />
+        <p id="pin-help" className="login-helper">Forgot your PIN? Use your password instead.</p>
+      </div>
+      <button className="login-submit" type="submit" disabled={pending}>
+        <span>{pending ? "Opening your portal…" : "Continue"}</span>
+        <ArrowRight aria-hidden="true" />
+      </button>
+    </form>
+  )
+}
+
+export function LoginForm() {
+  const [method, setMethod] = useState<"password" | "pin">("password")
+  return (
+    <>
+      <div className="login-method-switch" aria-label="Login method">
+        <button
+          type="button"
+          aria-pressed={method === "password"}
+          onClick={() => setMethod("password")}
+        >
+          Password
+        </button>
+        <button
+          type="button"
+          aria-pressed={method === "pin"}
+          onClick={() => setMethod("pin")}
+        >
+          6-digit PIN
+        </button>
+      </div>
+      {method === "password" ? <PasswordLoginForm /> : <PinLoginForm />}
+      <p className="login-register-link">
+        First visit? <Link href="/activate">Activate your account</Link>
+        <span aria-hidden="true"> · </span>
+        <Link href="/register">Request registration</Link>
+        <span aria-hidden="true"> · </span>
+        <Link href="/recover">Forgot password?</Link>
+      </p>
+    </>
   )
 }

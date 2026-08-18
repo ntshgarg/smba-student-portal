@@ -7,6 +7,7 @@ import { redirect } from "next/navigation"
 import { RegistrationForm } from "@/components/registration-form"
 import { publicSiteUrl } from "@/lib/config"
 import { sessionProvider } from "@/lib/data"
+import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
 
 export const metadata: Metadata = {
   title: "Request registration",
@@ -19,7 +20,11 @@ export const metadata: Metadata = {
 
 export default async function RegisterPage() {
   const identity = await sessionProvider.getCurrentIdentity()
-  if (identity) redirect(identity.role === "coach" ? "/coach" : "/player")
+  if (identity) redirect(postAuthenticationDestination({
+    accountId: identity.subjectId,
+    role: identity.role,
+    twoFactorEnabled: true,
+  }))
 
   return (
     <main className="login-page">

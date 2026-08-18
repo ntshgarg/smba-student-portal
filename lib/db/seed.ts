@@ -9,6 +9,7 @@ import {
   coachProfiles,
 } from "@/lib/db/schema"
 import { getAcademyDateKey } from "@/lib/format"
+import { provisionDevelopmentCredential } from "@/lib/auth/credential-service"
 
 export const INITIAL_COACH_ACCOUNT_ID = "00000000-0000-4000-8000-000000000001"
 
@@ -22,6 +23,12 @@ const batchSeed = [
   { id: "weekend-advanced", schedule: "Weekend", programme: "Advanced" },
   { id: "weekend-adult", schedule: "Weekend", programme: "Adult" },
 ] as const
+
+export function seedReferenceData(db: SmbaDatabase) {
+  db.insert(batches).values(batchSeed.map((batch) => ({ ...batch, active: true })))
+    .onConflictDoNothing()
+    .run()
+}
 
 export function seedDatabase(db: SmbaDatabase) {
   const now = new Date()
@@ -57,6 +64,14 @@ export function seedDatabase(db: SmbaDatabase) {
     createdAt: now,
   }).onConflictDoNothing().run()
 
+  if (process.env.NODE_ENV !== "production" && process.env.VERCEL !== "1") {
+    provisionDevelopmentCredential({
+      academyId: "SMBA#0001",
+      accountId: INITIAL_COACH_ACCOUNT_ID,
+      fullName: "Sathiya Moorthy",
+    }, { database: db, now })
+  }
+
   const coachAccount = db.select({
     approvedAt: accounts.approvedAt,
     createdAt: accounts.createdAt,
@@ -70,7 +85,5 @@ export function seedDatabase(db: SmbaDatabase) {
     updatedAt: now,
   }).onConflictDoNothing().run()
 
-  db.insert(batches).values(batchSeed.map((batch) => ({ ...batch, active: true })))
-    .onConflictDoNothing()
-    .run()
+  seedReferenceData(db)
 }

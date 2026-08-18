@@ -107,8 +107,8 @@ describe("regression fixture repeatability", () => {
       stage: "default",
       schema: {
         current: true,
-        latestMigrationTag: "0019_attendance_evidence_review_cleanup",
-        migrationCount: 20,
+        latestMigrationTag: "0022_verified_email_recovery",
+        migrationCount: 23,
         missingColumns: [],
         missingTables: [],
       },

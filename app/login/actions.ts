@@ -1,6 +1,8 @@
 "use server"
 
+import { cookies, headers } from "next/headers"
 import { redirect } from "next/navigation"
+import { hashPassword } from "better-auth/crypto"
 
 import {
   isAcademyId,
@@ -9,20 +11,45 @@ import {
 } from "@/lib/auth/identity"
 import {
   findApprovedAccountByAcademyId,
-  prototypeAcademyIdAuthEnabled,
-  registerPublicPlayerRequest,
+  registerPublicAccountRequest,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
-import { clearDatabaseSession, createDatabaseSession } from "@/lib/auth/session"
+import { auth } from "@/lib/auth/better-auth"
+import {
+  ACTIVATION_CLAIM_COOKIE,
+  completeAccountActivation,
+  createActivationClaimToken,
+  loginIsBlocked,
+  recordLoginFailure,
+  recordLoginSuccess,
+  validateNewPassword,
+} from "@/lib/auth/credential-service"
+import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
+import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
+import {
+  authSubjectHash,
+  requestSecurityContext,
+  writeAuthSecurityEvent,
+} from "@/lib/auth/security-context"
+import { clearDatabaseSession } from "@/lib/auth/session"
 import { publicSiteUrl } from "@/lib/config"
+
+const GENERIC_LOGIN_ERROR = "SMBA username or password is incorrect. If this is your first visit, activate your account."
+const GENERIC_PIN_ERROR = "SMBA username or PIN is incorrect. Use your password if PIN login is unavailable."
 
 export type LoginFormState = {
   error: string | null
 }
 
+export type ActivationFormState = {
+  error: string | null
+  errorField: "password" | "confirmPassword" | null
+}
+
 export type RegistrationFormState = {
   error: string | null
-  errorField: "fullName" | null
+  errorField: "fullName" | "requestedRole" | null
+  requestedRole: "coach" | "player"
   submitted: boolean
 }
 
@@ -30,54 +57,243 @@ export async function loginWithAcademyId(
   _previousState: LoginFormState,
   formData: FormData,
 ): Promise<LoginFormState> {
-  if (!prototypeAcademyIdAuthEnabled()) {
-    return { error: "Prototype Academy ID access is disabled." }
+  const academyId = normalizeAcademyId(String(formData.get("academyId") ?? ""))
+  const password = String(formData.get("password") ?? "")
+  if (!isAcademyId(academyId)) {
+    return { error: "Enter your SMBA username." }
+  }
+  if (!password) return { error: GENERIC_LOGIN_ERROR }
+
+  const requestHeaders = await headers()
+  const security = requestSecurityContext(requestHeaders)
+  const subjectHash = authSubjectHash(academyId)
+  const auditBase = {
+    ipHash: security.ipHash,
+    subjectHash,
+    userAgent: security.userAgent,
   }
 
-  const academyId = normalizeAcademyId(String(formData.get("academyId") ?? ""))
-  if (!isAcademyId(academyId)) {
-    return { error: "Enter an Academy ID in the format SMBA#0001." }
+  if (loginIsBlocked({ ipHash: security.ipHash, subjectHash })) {
+    writeAuthSecurityEvent({
+      ...auditBase,
+      eventType: "login_rate_limited",
+      outcome: "blocked",
+    })
+    return { error: "We couldn’t sign you in. Wait a few minutes before trying again." }
   }
 
   const account = findApprovedAccountByAcademyId(academyId)
-  if (!account?.role) {
-    return { error: "We couldn’t find an approved account with that Academy ID." }
+  if (!account?.role || account.credentialStatus !== "active") {
+    // Match the expensive path used for a real credential to reduce account
+    // discovery through response timing.
+    await hashPassword(password)
+    recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+    writeAuthSecurityEvent({
+      ...auditBase,
+      accountId: account?.accountId,
+      eventType: "login_failed",
+      outcome: "failure",
+    })
+    return { error: GENERIC_LOGIN_ERROR }
   }
 
-  await createDatabaseSession(account.accountId)
-  redirect(account.role === "coach" ? "/coach" : "/player")
+  let response: Awaited<ReturnType<typeof auth.api.signInUsername>>
+  try {
+    response = await auth.api.signInUsername({
+      body: { password, username: academyId },
+      headers: requestHeaders,
+    })
+  } catch {
+    recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+    writeAuthSecurityEvent({
+      ...auditBase,
+      accountId: account.accountId,
+      eventType: "login_failed",
+      outcome: "failure",
+    })
+    return { error: GENERIC_LOGIN_ERROR }
+  }
+
+  recordLoginSuccess(subjectHash)
+  writeAuthSecurityEvent({
+    ...auditBase,
+    accountId: account.accountId,
+    eventType: "login_succeeded",
+    metadata: { factor: "password" },
+    outcome: "success",
+  })
+
+  if ("twoFactorRedirect" in response && response.twoFactorRedirect) {
+    redirect("/auth/two-factor")
+  }
+  const twoFactorEnabled = "twoFactorEnabled" in response.user
+    && response.user.twoFactorEnabled === true
+  redirect(postAuthenticationDestination({
+    accessLevel: account.accessLevel,
+    accountId: account.accountId,
+    role: account.role,
+    twoFactorEnabled,
+  }))
+}
+
+export async function loginWithPin(
+  _previousState: LoginFormState,
+  formData: FormData,
+): Promise<LoginFormState> {
+  const academyId = normalizeAcademyId(String(formData.get("academyId") ?? ""))
+  const pin = String(formData.get("pin") ?? "")
+  if (!isAcademyId(academyId) || !/^\d{6}$/u.test(pin)) {
+    return { error: GENERIC_PIN_ERROR }
+  }
+
+  const requestHeaders = await headers()
+  const security = requestSecurityContext(requestHeaders)
+  const subjectHash = authSubjectHash(academyId)
+  const auditBase = {
+    ipHash: security.ipHash,
+    subjectHash,
+    userAgent: security.userAgent,
+  }
+  if (loginIsBlocked({ ipHash: security.ipHash, subjectHash })) {
+    writeAuthSecurityEvent({
+      ...auditBase,
+      eventType: "login_rate_limited",
+      outcome: "blocked",
+      metadata: { factor: "pin" },
+    })
+    return { error: "We couldn’t sign you in. Wait a few minutes before trying again." }
+  }
+
+  const account = findApprovedAccountByAcademyId(academyId)
+  if (!account?.role || account.credentialStatus !== "active") {
+    await hashPassword(pin)
+    recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+    writeAuthSecurityEvent({
+      ...auditBase,
+      accountId: account?.accountId,
+      eventType: "login_failed",
+      metadata: { factor: "pin" },
+      outcome: "failure",
+    })
+    return { error: GENERIC_PIN_ERROR }
+  }
+
+  let response: Awaited<ReturnType<typeof auth.api.signInPin>>
+  try {
+    response = await auth.api.signInPin({
+      body: { pin, username: academyId },
+      headers: requestHeaders,
+    })
+  } catch {
+    recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+    writeAuthSecurityEvent({
+      ...auditBase,
+      accountId: account.accountId,
+      eventType: "login_failed",
+      metadata: { factor: "pin" },
+      outcome: "failure",
+    })
+    return { error: GENERIC_PIN_ERROR }
+  }
+
+  recordLoginSuccess(subjectHash)
+  writeAuthSecurityEvent({
+    ...auditBase,
+    accountId: account.accountId,
+    eventType: "login_succeeded",
+    metadata: { factor: "pin" },
+    outcome: "success",
+  })
+  if ("twoFactorRedirect" in response && response.twoFactorRedirect) {
+    redirect("/auth/two-factor")
+  }
+  const twoFactorEnabled = "twoFactorEnabled" in response.user
+    && response.user.twoFactorEnabled === true
+  redirect(postAuthenticationDestination({
+    accessLevel: account.accessLevel,
+    accountId: account.accountId,
+    role: account.role,
+    twoFactorEnabled,
+  }))
+}
+
+export async function activateAccount(
+  _previousState: ActivationFormState,
+  formData: FormData,
+): Promise<ActivationFormState> {
+  const password = String(formData.get("password") ?? "")
+  const confirmPassword = String(formData.get("confirmPassword") ?? "")
+  const passwordError = validateNewPassword(password)
+  if (passwordError) return { error: passwordError, errorField: "password" }
+  if (password !== confirmPassword) {
+    return { error: "The passwords do not match.", errorField: "confirmPassword" }
+  }
+
+  const cookieStore = await cookies()
+  const token = cookieStore.get(ACTIVATION_CLAIM_COOKIE)?.value ?? ""
+  const activated = await completeAccountActivation({ token, password })
+  if (!activated) {
+    return {
+      error: "This registration link is unavailable or has expired. Return to registration to request access again.",
+      errorField: null,
+    }
+  }
+
+  const requestHeaders = await headers()
+  const response = await auth.api.signInUsername({
+    body: { password, username: activated.academyId },
+    headers: requestHeaders,
+  })
+  cookieStore.delete(ACTIVATION_CLAIM_COOKIE)
+  if ("twoFactorRedirect" in response && response.twoFactorRedirect) redirect("/auth/two-factor")
+  redirect("/auth/pin/setup")
 }
 
 export async function submitRegistration(
   _previousState: RegistrationFormState,
   formData: FormData,
 ): Promise<RegistrationFormState> {
-  if (!prototypeAcademyIdAuthEnabled()) {
-    return { error: "Prototype registration is disabled.", errorField: null, submitted: false }
-  }
-
   const fullName = normalizeFullName(String(formData.get("fullName") ?? ""))
   const registrationRequestKey = String(formData.get("registrationRequestKey") ?? "")
+  const requestedRole = formData.get("requestedRole") === "coach" ? "coach" : "player"
 
   if (fullName.length < 2) {
-    return { error: "Enter your full name.", errorField: "fullName", submitted: false }
+    return { error: "Enter your full name.", errorField: "fullName", requestedRole, submitted: false }
   }
   if (fullName.length > 80) {
     return {
       error: "Keep your name to 80 characters or fewer.",
       errorField: "fullName",
+      requestedRole,
       submitted: false,
     }
   }
 
   try {
-    registerPublicPlayerRequest({ fullName, requestKey: registrationRequestKey })
-    return { error: null, errorField: null, submitted: true }
+    const activationToken = createActivationClaimToken()
+    registerPublicAccountRequest({
+      activationToken,
+      fullName,
+      requestKey: registrationRequestKey,
+      requestedRole,
+    })
+    const cookieStore = await cookies()
+    cookieStore.set(ACTIVATION_CLAIM_COOKIE, activationToken, {
+      httpOnly: true,
+      maxAge: 90 * 24 * 60 * 60,
+      path: "/",
+      sameSite: "lax",
+      secure: secureAuthCookiesRequired(),
+    })
+    return { error: null, errorField: null, requestedRole, submitted: true }
   } catch (error) {
     if (error instanceof OperationalActionError) {
       return {
         error: error.message,
-        errorField: error.field === "fullName" ? "fullName" : null,
+        errorField: error.field === "fullName" || error.field === "requestedRole"
+          ? error.field
+          : null,
+        requestedRole,
         submitted: false,
       }
     }
