@@ -15,6 +15,15 @@ const sourcePath = path.resolve(process.cwd(), sourceArgument)
 const source = new BetterSqlite3(sourcePath, { readonly: true, fileMustExist: true })
 const target = new LibsqlDatabase(databaseUrl, { authToken })
 const INSERT_BATCH_SIZE = 50
+const TRANSIENT_AUTH_TABLES = new Set([
+  "auth_access_codes",
+  "auth_login_attempts",
+  "auth_rate_limits",
+  "auth_runtime_sessions",
+  "auth_security_events",
+  "auth_sessions",
+  "auth_verifications",
+])
 
 function quoteIdentifier(identifier) {
   return `"${identifier.replaceAll('"', '""')}"`
@@ -112,7 +121,7 @@ try {
     }
 
     for (const table of orderedTables) {
-      if (table.name === "auth_sessions") continue
+      if (TRANSIENT_AUTH_TABLES.has(table.name)) continue
       if (targetHasPreparedSchema && table.name === "__drizzle_migrations") continue
 
       const rows = source.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all()

@@ -69,6 +69,9 @@ export function AccountMenu({
           <Link href={publicSiteHref} onClick={() => setOpen(false)}>
             Return to academy
           </Link>
+          <Link href="/account/security" onClick={() => setOpen(false)}>
+            Account security
+          </Link>
           <form action={clearSession} data-unsaved-work-navigation="true">
             <button type="submit">
               Log out

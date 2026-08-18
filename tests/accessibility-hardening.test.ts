@@ -13,7 +13,9 @@ describe("authentication error focus", () => {
 
     expect(login).toContain("const academyIdRef = useRef<HTMLInputElement>(null)")
     expect(login).toContain("ref={academyIdRef}")
-    expect(login).toMatch(/useEffect\(\(\) => \{\s+if \(state\.error\) academyIdRef\.current\?\.focus\(\)\s+\}, \[state\]\)/)
+    expect(login).toContain("window.setTimeout(() => academyIdRef.current?.focus(), 0)")
+    expect(login).toContain("submissionStartedRef.current = true")
+    expect(login).toMatch(/useEffect\(\(\) => \{[\s\S]*?\}, \[pending, state\]\)/)
     expect(login).not.toContain("[state.error]")
   })
 

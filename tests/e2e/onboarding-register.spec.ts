@@ -7,11 +7,13 @@ const viewports = [
   { height: 1024, name: "tablet", width: 820 },
   { height: 844, name: "mobile", width: 390 },
 ] as const
+const FIXTURE_PASSWORD = process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!"
 
 async function loginAsCoach(page: import("@playwright/test").Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
   if (new URL(page.url()).pathname.startsWith("/coach")) return
   await page.getByLabel("Academy ID").fill("SMBA#0001")
+  await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/coach"))
 }

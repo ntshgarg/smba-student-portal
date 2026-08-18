@@ -7,6 +7,7 @@ import { redirect } from "next/navigation"
 import { LoginForm } from "@/components/login-form"
 import { sessionProvider } from "@/lib/data"
 import { publicSiteUrl } from "@/lib/config"
+import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
 
 export const metadata: Metadata = {
   title: "Portal login",
@@ -17,9 +18,20 @@ export const metadata: Metadata = {
   },
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ recovered?: string }>
+}) {
   const identity = await sessionProvider.getCurrentIdentity()
-  if (identity) redirect(identity.role === "coach" ? "/coach" : "/player")
+  if (identity) {
+    redirect(postAuthenticationDestination({
+      accountId: identity.subjectId,
+      role: identity.role,
+      twoFactorEnabled: true,
+    }))
+  }
+  const recovered = (await searchParams).recovered === "1"
 
   return (
     <main className="login-page">
@@ -40,9 +52,14 @@ export default async function LoginPage() {
         <div className="login-copy">
           <p className="eyebrow">SMBA portal</p>
           <h1 id="login-title">Welcome back.</h1>
-          <p>Enter the Academy ID shared with you by your coach.</p>
+          <p>Choose password or PIN to continue.</p>
         </div>
 
+        {recovered ? (
+          <p className="security-success login-recovery-success" role="status">
+            Password reset complete. Sign in with the new password.
+          </p>
+        ) : null}
         <LoginForm />
 
         <Link className="login-back" href={publicSiteUrl}>

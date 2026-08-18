@@ -35,18 +35,24 @@ The implemented finance contracts are recorded in
 Copy `.env.example` to `.env.local` for a new environment. Local development uses:
 
 ```env
-PROTOTYPE_ACADEMY_ID_AUTH=true
-DB_FILE_NAME=.data/academy-clean.db
+DB_FILE_NAME=.data/academy-empty.db
 NEXT_PUBLIC_SMBA_SITE_ORIGIN=http://localhost:3000
+SMBA_REQUIRE_COACH_TOTP=true
 ```
 
-Local `npm run dev` uses the clean head-coach-only profile in
-`.data/academy-clean.db`. Demo remains the canonical loaded academy for UI and
+The empty local academy begins with zero accounts. Open the one-time platform-owner
+claim URL, choose the password and mandatory six-digit PIN for
+`SMBA-ADMIN-0001`, then connect an authenticator. The owner can then open the
+one-time first head-coach setup from `/admin`. Loaded regression profiles use
+`SMBA fixture access 2026!`, overridable with `SMBA_FIXTURE_PASSWORD`.
+
+Local `npm run dev` uses the zero-member academy in
+`.data/academy-empty.db`. Demo remains the canonical loaded academy for UI and
 workflow review. The clean `.data/smba.db` remains an untouched source for
 rebuilding fixtures.
 
-`npm run dev` explicitly migrates that local database and ensures the baseline
-head-coach records before Next.js starts. For another configured database, run
+`npm run dev` explicitly migrates that local database and leaves owner creation to
+the one-time setup flow. For another configured database, run
 `npm run db:migrate`. Application requests only open an already prepared database;
 they never run migrations or seed writes.
 
@@ -73,7 +79,7 @@ npm run fixture:start:edge
 npm run fixture:start:stress
 ```
 
-- **Clean** is the current local empty-state profile with only the head coach.
+- **Clean** is the deterministic legacy fixture with only its test head coach.
 - **Demo** is the canonical 40-player academy for loaded-state development and screenshots.
 - **Edge** is the compact, feature-diverse profile with supported happy and exceptional paths.
 - **Stress** combines the 100-player scale workload with a small, deterministic set of supported variations so large-list and complete-workflow regression can run against the same profile; regression commands remain Stress aliases.
@@ -99,11 +105,10 @@ address, postal code and coordinates have been verified.
 
 ## Remote development preview
 
-The disposable Vercel workspace preview is available at
+The Vercel deployment is available at
 [`https://smba-student-portal.vercel.app`](https://smba-student-portal.vercel.app).
-It uses the synthetic 100-player Stress fixture in a Turso database and keeps the
-prototype Academy-ID login enabled for development. It must not be used for real
-academy, player, attendance or financial data.
+Its Turso database is prepared as an empty academy with separate platform-owner
+access. Do not import a synthetic Stress fixture into a real academy database.
 
 Vercel injects `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` through its Marketplace
 integration. Local development remains on `DB_FILE_NAME` unless
@@ -114,44 +119,93 @@ preview database after pulling Vercel's development environment, run:
 npm run preview:seed:turso
 ```
 
-The copier omits local authentication sessions and refuses to modify a database
+The copier omits authentication sessions, one-time codes and security telemetry and refuses to modify a database
 containing application data. It accepts either a completely empty database or an
 empty schema already prepared by the Vercel build.
 
-Vercel runs migrations as an explicit build step before starting application
-functions. Request handling never migrates or seeds the remote database. The local
-SQLite database is ignored by Git.
+Vercel runs migrations and the idempotent reference-data bootstrap as
+an explicit build step before starting application functions. Request handling
+never migrates or seeds the remote database. The local SQLite database is ignored by Git.
 
-## Prototype access
+## Authentication and account activation
 
-The seed coach is **Sathiya Moorthy** with Academy ID **`SMBA#0001`**.
+The platform owner signs in as **`SMBA-ADMIN-0001`** and is not an academy
+member. The one-time first coach setup creates **`SMBA-HC-0001`**. Approved
+junior coaches receive random `SMBA-JC-0001–SMBA-JC-9999` usernames and players
+receive random `SMBA-PL-0001–SMBA-PL-9999` usernames.
 
-Academy ID access is intentionally a temporary authentication method for local V1 testing.
-It has no password or OTP and must not be enabled for real student data or a public deployment.
-Set `PROTOTYPE_ACADEMY_ID_AUTH=false` outside a controlled prototype environment.
+Authentication uses the SMBA username plus password. Registration stores a secure,
+browser-bound activation receipt; after approval, that browser creates the first
+password without a coach-shared code. Players and junior coaches may then add an
+optional six-digit PIN. The head coach and platform owner create a password and
+mandatory PIN during first
+setup and must connect an authenticator. Password recovery uses a verified email,
+revokes existing sessions and removes the PIN. Head-coach and platform-owner resets
+also require their existing authenticator or one unused backup code. The platform owner
+always requires password or PIN plus authenticator and has audited, read-only dashboard
+preview rather than an academy role. Sessions expire after seven days.
+
+When recovery-email enforcement is enabled, an existing platform owner completes
+password and authenticator sign-in first, then verifies a recovery address before
+opening `/admin`. Verification codes expire after ten minutes; password-reset links
+expire after twenty minutes and are invalidated by a newer request. Public recovery
+requests deliberately return the same response for unknown, inactive and mismatched
+account/email combinations.
+
+Production requires these values:
+
+```env
+BETTER_AUTH_SECRET=<at-least-32-random-characters>
+SMBA_PLATFORM_ADMIN_SETUP_TOKEN=<at-least-32-random-characters>
+SMBA_HEAD_COACH_SETUP_TOKEN=<at-least-32-random-characters>
+SMBA_REQUIRE_COACH_TOTP=true
+SMBA_REQUIRE_RECOVERY_EMAIL=true
+RESEND_API_KEY=<resend-api-key>
+SMBA_AUTH_EMAIL_FROM=SMBA Security <security@your-verified-domain.example>
+```
+
+The platform setup token opens a one-time owner setup; it never becomes a login
+credential. The owner then opens the one-time head-coach setup; the coach verifies
+a recovery email and enters their
+own name, password and PIN. Players and junior coaches verify their recovery email
+in the browser that submitted registration. Shared parent email addresses are supported.
+Keep `BETTER_AUTH_SECRET` stable and store it in the deployment secret manager;
+rotating or losing it invalidates encrypted TOTP material and signed sessions.
+Losing access to the verified email, authenticator and all backup codes has no
+self-service bypass; a separately designed support workflow is required.
+
+Rebuilding a disposable fixture such as `.data/academy-stress.db` recreates its
+authentication rows, including TOTP enrollment. Ordinary logins, application restarts,
+migrations and production operation preserve the existing encrypted authenticator secret.
+
+An authenticator app scans a QR code containing a unique TOTP secret. It stores
+that secret on the phone and generates a six-digit code roughly every 30 seconds,
+even without internet. SMBA stores an encrypted copy and accepts only the current
+code after the password or head-coach PIN succeeds. The QR code, secret and
+one-use recovery codes must not be shared or photographed.
 
 ## Account workflow
 
-1. A player requests registration with their full name. Public coach registration is not available.
+1. A player or junior coach requests registration with their full name and retains a secure browser receipt.
 2. The request remains pending and cannot sign in.
-3. An approved coach reviews it in **Coach Workspace → Members**.
-4. Approval allocates a permanent human-friendly Academy ID such as `SMBA#0002`.
+3. The head coach reviews it in **Coach Workspace → Player onboarding**.
+4. Approval allocates a random, permanent `SMBA-JC-xxxx` or `SMBA-PL-xxxx` username; the registration browser can then create the password.
 5. A new player begins as **Unassigned**. Approval alone does not make the player attendance-eligible.
 6. The coach records one Level, one Weekday or Weekend Batch and an informational Academy Plan, then continues directly to matching recurring-session assignment. Weekday plans require an exact union of 3, 4 or 5 distinct weekdays across active assignments; the first complete assignment makes the player Active.
 7. Saved attendance is read from the same database by the player dashboard and coach report workflow.
 
 Duplicate names are allowed. Internal relationships use immutable account UUIDs, never Academy IDs.
-Academy IDs are immutable, human-friendly academy identifiers that are never edited or reused. They
-also serve as the temporary prototype login identifier, but roster membership does not depend on an
-Academy ID authentication method remaining active.
+Academy IDs are immutable, human-friendly academy identifiers that are never edited or reused. Roster
+membership does not depend on an Academy ID authentication method remaining active.
 
 ## Data boundaries
 
 - `accounts` represents who a person is.
-- `auth_methods` and `auth_sessions` represent how they prove identity and maintain a session.
+- `auth_methods` maps Academy IDs to domain accounts. Better Auth credential, TOTP and
+  runtime-session tables prove identity and maintain secure sessions.
 - `player_enrollments` represents academy participation and the Unassigned / Active / Paused lifecycle.
-- Public registration creates player requests only. Additional coaches require a future controlled
-  provisioning flow rather than self-selecting privileged access.
+- Public registration accepts player and junior-coach requests. Both require head-coach approval;
+  an approved coach is always created with restricted `junior_coach` access.
 - Member archival is non-destructive and available only after active assignments end. It revokes login
   access while preserving the account, Academy ID allocation, attendance, reports and training history.
 - Academy Plan represents the enrolled pricing option. It validates the exact 3/4/5-day Weekday union while assignments are created, but it never drives attendance after those assignment weekdays are saved. Weekend remains flexible at one or two days.
@@ -183,9 +237,8 @@ Academy ID authentication method remaining active.
 - business records are never stored in browser local storage. Only the coach's “continue where I left off” hint is local.
 - account, attendance and published-report records use archive/status transitions rather than hard deletion.
 
-The repository and session interfaces keep page components independent from the temporary SQLite and
-Academy ID adapters. A future OTP or password provider can replace the authentication method without
-changing historical academy records.
+The repository and session interfaces keep page components independent from SQLite and the Better Auth
+adapter. Credential, TOTP and session storage can evolve without changing historical academy records.
 
 ## Stress and regression harness
 

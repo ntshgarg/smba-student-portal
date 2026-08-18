@@ -13,6 +13,7 @@ import {
 const initialState: RegistrationFormState = {
   error: null,
   errorField: null,
+  requestedRole: "player",
   submitted: false,
 }
 
@@ -55,6 +56,7 @@ export function RegistrationForm() {
       setState({
         error: SUBMISSION_FAILURE_MESSAGE,
         errorField: null,
+        requestedRole: formData.get("requestedRole") === "coach" ? "coach" : "player",
         submitted: false,
       })
     } finally {
@@ -68,8 +70,11 @@ export function RegistrationForm() {
       <div className="registration-confirmation" role="status">
         <span><Check aria-hidden="true" /></span>
         <h2>Registration received.</h2>
-        <p>Your coach will review the request and share your Academy ID after approval.</p>
-        <Link href="/login">Return to login</Link>
+        <p>
+          Your coach will review this {state.requestedRole === "coach" ? "junior-coach" : "player"} request.
+          Return using this browser to create your password after approval.
+        </p>
+        <Link href="/activate">View activation status</Link>
       </div>
     )
   }
@@ -96,6 +101,26 @@ export function RegistrationForm() {
           value={fullName}
           onChange={(event) => setFullName(event.target.value)}
         />
+      </div>
+
+      <div className="login-field">
+        <label htmlFor="requested-role">Account type</label>
+        <select
+          id="requested-role"
+          name="requestedRole"
+          defaultValue="player"
+          aria-describedby={state.errorField === "requestedRole" ? "requested-role-error" : "requested-role-help"}
+          aria-invalid={state.errorField === "requestedRole" ? true : undefined}
+          disabled={pending}
+        >
+          <option value="player">Player</option>
+          <option value="coach">Junior coach</option>
+        </select>
+        {state.errorField === "requestedRole" ? (
+          <p id="requested-role-error" className="login-error" role="alert">{state.error}</p>
+        ) : (
+          <p id="requested-role-help" className="login-helper">Junior-coach access requires head-coach approval.</p>
+        )}
       </div>
 
       {fullNameError ? (

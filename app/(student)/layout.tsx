@@ -2,7 +2,9 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { AppShell } from "@/components/app-shell"
+import { AdminPreviewBanner } from "@/components/admin-preview-banner"
 import { getCurrentStudent } from "@/lib/student/current-student"
+import { recoveryEmailEnrollmentRequired } from "@/lib/auth/recovery-service"
 
 export const metadata: Metadata = {
   title: {
@@ -24,6 +26,16 @@ export default async function StudentLayout({
   const student = await getCurrentStudent()
 
   if (!student) redirect("/login")
+  if (!student.identity.previewMode && recoveryEmailEnrollmentRequired(student.identity.playerId)) {
+    redirect("/account/recovery-email/setup")
+  }
 
-  return <AppShell student={student.identity}>{children}</AppShell>
+  return (
+    <>
+      {student.identity.previewMode ? (
+        <AdminPreviewBanner label={`${student.identity.fullName} · Player`} />
+      ) : null}
+      <AppShell student={student.identity}>{children}</AppShell>
+    </>
+  )
 }

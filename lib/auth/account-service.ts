@@ -1,10 +1,12 @@
 import "server-only"
 
-import { createHash, randomUUID } from "node:crypto"
+import { createHash, randomInt, randomUUID } from "node:crypto"
 
 import { and, asc, eq, isNull } from "drizzle-orm"
 
 import {
+  ACADEMY_ID_SERIAL_RANGES,
+  HEAD_COACH_ACADEMY_ID,
   formatAcademyId,
   normalizeAcademyId,
   normalizeFullName,
@@ -14,20 +16,28 @@ import {
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { operationalActionError } from "@/lib/actions/operational-result"
 import type { PendingRegistration } from "@/lib/coach/types"
-import { initializeDatabase, type SmbaDatabase } from "@/lib/db/client"
+import {
+  initializeDatabase,
+  type SmbaDatabase,
+  type SmbaDatabaseExecutor,
+} from "@/lib/db/client"
 import {
   academyIdAllocations,
   accounts,
+  authCredentialStates,
   authMethods,
+  coachProfiles,
   playerEnrollments,
 } from "@/lib/db/schema"
 import { issueRegistrationChargeForApprovedPlayer } from "@/lib/finance/service"
+import {
+  createActivationClaimToken,
+  extendActivationClaim,
+  saveActivationClaim,
+} from "@/lib/auth/credential-service"
+import { getAcademyDateKey } from "@/lib/format"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
-
-export function prototypeAcademyIdAuthEnabled() {
-  return process.env.PROTOTYPE_ACADEMY_ID_AUTH === "true"
-}
 
 export function registerAccount(fullName: string, requestedRole: AccountRole) {
   const db = initializeDatabase()
@@ -48,10 +58,12 @@ export function registerAccount(fullName: string, requestedRole: AccountRole) {
   return id
 }
 
-export function registerPublicPlayerRequest(
+export function registerPublicAccountRequest(
   input: {
+    activationToken: string
     fullName: string
     requestKey: string
+    requestedRole: AccountRole
   },
   {
     createId = randomUUID,
@@ -65,6 +77,9 @@ export function registerPublicPlayerRequest(
 ) {
   const fullName = normalizeFullName(input.fullName)
   const requestKey = input.requestKey.trim()
+  if (input.requestedRole !== "player" && input.requestedRole !== "coach") {
+    operationalActionError("INVALID_INPUT", "Choose a valid account type.", "requestedRole")
+  }
 
   if (!UUID_PATTERN.test(requestKey)) {
     operationalActionError(
@@ -82,8 +97,8 @@ export function registerPublicPlayerRequest(
   }
   const requestFingerprint = createHash("sha256").update(JSON.stringify({
     fullName,
-    requestedRole: "player",
-    version: 1,
+    requestedRole: input.requestedRole,
+    version: 2,
   })).digest("hex")
 
   return database.transaction((tx) => {
@@ -102,6 +117,10 @@ export function registerPublicPlayerRequest(
           "registrationRequestKey",
         )
       }
+      saveActivationClaim({
+        accountId: existing.id,
+        token: input.activationToken,
+      }, { database: tx, now })
       return { accountId: existing.id, reused: true }
     }
 
@@ -112,26 +131,44 @@ export function registerPublicPlayerRequest(
       normalizedName: normalizedNameKey(fullName),
       registrationRequestFingerprint: requestFingerprint,
       registrationRequestKey: requestKey,
-      requestedRole: "player",
+      requestedRole: input.requestedRole,
       approvalStatus: "pending",
       createdAt: now,
       updatedAt: now,
     }).run()
 
+    saveActivationClaim({ accountId, token: input.activationToken }, { database: tx, now })
+
     return { accountId, reused: false }
   }, { behavior: "immediate" })
+}
+
+export function registerPublicPlayerRequest(input: {
+  activationToken?: string
+  fullName: string
+  requestKey: string
+}, options?: Parameters<typeof registerPublicAccountRequest>[1]) {
+  return registerPublicAccountRequest({
+    ...input,
+    activationToken: input.activationToken ?? createActivationClaimToken(),
+    requestedRole: "player",
+  }, options)
 }
 
 export function findApprovedAccountByAcademyId(value: string) {
   const db = initializeDatabase()
   return db.select({
+    accessLevel: coachProfiles.accessLevel,
     accountId: accounts.id,
     fullName: accounts.fullName,
     role: accounts.role,
     academyId: authMethods.identifier,
+    credentialStatus: authCredentialStates.status,
   })
     .from(authMethods)
     .innerJoin(accounts, eq(authMethods.accountId, accounts.id))
+    .leftJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
+    .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
     .where(and(
       eq(authMethods.identifier, normalizeAcademyId(value)),
       eq(authMethods.method, "academy_id"),
@@ -143,7 +180,7 @@ export function findApprovedAccountByAcademyId(value: string) {
 }
 
 export function listPendingRegistrations(): PendingRegistration[] {
-  return initializeDatabase().select({
+  const registrations = initializeDatabase().select({
     id: accounts.id,
     fullName: accounts.fullName,
     requestedRole: accounts.requestedRole,
@@ -153,14 +190,57 @@ export function listPendingRegistrations(): PendingRegistration[] {
     .where(and(eq(accounts.approvalStatus, "pending"), isNull(accounts.archivedAt)))
     .orderBy(asc(accounts.createdAt))
     .all()
-    .map((registration) => ({
-      ...registration,
-      createdAt: registration.createdAt.toISOString(),
-    }))
+  return registrations.flatMap((registration) => (
+    registration.requestedRole === "player" || registration.requestedRole === "coach"
+      ? [{
+        id: registration.id,
+        fullName: registration.fullName,
+        requestedRole: registration.requestedRole,
+        createdAt: registration.createdAt.toISOString(),
+      }]
+      : []
+  ))
 }
 
 function assertApprovingCoach(coachAccountId: string) {
   requireHeadAdminAccess(coachAccountId)
+}
+
+export function allocateRandomAcademyId(input: {
+  accountId: string
+  chooseIndex?: (availableCount: number) => number
+  database: SmbaDatabaseExecutor
+  now: Date
+  role?: "coach" | "player"
+  rolePrefixed?: boolean
+}) {
+  const used = new Set(input.database.select({ serial: academyIdAllocations.serial })
+    .from(academyIdAllocations).all().map((row) => row.serial))
+  const range = input.rolePrefixed
+    ? input.role === "coach"
+      ? ACADEMY_ID_SERIAL_RANGES.juniorCoach
+      : ACADEMY_ID_SERIAL_RANGES.player
+    : ACADEMY_ID_SERIAL_RANGES.legacy
+  const available: number[] = []
+  for (let serial = range.first; serial <= range.last; serial += 1) {
+    if (!used.has(serial)) available.push(serial)
+  }
+  if (!available.length) {
+    operationalActionError("CONFLICT", "No Academy IDs are currently available.", "academyId")
+  }
+  const index = input.chooseIndex
+    ? input.chooseIndex(available.length)
+    : randomInt(available.length)
+  if (!Number.isInteger(index) || index < 0 || index >= available.length) {
+    throw new Error("Academy ID random selection returned an invalid index.")
+  }
+  const serial = available[index]
+  input.database.insert(academyIdAllocations).values({
+    accountId: input.accountId,
+    createdAt: input.now,
+    serial,
+  }).run()
+  return { academyId: formatAcademyId(serial), serial }
 }
 
 export function approveRegistration(
@@ -171,6 +251,7 @@ export function approveRegistration(
     now?: Date
     createFinanceId?: () => string
     createFeeReference?: () => string
+    chooseAcademyIdIndex?: (availableCount: number) => number
   } = {},
 ) {
   assertApprovingCoach(coachAccountId)
@@ -188,26 +269,33 @@ export function approveRegistration(
       )
     }
     if (options.requestedRole && registration.requestedRole !== options.requestedRole) {
-      if (registration.requestedRole === "coach") {
-        operationalActionError(
-          "BUSINESS_RULE",
-          "Coach accounts require controlled provisioning. Reject this public request.",
-          "registrationId",
-        )
-      }
       operationalActionError(
         "CONFLICT",
         "This registration has a different account role.",
         "registrationId",
       )
     }
+    if (registration.requestedRole !== "player" && registration.requestedRole !== "coach") {
+      operationalActionError("CONFLICT", "This account cannot use academy onboarding.", "registrationId")
+    }
 
     const now = options.now ?? new Date()
-    const allocation = tx.insert(academyIdAllocations).values({
+    const approvingAcademyId = tx.select({ identifier: authMethods.identifier })
+      .from(authMethods)
+      .where(and(
+        eq(authMethods.accountId, coachAccountId),
+        eq(authMethods.method, "academy_id"),
+        isNull(authMethods.revokedAt),
+      ))
+      .get()?.identifier
+    const { academyId } = allocateRandomAcademyId({
       accountId: registration.id,
-      createdAt: now,
-    }).returning({ serial: academyIdAllocations.serial }).get()
-    const academyId = formatAcademyId(allocation.serial)
+      chooseIndex: options.chooseAcademyIdIndex,
+      database: tx,
+      now,
+      role: registration.requestedRole,
+      rolePrefixed: approvingAcademyId === HEAD_COACH_ACADEMY_ID,
+    })
 
     tx.update(accounts).set({
       role: registration.requestedRole,
@@ -225,6 +313,16 @@ export function approveRegistration(
       createdAt: now,
     }).run()
 
+    tx.insert(authCredentialStates).values({
+      accountId: registration.id,
+      status: "pending",
+      updatedAt: now,
+    }).onConflictDoUpdate({
+      target: authCredentialStates.accountId,
+      set: { status: "pending", updatedAt: now },
+    }).run()
+    extendActivationClaim(registration.id, { database: tx, now })
+
     if (registration.requestedRole === "player") {
       tx.insert(playerEnrollments).values({
         accountId: registration.id,
@@ -240,9 +338,21 @@ export function approveRegistration(
         database: tx,
         playerId: registration.id,
       })
+    } else {
+      tx.insert(coachProfiles).values({
+        accountId: registration.id,
+        accessLevel: "junior_coach",
+        joinedOn: getAcademyDateKey(now),
+        createdAt: now,
+        updatedAt: now,
+      }).run()
     }
 
-    return { academyId, fullName: registration.fullName, role: registration.requestedRole }
+    return {
+      academyId,
+      fullName: registration.fullName,
+      role: registration.requestedRole,
+    }
   })
 }
 

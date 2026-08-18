@@ -1,92 +1,117 @@
 import "server-only"
 
-import { createHash, randomBytes } from "node:crypto"
+import { and, eq, isNull } from "drizzle-orm"
+import { cookies, headers } from "next/headers"
 
-import { and, eq, gt, isNull } from "drizzle-orm"
-import { cookies } from "next/headers"
-
+import { auth, principalTotpRequired } from "@/lib/auth/better-auth"
+import { ADMIN_PREVIEW_COOKIE, readAdminPreviewToken } from "@/lib/auth/admin-preview"
 import { createSessionIdentity, type SessionIdentity } from "@/lib/auth/identity"
+import { requestSecurityContext, writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { initializeDatabase } from "@/lib/db/client"
-import { accounts, authMethods, authSessions } from "@/lib/db/schema"
+import {
+  accounts,
+  authCredentialStates,
+  authMethods,
+  coachProfiles,
+} from "@/lib/db/schema"
 
-export const SESSION_COOKIE = "smba_session"
+export const LEGACY_SESSION_COOKIE = "smba_session"
 export const LEGACY_PROTOTYPE_SESSION_COOKIE = "smba_prototype_student"
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
-
-function tokenHash(token: string) {
-  return createHash("sha256").update(token).digest("hex")
-}
 
 export interface SessionProvider {
   getCurrentIdentity(): Promise<SessionIdentity | null>
 }
 
+export async function getRawAuthSession() {
+  return auth.api.getSession({ headers: await headers() })
+}
+
 export class DatabaseSessionProvider implements SessionProvider {
   async getCurrentIdentity() {
-    const cookieStore = await cookies()
-    const token = cookieStore.get(SESSION_COOKIE)?.value
-    if (!token) return null
+    const rawSession = await getRawAuthSession()
+    if (!rawSession?.user?.id) return null
 
-    const db = initializeDatabase()
-    const now = new Date()
-    const result = db.select({
+    const result = initializeDatabase().select({
       accountId: accounts.id,
+      academyId: authMethods.identifier,
+      coachAccessLevel: coachProfiles.accessLevel,
+      credentialStatus: authCredentialStates.status,
       fullName: accounts.fullName,
       role: accounts.role,
-      academyId: authMethods.identifier,
     })
-      .from(authSessions)
-      .innerJoin(accounts, eq(authSessions.accountId, accounts.id))
+      .from(accounts)
       .innerJoin(authMethods, and(
         eq(authMethods.accountId, accounts.id),
         eq(authMethods.method, "academy_id"),
         isNull(authMethods.revokedAt),
       ))
+      .innerJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
+      .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
       .where(and(
-        eq(authSessions.tokenHash, tokenHash(token)),
-        gt(authSessions.expiresAt, now),
+        eq(accounts.id, rawSession.user.id),
         eq(accounts.approvalStatus, "approved"),
         isNull(accounts.archivedAt),
+        eq(authCredentialStates.status, "active"),
       ))
       .get()
 
     if (!result?.role) return null
+    if (principalTotpRequired(result.role, result.coachAccessLevel)
+      && !rawSession.user.twoFactorEnabled) return null
+    if (result.role === "platform_admin") {
+      const previewToken = (await cookies()).get(ADMIN_PREVIEW_COOKIE)?.value
+      const claim = readAdminPreviewToken(previewToken, result.accountId)
+      if (claim) {
+        const target = initializeDatabase().select({
+          accountId: accounts.id,
+          academyId: authMethods.identifier,
+          credentialStatus: authCredentialStates.status,
+          fullName: accounts.fullName,
+          role: accounts.role,
+        }).from(accounts)
+          .innerJoin(authMethods, and(
+            eq(authMethods.accountId, accounts.id),
+            eq(authMethods.method, "academy_id"),
+            isNull(authMethods.revokedAt),
+          ))
+          .innerJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
+          .where(and(
+            eq(accounts.id, claim.targetAccountId),
+            eq(accounts.approvalStatus, "approved"),
+            isNull(accounts.archivedAt),
+            eq(authCredentialStates.status, "active"),
+          ))
+          .get()
+        if (target?.role === "coach" || target?.role === "player") {
+          return createSessionIdentity({
+            ...target,
+            actorSubjectId: result.accountId,
+            previewMode: true,
+            role: target.role,
+          })
+        }
+      }
+    }
     return createSessionIdentity({ ...result, role: result.role })
   }
 }
 
-export async function createDatabaseSession(accountId: string) {
-  const db = initializeDatabase()
-  const token = randomBytes(32).toString("base64url")
-  const now = new Date()
-  const expiresAt = new Date(now.getTime() + SESSION_MAX_AGE_SECONDS * 1000)
-
-  db.insert(authSessions).values({
-    tokenHash: tokenHash(token),
-    accountId,
-    createdAt: now,
-    expiresAt,
-  }).run()
-
-  const cookieStore = await cookies()
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    maxAge: SESSION_MAX_AGE_SECONDS,
-    path: "/",
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  })
-  cookieStore.delete(LEGACY_PROTOTYPE_SESSION_COOKIE)
-}
-
 export async function clearDatabaseSession() {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(SESSION_COOKIE)?.value
-  if (token) {
-    initializeDatabase().delete(authSessions)
-      .where(eq(authSessions.tokenHash, tokenHash(token)))
-      .run()
+  const requestHeaders = await headers()
+  const rawSession = await auth.api.getSession({ headers: requestHeaders })
+  if (rawSession) {
+    const security = requestSecurityContext(requestHeaders)
+    await auth.api.signOut({ headers: requestHeaders })
+    writeAuthSecurityEvent({
+      accountId: rawSession.user.id,
+      eventType: "logout",
+      ipHash: security.ipHash,
+      outcome: "success",
+      userAgent: security.userAgent,
+    })
   }
-  cookieStore.delete(SESSION_COOKIE)
+
+  const cookieStore = await cookies()
+  cookieStore.delete(LEGACY_SESSION_COOKIE)
   cookieStore.delete(LEGACY_PROTOTYPE_SESSION_COOKIE)
 }

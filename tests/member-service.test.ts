@@ -43,13 +43,17 @@ describe("member directory service", () => {
       legacyCoachRequestId,
       coach.accountId,
       { requestedRole: "player" },
-    )).toThrow("controlled provisioning")
+    )).toThrow("This registration has a different account role.")
     expect(database.select().from(schema.accounts)
       .where(eq(schema.accounts.id, legacyCoachRequestId)).get()?.approvalStatus).toBe("pending")
     const playerId = accountService.registerAccount("Mira Rao", "player")
     const secondPlayerId = accountService.registerAccount("Dev Shah", "player")
-    const approved = accountService.approveRegistration(playerId, coach.accountId)
-    const secondApproved = accountService.approveRegistration(secondPlayerId, coach.accountId)
+    const approved = accountService.approveRegistration(playerId, coach.accountId, {
+      chooseAcademyIdIndex: () => 0,
+    })
+    const secondApproved = accountService.approveRegistration(secondPlayerId, coach.accountId, {
+      chooseAcademyIdIndex: () => 0,
+    })
     expect(approved.academyId).toBe("SMBA#0002")
     expect(secondApproved.academyId).toBe("SMBA#0003")
 
@@ -290,6 +294,10 @@ describe("member directory service", () => {
       .where(eq(schema.authMethods.accountId, playerId)).get()?.revokedAt).toBeInstanceOf(Date)
     expect(database.select().from(schema.authSessions)
       .where(eq(schema.authSessions.accountId, playerId)).all()).toHaveLength(0)
+    expect(database.select().from(schema.authCredentialStates)
+      .where(eq(schema.authCredentialStates.accountId, playerId)).get()?.status).toBe("revoked")
+    expect(database.select().from(schema.authRuntimeSessions)
+      .where(eq(schema.authRuntimeSessions.userId, playerId)).all()).toHaveLength(0)
     expect(database.select().from(schema.sessionAssignments)
       .where(eq(schema.sessionAssignments.accountId, playerId)).all()).toHaveLength(1)
     expect(database.select().from(schema.sessionAttendanceRecords)

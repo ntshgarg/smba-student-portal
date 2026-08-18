@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  Copy,
   X,
 } from "lucide-react"
 import Link from "next/link"
@@ -25,7 +24,6 @@ import { replaceFeeAgreementAction } from "@/app/coach/financials/actions"
 import { assignOnboardingSessionAction } from "@/app/coach/onboarding/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
-import { tryCopyText } from "@/lib/client/clipboard"
 import type {
   PlayerOnboardingCase,
   PlayerOnboardingStage,
@@ -61,11 +59,6 @@ const STAGES: Array<{
 const LEVELS: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
 const BATCHES: TrainingBatch[] = ["Weekday", "Weekend"]
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-type ApprovalReceipt = {
-  academyId: string
-  fullName: string
-}
 
 function folio(index: number) {
   return String(index + 1).padStart(2, "0")
@@ -209,46 +202,6 @@ function StepRail({ current }: { current: PlayerOnboardingStage }) {
   )
 }
 
-function ApprovalReceiptBox({ receipt }: { receipt: ApprovalReceipt }) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "unavailable">("idle")
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  async function copyAcademyId() {
-    const copied = await tryCopyText(receipt.academyId, navigator.clipboard)
-    setCopyState(copied ? "copied" : "unavailable")
-    if (!copied) {
-      inputRef.current?.focus()
-      inputRef.current?.select()
-    }
-  }
-
-  return (
-    <div className={styles.approvalReceipt}>
-      <div>
-        <Check aria-hidden="true" />
-        <p>
-          <strong>{receipt.fullName} approved</strong>
-          <span>Share this Academy ID privately</span>
-        </p>
-      </div>
-      <label>
-        <span className="sr-only">Academy ID</span>
-        <input
-          ref={inputRef}
-          name="academyId"
-          readOnly
-          value={receipt.academyId}
-          onFocus={(event) => event.currentTarget.select()}
-        />
-        <button type="button" onClick={() => void copyAcademyId()}>
-          {copyState === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-          {copyState === "copied" ? "Copied" : copyState === "unavailable" ? "Select ID" : "Copy ID"}
-        </button>
-      </label>
-    </div>
-  )
-}
-
 function RequestStep({
   item,
   onSuccess,
@@ -256,7 +209,6 @@ function RequestStep({
   item: PlayerOnboardingCase
   onSuccess: (input: {
     message: string
-    receipt?: ApprovalReceipt
     remove?: boolean
   }) => void
 }) {
@@ -274,11 +226,7 @@ function RequestStep({
       return
     }
     onSuccess({
-      message: `${result.data.fullName} approved. Continue with the court assessment.`,
-      receipt: {
-        academyId: result.data.academyId,
-        fullName: result.data.fullName,
-      },
+      message: `${result.data.fullName} approved as ${result.data.academyId}. Continue with the court assessment.`,
     })
   }
 
@@ -772,19 +720,16 @@ function FeePlanStep({
 }
 
 function OnboardingEditor({
-  approvalReceipt,
   financeActive,
   item,
   onSuccess,
   referenceDate,
   sessionSeries,
 }: {
-  approvalReceipt?: ApprovalReceipt
   financeActive: boolean
   item: PlayerOnboardingCase
   onSuccess: (input: {
     message: string
-    receipt?: ApprovalReceipt
     remove?: boolean
   }) => void
   referenceDate: string
@@ -806,7 +751,6 @@ function OnboardingEditor({
           <h3 id={`onboarding-editor-title-${item.id}`} tabIndex={-1}>{copy.title}</h3>
           <p>{copy.body}</p>
         </div>
-        {approvalReceipt ? <ApprovalReceiptBox receipt={approvalReceipt} /> : null}
         {item.stage === "request" ? <RequestStep item={item} onSuccess={onSuccess} /> : null}
         {item.stage === "assessment" ? <AssessmentStep item={item} onSuccess={onSuccess} /> : null}
         {item.stage === "session" ? (
@@ -847,7 +791,6 @@ export function PlayerOnboardingRegister({
   const selectedId = searchParams.get("player")
   const selectedItem = workspace.cases.find((item) => item.id === selectedId) ?? null
   const [notice, setNotice] = useState<ActionFeedback | null>(null)
-  const [approvalReceipts, setApprovalReceipts] = useState<Record<string, ApprovalReceipt>>({})
   const registerTitleRef = useRef<HTMLHeadingElement>(null)
   const previousSelectionRef = useRef<string | null>(null)
 
@@ -873,13 +816,9 @@ export function PlayerOnboardingRegister({
 
   function handleSuccess(input: {
     message: string
-    receipt?: ApprovalReceipt
     remove?: boolean
   }) {
     setNotice({ message: input.message, tone: "success" })
-    if (input.receipt && selectedItem) {
-      setApprovalReceipts((current) => ({ ...current, [selectedItem.id]: input.receipt! }))
-    }
     if (input.remove && selectedItem) {
       const currentIndex = workspace.cases.findIndex((item) => item.id === selectedItem.id)
       const nextItem = workspace.cases[currentIndex + 1] ?? workspace.cases[currentIndex - 1] ?? null
@@ -971,7 +910,6 @@ export function PlayerOnboardingRegister({
                   {expanded ? (
                     <OnboardingEditor
                       key={`${item.id}:${item.stage}:${item.recordRevision ?? "request"}`}
-                      approvalReceipt={approvalReceipts[item.id]}
                       financeActive={financeActive}
                       item={item}
                       onSuccess={handleSuccess}

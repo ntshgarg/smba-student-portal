@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test"
 import type { Locator, Page } from "@playwright/test"
 
 const COACH_ACADEMY_ID = "SMBA#0001"
-const PLAYER_ACADEMY_ID = process.env.SMBA_CAPTURE_PLAYER_ACADEMY_ID ?? "SMBA#0002"
+const PLAYER_ACADEMY_ID = process.env.SMBA_CAPTURE_PLAYER_ACADEMY_ID ?? "SMBA#0004"
+const FIXTURE_PASSWORD = process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!"
 const WIDTH_TOLERANCE_PX = 1
 
 const announcementViewports = [
@@ -33,6 +34,7 @@ async function loginAsCoach(page: Page) {
   if (new URL(page.url()).pathname.startsWith("/coach")) return
 
   await page.getByLabel("Academy ID").fill(COACH_ACADEMY_ID)
+  await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/coach"), {
     timeout: 20_000,
@@ -44,6 +46,7 @@ async function loginAsPlayer(page: Page) {
   if (new URL(page.url()).pathname.startsWith("/player")) return
 
   await page.getByLabel("Academy ID").fill(PLAYER_ACADEMY_ID)
+  await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/player"), {
     timeout: 20_000,

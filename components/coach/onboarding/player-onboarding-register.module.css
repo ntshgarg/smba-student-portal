@@ -239,8 +239,7 @@
 .openButton,
 .formActions > a,
 .formActions > button,
-.primaryButton,
-.approvalReceipt button {
+.primaryButton {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -266,8 +265,7 @@
 
 .openButton svg,
 .formActions svg,
-.primaryButton svg,
-.approvalReceipt button svg {
+.primaryButton svg {
   width: 15px;
   height: 15px;
 }
@@ -478,8 +476,7 @@
 }
 
 .formActions button:disabled,
-.primaryButton:disabled,
-.approvalReceipt button:disabled {
+.primaryButton:disabled {
   cursor: wait;
   opacity: 0.58;
 }
@@ -520,64 +517,6 @@
   font-size: 14px;
   font-weight: 720;
   line-height: 1.3;
-}
-
-.approvalReceipt {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.58fr);
-  align-items: center;
-  gap: 16px;
-  margin-top: 16px;
-  padding: 12px 14px;
-  border: 1px solid var(--green);
-  background: var(--green-soft);
-}
-
-.approvalReceipt > div,
-.approvalReceipt label {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-
-.approvalReceipt > div > svg {
-  width: 20px;
-  height: 20px;
-  color: var(--green);
-}
-
-.approvalReceipt p {
-  display: grid;
-  gap: 2px;
-}
-
-.approvalReceipt p strong {
-  color: var(--navy);
-  font-size: 12px;
-}
-
-.approvalReceipt p span {
-  color: var(--steel);
-  font-size: 10px;
-}
-
-.approvalReceipt input {
-  min-width: 0;
-  height: 44px;
-  flex: 1;
-  padding: 0 11px;
-  border: 1px solid var(--green);
-  background: var(--white);
-  color: var(--navy);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.approvalReceipt button {
-  flex: 0 0 auto;
-  padding: 0 12px;
-  border-color: var(--green);
-  color: var(--green);
 }
 
 .seriesChoices,
@@ -1040,15 +979,6 @@
 
   .formActions > .primaryButton {
     grid-row: 1;
-  }
-
-  .approvalReceipt {
-    grid-template-columns: 1fr;
-  }
-
-  .approvalReceipt label {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .seriesChoices > label {

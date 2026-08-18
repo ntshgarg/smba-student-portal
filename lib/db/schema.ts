@@ -16,8 +16,8 @@ export const accounts = sqliteTable("accounts", {
   normalizedName: text("normalized_name").notNull(),
   registrationRequestFingerprint: text("registration_request_fingerprint"),
   registrationRequestKey: text("registration_request_key"),
-  requestedRole: text("requested_role", { enum: ["player", "coach"] }).notNull(),
-  role: text("role", { enum: ["player", "coach"] }),
+  requestedRole: text("requested_role", { enum: ["player", "coach", "platform_admin"] }).notNull(),
+  role: text("role", { enum: ["player", "coach", "platform_admin"] }),
   approvalStatus: text("approval_status", {
     enum: ["pending", "approved", "rejected"],
   }).notNull().default("pending"),
@@ -66,6 +66,247 @@ export const authSessions = sqliteTable("auth_sessions", {
 }, (table) => [
   index("auth_sessions_account_idx").on(table.accountId),
   index("auth_sessions_expiry_idx").on(table.expiresAt),
+])
+
+/**
+ * Better Auth owns the credential and runtime-session tables below. The
+ * application-level `accounts` row remains the source of truth for identity,
+ * approval state, and role; Better Auth user IDs intentionally reuse that ID.
+ */
+export const authUsers = sqliteTable("auth_users", {
+  id: text("id").primaryKey().references(() => accounts.id),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(true),
+  image: text("image"),
+  username: text("username"),
+  displayUsername: text("display_username"),
+  twoFactorEnabled: integer("two_factor_enabled", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  uniqueIndex("auth_users_email_idx").on(table.email),
+  uniqueIndex("auth_users_username_idx").on(table.username),
+])
+
+export const authProviderAccounts = sqliteTable("auth_provider_accounts", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => authUsers.id),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp_ms" }),
+  refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp_ms" }),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  uniqueIndex("auth_provider_accounts_provider_account_idx")
+    .on(table.providerId, table.accountId),
+  index("auth_provider_accounts_user_idx").on(table.userId),
+])
+
+export const authRuntimeSessions = sqliteTable("auth_runtime_sessions", {
+  id: text("id").primaryKey(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  token: text("token").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => authUsers.id),
+}, (table) => [
+  uniqueIndex("auth_runtime_sessions_token_idx").on(table.token),
+  index("auth_runtime_sessions_user_idx").on(table.userId),
+  index("auth_runtime_sessions_expiry_idx").on(table.expiresAt),
+])
+
+export const authVerifications = sqliteTable("auth_verifications", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("auth_verifications_identifier_idx").on(table.identifier),
+  index("auth_verifications_expiry_idx").on(table.expiresAt),
+])
+
+export const authTwoFactors = sqliteTable("auth_two_factors", {
+  id: text("id").primaryKey(),
+  secret: text("secret").notNull(),
+  backupCodes: text("backup_codes").notNull(),
+  userId: text("user_id").notNull().references(() => authUsers.id),
+  verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+  failedVerificationCount: integer("failed_verification_count").notNull().default(0),
+  lockedUntil: integer("locked_until", { mode: "timestamp_ms" }),
+}, (table) => [
+  uniqueIndex("auth_two_factors_user_idx").on(table.userId),
+  index("auth_two_factors_secret_idx").on(table.secret),
+])
+
+export const authRateLimits = sqliteTable("auth_rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull(),
+  lastRequest: integer("last_request").notNull(),
+})
+
+export const authCredentialStates = sqliteTable("auth_credential_states", {
+  accountId: text("account_id").primaryKey().references(() => accounts.id),
+  status: text("status", {
+    enum: ["pending", "active", "reset_required", "revoked"],
+  }).notNull().default("pending"),
+  activatedAt: integer("activated_at", { mode: "timestamp_ms" }),
+  passwordChangedAt: integer("password_changed_at", { mode: "timestamp_ms" }),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("auth_credential_states_status_idx").on(table.status),
+  check(
+    "auth_credential_states_status_check",
+    sql`${table.status} in ('pending', 'active', 'reset_required', 'revoked')`,
+  ),
+])
+
+export const authActivationClaims = sqliteTable("auth_activation_claims", {
+  accountId: text("account_id").primaryKey().references(() => accounts.id),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  uniqueIndex("auth_activation_claims_token_idx").on(table.tokenHash),
+  index("auth_activation_claims_expiry_idx").on(table.expiresAt),
+])
+
+export const authRecoveryEmails = sqliteTable("auth_recovery_emails", {
+  accountId: text("account_id").primaryKey().references(() => accounts.id),
+  email: text("email").notNull(),
+  verifiedAt: integer("verified_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  // Recovery addresses are intentionally non-unique. Siblings may share a
+  // parent or guardian's email and disambiguate recovery with their Academy ID.
+  index("auth_recovery_emails_email_idx").on(table.email),
+  index("auth_recovery_emails_verified_idx").on(table.verifiedAt),
+])
+
+export const authEmailChallenges = sqliteTable("auth_email_challenges", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").references(() => accounts.id),
+  subjectHash: text("subject_hash").notNull(),
+  purpose: text("purpose", {
+    enum: ["verify_email", "password_reset"],
+  }).notNull(),
+  email: text("email").notNull(),
+  secretHash: text("secret_hash").notNull(),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
+  claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
+  secondFactorVerifiedAt: integer("second_factor_verified_at", { mode: "timestamp_ms" }),
+  consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  uniqueIndex("auth_email_challenges_secret_idx").on(table.secretHash),
+  index("auth_email_challenges_account_purpose_idx").on(table.accountId, table.purpose),
+  index("auth_email_challenges_subject_purpose_idx").on(table.subjectHash, table.purpose),
+  index("auth_email_challenges_expiry_idx").on(table.expiresAt),
+  check(
+    "auth_email_challenges_purpose_check",
+    sql`${table.purpose} in ('verify_email', 'password_reset')`,
+  ),
+])
+
+export const authPinCredentials = sqliteTable("auth_pin_credentials", {
+  accountId: text("account_id").primaryKey().references(() => accounts.id),
+  pinHash: text("pin_hash").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("auth_pin_credentials_updated_idx").on(table.updatedAt),
+])
+
+export const authAccessCodes = sqliteTable("auth_access_codes", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull().references(() => accounts.id),
+  purpose: text("purpose", { enum: ["activation", "password_reset"] }).notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+  createdByAccountId: text("created_by_account_id").references(() => accounts.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  uniqueIndex("auth_access_codes_hash_idx").on(table.codeHash),
+  uniqueIndex("auth_access_codes_one_active_idx")
+    .on(table.accountId, table.purpose)
+    .where(sql`${table.consumedAt} is null`),
+  index("auth_access_codes_account_idx").on(table.accountId),
+  index("auth_access_codes_expiry_idx").on(table.expiresAt),
+  check(
+    "auth_access_codes_purpose_check",
+    sql`${table.purpose} in ('activation', 'password_reset')`,
+  ),
+])
+
+export const authLoginAttempts = sqliteTable("auth_login_attempts", {
+  key: text("key").primaryKey(),
+  failedCount: integer("failed_count").notNull().default(0),
+  windowStartedAt: integer("window_started_at", { mode: "timestamp_ms" }).notNull(),
+  blockedUntil: integer("blocked_until", { mode: "timestamp_ms" }),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("auth_login_attempts_blocked_idx").on(table.blockedUntil),
+])
+
+export const authSecurityEvents = sqliteTable("auth_security_events", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").references(() => accounts.id),
+  actorAccountId: text("actor_account_id").references(() => accounts.id),
+  eventType: text("event_type", {
+    enum: [
+      "activation_issued",
+      "account_activated",
+      "login_succeeded",
+      "login_failed",
+      "login_rate_limited",
+      "logout",
+      "password_changed",
+      "password_reset_issued",
+      "password_reset_completed",
+      "pin_created",
+      "pin_changed",
+      "pin_removed",
+      "sessions_revoked",
+      "totp_enabled",
+      "totp_verified",
+      "totp_failed",
+      "recovery_email_verification_requested",
+      "recovery_email_verified",
+      "recovery_email_changed",
+      "password_recovery_requested",
+      "password_recovery_second_factor_verified",
+      "password_recovery_failed",
+      "admin_preview_started",
+      "admin_preview_stopped",
+    ],
+  }).notNull(),
+  outcome: text("outcome", { enum: ["success", "failure", "blocked"] }).notNull(),
+  subjectHash: text("subject_hash"),
+  ipHash: text("ip_hash"),
+  userAgent: text("user_agent"),
+  metadata: text("metadata").notNull().default("{}"),
+  occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("auth_security_events_account_idx").on(table.accountId, table.occurredAt),
+  index("auth_security_events_type_idx").on(table.eventType, table.occurredAt),
+  index("auth_security_events_occurred_idx").on(table.occurredAt),
 ])
 
 export const coachProfiles = sqliteTable("coach_profiles", {

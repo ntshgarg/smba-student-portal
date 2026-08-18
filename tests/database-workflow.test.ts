@@ -42,10 +42,18 @@ describe("shared academy session workflow", () => {
     if (!coach) throw new Error("Seed coach was not created.")
     const firstId = accountService.registerAccount("Mira Rao", "player")
     const secondId = accountService.registerAccount("Mira Rao", "player")
-    const first = accountService.approveRegistration(firstId, coach.accountId)
-    const second = accountService.approveRegistration(secondId, coach.accountId)
+    const first = accountService.approveRegistration(firstId, coach.accountId, {
+      chooseAcademyIdIndex: () => 0,
+    })
+    const second = accountService.approveRegistration(secondId, coach.accountId, {
+      chooseAcademyIdIndex: () => 0,
+    })
     expect(first.academyId).toBe("SMBA#0002")
     expect(second.academyId).toBe("SMBA#0003")
+    expect(database.select().from(schema.authAccessCodes)
+      .where(eq(schema.authAccessCodes.purpose, "activation")).all()).toHaveLength(0)
+    expect(database.select().from(schema.authCredentialStates)
+      .where(eq(schema.authCredentialStates.accountId, firstId)).get()?.status).toBe("pending")
 
     const now = new Date()
     const parts = new Intl.DateTimeFormat("en-CA", {

@@ -11,7 +11,7 @@ export default defineConfig({
   testMatch: "onboarding-register.spec.ts",
   timeout: 90_000,
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: process.env.SMBA_ONBOARDING_BASE_URL ?? "http://localhost:3000",
     channel: "chrome",
     colorScheme: "light",
     headless: true,
