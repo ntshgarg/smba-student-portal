@@ -45,7 +45,10 @@ function resendConfiguration() {
 export function authEmailRequired() {
   if (process.env.SMBA_REQUIRE_RECOVERY_EMAIL === "true") return true
   if (process.env.SMBA_REQUIRE_RECOVERY_EMAIL === "false") return false
-  return process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production"
+  // Recovery stays dormant until a verified sender is configured. Explicitly
+  // enabling it remains fail-closed through validateAuthEmailConfiguration().
+  const { apiKey, from } = resendConfiguration()
+  return Boolean(apiKey && from)
 }
 
 export function validateAuthEmailConfiguration() {

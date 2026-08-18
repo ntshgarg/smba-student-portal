@@ -151,10 +151,12 @@ afterEach(() => {
 })
 
 describe("production mail configuration", () => {
-  it("fails safely when enforced delivery is unavailable", () => {
+  it("stays dormant until configured and fails safely when enforcement is explicit", () => {
     process.env.VERCEL = "1"
     process.env.VERCEL_ENV = "production"
     process.env.SMBA_AUTH_MAIL_TRANSPORT = "memory"
+    expect(authEmailRequired()).toBe(false)
+    process.env.SMBA_REQUIRE_RECOVERY_EMAIL = "true"
     expect(authEmailRequired()).toBe(true)
     expect(() => validateAuthEmailConfiguration()).toThrow("RESEND_API_KEY")
     process.env.RESEND_API_KEY = "re_test_key"

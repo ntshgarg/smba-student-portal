@@ -75,7 +75,7 @@ beforeEach(() => {
 afterEach(() => sqlite.close())
 
 describe("empty-academy first-run security", () => {
-  it("starts with zero accounts and creates the platform owner with a chosen password and mandatory PIN once", async () => {
+  it("provisions the only platform owner with an explicit password and mandatory PIN once", async () => {
     expect(database.select().from(schema.accounts).all()).toHaveLength(0)
     expect(platformAdminSetupAvailable({ database })).toBe(true)
     const setup = await completeInitialPlatformAdminSetup({

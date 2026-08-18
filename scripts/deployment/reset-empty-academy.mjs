@@ -104,8 +104,8 @@ try {
     platformAdmins: count(source, "SELECT count(*) AS count FROM accounts WHERE role = 'platform_admin'"),
     players: count(source, "SELECT count(*) AS count FROM player_enrollments"),
   }
-  if (sourceCounts.accounts !== 0
-    || sourceCounts.platformAdmins !== 0
+  if (sourceCounts.accounts !== 1
+    || sourceCounts.platformAdmins !== 1
     || sourceCounts.headCoaches !== 0
     || sourceCounts.players !== 0) {
     throw new Error(`The source is not a zero-member academy: ${JSON.stringify(sourceCounts)}`)

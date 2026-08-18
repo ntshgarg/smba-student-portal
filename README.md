@@ -40,10 +40,11 @@ NEXT_PUBLIC_SMBA_SITE_ORIGIN=http://localhost:3000
 SMBA_REQUIRE_COACH_TOTP=true
 ```
 
-The empty local academy begins with zero accounts. Open the one-time platform-owner
-claim URL, choose the password and mandatory six-digit PIN for
-`SMBA-ADMIN-0001`, then connect an authenticator. The owner can then open the
-one-time first head-coach setup from `/admin`. Loaded regression profiles use
+The empty local academy contains only the separately provisioned platform owner
+`SMBA-ADMIN-0001`; it has no head coach, junior coaches, or players. Provision
+the owner once with `npm run db:provision:admin`, then connect an authenticator
+on first login. The owner can then open the one-time first head-coach setup from
+`/admin`. Loaded regression profiles use
 `SMBA fixture access 2026!`, overridable with `SMBA_FIXTURE_PASSWORD`.
 
 Local `npm run dev` uses the zero-member academy in
@@ -51,8 +52,8 @@ Local `npm run dev` uses the zero-member academy in
 workflow review. The clean `.data/smba.db` remains an untouched source for
 rebuilding fixtures.
 
-`npm run dev` explicitly migrates that local database and leaves owner creation to
-the one-time setup flow. For another configured database, run
+`npm run dev` explicitly migrates that local database and preserves its separately
+provisioned owner. For another configured database, run
 `npm run db:migrate`. Application requests only open an already prepared database;
 they never run migrations or seed writes.
 
@@ -137,9 +138,10 @@ receive random `SMBA-PL-0001–SMBA-PL-9999` usernames.
 Authentication uses the SMBA username plus password. Registration stores a secure,
 browser-bound activation receipt; after approval, that browser creates the first
 password without a coach-shared code. Players and junior coaches may then add an
-optional six-digit PIN. The head coach and platform owner create a password and
-mandatory PIN during first
-setup and must connect an authenticator. Password recovery uses a verified email,
+optional six-digit PIN. The platform owner is provisioned with an initial password
+and mandatory PIN, then connects an authenticator on first login. Both credentials
+remain changeable from Account Security. The head coach creates a password and
+mandatory PIN during first setup and must connect an authenticator. Password recovery uses a verified email,
 revokes existing sessions and removes the PIN. Head-coach and platform-owner resets
 also require their existing authenticator or one unused backup code. The platform owner
 always requires password or PIN plus authenticator and has audited, read-only dashboard
@@ -156,17 +158,15 @@ Production requires these values:
 
 ```env
 BETTER_AUTH_SECRET=<at-least-32-random-characters>
-SMBA_PLATFORM_ADMIN_SETUP_TOKEN=<at-least-32-random-characters>
-SMBA_HEAD_COACH_SETUP_TOKEN=<at-least-32-random-characters>
+SMBA_HEAD_COACH_SETUP_TOKEN=<optional-at-least-32-random-characters>
 SMBA_REQUIRE_COACH_TOTP=true
 SMBA_REQUIRE_RECOVERY_EMAIL=true
 RESEND_API_KEY=<resend-api-key>
 SMBA_AUTH_EMAIL_FROM=SMBA Security <security@your-verified-domain.example>
 ```
 
-The platform setup token opens a one-time owner setup; it never becomes a login
-credential. The owner then opens the one-time head-coach setup; the coach verifies
-a recovery email and enters their
+The separately provisioned platform owner then opens the one-time head-coach setup;
+the coach verifies a recovery email and enters their
 own name, password and PIN. Players and junior coaches verify their recovery email
 in the browser that submitted registration. Shared parent email addresses are supported.
 Keep `BETTER_AUTH_SECRET` stable and store it in the deployment secret manager;

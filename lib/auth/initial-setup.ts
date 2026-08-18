@@ -36,30 +36,24 @@ import { getAcademyDateKey } from "@/lib/format"
 
 export const HEAD_COACH_SETUP_COOKIE = "smba_head_coach_setup"
 export const LOCAL_HEAD_COACH_SETUP_TOKEN = "smba-local-head-coach-setup-token-2026"
-export const PLATFORM_ADMIN_SETUP_COOKIE = "smba_platform_admin_setup"
-export const LOCAL_PLATFORM_ADMIN_SETUP_TOKEN = "smba-local-platform-admin-setup-token-2026"
 
 function configuredSetupToken() {
   const configured = process.env.SMBA_HEAD_COACH_SETUP_TOKEN?.trim()
   if (configured) return configured
   if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production") {
-    throw new Error("SMBA_HEAD_COACH_SETUP_TOKEN is required for first-run head-coach setup.")
+    const secret = process.env.BETTER_AUTH_SECRET?.trim()
+    if (!secret || secret.length < 32) {
+      throw new Error("BETTER_AUTH_SECRET is required for first-run head-coach setup.")
+    }
+    return createHash("sha256")
+      .update(`smba-head-coach-setup:${secret}`)
+      .digest("base64url")
   }
   return LOCAL_HEAD_COACH_SETUP_TOKEN
 }
 
-function configuredPlatformAdminSetupToken() {
-  const configured = process.env.SMBA_PLATFORM_ADMIN_SETUP_TOKEN?.trim()
-  if (configured) return configured
-  if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production") {
-    throw new Error("SMBA_PLATFORM_ADMIN_SETUP_TOKEN is required for first-run platform-owner setup.")
-  }
-  return LOCAL_PLATFORM_ADMIN_SETUP_TOKEN
-}
-
 export function validateInitialSetupConfiguration() {
   if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production") {
-    configuredPlatformAdminSetupToken()
     configuredSetupToken()
   }
 }
@@ -75,14 +69,6 @@ function digest(value: string) {
 export function validHeadCoachSetupToken(value: string | null | undefined) {
   if (!value?.trim()) return false
   return timingSafeEqual(digest(value.trim()), digest(configuredSetupToken()))
-}
-
-export function validPlatformAdminSetupToken(value: string | null | undefined) {
-  if (!value?.trim()) return false
-  return timingSafeEqual(
-    digest(value.trim()),
-    digest(configuredPlatformAdminSetupToken()),
-  )
 }
 
 export function platformAdminSetupAvailable({
