@@ -9,7 +9,9 @@ import LibsqlDatabase from "libsql"
 
 import * as schema from "@/lib/db/schema"
 
-function shouldUseTurso() {
+const REMOTE_DATABASE_IDLE_LIMIT_MS = 30_000
+
+export function shouldUseTurso() {
   return Boolean(
     process.env.TURSO_DATABASE_URL
     && (process.env.VERCEL === "1" || process.env.SMBA_USE_TURSO === "true"),
@@ -43,16 +45,45 @@ function openDatabase() {
   if (!shouldUseTurso()) sqlite.pragma("journal_mode = WAL")
   sqlite.pragma("foreign_keys = ON")
 
-  return drizzle(sqlite, { schema })
+  return {
+    database: drizzle(sqlite, { schema }),
+    sqlite,
+  }
 }
 
-export type SmbaDatabase = ReturnType<typeof openDatabase>
+export type SmbaDatabase = ReturnType<typeof openDatabase>["database"]
 export type SmbaTransaction = Parameters<Parameters<SmbaDatabase["transaction"]>[0]>[0]
 export type SmbaDatabaseExecutor = SmbaDatabase | SmbaTransaction
 
 let database: SmbaDatabase | null = null
+let sqliteConnection: BetterSqlite3.Database | null = null
+let lastDatabaseAccessAt = 0
+
+function closeCachedDatabase() {
+  if (sqliteConnection?.open) sqliteConnection.close()
+  database = null
+  sqliteConnection = null
+  lastDatabaseAccessAt = 0
+}
 
 export function initializeDatabase() {
-  database ??= openDatabase()
+  const now = Date.now()
+  if (database
+    && shouldUseTurso()
+    && now - lastDatabaseAccessAt > REMOTE_DATABASE_IDLE_LIMIT_MS) {
+    // A Vercel worker can be frozen longer than Turso keeps its Hrana stream.
+    // Never hand the resumed request that expired stream; open a new one.
+    closeCachedDatabase()
+  }
+  if (!database) {
+    const opened = openDatabase()
+    database = opened.database
+    sqliteConnection = opened.sqlite
+  }
+  lastDatabaseAccessAt = now
   return database
+}
+
+export function closeDatabaseConnection() {
+  closeCachedDatabase()
 }

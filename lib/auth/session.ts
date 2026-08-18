@@ -3,7 +3,7 @@ import "server-only"
 import { and, eq, isNull } from "drizzle-orm"
 import { cookies, headers } from "next/headers"
 
-import { auth, principalTotpRequired } from "@/lib/auth/better-auth"
+import { getAuth, principalTotpRequired } from "@/lib/auth/better-auth"
 import { ADMIN_PREVIEW_COOKIE, readAdminPreviewToken } from "@/lib/auth/admin-preview"
 import { createSessionIdentity, type SessionIdentity } from "@/lib/auth/identity"
 import { requestSecurityContext, writeAuthSecurityEvent } from "@/lib/auth/security-context"
@@ -23,7 +23,7 @@ export interface SessionProvider {
 }
 
 export async function getRawAuthSession() {
-  return auth.api.getSession({ headers: await headers() })
+  return getAuth().api.getSession({ headers: await headers() })
 }
 
 export class DatabaseSessionProvider implements SessionProvider {
@@ -98,10 +98,11 @@ export class DatabaseSessionProvider implements SessionProvider {
 
 export async function clearDatabaseSession() {
   const requestHeaders = await headers()
-  const rawSession = await auth.api.getSession({ headers: requestHeaders })
+  const requestAuth = getAuth()
+  const rawSession = await requestAuth.api.getSession({ headers: requestHeaders })
   if (rawSession) {
     const security = requestSecurityContext(requestHeaders)
-    await auth.api.signOut({ headers: requestHeaders })
+    await requestAuth.api.signOut({ headers: requestHeaders })
     writeAuthSecurityEvent({
       accountId: rawSession.user.id,
       eventType: "logout",

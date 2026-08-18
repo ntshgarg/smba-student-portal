@@ -14,7 +14,7 @@ import {
   registerPublicAccountRequest,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
-import { auth } from "@/lib/auth/better-auth"
+import { getAuth } from "@/lib/auth/better-auth"
 import {
   ACTIVATION_CLAIM_COOKIE,
   completeAccountActivation,
@@ -97,9 +97,10 @@ export async function loginWithAcademyId(
     return { error: GENERIC_LOGIN_ERROR }
   }
 
-  let response: Awaited<ReturnType<typeof auth.api.signInUsername>>
+  const requestAuth = getAuth()
+  let response: Awaited<ReturnType<typeof requestAuth.api.signInUsername>>
   try {
-    response = await auth.api.signInUsername({
+    response = await requestAuth.api.signInUsername({
       body: { password, username: academyId },
       headers: requestHeaders,
     })
@@ -178,9 +179,10 @@ export async function loginWithPin(
     return { error: GENERIC_PIN_ERROR }
   }
 
-  let response: Awaited<ReturnType<typeof auth.api.signInPin>>
+  const requestAuth = getAuth()
+  let response: Awaited<ReturnType<typeof requestAuth.api.signInPin>>
   try {
-    response = await auth.api.signInPin({
+    response = await requestAuth.api.signInPin({
       body: { pin, username: academyId },
       headers: requestHeaders,
     })
@@ -240,7 +242,7 @@ export async function activateAccount(
   }
 
   const requestHeaders = await headers()
-  const response = await auth.api.signInUsername({
+  const response = await getAuth().api.signInUsername({
     body: { password, username: activated.academyId },
     headers: requestHeaders,
   })

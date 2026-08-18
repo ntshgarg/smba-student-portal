@@ -7,7 +7,7 @@ import { twoFactor, username } from "better-auth/plugins"
 
 import { isAcademyId, normalizeAcademyId } from "@/lib/auth/identity"
 import { siteOrigin } from "@/lib/config"
-import { initializeDatabase } from "@/lib/db/client"
+import { initializeDatabase, shouldUseTurso } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
 import { smbaPinLogin } from "@/lib/auth/pin-plugin"
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
@@ -52,7 +52,8 @@ export function principalTotpRequired(
   return role === "coach" && accessLevel === "head_admin" && coachTotpRequired(accessLevel)
 }
 
-export const auth = betterAuth({
+function createAuth() {
+  return betterAuth({
   appName: "SMBA",
   baseURL: siteOrigin.origin,
   basePath: "/api/auth",
@@ -131,4 +132,15 @@ export const auth = betterAuth({
     }),
     nextCookies(),
   ],
-})
+  })
+}
+
+// Local SQLite has a process-owned connection and benefits from a shared auth
+// runtime. Turso's remote Hrana stream can expire while a serverless worker is
+// frozen, so production requests build their adapter against the refreshed
+// connection returned by initializeDatabase().
+export const auth = createAuth()
+
+export function getAuth() {
+  return shouldUseTurso() ? createAuth() : auth
+}

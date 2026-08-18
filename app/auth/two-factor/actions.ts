@@ -4,7 +4,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
-import { auth } from "@/lib/auth/better-auth"
+import { getAuth } from "@/lib/auth/better-auth"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { requestSecurityContext, writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { initializeDatabase } from "@/lib/db/client"
@@ -65,7 +65,7 @@ export async function startTotpSetup(
   if (!password) return { error: "Enter your password to continue.", setup: null }
 
   try {
-    const response = await auth.api.enableTwoFactor({
+    const response = await getAuth().api.enableTwoFactor({
       body: { issuer: "Sathiya Moorthy Badminton Academy", password },
       headers: await headers(),
     })
@@ -91,7 +91,7 @@ export async function confirmTotpSetup(
   const requestHeaders = await headers()
 
   try {
-    await auth.api.verifyTOTP({ body: { code, trustDevice: true }, headers: requestHeaders })
+    await getAuth().api.verifyTOTP({ body: { code, trustDevice: true }, headers: requestHeaders })
   } catch {
     const security = requestSecurityContext(requestHeaders)
     writeAuthSecurityEvent({
@@ -123,7 +123,7 @@ export async function verifyTotpSignIn(
   if (!/^\d{6}$/u.test(code)) return { error: "Enter the six-digit code from your authenticator app." }
   const requestHeaders = await headers()
   try {
-    const response = await auth.api.verifyTOTP({
+    const response = await getAuth().api.verifyTOTP({
       body: { code, trustDevice: formData.get("trustDevice") === "on" },
       headers: requestHeaders,
     })
@@ -152,7 +152,7 @@ export async function verifyBackupCodeSignIn(
   if (!code) return { error: "Enter one of your unused recovery codes." }
   const requestHeaders = await headers()
   try {
-    const response = await auth.api.verifyBackupCode({
+    const response = await getAuth().api.verifyBackupCode({
       body: { code, trustDevice: false },
       headers: requestHeaders,
     })

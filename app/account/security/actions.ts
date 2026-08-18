@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
 
-import { auth } from "@/lib/auth/better-auth"
+import { getAuth } from "@/lib/auth/better-auth"
 import {
   hasPinCredential,
   removePinCredential,
@@ -53,7 +53,7 @@ export async function changePasswordAction(
 
   const requestHeaders = await headers()
   try {
-    await auth.api.changePassword({
+    await getAuth().api.changePassword({
       body: { currentPassword, newPassword, revokeOtherSessions: true },
       headers: requestHeaders,
     })
@@ -76,7 +76,7 @@ export async function changePasswordAction(
 export async function revokeOtherSessionsAction() {
   const identity = await requireIdentity()
   const requestHeaders = await headers()
-  await auth.api.revokeOtherSessions({ headers: requestHeaders })
+  await getAuth().api.revokeOtherSessions({ headers: requestHeaders })
   const security = requestSecurityContext(requestHeaders)
   writeAuthSecurityEvent({
     accountId: identity.subjectId,

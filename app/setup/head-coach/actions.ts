@@ -3,7 +3,7 @@
 import { cookies, headers } from "next/headers"
 import { redirect } from "next/navigation"
 
-import { auth } from "@/lib/auth/better-auth"
+import { getAuth } from "@/lib/auth/better-auth"
 import {
   completeInitialHeadCoachSetup,
   HEAD_COACH_SETUP_COOKIE,
@@ -43,7 +43,7 @@ export async function completeHeadCoachSetupAction(
 
   try {
     const account = await completeInitialHeadCoachSetup(input)
-    await auth.api.signInUsername({
+    await getAuth().api.signInUsername({
       body: { password: input.password, username: account.academyId },
       headers: await headers(),
     })

@@ -47,6 +47,9 @@ vi.mock("@/lib/auth/session", () => ({
 vi.mock("@/lib/auth/better-auth", () => ({
   auth: { api: { signInPin: mocks.signInPin, signInUsername: mocks.signInUsername } },
   coachTotpRequired: mocks.coachTotpRequired,
+  getAuth: () => ({
+    api: { signInPin: mocks.signInPin, signInUsername: mocks.signInUsername },
+  }),
   principalTotpRequired: (role: string, accessLevel: string | null) => (
     role === "platform_admin"
     || (role === "coach" && accessLevel === "head_admin" && mocks.coachTotpRequired())
