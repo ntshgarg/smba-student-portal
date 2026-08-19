@@ -2188,6 +2188,28 @@ h3 {
   font-size: 15px;
 }
 
+.security-required-marker {
+  margin-left: 2px;
+  color: var(--red);
+}
+
+.security-form input[aria-invalid="true"] {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red-soft) 34%, var(--white));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 38%, transparent);
+}
+
+.security-form input[aria-invalid="true"]:focus-visible {
+  outline-offset: 0;
+}
+
+.security-validation-message {
+  color: var(--red-dark);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.45;
+}
+
 .security-form button,
 .security-panel button,
 .security-mfa-callout a,
@@ -2207,6 +2229,20 @@ h3 {
   width: 100%;
   background: var(--navy);
   color: var(--white);
+}
+
+.security-recovery-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.security-recovery-submit svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
 }
 
 .security-success {
@@ -2266,6 +2302,10 @@ h3 {
 .security-pin-form > button,
 .security-pin-form > .login-error,
 .security-pin-form > .security-success {
+  grid-column: 1 / -1;
+}
+
+.security-pin-form > .security-validation-message {
   grid-column: 1 / -1;
 }
 
@@ -2515,6 +2555,10 @@ h3 {
   .security-pin-form > button,
   .security-pin-form > .login-error,
   .security-pin-form > .security-success {
+    grid-column: auto;
+  }
+
+  .security-pin-form > .security-validation-message {
     grid-column: auto;
   }
 

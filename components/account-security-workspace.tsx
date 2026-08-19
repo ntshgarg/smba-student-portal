@@ -66,7 +66,7 @@ export function AccountSecurityWorkspace({
   )
   const [pinState, pinAction, pinPending] = useActionState(savePinAction, initialPinState)
   const [removeState, removeAction, removePending] = useActionState(removePinAction, initialPinState)
-  const [pinFormReady, setPinFormReady] = useState(false)
+  const [pinValidationTarget, setPinValidationTarget] = useState<string | null>(null)
   const [requestMessage, setRequestMessage] = useState<string | null>(null)
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -179,14 +179,30 @@ export function AccountSecurityWorkspace({
           <form
             className="security-form security-pin-form"
             action={pinAction}
-            onInput={(event) => setPinFormReady(event.currentTarget.checkValidity())}
+            noValidate
+            onInput={(event) => {
+              if (!pinValidationTarget) return
+              const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
+              setPinValidationTarget(nextInvalid?.name ?? null)
+            }}
+            onSubmit={(event) => {
+              if (event.currentTarget.checkValidity()) {
+                setPinValidationTarget(null)
+                return
+              }
+              event.preventDefault()
+              const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
+              setPinValidationTarget(nextInvalid?.name ?? null)
+              nextInvalid?.focus()
+            }}
           >
-            <label>Current password<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
-            <label>{pinEnabled ? "New PIN" : "PIN"}<input className="login-pin-input" name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required /></label>
-            <label>Confirm PIN<input className="login-pin-input" name="confirmPin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required /></label>
+            <label><span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span><input name="currentPassword" type="password" autoComplete="current-password" required aria-invalid={pinValidationTarget === "currentPassword" ? true : undefined} /></label>
+            <label><span>{pinEnabled ? "New PIN" : "PIN"} <span className="security-required-marker" aria-hidden="true">*</span></span><input className="login-pin-input" name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required aria-invalid={pinValidationTarget === "pin" ? true : undefined} /></label>
+            <label><span>Confirm PIN <span className="security-required-marker" aria-hidden="true">*</span></span><input className="login-pin-input" name="confirmPin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required aria-invalid={pinValidationTarget === "confirmPin" ? true : undefined} /></label>
+            {pinValidationTarget ? <p className="security-validation-message" role="alert">Complete the highlighted required field.</p> : null}
             {pinState.error ? <p className="login-error" role="alert">{pinState.error}</p> : null}
             {pinState.success ? <p className="security-success" role="status">{pinState.success}</p> : null}
-            <button type="submit" disabled={pinPending || !pinFormReady}>{pinPending ? "Saving…" : pinEnabled ? "Change PIN" : "Enable PIN login"}</button>
+            <button type="submit" disabled={pinPending}>{pinPending ? "Saving…" : pinEnabled ? "Change PIN" : "Enable PIN login"}</button>
           </form>
           {pinEnabled && !pinRequired ? (
             <form className="security-form security-pin-remove" action={removeAction} noValidate>
