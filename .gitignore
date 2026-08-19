@@ -13,6 +13,8 @@
 /output
 /snapshots
 /tmp
+/test-results
+/playwright-report
 /static_analysis_codeql_1
 /static_analysis_semgrep_1
 /audit-context
