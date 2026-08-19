@@ -1,0 +1,93 @@
+name: Quality gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Application regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      BETTER_AUTH_SECRET: smba-ci-only-secret-never-used-in-production-2026
+      NEXT_PUBLIC_SMBA_SITE_ORIGIN: https://ci.smbaacademy.in
+      SMBA_AUTH_MAIL_TRANSPORT: memory
+      SMBA_REQUIRE_COACH_TOTP: "true"
+      SMBA_REQUIRE_RECOVERY_EMAIL: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          cache: npm
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Validate migrations
+        run: npm run db:check
+
+      - name: Run unit and operational regression tests
+        run: npm test
+
+      - name: Build and verify every regression database
+        run: |
+          npm run fixture:build:all
+          npm run fixture:verify:all
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Install Chromium for authentication regression
+        run: npx playwright install --with-deps chromium
+
+      - name: Start isolated stress workspace
+        env:
+          BETTER_AUTH_SECURE_COOKIES: "false"
+          DB_FILE_NAME: .data/academy-stress.db
+          NEXT_PUBLIC_SMBA_SITE_ORIGIN: http://localhost:3000
+          SMBA_REQUIRE_COACH_TOTP: "false"
+        run: |
+          npx next dev -p 3000 > /tmp/smba-ci-server.log 2>&1 &
+          echo $! > /tmp/smba-ci-server.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:3000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          tail -n 200 /tmp/smba-ci-server.log
+          exit 1
+
+      - name: Run responsive authentication E2E
+        run: npm run regression:authentication
+
+      - name: Show server log after a failure
+        if: failure()
+        run: tail -n 200 /tmp/smba-ci-server.log 2>/dev/null || true
+
+      - name: Stop isolated workspace
+        if: always()
+        run: |
+          if test -f /tmp/smba-ci-server.pid; then
+            kill "$(cat /tmp/smba-ci-server.pid)" 2>/dev/null || true
+          fi

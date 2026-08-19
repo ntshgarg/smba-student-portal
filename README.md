@@ -177,6 +177,11 @@ Rebuilding a disposable fixture such as `.data/academy-stress.db` recreates its
 authentication rows, including TOTP enrollment. Ordinary logins, application restarts,
 migrations and production operation preserve the existing encrypted authenticator secret.
 
+Production deployment, monitoring, database recovery and incident steps are documented in
+[`docs/PRODUCTION-OPERATIONS.md`](docs/PRODUCTION-OPERATIONS.md). The controlled first-academy pilot
+is documented in [`docs/ACADEMY-HANDOVER.md`](docs/ACADEMY-HANDOVER.md), with the academy decisions
+to confirm listed in [`docs/DATA-HANDLING-CHECKLIST.md`](docs/DATA-HANDLING-CHECKLIST.md).
+
 An authenticator app scans a QR code containing a unique TOTP secret. It stores
 that secret on the phone and generates a six-digit code roughly every 30 seconds,
 even without internet. SMBA stores an encrypted copy and accepts only the current
