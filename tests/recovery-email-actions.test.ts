@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   requestRecoveryEmailVerification: vi.fn(),
-  verifyCurrentPassword: vi.fn(),
+  verifyCurrentPasswordAttempt: vi.fn(),
   verifyFreshAccountSecondFactor: vi.fn(),
 }))
 
@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }))
 vi.mock("@/lib/auth/credential-service", () => ({
   ACTIVATION_CLAIM_COOKIE: "activation",
   getActivationClaimStatus: vi.fn(),
-  verifyCurrentPassword: mocks.verifyCurrentPassword,
+  verifyCurrentPasswordAttempt: mocks.verifyCurrentPasswordAttempt,
 }))
 vi.mock("@/lib/auth/cookie-policy", () => ({ secureAuthCookiesRequired: vi.fn() }))
 vi.mock("@/lib/auth/recovery-service", () => ({
@@ -61,7 +61,7 @@ describe("recovery email change requirements", () => {
       error: "Enter a valid recovery email address.",
       sent: false,
     })
-    expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
+    expect(mocks.verifyCurrentPasswordAttempt).not.toHaveBeenCalled()
     expect(mocks.requestRecoveryEmailVerification).not.toHaveBeenCalled()
   })
 
@@ -74,14 +74,14 @@ describe("recovery email change requirements", () => {
       error: "Enter your current password.",
       sent: false,
     })
-    expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
+    expect(mocks.verifyCurrentPasswordAttempt).not.toHaveBeenCalled()
     expect(mocks.requestRecoveryEmailVerification).not.toHaveBeenCalled()
   })
 
   it("requires a second factor for the head coach", async () => {
     mocks.getCurrentIdentity.mockResolvedValue({ role: "coach", subjectId: "head-one" })
     mocks.getCoachAccessProfile.mockReturnValue({ accessLevel: "head_admin" })
-    mocks.verifyCurrentPassword.mockResolvedValue(true)
+    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("verified")
     const formData = new FormData()
     formData.set("email", "new@example.com")
     formData.set("currentPassword", "Current secure password!")

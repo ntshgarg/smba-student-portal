@@ -1,8 +1,8 @@
 import "server-only"
 
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto"
+import { createHash, randomBytes, randomUUID } from "node:crypto"
 
-import { eq } from "drizzle-orm"
+import { and, eq, gt, isNull } from "drizzle-orm"
 import { hashPassword } from "better-auth/crypto"
 
 import {
@@ -30,45 +30,118 @@ import {
   accounts,
   authMethods,
   authPinCredentials,
+  authSetupClaims,
   coachProfiles,
 } from "@/lib/db/schema"
 import { getAcademyDateKey } from "@/lib/format"
 
 export const HEAD_COACH_SETUP_COOKIE = "smba_head_coach_setup"
-export const LOCAL_HEAD_COACH_SETUP_TOKEN = "smba-local-head-coach-setup-token-2026"
+export const HEAD_COACH_SETUP_CLAIM_LIFETIME_MS = 60 * 60 * 1_000
 
-function configuredSetupToken() {
-  const configured = process.env.SMBA_HEAD_COACH_SETUP_TOKEN?.trim()
-  if (configured) return configured
-  if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production") {
-    const secret = process.env.BETTER_AUTH_SECRET?.trim()
-    if (!secret || secret.length < 32) {
-      throw new Error("BETTER_AUTH_SECRET is required for first-run head-coach setup.")
+function setupClaimHash(token: string) {
+  return createHash("sha256").update(`head-coach-setup:${token.trim()}`).digest("hex")
+}
+
+export function createHeadCoachSetupClaim(input: {
+  createdByAccountId: string
+  claimImmediately?: boolean
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}) {
+  const token = randomBytes(32).toString("base64url")
+  const expiresAt = new Date(now.getTime() + HEAD_COACH_SETUP_CLAIM_LIFETIME_MS)
+  return database.transaction((tx) => {
+    const owner = tx.select({ id: accounts.id }).from(accounts).where(and(
+      eq(accounts.id, input.createdByAccountId),
+      eq(accounts.role, "platform_admin"),
+      eq(accounts.approvalStatus, "approved"),
+      isNull(accounts.archivedAt),
+    )).get()
+    if (!owner) throw new Error("Platform-owner access is required.")
+    if (!headCoachSetupAvailable({ database: tx })) {
+      throw new Error("The head-coach account has already been configured.")
     }
-    return createHash("sha256")
-      .update(`smba-head-coach-setup:${secret}`)
-      .digest("base64url")
-  }
-  return LOCAL_HEAD_COACH_SETUP_TOKEN
+    tx.update(authSetupClaims).set({ consumedAt: now, updatedAt: now }).where(and(
+      eq(authSetupClaims.purpose, "head_coach_setup"),
+      isNull(authSetupClaims.consumedAt),
+    )).run()
+    tx.insert(authSetupClaims).values({
+      id: randomUUID(),
+      purpose: "head_coach_setup",
+      tokenHash: setupClaimHash(token),
+      createdByAccountId: input.createdByAccountId,
+      expiresAt,
+      claimedAt: input.claimImmediately ? now : null,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    return { expiresAt, token }
+  }, { behavior: "immediate" })
 }
 
-export function validateInitialSetupConfiguration() {
-  if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production") {
-    configuredSetupToken()
-  }
+export function claimHeadCoachSetupToken(
+  value: string | null | undefined,
+  {
+    database = initializeDatabase(),
+    now = new Date(),
+  }: {
+    database?: SmbaDatabase
+    now?: Date
+  } = {},
+) {
+  if (!value?.trim() || !headCoachSetupAvailable({ database })) return false
+  return database.transaction((tx) => {
+    const result = tx.update(authSetupClaims).set({ claimedAt: now, updatedAt: now }).where(and(
+      eq(authSetupClaims.purpose, "head_coach_setup"),
+      eq(authSetupClaims.tokenHash, setupClaimHash(value)),
+      gt(authSetupClaims.expiresAt, now),
+      isNull(authSetupClaims.claimedAt),
+      isNull(authSetupClaims.consumedAt),
+    )).run()
+    return result.changes === 1
+  }, { behavior: "immediate" })
 }
 
-export function headCoachSetupTokenForTrustedServerAction() {
-  return configuredSetupToken()
-}
-
-function digest(value: string) {
-  return createHash("sha256").update(value).digest()
-}
-
-export function validHeadCoachSetupToken(value: string | null | undefined) {
+export function validHeadCoachSetupToken(
+  value: string | null | undefined,
+  {
+    database = initializeDatabase(),
+    now = new Date(),
+  }: {
+    database?: SmbaDatabaseExecutor
+    now?: Date
+  } = {},
+) {
   if (!value?.trim()) return false
-  return timingSafeEqual(digest(value.trim()), digest(configuredSetupToken()))
+  return Boolean(database.select({ id: authSetupClaims.id }).from(authSetupClaims).where(and(
+    eq(authSetupClaims.purpose, "head_coach_setup"),
+    eq(authSetupClaims.tokenHash, setupClaimHash(value)),
+    gt(authSetupClaims.expiresAt, now),
+    isNull(authSetupClaims.consumedAt),
+  )).get())
+}
+
+function consumeHeadCoachSetupClaim(
+  value: string,
+  {
+    database,
+    now,
+  }: {
+    database: SmbaDatabaseExecutor
+    now: Date
+  },
+) {
+  const result = database.update(authSetupClaims).set({ consumedAt: now, updatedAt: now }).where(and(
+    eq(authSetupClaims.purpose, "head_coach_setup"),
+    eq(authSetupClaims.tokenHash, setupClaimHash(value)),
+    gt(authSetupClaims.expiresAt, now),
+    isNull(authSetupClaims.consumedAt),
+  )).run()
+  return result.changes === 1
 }
 
 export function platformAdminSetupAvailable({
@@ -195,6 +268,7 @@ export type InitialHeadCoachSetupInput = {
   pin: string
   recoveryEmailReceiptToken: string
   recoveryEmailSubjectKey: string
+  setupToken: string
 }
 
 export function validateInitialHeadCoachSetup(input: InitialHeadCoachSetupInput) {
@@ -229,6 +303,9 @@ export async function completeInitialHeadCoachSetup(
   ])
 
   return database.transaction((tx) => {
+    if (!consumeHeadCoachSetupClaim(input.setupToken, { database: tx, now })) {
+      throw new Error("This one-time setup session is unavailable or has already been used.")
+    }
     if (!headCoachSetupAvailable({ database: tx })) {
       throw new Error("The head-coach account has already been configured.")
     }

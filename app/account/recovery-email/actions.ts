@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 import {
   ACTIVATION_CLAIM_COOKIE,
   getActivationClaimStatus,
-  verifyCurrentPassword,
+  verifyCurrentPasswordAttempt,
 } from "@/lib/auth/credential-service"
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import {
@@ -149,8 +149,23 @@ export async function requestRecoveryEmailChange(
   if (!currentPassword) {
     return { email, error: "Enter your current password.", sent: false }
   }
-  if (!await verifyCurrentPassword({ accountId: identity.subjectId, password: currentPassword })) {
-    return { email, error: "The current password could not be verified.", sent: false }
+  const context = await securityContext()
+  const passwordResult = await verifyCurrentPasswordAttempt({
+    academyId: identity.academyId,
+    accountId: identity.subjectId,
+    ipHash: context.ipHash,
+    operation: "change_recovery_email",
+    password: currentPassword,
+    userAgent: context.userAgent,
+  })
+  if (passwordResult !== "verified") {
+    return {
+      email,
+      error: passwordResult === "blocked"
+        ? "Too many attempts. Wait a few minutes before trying again."
+        : "The current password could not be verified.",
+      sent: false,
+    }
   }
   const access = identity.role === "coach" ? getCoachAccessProfile(identity.subjectId) : null
   const requiresSecondFactor = identity.role === "platform_admin"
@@ -160,7 +175,6 @@ export async function requestRecoveryEmailChange(
     if (!credential) {
       return { email, error: "Enter an authenticator or backup code.", sent: false }
     }
-    const context = await securityContext()
     if (!await verifyFreshAccountSecondFactor({
       accountId: identity.subjectId,
       credential,

@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   getCurrentIdentity: vi.fn(),
   removePinCredential: vi.fn(),
   setPinCredential: vi.fn(),
-  verifyCurrentPassword: vi.fn(),
+  verifyCurrentPasswordAttempt: vi.fn(),
 }))
 
 vi.mock("server-only", () => ({}))
@@ -25,7 +25,7 @@ vi.mock("@/lib/auth/credential-service", () => ({
   setPinCredential: mocks.setPinCredential,
   validateNewPassword: vi.fn(),
   validatePin: vi.fn(),
-  verifyCurrentPassword: mocks.verifyCurrentPassword,
+  verifyCurrentPasswordAttempt: mocks.verifyCurrentPasswordAttempt,
 }))
 vi.mock("@/lib/auth/security-context", () => ({
   requestSecurityContext: vi.fn(() => ({ ipHash: "ip", userAgent: "test" })),
@@ -46,7 +46,7 @@ function passwordData() {
 describe("role-aware PIN management", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.verifyCurrentPassword.mockResolvedValue(true)
+    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("verified")
   })
 
   it("prevents the head coach from removing the mandatory PIN", async () => {
@@ -55,7 +55,7 @@ describe("role-aware PIN management", () => {
 
     await expect(removePinAction({ error: null, success: null }, passwordData()))
       .resolves.toEqual({ error: "The head-coach account requires a PIN.", success: null })
-    expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
+    expect(mocks.verifyCurrentPasswordAttempt).not.toHaveBeenCalled()
     expect(mocks.removePinCredential).not.toHaveBeenCalled()
   })
 
@@ -64,7 +64,7 @@ describe("role-aware PIN management", () => {
 
     await expect(savePinAction({ error: null, success: null }, new FormData()))
       .resolves.toEqual({ error: "Enter your current password.", success: null })
-    expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
+    expect(mocks.verifyCurrentPasswordAttempt).not.toHaveBeenCalled()
     expect(mocks.setPinCredential).not.toHaveBeenCalled()
   })
 
@@ -76,7 +76,7 @@ describe("role-aware PIN management", () => {
 
     await expect(removePinAction({ error: null, success: null }, passwordData()))
       .resolves.toEqual({ error: "The platform-owner account requires a PIN.", success: null })
-    expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
+    expect(mocks.verifyCurrentPasswordAttempt).not.toHaveBeenCalled()
     expect(mocks.removePinCredential).not.toHaveBeenCalled()
   })
 

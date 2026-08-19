@@ -8,9 +8,6 @@ import { hashPassword, verifyPassword } from "better-auth/crypto"
 import {
   isAcademyId,
   normalizeAcademyId,
-  normalizeFullName,
-  normalizedNameKey,
-  PLATFORM_ADMIN_ACADEMY_ID,
 } from "@/lib/auth/identity"
 import { initializeDatabase, type SmbaDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
@@ -492,6 +489,58 @@ export async function verifyCurrentPassword(input: {
     ))
     .get()?.password
   return Boolean(stored && await verifyPassword({ hash: stored, password: input.password }))
+}
+
+export type CurrentPasswordAttemptResult = "blocked" | "invalid" | "verified"
+
+export async function verifyCurrentPasswordAttempt(input: {
+  accountId: string
+  academyId: string
+  ipHash: string
+  operation: string
+  password: string
+  userAgent?: string | null
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}): Promise<CurrentPasswordAttemptResult> {
+  const subjectHash = authSubjectHash(normalizeAcademyId(input.academyId))
+  const attempt = { ipHash: input.ipHash, subjectHash }
+  if (loginIsBlocked(attempt, { database, now })) {
+    writeAuthSecurityEvent({
+      accountId: input.accountId,
+      actorAccountId: input.accountId,
+      eventType: "login_rate_limited",
+      ipHash: input.ipHash,
+      metadata: { factor: "current_password", operation: input.operation },
+      outcome: "blocked",
+      subjectHash,
+      userAgent: input.userAgent,
+    }, { database, now })
+    return "blocked"
+  }
+  if (!await verifyCurrentPassword({
+    accountId: input.accountId,
+    password: input.password,
+  }, { database })) {
+    recordLoginFailure(attempt, { database, now })
+    writeAuthSecurityEvent({
+      accountId: input.accountId,
+      actorAccountId: input.accountId,
+      eventType: "login_failed",
+      ipHash: input.ipHash,
+      metadata: { factor: "current_password", operation: input.operation },
+      outcome: "failure",
+      subjectHash,
+      userAgent: input.userAgent,
+    }, { database, now })
+    return "invalid"
+  }
+  recordLoginSuccess(subjectHash, { database })
+  return "verified"
 }
 
 export async function verifyPinLogin(input: {

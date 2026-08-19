@@ -11,7 +11,7 @@ import {
   setPinCredential,
   validatePin,
   validateNewPassword,
-  verifyCurrentPassword,
+  verifyCurrentPasswordAttempt,
 } from "@/lib/auth/credential-service"
 import { approveRegistration, rejectRegistration } from "@/lib/auth/account-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
@@ -36,6 +36,28 @@ async function requireIdentity() {
   return identity
 }
 
+async function confirmCurrentPassword(input: {
+  academyId: string
+  accountId: string
+  operation: string
+  password: string
+}) {
+  const requestHeaders = await headers()
+  const security = requestSecurityContext(requestHeaders)
+  const result = await verifyCurrentPasswordAttempt({
+    ...input,
+    ipHash: security.ipHash,
+    userAgent: security.userAgent,
+  })
+  return { requestHeaders, result, security }
+}
+
+function currentPasswordError(result: "blocked" | "invalid" | "verified") {
+  return result === "blocked"
+    ? "Too many attempts. Wait a few minutes before trying again."
+    : "The current password could not be verified."
+}
+
 export async function changePasswordAction(
   _previousState: PasswordChangeState,
   formData: FormData,
@@ -51,23 +73,30 @@ export async function changePasswordAction(
     return { error: "The new passwords do not match.", success: null }
   }
 
-  const requestHeaders = await headers()
+  const confirmation = await confirmCurrentPassword({
+    academyId: identity.academyId,
+    accountId: identity.subjectId,
+    operation: "change_password",
+    password: currentPassword,
+  })
+  if (confirmation.result !== "verified") {
+    return { error: currentPasswordError(confirmation.result), success: null }
+  }
   try {
     await getAuth().api.changePassword({
       body: { currentPassword, newPassword, revokeOtherSessions: true },
-      headers: requestHeaders,
+      headers: confirmation.requestHeaders,
     })
   } catch {
     return { error: "The current password could not be verified.", success: null }
   }
 
-  const security = requestSecurityContext(requestHeaders)
   writeAuthSecurityEvent({
     accountId: identity.subjectId,
     eventType: "password_changed",
-    ipHash: security.ipHash,
+    ipHash: confirmation.security.ipHash,
     outcome: "success",
-    userAgent: security.userAgent,
+    userAgent: confirmation.security.userAgent,
   })
   revalidatePath("/account/security")
   return { error: null, success: "Password changed. Other signed-in devices were logged out." }
@@ -121,8 +150,14 @@ export async function savePinAction(
   }
   if (!pin) return { error: "Enter a new 6-digit PIN.", success: null }
   if (!confirmPin) return { error: "Confirm the new PIN.", success: null }
-  if (!await verifyCurrentPassword({ accountId: identity.subjectId, password: currentPassword })) {
-    return { error: "The current password could not be verified.", success: null }
+  const confirmation = await confirmCurrentPassword({
+    academyId: identity.academyId,
+    accountId: identity.subjectId,
+    operation: "save_pin",
+    password: currentPassword,
+  })
+  if (confirmation.result !== "verified") {
+    return { error: currentPasswordError(confirmation.result), success: null }
   }
   const pinError = validatePin(pin)
   if (pinError) return { error: pinError, success: null }
@@ -153,8 +188,17 @@ export async function removePinAction(
     return { error: "The head-coach account requires a PIN.", success: null }
   }
   const currentPassword = String(formData.get("currentPassword") ?? "")
-  if (!await verifyCurrentPassword({ accountId: identity.subjectId, password: currentPassword })) {
-    return { error: "The current password could not be verified.", success: null }
+  if (!currentPassword) {
+    return { error: "Enter your current password.", success: null }
+  }
+  const confirmation = await confirmCurrentPassword({
+    academyId: identity.academyId,
+    accountId: identity.subjectId,
+    operation: "remove_pin",
+    password: currentPassword,
+  })
+  if (confirmation.result !== "verified") {
+    return { error: currentPasswordError(confirmation.result), success: null }
   }
   removePinCredential(identity.subjectId)
   revalidatePath("/account/security")

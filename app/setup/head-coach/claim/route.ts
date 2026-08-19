@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 
 import {
   HEAD_COACH_SETUP_COOKIE,
-  headCoachSetupAvailable,
-  validHeadCoachSetupToken,
+  claimHeadCoachSetupToken,
 } from "@/lib/auth/initial-setup"
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 
 export function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token")
   const target = new URL("/setup/head-coach", request.url)
-  if (!validHeadCoachSetupToken(token) || !headCoachSetupAvailable()) {
+  if (!claimHeadCoachSetupToken(token)) {
     target.searchParams.set("status", "unavailable")
     return NextResponse.redirect(target)
   }

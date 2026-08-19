@@ -158,7 +158,6 @@ Production requires these values:
 
 ```env
 BETTER_AUTH_SECRET=<at-least-32-random-characters>
-SMBA_HEAD_COACH_SETUP_TOKEN=<optional-at-least-32-random-characters>
 SMBA_REQUIRE_COACH_TOTP=true
 SMBA_REQUIRE_RECOVERY_EMAIL=true
 RESEND_API_KEY=<resend-api-key>

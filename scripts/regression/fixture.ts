@@ -42,9 +42,11 @@ const FINANCE_TRACKING_MONTH = "2026-07"
 const CURRENT_FEE_PERIOD = "2026-08"
 const FINANCE_REFERENCE_DATE = "2026-08-03"
 const REGRESSION_DIRECTORY = path.resolve(process.cwd(), ".data/regression")
-const DEFAULT_SOURCE = path.resolve(process.cwd(), ".data/smba.db")
+const DEFAULT_SOURCE = path.resolve(process.cwd(), ".data/regression/fixture-source.db")
 const CLEAN_TARGET = path.resolve(process.cwd(), ".data/academy-clean.db")
 const MIGRATIONS_DIRECTORY = path.resolve(process.cwd(), "drizzle")
+const DATABASE_PREPARE_ENTRY = path.resolve(process.cwd(), "scripts/database/prepare.ts")
+const TSX_EXECUTABLE = path.resolve(process.cwd(), "node_modules/.bin/tsx")
 const REQUIRED_CURRENT_TABLES = [
   "auth_access_codes",
   "auth_authenticator_reset_requests",
@@ -54,6 +56,7 @@ const REQUIRED_CURRENT_TABLES = [
   "auth_rate_limits",
   "auth_runtime_sessions",
   "auth_security_events",
+  "auth_setup_claims",
   "auth_two_factors",
   "auth_users",
   "auth_verifications",
@@ -95,6 +98,7 @@ const CLEAN_OPERATIONAL_TABLES = [
   "broadcast_audience_targets",
   "broadcast_channels",
   "broadcast_withdrawals",
+  "auth_setup_claims",
 ] as const
 const selectedProfile = resolveFixtureProfile((() => {
   const args = process.argv.slice(2)
@@ -200,6 +204,13 @@ function assertRegressionTarget(target: string) {
   }
   if (target === DEFAULT_SOURCE || path.basename(target) === "smba.db") {
     throw new Error("Refusing to use the clean SMBA database as a regression target.")
+  }
+}
+
+function assertGeneratedSourceTarget(target: string) {
+  const relative = path.relative(REGRESSION_DIRECTORY, target)
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Generated fixture sources must live inside ${REGRESSION_DIRECTORY}.`)
   }
 }
 
@@ -392,6 +403,92 @@ function assertCleanSource(source: string) {
   } finally {
     db.close()
   }
+}
+
+function defaultSourceIsCurrent(source: string) {
+  if (!fs.existsSync(source)) return false
+  try {
+    const db = openReadonly(source)
+    try {
+      verifyFixtureSchema(db)
+      verifyDatabaseIntegrity(db)
+    } finally {
+      db.close()
+    }
+    assertCleanSource(source)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function prepareGeneratedSource(source: string) {
+  assertGeneratedSourceTarget(source)
+  const temporarySource = path.join(
+    REGRESSION_DIRECTORY,
+    `.fixture-source-build-${process.pid}.db`,
+  )
+  fs.mkdirSync(REGRESSION_DIRECTORY, { recursive: true })
+  try {
+    for (const candidate of [
+      temporarySource,
+      `${temporarySource}-wal`,
+      `${temporarySource}-shm`,
+    ]) {
+      if (fs.existsSync(candidate)) fs.unlinkSync(candidate)
+    }
+    const nodeOptions = [process.env.NODE_OPTIONS, "--conditions=react-server"]
+      .filter(Boolean)
+      .join(" ")
+    const prepared = spawnSync(TSX_EXECUTABLE, [DATABASE_PREPARE_ENTRY, "--seed"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        DB_FILE_NAME: temporarySource,
+        NODE_OPTIONS: nodeOptions,
+        NODE_PATH: path.resolve(process.cwd(), "node_modules/next/dist/compiled"),
+        SMBA_REQUIRE_RECOVERY_EMAIL: "false",
+        SMBA_USE_TURSO: "false",
+        TURSO_AUTH_TOKEN: "",
+        TURSO_DATABASE_URL: "",
+        VERCEL: "",
+        VERCEL_ENV: "",
+      },
+    })
+    if (prepared.error) throw prepared.error
+    if (prepared.status !== 0) {
+      throw new Error([
+        "Clean fixture source preparation failed.",
+        prepared.stdout.trim(),
+        prepared.stderr.trim(),
+      ].filter(Boolean).join("\n"))
+    }
+    assertCleanSource(temporarySource)
+    const db = openReadonly(temporarySource)
+    try {
+      verifyFixtureSchema(db)
+      verifyDatabaseIntegrity(db)
+    } finally {
+      db.close()
+    }
+    assertPublicationTargetQuiescent(source)
+    fs.renameSync(temporarySource, source)
+    return { source, schema: expectedFixtureSchema() }
+  } finally {
+    for (const candidate of [
+      temporarySource,
+      `${temporarySource}-wal`,
+      `${temporarySource}-shm`,
+    ]) {
+      if (fs.existsSync(candidate)) fs.unlinkSync(candidate)
+    }
+  }
+}
+
+function ensureGeneratedSource(source: string) {
+  if (source !== DEFAULT_SOURCE || defaultSourceIsCurrent(source)) return
+  prepareGeneratedSource(source)
 }
 
 function normalizeFixtureHeadCoachIdentity(target: string) {
@@ -2717,9 +2814,19 @@ async function buildCleanProfile(source: string) {
 async function main() {
   const args = parseArguments()
   let result
-  if (args.command === "build") result = await buildProfile(args.source, args.profile)
-  else if (args.command === "build-clean") result = await buildCleanProfile(args.source)
-  else if (args.command === "prepare") result = await prepare(args.source, args.target)
+  if (args.command === "prepare-source") result = prepareGeneratedSource(args.source)
+  else if (args.command === "build") {
+    ensureGeneratedSource(args.source)
+    result = await buildProfile(args.source, args.profile)
+  }
+  else if (args.command === "build-clean") {
+    ensureGeneratedSource(args.source)
+    result = await buildCleanProfile(args.source)
+  }
+  else if (args.command === "prepare") {
+    ensureGeneratedSource(args.source)
+    result = await prepare(args.source, args.target)
+  }
   else if (args.command === "seed") {
     result = await seedToStage(args.target, args.stage)
     if (args.stage === "loaded") writeFixtureManifest(args.target, args.profile)

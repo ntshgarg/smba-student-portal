@@ -9,8 +9,8 @@ import { ADMIN_PREVIEW_COOKIE, createAdminPreviewToken } from "@/lib/auth/admin-
 import { getRawAuthSession } from "@/lib/auth/session"
 import {
   HEAD_COACH_SETUP_COOKIE,
+  createHeadCoachSetupClaim,
   headCoachSetupAvailable,
-  headCoachSetupTokenForTrustedServerAction,
 } from "@/lib/auth/initial-setup"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import {
@@ -75,10 +75,14 @@ export async function startAdminPreviewAction(formData: FormData) {
 }
 
 export async function openHeadCoachSetupAction() {
-  await requirePlatformOwner()
+  const actorAccountId = await requirePlatformOwner()
   if (!headCoachSetupAvailable()) redirect("/admin")
+  const claim = createHeadCoachSetupClaim({
+    claimImmediately: true,
+    createdByAccountId: actorAccountId,
+  })
   const cookieStore = await cookies()
-  cookieStore.set(HEAD_COACH_SETUP_COOKIE, headCoachSetupTokenForTrustedServerAction(), {
+  cookieStore.set(HEAD_COACH_SETUP_COOKIE, claim.token, {
     httpOnly: true,
     maxAge: 60 * 60,
     path: "/setup/head-coach",

@@ -14,10 +14,14 @@ import {
   verifyPinLogin,
 } from "@/lib/auth/credential-service"
 import {
+  claimHeadCoachSetupToken,
   completeInitialHeadCoachSetup,
   completeInitialPlatformAdminSetup,
+  createHeadCoachSetupClaim,
+  HEAD_COACH_SETUP_CLAIM_LIFETIME_MS,
   headCoachSetupAvailable,
   platformAdminSetupAvailable,
+  validHeadCoachSetupToken,
 } from "@/lib/auth/initial-setup"
 import {
   confirmRecoveryEmailVerification,
@@ -38,8 +42,7 @@ const ADMIN_PASSWORD = "Platform owner secure password!"
 let sqlite: Database.Database
 let database: SmbaDatabase
 
-async function verifiedHeadSetupEmail() {
-  const setupToken = "test-head-coach-setup-token"
+async function verifiedHeadSetupEmail(setupToken: string) {
   const subjectKey = recoverySubjectKeyForHeadSetup(setupToken)
   let verificationCode = ""
   await requestRecoveryEmailVerification({
@@ -120,14 +123,26 @@ describe("empty-academy first-run security", () => {
   })
 
   it("creates the only head coach with a role-prefixed username, password and PIN exactly once", async () => {
+    await completeInitialPlatformAdminSetup({
+      fullName: "Nitish Gupta",
+      password: ADMIN_PASSWORD,
+      confirmPassword: ADMIN_PASSWORD,
+      pin: "135790",
+      confirmPin: "135790",
+    }, { database, now: NOW })
     expect(headCoachSetupAvailable({ database })).toBe(true)
-    const verifiedEmail = await verifiedHeadSetupEmail()
+    const claim = createHeadCoachSetupClaim({
+      claimImmediately: true,
+      createdByAccountId: PLATFORM_ADMIN_ACCOUNT_ID,
+    }, { database, now: NOW })
+    const verifiedEmail = await verifiedHeadSetupEmail(claim.token)
     const setup = await completeInitialHeadCoachSetup({
       fullName: "Sathiya Moorthy",
       password: HEAD_PASSWORD,
       confirmPassword: HEAD_PASSWORD,
       pin: "246810",
       confirmPin: "246810",
+      setupToken: claim.token,
       ...verifiedEmail,
     }, { database, now: NOW })
 
@@ -154,7 +169,40 @@ describe("empty-academy first-run security", () => {
       confirmPassword: "Another secure password!",
       pin: "135790",
       confirmPin: "135790",
+      setupToken: claim.token,
       ...verifiedEmail,
-    }, { database, now: NOW })).rejects.toThrow("already been configured")
+    }, { database, now: NOW })).rejects.toThrow("one-time setup session")
+    expect(validHeadCoachSetupToken(claim.token, { database, now: NOW })).toBe(false)
+  })
+
+  it("stores expiring single-use head-coach setup claims and invalidates older links", async () => {
+    await completeInitialPlatformAdminSetup({
+      fullName: "Nitish Gupta",
+      password: ADMIN_PASSWORD,
+      confirmPassword: ADMIN_PASSWORD,
+      pin: "135790",
+      confirmPin: "135790",
+    }, { database, now: NOW })
+    const first = createHeadCoachSetupClaim({
+      createdByAccountId: PLATFORM_ADMIN_ACCOUNT_ID,
+    }, { database, now: NOW })
+    expect(database.select().from(schema.authSetupClaims).get()?.tokenHash).not.toContain(first.token)
+    expect(claimHeadCoachSetupToken(first.token, { database, now: NOW })).toBe(true)
+    expect(claimHeadCoachSetupToken(first.token, { database, now: NOW })).toBe(false)
+    expect(validHeadCoachSetupToken(first.token, { database, now: NOW })).toBe(true)
+
+    const second = createHeadCoachSetupClaim({
+      claimImmediately: true,
+      createdByAccountId: PLATFORM_ADMIN_ACCOUNT_ID,
+    }, { database, now: new Date(NOW.getTime() + 1_000) })
+    expect(validHeadCoachSetupToken(first.token, { database, now: NOW })).toBe(false)
+    expect(validHeadCoachSetupToken(second.token, {
+      database,
+      now: new Date(NOW.getTime() + 1_000),
+    })).toBe(true)
+    expect(validHeadCoachSetupToken(second.token, {
+      database,
+      now: new Date(NOW.getTime() + HEAD_COACH_SETUP_CLAIM_LIFETIME_MS + 1_001),
+    })).toBe(false)
   })
 })

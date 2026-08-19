@@ -8,7 +8,6 @@ import { initializeDatabase, type SmbaDatabase } from "@/lib/db/client"
 import { seedDatabase, seedReferenceData } from "@/lib/db/seed"
 import { ensureBootstrapCredential } from "@/lib/auth/credential-service"
 import { validateAuthEmailConfiguration } from "@/lib/auth/mailer"
-import { validateInitialSetupConfiguration } from "@/lib/auth/initial-setup"
 
 type PrepareDatabaseOptions = {
   database?: SmbaDatabase
@@ -26,7 +25,6 @@ export function prepareDatabase({
   seed = false,
 }: PrepareDatabaseOptions = {}) {
   validateAuthEmailConfiguration()
-  validateInitialSetupConfiguration()
   migrate(database, {
     migrationsFolder: path.resolve(
       /* turbopackIgnore: true */ process.cwd(),

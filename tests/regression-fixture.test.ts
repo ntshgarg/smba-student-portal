@@ -9,7 +9,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url))
 const fixtureEntry = path.join(projectRoot, "scripts", "regression", "fixture.ts")
-const databasePrepareEntry = path.join(projectRoot, "scripts", "database", "prepare.ts")
 const tsxExecutable = path.join(projectRoot, "node_modules", ".bin", "tsx")
 const regressionDirectory = path.join(projectRoot, ".data", "regression")
 fs.mkdirSync(regressionDirectory, { recursive: true })
@@ -43,31 +42,6 @@ function runFixture(databasePath: string, args: string[]) {
   }
 
   return result.stdout.trim()
-}
-
-function prepareCleanSource(databasePath: string) {
-  const nodeOptions = [process.env.NODE_OPTIONS, "--conditions=react-server"]
-    .filter(Boolean)
-    .join(" ")
-  const result = spawnSync(tsxExecutable, [databasePrepareEntry, "--seed"], {
-    cwd: projectRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      DB_FILE_NAME: databasePath,
-      NODE_OPTIONS: nodeOptions,
-      NODE_PATH: path.join(projectRoot, "node_modules", "next", "dist", "compiled"),
-    },
-  })
-
-  if (result.error) throw result.error
-  if (result.status !== 0) {
-    throw new Error([
-      "Clean fixture source preparation failed.",
-      result.stdout.trim(),
-      result.stderr.trim(),
-    ].filter(Boolean).join("\n"))
-  }
 }
 
 function runJsonFixture(databasePath: string, args: string[]): JsonRecord {
@@ -123,7 +97,7 @@ afterAll(() => {
 })
 
 beforeAll(() => {
-  prepareCleanSource(sourceDatabase)
+  runFixture(sourceDatabase, ["prepare-source", "--source", sourceDatabase])
 })
 
 describe("regression fixture repeatability", () => {
@@ -139,8 +113,8 @@ describe("regression fixture repeatability", () => {
       stage: "default",
       schema: {
         current: true,
-        latestMigrationTag: "0023_authenticator_reset_approval",
-        migrationCount: 24,
+        latestMigrationTag: "0024_head_coach_setup_claims",
+        migrationCount: 25,
         missingColumns: [],
         missingTables: [],
       },

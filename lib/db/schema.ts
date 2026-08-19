@@ -183,6 +183,29 @@ export const authActivationClaims = sqliteTable("auth_activation_claims", {
   index("auth_activation_claims_expiry_idx").on(table.expiresAt),
 ])
 
+export const authSetupClaims = sqliteTable("auth_setup_claims", {
+  id: text("id").primaryKey(),
+  purpose: text("purpose", { enum: ["head_coach_setup"] }).notNull(),
+  tokenHash: text("token_hash").notNull(),
+  createdByAccountId: text("created_by_account_id").notNull()
+    .references(() => accounts.id),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  claimedAt: integer("claimed_at", { mode: "timestamp_ms" }),
+  consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  uniqueIndex("auth_setup_claims_token_idx").on(table.tokenHash),
+  uniqueIndex("auth_setup_claims_one_active_idx")
+    .on(table.purpose)
+    .where(sql`${table.consumedAt} is null`),
+  index("auth_setup_claims_expiry_idx").on(table.expiresAt),
+  check(
+    "auth_setup_claims_purpose_check",
+    sql`${table.purpose} = 'head_coach_setup'`,
+  ),
+])
+
 export const authRecoveryEmails = sqliteTable("auth_recovery_emails", {
   accountId: text("account_id").primaryKey().references(() => accounts.id),
   email: text("email").notNull(),

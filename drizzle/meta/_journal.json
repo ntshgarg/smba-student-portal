@@ -169,6 +169,13 @@
       "when": 1787156073567,
       "tag": "0023_authenticator_reset_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1787175215386,
+      "tag": "0024_head_coach_setup_claims",
+      "breakpoints": true
     }
   ]
 }

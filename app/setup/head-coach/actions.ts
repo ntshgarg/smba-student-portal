@@ -37,6 +37,7 @@ export async function completeHeadCoachSetupAction(
     confirmPin: String(formData.get("confirmPin") ?? ""),
     recoveryEmailReceiptToken: cookieStore.get(HEAD_SETUP_EMAIL_COOKIE)?.value ?? "",
     recoveryEmailSubjectKey: recoverySubjectKeyForHeadSetup(setupToken!),
+    setupToken: setupToken!,
   }
   const validationError = validateInitialHeadCoachSetup(input)
   if (validationError) return { error: validationError }

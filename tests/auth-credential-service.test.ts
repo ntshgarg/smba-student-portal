@@ -22,6 +22,7 @@ import {
   setPinCredential,
   validatePin,
   verifyCurrentPassword,
+  verifyCurrentPasswordAttempt,
   verifyPinLogin,
 } from "@/lib/auth/credential-service"
 import type { SmbaDatabase } from "@/lib/db/client"
@@ -261,6 +262,40 @@ describe("production credential lifecycle", () => {
       ipHash: "saturated-ip",
       subjectHash: "new-player",
     }, { database, now: NOW })).toBe(true)
+  })
+
+  it("rate-limits repeated current-password confirmation failures", async () => {
+    const playerId = "confirmation-player"
+    const { academyId, activationToken } = createApprovedPlayer(playerId, "Confirmation Player")
+    await completeAccountActivation({ token: activationToken, password: PASSWORD }, { database, now: NOW })
+    const attempt = {
+      academyId,
+      accountId: playerId,
+      ipHash: "confirmation-ip",
+      operation: "save_pin",
+      password: "Wrong password",
+      userAgent: "test",
+    }
+
+    for (let index = 0; index < 5; index += 1) {
+      await expect(verifyCurrentPasswordAttempt(attempt, {
+        database,
+        now: new Date(NOW.getTime() + index),
+      })).resolves.toBe("invalid")
+    }
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, password: PASSWORD }, {
+      database,
+      now: new Date(NOW.getTime() + 5),
+    })).resolves.toBe("blocked")
+
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, password: PASSWORD }, {
+      database,
+      now: new Date(NOW.getTime() + 15 * 60 * 1_000 + 5),
+    })).resolves.toBe("verified")
+    await expect(verifyCurrentPasswordAttempt(attempt, {
+      database,
+      now: new Date(NOW.getTime() + 15 * 60 * 1_000 + 6),
+    })).resolves.toBe("invalid")
   })
 
 })
