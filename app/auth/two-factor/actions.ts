@@ -5,8 +5,20 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { getAuth } from "@/lib/auth/better-auth"
+import { getCoachAccessProfile } from "@/lib/auth/coach-access"
+import {
+  loginIsBlocked,
+  recordLoginFailure,
+  recordLoginSuccess,
+  verifyCurrentPassword,
+} from "@/lib/auth/credential-service"
 import { getRawAuthSession } from "@/lib/auth/session"
-import { requestSecurityContext, writeAuthSecurityEvent } from "@/lib/auth/security-context"
+import { sessionProvider } from "@/lib/data"
+import {
+  authSubjectHash,
+  requestSecurityContext,
+  writeAuthSecurityEvent,
+} from "@/lib/auth/security-context"
 import { initializeDatabase } from "@/lib/db/client"
 import { accounts } from "@/lib/db/schema"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
@@ -21,6 +33,11 @@ export type TotpSetupState = {
 
 export type TotpVerificationState = {
   error: string | null
+}
+
+export type TotpReconnectState = {
+  error: string | null
+  errorField: "password" | "secondFactor" | null
 }
 
 function destinationForUser(userId: string, twoFactorEnabled = true) {
@@ -51,8 +68,120 @@ async function requireProtectedSetupSession() {
       isNull(accounts.archivedAt),
     ))
     .get()
+  if (account?.role === "coach"
+    && getCoachAccessProfile(rawSession.user.id)?.accessLevel !== "head_admin") {
+    redirect("/coach")
+  }
   if (account?.role !== "coach" && account?.role !== "platform_admin") redirect("/player")
   return rawSession
+}
+
+async function requireAuthenticatorReconnectSession() {
+  const [rawSession, identity] = await Promise.all([
+    getRawAuthSession(),
+    sessionProvider.getCurrentIdentity(),
+  ])
+  if (!rawSession || !identity) redirect("/login")
+  if (identity.previewMode) redirect("/admin")
+  const protectedAccount = identity.role === "platform_admin"
+    || (identity.role === "coach"
+      && getCoachAccessProfile(identity.subjectId)?.accessLevel === "head_admin")
+  if (!protectedAccount) redirect(identity.role === "coach" ? "/coach" : "/player")
+  return { identity, rawSession }
+}
+
+export async function beginAuthenticatorReconnect(
+  _previousState: TotpReconnectState,
+  formData: FormData,
+): Promise<TotpReconnectState> {
+  const { identity, rawSession } = await requireAuthenticatorReconnectSession()
+  if (!rawSession.user.twoFactorEnabled) redirect("/auth/two-factor/setup")
+
+  const password = String(formData.get("password") ?? "")
+  const secondFactor = String(formData.get("secondFactor") ?? "").trim()
+  const requestHeaders = await headers()
+  const security = requestSecurityContext(requestHeaders)
+  const subjectHash = authSubjectHash(identity.academyId)
+  const attempt = { ipHash: security.ipHash, subjectHash }
+  if (loginIsBlocked(attempt)) {
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      eventType: "login_rate_limited",
+      ipHash: security.ipHash,
+      metadata: { operation: "totp_reconnect" },
+      outcome: "blocked",
+      subjectHash,
+      userAgent: security.userAgent,
+    })
+    return {
+      error: "Too many attempts. Wait a few minutes before trying again.",
+      errorField: null,
+    }
+  }
+  if (!password) {
+    return { error: "Enter your current password.", errorField: "password" }
+  }
+  if (!await verifyCurrentPassword({ accountId: identity.subjectId, password })) {
+    recordLoginFailure(attempt)
+    return { error: "The current password could not be verified.", errorField: "password" }
+  }
+  if (!secondFactor) {
+    return { error: "Enter a current authenticator code or an unused recovery code.", errorField: "secondFactor" }
+  }
+
+  const requestAuth = getAuth()
+  try {
+    if (/^\d{6}$/u.test(secondFactor)) {
+      await requestAuth.api.verifyTOTP({
+        body: { code: secondFactor, trustDevice: false },
+        headers: requestHeaders,
+      })
+    } else {
+      await requestAuth.api.verifyBackupCode({
+        body: { code: secondFactor, disableSession: false, trustDevice: false },
+        headers: requestHeaders,
+      })
+    }
+  } catch {
+    recordLoginFailure(attempt)
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      eventType: "totp_failed",
+      ipHash: security.ipHash,
+      metadata: { operation: "reconnect" },
+      outcome: "failure",
+      userAgent: security.userAgent,
+    })
+    return {
+      error: "That authenticator or recovery code was not accepted.",
+      errorField: "secondFactor",
+    }
+  }
+
+  recordLoginSuccess(subjectHash)
+
+  try {
+    await requestAuth.api.revokeOtherSessions({ headers: requestHeaders })
+    await requestAuth.api.disableTwoFactor({
+      body: { password },
+      headers: requestHeaders,
+    })
+  } catch {
+    return {
+      error: "The authenticator could not be reconnected. Try again.",
+      errorField: null,
+    }
+  }
+
+  writeAuthSecurityEvent({
+    accountId: identity.subjectId,
+    actorAccountId: identity.subjectId,
+    eventType: "totp_reconnect_started",
+    ipHash: security.ipHash,
+    outcome: "success",
+    userAgent: security.userAgent,
+  })
+  redirect("/auth/two-factor/setup?reconnect=1")
 }
 
 export async function startTotpSetup(

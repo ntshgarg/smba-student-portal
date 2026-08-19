@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test"
 import type { Page } from "@playwright/test"
 
-const COACH_ACADEMY_ID = "SMBA#0001"
+const COACH_ACADEMY_ID = "SMBA-HC-0001"
 const FIXTURE_PASSWORD = process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!"
 
 async function loginAsCoach(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
   if (new URL(page.url()).pathname.startsWith("/coach")) return
 
-  await page.getByLabel("Academy ID").fill(COACH_ACADEMY_ID)
+  await page.getByLabel("SMBA username").fill(COACH_ACADEMY_ID)
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/coach"), {

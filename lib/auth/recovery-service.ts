@@ -4,7 +4,7 @@ import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 
 
 import { createOTP } from "@better-auth/utils/otp"
 import { hashPassword, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto"
-import { and, desc, eq, gt, isNull } from "drizzle-orm"
+import { and, desc, eq, gt, isNull, lte } from "drizzle-orm"
 
 import { normalizeAcademyId } from "@/lib/auth/identity"
 import { authEmailRequired, createAuthMailer, type AuthMailer } from "@/lib/auth/mailer"
@@ -24,6 +24,7 @@ import {
 import {
   accounts,
   authAccessCodes,
+  authAuthenticatorResetRequests,
   authCredentialStates,
   authEmailChallenges,
   authMethods,
@@ -38,9 +39,11 @@ import {
 } from "@/lib/db/schema"
 
 export const RECOVERY_SESSION_COOKIE = "smba_password_recovery"
+export const AUTHENTICATOR_RECOVERY_COOKIE = "smba_authenticator_recovery"
 export const HEAD_SETUP_EMAIL_COOKIE = "smba_head_setup_email"
 export const EMAIL_VERIFICATION_LIFETIME_MS = 10 * 60 * 1000
 export const PASSWORD_RECOVERY_LIFETIME_MS = 20 * 60 * 1000
+export const AUTHENTICATOR_RESET_REQUEST_LIFETIME_MS = 24 * 60 * 60 * 1000
 export const EMAIL_RESEND_COOLDOWN_MS = 60 * 1000
 export const EMAIL_VERIFICATION_MAX_ATTEMPTS = 5
 
@@ -427,6 +430,7 @@ export function getVerifiedSetupRecoveryEmail(input: {
 export async function requestPasswordRecovery(input: {
   academyId: string
   email: string
+  intent?: "authenticator" | "password"
   mailer?: AuthMailer
   security?: SecurityMetadata
 }, {
@@ -437,18 +441,20 @@ export async function requestPasswordRecovery(input: {
   now?: Date
 } = {}) {
   const startedAt = Date.now()
+  const intent = input.intent ?? "password"
+  const failureEvent = intent === "authenticator" ? "totp_reset_failed" : "password_recovery_failed"
   const academyId = normalizeAcademyId(input.academyId)
   const email = normalizeRecoveryEmail(input.email)
   // Perform the same keyed hashing for every request before deciding whether a
   // matching account exists. The public response remains intentionally generic.
   const publicSubject = authSubjectHash(`${academyId}:${email ?? input.email.trim()}`)
   const attempt = requestThrottleKeys(
-    `password-recovery:${publicSubject}`,
+    `${intent}-recovery:${publicSubject}`,
     input.security?.ipHash,
   )
   if (loginIsBlocked(attempt, { database, now })) {
     writeAuthSecurityEvent({
-      eventType: "password_recovery_failed",
+      eventType: failureEvent,
       ipHash: input.security?.ipHash,
       outcome: "blocked",
       subjectHash: publicSubject,
@@ -459,7 +465,7 @@ export async function requestPasswordRecovery(input: {
   recordLoginFailure(attempt, { database, now })
   if (!email) {
     writeAuthSecurityEvent({
-      eventType: "password_recovery_failed",
+      eventType: failureEvent,
       ipHash: input.security?.ipHash,
       outcome: "failure",
       subjectHash: publicSubject,
@@ -468,10 +474,14 @@ export async function requestPasswordRecovery(input: {
     return genericRecoveryResponse(startedAt)
   }
   const account = database.select({
+    accessLevel: coachProfiles.accessLevel,
     accountId: accounts.id,
     fullName: accounts.fullName,
+    role: accounts.role,
+    twoFactorEnabled: authUsers.twoFactorEnabled,
   }).from(authMethods)
     .innerJoin(accounts, eq(accounts.id, authMethods.accountId))
+    .innerJoin(authUsers, eq(authUsers.id, accounts.id))
     .innerJoin(authCredentialStates, and(
       eq(authCredentialStates.accountId, accounts.id),
       eq(authCredentialStates.status, "active"),
@@ -480,6 +490,7 @@ export async function requestPasswordRecovery(input: {
       eq(authRecoveryEmails.accountId, accounts.id),
       eq(authRecoveryEmails.email, email),
     ))
+    .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
     .where(and(
       eq(authMethods.identifier, academyId),
       eq(authMethods.method, "academy_id"),
@@ -487,9 +498,13 @@ export async function requestPasswordRecovery(input: {
       eq(accounts.approvalStatus, "approved"),
       isNull(accounts.archivedAt),
     )).get()
-  if (!account) {
+  const validAuthenticatorRecovery = intent !== "authenticator"
+    || (account?.role === "coach"
+      && account.accessLevel === "head_admin"
+      && account.twoFactorEnabled)
+  if (!account || !validAuthenticatorRecovery) {
     writeAuthSecurityEvent({
-      eventType: "password_recovery_failed",
+      eventType: failureEvent,
       ipHash: input.security?.ipHash,
       outcome: "failure",
       subjectHash: publicSubject,
@@ -509,7 +524,7 @@ export async function requestPasswordRecovery(input: {
   if (recent.length >= EMAIL_REQUEST_LIMIT) {
     writeAuthSecurityEvent({
       accountId: account.accountId,
-      eventType: "password_recovery_failed",
+      eventType: failureEvent,
       ipHash: input.security?.ipHash,
       outcome: "blocked",
       subjectHash: publicSubject,
@@ -541,15 +556,25 @@ export async function requestPasswordRecovery(input: {
   }, { behavior: "immediate" })
 
   try {
-    await (input.mailer ?? createAuthMailer()).sendPasswordRecovery({
-      expiresInMinutes: PASSWORD_RECOVERY_LIFETIME_MS / 60_000,
-      fullName: account.fullName,
-      resetUrl: absoluteSiteUrl(`/recover/claim?token=${encodeURIComponent(token)}`),
-      to: email,
-    })
+    const mailer = input.mailer ?? createAuthMailer()
+    if (intent === "authenticator") {
+      await mailer.sendAuthenticatorRecovery({
+        expiresInMinutes: PASSWORD_RECOVERY_LIFETIME_MS / 60_000,
+        fullName: account.fullName,
+        recoveryUrl: absoluteSiteUrl(`/auth/two-factor/recovery/claim?token=${encodeURIComponent(token)}`),
+        to: email,
+      })
+    } else {
+      await mailer.sendPasswordRecovery({
+        expiresInMinutes: PASSWORD_RECOVERY_LIFETIME_MS / 60_000,
+        fullName: account.fullName,
+        resetUrl: absoluteSiteUrl(`/recover/claim?token=${encodeURIComponent(token)}`),
+        to: email,
+      })
+    }
     writeAuthSecurityEvent({
       accountId: account.accountId,
-      eventType: "password_recovery_requested",
+      eventType: intent === "authenticator" ? "totp_recovery_email_sent" : "password_recovery_requested",
       ipHash: input.security?.ipHash,
       outcome: "success",
       subjectHash: publicSubject,
@@ -560,7 +585,7 @@ export async function requestPasswordRecovery(input: {
       .where(eq(authEmailChallenges.id, challengeId)).run()
     writeAuthSecurityEvent({
       accountId: account.accountId,
-      eventType: "password_recovery_failed",
+      eventType: failureEvent,
       ipHash: input.security?.ipHash,
       outcome: "failure",
       subjectHash: publicSubject,
@@ -579,6 +604,7 @@ function recoveryChallenge(token: string, database: SmbaDatabaseExecutor, now: D
     challengeId: authEmailChallenges.id,
     claimedAt: authEmailChallenges.claimedAt,
     consumedAt: authEmailChallenges.consumedAt,
+    email: authEmailChallenges.email,
     expiresAt: authEmailChallenges.expiresAt,
     role: accounts.role,
     secondFactorVerifiedAt: authEmailChallenges.secondFactorVerifiedAt,
@@ -659,6 +685,114 @@ export function getPasswordRecoveryStatus(token: string, {
     secondFactorVerified: !requiresSecondFactor || Boolean(challenge.secondFactorVerifiedAt),
     state: "active",
   }
+}
+
+export type AuthenticatorRecoveryStatus =
+  | { state: "missing" }
+  | { academyId: string; state: "verified" }
+
+export function getAuthenticatorRecoveryStatus(token: string, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}): AuthenticatorRecoveryStatus {
+  const challenge = recoveryChallenge(token, database, now)
+  if (!challenge?.accountId
+    || !challenge.claimedAt
+    || challenge.role !== "coach"
+    || challenge.accessLevel !== "head_admin"
+    || !challenge.twoFactorEnabled) {
+    return { state: "missing" }
+  }
+  const recoveryEmail = getRecoveryEmail(challenge.accountId, { database })
+  if (!recoveryEmail || recoveryEmail.email !== challenge.email) return { state: "missing" }
+  return { academyId: challenge.academyId, state: "verified" }
+}
+
+export function submitAuthenticatorResetRequest(input: {
+  security?: SecurityMetadata
+  token: string
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}) {
+  const challenge = recoveryChallenge(input.token, database, now)
+  if (!challenge?.accountId
+    || !challenge.claimedAt
+    || challenge.role !== "coach"
+    || challenge.accessLevel !== "head_admin"
+    || !challenge.twoFactorEnabled) {
+    return null
+  }
+  const accountId = challenge.accountId
+  const recoveryEmail = getRecoveryEmail(accountId, { database })
+  if (!recoveryEmail || recoveryEmail.email !== challenge.email) return null
+  const expiresAt = new Date(now.getTime() + AUTHENTICATOR_RESET_REQUEST_LIFETIME_MS)
+
+  return database.transaction((tx) => {
+    const activeChallenge = tx.select({ id: authEmailChallenges.id })
+      .from(authEmailChallenges)
+      .where(and(
+        eq(authEmailChallenges.id, challenge.challengeId),
+        isNull(authEmailChallenges.consumedAt),
+        gt(authEmailChallenges.expiresAt, now),
+      )).get()
+    if (!activeChallenge) return null
+
+    tx.update(authAuthenticatorResetRequests).set({
+      resolvedAt: now,
+      status: "expired",
+      updatedAt: now,
+    }).where(and(
+      eq(authAuthenticatorResetRequests.accountId, accountId),
+      eq(authAuthenticatorResetRequests.status, "pending"),
+      lte(authAuthenticatorResetRequests.expiresAt, now),
+    )).run()
+
+    const pending = tx.select({ id: authAuthenticatorResetRequests.id })
+      .from(authAuthenticatorResetRequests)
+      .where(and(
+        eq(authAuthenticatorResetRequests.accountId, accountId),
+        eq(authAuthenticatorResetRequests.status, "pending"),
+        gt(authAuthenticatorResetRequests.expiresAt, now),
+      )).get()
+    const requestId = pending?.id ?? randomUUID()
+    if (pending) {
+      tx.update(authAuthenticatorResetRequests).set({
+        expiresAt,
+        recoveryEmail: recoveryEmail.email,
+        requestedAt: now,
+        updatedAt: now,
+      }).where(eq(authAuthenticatorResetRequests.id, requestId)).run()
+    } else {
+      tx.insert(authAuthenticatorResetRequests).values({
+        accountId,
+        createdAt: now,
+        expiresAt,
+        id: requestId,
+        recoveryEmail: recoveryEmail.email,
+        requestedAt: now,
+        status: "pending",
+        updatedAt: now,
+      }).run()
+    }
+    tx.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
+      .where(eq(authEmailChallenges.id, challenge.challengeId)).run()
+    writeAuthSecurityEvent({
+      accountId,
+      eventType: "totp_reset_requested",
+      ipHash: input.security?.ipHash,
+      metadata: { requestId },
+      outcome: "success",
+      userAgent: input.security?.userAgent,
+    }, { database: tx, now })
+    return { accountId, requestId }
+  }, { behavior: "immediate" })
 }
 
 async function verifyAccountSecondFactor(input: {

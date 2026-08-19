@@ -2061,6 +2061,23 @@ h3 {
   text-underline-offset: 4px;
 }
 
+.totp-recovery-link {
+  display: flex;
+  width: fit-content;
+  min-height: 44px;
+  align-items: center;
+  margin: 2px auto 0;
+  color: var(--steel);
+  font-size: 11px;
+  font-weight: 720;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.totp-recovery-link:hover {
+  color: var(--red);
+}
+
 .security-page {
   min-height: 100svh;
   padding: clamp(24px, 5vw, 76px);
@@ -2131,7 +2148,7 @@ h3 {
 }
 
 .security-panel > header > svg,
-.security-mfa-callout > svg {
+.security-mfa-icon > svg {
   width: 22px;
   height: 22px;
   color: var(--red);
@@ -2155,7 +2172,7 @@ h3 {
   display: grid;
   gap: 7px;
   color: var(--navy);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -2182,7 +2199,7 @@ h3 {
   background: transparent;
   color: var(--navy);
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -2225,7 +2242,7 @@ h3 {
 
 .security-sessions span {
   color: var(--steel);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .security-secondary-action {
@@ -2235,6 +2252,15 @@ h3 {
 
 .security-pin-form {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.security-pin-form > label,
+.security-pin-form input {
+  min-width: 0;
+}
+
+.security-pin-form input {
+  width: 100%;
 }
 
 .security-pin-form > button,
@@ -2263,14 +2289,54 @@ h3 {
 }
 
 .security-mfa-callout {
+  position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  grid-template-columns: auto minmax(0, 1fr) minmax(218px, auto);
   align-items: center;
-  gap: 16px;
+  gap: 18px;
   border-color: var(--red);
 }
 
-.security-mfa-callout p:last-child,
+.security-mfa-callout::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--red);
+  content: "";
+}
+
+.security-mfa-callout.is-connected {
+  border-color: color-mix(in srgb, var(--green) 42%, var(--line));
+}
+
+.security-mfa-callout.is-connected::before {
+  background: var(--green);
+}
+
+.security-mfa-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--red) 42%, var(--line));
+  background: var(--white);
+}
+
+.security-mfa-callout.is-connected .security-mfa-icon {
+  border-color: color-mix(in srgb, var(--green) 48%, var(--line));
+  background: color-mix(in srgb, var(--green-soft) 56%, var(--white));
+}
+
+.security-mfa-callout.is-connected .security-mfa-icon > svg {
+  color: var(--green);
+}
+
+.security-mfa-copy {
+  min-width: 0;
+}
+
+.security-mfa-copy p:last-child,
 .security-account-access > p {
   margin-top: 7px;
   color: var(--steel);
@@ -2278,9 +2344,46 @@ h3 {
   line-height: 1.5;
 }
 
-.security-mfa-callout a {
+.security-mfa-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.security-mfa-status {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--green) 52%, var(--line));
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.security-mfa-status svg,
+.security-mfa-actions a svg {
+  width: 14px;
+  height: 14px;
+}
+
+.security-mfa-actions a {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.totp-reconnect-note {
+  padding: 13px 14px;
+  border-inline-start: 3px solid var(--red);
+  background: color-mix(in srgb, var(--red-soft) 52%, var(--white));
+  color: var(--steel);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .security-account-table {
@@ -2380,6 +2483,29 @@ h3 {
 }
 
 @media (max-width: 760px) {
+  .login-register-link {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    column-gap: 14px;
+    line-height: 1.35;
+  }
+
+  .login-register-prompt {
+    flex-basis: 100%;
+  }
+
+  .login-register-link a {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+  }
+
+  .login-register-separator {
+    display: none;
+  }
+
   .pin-setup-actions,
   .security-pin-form,
   .security-pin-remove {
@@ -2420,11 +2546,11 @@ h3 {
 
   .security-mfa-callout {
     grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px;
   }
 
-  .security-mfa-callout a {
+  .security-mfa-actions {
     grid-column: 1 / -1;
-    justify-content: center;
   }
 
   .security-account-table {
@@ -14250,6 +14376,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-page-header,
 .admin-setup-panel,
+.admin-support-panel,
 .admin-preview-panel {
   border: 1px solid rgba(7, 27, 50, 0.2);
   background: #fffdf8;
@@ -14409,12 +14536,132 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-setup-panel,
+.admin-support-panel,
 .admin-preview-panel {
   padding: clamp(20px, 3vw, 36px);
 }
 
 .admin-setup-panel {
   margin-top: 16px;
+}
+
+.admin-support-panel {
+  margin-top: 16px;
+  padding: clamp(20px, 3vw, 36px);
+  border-color: rgba(203, 35, 52, 0.45);
+}
+
+.admin-support-panel > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.admin-support-panel h2 {
+  margin: 0 0 6px;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: clamp(25px, 2.6vw, 36px);
+  font-weight: 400;
+}
+
+.admin-support-panel header p:last-child {
+  color: var(--steel);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-support-panel header > span {
+  flex: 0 0 auto;
+  border: 1px solid var(--admin-signal-red);
+  padding: 7px 10px;
+  color: var(--admin-signal-red);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.admin-support-message {
+  margin-top: 16px;
+  border: 1px solid rgba(7, 27, 50, 0.2);
+  padding: 11px 13px;
+  color: var(--admin-cobalt-deep);
+  font-size: 12px;
+}
+
+.admin-support-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.admin-support-list article {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) minmax(250px, auto);
+  align-items: center;
+  gap: 16px;
+  border: 1px solid rgba(7, 27, 50, 0.22);
+  background: color-mix(in srgb, var(--white) 88%, var(--ivory));
+  padding: 16px;
+}
+
+.admin-support-list article > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--admin-signal-red);
+}
+
+.admin-support-list article > div:nth-child(2) {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-support-list small {
+  color: var(--admin-signal-red);
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-support-list strong {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 24px;
+  font-style: italic;
+  font-weight: 470;
+}
+
+.admin-support-list span {
+  color: var(--steel);
+  font-size: 11px;
+}
+
+.admin-support-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-support-actions button {
+  min-height: 44px;
+  border: 1px solid var(--admin-cobalt-deep);
+  background: transparent;
+  color: var(--admin-cobalt-deep);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.admin-support-actions button.is-approve {
+  background: var(--admin-cobalt-deep);
+  color: var(--admin-paper);
+}
+
+.admin-support-actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .admin-preview-panel {
@@ -14736,6 +14983,14 @@ tr.is-expanded .coach-member-row-action button svg {
   .admin-preview-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .admin-support-list article {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .admin-support-actions {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 600px) {
@@ -14746,6 +15001,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .admin-page-header,
   .admin-setup-panel,
+  .admin-support-panel > header,
   .admin-preview-banner {
     align-items: stretch;
     flex-direction: column;
@@ -14821,6 +15077,23 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .admin-preview-panel {
     padding: 16px 12px 22px;
+  }
+
+  .admin-support-panel {
+    padding: 16px 12px 20px;
+  }
+
+  .admin-support-panel > header {
+    align-items: flex-start;
+  }
+
+  .admin-support-list article {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .admin-support-actions {
+    grid-column: auto;
   }
 
   .admin-preview-panel h2 {

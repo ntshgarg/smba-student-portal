@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 
 import { AccountMenu } from "@/components/account-menu"
 import { AdminDashboardDirectory } from "@/components/admin/admin-dashboard-directory"
+import { AdminAuthenticatorRecoveryQueue } from "@/components/admin/admin-authenticator-recovery-queue"
 import { openHeadCoachSetupAction } from "@/app/admin/actions"
 import { sessionProvider } from "@/lib/data"
 import { initializeDatabase } from "@/lib/db/client"
@@ -14,7 +15,11 @@ import {
   coachProfiles,
 } from "@/lib/db/schema"
 import { headCoachSetupAvailable } from "@/lib/auth/initial-setup"
-import { recoveryEmailEnrollmentRequired } from "@/lib/auth/recovery-service"
+import {
+  maskRecoveryEmail,
+  recoveryEmailEnrollmentRequired,
+} from "@/lib/auth/recovery-service"
+import { listPendingAuthenticatorResetRequests } from "@/lib/auth/authenticator-reset-service"
 
 export const metadata: Metadata = {
   title: "Platform owner",
@@ -52,6 +57,14 @@ export default async function AdminPage() {
     ))
     .orderBy(asc(accounts.role), asc(accounts.fullName))
     .all()
+  const authenticatorResetRequests = listPendingAuthenticatorResetRequests({ database }).map((request) => ({
+    academyId: request.academyId,
+    expiresAt: request.expiresAt.toISOString(),
+    fullName: request.fullName,
+    id: request.id,
+    maskedEmail: maskRecoveryEmail(request.recoveryEmail),
+    requestedAt: request.requestedAt.toISOString(),
+  }))
 
   return (
     <main className="admin-page page-shell">
@@ -71,7 +84,7 @@ export default async function AdminPage() {
       </header>
 
       <div className="admin-access-strip">
-        <span>Read-only access</span>
+        <span>Read-only dashboard previews · Audited security approvals</span>
       </div>
 
       {headCoachSetupAvailable({ database }) ? (
@@ -85,6 +98,10 @@ export default async function AdminPage() {
             <button type="submit">Open secure coach setup</button>
           </form>
         </section>
+      ) : null}
+
+      {authenticatorResetRequests.length ? (
+        <AdminAuthenticatorRecoveryQueue requests={authenticatorResetRequests} />
       ) : null}
 
       <section className="admin-preview-panel" aria-labelledby="admin-preview-title">

@@ -46,6 +46,7 @@ async function verifiedHeadSetupEmail() {
     email: "head.coach@example.com",
     fullName: "Sathiya Moorthy",
     mailer: {
+      async sendAuthenticatorRecovery() {},
       async sendPasswordRecovery() {},
       async sendRecoveryEmailVerification(message) {
         verificationCode = message.code

@@ -11,7 +11,6 @@ export default defineConfig({
   timeout: 60_000,
   use: {
     baseURL: process.env.SMBA_E2E_BASE_URL ?? "http://localhost:3000",
-    channel: "chrome",
     colorScheme: "light",
     headless: true,
     locale: "en-IN",

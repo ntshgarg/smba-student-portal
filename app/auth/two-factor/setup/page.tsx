@@ -5,6 +5,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { redirect } from "next/navigation"
 
 import { TwoFactorSetupForm } from "@/components/two-factor-setup-form"
+import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { publicSiteUrl } from "@/lib/config"
 import { initializeDatabase } from "@/lib/db/client"
@@ -16,7 +17,12 @@ export const metadata: Metadata = {
   robots: { follow: false, index: false },
 }
 
-export default async function TwoFactorSetupPage() {
+export default async function TwoFactorSetupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reconnect?: string }>
+}) {
+  const reconnecting = (await searchParams).reconnect === "1"
   const rawSession = await getRawAuthSession()
   if (!rawSession) redirect("/login")
   const account = initializeDatabase().select({ role: accounts.role })
@@ -28,6 +34,10 @@ export default async function TwoFactorSetupPage() {
     ))
     .get()
   if (account?.role !== "coach" && account?.role !== "platform_admin") redirect("/player")
+  if (account.role === "coach"
+    && getCoachAccessProfile(rawSession.user.id)?.accessLevel !== "head_admin") {
+    redirect("/coach")
+  }
   if (rawSession.user.twoFactorEnabled) {
     redirect(postAuthenticationDestination({
       accountId: rawSession.user.id,
@@ -44,9 +54,11 @@ export default async function TwoFactorSetupPage() {
           <span>SMBA <em>Secure access</em></span>
         </Link>
         <div className="login-copy">
-          <p className="eyebrow">Required account security</p>
-          <h1 id="totp-setup-title">Protect your workspace.</h1>
-          <p>Add a free authenticator app before opening protected records.</p>
+          <p className="eyebrow">{reconnecting ? "Authenticator replacement" : "Required account security"}</p>
+          <h1 id="totp-setup-title">{reconnecting ? "Connect your new authenticator." : "Protect your workspace."}</h1>
+          <p>{reconnecting
+            ? "The previous connection and recovery codes have been retired. Finish setup to reopen protected records."
+            : "Add a free authenticator app before opening protected records."}</p>
         </div>
         <TwoFactorSetupForm />
       </section>

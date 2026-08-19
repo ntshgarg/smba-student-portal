@@ -77,12 +77,13 @@ export default async function AccountSecurityPage() {
       </header>
       <AccountSecurityWorkspace
         allowPin={allowPin}
+        authenticatorEnabled={rawSession.user.twoFactorEnabled === true}
+        authenticatorRequired={Boolean(access?.accessLevel === "head_admin"
+          || identity.role === "platform_admin")}
         pinEnabled={allowPin && hasPinCredential(identity.subjectId, { database })}
         pinRequired={identity.role === "platform_admin" || access?.accessLevel === "head_admin"}
         pendingCoachRequests={pendingCoachRequests}
         sessions={sessions}
-        showCoachMfaSetup={(access?.accessLevel === "head_admin" || identity.role === "platform_admin")
-          && !rawSession.user.twoFactorEnabled}
       />
       {recoveryEmail ? (
         <RecoveryEmailSecurityPanel

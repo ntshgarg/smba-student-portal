@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react"
 import Link from "next/link"
-import { KeyRound, LogOut, ShieldCheck, UserPlus } from "lucide-react"
+import { Check, KeyRound, LogOut, RefreshCw, ShieldCheck, UserPlus } from "lucide-react"
 
 import {
   approveJuniorCoachRequestAction,
@@ -45,18 +45,20 @@ function deviceLabel(userAgent: string | null) {
 
 export function AccountSecurityWorkspace({
   allowPin,
+  authenticatorEnabled,
+  authenticatorRequired,
   pendingCoachRequests,
   pinEnabled,
   pinRequired,
   sessions,
-  showCoachMfaSetup,
 }: {
   allowPin: boolean
+  authenticatorEnabled: boolean
+  authenticatorRequired: boolean
   pendingCoachRequests: PendingCoachRequest[]
   pinEnabled: boolean
   pinRequired: boolean
   sessions: SecuritySession[]
-  showCoachMfaSetup: boolean
 }) {
   const [passwordState, passwordAction, passwordPending] = useActionState(
     changePasswordAction,
@@ -92,15 +94,27 @@ export function AccountSecurityWorkspace({
 
   return (
     <div className="security-workspace">
-      {showCoachMfaSetup ? (
-        <section className="security-panel security-mfa-callout">
-          <ShieldCheck aria-hidden="true" />
-          <div>
+      {authenticatorRequired ? (
+        <section className={`security-panel security-mfa-callout ${authenticatorEnabled ? "is-connected" : "is-required"}`}>
+          <span className="security-mfa-icon"><ShieldCheck aria-hidden="true" /></span>
+          <div className="security-mfa-copy">
             <p className="eyebrow">Protected access</p>
-            <h2>Add an authenticator app</h2>
-            <p>This account must complete this step before protected workspace access.</p>
+            <h2>{authenticatorEnabled ? "Authenticator connected" : "Add an authenticator app"}</h2>
+            <p>{authenticatorEnabled
+              ? "Your protected workspace requires a fresh authenticator code at sign-in."
+              : "This account must complete this step before protected workspace access."}</p>
           </div>
-          <Link href="/auth/two-factor/setup">Set up authenticator</Link>
+          <div className="security-mfa-actions">
+            {authenticatorEnabled ? (
+              <span className="security-mfa-status" role="status">
+                <Check aria-hidden="true" />Authenticator setup successful
+              </span>
+            ) : null}
+            <Link href={authenticatorEnabled ? "/auth/two-factor/reconnect" : "/auth/two-factor/setup"}>
+              {authenticatorEnabled ? <RefreshCw aria-hidden="true" /> : null}
+              {authenticatorEnabled ? "Reconnect authenticator" : "Set up authenticator"}
+            </Link>
+          </div>
         </section>
       ) : null}
 

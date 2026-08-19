@@ -18,7 +18,7 @@ export default function registrationResilienceGlobalSetup() {
         count(*) AS accountCount,
         sum(CASE WHEN a.approval_status = 'approved'
           AND a.role = 'coach'
-          AND m.identifier = 'SMBA#0001' THEN 1 ELSE 0 END) AS headCoachCount
+          AND m.identifier = 'SMBA-HC-0001' THEN 1 ELSE 0 END) AS headCoachCount
       FROM accounts a
       LEFT JOIN auth_methods m
         ON m.account_id = a.id

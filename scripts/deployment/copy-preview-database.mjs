@@ -17,6 +17,7 @@ const target = new LibsqlDatabase(databaseUrl, { authToken })
 const INSERT_BATCH_SIZE = 50
 const TRANSIENT_AUTH_TABLES = new Set([
   "auth_access_codes",
+  "auth_authenticator_reset_requests",
   "auth_login_attempts",
   "auth_rate_limits",
   "auth_runtime_sessions",

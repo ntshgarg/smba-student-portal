@@ -1,6 +1,7 @@
 "use client"
 
 import { useActionState, useState } from "react"
+import Link from "next/link"
 
 import {
   verifyBackupCodeSignIn,
@@ -70,7 +71,9 @@ export function TwoFactorVerificationForm() {
       <button className="totp-switch" type="button" onClick={() => setUseRecovery((value) => !value)}>
         {useRecovery ? "Use authenticator code" : "Use a recovery code"}
       </button>
+      <Link className="totp-recovery-link" href="/auth/two-factor/recovery">
+        Lost the authenticator and every recovery code?
+      </Link>
     </div>
   )
 }
-

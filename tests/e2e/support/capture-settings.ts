@@ -113,7 +113,7 @@ const outputRoot = path.resolve(
 export const captureSettings = {
   actors: parseActors(process.env.SMBA_CAPTURE_ACTORS, scenario),
   baseURL: process.env.SMBA_CAPTURE_BASE_URL ?? "http://127.0.0.1:3000",
-  coachAcademyId: process.env.SMBA_CAPTURE_COACH_ACADEMY_ID ?? "SMBA#0001",
+  coachAcademyId: process.env.SMBA_CAPTURE_COACH_ACADEMY_ID ?? "SMBA-HC-0001",
   coachStorageState: process.env.SMBA_CAPTURE_COACH_STORAGE_STATE
     ? path.resolve(process.env.SMBA_CAPTURE_COACH_STORAGE_STATE)
     : undefined,
@@ -125,7 +125,7 @@ export const captureSettings = {
   playerAcademyId: process.env.SMBA_CAPTURE_PLAYER_ACADEMY_ID
     ?? (typeof fixtureSummary?.representativeAcademyId === "string"
       ? fixtureSummary.representativeAcademyId
-      : "SMBA#0004"),
+      : "SMBA-PL-0001"),
   playerStorageState: process.env.SMBA_CAPTURE_PLAYER_STORAGE_STATE
     ? path.resolve(process.env.SMBA_CAPTURE_PLAYER_STORAGE_STATE)
     : undefined,

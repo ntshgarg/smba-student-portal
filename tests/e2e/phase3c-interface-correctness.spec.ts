@@ -3,13 +3,13 @@ import path from "node:path"
 import { expect, test } from "@playwright/test"
 import type { Page } from "@playwright/test"
 
-const COACH_ACADEMY_ID = "SMBA#0001"
-const PLAYER_ACADEMY_ID = process.env.SMBA_CAPTURE_PLAYER_ACADEMY_ID ?? "SMBA#0004"
+const COACH_ACADEMY_ID = "SMBA-HC-0001"
+const PLAYER_ACADEMY_ID = process.env.SMBA_CAPTURE_PLAYER_ACADEMY_ID ?? "SMBA-PL-0001"
 const FIXTURE_PASSWORD = process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!"
 
 async function login(page: Page, academyId: string, routePrefix: string) {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  await page.getByLabel("Academy ID").fill(academyId)
+  await page.getByLabel("SMBA username").fill(academyId)
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith(routePrefix), { timeout: 20_000 })

@@ -10,6 +10,12 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { readMigrationFiles } from "drizzle-orm/migrator"
 
 import {
+  ACADEMY_ID_SERIAL_RANGES,
+  formatAcademyId,
+  HEAD_COACH_ACADEMY_ID,
+} from "../../lib/auth/identity"
+
+import {
   createPlayerDefinitions,
   fixtureProfiles,
   FIXTURE_ANCHOR_DATE,
@@ -25,7 +31,8 @@ import {
 } from "./profiles"
 
 const COACH_ID = "00000000-0000-4000-8000-000000000001"
-const COACH_ACADEMY_ID = "SMBA#0001"
+const LEGACY_COACH_ACADEMY_ID = "SMBA#0001"
+const COACH_ACADEMY_ID = HEAD_COACH_ACADEMY_ID
 const CANONICAL_DATE = FIXTURE_ANCHOR_DATE
 const SCHEDULE_START = FIXTURE_SCHEDULE_START
 const SCHEDULE_END = FIXTURE_SCHEDULE_END
@@ -40,6 +47,7 @@ const CLEAN_TARGET = path.resolve(process.cwd(), ".data/academy-clean.db")
 const MIGRATIONS_DIRECTORY = path.resolve(process.cwd(), "drizzle")
 const REQUIRED_CURRENT_TABLES = [
   "auth_access_codes",
+  "auth_authenticator_reset_requests",
   "auth_credential_states",
   "auth_login_attempts",
   "auth_provider_accounts",
@@ -371,9 +379,9 @@ function assertCleanSource(source: string) {
       join auth_methods m on m.account_id = a.id and m.revoked_at is null
     `).get() as { approvalStatus: string; fullName: string; identifier: string; role: string } | undefined
     if (tableCount(db, "accounts") !== 1
-      || coach?.identifier !== COACH_ACADEMY_ID
-      || coach.role !== "coach"
-      || coach.approvalStatus !== "approved") {
+      || ![LEGACY_COACH_ACADEMY_ID, COACH_ACADEMY_ID].includes(coach?.identifier ?? "")
+      || coach?.role !== "coach"
+      || coach?.approvalStatus !== "approved") {
       throw new Error("The source database is not the clean coach-only SMBA state.")
     }
     if (CLEAN_OPERATIONAL_TABLES.some(
@@ -381,6 +389,27 @@ function assertCleanSource(source: string) {
     )) {
       throw new Error("The source database contains operational data and cannot seed this regression.")
     }
+  } finally {
+    db.close()
+  }
+}
+
+function normalizeFixtureHeadCoachIdentity(target: string) {
+  const db = new Database(target, { fileMustExist: true })
+  try {
+    db.pragma("foreign_keys = ON")
+    db.transaction(() => {
+      db.prepare(`
+        update academy_id_allocations
+        set serial = ?
+        where account_id = ?
+      `).run(ACADEMY_ID_SERIAL_RANGES.headCoach.first, COACH_ID)
+      db.prepare(`
+        update auth_methods
+        set identifier = ?
+        where account_id = ? and method = 'academy_id' and revoked_at is null
+      `).run(COACH_ACADEMY_ID, COACH_ID)
+    })()
   } finally {
     db.close()
   }
@@ -401,6 +430,7 @@ async function prepare(source: string, target: string) {
     sourceDatabase.close()
   }
   migrateFixtureTarget(target)
+  normalizeFixtureHeadCoachIdentity(target)
   await provisionFixtureCredentials(target)
   return verify(target, "default")
 }
@@ -1748,12 +1778,13 @@ function summaryFor(target: string) {
 function logicalChecksum(db: Database.Database) {
   const ids = new Map<string, string>()
   const playersByAcademyId = db.prepare(`
-    select a.id, printf('SMBA#%04d', x.serial) as identifier,
+    select a.id, m.identifier,
       a.full_name as fullName, e.level, e.batch,
       e.academy_plan as academyPlan, e.status,
       case when a.archived_at is null then 0 else 1 end as archived
     from accounts a
     join academy_id_allocations x on x.account_id = a.id
+    join auth_methods m on m.account_id = a.id and m.revoked_at is null
     left join player_enrollments e on e.account_id = a.id
     order by x.serial
   `).all() as Array<Record<string, unknown> & { id: string; identifier: string }>
@@ -1796,11 +1827,12 @@ function logicalChecksum(db: Database.Database) {
     order by m.identifier, o.occurrence_date, startTime
   `).all()
   const reports = db.prepare(`
-    select printf('SMBA#%04d', x.serial) as academyId,
+    select m.identifier as academyId,
       r.month, r.draft_text as draftText,
       p.report_text as publishedText, p.revision
     from monthly_reports r
     join academy_id_allocations x on x.account_id = r.account_id
+    join auth_methods m on m.account_id = r.account_id and m.revoked_at is null
     left join report_publications p on p.report_id = r.id
     order by x.serial, r.month, p.revision
   `).all()
@@ -1822,16 +1854,18 @@ function logicalChecksum(db: Database.Database) {
     order by occurrenceDate, startTime, s.programme, s.batch
   `).all()
   const coachAccess = tableExists(db, "coach_profiles") ? db.prepare(`
-    select printf('SMBA#%04d', x.serial) as academyId,
+    select m.identifier as academyId,
       p.access_level as accessLevel, p.joined_on as joinedOn
     from coach_profiles p
     join academy_id_allocations x on x.account_id = p.account_id
+    join auth_methods m on m.account_id = p.account_id and m.revoked_at is null
     order by x.serial
   `).all() : []
   const staffAttendance = tableExists(db, "staff_attendance_records") ? db.prepare(`
-    select printf('SMBA#%04d', x.serial) as academyId, r.date_key as dateKey, r.choice
+    select m.identifier as academyId, r.date_key as dateKey, r.choice
     from staff_attendance_records r
     join academy_id_allocations x on x.account_id = r.coach_account_id
+    join auth_methods m on m.account_id = r.coach_account_id and m.revoked_at is null
     order by x.serial, r.date_key
   `).all() : []
   const adjustments = db.prepare(`
@@ -1979,7 +2013,7 @@ function verify(target: string, expectedStage?: Stage) {
     )
     if (tableCount(db, "batches") !== 8) problems.push("Eight reference batches must remain available.")
     const coach = db.prepare(`select count(*) as count from auth_methods where identifier = ?`).get(COACH_ACADEMY_ID) as { count: number }
-    if (coach.count !== 1) problems.push("The seed coach must remain SMBA#0001.")
+    if (coach.count !== 1) problems.push(`The seed coach must remain ${COACH_ACADEMY_ID}.`)
     if (stage === "default" && (summary.accounts !== 1 || summary.players || summary.series)) {
       problems.push("Default stage must contain only the coach and reference batches.")
     }
@@ -2009,11 +2043,17 @@ function verify(target: string, expectedStage?: Stage) {
       const identifiers = db.prepare(`
         select identifier from auth_methods order by identifier
       `).all() as Array<{ identifier: string }>
-      const expected = Array.from({ length: approvedAccountCount }, (_, index) => (
-        `SMBA#${String(index + 1).padStart(4, "0")}`
-      ))
+      const expected = [
+        COACH_ACADEMY_ID,
+        ...selectedProfile.juniorCoaches.map((_, index) => (
+          formatAcademyId(ACADEMY_ID_SERIAL_RANGES.juniorCoach.first + index)
+        )),
+        ...players.map((_, index) => (
+          formatAcademyId(ACADEMY_ID_SERIAL_RANGES.player.first + index)
+        )),
+      ].sort()
       if (identifiers.map((row) => row.identifier).join("|") !== expected.join("|")) {
-        problems.push("Approved Academy IDs are not a contiguous deterministic sequence.")
+        problems.push("Approved Academy IDs do not match the deterministic role-prefixed sequence.")
       }
       if (summary.coachProfiles !== 1 + selectedProfile.juniorCoaches.length) {
         problems.push("Every approved coach must have exactly one access profile.")

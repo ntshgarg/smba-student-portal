@@ -145,13 +145,14 @@ export function LoginForm() {
         </button>
       </div>
       {method === "password" ? <PasswordLoginForm /> : <PinLoginForm />}
-      <p className="login-register-link">
-        First visit? <Link href="/activate">Activate your account</Link>
-        <span aria-hidden="true"> · </span>
+      <nav className="login-register-link" aria-label="Account access">
+        <span className="login-register-prompt">First visit?</span>
+        <Link href="/activate">Activate your account</Link>
+        <span className="login-register-separator" aria-hidden="true"> · </span>
         <Link href="/register">Request registration</Link>
-        <span aria-hidden="true"> · </span>
+        <span className="login-register-separator" aria-hidden="true"> · </span>
         <Link href="/recover">Forgot password?</Link>
-      </p>
+      </nav>
     </>
   )
 }

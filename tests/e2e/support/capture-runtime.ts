@@ -184,7 +184,7 @@ async function loginWithAcademyId(page: Page, actor: CaptureActor) {
   const expectedPath = actor === "coach" ? "/coach" : "/player"
   if (new URL(page.url()).pathname.startsWith(expectedPath)) return
 
-  await page.getByLabel("Academy ID").fill(academyIdForActor(actor))
+  await page.getByLabel("SMBA username").fill(academyIdForActor(actor))
   await page.getByLabel("Password").fill(
     process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!",
   )
@@ -390,13 +390,13 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     }
     case "login-account-not-found":
-      await page.getByLabel("Academy ID").fill("SMBA#9999")
+      await page.getByLabel("SMBA username").fill("SMBA#9999")
       await page.getByLabel("Password").fill("A deliberately incorrect password")
       await clickRequired(page.getByRole("button", { name: "Continue" }), action)
       await page.getByRole("alert").waitFor({ state: "visible", timeout: 12_000 })
       break
     case "login-format-error":
-      await page.getByLabel("Academy ID").fill("SMBA-12")
+      await page.getByLabel("SMBA username").fill("SMBA-12")
       await clickRequired(page.getByRole("button", { name: "Continue" }), action)
       await page.getByRole("alert").waitFor({ state: "visible", timeout: 12_000 })
       break

@@ -14,12 +14,21 @@ export type PasswordRecoveryMessage = {
   to: string
 }
 
+export type AuthenticatorRecoveryMessage = {
+  expiresInMinutes: number
+  fullName: string
+  recoveryUrl: string
+  to: string
+}
+
 export interface AuthMailer {
+  sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage): Promise<void>
   sendPasswordRecovery(message: PasswordRecoveryMessage): Promise<void>
   sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage): Promise<void>
 }
 
 export type CapturedAuthEmail =
+  | ({ kind: "authenticator-recovery" } & AuthenticatorRecoveryMessage)
   | ({ kind: "recovery-email-verification" } & RecoveryEmailVerificationMessage)
   | ({ kind: "password-recovery" } & PasswordRecoveryMessage)
 
@@ -62,6 +71,10 @@ export function validateAuthEmailConfiguration() {
 }
 
 class MemoryAuthMailer implements AuthMailer {
+  async sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage) {
+    memoryOutbox.push({ ...message, kind: "authenticator-recovery" })
+  }
+
   async sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage) {
     memoryOutbox.push({ ...message, kind: "recovery-email-verification" })
   }
@@ -109,6 +122,17 @@ class ResendAuthMailer implements AuthMailer {
       subject: "Verify your SMBA recovery email",
       text: `Hello ${message.fullName},\n\nYour SMBA verification code is ${message.code}. It expires in ${message.expiresInMinutes} minutes.\n\nIf you did not request this, you can ignore this email.`,
       html: `<p>Hello ${name},</p><p>Your SMBA verification code is:</p><p style="font-size:28px;letter-spacing:0.18em"><strong>${code}</strong></p><p>It expires in ${message.expiresInMinutes} minutes.</p><p>If you did not request this, you can ignore this email.</p>`,
+    })
+  }
+
+  async sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage) {
+    const name = escapeHtml(message.fullName)
+    const recoveryUrl = escapeHtml(message.recoveryUrl)
+    await this.send({
+      to: message.to,
+      subject: "Verify your SMBA authenticator recovery request",
+      text: `Hello ${message.fullName},\n\nOpen this secure link to request platform-admin approval for a fresh SMBA authenticator setup:\n${message.recoveryUrl}\n\nIt expires in ${message.expiresInMinutes} minutes. Your authenticator will not be changed merely by opening the link. If you did not request this, you can ignore this email.`,
+      html: `<p>Hello ${name},</p><p>Use the secure link below to verify your email before requesting platform-admin approval for a fresh authenticator setup.</p><p><a href="${recoveryUrl}">Verify recovery request</a></p><p>It expires in ${message.expiresInMinutes} minutes. Your authenticator will not be changed merely by opening the link.</p><p>If you did not request this, you can ignore this email.</p>`,
     })
   }
 

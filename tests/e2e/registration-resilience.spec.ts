@@ -332,7 +332,7 @@ async function loginAsHeadCoach(browser: Browser) {
   const context = await browser.newContext({ baseURL, viewport: { height: 900, width: 1440 } })
   const page = await context.newPage()
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  await page.getByLabel("Academy ID").fill("SMBA#0001")
+  await page.getByLabel("SMBA username").fill("SMBA-HC-0001")
   await page.getByLabel("Password").fill(
     process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!",
   )
@@ -351,7 +351,7 @@ async function loginAsActivatedPlayer(
   const page = await context.newPage()
   await page.goto("/login", { waitUntil: "domcontentloaded" })
   if ("pin" in factor) await page.getByRole("button", { name: "6-digit PIN" }).click()
-  await page.getByLabel("Academy ID").fill(academyId)
+  await page.getByLabel("SMBA username").fill(academyId)
   await page.getByLabel("pin" in factor ? "6-digit PIN" : "Password").fill(
     "pin" in factor ? factor.pin : factor.password,
   )
@@ -388,14 +388,14 @@ test("a player completes code-free browser activation, optional PIN, and passwor
   })
   await coach.page.getByRole("button", { name: "Approve & continue" }).click()
   await expect(
-    coach.page.getByRole("status").filter({ hasText: /approved as SMBA#[0-9]{4}/u }),
-  ).toContainText(/approved as SMBA#[0-9]{4}/u)
+    coach.page.getByRole("status").filter({ hasText: /approved as SMBA-PL-[0-9]{4}/u }),
+  ).toContainText(/approved as SMBA-PL-[0-9]{4}/u)
   await expect(coach.page.getByRole("button", { name: "Copy ID" })).toHaveCount(0)
   await coach.context.close()
 
   await expect.poll(() => registrationRows(fullName)[0]?.approvalStatus).toBe("approved")
   const academyId = academyIdFor(account.id)
-  expect(academyId).toMatch(/^SMBA#[0-9]{4}$/u)
+  expect(academyId).toMatch(/^SMBA-PL-[0-9]{4}$/u)
   expect(credentialEvidence(account.id).activationCodeCount).toBe(0)
 
   await page.goto("/activate", { waitUntil: "domcontentloaded" })

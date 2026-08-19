@@ -31,7 +31,12 @@ import {
   requestRecoveryEmailVerification,
   verifyPasswordRecoverySecondFactor,
 } from "@/lib/auth/recovery-service"
-import type { AuthMailer, PasswordRecoveryMessage, RecoveryEmailVerificationMessage } from "@/lib/auth/mailer"
+import type {
+  AuthenticatorRecoveryMessage,
+  AuthMailer,
+  PasswordRecoveryMessage,
+  RecoveryEmailVerificationMessage,
+} from "@/lib/auth/mailer"
 import { authEmailRequired, validateAuthEmailConfiguration } from "@/lib/auth/mailer"
 import type { SmbaDatabase } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
@@ -45,8 +50,13 @@ let sqlite: Database.Database
 let database: SmbaDatabase
 
 class CapturingMailer implements AuthMailer {
+  authenticatorRecovery: AuthenticatorRecoveryMessage[] = []
   passwordRecovery: PasswordRecoveryMessage[] = []
   verification: RecoveryEmailVerificationMessage[] = []
+
+  async sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage) {
+    this.authenticatorRecovery.push(message)
+  }
 
   async sendPasswordRecovery(message: PasswordRecoveryMessage) {
     this.passwordRecovery.push(message)

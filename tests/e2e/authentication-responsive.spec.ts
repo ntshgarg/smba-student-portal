@@ -25,7 +25,7 @@ async function loginAs(
 ) {
   const context = await browser.newContext({ baseURL, viewport: { height: 844, width: 390 } })
   const page = await context.newPage()
-  await page.goto("/login", { waitUntil: "domcontentloaded" })
+  await page.goto("/login", { waitUntil: "networkidle" })
   await page.getByLabel("SMBA username").fill(academyId)
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
@@ -54,7 +54,7 @@ async function verifyLoginRoute(
 test("shared password and PIN login remains contained in all three views", async ({ page }) => {
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
-    await page.goto("/login", { waitUntil: "domcontentloaded" })
+    await page.goto("/login", { waitUntil: "networkidle" })
     await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible()
     await expect(page.getByLabel("SMBA username")).toBeVisible()
     await expect(page.getByLabel("Password")).toBeVisible()
@@ -79,11 +79,12 @@ test("registration, activation and recovery surfaces remain contained in all thr
     { heading: "Open your account.", path: "/activate" },
     { heading: "Reset your password.", path: "/recover" },
     { heading: "This recovery link is unavailable.", path: "/recover/reset" },
+    { heading: "Recover protected access.", path: "/auth/two-factor/recovery" },
   ]
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
     for (const surface of surfaces) {
-      await page.goto(surface.path, { waitUntil: "domcontentloaded" })
+      await page.goto(surface.path, { waitUntil: "networkidle" })
       await expect(page.getByRole("heading", { name: surface.heading })).toBeVisible()
       await expectNoDocumentOverflow(page, `${viewport.label} ${surface.path}`)
     }
@@ -92,26 +93,26 @@ test("registration, activation and recovery surfaces remain contained in all thr
 
 test("password login routes head coach, junior coach, and player independently", async ({ browser }, testInfo) => {
   const baseURL = String(testInfo.project.use.baseURL)
-  await verifyLoginRoute(browser, baseURL, "SMBA#0001", "/coach")
-  await verifyLoginRoute(browser, baseURL, "SMBA#0002", "/coach")
-  await verifyLoginRoute(browser, baseURL, "SMBA#0004", "/player")
+  await verifyLoginRoute(browser, baseURL, "SMBA-HC-0001", "/coach")
+  await verifyLoginRoute(browser, baseURL, "SMBA-JC-0001", "/coach")
+  await verifyLoginRoute(browser, baseURL, "SMBA-PL-0001", "/player")
 })
 
 test("Account security offers PIN to academy accounts", async ({ browser }, testInfo) => {
   const baseURL = String(testInfo.project.use.baseURL)
-  const head = await loginAs(browser, baseURL, "SMBA#0001", "/coach")
-  await head.page.goto("/account/security", { waitUntil: "domcontentloaded" })
+  const head = await loginAs(browser, baseURL, "SMBA-HC-0001", "/coach")
+  await head.page.goto("/account/security", { waitUntil: "networkidle" })
   await expect(head.page.getByRole("heading", { name: "Account security." })).toBeVisible()
   await expect(head.page.getByRole("heading", { name: /(?:Add a 6-digit|Change(?: or remove)?) PIN/u })).toBeVisible()
   await expect(head.page.getByRole("heading", { name: "Add an authenticator app" })).toBeVisible()
   await head.context.close()
 
   for (const actor of [
-    { academyId: "SMBA#0002", destination: "/coach" as const },
-    { academyId: "SMBA#0004", destination: "/player" as const },
+    { academyId: "SMBA-JC-0001", destination: "/coach" as const },
+    { academyId: "SMBA-PL-0001", destination: "/player" as const },
   ]) {
     const session = await loginAs(browser, baseURL, actor.academyId, actor.destination)
-    await session.page.goto("/account/security", { waitUntil: "domcontentloaded" })
+    await session.page.goto("/account/security", { waitUntil: "networkidle" })
     await expect(session.page.getByRole("heading", { name: /(?:Add a 6-digit|Change(?: or remove)?) PIN/u })).toBeVisible()
     await expect(session.page.getByRole("heading", { name: "Add an authenticator app" })).toHaveCount(0)
     await session.context.close()

@@ -41,8 +41,8 @@ npx playwright test -c tests/e2e/playwright.config.ts
 ```
 
 If storage state is omitted, the harness signs in through `/login` with
-`SMBA_CAPTURE_COACH_ACADEMY_ID` (default `SMBA#0001`) and
-`SMBA_CAPTURE_PLAYER_ACADEMY_ID` (default fixture representative `SMBA#0004`).
+`SMBA_CAPTURE_COACH_ACADEMY_ID` (default `SMBA-HC-0001`) and
+`SMBA_CAPTURE_PLAYER_ACADEMY_ID` (default fixture representative `SMBA-PL-0001`).
 Loaded fixtures use `SMBA_FIXTURE_PASSWORD` (default
 `SMBA fixture access 2026!`). Fixture start scripts disable mandatory coach TOTP
 only for this disposable browser regression path.

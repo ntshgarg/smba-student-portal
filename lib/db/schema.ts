@@ -224,6 +224,32 @@ export const authEmailChallenges = sqliteTable("auth_email_challenges", {
   ),
 ])
 
+export const authAuthenticatorResetRequests = sqliteTable("auth_authenticator_reset_requests", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull().references(() => accounts.id),
+  recoveryEmail: text("recovery_email").notNull(),
+  status: text("status", {
+    enum: ["pending", "approved", "rejected", "expired"],
+  }).notNull().default("pending"),
+  requestedAt: integer("requested_at", { mode: "timestamp_ms" }).notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+  resolvedByAccountId: text("resolved_by_account_id")
+    .references((): AnySQLiteColumn => accounts.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  uniqueIndex("auth_authenticator_reset_requests_pending_idx")
+    .on(table.accountId)
+    .where(sql`${table.status} = 'pending'`),
+  index("auth_authenticator_reset_requests_status_idx").on(table.status, table.requestedAt),
+  index("auth_authenticator_reset_requests_expiry_idx").on(table.expiresAt),
+  check(
+    "auth_authenticator_reset_requests_status_check",
+    sql`${table.status} in ('pending', 'approved', 'rejected', 'expired')`,
+  ),
+])
+
 export const authPinCredentials = sqliteTable("auth_pin_credentials", {
   accountId: text("account_id").primaryKey().references(() => accounts.id),
   pinHash: text("pin_hash").notNull(),
@@ -287,6 +313,12 @@ export const authSecurityEvents = sqliteTable("auth_security_events", {
       "totp_enabled",
       "totp_verified",
       "totp_failed",
+      "totp_reconnect_started",
+      "totp_recovery_email_sent",
+      "totp_reset_requested",
+      "totp_reset_approved",
+      "totp_reset_rejected",
+      "totp_reset_failed",
       "recovery_email_verification_requested",
       "recovery_email_verified",
       "recovery_email_changed",

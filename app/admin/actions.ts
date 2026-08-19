@@ -3,6 +3,7 @@
 import { and, eq, isNull } from "drizzle-orm"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
+import { revalidatePath } from "next/cache"
 
 import { ADMIN_PREVIEW_COOKIE, createAdminPreviewToken } from "@/lib/auth/admin-preview"
 import { getRawAuthSession } from "@/lib/auth/session"
@@ -12,6 +13,10 @@ import {
   headCoachSetupTokenForTrustedServerAction,
 } from "@/lib/auth/initial-setup"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
+import {
+  approveAuthenticatorResetRequest,
+  rejectAuthenticatorResetRequest,
+} from "@/lib/auth/authenticator-reset-service"
 import { initializeDatabase } from "@/lib/db/client"
 import { accounts, authCredentialStates, authUsers } from "@/lib/db/schema"
 
@@ -81,4 +86,22 @@ export async function openHeadCoachSetupAction() {
     secure: process.env.VERCEL === "1",
   })
   redirect("/setup/head-coach")
+}
+
+export async function approveAuthenticatorResetRequestAction(requestId: string) {
+  const actorAccountId = await requirePlatformOwner()
+  const approved = approveAuthenticatorResetRequest({ actorAccountId, requestId })
+  revalidatePath("/admin")
+  return approved
+    ? { message: "Authenticator reset approved. The coach can now sign in and connect a new authenticator.", ok: true as const }
+    : { message: "This request is unavailable, expired, or no longer matches the verified recovery email.", ok: false as const }
+}
+
+export async function rejectAuthenticatorResetRequestAction(requestId: string) {
+  const actorAccountId = await requirePlatformOwner()
+  const rejected = rejectAuthenticatorResetRequest({ actorAccountId, requestId })
+  revalidatePath("/admin")
+  return rejected
+    ? { message: "Authenticator reset request rejected.", ok: true as const }
+    : { message: "This request is unavailable or expired.", ok: false as const }
 }

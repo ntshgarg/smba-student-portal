@@ -5,14 +5,16 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import Database from "better-sqlite3"
-import { afterAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url))
 const fixtureEntry = path.join(projectRoot, "scripts", "regression", "fixture.ts")
+const databasePrepareEntry = path.join(projectRoot, "scripts", "database", "prepare.ts")
 const tsxExecutable = path.join(projectRoot, "node_modules", ".bin", "tsx")
 const regressionDirectory = path.join(projectRoot, ".data", "regression")
 fs.mkdirSync(regressionDirectory, { recursive: true })
 const temporaryDirectory = fs.mkdtempSync(path.join(regressionDirectory, "repeatability-test-"))
+const sourceDatabase = path.join(temporaryDirectory, "clean-source.db")
 
 type JsonRecord = Record<string, unknown>
 
@@ -41,6 +43,31 @@ function runFixture(databasePath: string, args: string[]) {
   }
 
   return result.stdout.trim()
+}
+
+function prepareCleanSource(databasePath: string) {
+  const nodeOptions = [process.env.NODE_OPTIONS, "--conditions=react-server"]
+    .filter(Boolean)
+    .join(" ")
+  const result = spawnSync(tsxExecutable, [databasePrepareEntry, "--seed"], {
+    cwd: projectRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      DB_FILE_NAME: databasePath,
+      NODE_OPTIONS: nodeOptions,
+      NODE_PATH: path.join(projectRoot, "node_modules", "next", "dist", "compiled"),
+    },
+  })
+
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    throw new Error([
+      "Clean fixture source preparation failed.",
+      result.stdout.trim(),
+      result.stderr.trim(),
+    ].filter(Boolean).join("\n"))
+  }
 }
 
 function runJsonFixture(databasePath: string, args: string[]): JsonRecord {
@@ -75,7 +102,9 @@ function fileChecksum(databasePath: string) {
 }
 
 function prepareAndLoad(databasePath: string, profile = "stress") {
-  runFixture(databasePath, ["prepare", "--profile", profile, "--target", databasePath])
+  runFixture(databasePath, [
+    "prepare", "--profile", profile, "--source", sourceDatabase, "--target", databasePath,
+  ])
   runFixture(databasePath, [
     "seed", "--profile", profile, "--stage", "loaded", "--target", databasePath,
   ])
@@ -93,22 +122,25 @@ afterAll(() => {
   fs.rmSync(temporaryDirectory, { force: true, recursive: true })
 })
 
+beforeAll(() => {
+  prepareCleanSource(sourceDatabase)
+})
+
 describe("regression fixture repeatability", () => {
   it("upgrades only a disposable clone and rejects stale schema without mutating it", () => {
-    const sourceDatabase = path.join(projectRoot, ".data", "smba.db")
     const preparedDatabase = path.join(temporaryDirectory, "schema-current.db")
     const sourceBefore = fileChecksum(sourceDatabase)
 
     const prepared = runJsonFixture(preparedDatabase, [
-      "prepare", "--profile", "stress", "--target", preparedDatabase,
+      "prepare", "--profile", "stress", "--source", sourceDatabase, "--target", preparedDatabase,
     ])
 
     expect(prepared).toMatchObject({
       stage: "default",
       schema: {
         current: true,
-        latestMigrationTag: "0022_verified_email_recovery",
-        migrationCount: 23,
+        latestMigrationTag: "0023_authenticator_reset_approval",
+        migrationCount: 24,
         missingColumns: [],
         missingTables: [],
       },
@@ -466,8 +498,14 @@ describe("regression fixture repeatability", () => {
             select distinct report.month
             from monthly_reports report
             join report_publications publication on publication.report_id = report.id
-            join academy_id_allocations allocation on allocation.account_id = report.account_id
-            where allocation.serial = 4
+            where report.account_id = (
+              select account.id
+              from accounts account
+              join academy_id_allocations allocation on allocation.account_id = account.id
+              where account.role = 'player'
+              order by allocation.serial
+              limit 1
+            )
             order by report.month desc
           `).all().map((row) => (row as { month: string }).month)
           expect(months).toEqual([
