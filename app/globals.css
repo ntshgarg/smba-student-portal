@@ -14702,12 +14702,19 @@ tr.is-expanded .coach-member-row-action button svg {
   text-align: center;
 }
 
-.admin-preview-banner a {
+.admin-preview-banner form {
+  margin: 0;
+}
+
+.admin-preview-banner button {
+  appearance: none;
   border: 1px solid #071b32;
+  background: transparent;
   color: inherit;
+  cursor: pointer;
+  font: inherit;
   padding: 5px 12px;
   font-weight: 800;
-  text-decoration: none;
 }
 
 @media (max-width: 860px) {

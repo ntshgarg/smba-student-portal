@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
+import { renderToStaticMarkup } from "react-dom/server"
 
 vi.mock("server-only", () => ({}))
 
@@ -7,6 +8,7 @@ import {
   createAdminPreviewToken,
   readAdminPreviewToken,
 } from "@/lib/auth/admin-preview"
+import { AdminPreviewBanner } from "@/components/admin-preview-banner"
 import { proxy } from "@/proxy"
 
 describe("platform-owner preview claims", () => {
@@ -26,16 +28,30 @@ describe("platform-owner preview claims", () => {
       .toBeNull()
   })
 
-  it("blocks every mutation while a preview cookie is present", () => {
+  it("blocks mutations while allowing the explicit preview-exit post", () => {
     const mutation = proxy(new NextRequest("http://localhost:3000/coach/actions", {
       method: "POST",
       headers: { cookie: "smba_admin_preview=present" },
     }))
     expect(mutation.status).toBe(403)
+
+    const exit = proxy(new NextRequest("http://localhost:3000/admin/preview/exit", {
+      method: "POST",
+      headers: { cookie: "smba_admin_preview=present" },
+    }))
+    expect(exit.status).toBe(200)
+
     const navigation = proxy(new NextRequest("http://localhost:3000/coach", {
       method: "GET",
       headers: { cookie: "smba_admin_preview=present" },
     }))
     expect(navigation.status).toBe(200)
+  })
+
+  it("does not expose preview exit as a prefetchable GET link", () => {
+    const markup = renderToStaticMarkup(AdminPreviewBanner({ label: "Head coach" }))
+    expect(markup).toContain('action="/admin/preview/exit"')
+    expect(markup).toContain('method="post"')
+    expect(markup).not.toContain('href="/admin/preview/exit"')
   })
 })

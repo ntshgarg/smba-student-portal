@@ -7,7 +7,7 @@ import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { initializeDatabase } from "@/lib/db/client"
 import { accounts } from "@/lib/db/schema"
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const rawSession = await getRawAuthSession()
   const actorAccountId = rawSession?.user?.id
   const owner = actorAccountId
@@ -18,7 +18,10 @@ export async function GET(request: Request) {
       isNull(accounts.archivedAt),
     )).get()
     : null
-  const response = NextResponse.redirect(new URL(owner ? "/admin" : "/login", request.url))
+  const response = NextResponse.redirect(
+    new URL(owner ? "/admin" : "/login", request.url),
+    303,
+  )
   response.cookies.delete(ADMIN_PREVIEW_COOKIE)
   if (owner) {
     writeAuthSecurityEvent({
