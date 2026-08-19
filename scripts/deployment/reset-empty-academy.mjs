@@ -97,6 +97,29 @@ function count(database, query) {
   return Number(database.prepare(query).get().count)
 }
 
+function sequenceRows(database) {
+  try {
+    return database.prepare("SELECT name, seq FROM sqlite_sequence ORDER BY name").all()
+  } catch {
+    return []
+  }
+}
+
+function restoreSequences(database, rows) {
+  try {
+    database.prepare("DELETE FROM sqlite_sequence").run()
+  } catch {
+    if (rows.length) throw new Error("The database does not expose sqlite_sequence.")
+    return
+  }
+
+  if (!rows.length) return
+  database.prepare(`
+    INSERT INTO sqlite_sequence (name, seq)
+    VALUES ${rows.map(() => "(?, ?)").join(", ")}
+  `).run(...rows.flatMap((row) => [row.name, row.seq]))
+}
+
 try {
   const sourceCounts = {
     accounts: count(source, "SELECT count(*) AS count FROM accounts"),
@@ -113,6 +136,8 @@ try {
 
   const sourceSchema = schemaObjects(source)
   const targetSchema = schemaObjects(target)
+  const sourceSequences = sequenceRows(source)
+  const targetSequences = sequenceRows(target)
   const sourceNames = sourceSchema.tables.map((table) => table.name).sort()
   const targetNames = targetSchema.tables.map((table) => table.name).sort()
   if (JSON.stringify(sourceNames) !== JSON.stringify(targetNames)) {
@@ -130,6 +155,7 @@ try {
         target.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all(),
       )
     }
+    restoreSequences(backup, targetSequences)
     for (const index of targetSchema.indexes) backup.exec(index.sql)
   })
   createBackup.immediate()
@@ -150,6 +176,7 @@ try {
         source.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all(),
       )
     }
+    restoreSequences(target, sourceSequences)
   })
   reset.immediate()
 
