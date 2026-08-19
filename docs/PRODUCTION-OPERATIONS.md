@@ -18,6 +18,9 @@ Vercel still deploys `main` automatically. For a strict pre-deployment gate, pro
 GitHub, require the `Application regression` check, and merge through a pull request. Direct pushes
 start Vercel and GitHub Actions at the same time and therefore are not a true gate.
 
+`main` is protected with strict status checks, administrator enforcement, pull requests, linear history,
+conversation resolution and force-push/deletion prevention. Do not weaken those rules to bypass a failure.
+
 ## Availability monitoring
 
 `GET /api/health` performs a read-only database query. It returns only `{"status":"ok"}` or a
@@ -27,6 +30,14 @@ generic 503 response and is never cached. It does not expose counts, credentials
 hour without authenticating or mutating data. A failed run appears in GitHub Actions. GitHub
 notifications should be enabled for failed Actions runs. For faster paging, connect the same URL to
 an external uptime service later.
+
+`.github/workflows/operations-monitor.yml` checks sanitized server-error counts, authentication-email
+API failures and repeated login lockouts twice per hour. `.github/workflows/production-alerts.yml`
+turns failed quality, health, monitoring, backup and production-deployment events into one assigned,
+deduplicated `production-alert` issue. A successful recovery closes the corresponding issue. The repository
+owner must keep GitHub issue and Actions email or mobile notifications enabled.
+Test delivery quarterly by manually running `Production alerts` with `open`, confirming the assigned issue
+notification arrives, and immediately running it again with `resolved`.
 
 Manual check:
 
@@ -57,14 +68,35 @@ The snapshot contains personal, financial and authentication data. It must never
 emailed or uploaded unencrypted. Store an encrypted copy in an access-controlled backup vault and
 keep its decryption key in a separate password manager.
 
+### Scheduled encrypted backups
+
+`.github/workflows/encrypted-production-backup.yml` creates and verifies a logical snapshot every Sunday,
+encrypts the database and manifest with GnuPG AES-256 before upload, removes every plaintext runner copy,
+and retains the encrypted artifact for 35 days. Configure these GitHub Actions secrets:
+
+- `SMBA_BACKUP_DATABASE_URL`: production Turso database URL;
+- `SMBA_BACKUP_DATABASE_TOKEN`: database-scoped read-only token created with
+  `turso db tokens create <database-name> --read-only`; and
+- `SMBA_BACKUP_PASSPHRASE`: a unique random passphrase of at least 24 characters, stored in a separate
+  password manager and never in the repository or Vercel.
+
+The operations monitor shares only the two read-only database secrets. It cannot change academy data.
+Trigger the workflow manually after configuring the secrets and retain its successful run as the first
+backup record.
+
 ### Quarterly restore drill
 
+Record completed exercises in `docs/RESTORE-DRILL-LOG.md`.
+
 1. Create and verify a fresh logical snapshot.
-2. Create a disposable Turso database from the snapshot or from a chosen PITR timestamp.
-3. Use a temporary deployment or local environment to run migrations, `/api/health`, the fixture
+2. Download one encrypted workflow artifact and decrypt it outside the repository:
+   `gpg --output smba-restore.tar.gz --decrypt smba-production-<run>.tar.gz.gpg`, then extract it into a
+   temporary directory and run `npm run db:snapshot:verify -- <snapshot> <manifest>`.
+3. Create a disposable Turso database from the snapshot or from a chosen PITR timestamp.
+4. Use a temporary deployment or local environment to run migrations, `/api/health`, the fixture
    verifier where applicable, and a read-only login-page smoke check.
-4. Record the timestamp, selected recovery point, result and operator.
-5. Delete the disposable database only after the result has been recorded and the production
+5. Record the timestamp, selected recovery point, result and operator.
+6. Delete the disposable database only after the result has been recorded and the production
    database URL has been double-checked.
 
 ## Incident order

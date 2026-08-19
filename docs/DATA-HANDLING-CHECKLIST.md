@@ -3,6 +3,9 @@
 This is an operational checklist, not legal advice. The academy should confirm its final policy with
 an appropriately qualified adviser before collecting the full student roster.
 
+The proposed decisions and signature block are in
+`docs/ACADEMY-PRIVACY-AND-RETENTION-POLICY.md`.
+
 ## Before collecting real records
 
 - Record who owns the academy data and who may act as platform owner, head coach and junior coach.

@@ -14,6 +14,8 @@ Use this checklist with the head coach before entering the full academy roster.
 
 Run the first acceptance pass with one junior coach and two or three consenting test players:
 
+Record the result in `docs/PRODUCTION-ACCEPTANCE-RECORD.md`.
+
 1. Submit and approve player and junior-coach registrations.
 2. Complete player assessment, session assignment and fee-plan assignment through Player Onboarding.
 3. Create one session and verify it in calendar, schedules and both relevant dashboards.
@@ -40,3 +42,4 @@ Turso recovery point has been confirmed.
 - Review active sessions in Account Security and log out unfamiliar devices.
 - Confirm recovery emails and offline authenticator backup codes remain available.
 - Create and verify an encrypted logical database snapshot.
+- Review the retention schedule and delete only records whose approved period has ended.

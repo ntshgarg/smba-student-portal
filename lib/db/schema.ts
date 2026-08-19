@@ -364,6 +364,17 @@ export const authSecurityEvents = sqliteTable("auth_security_events", {
   index("auth_security_events_occurred_idx").on(table.occurredAt),
 ])
 
+export const operationalEvents = sqliteTable("operational_events", {
+  id: text("id").primaryKey(),
+  eventType: text("event_type", { enum: ["application_error"] }).notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  routePath: text("route_path").notNull(),
+  occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("operational_events_type_occurred_idx").on(table.eventType, table.occurredAt),
+  index("operational_events_fingerprint_idx").on(table.fingerprint, table.occurredAt),
+])
+
 export const coachProfiles = sqliteTable("coach_profiles", {
   accountId: text("account_id").primaryKey().references(() => accounts.id),
   accessLevel: text("access_level", {

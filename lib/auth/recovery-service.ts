@@ -242,15 +242,15 @@ export async function requestRecoveryEmailVerification(input: {
   } catch (error) {
     database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
       .where(eq(authEmailChallenges.id, challengeId)).run()
-    if (input.accountId) {
-      writeAuthSecurityEvent({
-        accountId: input.accountId,
-        eventType: "recovery_email_verification_requested",
-        ipHash: input.security?.ipHash,
-        outcome: "failure",
-        userAgent: input.security?.userAgent,
-      }, { database, now })
-    }
+    writeAuthSecurityEvent({
+      accountId: input.accountId,
+      eventType: "recovery_email_verification_requested",
+      ipHash: input.security?.ipHash,
+      metadata: { reason: "email_delivery" },
+      outcome: "failure",
+      subjectHash: hashedSubject,
+      userAgent: input.security?.userAgent,
+    }, { database, now })
     throw error
   }
 
@@ -587,6 +587,7 @@ export async function requestPasswordRecovery(input: {
       accountId: account.accountId,
       eventType: failureEvent,
       ipHash: input.security?.ipHash,
+      metadata: { reason: "email_delivery" },
       outcome: "failure",
       subjectHash: publicSubject,
       userAgent: input.security?.userAgent,

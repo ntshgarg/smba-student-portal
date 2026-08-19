@@ -17,6 +17,7 @@
     "db:check": "drizzle-kit check",
     "test": "vitest run",
     "ops:smoke": "node scripts/operations/check-production.mjs",
+    "ops:security-signals": "node scripts/operations/check-security-signals.mjs",
     "db:snapshot:create": "node scripts/operations/create-database-snapshot.mjs",
     "db:snapshot:verify": "node scripts/operations/verify-database-snapshot.mjs",
     "fixture:prepare-source": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/regression/fixture.ts prepare-source",
