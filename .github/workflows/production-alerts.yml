@@ -1,0 +1,112 @@
+name: Production alerts
+
+on:
+  workflow_dispatch:
+    inputs:
+      status:
+        description: Open or resolve the harmless alert-delivery test issue
+        required: true
+        type: choice
+        options:
+          - open
+          - resolved
+  workflow_run:
+    workflows:
+      - Encrypted production backup
+      - Operations monitor
+      - Production health
+      - Quality gate
+    types: [completed]
+  deployment_status:
+
+concurrency:
+  group: production-alert-${{ github.event_name }}-${{ github.event.workflow_run.name || github.event.deployment.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  workflow-result:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.conclusion != 'skipped'
+    name: Deliver workflow alert
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out alert helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Synchronize workflow alert
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const syncAlert = require("./.github/scripts/sync-production-alert.js")
+            const run = context.payload.workflow_run
+            await syncAlert({
+              core,
+              detailsUrl: run.html_url,
+              github,
+              key: run.name,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              status: run.conclusion === "success" ? "resolved" : "open",
+              summary: `${run.name} completed with status: ${run.conclusion}.`,
+            })
+
+  deployment-result:
+    if: github.event_name == 'deployment_status'
+    name: Deliver deployment alert
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out alert helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Synchronize production deployment alert
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const deployment = context.payload.deployment
+            const deploymentStatus = context.payload.deployment_status
+            if (deployment.environment.toLowerCase() !== "production") {
+              core.notice(`Ignoring ${deployment.environment} deployment.`)
+              return
+            }
+            if (!["success", "failure", "error"].includes(deploymentStatus.state)) {
+              core.notice(`Ignoring transitional deployment state: ${deploymentStatus.state}.`)
+              return
+            }
+            const syncAlert = require("./.github/scripts/sync-production-alert.js")
+            await syncAlert({
+              core,
+              detailsUrl: deploymentStatus.target_url || deploymentStatus.log_url,
+              github,
+              key: "Production deployment",
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              status: deploymentStatus.state === "success" ? "resolved" : "open",
+              summary: `The production deployment for ${deployment.ref} reported: ${deploymentStatus.state}.`,
+            })
+
+  manual-delivery-test:
+    if: github.event_name == 'workflow_dispatch'
+    name: Test alert delivery
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out alert helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Synchronize harmless test alert
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const syncAlert = require("./.github/scripts/sync-production-alert.js")
+            await syncAlert({
+              core,
+              detailsUrl: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              github,
+              key: "Alert delivery test",
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              status: "${{ inputs.status }}",
+              summary: "This is a harmless manual test of production alert delivery.",
+            })

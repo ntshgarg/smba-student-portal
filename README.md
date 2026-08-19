@@ -179,8 +179,11 @@ migrations and production operation preserve the existing encrypted authenticato
 
 Production deployment, monitoring, database recovery and incident steps are documented in
 [`docs/PRODUCTION-OPERATIONS.md`](docs/PRODUCTION-OPERATIONS.md). The controlled first-academy pilot
-is documented in [`docs/ACADEMY-HANDOVER.md`](docs/ACADEMY-HANDOVER.md), with the academy decisions
-to confirm listed in [`docs/DATA-HANDLING-CHECKLIST.md`](docs/DATA-HANDLING-CHECKLIST.md).
+is documented in [`docs/ACADEMY-HANDOVER.md`](docs/ACADEMY-HANDOVER.md) and recorded in
+[`docs/PRODUCTION-ACCEPTANCE-RECORD.md`](docs/PRODUCTION-ACCEPTANCE-RECORD.md). Privacy, access and
+retention decisions are ready for signature in
+[`docs/ACADEMY-PRIVACY-AND-RETENTION-POLICY.md`](docs/ACADEMY-PRIVACY-AND-RETENTION-POLICY.md), with
+the supporting checklist in [`docs/DATA-HANDLING-CHECKLIST.md`](docs/DATA-HANDLING-CHECKLIST.md).
 
 An authenticator app scans a QR code containing a unique TOTP secret. It stores
 that secret on the phone and generates a six-digit code roughly every 30 seconds,

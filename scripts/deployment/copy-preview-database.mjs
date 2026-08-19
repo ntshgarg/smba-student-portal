@@ -24,6 +24,7 @@ const TRANSIENT_AUTH_TABLES = new Set([
   "auth_security_events",
   "auth_sessions",
   "auth_verifications",
+  "operational_events",
 ])
 
 function quoteIdentifier(identifier) {

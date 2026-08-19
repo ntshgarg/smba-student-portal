@@ -67,6 +67,20 @@ class CapturingMailer implements AuthMailer {
   }
 }
 
+class FailingMailer implements AuthMailer {
+  async sendAuthenticatorRecovery() {
+    throw new Error("simulated delivery failure")
+  }
+
+  async sendPasswordRecovery() {
+    throw new Error("simulated delivery failure")
+  }
+
+  async sendRecoveryEmailVerification() {
+    throw new Error("simulated delivery failure")
+  }
+}
+
 async function createActiveAccount(input: {
   academyId: string
   accessLevel?: "head_admin" | "junior_coach"
@@ -177,6 +191,25 @@ describe("production mail configuration", () => {
 })
 
 describe("verified recovery email", () => {
+  it("records a monitorable delivery failure without storing the address or error", async () => {
+    await expect(requestRecoveryEmailVerification({
+      email: "setup@example.com",
+      fullName: "Setup Coach",
+      mailer: new FailingMailer(),
+      subjectKey: "head-coach-setup",
+    }, { database, now: NOW })).rejects.toThrow("simulated delivery failure")
+
+    const event = database.select().from(schema.authSecurityEvents).get()
+    expect(event).toMatchObject({
+      accountId: null,
+      eventType: "recovery_email_verification_requested",
+      outcome: "failure",
+    })
+    expect(JSON.parse(event!.metadata)).toEqual({ reason: "email_delivery" })
+    expect(event!.metadata).not.toContain("setup@example.com")
+    expect(event!.metadata).not.toContain("simulated delivery failure")
+  })
+
   it("normalizes addresses, supports shared family email, enforces cooldown and rejects exhausted codes", async () => {
     await createActiveAccount({ academyId: "SMBA-PL-1001", accountId: "player-one", role: "player" })
     await createActiveAccount({ academyId: "SMBA-PL-1002", accountId: "player-two", role: "player" })
@@ -284,6 +317,30 @@ describe("verified recovery email", () => {
 })
 
 describe("password recovery", () => {
+  it("records mail-provider failures as a monitorable security signal", async () => {
+    await createActiveAccount({
+      academyId: "SMBA-PL-2099",
+      accountId: "player-delivery-failure",
+      email: SHARED_EMAIL,
+      role: "player",
+    })
+
+    await expect(requestPasswordRecovery({
+      academyId: "SMBA-PL-2099",
+      email: SHARED_EMAIL,
+      mailer: new FailingMailer(),
+    }, { database, now: NOW })).resolves.toEqual({ accepted: true })
+
+    const event = database.select().from(schema.authSecurityEvents)
+      .where(eq(schema.authSecurityEvents.accountId, "player-delivery-failure"))
+      .get()
+    expect(event).toMatchObject({
+      eventType: "password_recovery_failed",
+      outcome: "failure",
+    })
+    expect(JSON.parse(event!.metadata)).toEqual({ reason: "email_delivery" })
+  })
+
   it("returns a generic response for unknown details and accepts only the newest single-use link", async () => {
     await createActiveAccount({
       academyId: "SMBA-PL-2001",
