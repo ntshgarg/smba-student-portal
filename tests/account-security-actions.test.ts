@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   removePinCredential: vi.fn(),
+  setPinCredential: vi.fn(),
   verifyCurrentPassword: vi.fn(),
 }))
 
@@ -21,7 +22,7 @@ vi.mock("@/lib/auth/coach-access", () => ({
 vi.mock("@/lib/auth/credential-service", () => ({
   hasPinCredential: vi.fn(),
   removePinCredential: mocks.removePinCredential,
-  setPinCredential: vi.fn(),
+  setPinCredential: mocks.setPinCredential,
   validateNewPassword: vi.fn(),
   validatePin: vi.fn(),
   verifyCurrentPassword: mocks.verifyCurrentPassword,
@@ -34,7 +35,7 @@ vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
 }))
 
-import { removePinAction } from "@/app/account/security/actions"
+import { removePinAction, savePinAction } from "@/app/account/security/actions"
 
 function passwordData() {
   const formData = new FormData()
@@ -56,6 +57,15 @@ describe("role-aware PIN management", () => {
       .resolves.toEqual({ error: "The head-coach account requires a PIN.", success: null })
     expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
     expect(mocks.removePinCredential).not.toHaveBeenCalled()
+  })
+
+  it("rejects an empty PIN form before checking credentials", async () => {
+    mocks.getCurrentIdentity.mockResolvedValue({ role: "player", subjectId: "player-one" })
+
+    await expect(savePinAction({ error: null, success: null }, new FormData()))
+      .resolves.toEqual({ error: "Enter your current password.", success: null })
+    expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
+    expect(mocks.setPinCredential).not.toHaveBeenCalled()
   })
 
   it("prevents the platform owner from removing the mandatory PIN", async () => {

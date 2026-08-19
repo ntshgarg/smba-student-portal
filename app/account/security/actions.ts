@@ -116,6 +116,11 @@ export async function savePinAction(
   const currentPassword = String(formData.get("currentPassword") ?? "")
   const pin = String(formData.get("pin") ?? "")
   const confirmPin = String(formData.get("confirmPin") ?? "")
+  if (!currentPassword) {
+    return { error: "Enter your current password.", success: null }
+  }
+  if (!pin) return { error: "Enter a new 6-digit PIN.", success: null }
+  if (!confirmPin) return { error: "Confirm the new PIN.", success: null }
   if (!await verifyCurrentPassword({ accountId: identity.subjectId, password: currentPassword })) {
     return { error: "The current password could not be verified.", success: null }
   }

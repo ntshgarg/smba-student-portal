@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState } from "react"
+import { useActionState, useState } from "react"
 import { MailCheck, ShieldCheck } from "lucide-react"
 
 import {
@@ -30,6 +30,8 @@ export function RecoveryEmailSecurityPanel({
     confirmRecoveryEmailChange,
     initialRecoveryEmailEnrollmentState,
   )
+  const [requestFormReady, setRequestFormReady] = useState(false)
+  const [confirmFormReady, setConfirmFormReady] = useState(false)
   const sent = requestState.sent || confirmState.sent
   const email = confirmState.email || requestState.email
 
@@ -44,7 +46,11 @@ export function RecoveryEmailSecurityPanel({
       </header>
       <p>Verified address: <strong>{maskedEmail}</strong></p>
       {sent ? (
-        <form className="security-form" action={confirmAction} noValidate>
+        <form
+          className="security-form"
+          action={confirmAction}
+          onInput={(event) => setConfirmFormReady(event.currentTarget.checkValidity())}
+        >
           <input type="hidden" name="email" value={email} />
           <label>
             Verification code
@@ -52,10 +58,14 @@ export function RecoveryEmailSecurityPanel({
           </label>
           <p>Enter the six-digit code sent to the new address.</p>
           {confirmState.error ? <p className="login-error" role="alert">{confirmState.error}</p> : null}
-          <button type="submit" disabled={confirming}>{confirming ? "Verifying…" : "Confirm new email"}</button>
+          <button type="submit" disabled={confirming || !confirmFormReady}>{confirming ? "Verifying…" : "Confirm new email"}</button>
         </form>
       ) : (
-        <form className="security-form" action={requestAction} noValidate>
+        <form
+          className="security-form"
+          action={requestAction}
+          onInput={(event) => setRequestFormReady(event.currentTarget.checkValidity())}
+        >
           <label>
             New recovery email
             <input name="email" type="email" autoComplete="email" maxLength={254} required />
@@ -72,7 +82,7 @@ export function RecoveryEmailSecurityPanel({
           ) : null}
           <p>A new address becomes active only after its verification code is confirmed.</p>
           {requestState.error ? <p className="login-error" role="alert">{requestState.error}</p> : null}
-          <button type="submit" disabled={requesting}>
+          <button type="submit" disabled={requesting || !requestFormReady}>
             <ShieldCheck aria-hidden="true" />
             {requesting ? "Sending code…" : "Change recovery email"}
           </button>

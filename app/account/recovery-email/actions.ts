@@ -143,6 +143,12 @@ export async function requestRecoveryEmailChange(
   const identity = await currentIdentity()
   const email = String(formData.get("email") ?? "")
   const currentPassword = String(formData.get("currentPassword") ?? "")
+  if (!email.trim()) {
+    return { email, error: "Enter a valid recovery email address.", sent: false }
+  }
+  if (!currentPassword) {
+    return { email, error: "Enter your current password.", sent: false }
+  }
   if (!await verifyCurrentPassword({ accountId: identity.subjectId, password: currentPassword })) {
     return { email, error: "The current password could not be verified.", sent: false }
   }
@@ -151,8 +157,11 @@ export async function requestRecoveryEmailChange(
     || access?.accessLevel === "head_admin"
   if (requiresSecondFactor) {
     const credential = String(formData.get("secondFactor") ?? "").trim()
+    if (!credential) {
+      return { email, error: "Enter an authenticator or backup code.", sent: false }
+    }
     const context = await securityContext()
-    if (!credential || !await verifyFreshAccountSecondFactor({
+    if (!await verifyFreshAccountSecondFactor({
       accountId: identity.subjectId,
       credential,
       security: context,
