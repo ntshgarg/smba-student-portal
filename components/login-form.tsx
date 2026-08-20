@@ -4,6 +4,8 @@ import { useActionState, useEffect, useRef, useState } from "react"
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 
+import { PasswordInput } from "@/components/password-input"
+
 import {
   loginWithAcademyId,
   loginWithPin,
@@ -63,10 +65,9 @@ function PasswordLoginForm() {
       <AcademyIdField academyIdRef={academyIdRef} error={state.error} />
       <div className="login-field">
         <label htmlFor="password">Password</label>
-        <input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           maxLength={128}
           required

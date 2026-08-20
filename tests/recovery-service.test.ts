@@ -169,9 +169,12 @@ afterEach(() => {
   delete process.env.RESEND_API_KEY
   delete process.env.SMBA_AUTH_EMAIL_FROM
   delete process.env.SMBA_AUTH_MAIL_TRANSPORT
+  delete process.env.SMBA_ACCESSIBILITY_PROFILE
+  delete process.env.DB_FILE_NAME
   delete process.env.SMBA_REQUIRE_RECOVERY_EMAIL
   delete process.env.VERCEL
   delete process.env.VERCEL_ENV
+  vi.unstubAllEnvs()
 })
 
 describe("production mail configuration", () => {
@@ -187,6 +190,22 @@ describe("production mail configuration", () => {
     expect(() => validateAuthEmailConfiguration()).toThrow("SMBA_AUTH_EMAIL_FROM")
     process.env.SMBA_AUTH_EMAIL_FROM = "SMBA Security <security@example.com>"
     expect(() => validateAuthEmailConfiguration()).not.toThrow()
+  })
+
+  it("allows memory delivery only for a disposable production accessibility profile", () => {
+    vi.stubEnv("NODE_ENV", "production")
+    process.env.SMBA_REQUIRE_RECOVERY_EMAIL = "true"
+    process.env.SMBA_AUTH_MAIL_TRANSPORT = "memory"
+    process.env.SMBA_ACCESSIBILITY_PROFILE = "clean"
+    process.env.DB_FILE_NAME = "/tmp/smba-accessibility-mailer.db"
+    expect(() => validateAuthEmailConfiguration()).not.toThrow()
+
+    process.env.DB_FILE_NAME = path.resolve(".data/academy-clean.db")
+    expect(() => validateAuthEmailConfiguration()).toThrow("RESEND_API_KEY")
+
+    process.env.DB_FILE_NAME = "/tmp/smba-accessibility-mailer.db"
+    process.env.VERCEL = "1"
+    expect(() => validateAuthEmailConfiguration()).toThrow("RESEND_API_KEY")
   })
 })
 

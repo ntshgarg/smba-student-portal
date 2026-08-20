@@ -9,6 +9,7 @@ import {
   type RecoveryPasswordState,
   type RecoverySecondFactorState,
 } from "@/app/recover/actions"
+import { PasswordInput } from "@/components/password-input"
 
 const initialFactorState: RecoverySecondFactorState = { error: null }
 const initialPasswordState: RecoveryPasswordState = { error: null, errorField: null }
@@ -52,11 +53,11 @@ export function RecoveryPasswordForm() {
     <form className="login-form" action={action} noValidate>
       <div className="login-field">
         <label htmlFor="recovery-new-password">New password</label>
-        <input ref={passwordRef} id="recovery-new-password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required />
+        <PasswordInput ref={passwordRef} id="recovery-new-password" name="password" autoComplete="new-password" minLength={12} maxLength={128} required />
       </div>
       <div className="login-field">
         <label htmlFor="recovery-confirm-password">Confirm new password</label>
-        <input ref={confirmRef} id="recovery-confirm-password" name="confirmPassword" type="password" autoComplete="new-password" minLength={12} maxLength={128} required />
+        <PasswordInput ref={confirmRef} id="recovery-confirm-password" name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required />
       </div>
       <p className="login-helper">Resetting logs out every device and removes the old PIN. Your authenticator remains connected.</p>
       {state.error ? <p className="login-error" role="alert">{state.error}</p> : null}

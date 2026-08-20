@@ -13,6 +13,7 @@ import {
   type PasswordChangeState,
   type PinManagementState,
 } from "@/app/account/security/actions"
+import { PasswordInput } from "@/components/password-input"
 
 type SecuritySession = {
   createdAt: string
@@ -92,9 +93,18 @@ export function AccountSecurityWorkspace({
             <div><p className="eyebrow">Credentials</p><h2 id="change-password-title">Change password</h2></div>
           </header>
           <form className="security-form" action={passwordAction} noValidate>
-            <label>Current password<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
-            <label>New password<input name="newPassword" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></label>
-            <label>Confirm new password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></label>
+            <div className="security-password-field">
+              <label htmlFor="security-current-password">Current password</label>
+              <PasswordInput id="security-current-password" name="currentPassword" autoComplete="current-password" required />
+            </div>
+            <div className="security-password-field">
+              <label htmlFor="security-new-password">New password</label>
+              <PasswordInput id="security-new-password" name="newPassword" autoComplete="new-password" minLength={12} maxLength={128} required />
+            </div>
+            <div className="security-password-field">
+              <label htmlFor="security-confirm-password">Confirm new password</label>
+              <PasswordInput id="security-confirm-password" name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required />
+            </div>
             {passwordState.error ? <p className="login-error" role="alert">{passwordState.error}</p> : null}
             {passwordState.success ? <p className="security-success" role="status">{passwordState.success}</p> : null}
             <button type="submit" disabled={passwordPending}>{passwordPending ? "Changing…" : "Change password"}</button>
@@ -162,7 +172,10 @@ export function AccountSecurityWorkspace({
               nextInvalid?.focus()
             }}
           >
-            <label><span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span><input name="currentPassword" type="password" autoComplete="current-password" required aria-invalid={pinValidationTarget === "currentPassword" ? true : undefined} /></label>
+            <div className="security-password-field">
+              <label htmlFor="pin-current-password"><span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
+              <PasswordInput id="pin-current-password" name="currentPassword" autoComplete="current-password" required aria-invalid={pinValidationTarget === "currentPassword" ? true : undefined} />
+            </div>
             <label><span>{pinEnabled ? "New PIN" : "PIN"} <span className="security-required-marker" aria-hidden="true">*</span></span><input className="login-pin-input" name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required aria-invalid={pinValidationTarget === "pin" ? true : undefined} /></label>
             <label><span>Confirm PIN <span className="security-required-marker" aria-hidden="true">*</span></span><input className="login-pin-input" name="confirmPin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required aria-invalid={pinValidationTarget === "confirmPin" ? true : undefined} /></label>
             {pinValidationTarget ? <p className="security-validation-message" role="alert">Complete the highlighted required field.</p> : null}
@@ -172,7 +185,10 @@ export function AccountSecurityWorkspace({
           </form>
           {pinEnabled && !pinRequired ? (
             <form className="security-form security-pin-remove" action={removeAction} noValidate>
-              <label>Current password<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+              <div className="security-password-field">
+                <label htmlFor="pin-remove-current-password">Current password</label>
+                <PasswordInput id="pin-remove-current-password" name="currentPassword" autoComplete="current-password" required />
+              </div>
               {removeState.error ? <p className="login-error" role="alert">{removeState.error}</p> : null}
               {removeState.success ? <p className="security-success" role="status">{removeState.success}</p> : null}
               <button className="security-secondary-action" type="submit" disabled={removePending}>{removePending ? "Removing…" : "Remove PIN"}</button>

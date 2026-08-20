@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 
 import Database from "better-sqlite3"
@@ -182,13 +183,27 @@ function parseArguments() {
     const index = rest.indexOf(`--${name}`)
     return index >= 0 ? rest[index + 1] : undefined
   }
+  const defaultTarget = command === "build-clean" ? CLEAN_TARGET : DEFAULT_TARGET
   return {
     command,
     profile: selectedProfile,
     source: path.resolve(option("source") ?? DEFAULT_SOURCE),
     stage: (option("stage") ?? "loaded") as Stage,
-    target: path.resolve(option("target") ?? process.env.SMBA_REGRESSION_DB ?? DEFAULT_TARGET),
+    target: path.resolve(option("target") ?? process.env.SMBA_REGRESSION_DB ?? defaultTarget),
   }
+}
+
+function isAccessibilityTemporaryTarget(target: string) {
+  const temporaryRoots = new Set([
+    path.resolve(os.tmpdir()),
+    path.resolve("/tmp"),
+  ])
+  const insideTemporaryRoot = [...temporaryRoots].some((root) => {
+    const relative = path.relative(root, target)
+    return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+  })
+  return insideTemporaryRoot
+    && /smba[-_.].*(accessibility|a11y)|smba-accessibility/u.test(path.basename(target))
 }
 
 function assertRegressionTarget(target: string) {
@@ -199,7 +214,10 @@ function assertRegressionTarget(target: string) {
   const isNamedProfileTarget = Object.values(fixtureProfiles)
     .some((profile) => target === profile.target)
   const isCleanTarget = target === CLEAN_TARGET
-  if (!isRegressionTarget && !isNamedProfileTarget && !isCleanTarget) {
+  if (!isRegressionTarget
+    && !isNamedProfileTarget
+    && !isCleanTarget
+    && !isAccessibilityTemporaryTarget(target)) {
     throw new Error(
       `Fixture databases must use a named profile path or live inside ${REGRESSION_DIRECTORY}.`,
     )
@@ -210,6 +228,7 @@ function assertRegressionTarget(target: string) {
 }
 
 function assertGeneratedSourceTarget(target: string) {
+  if (isAccessibilityTemporaryTarget(target)) return
   const relative = path.relative(REGRESSION_DIRECTORY, target)
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`Generated fixture sources must live inside ${REGRESSION_DIRECTORY}.`)
@@ -2741,13 +2760,21 @@ function writeFixtureManifest(target: string, profile: FixtureProfile) {
   fs.writeFileSync(profileManifestPath(profile), `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
-async function buildProfile(source: string, profile: FixtureProfile) {
+async function buildProfile(source: string, profile: FixtureProfile, target: string) {
+  assertRegressionTarget(target)
+  const targetDirectory = path.dirname(target)
+  const buildDirectory = isAccessibilityTemporaryTarget(target)
+    ? targetDirectory
+    : REGRESSION_DIRECTORY
   const temporaryTarget = path.join(
-    REGRESSION_DIRECTORY,
-    `.academy-${profile.key}-build-${process.pid}.db`,
+    buildDirectory,
+    isAccessibilityTemporaryTarget(target)
+      ? `.smba-accessibility-${profile.key}-build-${process.pid}.db`
+      : `.academy-${profile.key}-build-${process.pid}.db`,
   )
-  const publishTarget = `${profile.target}.next-${process.pid}`
-  fs.mkdirSync(REGRESSION_DIRECTORY, { recursive: true })
+  const publishTarget = `${target}.next-${process.pid}`
+  fs.mkdirSync(buildDirectory, { recursive: true })
+  fs.mkdirSync(targetDirectory, { recursive: true })
   try {
     await prepare(source, temporaryTarget)
     await seedToStage(temporaryTarget, "loaded")
@@ -2758,11 +2785,10 @@ async function buildProfile(source: string, profile: FixtureProfile) {
     } finally {
       sourceDatabase.close()
     }
-    fs.mkdirSync(path.dirname(profile.target), { recursive: true })
-    assertPublicationTargetQuiescent(profile.target)
-    fs.renameSync(publishTarget, profile.target)
-    writeFixtureManifest(profile.target, profile)
-    return verify(profile.target, "loaded")
+    assertPublicationTargetQuiescent(target)
+    fs.renameSync(publishTarget, target)
+    writeFixtureManifest(target, profile)
+    return verify(target, "loaded")
   } finally {
     for (const candidate of [
       temporaryTarget,
@@ -2777,13 +2803,21 @@ async function buildProfile(source: string, profile: FixtureProfile) {
   }
 }
 
-async function buildCleanProfile(source: string) {
+async function buildCleanProfile(source: string, target: string) {
+  assertRegressionTarget(target)
+  const targetDirectory = path.dirname(target)
+  const buildDirectory = isAccessibilityTemporaryTarget(target)
+    ? targetDirectory
+    : REGRESSION_DIRECTORY
   const temporaryTarget = path.join(
-    REGRESSION_DIRECTORY,
-    `.academy-clean-build-${process.pid}.db`,
+    buildDirectory,
+    isAccessibilityTemporaryTarget(target)
+      ? `.smba-accessibility-clean-build-${process.pid}.db`
+      : `.academy-clean-build-${process.pid}.db`,
   )
-  const publishTarget = `${CLEAN_TARGET}.next-${process.pid}`
-  fs.mkdirSync(REGRESSION_DIRECTORY, { recursive: true })
+  const publishTarget = `${target}.next-${process.pid}`
+  fs.mkdirSync(buildDirectory, { recursive: true })
+  fs.mkdirSync(targetDirectory, { recursive: true })
   try {
     await prepare(source, temporaryTarget)
     const sourceDatabase = openReadonly(temporaryTarget)
@@ -2793,12 +2827,13 @@ async function buildCleanProfile(source: string) {
     } finally {
       sourceDatabase.close()
     }
-    fs.mkdirSync(path.dirname(CLEAN_TARGET), { recursive: true })
-    assertPublicationTargetQuiescent(CLEAN_TARGET)
-    fs.renameSync(publishTarget, CLEAN_TARGET)
-    const manifest = cleanFixtureManifest(CLEAN_TARGET)
-    fs.writeFileSync(`${CLEAN_TARGET}.manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`)
-    return verify(CLEAN_TARGET, "default")
+    assertPublicationTargetQuiescent(target)
+    fs.renameSync(publishTarget, target)
+    if (target === CLEAN_TARGET) {
+      const manifest = cleanFixtureManifest(target)
+      fs.writeFileSync(`${target}.manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`)
+    }
+    return verify(target, "default")
   } finally {
     for (const candidate of [
       temporaryTarget,
@@ -2819,11 +2854,11 @@ async function main() {
   if (args.command === "prepare-source") result = prepareGeneratedSource(args.source)
   else if (args.command === "build") {
     ensureGeneratedSource(args.source)
-    result = await buildProfile(args.source, args.profile)
+    result = await buildProfile(args.source, args.profile, args.target)
   }
   else if (args.command === "build-clean") {
     ensureGeneratedSource(args.source)
-    result = await buildCleanProfile(args.source)
+    result = await buildCleanProfile(args.source, args.target)
   }
   else if (args.command === "prepare") {
     ensureGeneratedSource(args.source)

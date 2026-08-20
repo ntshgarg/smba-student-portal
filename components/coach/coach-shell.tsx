@@ -34,7 +34,7 @@ export function CoachShell({
         <AccountMenu account={coach} publicSiteHref={publicSiteUrl} />
       </header>
 
-      <main id="coach-main-content">{children}</main>
+      <main id="coach-main-content" tabIndex={-1}>{children}</main>
     </>
   )
 }

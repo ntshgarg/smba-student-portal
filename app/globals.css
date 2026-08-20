@@ -1815,6 +1815,9 @@ h3 {
 }
 
 .login-register-link a {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
   color: var(--navy);
   font-weight: 800;
   text-decoration: underline;
@@ -2231,6 +2234,66 @@ h3 {
   color: var(--white);
 }
 
+.password-input-shell {
+  position: relative;
+  width: 100%;
+}
+
+.login-field > .password-input-shell {
+  margin-top: 10px;
+}
+
+.login-field > .password-input-shell input {
+  margin-top: 0;
+}
+
+.password-input-shell input {
+  width: 100%;
+  padding-inline-end: 84px;
+}
+
+.security-password-field {
+  display: grid;
+  gap: 7px;
+}
+
+.password-input-shell .password-visibility-toggle,
+.security-form .password-input-shell .password-visibility-toggle {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 1px;
+  display: inline-flex;
+  width: auto;
+  min-width: 72px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--steel);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transform: translateY(-50%);
+}
+
+.password-input-shell .password-visibility-toggle:hover,
+.security-form .password-input-shell .password-visibility-toggle:hover {
+  background: #eee8dc;
+  color: var(--navy);
+}
+
+.password-visibility-toggle svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
 .security-recovery-submit {
   display: inline-flex;
   align-items: center;
@@ -2523,6 +2586,10 @@ h3 {
 }
 
 @media (max-width: 760px) {
+  .security-form input {
+    font-size: 16px;
+  }
+
   .login-register-link {
     display: flex;
     flex-wrap: wrap;
@@ -14373,6 +14440,9 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .login-empty-state a {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
   color: var(--color-navy, #071b32);
   font-weight: 700;
 }
@@ -15161,5 +15231,33 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .admin-directory-search-field {
     width: 100%;
+  }
+}
+
+/* Accessibility floor: component-specific reset rules must not suppress keyboard focus. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--red) !important;
+  outline-offset: 2px;
+}
+
+@media (max-width: 820px) {
+  .coach-member-search input,
+  .coach-member-filter select {
+    min-height: 24px;
+  }
+
+  .coach-slot-day {
+    min-height: 24px;
+  }
+}
+
+@media (max-width: 430px) {
+  .admin-directory-search-field input,
+  input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not([type="range"]):not([type="reset"]):not([type="submit"]),
+  select,
+  textarea {
+    font-size: 16px !important;
   }
 }

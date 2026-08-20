@@ -1,0 +1,195 @@
+name: UI accessibility
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ui-accessibility-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  accessibility:
+    name: UI accessibility / WCAG 2.2 AA
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BETTER_AUTH_SECRET: smba-accessibility-ci-secret-never-used-in-production-2026
+      NEXT_PUBLIC_SMBA_SITE_ORIGIN: https://ci.smbaacademy.in
+      SMBA_ACCESSIBILITY_ADMIN_PASSWORD: SMBA accessibility admin 2026!
+      SMBA_ACCESSIBILITY_PIN: "246810"
+      SMBA_AUTH_MAIL_TRANSPORT: memory
+      SMBA_FIXTURE_PASSWORD: SMBA fixture access 2026!
+      SMBA_INITIAL_ADMIN_NAME: Accessibility Platform Owner
+      SMBA_INITIAL_ADMIN_PASSWORD: SMBA accessibility admin 2026!
+      SMBA_INITIAL_ADMIN_PIN: "574482"
+      SMBA_REQUIRE_RECOVERY_EMAIL: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          cache: npm
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build immutable accessibility sources under /tmp
+        env:
+          NODE_OPTIONS: --conditions=react-server
+          NODE_PATH: ./node_modules/next/dist/compiled
+        run: |
+          mkdir -p /tmp/smba-accessibility-sources
+          npx tsx scripts/regression/fixture.ts prepare-source \
+            --source /tmp/smba-accessibility-sources/smba-accessibility-source.db
+          npx tsx scripts/regression/fixture.ts build-clean \
+            --source /tmp/smba-accessibility-sources/smba-accessibility-source.db \
+            --target /tmp/smba-accessibility-sources/smba-accessibility-clean-source.db
+          npx tsx scripts/regression/fixture.ts build --profile stress \
+            --source /tmp/smba-accessibility-sources/smba-accessibility-source.db \
+            --target /tmp/smba-accessibility-sources/smba-accessibility-stress-source.db
+          DB_FILE_NAME=/tmp/smba-accessibility-sources/smba-accessibility-admin-source.db npm run db:prepare:empty
+          DB_FILE_NAME=/tmp/smba-accessibility-sources/smba-accessibility-admin-source.db npm run db:provision:admin
+          sha256sum \
+            /tmp/smba-accessibility-sources/smba-accessibility-source.db \
+            /tmp/smba-accessibility-sources/smba-accessibility-admin-source.db \
+            /tmp/smba-accessibility-sources/smba-accessibility-clean-source.db \
+            /tmp/smba-accessibility-sources/smba-accessibility-stress-source.db \
+            > /tmp/smba-accessibility-sources.sha256
+
+      - name: Prepare disposable accessibility databases
+        run: |
+          cp /tmp/smba-accessibility-sources/smba-accessibility-admin-source.db /tmp/smba-accessibility-admin.db
+          cp /tmp/smba-accessibility-sources/smba-accessibility-clean-source.db /tmp/smba-accessibility-clean.db
+          cp /tmp/smba-accessibility-sources/smba-accessibility-stress-source.db /tmp/smba-accessibility-stress.db
+          DB_FILE_NAME=/tmp/smba-accessibility-stress.db npm run db:provision:admin
+
+      - name: Build production application
+        env:
+          DB_FILE_NAME: /tmp/smba-accessibility-sources/smba-accessibility-clean-source.db
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Audit admin-only academy
+        id: admin
+        continue-on-error: true
+        env:
+          BETTER_AUTH_SECURE_COOKIES: "false"
+          DB_FILE_NAME: /tmp/smba-accessibility-admin.db
+          SMBA_ACCESSIBILITY_BASE_URL: http://127.0.0.1:3110
+          SMBA_ACCESSIBILITY_DB: /tmp/smba-accessibility-admin.db
+          SMBA_ACCESSIBILITY_PROFILE: admin
+          SMBA_REQUIRE_COACH_TOTP: "true"
+        run: |
+          npx next start -p 3110 > /tmp/smba-accessibility-admin.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3110/api/health > /dev/null; then
+              npm run regression:accessibility
+              exit $?
+            fi
+            sleep 1
+          done
+          tail -n 200 /tmp/smba-accessibility-admin.log
+          exit 1
+
+      - name: Audit clean activation academy
+        id: clean
+        continue-on-error: true
+        env:
+          BETTER_AUTH_SECURE_COOKIES: "false"
+          DB_FILE_NAME: /tmp/smba-accessibility-clean.db
+          SMBA_ACCESSIBILITY_BASE_URL: http://127.0.0.1:3111
+          SMBA_ACCESSIBILITY_DB: /tmp/smba-accessibility-clean.db
+          SMBA_ACCESSIBILITY_PROFILE: clean
+          SMBA_REQUIRE_COACH_TOTP: "true"
+        run: |
+          npx next start -p 3111 > /tmp/smba-accessibility-clean.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3111/api/health > /dev/null; then
+              npm run regression:accessibility
+              exit $?
+            fi
+            sleep 1
+          done
+          tail -n 200 /tmp/smba-accessibility-clean.log
+          exit 1
+
+      - name: Audit populated stress academy
+        id: stress
+        continue-on-error: true
+        env:
+          BETTER_AUTH_SECURE_COOKIES: "false"
+          DB_FILE_NAME: /tmp/smba-accessibility-stress.db
+          SMBA_ACCESSIBILITY_BASE_URL: http://127.0.0.1:3112
+          SMBA_ACCESSIBILITY_DB: /tmp/smba-accessibility-stress.db
+          SMBA_ACCESSIBILITY_PROFILE: stress
+          SMBA_REQUIRE_COACH_TOTP: "false"
+        run: |
+          npx next start -p 3112 > /tmp/smba-accessibility-stress.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3112/api/health > /dev/null; then
+              npm run regression:accessibility
+              exit $?
+            fi
+            sleep 1
+          done
+          tail -n 200 /tmp/smba-accessibility-stress.log
+          exit 1
+
+      - name: Write accessibility job summary
+        id: summary
+        if: always()
+        continue-on-error: true
+        run: npx tsx scripts/regression/summarize-accessibility.ts --output "$GITHUB_STEP_SUMMARY"
+
+      - name: Confirm immutable accessibility sources remain unchanged
+        id: fixtures
+        if: always()
+        continue-on-error: true
+        run: sha256sum --check /tmp/smba-accessibility-sources.sha256
+
+      - name: Show server logs after a failure
+        if: always() && (steps.admin.outcome == 'failure' || steps.clean.outcome == 'failure' || steps.stress.outcome == 'failure')
+        run: |
+          mkdir -p output/accessibility/server-logs
+          cp /tmp/smba-accessibility-admin.log output/accessibility/server-logs/admin.log 2>/dev/null || true
+          cp /tmp/smba-accessibility-clean.log output/accessibility/server-logs/clean.log 2>/dev/null || true
+          cp /tmp/smba-accessibility-stress.log output/accessibility/server-logs/stress.log 2>/dev/null || true
+          tail -n 120 /tmp/smba-accessibility-admin.log 2>/dev/null || true
+          tail -n 120 /tmp/smba-accessibility-clean.log 2>/dev/null || true
+          tail -n 120 /tmp/smba-accessibility-stress.log 2>/dev/null || true
+
+      - name: Upload failure evidence
+        if: always() && (steps.admin.outcome == 'failure' || steps.clean.outcome == 'failure' || steps.stress.outcome == 'failure' || steps.summary.outcome == 'failure')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-accessibility-failure-${{ github.run_id }}
+          path: output/accessibility
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Enforce accessibility outcomes
+        if: always()
+        run: |
+          test "${{ steps.admin.outcome }}" = success
+          test "${{ steps.clean.outcome }}" = success
+          test "${{ steps.stress.outcome }}" = success
+          test "${{ steps.summary.outcome }}" = success
+          test "${{ steps.fixtures.outcome }}" = success

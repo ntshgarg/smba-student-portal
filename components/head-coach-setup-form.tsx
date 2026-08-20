@@ -6,6 +6,7 @@ import {
   completeHeadCoachSetupAction,
   type HeadCoachSetupState,
 } from "@/app/setup/head-coach/actions"
+import { PasswordInput } from "@/components/password-input"
 
 const initialState: HeadCoachSetupState = { error: null }
 
@@ -30,11 +31,11 @@ export function HeadCoachSetupForm({
       <div className="setup-field-grid">
         <div className="login-field">
           <label htmlFor="head-password">Create password</label>
-          <input id="head-password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required />
+          <PasswordInput id="head-password" name="password" autoComplete="new-password" minLength={12} maxLength={128} required />
         </div>
         <div className="login-field">
           <label htmlFor="head-password-confirm">Confirm password</label>
-          <input id="head-password-confirm" name="confirmPassword" type="password" autoComplete="new-password" minLength={12} maxLength={128} required />
+          <PasswordInput id="head-password-confirm" name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required />
         </div>
       </div>
       <div className="setup-field-grid">
