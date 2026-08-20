@@ -1,4 +1,4 @@
-import { closeSync, mkdtempSync, openSync, rmSync } from "node:fs"
+import { closeSync, mkdtempSync, openSync, realpathSync, rmSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -107,7 +107,7 @@ describe("accessibility database guard", () => {
     temporaryDirectories.push(directory)
     const database = path.join(directory, "smba-a11y-test.db")
     closeSync(openSync(database, "w", 0o600))
-    expect(assertDisposableAccessibilityDatabase(database)).toBe(path.resolve(database).replace(/^\/var\//u, "/private/var/"))
+    expect(assertDisposableAccessibilityDatabase(database)).toBe(realpathSync(database))
   })
 
   it("accepts a guarded accessibility database under the portable /tmp root", () => {
@@ -115,7 +115,7 @@ describe("accessibility database guard", () => {
     temporaryDirectories.push(directory)
     const database = path.join(directory, "smba-accessibility-test.db")
     closeSync(openSync(database, "w", 0o600))
-    expect(assertDisposableAccessibilityDatabase(database)).toBe(path.resolve(database).replace(/^\/tmp\//u, "/private/tmp/"))
+    expect(assertDisposableAccessibilityDatabase(database)).toBe(realpathSync(database))
   })
 
   it("rejects relative and non-temporary database paths", () => {

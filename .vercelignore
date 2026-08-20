@@ -13,6 +13,7 @@ audit-context
 static_analysis_codeql_1
 static_analysis_semgrep_1
 tests
+scripts/regression/summarize-accessibility.ts
 docs
 *.log
 *.tsbuildinfo
