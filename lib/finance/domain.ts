@@ -106,11 +106,14 @@ export function calculateProratedSessionFee(
     throw new Error("Invalid session fee proration.")
   }
   if (remainingSessions === 0) return 0
+  if (remainingSessions === totalSessions) return agreedMonthlyFeePaise
 
   const exactPaise = (agreedMonthlyFeePaise * remainingSessions) / totalSessions
-  // Offline academy collections use whole rupees. Round the joining-month
-  // fraction once, at charge issuance, and keep the resulting Charge immutable.
-  return Math.round(exactPaise / 100) * 100
+  const fiftyRupeesPaise = 5_000
+  // Offline academy collections use simple denominations. Round a partial
+  // joining-month fee once to the nearest INR 50 (ties round upward), then
+  // keep the resulting Charge immutable. A full month retains its exact fee.
+  return Math.round(exactPaise / fiftyRupeesPaise) * fiftyRupeesPaise
 }
 
 export function dateInMonth(period: string, day: number) {

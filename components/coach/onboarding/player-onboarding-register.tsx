@@ -721,7 +721,7 @@ function FeePlanStep({
         </label>
       </div>
       <p className={styles.feeNote}>
-        Completing onboarding issues the registration fee. Choosing this month prorates the first monthly fee by scheduled sessions remaining; a future month joins that month’s full fee issue.
+        Completing onboarding issues the registration fee. Choosing this month prorates the first monthly fee by scheduled sessions remaining and rounds it to the nearest ₹50; a future month joins that month’s full fee issue.
       </p>
       <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>

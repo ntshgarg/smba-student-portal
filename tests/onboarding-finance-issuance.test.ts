@@ -153,7 +153,7 @@ describe("onboarding finance issuance", () => {
     })
     expect(completed).toMatchObject({
       firstMonthlyChargeId: expect.any(String),
-      firstMonthlyFeePaise: 145_800,
+      firstMonthlyFeePaise: 145_000,
       firstMonthlyRemainingSessions: 5,
       firstMonthlyTotalSessions: 12,
       registrationChargeId: expect.any(String),
@@ -167,7 +167,7 @@ describe("onboarding finance issuance", () => {
       monthlyCharges: [expect.objectContaining({
         billingPeriod: "2026-08",
         dueDate: "2026-08-21",
-        originalAmountPaise: 145_800,
+        originalAmountPaise: 145_000,
       })],
     })
 
@@ -304,7 +304,7 @@ describe("onboarding finance issuance", () => {
     }, { coachId, createFeeReference: references, createId: ids, database, now: onboardingNow })
 
     expect(completed).toMatchObject({
-      firstMonthlyFeePaise: 116_700,
+      firstMonthlyFeePaise: 115_000,
       firstMonthlyRemainingSessions: 1,
       firstMonthlyTotalSessions: 3,
     })
@@ -367,8 +367,9 @@ describe("onboarding finance issuance", () => {
     )).all()).toHaveLength(0)
   })
 
-  it("rounds the joining-month fraction to the nearest whole rupee", () => {
-    expect(calculateProratedSessionFee(350_000, 5, 12)).toBe(145_800)
+  it("rounds a partial joining-month fee to the nearest fifty rupees", () => {
+    expect(calculateProratedSessionFee(350_000, 5, 12)).toBe(145_000)
+    expect(calculateProratedSessionFee(255_000, 1, 2)).toBe(130_000)
     expect(calculateProratedSessionFee(350_000, 12, 12)).toBe(350_000)
     expect(calculateProratedSessionFee(350_000, 0, 12)).toBe(0)
     expect(() => calculateProratedSessionFee(350_000, 13, 12)).toThrow(

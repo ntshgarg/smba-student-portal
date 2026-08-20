@@ -176,6 +176,7 @@ describe("Player Onboarding Next-Step Register", () => {
     expect(html).toContain('value="2026-09"')
     expect(html).toContain("Completing onboarding issues the registration fee")
     expect(html).toContain("prorates the first monthly fee by scheduled sessions remaining")
+    expect(html).toContain("rounds it to the nearest ₹50")
     expect(html).toContain("Complete onboarding &amp; issue fees")
     expect(html).not.toContain("Monthly charges are prepared separately")
   })
