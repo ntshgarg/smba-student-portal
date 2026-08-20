@@ -84,6 +84,24 @@ describe("Financials V1 service", () => {
       assignedByAccountId: coachId,
       assignedAt: now,
     }).run()
+    const occurrenceDates = ["2026-08-10", "2026-08-12", "2026-08-14"]
+    const weekdays = occurrenceDates.map((date) => (
+      new Date(`${date}T00:00:00.000Z`).getUTCDay()
+    ))
+    database.insert(schema.sessionAssignmentWeekdays).values(weekdays.map((weekday) => ({
+      id: ids(),
+      assignmentId: `finance-assignment-${suffix}`,
+      weekday,
+    }))).run()
+    database.insert(schema.sessionOccurrences).values(occurrenceDates.map((occurrenceDate) => ({
+      id: ids(),
+      createdAt: now,
+      durationMinutes: 60,
+      occurrenceDate,
+      seriesId,
+      startsAt: new Date(`${occurrenceDate}T06:00:00+05:30`),
+      venue: "SMBA Court",
+    }))).run()
   }
 
   beforeAll(async () => {

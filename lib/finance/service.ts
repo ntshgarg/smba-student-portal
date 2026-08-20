@@ -27,6 +27,7 @@ import { formatAcademyId } from "@/lib/auth/identity"
 import { DEFAULT_MONTHLY_DUE_DAY, REGISTRATION_FEE_PAISE } from "@/lib/finance/config"
 import {
   addCalendarDays,
+  calculateProratedSessionFee,
   calculateUnusedMonthRefundLimit,
   createOpaqueFeeReference,
   calculateConcessionAmount,
@@ -60,6 +61,7 @@ import {
   readCharge,
   readFinanceActivation,
   readFirstAssignmentDate,
+  readFirstMonthSessionProration,
   hasAssignmentInPeriod,
   hasCurrentOrFutureMatchingAssignment,
   readPaymentByIdempotencyKey,
@@ -872,7 +874,42 @@ export function completePlayerOnboardingFinance(
   return database.transaction((tx) => {
     requireCoach(tx, coachId)
     requireFinanceActive(tx)
-    const agreementResult = createAgreement(tx, input, { actorId: coachId, createId, now })
+    let firstMonthProration: { remainingSessions: number; totalSessions: number } | null = null
+    let agreementInput = input
+    if (firstFeePeriod === onboardingPeriod) {
+      if (!hasAssignmentInPeriod(tx, input.playerId, firstFeePeriod, {
+        programme: input.level,
+        batch: input.batch,
+      })) {
+        financeError(
+          "SETUP_REQUIRED",
+          "Choose the month in which the player’s assigned session begins.",
+          "effectiveFrom",
+        )
+      }
+      firstMonthProration = readFirstMonthSessionProration(tx, {
+        batch: input.batch,
+        period: firstFeePeriod,
+        playerId: input.playerId,
+        programme: input.level,
+        referenceInstant: now,
+      })
+      if (firstMonthProration.totalSessions === 0) {
+        financeError(
+          "SETUP_REQUIRED",
+          "The assigned session has no scheduled training days for this month.",
+          "effectiveFrom",
+        )
+      }
+      if (firstMonthProration.remainingSessions === 0) {
+        agreementInput = {
+          ...input,
+          effectiveFrom: addCalendarDays(monthEnd(firstFeePeriod), 1),
+        }
+      }
+    }
+
+    const agreementResult = createAgreement(tx, agreementInput, { actorId: coachId, createId, now })
     const registration = issueCharge(tx, {
       actorId: coachId,
       amountPaise: REGISTRATION_FEE_PAISE,
@@ -886,17 +923,7 @@ export function completePlayerOnboardingFinance(
     })
 
     let firstMonthlyCharge: ReturnType<typeof issueCharge> | null = null
-    if (firstFeePeriod === onboardingPeriod) {
-      if (!hasAssignmentInPeriod(tx, input.playerId, firstFeePeriod, {
-        programme: input.level,
-        batch: input.batch,
-      })) {
-        financeError(
-          "SETUP_REQUIRED",
-          "Choose the month in which the player’s assigned session begins.",
-          "effectiveFrom",
-        )
-      }
+    if (firstMonthProration && firstMonthProration.remainingSessions > 0) {
       const normalDueDate = dateInMonth(firstFeePeriod, agreementResult.agreement.monthlyDueDay)
       const firstAssignment = readFirstAssignmentDate(tx, input.playerId)
       const chargeReadyDate = [onboardingDate, firstAssignment ?? onboardingDate]
@@ -904,14 +931,19 @@ export function completePlayerOnboardingFinance(
       const dueDate = chargeReadyDate > normalDueDate
         ? addCalendarDays(chargeReadyDate, 3)
         : normalDueDate
+      const proratedAmountPaise = calculateProratedSessionFee(
+        agreementResult.agreement.agreedMonthlyFeePaise,
+        firstMonthProration.remainingSessions,
+        firstMonthProration.totalSessions,
+      )
       firstMonthlyCharge = issueCharge(tx, {
         actorId: coachId,
         agreementId: agreementResult.agreement.id,
-        amountPaise: agreementResult.agreement.agreedMonthlyFeePaise,
+        amountPaise: proratedAmountPaise,
         billingPeriod: firstFeePeriod,
         createFeeReference,
         createId,
-        description: `Monthly training fee · ${firstFeePeriod}`,
+        description: `First monthly training fee · ${firstMonthProration.remainingSessions}/${firstMonthProration.totalSessions} sessions`,
         dueDate,
         now,
         playerId: input.playerId,
@@ -926,7 +958,12 @@ export function completePlayerOnboardingFinance(
 
     return {
       agreementId: agreementResult.agreement.id,
+      firstMonthlyFeePaise: firstMonthProration
+        ? firstMonthlyCharge?.charge.originalAmountPaise ?? 0
+        : null,
       firstMonthlyChargeId: firstMonthlyCharge?.charge.id ?? null,
+      firstMonthlyRemainingSessions: firstMonthProration?.remainingSessions ?? null,
+      firstMonthlyTotalSessions: firstMonthProration?.totalSessions ?? null,
       registrationChargeId: registration.charge.id,
       reused: agreementResult.reused
         && !registration.created

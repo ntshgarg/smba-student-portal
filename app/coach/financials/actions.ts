@@ -158,8 +158,10 @@ export async function completeOnboardingFinanceAction(
       message: result.reused
         ? "Onboarding fees were already issued"
         : result.firstMonthlyChargeId
-          ? "Registration and first monthly fees issued"
-          : "Registration fee issued; the first monthly fee will join its selected month",
+          ? `Registration and prorated first monthly fee issued for ${result.firstMonthlyRemainingSessions} of ${result.firstMonthlyTotalSessions} sessions`
+          : result.firstMonthlyTotalSessions !== null
+            ? "Registration fee issued; no monthly fee is due because no sessions remain this month"
+            : "Registration fee issued; the first monthly fee will join its selected month",
     }
   })
 }

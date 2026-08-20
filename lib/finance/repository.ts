@@ -1,7 +1,8 @@
 import "server-only"
 
-import { and, asc, desc, eq, gt, gte, isNull, lte, ne, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm"
 
+import { weekdayForDateKey } from "@/lib/date-keys"
 import { formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
@@ -19,6 +20,8 @@ import {
   refundAllocations,
   refunds,
   sessionAssignments,
+  sessionAssignmentWeekdays,
+  sessionOccurrences,
   sessionSeries,
 } from "@/lib/db/schema"
 import {
@@ -41,6 +44,7 @@ import {
 } from "@/lib/finance/types"
 import { getAcademyDateKey } from "@/lib/format"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
+import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 
 export const FINANCE_ACADEMY_ENTITY_ID = "smba"
 
@@ -142,6 +146,81 @@ export function hasAssignmentInPeriod(
       lte(sessionSeries.startsOn, monthEnd(period)),
       or(isNull(sessionSeries.endsOn), gte(sessionSeries.endsOn, monthStart(period))),
     )).get())
+}
+
+export function readFirstMonthSessionProration(
+  database: Executor,
+  {
+    batch,
+    period,
+    playerId,
+    programme,
+    referenceInstant,
+  }: {
+    batch: typeof feeAgreements.$inferSelect.batch
+    period: string
+    playerId: string
+    programme: typeof feeAgreements.$inferSelect.level
+    referenceInstant: Date
+  },
+) {
+  const assignments = database.select({
+    effectiveFrom: sessionAssignments.effectiveFrom,
+    effectiveTo: sessionAssignments.effectiveTo,
+    id: sessionAssignments.id,
+    seriesId: sessionAssignments.seriesId,
+  }).from(sessionAssignments)
+    .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+    .where(and(
+      eq(sessionAssignments.accountId, playerId),
+      eq(sessionSeries.programme, programme),
+      eq(sessionSeries.batch, batch),
+      eq(sessionSeries.status, "active"),
+      lte(sessionAssignments.effectiveFrom, monthEnd(period)),
+      or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, monthStart(period))),
+    )).all()
+  if (!assignments.length) return { remainingSessions: 0, totalSessions: 0 }
+
+  const weekdays = database.select().from(sessionAssignmentWeekdays).where(inArray(
+    sessionAssignmentWeekdays.assignmentId,
+    assignments.map((assignment) => assignment.id),
+  )).all()
+  const weekdaysByAssignment = new Map(assignments.map((assignment) => [
+    assignment.id,
+    new Set(weekdays
+      .filter((weekday) => weekday.assignmentId === assignment.id)
+      .map((weekday) => weekday.weekday)),
+  ]))
+  const seriesIds = [...new Set(assignments.map((assignment) => assignment.seriesId))]
+  const occurrences = resolveOccurrenceEligibilityDates(
+    database,
+    database.select().from(sessionOccurrences).where(and(
+      inArray(sessionOccurrences.seriesId, seriesIds),
+      gte(sessionOccurrences.occurrenceDate, monthStart(period)),
+      lte(sessionOccurrences.occurrenceDate, monthEnd(period)),
+      eq(sessionOccurrences.status, "scheduled"),
+    )).orderBy(asc(sessionOccurrences.startsAt), asc(sessionOccurrences.id)).all(),
+  )
+
+  const totalOccurrences = occurrences.filter((occurrence) => assignments.some((assignment) => (
+    assignment.seriesId === occurrence.seriesId
+    && (assignment.effectiveTo === null || occurrence.eligibilityDate < assignment.effectiveTo)
+    && weekdaysByAssignment.get(assignment.id)?.has(weekdayForDateKey(occurrence.eligibilityDate))
+  )))
+  const remainingOccurrences = totalOccurrences.filter((occurrence) => (
+    occurrence.startsAt.getTime() >= referenceInstant.getTime()
+    && assignments.some((assignment) => (
+      assignment.seriesId === occurrence.seriesId
+      && occurrence.eligibilityDate >= assignment.effectiveFrom
+      && (assignment.effectiveTo === null || occurrence.eligibilityDate < assignment.effectiveTo)
+      && weekdaysByAssignment.get(assignment.id)?.has(weekdayForDateKey(occurrence.eligibilityDate))
+    ))
+  ))
+
+  return {
+    remainingSessions: remainingOccurrences.length,
+    totalSessions: totalOccurrences.length,
+  }
 }
 
 export function hasCurrentOrFutureMatchingAssignment(
