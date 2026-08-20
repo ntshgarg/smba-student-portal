@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { and, asc, eq, isNull } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { redirect } from "next/navigation"
 
 import { AccountSecurityWorkspace } from "@/components/account-security-workspace"
@@ -9,10 +9,7 @@ import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
 import { initializeDatabase } from "@/lib/db/client"
-import {
-  accounts,
-  authRuntimeSessions,
-} from "@/lib/db/schema"
+import { authRuntimeSessions } from "@/lib/db/schema"
 import { hasPinCredential } from "@/lib/auth/credential-service"
 import { getRecoveryEmail, maskRecoveryEmail } from "@/lib/auth/recovery-service"
 
@@ -43,20 +40,6 @@ export default async function AccountSecurityPage() {
     }))
 
   const access = identity.role === "coach" ? getCoachAccessProfile(identity.subjectId) : null
-  const pendingCoachRequests = access?.accessLevel === "head_admin"
-    ? database.select({
-      createdAt: accounts.createdAt,
-      fullName: accounts.fullName,
-      id: accounts.id,
-    }).from(accounts).where(and(
-      eq(accounts.approvalStatus, "pending"),
-      eq(accounts.requestedRole, "coach"),
-      isNull(accounts.archivedAt),
-    )).orderBy(asc(accounts.createdAt)).all().map((request) => ({
-      ...request,
-      createdAt: request.createdAt.toISOString(),
-    }))
-    : []
   const allowPin = identity.role === "player"
     || identity.role === "coach"
     || identity.role === "platform_admin"
@@ -82,7 +65,6 @@ export default async function AccountSecurityPage() {
           || identity.role === "platform_admin")}
         pinEnabled={allowPin && hasPinCredential(identity.subjectId, { database })}
         pinRequired={identity.role === "platform_admin" || access?.accessLevel === "head_admin"}
-        pendingCoachRequests={pendingCoachRequests}
         sessions={sessions}
       />
       {recoveryEmail ? (

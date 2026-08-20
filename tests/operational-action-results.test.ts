@@ -156,7 +156,7 @@ describe("production-safe operational action results", () => {
     })).rejects.toThrow("database unavailable")
 
     mocks.requireHeadAdminAction.mockRejectedValueOnce(new Error("Head coach access is required."))
-    await expect(approveRegistrationAction("registration-1"))
+    await expect(approveRegistrationAction("registration-1", "player"))
       .rejects.toThrow("Head coach access is required.")
     expect(mocks.approveRegistration).not.toHaveBeenCalled()
   })
@@ -184,7 +184,7 @@ describe("production-safe operational action results", () => {
         "registrationId",
       )
     })
-    await expect(approveRegistrationAction("registration-1")).resolves.toMatchObject({
+    await expect(approveRegistrationAction("registration-1", "player")).resolves.toMatchObject({
       ok: false,
       code: "NOT_FOUND",
       field: "registrationId",
@@ -206,6 +206,28 @@ describe("production-safe operational action results", () => {
       code: "CONFLICT",
       field: "sourceOccurrenceId",
     })
+  })
+
+  it("approves a junior-coach request with an explicit role guard", async () => {
+    mocks.approveRegistration.mockReturnValue({
+      academyId: "SMBA-JC-4827",
+      fullName: "Arjun Kumar",
+      role: "coach",
+    })
+
+    await expect(approveRegistrationAction("registration-1", "coach")).resolves.toEqual({
+      ok: true,
+      data: {
+        academyId: "SMBA-JC-4827",
+        fullName: "Arjun Kumar",
+        role: "coach",
+      },
+    })
+    expect(mocks.approveRegistration).toHaveBeenCalledWith(
+      "registration-1",
+      "coach-1",
+      { requestedRole: "coach" },
+    )
   })
 })
 

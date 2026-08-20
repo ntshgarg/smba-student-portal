@@ -74,10 +74,17 @@ export default async function ActivatePage() {
         {approved ? emailVerified
           ? <ActivationForm academyId={status.academyId} />
           : (
-            <RecoveryEmailEnrollmentForm
-              requestAction={requestActivationRecoveryEmail}
-              confirmAction={confirmActivationRecoveryEmail}
-            />
+            <>
+              <div className="login-field activation-academy-id">
+                <label htmlFor="approved-academy-id">Your Academy ID</label>
+                <input id="approved-academy-id" name="academyId" value={status.academyId} readOnly />
+                <p className="login-helper">Save this ID. You will use it every time you sign in.</p>
+              </div>
+              <RecoveryEmailEnrollmentForm
+                requestAction={requestActivationRecoveryEmail}
+                confirmAction={confirmActivationRecoveryEmail}
+              />
+            </>
           ) : (
           <div className="registration-confirmation" role="status">
             {status.state === "pending" ? (

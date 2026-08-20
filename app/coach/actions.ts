@@ -97,7 +97,10 @@ function revalidateAcademyData() {
   revalidatePath("/reports")
 }
 
-export async function approveRegistrationAction(registrationId: string) {
+export async function approveRegistrationAction(
+  registrationId: string,
+  requestedRole: "player" | "coach",
+) {
   const coach = await requireCoach()
   return runOperationalAction(() => {
     if (typeof registrationId !== "string" || !registrationId.trim()) {
@@ -107,9 +110,14 @@ export async function approveRegistrationAction(registrationId: string) {
         "registrationId",
       )
     }
-    const approved = approveRegistration(registrationId, coach.subjectId, {
-      requestedRole: "player",
-    })
+    if (requestedRole !== "player" && requestedRole !== "coach") {
+      throw new OperationalActionError(
+        "INVALID_INPUT",
+        "Choose a valid account type.",
+        "requestedRole",
+      )
+    }
+    const approved = approveRegistration(registrationId, coach.subjectId, { requestedRole })
     revalidateAcademyData()
     return approved
   })

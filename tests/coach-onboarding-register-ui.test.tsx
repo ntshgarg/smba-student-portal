@@ -45,6 +45,7 @@ const workspace: PlayerOnboardingWorkspace = {
       level: null,
       primaryContact: null,
       recordRevision: null,
+      requestedRole: "player",
       requestedAt: "2026-08-15T09:00:00.000Z",
       stage: "request",
     },
@@ -59,6 +60,7 @@ const workspace: PlayerOnboardingWorkspace = {
       level: null,
       primaryContact: { name: "", phone: "", relationship: "" },
       recordRevision: 0,
+      requestedRole: "player",
       requestedAt: null,
       stage: "assessment",
     },
@@ -83,7 +85,8 @@ describe("Player Onboarding Next-Step Register", () => {
       />,
     )
 
-    expect(html).toContain("Player intake register.")
+    expect(html).toContain("Academy intake register.")
+    expect(html).toContain('aria-label="Academy onboarding progress"')
     expect(html).toContain("One ordered queue")
     expect(html).toContain("New requests")
     expect(html).toContain("Assessment")
@@ -99,5 +102,40 @@ describe("Player Onboarding Next-Step Register", () => {
     expect(html).toContain('aria-current="step"')
     expect(html).not.toContain("<main")
     expect(html).not.toContain("View application")
+  })
+
+  it("renders junior-coach requests as staff approval without player assessment copy", () => {
+    const coachWorkspace: PlayerOnboardingWorkspace = {
+      cases: [{
+        academyId: null,
+        academyPlan: null,
+        batch: null,
+        feePlanRecorded: false,
+        fullName: "Arjun Kumar",
+        id: "assessment-player",
+        joinedAt: null,
+        level: null,
+        primaryContact: null,
+        recordRevision: null,
+        requestedRole: "coach",
+        requestedAt: "2026-08-15T09:00:00.000Z",
+        stage: "request",
+      }],
+      summary: { assessment: 0, feePlan: 0, newRequests: 1, session: 0, total: 1 },
+    }
+    const html = renderToStaticMarkup(
+      <PlayerOnboardingRegister
+        financeActive
+        referenceDate="2026-08-16"
+        sessionSeries={[]}
+        workspace={coachWorkspace}
+      />,
+    )
+
+    expect(html).toContain("Review Arjun’s staff request")
+    expect(html).toContain("Junior coach")
+    expect(html).toContain("Coaching staff")
+    expect(html).toContain("Approve staff access")
+    expect(html).not.toContain("court assessment")
   })
 })

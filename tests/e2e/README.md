@@ -78,13 +78,15 @@ changes fixture records.
 ## Attendance workspace smoke suite
 
 The focused attendance suite verifies the dashboard launch card, the standalone
-Record Attendance and Reschedule Attendance destinations, unsaved-draft guards,
-legacy deep-link redirects, and adjustment record focus. It expects the loaded
-100-player fixture server to already be running and does not save or publish
-fixture data.
+Record Attendance and Reschedule Attendance destinations, stale-write protection,
+unsaved-draft guards, legacy deep-link redirects, adjustment record focus, responsive
+roll-call controls, and document overflow. It expects the loaded 100-player fixture
+server to run against a disposable database copy. One test saves and restores a
+roll-call choice, and UI login creates ordinary session records; never point this
+suite at a canonical fixture or production database.
 
 ```sh
-npx playwright test -c tests/e2e/playwright.attendance-workspaces.config.ts
+npm run regression:attendance
 ```
 
 Override the server when needed with

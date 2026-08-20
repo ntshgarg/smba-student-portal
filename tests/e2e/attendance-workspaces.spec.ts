@@ -11,9 +11,19 @@ async function loginAsCoach(page: Page) {
   await page.getByLabel("SMBA username").fill(COACH_ACADEMY_ID)
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
-  await page.waitForURL((url) => url.pathname.startsWith("/coach"), {
+  await page.waitForURL((url) => (
+    url.pathname === "/auth/pin/setup" || url.pathname.startsWith("/coach")
+  ), {
     timeout: 20_000,
   })
+  if (new URL(page.url()).pathname === "/auth/pin/setup") {
+    await page.getByLabel("Enter PIN").fill("135790")
+    await page.getByLabel("Confirm PIN").fill("135790")
+    await page.getByRole("button", { name: "Set up PIN" }).click()
+    await page.waitForURL((url) => url.pathname.startsWith("/coach"), {
+      timeout: 20_000,
+    })
+  }
 }
 
 async function chooseAPlayerWithAnAbsence(page: Page) {
@@ -30,6 +40,9 @@ async function chooseAPlayerWithAnAbsence(page: Page) {
 
   for (const playerId of playerIds) {
     await playerSelect.selectOption(playerId)
+    await expect(page).toHaveURL((url) => url.searchParams.get("player") === playerId)
+    await page.waitForLoadState("networkidle")
+    await expect(page.locator(".coach-adjustment-choice-group").first()).toBeVisible()
     const calendar = page.locator(".coach-adjustment-missed-calendar")
     if (await calendar.isVisible()) return
   }
@@ -384,6 +397,8 @@ test("A valid adjustment deep link expands and focuses its published record", as
   await historyDisclosure.click()
   const firstHistoryItem = page.locator(".coach-adjustment-history-item > button").first()
   await expect(firstHistoryItem).toBeVisible()
+  await firstHistoryItem.click()
+  await expect(firstHistoryItem).toHaveAttribute("aria-expanded", "true")
   const detailsId = await firstHistoryItem.getAttribute("aria-controls")
   expect(detailsId).toMatch(/^adjustment-details-/)
   const adjustmentId = detailsId?.replace("adjustment-details-", "")
@@ -444,6 +459,8 @@ test("A player without missed sessions gets a compact empty step", async ({ page
 
   for (const playerId of playerIds) {
     await playerSelect.selectOption(playerId)
+    await expect(page).toHaveURL((url) => url.searchParams.get("player") === playerId)
+    await page.waitForLoadState("networkidle")
     const compactEmptyStep = page.locator(".coach-adjustment-empty-step.is-compact")
     if (!await compactEmptyStep.isVisible()) continue
 

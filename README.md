@@ -195,8 +195,8 @@ one-use recovery codes must not be shared or photographed.
 
 1. A player or junior coach requests registration with their full name and retains a secure browser receipt.
 2. The request remains pending and cannot sign in.
-3. The head coach reviews it in **Coach Workspace → Player onboarding**.
-4. Approval allocates a random, permanent `SMBA-JC-xxxx` or `SMBA-PL-xxxx` username; the registration browser can then create the password.
+3. The head coach reviews it in **Coach Workspace → Academy onboarding**. Player and junior-coach requests share the same ordered approval queue.
+4. Approval allocates a random, permanent `SMBA-JC-xxxx` or `SMBA-PL-xxxx` username. The original registration browser shows that Academy ID immediately, then requires a verified recovery email before password creation.
 5. A new player begins as **Unassigned**. Approval alone does not make the player attendance-eligible.
 6. The coach records one Level, one Weekday or Weekend Batch and an informational Academy Plan, then continues directly to matching recurring-session assignment. Weekday plans require an exact union of 3, 4 or 5 distinct weekdays across active assignments; the first complete assignment makes the player Active.
 7. Saved attendance is read from the same database by the player dashboard and coach report workflow.

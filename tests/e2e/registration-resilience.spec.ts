@@ -9,7 +9,10 @@ import path from "node:path"
 
 import { expect, test } from "@playwright/test"
 import type { Browser, Page, Route, TestInfo } from "@playwright/test"
+import { base32 } from "@better-auth/utils/base32"
+import { createOTP } from "@better-auth/utils/otp"
 import Database from "better-sqlite3"
+import { symmetricDecrypt } from "better-auth/crypto"
 
 const projectRoot = path.resolve(process.cwd())
 const canonicalDataDirectory = path.join(projectRoot, ".data")
@@ -113,6 +116,24 @@ function academyIdFor(accountId: string) {
       WHERE account_id = ? AND method = 'academy_id' AND revoked_at IS NULL
     `).get(accountId) as { identifier: string } | undefined
   )?.identifier ?? null)
+}
+
+function markRecoveryEmailVerified(accountId: string, email: string) {
+  const database = new Database(databasePath, { fileMustExist: true })
+  try {
+    const now = Date.now()
+    database.prepare(`
+      INSERT INTO auth_recovery_emails (
+        account_id, email, verified_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(account_id) DO UPDATE SET
+        email = excluded.email,
+        verified_at = excluded.verified_at,
+        updated_at = excluded.updated_at
+    `).run(accountId, email, now, now, now)
+  } finally {
+    database.close()
+  }
 }
 
 function credentialEvidence(accountId: string) {
@@ -337,7 +358,53 @@ async function loginAsHeadCoach(browser: Browser) {
     process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!",
   )
   await page.getByRole("button", { name: "Continue" }).click()
-  await page.waitForURL((url) => url.pathname.startsWith("/coach"), { timeout: 20_000 })
+  await page.waitForURL((url) => (
+    url.pathname === "/auth/two-factor/setup"
+      || url.pathname === "/auth/two-factor"
+      || url.pathname === "/auth/pin/setup"
+      || url.pathname.startsWith("/coach")
+  ), { timeout: 20_000 })
+  if (new URL(page.url()).pathname === "/auth/two-factor/setup") {
+    await page.getByLabel("Confirm password").fill(
+      process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!",
+    )
+    await page.getByRole("button", { name: "Set up authenticator" }).click()
+    const manualSecret = await page.locator(".totp-manual-key code").textContent()
+    if (!manualSecret) throw new Error("Authenticator setup did not expose a manual secret.")
+    const authenticatorSecret = new TextDecoder().decode(base32.decode(manualSecret))
+    await page.getByLabel("Confirm six-digit code").fill(
+      await createOTP(authenticatorSecret).totp(),
+    )
+    await page.getByRole("button", { name: "Verify and enter workspace" }).click()
+    await page.waitForURL((url) => (
+      url.pathname === "/auth/pin/setup" || url.pathname.startsWith("/coach")
+    ), { timeout: 20_000 })
+  }
+  if (new URL(page.url()).pathname === "/auth/two-factor") {
+    const row = readDatabase((database) => database.prepare(`
+        SELECT secret
+        FROM auth_two_factors
+        WHERE user_id = '00000000-0000-4000-8000-000000000001'
+          AND verified = 1
+        LIMIT 1
+      `).get() as { secret: string } | undefined)
+    if (!row) throw new Error("The head coach has no verified authenticator secret.")
+    const authenticatorSecret = await symmetricDecrypt({
+      data: row.secret,
+      key: process.env.BETTER_AUTH_SECRET ?? "smba-local-release-test-secret-2026",
+    })
+    await page.getByLabel("Six-digit code").fill(await createOTP(authenticatorSecret).totp())
+    await page.getByRole("button", { name: "Verify and continue" }).click()
+    await page.waitForURL((url) => (
+      url.pathname === "/auth/pin/setup" || url.pathname.startsWith("/coach")
+    ), { timeout: 20_000 })
+  }
+  if (new URL(page.url()).pathname === "/auth/pin/setup") {
+    await page.getByLabel("Enter PIN").fill("135790")
+    await page.getByLabel("Confirm PIN").fill("135790")
+    await page.getByRole("button", { name: "Set up PIN" }).click()
+    await page.waitForURL((url) => url.pathname.startsWith("/coach"), { timeout: 20_000 })
+  }
   return { context, page }
 }
 
@@ -399,6 +466,11 @@ test("a player completes code-free browser activation, optional PIN, and passwor
   expect(credentialEvidence(account.id).activationCodeCount).toBe(0)
 
   await page.goto("/activate", { waitUntil: "domcontentloaded" })
+  await expect(page.getByRole("heading", { name: "Verify your recovery email." })).toBeVisible()
+  await expect(page.getByLabel("Your Academy ID")).toHaveValue(academyId!)
+  await expect(page.getByText("Save this ID. You will use it every time you sign in.")).toBeVisible()
+  markRecoveryEmailVerified(account.id, "browser-claim-player@example.com")
+  await page.reload({ waitUntil: "domcontentloaded" })
   await expect(page.getByRole("heading", { name: "Create your password." })).toBeVisible()
   await expect(page.getByLabel("Academy ID")).toHaveValue(academyId!)
   await page.getByLabel("Create password").fill(password)
@@ -416,4 +488,49 @@ test("a player completes code-free browser activation, optional PIN, and passwor
   expect(evidence.pin?.pinHash).toMatch(/^[0-9a-f]+:[0-9a-f]+$/u)
   await loginAsActivatedPlayer(browser, academyId!, { pin })
   await loginAsActivatedPlayer(browser, academyId!, { password })
+})
+
+test("a junior coach is approved from Academy onboarding and activates staff access", async ({ browser, page }) => {
+  const fullName = "Browser Claim Junior Coach"
+  const password = "A durable junior password!"
+  const pin = "975310"
+  await openRegistration(page)
+  await page.getByLabel("Account type").selectOption("coach")
+  await page.getByLabel("Full name").fill(fullName)
+  await page.getByRole("button", { name: "Request registration" }).click()
+  await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
+  await page.getByRole("link", { name: "View activation status" }).click()
+  await expect(page.getByRole("heading", { name: "Approval is pending." })).toBeVisible()
+
+  const account = registrationRows(fullName)[0]
+  expect(account).toMatchObject({ approvalStatus: "pending", requestedRole: "coach" })
+  const coach = await loginAsHeadCoach(browser)
+  await coach.page.goto(`/coach/onboarding?player=${encodeURIComponent(account.id)}`, {
+    waitUntil: "domcontentloaded",
+  })
+  await expect(coach.page.getByText("Review Browser’s staff request")).toBeVisible()
+  await coach.page.getByRole("button", { name: "Approve staff access" }).click()
+  await expect(coach.page.getByRole("status").filter({
+    hasText: /approved as SMBA-JC-[0-9]{4}/u,
+  }))
+    .toContainText(/approved as SMBA-JC-[0-9]{4}/u)
+  await coach.context.close()
+
+  await expect.poll(() => registrationRows(fullName)[0]?.approvalStatus).toBe("approved")
+  const academyId = academyIdFor(account.id)
+  expect(academyId).toMatch(/^SMBA-JC-[0-9]{4}$/u)
+  await page.goto("/activate", { waitUntil: "domcontentloaded" })
+  await expect(page.getByRole("heading", { name: "Verify your recovery email." })).toBeVisible()
+  await expect(page.getByLabel("Your Academy ID")).toHaveValue(academyId!)
+  markRecoveryEmailVerified(account.id, "browser-claim-junior@example.com")
+  await page.reload({ waitUntil: "domcontentloaded" })
+  await page.getByLabel("Create password").fill(password)
+  await page.getByLabel("Confirm password").fill(password)
+  await page.getByRole("button", { name: "Continue" }).click()
+  await page.waitForURL((url) => url.pathname === "/auth/pin/setup", { timeout: 20_000 })
+  await page.getByLabel("Enter PIN").fill(pin)
+  await page.getByLabel("Confirm PIN").fill(pin)
+  await page.getByRole("button", { name: "Set up PIN" }).click()
+  await page.waitForURL((url) => url.pathname.startsWith("/coach"), { timeout: 20_000 })
+  await expect(page.getByRole("heading", { name: "Personal roll-call ledger" })).toBeVisible()
 })

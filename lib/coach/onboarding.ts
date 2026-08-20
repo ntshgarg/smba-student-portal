@@ -18,6 +18,7 @@ export type OnboardingPendingRequest = {
   createdAt: string
   fullName: string
   id: string
+  requestedRole: "player" | "coach"
 }
 
 export type OnboardingWorkspacePlayer = OnboardingPlayer & {
@@ -43,6 +44,7 @@ export type PlayerOnboardingCase = {
   level: TrainingProgramme | null
   primaryContact: OnboardingWorkspacePlayer["primaryContact"] | null
   recordRevision: number | null
+  requestedRole: "player" | "coach"
   requestedAt: string | null
   stage: PlayerOnboardingStage
 }
@@ -244,6 +246,7 @@ export function derivePlayerOnboardingWorkspace({
     level: null,
     primaryContact: null,
     recordRevision: null,
+    requestedRole: request.requestedRole,
     requestedAt: request.createdAt,
     stage: "request",
   }))
@@ -269,6 +272,7 @@ export function derivePlayerOnboardingWorkspace({
       level: player.level,
       primaryContact: player.primaryContact,
       recordRevision: player.recordRevision,
+      requestedRole: "player",
       requestedAt: null,
       stage,
     }]

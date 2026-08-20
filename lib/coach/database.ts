@@ -239,10 +239,11 @@ export function getPlayerOnboardingWorkspace(
     createdAt: accounts.createdAt,
     fullName: accounts.fullName,
     id: accounts.id,
+    requestedRole: accounts.requestedRole,
   })
     .from(accounts)
     .where(and(
-      eq(accounts.requestedRole, "player"),
+      inArray(accounts.requestedRole, ["player", "coach"]),
       eq(accounts.approvalStatus, "pending"),
       isNull(accounts.archivedAt),
     ))
@@ -251,6 +252,7 @@ export function getPlayerOnboardingWorkspace(
     .map((request) => ({
       ...request,
       createdAt: request.createdAt.toISOString(),
+      requestedRole: request.requestedRole === "coach" ? "coach" as const : "player" as const,
     }))
   const players = db.select({
     academyPlan: playerEnrollments.academyPlan,
