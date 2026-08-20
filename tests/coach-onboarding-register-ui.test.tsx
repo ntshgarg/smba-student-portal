@@ -14,7 +14,7 @@ vi.mock("@/app/coach/actions", () => ({
 }))
 
 vi.mock("@/app/coach/financials/actions", () => ({
-  replaceFeeAgreementAction: vi.fn(),
+  completeOnboardingFinanceAction: vi.fn(),
 }))
 
 vi.mock("@/app/coach/onboarding/actions", () => ({
@@ -39,6 +39,7 @@ const workspace: PlayerOnboardingWorkspace = {
       academyPlan: null,
       batch: null,
       feePlanRecorded: false,
+      firstFeeMonth: null,
       fullName: "Myra Shah",
       id: "request-player",
       joinedAt: null,
@@ -54,6 +55,7 @@ const workspace: PlayerOnboardingWorkspace = {
       academyPlan: null,
       batch: null,
       feePlanRecorded: false,
+      firstFeeMonth: null,
       fullName: "Rohan Kulkarni",
       id: "assessment-player",
       joinedAt: "2026-08-11",
@@ -111,6 +113,7 @@ describe("Player Onboarding Next-Step Register", () => {
         academyPlan: null,
         batch: null,
         feePlanRecorded: false,
+        firstFeeMonth: null,
         fullName: "Arjun Kumar",
         id: "assessment-player",
         joinedAt: null,
@@ -137,5 +140,44 @@ describe("Player Onboarding Next-Step Register", () => {
     expect(html).toContain("Coaching staff")
     expect(html).toContain("Approve staff access")
     expect(html).not.toContain("court assessment")
+  })
+
+  it("makes onboarding the single fee-plan setup and explains current versus future fee issue", () => {
+    const feeWorkspace: PlayerOnboardingWorkspace = {
+      cases: [{
+        academyId: "SMBA#0014",
+        academyPlan: "weekday-3-day",
+        batch: "Weekday",
+        feePlanRecorded: false,
+        firstFeeMonth: "2026-09",
+        fullName: "Rohan Kulkarni",
+        id: "assessment-player",
+        joinedAt: "2026-08-11",
+        level: "Beginner",
+        primaryContact: { name: "", phone: "", relationship: "" },
+        recordRevision: 2,
+        requestedRole: "player",
+        requestedAt: null,
+        stage: "feePlan",
+      }],
+      summary: { assessment: 0, feePlan: 1, newRequests: 0, session: 0, total: 1 },
+    }
+    const html = renderToStaticMarkup(
+      <PlayerOnboardingRegister
+        financeActive
+        referenceDate="2026-08-16"
+        sessionSeries={[]}
+        workspace={feeWorkspace}
+      />,
+    )
+
+    expect(html).toContain("First fee month")
+    expect(html).toContain('min="2026-09"')
+    expect(html).toContain('value="2026-09"')
+    expect(html).toContain("Completing onboarding issues the registration fee")
+    expect(html).toContain("prorates the first monthly fee by scheduled sessions remaining")
+    expect(html).toContain("rounds it to the nearest ₹50")
+    expect(html).toContain("Complete onboarding &amp; issue fees")
+    expect(html).not.toContain("Monthly charges are prepared separately")
   })
 })

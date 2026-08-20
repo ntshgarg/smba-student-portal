@@ -25,6 +25,10 @@ function referenceFactory() {
     "SMBA-7S9T3V5W",
     "SMBA-8X2Y4Z6A",
     "SMBA-9B3C5D7E",
+    "SMBA-2F4G6H8J",
+    "SMBA-3K5M7N9P",
+    "SMBA-4Q6R8S2T",
+    "SMBA-5V7W9X3Y",
   ]
   return () => values.shift() ?? `SMBA-${"A".repeat(8)}`
 }
@@ -80,6 +84,24 @@ describe("Financials V1 service", () => {
       assignedByAccountId: coachId,
       assignedAt: now,
     }).run()
+    const occurrenceDates = ["2026-08-10", "2026-08-12", "2026-08-14"]
+    const weekdays = occurrenceDates.map((date) => (
+      new Date(`${date}T00:00:00.000Z`).getUTCDay()
+    ))
+    database.insert(schema.sessionAssignmentWeekdays).values(weekdays.map((weekday) => ({
+      id: ids(),
+      assignmentId: `finance-assignment-${suffix}`,
+      weekday,
+    }))).run()
+    database.insert(schema.sessionOccurrences).values(occurrenceDates.map((occurrenceDate) => ({
+      id: ids(),
+      createdAt: now,
+      durationMinutes: 60,
+      occurrenceDate,
+      seriesId,
+      startsAt: new Date(`${occurrenceDate}T06:00:00+05:30`),
+      venue: "SMBA Court",
+    }))).run()
   }
 
   beforeAll(async () => {
@@ -126,7 +148,7 @@ describe("Financials V1 service", () => {
     }))
   })
 
-  it("issues the registration Charge atomically for approvals after activation", () => {
+  it("defers registration charging until player onboarding is completed", () => {
     activePlayerId = accountService.registerAccount("Active Player", "player")
     accountService.approveRegistration(activePlayerId, coachId, {
       now,
@@ -137,15 +159,7 @@ describe("Financials V1 service", () => {
       eq(schema.financialCharges.playerAccountId, activePlayerId),
       eq(schema.financialCharges.type, "registration"),
     )).get()
-    expect(charge).toMatchObject({
-      feeReference: "SMBA-7K4M2P8Q",
-      originalAmountPaise: 100_000,
-      dueDate: "2026-08-08",
-      lifecycle: "issued",
-    })
-    expect(database.select().from(schema.financialAuditEvents)
-      .where(eq(schema.financialAuditEvents.entityId, charge?.id ?? "missing")).all())
-      .toHaveLength(1)
+    expect(charge).toBeUndefined()
   })
 
   it("issues and records a legacy registration fee without creating a monthly fee plan", () => {
@@ -415,7 +429,7 @@ describe("Financials V1 service", () => {
       code: "INVALID_INPUT",
       field: "effectiveFrom",
     }))
-    finance.createOrReplaceFeeAgreement({
+    const completion = finance.completePlayerOnboardingFinance({
       playerId: activePlayerId,
       academyPlan: "weekday-3-day",
       level: "Beginner",
@@ -423,8 +437,23 @@ describe("Financials V1 service", () => {
       agreedMonthlyFeePaise: 350_000,
       effectiveFrom: "2026-08-01",
       idempotencyKey: "agreement-active-player",
-    }, { coachId, createId: ids, database, now })
-    expect(() => finance.createOrReplaceFeeAgreement({
+    }, { coachId, createFeeReference: references, createId: ids, database, now })
+    expect(completion).toMatchObject({
+      reused: false,
+      firstMonthlyChargeId: expect.any(String),
+      registrationChargeId: expect.any(String),
+    })
+    expect(finance.completePlayerOnboardingFinance({
+      playerId: activePlayerId,
+      academyPlan: "weekday-3-day",
+      level: "Beginner",
+      batch: "Weekday",
+      agreedMonthlyFeePaise: 350_000,
+      effectiveFrom: "2026-08-01",
+      idempotencyKey: "agreement-active-player",
+    }, { coachId, createFeeReference: references, createId: ids, database, now }))
+      .toMatchObject({ reused: true })
+    expect(() => finance.completePlayerOnboardingFinance({
       playerId: activePlayerId,
       academyPlan: "weekday-3-day",
       level: "Beginner",
@@ -432,7 +461,7 @@ describe("Financials V1 service", () => {
       agreedMonthlyFeePaise: 351_000,
       effectiveFrom: "2026-08-01",
       idempotencyKey: "agreement-active-player",
-    }, { coachId, createId: ids, database, now })).toThrow(expect.objectContaining({
+    }, { coachId, createFeeReference: references, createId: ids, database, now })).toThrow(expect.objectContaining({
       code: "IDEMPOTENCY_CONFLICT",
     }))
     const beforePreparation = finance.getCoachFinanceWorkspace({
@@ -440,7 +469,7 @@ describe("Financials V1 service", () => {
       view: "attention",
     }, { coachId, database, now })
     expect(beforePreparation.players.find((player) => player.playerId === activePlayerId)?.status)
-      .toBe("not_prepared")
+      .toBe("pending")
     expect(beforePreparation.summary.attentionCount).toBeGreaterThan(0)
     const dashboardBeforePreparation = finance.getCoachFinanceDashboardSummary(
       "2026-08",
@@ -448,15 +477,15 @@ describe("Financials V1 service", () => {
     )
     expect(dashboardBeforePreparation.attentionCount).toBeGreaterThan(0)
     expect(dashboardBeforePreparation.preparation).toEqual({
-      ready: 2,
-      alreadyPrepared: 0,
+      ready: 1,
+      alreadyPrepared: 1,
     })
 
     const prepared = finance.prepareMonthlyCharges({
       period: "2026-08",
       idempotencyKey: "prepare-2026-08",
     }, { coachId, createFeeReference: references, createId: ids, database, now })
-    expect(prepared).toMatchObject({ ready: 2, reused: false })
+    expect(prepared).toMatchObject({ ready: 1, alreadyPrepared: 1, reused: false })
     monthlyChargeId = database.select({ id: schema.financialCharges.id })
       .from(schema.financialCharges).where(and(
         eq(schema.financialCharges.playerAccountId, activePlayerId),
@@ -488,10 +517,7 @@ describe("Financials V1 service", () => {
     }, { coachId, database, now: overdueReference })
     expect(unresolvedOverdueWorkspace.players.find((player) => (
       player.playerId === unresolvedPlayerId
-    ))).toMatchObject({
-      outstandingPaise: 350_000,
-      status: "setup_required",
-    })
+    ))).toBeUndefined()
     expect(finance.getCoachFinanceDashboardSummary("2026-08", {
       coachId,
       database,
@@ -520,7 +546,7 @@ describe("Financials V1 service", () => {
     }, { coachId, database, now })
     expect(unresolvedWorkspace.players.find((player) => (
       player.playerId === unresolvedPlayerId
-    ))?.status).toBe("setup_required")
+    ))).toBeUndefined()
     expect(finance.getCoachFinanceDashboardSummary("2026-08", { coachId, database, now }))
       .toMatchObject({ attentionCount: unresolvedWorkspace.summary.attentionCount })
     const issuedRegistration = finance.resolveExistingRegistrationFee({
@@ -543,7 +569,7 @@ describe("Financials V1 service", () => {
       status: "paid",
     })
     expect(finance.getCoachFinanceDashboardSummary("2026-08", { coachId, database, now })
-      .attentionCount).toBe(unresolvedWorkspace.summary.attentionCount - 1)
+      .attentionCount).toBe(unresolvedWorkspace.summary.attentionCount)
     expect(database.select().from(schema.financialCharges)
       .where(eq(schema.financialCharges.id, monthlyChargeId)).get()).toMatchObject({
       originalAmountPaise: 350_000,

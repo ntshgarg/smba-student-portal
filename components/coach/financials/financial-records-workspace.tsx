@@ -104,7 +104,7 @@ export type FinancialRecordsWorkspaceProps =
   }
 
 const statusLabels: Record<FinanceStatus, string> = {
-  not_prepared: "Not prepared",
+  not_prepared: "Not issued",
   overdue: "Overdue",
   paid: "Paid",
   partially_paid: "Partially paid",
@@ -346,7 +346,7 @@ function FeeRegisterTable({
                   <small>{row.academyId}{row.archived ? " · Archived" : ""}</small>
                 </td>
                 <td className={recordsStyles.registrationEntry} data-label={isRegistration ? "Registration entry" : "Monthly fee"}>
-                  <strong>{row.feeReference ?? "Not prepared"}</strong>
+                  <strong>{row.feeReference ?? "Not issued"}</strong>
                   <small>{dueLabel}{adjustments ? ` · ${adjustments}` : " · No adjustments"}</small>
                 </td>
                 <td className={recordsStyles.registrationAmounts} data-label="Amounts">
@@ -467,8 +467,7 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
             <option value="partially_paid">Partially paid</option>
             <option value="pending">Pending</option>
             <option value="paid">Paid</option>
-            <option value="not_prepared">Not prepared</option>
-            <option value="setup_required">Setup required</option>
+            <option value="not_prepared">Not issued</option>
             <option value="void">Void</option>
           </select>
         </label>

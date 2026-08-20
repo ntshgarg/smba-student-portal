@@ -254,7 +254,7 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
     }, { coachId, database, now }).rows).toHaveLength(1)
     expect(finance.getFeeRegister({
       mode: "registration",
-    }, { coachId, database, now }).rows[0]).toMatchObject({ status: "setup_required" })
+    }, { coachId, database, now }).rows).toHaveLength(0)
   })
 
   it("provides a lifecycle-aware collections day book and readable activity", () => {

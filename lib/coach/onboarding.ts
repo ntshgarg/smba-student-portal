@@ -38,6 +38,7 @@ export type PlayerOnboardingCase = {
   academyPlan: AcademyPlan | null
   batch: TrainingBatch | null
   feePlanRecorded: boolean
+  firstFeeMonth: string | null
   fullName: string
   id: string
   joinedAt: string | null
@@ -172,6 +173,30 @@ function hasCurrentOrFutureAssignment(
   })
 }
 
+function firstFeeMonth(
+  assignments: OnboardingAssignment[],
+  player: OnboardingPlayer,
+  referenceDate: string,
+) {
+  if (!player.level || !player.batch) return null
+  const starts = assignments.flatMap((assignment) => {
+    const range = assignmentRange(assignment)
+    return range !== null
+      && assignment.programme === player.level
+      && assignment.batch === player.batch
+      && assignment.seriesStatus === "active"
+      && (range.end === null || range.end >= referenceDate)
+      ? [range.start]
+      : []
+  })
+  if (!starts.length) return null
+  const assignmentMonth = starts.reduce((earliest, value) => (
+    value < earliest ? value : earliest
+  )).slice(0, 7)
+  const referenceMonth = referenceDate.slice(0, 7)
+  return assignmentMonth > referenceMonth ? assignmentMonth : referenceMonth
+}
+
 function onboardingStage(
   assignments: OnboardingAssignment[],
   feePlans: OnboardingFeePlan[],
@@ -240,6 +265,7 @@ export function derivePlayerOnboardingWorkspace({
     academyPlan: null,
     batch: null,
     feePlanRecorded: false,
+    firstFeeMonth: null,
     fullName: request.fullName,
     id: request.id,
     joinedAt: null,
@@ -266,6 +292,7 @@ export function derivePlayerOnboardingWorkspace({
       academyPlan: player.academyPlan,
       batch: player.batch,
       feePlanRecorded: playerFeePlans.length > 0,
+      firstFeeMonth: firstFeeMonth(playerAssignments, player, referenceDate),
       fullName: player.fullName,
       id: player.id,
       joinedAt: player.joinedAt,

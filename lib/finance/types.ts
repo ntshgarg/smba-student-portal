@@ -283,6 +283,16 @@ export type CreateFeeAgreementInput = {
   idempotencyKey: string
 }
 
+export type CompleteOnboardingFinanceResult = {
+  agreementId: string
+  firstMonthlyChargeId: string | null
+  firstMonthlyFeePaise: number | null
+  firstMonthlyRemainingSessions: number | null
+  firstMonthlyTotalSessions: number | null
+  registrationChargeId: string
+  reused: boolean
+}
+
 export type PrepareMonthlyChargesInput = {
   period: string
   idempotencyKey: string

@@ -226,7 +226,7 @@ function RegistrationBand({ record }: { record: PlayerFeeRecord }) {
         aria-label="Registration fee"
       >
         <strong>Registration fee</strong>
-        <p>Record being prepared</p>
+        <p>Available after onboarding</p>
       </section>
     )
   }

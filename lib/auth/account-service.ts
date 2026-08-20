@@ -29,7 +29,6 @@ import {
   coachProfiles,
   playerEnrollments,
 } from "@/lib/db/schema"
-import { issueRegistrationChargeForApprovedPlayer } from "@/lib/finance/service"
 import {
   createActivationClaimToken,
   extendActivationClaim,
@@ -330,14 +329,6 @@ export function approveRegistration(
         joinedAt: now,
         updatedAt: now,
       }).run()
-      issueRegistrationChargeForApprovedPlayer({
-        approvedAt: now,
-        coachId: coachAccountId,
-        createFeeReference: options.createFeeReference,
-        createId: options.createFinanceId,
-        database: tx,
-        playerId: registration.id,
-      })
     } else {
       tx.insert(coachProfiles).values({
         accountId: registration.id,

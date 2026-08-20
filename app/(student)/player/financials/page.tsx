@@ -57,7 +57,7 @@ export default async function PlayerFinancialsPage({
       ) : (
         <section className={`${styles.pageState} empty-state`} aria-labelledby="fee-record-empty-title">
           <ReceiptText aria-hidden="true" />
-          <h2 id="fee-record-empty-title">Your fee record is being prepared.</h2>
+          <h2 id="fee-record-empty-title">Your fee record will appear after onboarding.</h2>
           <p>Charges and payments will appear here once the academy completes the setup.</p>
         </section>
       )}

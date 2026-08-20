@@ -8,6 +8,7 @@ import {
   applyConcession,
   applyChargeAdjustment,
   createConcession,
+  completePlayerOnboardingFinance,
   createOrReplaceFeeAgreement,
   endFeeAgreement,
   FinanceServiceError,
@@ -148,6 +149,23 @@ export async function replaceFeeAgreementAction(
   })
 }
 
+export async function completeOnboardingFinanceAction(
+  input: CreateFeeAgreementInput,
+): Promise<FinanceActionResult> {
+  return runFinanceAction((coachId) => {
+    const result = completePlayerOnboardingFinance(input, { coachId })
+    return {
+      message: result.reused
+        ? "Onboarding fees were already issued"
+        : result.firstMonthlyChargeId
+          ? `Registration and prorated first monthly fee issued for ${result.firstMonthlyRemainingSessions} of ${result.firstMonthlyTotalSessions} sessions`
+          : result.firstMonthlyTotalSessions !== null
+            ? "Registration fee issued; no monthly fee is due because no sessions remain this month"
+            : "Registration fee issued; the first monthly fee will join its selected month",
+    }
+  })
+}
+
 export async function endFeeAgreementAction(
   input: EndFeeAgreementInput,
 ): Promise<FinanceActionResult> {
@@ -174,8 +192,8 @@ export async function prepareMonthlyChargesAction(
     const count = result.createdChargeIds.length
     return {
       message: result.reused
-        ? "Monthly fees were already prepared"
-        : `${count} ${count === 1 ? "monthly fee" : "monthly fees"} prepared`,
+        ? "Monthly fees were already issued"
+        : `${count} ${count === 1 ? "monthly fee" : "monthly fees"} issued`,
     }
   })
 }

@@ -94,6 +94,28 @@ export function calculateUnusedMonthRefundLimit(
   return Math.floor((effectiveAmountPaise * unusedDays) / daysInMonth)
 }
 
+export function calculateProratedSessionFee(
+  agreedMonthlyFeePaise: number,
+  remainingSessions: number,
+  totalSessions: number,
+) {
+  if (!Number.isInteger(agreedMonthlyFeePaise) || agreedMonthlyFeePaise <= 0
+    || !Number.isInteger(totalSessions) || totalSessions <= 0
+    || !Number.isInteger(remainingSessions) || remainingSessions < 0
+    || remainingSessions > totalSessions) {
+    throw new Error("Invalid session fee proration.")
+  }
+  if (remainingSessions === 0) return 0
+  if (remainingSessions === totalSessions) return agreedMonthlyFeePaise
+
+  const exactPaise = (agreedMonthlyFeePaise * remainingSessions) / totalSessions
+  const fiftyRupeesPaise = 5_000
+  // Offline academy collections use simple denominations. Round a partial
+  // joining-month fee once to the nearest INR 50 (ties round upward), then
+  // keep the resulting Charge immutable. A full month retains its exact fee.
+  return Math.round(exactPaise / fiftyRupeesPaise) * fiftyRupeesPaise
+}
+
 export function dateInMonth(period: string, day: number) {
   if (!isValidMonthKey(period) || !Number.isInteger(day) || day < 1 || day > 28) {
     throw new Error("Invalid billing due date.")

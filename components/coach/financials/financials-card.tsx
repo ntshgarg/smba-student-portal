@@ -42,10 +42,10 @@ export function FinancialsCard({
     : "Fee records are ready to review"
   const month = formatPeriod(period)
   const preparationState = preparation.ready > 0
-    ? `${month} fees not prepared`
+    ? `${month} fees ready to issue`
     : preparation.alreadyPrepared > 0
-      ? `${month} fees prepared`
-      : "No monthly fees to prepare"
+      ? `${month} fees issued`
+      : "No monthly fees to issue"
 
   return (
     <CoachDashboardCard

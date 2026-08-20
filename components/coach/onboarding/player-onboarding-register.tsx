@@ -20,7 +20,7 @@ import {
   rejectRegistrationAction,
   saveMemberAction,
 } from "@/app/coach/actions"
-import { replaceFeeAgreementAction } from "@/app/coach/financials/actions"
+import { completeOnboardingFinanceAction } from "@/app/coach/financials/actions"
 import { assignOnboardingSessionAction } from "@/app/coach/onboarding/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
@@ -615,10 +615,11 @@ function FeePlanStep({
   referenceDate: string
 }) {
   const [monthlyFee, setMonthlyFee] = useState("")
-  const [effectiveMonth, setEffectiveMonth] = useState(referenceDate.slice(0, 7))
+  const firstFeeMonth = item.firstFeeMonth ?? referenceDate.slice(0, 7)
+  const [effectiveMonth, setEffectiveMonth] = useState(firstFeeMonth)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   const [busy, setBusy] = useState(false)
-  const isDirty = monthlyFee !== "" || effectiveMonth !== referenceDate.slice(0, 7)
+  const isDirty = monthlyFee !== "" || effectiveMonth !== firstFeeMonth
   const guard = useUnsavedWorkGuard({
     isDirty,
     scope: `onboarding-fee-plan-${item.id}`,
@@ -664,7 +665,7 @@ function FeePlanStep({
     }
     setBusy(true)
     setFeedback(null)
-    const result = await replaceFeeAgreementAction({
+    const result = await completeOnboardingFinanceAction({
       playerId: item.id,
       academyPlan: item.academyPlan,
       level: item.level,
@@ -680,7 +681,7 @@ function FeePlanStep({
       return
     }
     guard.navigateAfterCommit(() => onSuccess({
-      message: `${item.fullName} is fully onboarded. Their Fee Plan is ready for monthly preparation.`,
+      message: `${item.fullName} is fully onboarded. ${result.message}.`,
       remove: true,
     }))
   }
@@ -707,21 +708,24 @@ function FeePlanStep({
           /></span>
         </label>
         <label>
-          <span>Track from month</span>
+          <span>First fee month</span>
           <input
             name="effectiveMonth"
             type="month"
+            min={firstFeeMonth}
             value={effectiveMonth}
             onChange={(event) => setEffectiveMonth(event.target.value)}
           />
         </label>
       </div>
-      <p className={styles.feeNote}>Monthly charges are prepared separately after this Fee Plan is recorded.</p>
+      <p className={styles.feeNote}>
+        Completing onboarding issues the registration fee. Choosing this month prorates the first monthly fee by scheduled sessions remaining and rounds it to the nearest ₹50; a future month joins that month’s full fee issue.
+      </p>
       <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <Link href={`/coach/financials/players/${encodeURIComponent(item.id)}?mode=monthly`}>Open finance record</Link>
         <button className={styles.primaryButton} type="submit" disabled={busy}>
-          {busy ? "Creating…" : "Create Fee Plan & complete"} <ArrowRight aria-hidden="true" />
+          {busy ? "Completing…" : "Complete onboarding & issue fees"} <ArrowRight aria-hidden="true" />
         </button>
       </div>
     </form>

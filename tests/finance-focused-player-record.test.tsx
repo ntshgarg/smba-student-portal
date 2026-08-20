@@ -103,7 +103,7 @@ describe("focused player fee record", () => {
     expect(html).not.toContain("Record payment")
   })
 
-  it("keeps the compact first-time fee-plan workflow available", () => {
+  it("returns first-time fee-plan setup to the consolidated onboarding workflow", () => {
     const setupLedger: PlayerFinancialLedgerView = {
       ...archivedLedger,
       archived: false,
@@ -130,10 +130,10 @@ describe("focused player fee record", () => {
       <PlayerLedger focused ledger={setupLedger} period="2026-08" />,
     )
 
-    expect(html).toContain("Create fee plan")
-    expect(html).toContain("Agreed monthly fee")
-    expect(html).toContain("Track from")
-    expect(html).toContain("Academy Plan")
+    expect(html).toContain("Complete this player’s onboarding first")
+    expect(html).toContain("Continue Player Onboarding")
+    expect(html).toContain(`/coach/onboarding?player=${setupLedger.playerId}`)
+    expect(html).not.toContain("Create fee plan")
   })
 
   it("keeps the old finance route from bypassing session assignment", () => {
@@ -163,7 +163,7 @@ describe("focused player fee record", () => {
       <PlayerLedger focused ledger={setupLedger} period="2026-08" />,
     )
 
-    expect(html).toContain("Assign a matching session before creating the Fee Plan")
+    expect(html).toContain("Complete this player’s onboarding first")
     expect(html).toContain("Continue Player Onboarding")
     expect(html).toContain(`/coach/onboarding?player=${setupLedger.playerId}`)
     expect(html).not.toContain("Agreed monthly fee")
