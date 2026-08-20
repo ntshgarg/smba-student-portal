@@ -681,9 +681,7 @@ function FeePlanStep({
       return
     }
     guard.navigateAfterCommit(() => onSuccess({
-      message: effectiveMonth === referenceDate.slice(0, 7)
-        ? `${item.fullName} is fully onboarded. Registration and ${effectiveMonth} fees are now due.`
-        : `${item.fullName} is fully onboarded. Registration is due; monthly fees begin in ${effectiveMonth}.`,
+      message: `${item.fullName} is fully onboarded. ${result.message}.`,
       remove: true,
     }))
   }

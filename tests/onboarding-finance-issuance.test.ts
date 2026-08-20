@@ -34,16 +34,24 @@ describe("onboarding finance issuance", () => {
     "SMBA-789ABCDE",
     "SMBA-89ABCDEF",
     "SMBA-9ABCDEFG",
+    "SMBA-BCDEFGHJ",
+    "SMBA-CDEFGHJK",
+    "SMBA-DEFGHJKL",
+    "SMBA-EFGHJKLM",
+    "SMBA-FGHJKLMN",
+    "SMBA-GHJKLMNP",
   ]
   const references = () => feeReferences.shift() ?? "SMBA-ABCDEFGH"
   const onboardingNow = new Date("2026-08-18T10:00:00+05:30")
 
   function createAssessedPlayer({
     assignmentFrom,
+    assignmentTo,
     name,
     occurrences = [],
   }: {
     assignmentFrom: string
+    assignmentTo?: string
     name: string
     occurrences?: Array<{
       date: string
@@ -79,6 +87,7 @@ describe("onboarding finance issuance", () => {
       assignedAt: onboardingNow,
       assignedByAccountId: coachId,
       effectiveFrom: assignmentFrom,
+      effectiveTo: assignmentTo,
       seriesId,
     }).run()
     const weekdays = [...new Set(occurrences.map(({ date }) => (
@@ -251,6 +260,39 @@ describe("onboarding finance issuance", () => {
     )).all()).toHaveLength(1)
   })
 
+  it("rejects a future first fee month outside the assigned session period", () => {
+    const playerId = createAssessedPlayer({
+      assignmentFrom: "2026-09-01",
+      assignmentTo: "2026-09-30",
+      name: "Expired Future Assignment Player",
+      occurrences: [{ date: "2026-09-02" }],
+    })
+
+    expect(() => finance.completePlayerOnboardingFinance({
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 350_000,
+      batch: "Weekday",
+      effectiveFrom: "2026-10-01",
+      idempotencyKey: "reject-fee-after-assignment",
+      level: "Beginner",
+      playerId,
+    }, {
+      coachId,
+      createFeeReference: references,
+      createId: ids,
+      database,
+      now: onboardingNow,
+    })).toThrow(expect.objectContaining({ code: "SETUP_REQUIRED", field: "effectiveFrom" }))
+    expect(database.select().from(schema.feeAgreements).where(eq(
+      schema.feeAgreements.playerAccountId,
+      playerId,
+    )).all()).toHaveLength(0)
+    expect(database.select().from(schema.financialCharges).where(eq(
+      schema.financialCharges.playerAccountId,
+      playerId,
+    )).all()).toHaveLength(0)
+  })
+
   it("rolls back every finance record when the selected month has no matching session", () => {
     const playerId = createAssessedPlayer({
       assignmentFrom: "2026-09-01",
@@ -308,6 +350,66 @@ describe("onboarding finance issuance", () => {
       firstMonthlyRemainingSessions: 1,
       firstMonthlyTotalSessions: 3,
     })
+  })
+
+  it("treats a session at the exact onboarding instant as already started", () => {
+    const playerId = createAssessedPlayer({
+      assignmentFrom: "2026-08-01",
+      name: "Exact Start Player",
+      occurrences: [
+        { date: "2026-08-18", startTime: "10:00" },
+        { date: "2026-08-25", startTime: "10:00" },
+      ],
+    })
+    const completed = finance.completePlayerOnboardingFinance({
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 350_000,
+      batch: "Weekday",
+      effectiveFrom: "2026-08-01",
+      idempotencyKey: "complete-at-exact-session-start",
+      level: "Beginner",
+      playerId,
+    }, { coachId, createFeeReference: references, createId: ids, database, now: onboardingNow })
+
+    expect(completed).toMatchObject({
+      firstMonthlyFeePaise: 175_000,
+      firstMonthlyRemainingSessions: 1,
+      firstMonthlyTotalSessions: 2,
+    })
+  })
+
+  it("rejects a partial fee that would round to a zero-value charge", () => {
+    const playerId = createAssessedPlayer({
+      assignmentFrom: "2026-08-01",
+      name: "Tiny Fee Player",
+      occurrences: [
+        { date: "2026-08-04" },
+        { date: "2026-08-11" },
+        { date: "2026-08-25" },
+      ],
+    })
+
+    expect(() => finance.completePlayerOnboardingFinance({
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 100,
+      batch: "Weekday",
+      effectiveFrom: "2026-08-01",
+      idempotencyKey: "reject-zero-rounded-fee",
+      level: "Beginner",
+      playerId,
+    }, { coachId, createFeeReference: references, createId: ids, database, now: onboardingNow }))
+      .toThrow(expect.objectContaining({
+        code: "INVALID_INPUT",
+        field: "agreedMonthlyFeePaise",
+      }))
+    expect(database.select().from(schema.feeAgreements).where(eq(
+      schema.feeAgreements.playerAccountId,
+      playerId,
+    )).all()).toHaveLength(0)
+    expect(database.select().from(schema.financialCharges).where(eq(
+      schema.financialCharges.playerAccountId,
+      playerId,
+    )).all()).toHaveLength(0)
   })
 
   it("creates no joining-month fee when no sessions remain and starts the plan next month", () => {

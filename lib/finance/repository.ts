@@ -138,6 +138,7 @@ export function hasAssignmentInPeriod(
       eq(sessionAssignments.accountId, playerId),
       training ? eq(sessionSeries.programme, training.programme) : undefined,
       training ? eq(sessionSeries.batch, training.batch) : undefined,
+      eq(sessionSeries.status, "active"),
       lte(sessionAssignments.effectiveFrom, monthEnd(period)),
       or(
         isNull(sessionAssignments.effectiveTo),
@@ -208,7 +209,7 @@ export function readFirstMonthSessionProration(
     && weekdaysByAssignment.get(assignment.id)?.has(weekdayForDateKey(occurrence.eligibilityDate))
   )))
   const remainingOccurrences = totalOccurrences.filter((occurrence) => (
-    occurrence.startsAt.getTime() >= referenceInstant.getTime()
+    occurrence.startsAt.getTime() > referenceInstant.getTime()
     && assignments.some((assignment) => (
       assignment.seriesId === occurrence.seriesId
       && occurrence.eligibilityDate >= assignment.effectiveFrom

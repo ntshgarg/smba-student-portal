@@ -876,17 +876,17 @@ export function completePlayerOnboardingFinance(
     requireFinanceActive(tx)
     let firstMonthProration: { remainingSessions: number; totalSessions: number } | null = null
     let agreementInput = input
+    if (!hasAssignmentInPeriod(tx, input.playerId, firstFeePeriod, {
+      programme: input.level,
+      batch: input.batch,
+    })) {
+      financeError(
+        "SETUP_REQUIRED",
+        "Choose a first fee month covered by the player’s assigned session.",
+        "effectiveFrom",
+      )
+    }
     if (firstFeePeriod === onboardingPeriod) {
-      if (!hasAssignmentInPeriod(tx, input.playerId, firstFeePeriod, {
-        programme: input.level,
-        batch: input.batch,
-      })) {
-        financeError(
-          "SETUP_REQUIRED",
-          "Choose the month in which the player’s assigned session begins.",
-          "effectiveFrom",
-        )
-      }
       firstMonthProration = readFirstMonthSessionProration(tx, {
         batch: input.batch,
         period: firstFeePeriod,
@@ -910,6 +910,20 @@ export function completePlayerOnboardingFinance(
     }
 
     const agreementResult = createAgreement(tx, agreementInput, { actorId: coachId, createId, now })
+    const firstMonthlyAmountPaise = firstMonthProration?.remainingSessions
+      ? calculateProratedSessionFee(
+          agreementResult.agreement.agreedMonthlyFeePaise,
+          firstMonthProration.remainingSessions,
+          firstMonthProration.totalSessions,
+        )
+      : null
+    if (firstMonthlyAmountPaise === 0) {
+      financeError(
+        "INVALID_INPUT",
+        "The agreed monthly fee is too low to create a partial fee rounded to ₹50.",
+        "agreedMonthlyFeePaise",
+      )
+    }
     const registration = issueCharge(tx, {
       actorId: coachId,
       amountPaise: REGISTRATION_FEE_PAISE,
@@ -924,6 +938,9 @@ export function completePlayerOnboardingFinance(
 
     let firstMonthlyCharge: ReturnType<typeof issueCharge> | null = null
     if (firstMonthProration && firstMonthProration.remainingSessions > 0) {
+      if (firstMonthlyAmountPaise === null) {
+        throw new Error("The first monthly fee could not be calculated.")
+      }
       const normalDueDate = dateInMonth(firstFeePeriod, agreementResult.agreement.monthlyDueDay)
       const firstAssignment = readFirstAssignmentDate(tx, input.playerId)
       const chargeReadyDate = [onboardingDate, firstAssignment ?? onboardingDate]
@@ -931,15 +948,10 @@ export function completePlayerOnboardingFinance(
       const dueDate = chargeReadyDate > normalDueDate
         ? addCalendarDays(chargeReadyDate, 3)
         : normalDueDate
-      const proratedAmountPaise = calculateProratedSessionFee(
-        agreementResult.agreement.agreedMonthlyFeePaise,
-        firstMonthProration.remainingSessions,
-        firstMonthProration.totalSessions,
-      )
       firstMonthlyCharge = issueCharge(tx, {
         actorId: coachId,
         agreementId: agreementResult.agreement.id,
-        amountPaise: proratedAmountPaise,
+        amountPaise: firstMonthlyAmountPaise,
         billingPeriod: firstFeePeriod,
         createFeeReference,
         createId,
