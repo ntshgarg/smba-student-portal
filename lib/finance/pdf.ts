@@ -63,7 +63,7 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
 }
 
 const STATUS_LABELS: Record<FinanceStatus, string> = {
-  not_prepared: "Not prepared",
+  not_prepared: "Not issued",
   overdue: "Overdue",
   paid: "Paid",
   partially_paid: "Partially paid",

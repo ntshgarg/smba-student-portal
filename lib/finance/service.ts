@@ -75,6 +75,7 @@ import {
   type CoachFinanceWorkspace,
   type CoachFinanceDashboardSummary,
   type CoachFinanceRapidDesk,
+  type CompleteOnboardingFinanceResult,
   type CreateFeeAgreementInput,
   type CreateConcessionInput,
   type ExistingPlayerFinanceSetupInput,
@@ -841,6 +842,96 @@ export function createOrReplaceFeeAgreement(
     requireCoach(tx, coachId)
     requireFinanceActive(tx)
     return createAgreement(tx, input, { actorId: coachId, createId, now })
+  }, { behavior: "immediate" })
+}
+
+export function completePlayerOnboardingFinance(
+  input: CreateFeeAgreementInput,
+  {
+    coachId,
+    createFeeReference = createOpaqueFeeReference,
+    createId = randomUUID,
+    database = initializeDatabase(),
+    now = new Date(),
+  }: CoachContext,
+): CompleteOnboardingFinanceResult {
+  if (!input || typeof input !== "object" || typeof input.effectiveFrom !== "string") {
+    financeError("INVALID_INPUT", "Choose a valid first fee month.", "effectiveFrom")
+  }
+  const onboardingDate = getAcademyDateKey(now)
+  const onboardingPeriod = onboardingDate.slice(0, 7)
+  const firstFeePeriod = input.effectiveFrom.slice(0, 7)
+  if (!isValidMonthKey(firstFeePeriod) || firstFeePeriod < onboardingPeriod) {
+    financeError(
+      "INVALID_INPUT",
+      "The first fee month cannot be earlier than the onboarding month.",
+      "effectiveFrom",
+    )
+  }
+
+  return database.transaction((tx) => {
+    requireCoach(tx, coachId)
+    requireFinanceActive(tx)
+    const agreementResult = createAgreement(tx, input, { actorId: coachId, createId, now })
+    const registration = issueCharge(tx, {
+      actorId: coachId,
+      amountPaise: REGISTRATION_FEE_PAISE,
+      createFeeReference,
+      createId,
+      description: "SMBA registration fee",
+      dueDate: onboardingDate,
+      now,
+      playerId: input.playerId,
+      type: "registration",
+    })
+
+    let firstMonthlyCharge: ReturnType<typeof issueCharge> | null = null
+    if (firstFeePeriod === onboardingPeriod) {
+      if (!hasAssignmentInPeriod(tx, input.playerId, firstFeePeriod, {
+        programme: input.level,
+        batch: input.batch,
+      })) {
+        financeError(
+          "SETUP_REQUIRED",
+          "Choose the month in which the player’s assigned session begins.",
+          "effectiveFrom",
+        )
+      }
+      const normalDueDate = dateInMonth(firstFeePeriod, agreementResult.agreement.monthlyDueDay)
+      const firstAssignment = readFirstAssignmentDate(tx, input.playerId)
+      const chargeReadyDate = [onboardingDate, firstAssignment ?? onboardingDate]
+        .reduce((latest, value) => value > latest ? value : latest)
+      const dueDate = chargeReadyDate > normalDueDate
+        ? addCalendarDays(chargeReadyDate, 3)
+        : normalDueDate
+      firstMonthlyCharge = issueCharge(tx, {
+        actorId: coachId,
+        agreementId: agreementResult.agreement.id,
+        amountPaise: agreementResult.agreement.agreedMonthlyFeePaise,
+        billingPeriod: firstFeePeriod,
+        createFeeReference,
+        createId,
+        description: `Monthly training fee · ${firstFeePeriod}`,
+        dueDate,
+        now,
+        playerId: input.playerId,
+        type: "monthly_training",
+      })
+      applyRecurringConcessionForCharge(tx, firstMonthlyCharge.charge, firstFeePeriod, {
+        actorId: coachId,
+        createId,
+        now,
+      })
+    }
+
+    return {
+      agreementId: agreementResult.agreement.id,
+      firstMonthlyChargeId: firstMonthlyCharge?.charge.id ?? null,
+      registrationChargeId: registration.charge.id,
+      reused: agreementResult.reused
+        && !registration.created
+        && (firstMonthlyCharge === null || !firstMonthlyCharge.created),
+    }
   }, { behavior: "immediate" })
 }
 

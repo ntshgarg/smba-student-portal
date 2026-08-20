@@ -205,7 +205,7 @@ describe("player financial presentation", () => {
       status: "setup_required",
       currentBalancePaise: 0,
       nextDueDate: null,
-    }).status).toBe("Fee record is being prepared")
+    }).status).toBe("Player onboarding in progress")
     expect(dashboardFeeRecordCopy({
       status: "partially_paid",
       currentBalancePaise: 200_000,

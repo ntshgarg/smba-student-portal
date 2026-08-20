@@ -7,8 +7,8 @@ import type {
 } from "@/lib/finance/types"
 
 const STATUS_LABELS: Record<FinanceStatus, string> = {
-  setup_required: "Being prepared",
-  not_prepared: "Being prepared",
+  setup_required: "Onboarding in progress",
+  not_prepared: "Monthly fee not issued",
   pending: "Pending",
   partially_paid: "Partially paid",
   overdue: "Payment due",
@@ -106,15 +106,15 @@ export function dashboardFeeRecordCopy(
 
   if (summary.status === "setup_required") {
     return {
-      status: "Fee record is being prepared",
-      detail: "Your academy fees will appear here once the record is ready.",
+      status: "Player onboarding in progress",
+      detail: "Your academy fees will appear here after onboarding is complete.",
     }
   }
 
   if (summary.status === "not_prepared") {
     return {
-      status: "Fee record is being prepared",
-      detail: "Your next monthly fee will appear after the academy prepares the record.",
+      status: "Monthly fee not issued",
+      detail: "Your next monthly fee will appear after the academy issues it.",
     }
   }
 

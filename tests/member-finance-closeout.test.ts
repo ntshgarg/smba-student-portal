@@ -54,20 +54,32 @@ describe("member archival financial closeout", () => {
       accountId: playerId,
       seriesId,
       effectiveFrom: "2026-08-20",
-      effectiveTo: "2026-08-20",
+      effectiveTo: null,
       assignedByAccountId: coachId,
       assignedAt: now,
     }).run()
-    const agreement = finance.createOrReplaceFeeAgreement({
+    const completion = finance.completePlayerOnboardingFinance({
       playerId,
       academyPlan: "weekday-3-day",
       level: "Beginner",
       batch: "Weekday",
       agreedMonthlyFeePaise: 350_000,
-      effectiveFrom: "2026-08-01",
+      effectiveFrom: "2026-09-01",
       monthlyDueDay: 5,
       idempotencyKey: `${playerId}:fee-plan`,
-    }, { coachId, createId, database, now }).agreement
+    }, {
+      coachId,
+      createFeeReference: () => feeReference,
+      createId,
+      database,
+      now,
+    })
+    const agreement = database.select().from(schema.feeAgreements)
+      .where(eq(schema.feeAgreements.id, completion.agreementId)).get()
+    if (!agreement) throw new Error("The completed onboarding Fee Plan is unavailable.")
+    database.update(schema.sessionAssignments).set({
+      effectiveTo: "2026-08-19",
+    }).where(eq(schema.sessionAssignments.accountId, playerId)).run()
     return { agreement, playerId }
   }
 
@@ -143,7 +155,7 @@ describe("member archival financial closeout", () => {
 
     finance.endFeeAgreement({
       agreementId: agreement.id,
-      effectiveThroughPeriod: "2026-08",
+      effectiveThroughPeriod: "2026-09",
       reason: "Player is leaving the academy",
       expectedRevision: agreement.recordRevision,
       idempotencyKey: "member-closeout-end-plan",

@@ -46,7 +46,7 @@ export function PrepareFees({
       }
     } catch (error) {
       setFeedback({
-        message: error instanceof Error ? error.message : "Monthly fees could not be prepared",
+        message: error instanceof Error ? error.message : "Monthly fees could not be issued",
         tone: "error",
       })
     } finally {
@@ -58,8 +58,8 @@ export function PrepareFees({
     <section className={`${styles.preparation} ${compact ? styles.compactPreparation : ""}`} aria-labelledby="financial-preparation-title">
       <div className={styles.preparationHeading}>
         <div>
-          <span>Monthly preparation</span>
-          <h2 id="financial-preparation-title">Prepare {periodLabel(period)} fees</h2>
+          <span>Monthly fee issue</span>
+          <h2 id="financial-preparation-title">Issue {periodLabel(period)} fees</h2>
         </div>
         {!reviewOpen ? (
           <button
@@ -67,31 +67,33 @@ export function PrepareFees({
             disabled={preparation.ready === 0}
             onClick={() => setReviewOpen(true)}
           >
-            {preparation.ready > 0 ? "Review preparation" : "Month prepared"}
+            {preparation.ready > 0
+              ? "Review fee issue"
+              : preparation.alreadyPrepared > 0
+                ? "Fees issued"
+                : "No fees to issue"}
             {preparation.ready > 0 ? <ArrowUpRight aria-hidden="true" /> : <Check aria-hidden="true" />}
           </button>
         ) : null}
       </div>
 
       <dl className={styles.preparationCounts}>
-        <div><dt>Ready</dt><dd>{preparation.ready}</dd></div>
-        <div><dt>Already prepared</dt><dd>{preparation.alreadyPrepared}</dd></div>
-        <div><dt>Awaiting assignment</dt><dd>{preparation.awaitingAssignment}</dd></div>
-        <div><dt>Setup required</dt><dd>{preparation.setupRequired}</dd></div>
+        <div><dt>Ready to issue</dt><dd>{preparation.ready}</dd></div>
+        <div><dt>Already issued</dt><dd>{preparation.alreadyPrepared}</dd></div>
       </dl>
 
       {reviewOpen ? (
         <div className={styles.preparationReview}>
           <div>
             <strong>{preparation.ready} {preparation.ready === 1 ? "player is" : "players are"} ready</strong>
-            <p>Only missing monthly charges will be created. Running this again will not duplicate them.</p>
+            <p>Only missing monthly charges will be issued. Running this again will not duplicate them.</p>
           </div>
           <div>
             <button className={styles.quietButton} type="button" disabled={pending} onClick={() => { requestKey.reset(); setReviewOpen(false) }}>
               Cancel
             </button>
             <button className={styles.primaryButton} type="button" disabled={pending} onClick={() => void prepare()}>
-              {pending ? "Preparing…" : `Prepare ${preparation.ready} ${preparation.ready === 1 ? "fee" : "fees"}`}
+              {pending ? "Issuing…" : `Issue ${preparation.ready} ${preparation.ready === 1 ? "fee" : "fees"}`}
             </button>
           </div>
         </div>

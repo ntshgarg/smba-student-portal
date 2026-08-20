@@ -770,7 +770,7 @@ export function listFinancePlayers(
     .all()
   const grouped = new Map<string, typeof rows>()
   rows.forEach((row) => grouped.set(row.playerId, [...(grouped.get(row.playerId) ?? []), row]))
-  return [...grouped.values()].map((playerRows) => {
+  const items = [...grouped.values()].map((playerRows) => {
     const player = playerRows[0]
     const chargeRows = playerRows.flatMap((row) => {
       const dueDate = row.dueDate
@@ -848,6 +848,7 @@ export function listFinancePlayers(
       feeReference: representative.feeReference,
     }
   })
+  return items.filter((item) => item.status !== "setup_required")
 }
 
 export function listMonthlyPreparationCandidates(database: Executor, period: string) {

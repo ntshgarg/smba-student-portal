@@ -35,7 +35,6 @@ const COLLECTION_PAGE_SIZE = 10
 const ACTIVITY_PAGE_SIZE = 20
 
 const FINANCE_STATUSES: FinanceStatus[] = [
-  "setup_required",
   "pending",
   "partially_paid",
   "overdue",
@@ -52,7 +51,7 @@ const ACTIVITY_TYPES: Array<{ label: string; value: FinanceAuditEventType }> = [
   { label: "Fee plan ended", value: "fee_agreement_ended" },
   { label: "Fee issued", value: "charge_issued" },
   { label: "Fee voided", value: "charge_voided" },
-  { label: "Monthly fees prepared", value: "monthly_fees_prepared" },
+  { label: "Monthly fees issued", value: "monthly_fees_prepared" },
   { label: "Payment recorded", value: "payment_recorded" },
   { label: "Payment reversed", value: "payment_reversed" },
   { label: "Refund recorded", value: "refund_recorded" },

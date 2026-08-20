@@ -86,9 +86,9 @@ describe("coach Financials entry points", () => {
   })
 
   it.each([
-    [{ ready: 4, alreadyPrepared: 1 }, "August fees not prepared"],
-    [{ ready: 0, alreadyPrepared: 5 }, "August fees prepared"],
-    [{ ready: 0, alreadyPrepared: 0 }, "No monthly fees to prepare"],
+    [{ ready: 4, alreadyPrepared: 1 }, "August fees ready to issue"],
+    [{ ready: 0, alreadyPrepared: 5 }, "August fees issued"],
+    [{ ready: 0, alreadyPrepared: 0 }, "No monthly fees to issue"],
   ])("shows the active preparation state and equal operational destinations", (preparation, label) => {
     const html = renderToStaticMarkup(
       <FinancialsCard

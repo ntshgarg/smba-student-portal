@@ -175,6 +175,7 @@ export function loadFeeRegister(
 
   const query = normalizeSearch(input.query)
   const filtered = rows.filter((row) => {
+    if (row.status === "setup_required") return false
     if ((input.playerScope ?? "active") === "active" && row.archived) return false
     if (input.playerScope === "archived" && !row.archived) return false
     if (input.statuses?.length && !input.statuses.includes(row.status)) return false
@@ -371,7 +372,7 @@ const ACTIVITY_ACTIONS: Record<FinanceAuditEventType, string> = {
   fee_agreement_ended: "Fee plan ended",
   charge_issued: "Fee issued",
   charge_voided: "Fee voided",
-  monthly_fees_prepared: "Monthly fees prepared",
+  monthly_fees_prepared: "Monthly fees issued",
   payment_recorded: "Payment recorded",
   payment_reversed: "Payment reversed",
   refund_recorded: "Refund recorded",

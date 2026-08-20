@@ -13,7 +13,6 @@ import {
   endFeeAgreementAction,
   previewRefundAllocationsAction,
   recordRefundAction,
-  reconcileRegistrationFeeAction,
   replaceFeeAgreementAction,
   reverseChargeAdjustmentAction,
   reverseConcessionAction,
@@ -499,158 +498,6 @@ function ReceiptHistory({
   )
 }
 
-function FeeSetupForm({
-  ledger,
-  period,
-}: {
-  ledger: PlayerFinancialLedgerView
-  period: string
-}) {
-  const router = useRouter()
-  const defaults = ledger.setupDefaults
-  const [amount, setAmount] = useState(defaults ? String(defaults.suggestedMonthlyFeePaise / 100) : "")
-  const [trackingMonth, setTrackingMonth] = useState(period)
-  const [dirty, setDirty] = useState(false)
-  const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
-  const amountRef = useRef<HTMLInputElement>(null)
-  const requestKey = useIdempotencyKey()
-
-  useUnsavedWorkGuard({
-    isDirty: dirty && !pending,
-    message: "You have an unfinished fee setup. Leave without saving?",
-    scope: `financial-setup-${ledger.playerId}`,
-  })
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!defaults || pending) return
-    const agreedMonthlyFeePaise = rupeesToPaise(amount)
-    if (agreedMonthlyFeePaise === null) {
-      setFeedback({ message: "Enter a valid agreed monthly fee", tone: "error" })
-      amountRef.current?.focus()
-      return
-    }
-
-    setPending(true)
-    try {
-      const result = await replaceFeeAgreementAction({
-        academyPlan: defaults.academyPlan,
-        agreedMonthlyFeePaise,
-        batch: defaults.batch,
-        effectiveFrom: `${trackingMonth}-01`,
-        idempotencyKey: requestKey.current(),
-        level: defaults.level,
-        playerId: ledger.playerId,
-      })
-      setFeedback(resultFeedback(result))
-      if (result.ok) {
-        requestKey.reset()
-        setDirty(false)
-        router.refresh()
-      } else if (result.field === "agreedMonthlyFeePaise") {
-        amountRef.current?.focus()
-      }
-    } catch (error) {
-      setFeedback({
-        message: error instanceof Error ? error.message : "The fee plan could not be created",
-        tone: "error",
-      })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  if (!defaults) {
-    return (
-      <section className={styles.setupState}>
-        <CircleAlert aria-hidden="true" />
-        <div>
-          <strong>Complete the player’s training details first</strong>
-          <p>A valid Level, Batch and Training plan are required before financial tracking can begin.</p>
-          <Link href={`/coach/onboarding?player=${ledger.playerId}`}>Open Player Onboarding</Link>
-        </div>
-      </section>
-    )
-  }
-
-  if (!ledger.feePlanSetupReady) {
-    return (
-      <section className={styles.setupState}>
-        <CircleAlert aria-hidden="true" />
-        <div>
-          <strong>Assign a matching session before creating the Fee Plan</strong>
-          <p>The player needs a current or future session for their assessed Level and Batch.</p>
-          <Link href={`/coach/onboarding?player=${ledger.playerId}`}>Continue Player Onboarding</Link>
-        </div>
-      </section>
-    )
-  }
-
-  return (
-    <section className={styles.setupPanel} aria-labelledby="fee-setup-title">
-      <div className={styles.setupHeading}>
-        <span>One-time setup</span>
-        <h3 id="fee-setup-title">Create fee plan</h3>
-        <p>Confirm the player’s current programme and the monthly fee agreed with the coach.</p>
-      </div>
-
-      <dl className={styles.setupDefaults}>
-        <div><dt>Level</dt><dd>{defaults.level}</dd></div>
-        <div><dt>Batch</dt><dd>{defaults.batch}</dd></div>
-        <div><dt>Academy Plan</dt><dd>{defaults.academyPlanLabel}</dd></div>
-      </dl>
-
-      <form autoComplete="off" onSubmit={(event) => void submit(event)}>
-        <div className={styles.fieldRow}>
-          <label className={styles.field}>
-            <span>Agreed monthly fee</span>
-            <div className={styles.moneyInput}>
-              <span aria-hidden="true">₹</span>
-              <input
-                ref={amountRef}
-                name="agreedMonthlyFee"
-                inputMode="decimal"
-                autoComplete="off"
-                value={amount}
-                disabled={pending}
-                onChange={(event) => {
-                  setAmount(event.target.value)
-                  setDirty(true)
-                  setFeedback(null)
-                  requestKey.reset()
-                }}
-              />
-            </div>
-          </label>
-          <label className={styles.field}>
-            <span>Track from</span>
-            <input
-              name="trackingMonth"
-              type="month"
-              max={getAcademyDateKey().slice(0, 7)}
-              value={trackingMonth}
-              disabled={pending}
-              onChange={(event) => {
-                setTrackingMonth(event.target.value)
-                setDirty(true)
-                requestKey.reset()
-              }}
-            />
-          </label>
-        </div>
-
-        <div className={styles.paymentFooter}>
-          <InlineNotice className={styles.notice} message={feedback?.message} reserveSpace={false} tone={feedback?.tone} />
-          <button className={styles.primaryButton} type="submit" disabled={pending}>
-            {pending ? "Creating…" : "Create fee plan"}
-          </button>
-        </div>
-      </form>
-    </section>
-  )
-}
-
 function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView }) {
   const router = useRouter()
   const agreement = ledger.feePlan
@@ -767,6 +614,21 @@ function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView }) {
         </form>
       </div>
     </details>
+  )
+}
+
+function OnboardingFinanceSetup({ ledger }: { ledger: PlayerFinancialLedgerView }) {
+  return (
+    <section className={styles.setupState}>
+      <CircleAlert aria-hidden="true" />
+      <div>
+        <strong>Complete this player’s onboarding first</strong>
+        <p>Assessment, session assignment and the first Fee Plan are managed together in Player Onboarding.</p>
+        <Link href={`/coach/onboarding?player=${encodeURIComponent(ledger.playerId)}`}>
+          Continue Player Onboarding
+        </Link>
+      </div>
+    </section>
   )
 }
 
@@ -1118,7 +980,7 @@ function ApplyConcessionForm({
 
   if (!eligibleCharges.length) {
     return concession.mode === "recurring"
-      ? <p className={styles.concessionHelp}>Future eligible monthly fees will receive this concession when they are prepared.</p>
+      ? <p className={styles.concessionHelp}>Future eligible monthly fees will receive this concession when they are issued.</p>
       : <p className={styles.concessionHelp}>There is no outstanding fee available for this concession.</p>
   }
 
@@ -1351,53 +1213,6 @@ function ConcessionManagement({
         ) : <div className={styles.emptyLedger}>No concessions have been created for this player.</div>}
       </div>
     </details>
-  )
-}
-
-function RegistrationReconciliation({ ledger }: { ledger: PlayerFinancialLedgerView }) {
-  const router = useRouter()
-  const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
-  const requestKey = useIdempotencyKey()
-
-  async function reconcile() {
-    if (pending) return
-    setPending(true)
-    try {
-      const result = await reconcileRegistrationFeeAction({
-        idempotencyKey: requestKey.current(),
-        playerId: ledger.playerId,
-        status: "pending",
-      })
-      setFeedback(resultFeedback(result))
-      if (result.ok) {
-        requestKey.reset()
-        router.refresh()
-      }
-    } catch (error) {
-      setFeedback({
-        message: error instanceof Error ? error.message : "The registration fee record could not be updated",
-        tone: "error",
-      })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <section className={styles.registrationResolution} aria-labelledby="registration-resolution-title">
-      <div>
-        <span>Registration fee</span>
-        <h3 id="registration-resolution-title">Record unresolved</h3>
-        <p>Issue the one-time academy fee so its offline payment can be recorded.</p>
-      </div>
-      <div className={styles.registrationResolutionAction}>
-        <button className={styles.primaryButton} type="button" disabled={pending} onClick={() => void reconcile()}>
-          {pending ? "Issuing…" : "Issue registration fee"}
-        </button>
-      </div>
-      <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
-    </section>
   )
 }
 
@@ -1637,7 +1452,7 @@ export function PlayerLedger({
         <div>
           <span>{ledger.academyId}{ledger.archived ? " · Archived" : ""}</span>
           <h2 id="selected-ledger-title">{ledger.fullName}</h2>
-          <p>{ledger.feePlan?.label ?? "Fee plan setup required"}</p>
+          <p>{ledger.feePlan?.label ?? "Player onboarding in progress"}</p>
         </div>
         <div className={styles.ledgerBalance}>
           <span>Outstanding</span>
@@ -1660,13 +1475,7 @@ export function PlayerLedger({
             </>
           )}
         </>
-      ) : ledger.archived ? null : <FeeSetupForm ledger={ledger} period={period} />}
-
-      {!ledger.archived && !ledger.charges.some((charge) => (
-        charge.type === "registration" && charge.status !== "void"
-      )) ? (
-        <RegistrationReconciliation ledger={ledger} />
-      ) : null}
+      ) : ledger.archived ? null : <OnboardingFinanceSetup ledger={ledger} />}
 
       {(!ledger.archived && ledger.feePlan)
         || (ledger.archived && ledger.management.concessions.length > 0) ? (

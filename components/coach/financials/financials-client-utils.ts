@@ -11,7 +11,7 @@ import type { FinanceStatus } from "./types"
 
 export const statusLabels: Record<FinanceStatus, string> = {
   setup_required: "Setup required",
-  not_prepared: "Month not prepared",
+  not_prepared: "Monthly fee not issued",
   pending: "Pending",
   partially_paid: "Partially paid",
   overdue: "Overdue",
