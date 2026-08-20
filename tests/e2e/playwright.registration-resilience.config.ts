@@ -39,7 +39,6 @@ export default defineConfig({
   timeout: 90_000,
   use: {
     baseURL,
-    channel: "chrome",
     colorScheme: "light",
     locale: "en-IN",
     screenshot: "only-on-failure",

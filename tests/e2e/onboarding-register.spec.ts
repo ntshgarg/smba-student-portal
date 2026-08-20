@@ -1,7 +1,5 @@
-import path from "node:path"
 import { expect, test } from "@playwright/test"
 
-const SCREENSHOT_DIR = "/Users/nitishg/.codex/visualizations/2026/08/10/019fecfa-5069-7a21-9efb-a4976db01af9"
 const viewports = [
   { height: 1000, name: "web", width: 1440 },
   { height: 1024, name: "tablet", width: 820 },
@@ -15,10 +13,18 @@ async function loginAsCoach(page: import("@playwright/test").Page) {
   await page.getByLabel("SMBA username").fill("SMBA-HC-0001")
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
-  await page.waitForURL((url) => url.pathname.startsWith("/coach"))
+  await page.waitForURL((url) => (
+    url.pathname === "/auth/pin/setup" || url.pathname.startsWith("/coach")
+  ))
+  if (new URL(page.url()).pathname === "/auth/pin/setup") {
+    await page.getByLabel("Enter PIN").fill("135790")
+    await page.getByLabel("Confirm PIN").fill("135790")
+    await page.getByRole("button", { name: "Set up PIN" }).click()
+    await page.waitForURL((url) => url.pathname.startsWith("/coach"))
+  }
 }
 
-test("Player Onboarding register is readable and contained at all three views", async ({ page }) => {
+test("Academy Onboarding register is readable and contained at all three views", async ({ page }, testInfo) => {
   const consoleErrors: string[] = []
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text())
@@ -31,9 +37,9 @@ test("Player Onboarding register is readable and contained at all three views", 
     await page.goto("/coach/onboarding", { waitUntil: "networkidle" })
     await page.evaluate(() => document.fonts.ready)
 
-    await expect(page.getByRole("heading", { name: "Player intake register." })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Academy intake register." })).toBeVisible()
     await expect(page.getByRole("region", { name: "Onboarding stage totals" }).locator(":scope > div")).toHaveCount(4)
-    await expect(page.getByRole("heading", { name: "Players needing action" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "People needing action" })).toBeVisible()
 
     const firstExpander = page.locator("a[aria-controls^='onboarding-editor-']").first()
     if (await firstExpander.count()) {
@@ -49,7 +55,7 @@ test("Player Onboarding register is readable and contained at all three views", 
 
     await page.screenshot({
       fullPage: true,
-      path: path.join(SCREENSHOT_DIR, `onboarding-implemented-${viewport.name}.png`),
+      path: testInfo.outputPath(`onboarding-implemented-${viewport.name}.png`),
     })
   }
 

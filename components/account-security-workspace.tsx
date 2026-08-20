@@ -2,12 +2,10 @@
 
 import { useActionState, useState, useTransition } from "react"
 import Link from "next/link"
-import { Check, KeyRound, LogOut, RefreshCw, ShieldCheck, UserPlus } from "lucide-react"
+import { Check, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
 
 import {
-  approveJuniorCoachRequestAction,
   changePasswordAction,
-  rejectJuniorCoachRequestAction,
   removePinAction,
   revokeOtherSessionsAction,
   revokeSessionAction,
@@ -28,12 +26,6 @@ type SecuritySession = {
 const initialPasswordState: PasswordChangeState = { error: null, success: null }
 const initialPinState: PinManagementState = { error: null, success: null }
 
-type PendingCoachRequest = {
-  createdAt: string
-  fullName: string
-  id: string
-}
-
 function deviceLabel(userAgent: string | null) {
   if (!userAgent) return "Unknown browser"
   if (/iPhone|iPad/iu.test(userAgent)) return "Apple mobile device"
@@ -47,7 +39,6 @@ export function AccountSecurityWorkspace({
   allowPin,
   authenticatorEnabled,
   authenticatorRequired,
-  pendingCoachRequests,
   pinEnabled,
   pinRequired,
   sessions,
@@ -55,7 +46,6 @@ export function AccountSecurityWorkspace({
   allowPin: boolean
   authenticatorEnabled: boolean
   authenticatorRequired: boolean
-  pendingCoachRequests: PendingCoachRequest[]
   pinEnabled: boolean
   pinRequired: boolean
   sessions: SecuritySession[]
@@ -67,31 +57,7 @@ export function AccountSecurityWorkspace({
   const [pinState, pinAction, pinPending] = useActionState(savePinAction, initialPinState)
   const [removeState, removeAction, removePending] = useActionState(removePinAction, initialPinState)
   const [pinValidationTarget, setPinValidationTarget] = useState<string | null>(null)
-  const [requestMessage, setRequestMessage] = useState<string | null>(null)
-  const [busyAccountId, setBusyAccountId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
-
-  function approveCoachRequest(request: PendingCoachRequest) {
-    setBusyAccountId(request.id)
-    setRequestMessage(null)
-    startTransition(async () => {
-      const result = await approveJuniorCoachRequestAction(request.id)
-      setBusyAccountId(null)
-      setRequestMessage(result.ok
-        ? `${request.fullName} approved as ${result.data.academyId}. They can create a password in their registration browser.`
-        : result.message)
-    })
-  }
-
-  function rejectCoachRequest(request: PendingCoachRequest) {
-    setBusyAccountId(request.id)
-    setRequestMessage(null)
-    startTransition(async () => {
-      const result = await rejectJuniorCoachRequestAction(request.id)
-      setBusyAccountId(null)
-      setRequestMessage(result.ok ? `${request.fullName}’s request was rejected.` : result.message)
-    })
-  }
 
   return (
     <div className="security-workspace">
@@ -212,35 +178,6 @@ export function AccountSecurityWorkspace({
               <button className="security-secondary-action" type="submit" disabled={removePending}>{removePending ? "Removing…" : "Remove PIN"}</button>
             </form>
           ) : null}
-        </section>
-      ) : null}
-
-      {pendingCoachRequests.length ? (
-        <section className="security-panel security-account-access" aria-labelledby="coach-requests-title">
-          <header>
-            <UserPlus aria-hidden="true" />
-            <div>
-              <p className="eyebrow">Head coach control</p>
-              <h2 id="coach-requests-title">Junior-coach requests</h2>
-            </div>
-          </header>
-          <p>Approve only staff members whose identity you have confirmed.</p>
-          {requestMessage ? <p className="security-success" role="status">{requestMessage}</p> : null}
-          <div className="security-account-table">
-            {pendingCoachRequests.map((request) => (
-              <div key={request.id}>
-                <div>
-                  <strong>{request.fullName}</strong>
-                  <span>Requested {new Date(request.createdAt).toLocaleDateString("en-IN")}</span>
-                </div>
-                <span className="security-status security-status-pending">Pending review</span>
-                <div className="security-request-actions">
-                  <button type="button" disabled={busyAccountId === request.id || isPending} onClick={() => approveCoachRequest(request)}>Approve</button>
-                  <button type="button" disabled={busyAccountId === request.id || isPending} onClick={() => rejectCoachRequest(request)}>Reject</button>
-                </div>
-              </div>
-            ))}
-          </div>
         </section>
       ) : null}
 

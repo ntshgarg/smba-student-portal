@@ -13,7 +13,6 @@ import {
   validateNewPassword,
   verifyCurrentPasswordAttempt,
 } from "@/lib/auth/credential-service"
-import { approveRegistration, rejectRegistration } from "@/lib/auth/account-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { sessionProvider } from "@/lib/data"
 import { requestSecurityContext, writeAuthSecurityEvent } from "@/lib/auth/security-context"
@@ -203,30 +202,4 @@ export async function removePinAction(
   removePinCredential(identity.subjectId)
   revalidatePath("/account/security")
   return { error: null, success: "PIN login removed. Use your password to sign in." }
-}
-
-export async function approveJuniorCoachRequestAction(registrationId: string) {
-  const identity = await requireIdentity()
-  const access = getCoachAccessProfile(identity.subjectId)
-  if (access?.accessLevel !== "head_admin") return { ok: false as const, message: "Head coach access is required." }
-  try {
-    const approved = approveRegistration(registrationId, identity.subjectId, { requestedRole: "coach" })
-    revalidatePath("/account/security")
-    return { ok: true as const, data: approved }
-  } catch (error) {
-    return { ok: false as const, message: error instanceof Error ? error.message : "The request could not be approved." }
-  }
-}
-
-export async function rejectJuniorCoachRequestAction(registrationId: string) {
-  const identity = await requireIdentity()
-  const access = getCoachAccessProfile(identity.subjectId)
-  if (access?.accessLevel !== "head_admin") return { ok: false as const, message: "Head coach access is required." }
-  try {
-    rejectRegistration(registrationId, identity.subjectId)
-    revalidatePath("/account/security")
-    return { ok: true as const }
-  } catch (error) {
-    return { ok: false as const, message: error instanceof Error ? error.message : "The request could not be rejected." }
-  }
 }

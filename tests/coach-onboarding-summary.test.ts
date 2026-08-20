@@ -128,6 +128,12 @@ describe("coach player onboarding summary", () => {
         createdAt: "2026-08-09T10:00:00.000Z",
         fullName: "Myra Shah",
         id: "request-player",
+        requestedRole: "player",
+      }, {
+        createdAt: "2026-08-09T11:00:00.000Z",
+        fullName: "Arjun Kumar",
+        id: "request-coach",
+        requestedRole: "coach",
       }],
       players: [
         {
@@ -164,6 +170,7 @@ describe("coach player onboarding summary", () => {
 
     expect(workspace.cases.map(({ id, stage }) => [id, stage])).toEqual([
       ["request-player", "request"],
+      ["request-coach", "request"],
       ["assessment-player", "assessment"],
       ["player-1", "session"],
       ["fee-player", "feePlan"],
@@ -171,9 +178,11 @@ describe("coach player onboarding summary", () => {
     expect(workspace.summary).toEqual({
       assessment: 1,
       feePlan: 1,
-      newRequests: 1,
+      newRequests: 2,
       session: 1,
-      total: 4,
+      total: 5,
     })
+    expect(workspace.cases.find(({ id }) => id === "request-coach"))
+      .toMatchObject({ requestedRole: "coach" })
   })
 })

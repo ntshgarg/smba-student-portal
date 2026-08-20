@@ -8,7 +8,7 @@ import { getFinanceActivation } from "@/lib/finance/service"
 import { listSessionSeries } from "@/lib/sessions/database"
 
 export const metadata = {
-  title: "Player Onboarding",
+  title: "Academy Onboarding",
 }
 
 export default async function CoachOnboardingPage() {

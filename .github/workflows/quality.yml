@@ -16,7 +16,7 @@ jobs:
   verify:
     name: Application regression
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       BETTER_AUTH_SECRET: smba-ci-only-secret-never-used-in-production-2026
       NEXT_PUBLIC_SMBA_SITE_ORIGIN: https://ci.smbaacademy.in
@@ -55,39 +55,93 @@ jobs:
           npm run fixture:verify:all
 
       - name: Build production application
+        env:
+          DB_FILE_NAME: .data/academy-clean.db
         run: npm run build
 
-      - name: Install Chromium for authentication regression
+      - name: Install Chromium for browser regressions
         run: npx playwright install --with-deps chromium
 
-      - name: Start isolated stress workspace
+      - name: Prepare disposable registration database
+        run: cp .data/academy-clean.db /tmp/smba-ci-registration.db
+
+      - name: Start isolated registration workspace
         env:
           BETTER_AUTH_SECURE_COOKIES: "false"
-          DB_FILE_NAME: .data/academy-stress.db
-          NEXT_PUBLIC_SMBA_SITE_ORIGIN: http://localhost:3000
+          DB_FILE_NAME: /tmp/smba-ci-registration.db
           SMBA_REQUIRE_COACH_TOTP: "false"
         run: |
-          npx next dev -p 3000 > /tmp/smba-ci-server.log 2>&1 &
-          echo $! > /tmp/smba-ci-server.pid
+          npx next start -p 3101 > /tmp/smba-ci-registration-server.log 2>&1 &
+          echo $! > /tmp/smba-ci-registration-server.pid
           for attempt in {1..60}; do
-            if curl --fail --silent http://localhost:3000/api/health > /dev/null; then
+            if curl --fail --silent http://127.0.0.1:3101/api/health > /dev/null; then
               exit 0
             fi
             sleep 1
           done
-          tail -n 200 /tmp/smba-ci-server.log
+          tail -n 200 /tmp/smba-ci-registration-server.log
+          exit 1
+
+      - name: Run registration and activation E2E
+        env:
+          SMBA_REGISTRATION_RESILIENCE_BASE_URL: http://127.0.0.1:3101
+          SMBA_REGISTRATION_RESILIENCE_DB: /tmp/smba-ci-registration.db
+        run: npm run regression:registration
+
+      - name: Show registration server log after a failure
+        if: failure()
+        run: tail -n 200 /tmp/smba-ci-registration-server.log 2>/dev/null || true
+
+      - name: Stop isolated registration workspace
+        if: always()
+        run: |
+          if test -f /tmp/smba-ci-registration-server.pid; then
+            kill "$(cat /tmp/smba-ci-registration-server.pid)" 2>/dev/null || true
+          fi
+
+      - name: Prepare disposable stress database
+        run: cp .data/academy-stress.db /tmp/smba-ci-stress.db
+
+      - name: Start isolated stress workspace
+        env:
+          BETTER_AUTH_SECURE_COOKIES: "false"
+          DB_FILE_NAME: /tmp/smba-ci-stress.db
+          SMBA_REQUIRE_COACH_TOTP: "false"
+        run: |
+          npx next start -p 3000 > /tmp/smba-ci-stress-server.log 2>&1 &
+          echo $! > /tmp/smba-ci-stress-server.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          tail -n 200 /tmp/smba-ci-stress-server.log
           exit 1
 
       - name: Run responsive authentication E2E
         run: npm run regression:authentication
 
-      - name: Show server log after a failure
-        if: failure()
-        run: tail -n 200 /tmp/smba-ci-server.log 2>/dev/null || true
+      - name: Run academy onboarding E2E
+        env:
+          SMBA_ONBOARDING_BASE_URL: http://127.0.0.1:3000
+        run: npm run regression:onboarding
 
-      - name: Stop isolated workspace
+      - name: Run attendance operations E2E
+        env:
+          SMBA_ATTENDANCE_WORKSPACES_BASE_URL: http://127.0.0.1:3000
+        run: npm run regression:attendance
+
+      - name: Show stress server log after a failure
+        if: failure()
+        run: tail -n 200 /tmp/smba-ci-stress-server.log 2>/dev/null || true
+
+      - name: Stop isolated stress workspace
         if: always()
         run: |
-          if test -f /tmp/smba-ci-server.pid; then
-            kill "$(cat /tmp/smba-ci-server.pid)" 2>/dev/null || true
+          if test -f /tmp/smba-ci-stress-server.pid; then
+            kill "$(cat /tmp/smba-ci-stress-server.pid)" 2>/dev/null || true
           fi
+
+      - name: Confirm canonical fixtures remain unchanged
+        run: npm run fixture:verify:all

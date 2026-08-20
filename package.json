@@ -41,6 +41,8 @@
     "regression:test": "vitest run tests/regression-fixture.test.ts",
     "regression:registration": "playwright test -c tests/e2e/playwright.registration-resilience.config.ts",
     "regression:authentication": "playwright test -c tests/e2e/playwright.authentication.config.ts",
+    "regression:onboarding": "playwright test -c tests/e2e/playwright.onboarding.config.ts",
+    "regression:attendance": "playwright test -c tests/e2e/playwright.attendance-workspaces.config.ts",
     "regression:capture": "playwright test -c tests/e2e/playwright.config.ts",
     "regression:start": "npm run fixture:start:stress",
     "preview:seed:turso": "node --env-file=.env.local scripts/deployment/copy-preview-database.mjs .data/academy-stress.db"

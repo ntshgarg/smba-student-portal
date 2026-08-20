@@ -26,24 +26,24 @@ export function PlayerOnboardingCard({
 }: {
   summary: PlayerOnboardingSummary
 }) {
-  const playerLabel = summary.total === 1 ? "player needs" : "players need"
+  const accountLabel = summary.total === 1 ? "person needs" : "people need"
 
   return (
     <CoachDashboardCard
       area="onboarding"
       id="onboarding"
       status={summary.total ? `${summary.total} in progress` : "All complete"}
-      title="Player onboarding"
+      title="Academy onboarding"
       titleId="player-onboarding-card-title"
     >
       <div className={styles.layout}>
         <CoachDashboardSummary
-          detail="Move each player through approval, assessment, session and Fee Plan."
+          detail="Approve staff access and move players through assessment, session and Fee Plan."
         >
-          {summary.total ? `${summary.total} ${playerLabel} a next step` : "Every player is onboarded"}
+          {summary.total ? `${summary.total} ${accountLabel} a next step` : "Academy onboarding is complete"}
         </CoachDashboardSummary>
 
-        <dl className={styles.stages} aria-label="Player onboarding stages">
+        <dl className={styles.stages} aria-label="Academy onboarding stages">
           {stages.map(({ key, label }) => (
             <div key={key} className={styles.stage}>
               <dt>{label}</dt>
@@ -54,7 +54,7 @@ export function PlayerOnboardingCard({
           ))}
         </dl>
 
-        <CoachDashboardActions ariaLabel="Player onboarding actions">
+        <CoachDashboardActions ariaLabel="Academy onboarding actions">
           <CoachDashboardAction href="/coach/onboarding">Open onboarding</CoachDashboardAction>
         </CoachDashboardActions>
       </div>

@@ -37,6 +37,28 @@ describe("shared academy session workflow", () => {
     })
   })
 
+  it("surfaces player and junior-coach requests in one onboarding queue", async () => {
+    const coach = accountService.findApprovedAccountByAcademyId("SMBA#0001")
+    if (!coach) throw new Error("Seed coach was not created.")
+    const playerId = accountService.registerAccount("Pending Player", "player")
+    const juniorCoachId = accountService.registerAccount("Pending Junior Coach", "coach")
+    const { getPlayerOnboardingWorkspace } = await import("@/lib/coach/database")
+
+    expect(getPlayerOnboardingWorkspace("2026-08-02").cases)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: playerId, requestedRole: "player", stage: "request" }),
+        expect.objectContaining({ id: juniorCoachId, requestedRole: "coach", stage: "request" }),
+      ]))
+
+    accountService.rejectRegistration(juniorCoachId, coach.accountId)
+    accountService.rejectRegistration(playerId, coach.accountId)
+    expect(getPlayerOnboardingWorkspace("2026-08-02").cases)
+      .not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: juniorCoachId }),
+        expect.objectContaining({ id: playerId }),
+      ]))
+  })
+
   it("keeps approval separate and synchronizes occurrence attendance after assignment", async () => {
     const coach = accountService.findApprovedAccountByAcademyId("SMBA#0001")
     if (!coach) throw new Error("Seed coach was not created.")

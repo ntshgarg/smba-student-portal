@@ -120,6 +120,12 @@ function editorCopy(item: PlayerOnboardingCase) {
   const firstName = item.fullName.split(/\s+/u)[0]
   switch (item.stage) {
     case "request":
+      if (item.requestedRole === "coach") {
+        return {
+          title: `Review ${firstName}’s staff request`,
+          body: "Approve the junior coach to create their Academy ID and activate staff access.",
+        }
+      }
       return {
         title: `Review ${firstName}’s request`,
         body: "Approve the player to create their Academy ID and begin assessment.",
@@ -184,7 +190,7 @@ function StepRail({ current }: { current: PlayerOnboardingStage }) {
   const currentIndex = STAGES.findIndex((stage) => stage.key === current)
 
   return (
-    <ol className={styles.stepRail} aria-label="Player onboarding progress">
+    <ol className={styles.stepRail} aria-label="Academy onboarding progress">
       {STAGES.map((stage, index) => {
         const complete = index < currentIndex
         return (
@@ -219,14 +225,17 @@ function RequestStep({
     if (busy) return
     setBusy("approve")
     setFeedback(null)
-    const result = await approveRegistrationAction(item.id)
+    const result = await approveRegistrationAction(item.id, item.requestedRole)
     setBusy(null)
     if (!result.ok) {
       setFeedback({ message: result.message, tone: "error" })
       return
     }
     onSuccess({
-      message: `${result.data.fullName} approved as ${result.data.academyId}. Continue with the court assessment.`,
+      message: item.requestedRole === "coach"
+        ? `${result.data.fullName} approved as ${result.data.academyId}. They can activate their staff account in the registration browser.`
+        : `${result.data.fullName} approved as ${result.data.academyId}. Continue with the court assessment.`,
+      remove: item.requestedRole === "coach",
     })
   }
 
@@ -246,8 +255,8 @@ function RequestStep({
   return (
     <div className={styles.requestStep} aria-busy={Boolean(busy)}>
       <dl className={styles.requestFacts}>
-        <div><dt>Player</dt><dd>{item.fullName}</dd></div>
-        <div><dt>Request type</dt><dd>Academy membership</dd></div>
+        <div><dt>{item.requestedRole === "coach" ? "Junior coach" : "Player"}</dt><dd>{item.fullName}</dd></div>
+        <div><dt>Request type</dt><dd>{item.requestedRole === "coach" ? "Coaching staff" : "Academy membership"}</dd></div>
         <div><dt>Received</dt><dd>{item.requestedAt ? shortDate(item.requestedAt) : "Recently"}</dd></div>
       </dl>
       <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
@@ -256,7 +265,7 @@ function RequestStep({
           <X aria-hidden="true" /> {busy === "reject" ? "Rejecting…" : "Reject request"}
         </button>
         <button className={styles.primaryButton} type="button" disabled={Boolean(busy)} onClick={() => void approve()}>
-          {busy === "approve" ? "Approving…" : "Approve & continue"} <ArrowRight aria-hidden="true" />
+          {busy === "approve" ? "Approving…" : item.requestedRole === "coach" ? "Approve staff access" : "Approve & continue"} <ArrowRight aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -838,10 +847,10 @@ export function PlayerOnboardingRegister({
 
       <header className={styles.pageHeader}>
         <div>
-          <span className="eyebrow">Player onboarding</span>
-          <h1>Player intake register.</h1>
+          <span className="eyebrow">Academy onboarding</span>
+          <h1>Academy intake register.</h1>
         </div>
-        <p>One ordered queue. Open a player and complete only the next required step.</p>
+        <p>One ordered queue. Approve staff access or complete the next required player step.</p>
       </header>
 
       <InlineNotice
@@ -869,7 +878,7 @@ export function PlayerOnboardingRegister({
 
       <section className={styles.register} aria-labelledby="onboarding-register-title">
         <div className={styles.registerHeading}>
-          <h2 ref={registerTitleRef} id="onboarding-register-title" tabIndex={-1}>Players needing action</h2>
+          <h2 ref={registerTitleRef} id="onboarding-register-title" tabIndex={-1}>People needing action</h2>
           <p><strong>{workspace.summary.total}</strong> in progress · Ordered by next step</p>
         </div>
 
@@ -924,8 +933,8 @@ export function PlayerOnboardingRegister({
         ) : (
           <div className={styles.emptyState}>
             <Check aria-hidden="true" />
-            <h3>Every player is fully onboarded.</h3>
-            <p>New requests and incomplete setup steps will appear in this register.</p>
+            <h3>Academy onboarding is complete.</h3>
+            <p>New staff or player requests and incomplete player setup steps will appear here.</p>
             <Link href="/coach/members">Open Member Directory</Link>
           </div>
         )}
