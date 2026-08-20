@@ -34,7 +34,7 @@ export function AppShell({
         <AccountMenu account={student} publicSiteHref={publicSiteUrl} />
       </header>
 
-      <main id="main-content">{children}</main>
+      <main id="main-content" tabIndex={-1}>{children}</main>
     </>
   )
 }

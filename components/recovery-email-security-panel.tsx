@@ -8,6 +8,7 @@ import {
   requestRecoveryEmailChange,
   type RecoveryEmailEnrollmentState,
 } from "@/app/account/recovery-email/actions"
+import { PasswordInput } from "@/components/password-input"
 
 const initialRecoveryEmailEnrollmentState: RecoveryEmailEnrollmentState = {
   email: "",
@@ -101,10 +102,12 @@ export function RecoveryEmailSecurityPanel({
             <span>New recovery email <span className="security-required-marker" aria-hidden="true">*</span></span>
             <input name="email" type="email" autoComplete="email" maxLength={254} required aria-invalid={requestValidationTarget === "email" ? true : undefined} />
           </label>
-          <label>
-            <span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span>
-            <input name="currentPassword" type="password" autoComplete="current-password" required aria-invalid={requestValidationTarget === "currentPassword" ? true : undefined} />
-          </label>
+          <div className="security-password-field">
+            <label htmlFor="recovery-email-current-password">
+              <span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span>
+            </label>
+            <PasswordInput id="recovery-email-current-password" name="currentPassword" autoComplete="current-password" required aria-invalid={requestValidationTarget === "currentPassword" ? true : undefined} />
+          </div>
           {requiresSecondFactor ? (
             <label>
               <span>Authenticator or backup code <span className="security-required-marker" aria-hidden="true">*</span></span>

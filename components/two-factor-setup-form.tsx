@@ -9,6 +9,7 @@ import {
   type TotpSetupState,
   type TotpVerificationState,
 } from "@/app/auth/two-factor/actions"
+import { PasswordInput } from "@/components/password-input"
 
 const initialSetup: TotpSetupState = { error: null, setup: null }
 const initialVerification: TotpVerificationState = { error: null }
@@ -22,10 +23,9 @@ export function TwoFactorSetupForm() {
       <form className="login-form" action={setupAction} noValidate>
         <div className="login-field">
           <label htmlFor="totp-current-password">Confirm password</label>
-          <input
+          <PasswordInput
             id="totp-current-password"
             name="password"
-            type="password"
             autoComplete="current-password"
             required
             aria-describedby={setupState.error ? "totp-setup-error" : "totp-password-help"}
@@ -48,8 +48,13 @@ export function TwoFactorSetupForm() {
   const manualSecret = setupUrl.searchParams.get("secret") ?? ""
   return (
     <div className="totp-setup">
-      <div className="totp-qr" aria-label="Authenticator setup QR code">
-        <QRCodeSVG value={setupState.setup.totpURI} size={190} level="M" />
+      <div className="totp-qr">
+        <QRCodeSVG
+          aria-label="Authenticator setup QR code"
+          value={setupState.setup.totpURI}
+          size={190}
+          level="M"
+        />
       </div>
       <div className="totp-instructions">
         <h2>Scan with your authenticator app</h2>
@@ -87,4 +92,3 @@ export function TwoFactorSetupForm() {
     </div>
   )
 }
-

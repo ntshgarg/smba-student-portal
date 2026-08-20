@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef } from "react"
 import { ArrowRight } from "lucide-react"
 
 import { activateAccount, type ActivationFormState } from "@/app/login/actions"
+import { PasswordInput } from "@/components/password-input"
 
 const initialState: ActivationFormState = { error: null, errorField: null }
 
@@ -26,11 +27,10 @@ export function ActivationForm({ academyId }: { academyId: string }) {
       </div>
       <div className="login-field">
         <label htmlFor="activation-password">Create password</label>
-        <input
+        <PasswordInput
           ref={passwordRef}
           id="activation-password"
           name="password"
-          type="password"
           autoComplete="new-password"
           minLength={12}
           maxLength={128}
@@ -46,11 +46,10 @@ export function ActivationForm({ academyId }: { academyId: string }) {
       </div>
       <div className="login-field">
         <label htmlFor="activation-password-confirmation">Confirm password</label>
-        <input
+        <PasswordInput
           ref={confirmPasswordRef}
           id="activation-password-confirmation"
           name="confirmPassword"
-          type="password"
           autoComplete="new-password"
           minLength={12}
           maxLength={128}

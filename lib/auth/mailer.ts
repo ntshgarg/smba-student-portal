@@ -34,6 +34,32 @@ export type CapturedAuthEmail =
 
 const memoryOutbox: CapturedAuthEmail[] = []
 
+function memoryAuthMailerAllowed() {
+  if (process.env.SMBA_AUTH_MAIL_TRANSPORT !== "memory" || process.env.VERCEL === "1") {
+    return false
+  }
+  if (process.env.NODE_ENV !== "production") return true
+
+  // The accessibility gate deliberately exercises a production build without
+  // sending real email. Keep that escape hatch bound to a named test profile
+  // and an accessibility-specific disposable database under the OS temp root.
+  const profile = process.env.SMBA_ACCESSIBILITY_PROFILE
+  const databasePath = process.env.DB_FILE_NAME?.trim() ?? ""
+  if (!profile || !["admin", "clean", "stress"].includes(profile)) return false
+  const normalizedDatabase = databasePath.replaceAll("\\", "/")
+  if (!normalizedDatabase.startsWith("/") || normalizedDatabase.includes("/../")) return false
+  const configuredTempRoot = process.env.TMPDIR?.replaceAll("\\", "/").replace(/\/+$/u, "")
+  const temporaryPrefixes = [
+    "/tmp/",
+    "/private/tmp/",
+    configuredTempRoot ? `${configuredTempRoot}/` : "",
+  ].filter(Boolean)
+  const inTemporaryRoot = temporaryPrefixes.some((prefix) => normalizedDatabase.startsWith(prefix))
+  const databaseName = normalizedDatabase.split("/").at(-1) ?? ""
+  return inTemporaryRoot
+    && /smba[-_.].*(accessibility|a11y)|smba-accessibility/u.test(databaseName)
+}
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -62,9 +88,7 @@ export function authEmailRequired() {
 
 export function validateAuthEmailConfiguration() {
   if (!authEmailRequired()) return
-  if (process.env.SMBA_AUTH_MAIL_TRANSPORT === "memory"
-    && process.env.NODE_ENV !== "production"
-    && process.env.VERCEL !== "1") return
+  if (memoryAuthMailerAllowed()) return
   const { apiKey, from } = resendConfiguration()
   if (!apiKey) throw new Error("RESEND_API_KEY is required when recovery email is enforced.")
   if (!from) throw new Error("SMBA_AUTH_EMAIL_FROM is required when recovery email is enforced.")
@@ -149,9 +173,7 @@ class ResendAuthMailer implements AuthMailer {
 }
 
 export function createAuthMailer(): AuthMailer {
-  if (process.env.SMBA_AUTH_MAIL_TRANSPORT === "memory"
-    && process.env.NODE_ENV !== "production"
-    && process.env.VERCEL !== "1") {
+  if (memoryAuthMailerAllowed()) {
     return new MemoryAuthMailer()
   }
   const configuration = resendConfiguration()
@@ -163,7 +185,7 @@ export function createAuthMailer(): AuthMailer {
 
 /** Test-only transport inspection. Never expose this through a production route. */
 export function readCapturedAuthEmails() {
-  if (process.env.SMBA_AUTH_MAIL_TRANSPORT !== "memory" || process.env.VERCEL === "1") {
+  if (!memoryAuthMailerAllowed()) {
     throw new Error("The authentication email outbox is unavailable.")
   }
   return [...memoryOutbox]

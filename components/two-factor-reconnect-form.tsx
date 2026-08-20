@@ -7,6 +7,7 @@ import {
   beginAuthenticatorReconnect,
   type TotpReconnectState,
 } from "@/app/auth/two-factor/actions"
+import { PasswordInput } from "@/components/password-input"
 
 const initialState: TotpReconnectState = { error: null, errorField: null }
 
@@ -24,11 +25,10 @@ export function TwoFactorReconnectForm() {
     <form className="login-form" action={formAction} noValidate>
       <div className="login-field">
         <label htmlFor="reconnect-password">Current password</label>
-        <input
+        <PasswordInput
           ref={passwordRef}
           id="reconnect-password"
           name="password"
-          type="password"
           autoComplete="current-password"
           required
           aria-invalid={state.errorField === "password" ? true : undefined}
