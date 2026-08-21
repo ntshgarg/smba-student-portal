@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, X } from "lucide-react"
+import { ArrowLeft, Check, X } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import type { CSSProperties } from "react"
@@ -257,7 +257,13 @@ export function StaffAttendanceRegister({
                               aria-label={`${coach.fullName}, ${date.label}: ${state}.`}
                               title={`${date.label}: ${state}`}
                             >
-                              {unavailable ? <X aria-hidden="true" /> : choice && choice !== "cleared" ? null : <span aria-hidden="true">—</span>}
+                              {unavailable
+                                ? <X aria-hidden="true" />
+                                : choice === "present"
+                                  ? <Check aria-hidden="true" />
+                                  : choice === "absent"
+                                    ? <X aria-hidden="true" />
+                                    : choice && choice !== "cleared" ? null : <span aria-hidden="true">—</span>}
                             </span>
                           </td>
                         )

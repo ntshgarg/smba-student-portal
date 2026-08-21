@@ -3260,13 +3260,46 @@ h3 {
 }
 
 .player-attendance-legend i.is-present {
+  position: relative;
   border-color: var(--green);
   background: var(--green);
 }
 
 .player-attendance-legend i.is-absent {
+  position: relative;
   border-color: var(--red);
   background: var(--red);
+}
+
+/* --green and --red sit at 1.05:1 relative luminance, so the fill alone cannot
+   separate Present from Absent in greyscale, in monochrome print, or for
+   achromatopsia. Pending and Not scheduled already carry a dash and a hatch;
+   these two swatches need an equivalent non-colour mark. */
+.player-attendance-legend i.is-present::after,
+.player-attendance-legend i.is-absent::after {
+  position: absolute;
+  content: "";
+}
+
+.player-attendance-legend i.is-present::after {
+  top: 1px;
+  left: 3px;
+  width: 3px;
+  height: 7px;
+  border-right: 1.5px solid var(--white);
+  border-bottom: 1.5px solid var(--white);
+  transform: rotate(45deg);
+}
+
+.player-attendance-legend i.is-absent::after {
+  top: 3px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  background:
+    linear-gradient(var(--white), var(--white)) 50% 50% / 100% 1.5px no-repeat,
+    linear-gradient(var(--white), var(--white)) 50% 50% / 1.5px 100% no-repeat;
+  transform: rotate(45deg);
 }
 
 .player-attendance-legend i.is-unmarked {
@@ -12220,12 +12253,41 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .personal-attendance-calendar .player-attendance-calendar-day.is-present {
+  position: relative;
   border-color: color-mix(in srgb, var(--green) 85%, var(--white));
   background: var(--green);
   color: var(--white);
 }
 
+/* Recorded states carry a mark as well as a fill: the status word is hidden
+   below 760px, and green and red are the same tone in greyscale regardless. */
+.personal-attendance-calendar .player-attendance-calendar-day.is-present::after,
+.personal-attendance-calendar .player-attendance-calendar-day.is-absent::after {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  content: "";
+}
+
+.personal-attendance-calendar .player-attendance-calendar-day.is-present::after {
+  width: 5px;
+  height: 10px;
+  border-right: 2px solid var(--white);
+  border-bottom: 2px solid var(--white);
+  transform: rotate(45deg);
+}
+
+.personal-attendance-calendar .player-attendance-calendar-day.is-absent::after {
+  width: 10px;
+  height: 10px;
+  background:
+    linear-gradient(var(--white), var(--white)) 50% 50% / 100% 2px no-repeat,
+    linear-gradient(var(--white), var(--white)) 50% 50% / 2px 100% no-repeat;
+  transform: rotate(45deg);
+}
+
 .personal-attendance-calendar .player-attendance-calendar-day.is-absent {
+  position: relative;
   border-color: color-mix(in srgb, var(--red) 85%, var(--white));
   background: var(--red);
   color: var(--white);

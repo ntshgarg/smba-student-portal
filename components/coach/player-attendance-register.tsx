@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, CircleAlert, X } from "lucide-react"
+import { ArrowLeft, Check, CircleAlert, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
@@ -465,7 +465,13 @@ export function PlayerAttendanceRegister({
                                       aria-label={cellLabel}
                                       title={`${sessionLabel} · ${date.label}: ${state}`}
                                     >
-                                      {unavailable ? <X aria-hidden="true" /> : choice || completionCount ? null : <span aria-hidden="true">—</span>}
+                                      {unavailable
+                                        ? <X aria-hidden="true" />
+                                        : choice === "present"
+                                          ? <Check aria-hidden="true" />
+                                          : choice === "absent"
+                                            ? <X aria-hidden="true" />
+                                            : choice || completionCount ? null : <span aria-hidden="true">—</span>}
                                       {completionCount ? <span className="coach-register-makeup-count" aria-hidden="true">+{completionCount}</span> : null}
                                       {completionRequiresReview ? <CircleAlert aria-hidden="true" /> : null}
                                     </span>
