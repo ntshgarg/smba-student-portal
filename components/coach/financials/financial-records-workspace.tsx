@@ -286,9 +286,13 @@ function FeeTruthRail({
       <div className={recordsStyles.registrationEquation} aria-hidden="true">
         <div><span>{feeLabel}</span><strong>{effective}</strong></div>
         <b>−</b>
-        <div><span>Received</span><strong>{received}</strong></div>
+        <div className={summary.receivedPaise > 0 ? recordsStyles.figureReceived : undefined}>
+          <span>Received</span><strong>{received}</strong>
+        </div>
         <b>=</b>
-        <div><span>Outstanding</span><strong>{outstanding}</strong></div>
+        <div className={summary.outstandingPaise > 0 ? recordsStyles.figureOwed : undefined}>
+          <span>Outstanding</span><strong>{outstanding}</strong>
+        </div>
       </div>
     </div>
   )
