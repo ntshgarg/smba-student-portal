@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useState, useTransition } from "react"
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { Check, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
 
@@ -26,6 +26,18 @@ type SecuritySession = {
 
 const initialPasswordState: PasswordChangeState = { error: null, success: null }
 const initialPinState: PinManagementState = { error: null, success: null }
+
+const PASSWORD_ERROR_ID = "security-password-error"
+
+/** Input ids for the change-password form, keyed by the field the action reports. */
+const passwordFieldIds = {
+  confirmPassword: "security-confirm-password",
+  currentPassword: "security-current-password",
+  newPassword: "security-new-password",
+} as const
+
+/** Sessions shown before the list has to be expanded. */
+const sessionPreviewCount = 5
 
 function deviceLabel(userAgent: string | null) {
   if (!userAgent) return "Unknown browser"
@@ -59,6 +71,30 @@ export function AccountSecurityWorkspace({
   const [removeState, removeAction, removePending] = useActionState(removePinAction, initialPinState)
   const [pinValidationTarget, setPinValidationTarget] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null)
+  const [showAllSessions, setShowAllSessions] = useState(false)
+
+  // Send focus to the field the error names, matching the PIN form below.
+  useEffect(() => {
+    const field = passwordState.errorField
+    if (!field) return
+    document.getElementById(passwordFieldIds[field])?.focus()
+  }, [passwordState])
+
+  // Keep this device visible even when the list is capped.
+  const orderedSessions = useMemo(() => [
+    ...sessions.filter((session) => session.current),
+    ...sessions.filter((session) => !session.current),
+  ], [sessions])
+  const visibleSessions = showAllSessions
+    ? orderedSessions
+    : orderedSessions.slice(0, sessionPreviewCount)
+  const hiddenSessionCount = orderedSessions.length - visibleSessions.length
+
+  function passwordFieldProps(field: keyof typeof passwordFieldIds) {
+    if (passwordState.errorField !== field) return {}
+    return { "aria-describedby": PASSWORD_ERROR_ID, "aria-invalid": true } as const
+  }
 
   return (
     <div className="security-workspace">
@@ -94,18 +130,18 @@ export function AccountSecurityWorkspace({
           </header>
           <form className="security-form" action={passwordAction} noValidate>
             <div className="security-password-field">
-              <label htmlFor="security-current-password">Current password</label>
-              <PasswordInput id="security-current-password" name="currentPassword" autoComplete="current-password" required />
+              <label htmlFor="security-current-password"><span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
+              <PasswordInput id="security-current-password" name="currentPassword" autoComplete="current-password" required {...passwordFieldProps("currentPassword")} />
             </div>
             <div className="security-password-field">
-              <label htmlFor="security-new-password">New password</label>
-              <PasswordInput id="security-new-password" name="newPassword" autoComplete="new-password" minLength={12} maxLength={128} required />
+              <label htmlFor="security-new-password"><span>New password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
+              <PasswordInput id="security-new-password" name="newPassword" autoComplete="new-password" minLength={12} maxLength={128} required {...passwordFieldProps("newPassword")} />
             </div>
             <div className="security-password-field">
-              <label htmlFor="security-confirm-password">Confirm new password</label>
-              <PasswordInput id="security-confirm-password" name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required />
+              <label htmlFor="security-confirm-password"><span>Confirm new password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
+              <PasswordInput id="security-confirm-password" name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required {...passwordFieldProps("confirmPassword")} />
             </div>
-            {passwordState.error ? <p className="login-error" role="alert">{passwordState.error}</p> : null}
+            {passwordState.error ? <p className="login-error" id={PASSWORD_ERROR_ID} role="alert">{passwordState.error}</p> : null}
             {passwordState.success ? <p className="security-success" role="status">{passwordState.success}</p> : null}
             <button type="submit" disabled={passwordPending}>{passwordPending ? "Changing…" : "Change password"}</button>
           </form>
@@ -116,21 +152,52 @@ export function AccountSecurityWorkspace({
             <LogOut aria-hidden="true" />
             <div><p className="eyebrow">Devices</p><h2 id="sessions-title">Active sessions</h2></div>
           </header>
+          <p className="security-sessions-count">
+            {orderedSessions.length === 1
+              ? "1 signed-in device."
+              : `${orderedSessions.length} signed-in devices.`}
+          </p>
           <ul className="security-sessions">
-            {sessions.map((session) => (
-              <li key={session.id}>
-                <div>
-                  <strong>{deviceLabel(session.userAgent)}{session.current ? " · This device" : ""}</strong>
-                  <span>Signed in {new Date(session.createdAt).toLocaleString("en-IN")}</span>
-                  <span>Expires {new Date(session.expiresAt).toLocaleString("en-IN")}</span>
-                </div>
-                {!session.current ? (
-                  <button type="button" onClick={() => startTransition(() => revokeSessionAction(session.id))}>Log out</button>
-                ) : null}
-              </li>
-            ))}
+            {visibleSessions.map((session) => {
+              const signedIn = new Date(session.createdAt).toLocaleString("en-IN")
+              const revoking = revokingSessionId === session.id
+              return (
+                <li key={session.id}>
+                  <div>
+                    <strong>{deviceLabel(session.userAgent)}{session.current ? " · This device" : ""}</strong>
+                    <span>Signed in {signedIn}</span>
+                    <span>Expires {new Date(session.expiresAt).toLocaleString("en-IN")}</span>
+                  </div>
+                  {!session.current ? (
+                    <button
+                      type="button"
+                      aria-label={`Log out ${deviceLabel(session.userAgent)} signed in ${signedIn}`}
+                      disabled={isPending}
+                      onClick={() => {
+                        setRevokingSessionId(session.id)
+                        startTransition(() => revokeSessionAction(session.id))
+                      }}
+                    >
+                      {revoking && isPending ? "Logging out…" : "Log out"}
+                    </button>
+                  ) : null}
+                </li>
+              )
+            })}
           </ul>
-          {sessions.length > 1 ? (
+          {hiddenSessionCount > 0 || showAllSessions ? (
+            <button
+              className="security-secondary-action"
+              type="button"
+              aria-expanded={showAllSessions}
+              onClick={() => setShowAllSessions((value) => !value)}
+            >
+              {showAllSessions
+                ? `Show ${sessionPreviewCount} most recent`
+                : `Show all ${orderedSessions.length} devices`}
+            </button>
+          ) : null}
+          {orderedSessions.length > 1 ? (
             <button className="security-secondary-action" type="button" onClick={() => startTransition(() => revokeOtherSessionsAction())} disabled={isPending}>
               Log out other devices
             </button>
@@ -186,7 +253,7 @@ export function AccountSecurityWorkspace({
           {pinEnabled && !pinRequired ? (
             <form className="security-form security-pin-remove" action={removeAction} noValidate>
               <div className="security-password-field">
-                <label htmlFor="pin-remove-current-password">Current password</label>
+                <label htmlFor="pin-remove-current-password"><span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
                 <PasswordInput id="pin-remove-current-password" name="currentPassword" autoComplete="current-password" required />
               </div>
               {removeState.error ? <p className="login-error" role="alert">{removeState.error}</p> : null}

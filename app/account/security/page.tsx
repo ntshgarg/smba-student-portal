@@ -58,30 +58,32 @@ export default async function AccountSecurityPage() {
         <h1>Account security.</h1>
         <p>Manage your password, signed-in devices and academy account access.</p>
       </header>
-      <AccountSecurityWorkspace
-        allowPin={allowPin}
-        authenticatorEnabled={rawSession.user.twoFactorEnabled === true}
-        authenticatorRequired={Boolean(access?.accessLevel === "head_admin"
-          || identity.role === "platform_admin")}
-        pinEnabled={allowPin && hasPinCredential(identity.subjectId, { database })}
-        pinRequired={identity.role === "platform_admin" || access?.accessLevel === "head_admin"}
-        sessions={sessions}
-      />
-      {recoveryEmail ? (
-        <RecoveryEmailSecurityPanel
-          maskedEmail={maskRecoveryEmail(recoveryEmail.email)}
-          requiresSecondFactor={recoverySecondFactorRequired}
+      <div className="security-page-body">
+        <AccountSecurityWorkspace
+          allowPin={allowPin}
+          authenticatorEnabled={rawSession.user.twoFactorEnabled === true}
+          authenticatorRequired={Boolean(access?.accessLevel === "head_admin"
+            || identity.role === "platform_admin")}
+          pinEnabled={allowPin && hasPinCredential(identity.subjectId, { database })}
+          pinRequired={identity.role === "platform_admin" || access?.accessLevel === "head_admin"}
+          sessions={sessions}
         />
-      ) : (
-        <section className="security-panel security-recovery-callout">
-          <div>
-            <p className="eyebrow">Account recovery</p>
-            <h2>Add a recovery email</h2>
-            <p>Verify an address before relying on self-service password recovery.</p>
-          </div>
-          <Link href="/account/recovery-email/setup">Set up recovery email</Link>
-        </section>
-      )}
+        {recoveryEmail ? (
+          <RecoveryEmailSecurityPanel
+            maskedEmail={maskRecoveryEmail(recoveryEmail.email)}
+            requiresSecondFactor={recoverySecondFactorRequired}
+          />
+        ) : (
+          <section className="security-panel security-recovery-callout">
+            <div>
+              <p className="eyebrow">Account recovery</p>
+              <h2>Add a recovery email</h2>
+              <p>Verify an address before relying on self-service password recovery.</p>
+            </div>
+            <Link href="/account/recovery-email/setup">Set up recovery email</Link>
+          </section>
+        )}
+      </div>
     </main>
   )
 }

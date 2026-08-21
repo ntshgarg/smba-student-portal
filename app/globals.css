@@ -2092,7 +2092,10 @@ h3 {
   color: var(--navy);
 }
 
+/* The recovery panel is a sibling of the workspace, so the cap lives on a
+   shared wrapper -- otherwise that panel escapes it and overhangs the rest. */
 .security-page-header,
+.security-page-body,
 .security-workspace {
   width: min(100%, 1240px);
   margin-inline: auto;
@@ -2137,6 +2140,7 @@ h3 {
 .security-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 18px;
 }
 
@@ -2208,6 +2212,12 @@ h3 {
 
 .security-form input[aria-invalid="true"]:focus-visible {
   outline-offset: 0;
+}
+
+.security-sessions-count {
+  margin: 0 0 4px;
+  color: var(--steel);
+  font-size: 12px;
 }
 
 .security-validation-message {
