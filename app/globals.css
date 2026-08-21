@@ -10757,11 +10757,14 @@ tr.is-expanded .coach-member-row-action button svg {
   background: var(--white);
 }
 
+/* The 1px gap over a --line background is what draws the divider between the
+   rail and the document, so both columns have to stretch. Any align-items
+   other than stretch turns the short rail's leftover height into a slab of
+   exposed --line. */
 .coach-published-report-detail-grid {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(220px, 0.34fr) minmax(560px, 1fr);
-  align-items: start;
   gap: 1px;
   margin-top: clamp(54px, 7vw, 86px);
   border: 1px solid var(--line);
