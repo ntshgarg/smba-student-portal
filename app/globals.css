@@ -3980,10 +3980,16 @@ h3 {
   transition: transform 240ms ease;
 }
 
-.report-year-trigger:hover .report-year-toggle,
-.report-month-trigger:hover .report-month-toggle,
-.report-year-group.is-open > h2 .report-year-toggle,
-.report-month-item.is-open .report-month-toggle {
+.report-month-trigger:hover .report-month-toggle {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+}
+
+/* The filled red disc stays reserved for the month that is actually open, so
+   running the pointer down the list cannot read as each row opening. */
+.report-month-item.is-open .report-month-toggle,
+.report-month-item.is-open .report-month-trigger:hover .report-month-toggle {
   border-color: var(--red);
   background: var(--red);
   color: var(--white);
