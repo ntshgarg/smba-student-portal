@@ -19,8 +19,12 @@ import { requestSecurityContext, writeAuthSecurityEvent } from "@/lib/auth/secur
 import { initializeDatabase } from "@/lib/db/client"
 import { authRuntimeSessions } from "@/lib/db/schema"
 
+/** Which input an error belongs to, so the form can flag and focus it. */
+export type PasswordChangeField = "currentPassword" | "newPassword" | "confirmPassword"
+
 export type PasswordChangeState = {
   error: string | null
+  errorField?: PasswordChangeField | null
   success: string | null
 }
 
@@ -65,11 +69,17 @@ export async function changePasswordAction(
   const currentPassword = String(formData.get("currentPassword") ?? "")
   const newPassword = String(formData.get("newPassword") ?? "")
   const confirmPassword = String(formData.get("confirmPassword") ?? "")
-  if (!currentPassword) return { error: "Enter your current password.", success: null }
+  if (!currentPassword) {
+    return { error: "Enter your current password.", errorField: "currentPassword", success: null }
+  }
   const passwordError = validateNewPassword(newPassword)
-  if (passwordError) return { error: passwordError, success: null }
+  if (passwordError) return { error: passwordError, errorField: "newPassword", success: null }
   if (newPassword !== confirmPassword) {
-    return { error: "The new passwords do not match.", success: null }
+    return {
+      error: "The new passwords do not match.",
+      errorField: "confirmPassword",
+      success: null,
+    }
   }
 
   const confirmation = await confirmCurrentPassword({
@@ -79,7 +89,11 @@ export async function changePasswordAction(
     password: currentPassword,
   })
   if (confirmation.result !== "verified") {
-    return { error: currentPasswordError(confirmation.result), success: null }
+    return {
+      error: currentPasswordError(confirmation.result),
+      errorField: "currentPassword",
+      success: null,
+    }
   }
   try {
     await getAuth().api.changePassword({
@@ -87,7 +101,11 @@ export async function changePasswordAction(
       headers: confirmation.requestHeaders,
     })
   } catch {
-    return { error: "The current password could not be verified.", success: null }
+    return {
+      error: "The current password could not be verified.",
+      errorField: "currentPassword",
+      success: null,
+    }
   }
 
   writeAuthSecurityEvent({
