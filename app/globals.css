@@ -4467,9 +4467,13 @@ h3 {
   color: var(--white);
 }
 
+/* One track per button rather than a fixed four: this picker is reused for the
+   two batches as well as the four programmes, and a hard-coded track count
+   leaves the container's border-top running across empty columns. */
 .coach-session-picker {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   border-top: 1px solid var(--line);
   border-left: 1px solid var(--line);
 }
@@ -7547,6 +7551,7 @@ tr.is-expanded .coach-member-row-action button svg {
     display: grid;
     overflow: visible;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row;
     border-left: 1px solid var(--line);
     scroll-snap-type: none;
   }
