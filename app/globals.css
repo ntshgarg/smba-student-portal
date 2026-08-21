@@ -952,6 +952,12 @@
   background: var(--ivory);
 }
 
+/* The wash alone is shared with hover, so the review alert owns a red keyline
+   the pointer never paints. Same split as the adjustment choice list above. */
+.coach-adjustment-history-item.requires-review:has(> button[aria-expanded="false"]) {
+  box-shadow: inset 3px 0 0 var(--red);
+}
+
 .coach-adjustment-history-item > button > svg {
   width: 16px;
   height: 16px;
