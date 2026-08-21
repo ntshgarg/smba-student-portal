@@ -33,6 +33,10 @@
   --section-space-lg: var(--space-section-sm);
   --page-scroll-padding: 88px;
   --portal-header-height: 82px;
+  --type-utility-label: 11px;
+  --type-utility-meta: 12px;
+  --type-operational-body: 13px;
+  --type-operational-action: 12px;
 }
 
 :where(a, button, input, select, textarea, summary, [role="button"]) {
@@ -2216,6 +2220,7 @@ h3 {
 .security-form button,
 .security-panel button,
 .security-mfa-callout a,
+.security-recovery-callout > a,
 .security-code-receipt button {
   min-height: 44px;
   padding: 0 14px;
@@ -2399,6 +2404,31 @@ h3 {
   align-items: center;
   gap: 18px;
   border-color: var(--red);
+}
+
+.security-recovery-callout {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) minmax(218px, auto);
+  align-items: center;
+  gap: 18px;
+  border-color: var(--red);
+}
+
+.security-recovery-callout::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--red);
+  content: "";
+}
+
+.security-recovery-callout > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .security-mfa-callout::before {
@@ -2658,6 +2688,15 @@ h3 {
   .security-mfa-callout {
     grid-template-columns: auto minmax(0, 1fr);
     gap: 14px;
+  }
+
+  .security-recovery-callout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .security-recovery-callout > a {
+    width: 100%;
   }
 
   .security-mfa-actions {
@@ -15259,5 +15298,272 @@ textarea:focus-visible {
   select,
   textarea {
     font-size: 16px !important;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1100px) {
+  .coach-members-directory-header {
+    padding-bottom: 20px;
+  }
+
+  .coach-member-directory-panel {
+    margin-top: 20px;
+  }
+
+  .coach-member-register-tools {
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 0.38fr);
+  }
+
+  .coach-member-directory-summary {
+    min-height: 52px;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: end;
+    gap: 2px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+    text-align: right;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 900px) {
+  .player-attendance-recorder .attendance-occurrence-lead,
+  .player-attendance-recorder .attendance-occurrence-tail {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .player-attendance-recorder .attendance-occurrence-lead {
+    padding-top: 20px;
+  }
+
+  .player-attendance-recorder .attendance-occurrence-lead.is-without-selection,
+  .player-attendance-recorder .attendance-occurrence-tail {
+    padding-bottom: 20px;
+  }
+
+  .player-attendance-recorder .attendance-roster-recorder.has-selection {
+    margin-right: 20px;
+    margin-left: 20px;
+    padding: 16px;
+  }
+
+  .player-attendance-recorder .attendance-record-roster-list {
+    margin-top: 14px;
+  }
+
+  .player-attendance-recorder .attendance-record-footer {
+    margin-top: 10px;
+  }
+}
+
+/* Internal operations typography floor: keep registers compact without miniature copy. */
+.coach-members-directory-header .eyebrow,
+.coach-registration-queue-heading > strong,
+.coach-member-filter > span,
+.coach-member-table thead th,
+.coach-member-name small,
+.coach-member-training small,
+.coach-member-status,
+.coach-member-detail-heading > div > span,
+.coach-member-detail-domains section > span,
+.coach-member-detail-domains dt,
+.coach-member-edit-form legend,
+.coach-member-form-grid label > span,
+.coach-member-form-status > span,
+.coach-member-access-actions span {
+  font-size: var(--type-utility-label);
+}
+
+.coach-member-table tbody th,
+.coach-member-table tbody td,
+.coach-member-training strong,
+.coach-member-detail-domains dd {
+  font-size: var(--type-operational-body);
+}
+
+.coach-member-row-action button,
+.coach-member-contact-reveal,
+.coach-member-contact a,
+.coach-member-detail-heading > button,
+.coach-member-form-actions button,
+.coach-member-access-actions > a,
+.coach-member-access-actions > button {
+  font-size: var(--type-operational-action);
+}
+
+.player-attendance-recorder .attendance-roster-heading > strong,
+.staff-roll-call-ledger .staff-roll-call-heading > strong,
+.staff-roll-call-register-head {
+  font-size: var(--type-utility-label);
+}
+
+.player-attendance-recorder .attendance-roster-player strong,
+.staff-roll-call-ledger .staff-roll-call-person strong {
+  font-size: var(--type-operational-body);
+}
+
+.player-attendance-recorder .attendance-roster-player small,
+.staff-roll-call-ledger .staff-roll-call-person small {
+  font-size: var(--type-utility-label);
+}
+
+.player-attendance-recorder .attendance-roster-choices button,
+.player-attendance-recorder .attendance-roster-adjustment,
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button {
+  font-size: var(--type-utility-label);
+  letter-spacing: 0.02em;
+}
+
+/* Expanded workspaces share one compact alignment rhythm. */
+.coach-member-detail-heading,
+.coach-report-editor-heading {
+  align-items: flex-start;
+}
+
+.coach-member-detail-domains section,
+.coach-report-attendance-summary > div {
+  min-width: 0;
+}
+
+@media (min-width: 721px) and (max-width: 900px) {
+  .coach-member-detail-panel {
+    padding: 30px;
+  }
+
+  .coach-member-detail-domains {
+    margin-top: 28px;
+  }
+
+  .coach-member-detail-domains section {
+    padding: 26px;
+  }
+
+  .coach-member-detail-domains dl {
+    gap: 18px;
+    margin-top: 24px;
+  }
+
+  .coach-report-editor {
+    padding: 34px;
+  }
+
+  .coach-report-attendance-summary,
+  .coach-report-editor form {
+    margin-top: 30px;
+  }
+}
+
+@media (max-width: 720px) {
+  .coach-member-search,
+  .coach-member-filter,
+  .coach-member-filter-toggle {
+    min-height: 56px;
+  }
+
+  .coach-member-search {
+    padding-inline: 16px;
+  }
+
+  .coach-member-detail-panel {
+    padding: 24px 16px 28px;
+  }
+
+  .coach-member-detail-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+  }
+
+  .coach-member-detail-heading h3 {
+    font-size: clamp(28px, 9vw, 34px);
+  }
+
+  .coach-member-detail-heading > button {
+    padding-inline: 12px;
+  }
+
+  .coach-member-detail-domains {
+    margin-top: 24px;
+  }
+
+  .coach-member-detail-domains section {
+    padding: 20px 16px;
+  }
+
+  .coach-member-detail-domains dl {
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .coach-member-access-actions {
+    margin-top: 20px;
+    padding-top: 18px;
+  }
+
+  .coach-report-month-control button {
+    height: 56px;
+  }
+
+  .coach-report-month-control > div {
+    padding-inline: 12px;
+  }
+
+  .coach-report-player-list > button,
+  .coach-report-player-list > button:nth-child(odd) {
+    min-height: 68px;
+    padding-block: 11px;
+  }
+
+  .coach-report-editor-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 14px;
+  }
+
+  .coach-report-editor-state {
+    justify-items: end;
+    text-align: right;
+  }
+
+  .coach-report-attendance-summary {
+    margin-top: 24px;
+  }
+
+  .coach-report-attendance-summary > div {
+    padding: 14px;
+  }
+
+  .coach-report-editor form {
+    margin-top: 28px;
+  }
+
+  .coach-report-field {
+    margin-top: 24px;
+  }
+
+  .expanded-report-panel {
+    gap: 20px;
+    padding: 28px 20px 30px;
+  }
+
+  .report-accordion-content {
+    padding-bottom: 22px;
+  }
+}
+
+@media (max-width: 360px) {
+  .coach-member-detail-heading,
+  .coach-report-editor-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .coach-member-detail-heading > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .coach-report-editor-state {
+    justify-items: start;
+    text-align: left;
   }
 }

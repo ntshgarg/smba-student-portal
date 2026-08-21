@@ -2,6 +2,7 @@ import type {
   CaptureDefinition,
   CaptureScenario,
   CaptureViewport,
+  CaptureViewportSet,
 } from "./capture-types"
 
 export const primaryViewport: CaptureViewport = {
@@ -15,6 +16,12 @@ export const criticalViewports: CaptureViewport[] = [
   { height: 800, label: "mobile-360", width: 360 },
   primaryViewport,
   { height: 932, label: "mobile-430", width: 430 },
+]
+
+export const responsiveViewports: CaptureViewport[] = [
+  { height: 900, label: "web-1440", width: 1440 },
+  { height: 1024, label: "tablet-820", width: 820 },
+  primaryViewport,
 ]
 
 const populatedScenarios: CaptureScenario[] = [
@@ -579,6 +586,10 @@ export const captureDefinitions: CaptureDefinition[] = [
   },
 ]
 
-export function viewportsForCapture(definition: CaptureDefinition) {
+export function viewportsForCapture(
+  definition: CaptureDefinition,
+  viewportSet: CaptureViewportSet = "mobile",
+) {
+  if (viewportSet === "responsive") return responsiveViewports
   return definition.critical ? criticalViewports : [primaryViewport]
 }

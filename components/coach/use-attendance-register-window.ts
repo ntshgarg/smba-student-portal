@@ -64,6 +64,27 @@ export function getAttendanceRegisterWindow({
   }
 }
 
+export function getAttendanceRegisterScrollLeft({
+  dateCount,
+  dateWidth,
+  index,
+  nameWidth,
+}: {
+  dateCount: number
+  dateWidth: number
+  index: number
+  nameWidth: number
+}) {
+  const safeDateWidth = Math.max(1, dateWidth)
+  const targetIndex = clamp(index, 0, Math.max(0, dateCount - 1))
+  const visibleColumnsBeforeTarget = Math.max(
+    0,
+    Math.round(Math.max(0, TODAY_ALIGNMENT_OFFSET - nameWidth) / safeDateWidth),
+  )
+
+  return Math.max(0, (targetIndex - visibleColumnsBeforeTarget) * safeDateWidth)
+}
+
 function sameWindow(first: AttendanceRegisterWindow, second: AttendanceRegisterWindow) {
   return first.start === second.start && first.end === second.end
 }
@@ -125,11 +146,11 @@ export function useAttendanceRegisterWindow({
     const container = containerRef.current
     if (!container) return
     const dimensions = readTableDimensions(container)
-    const left = Math.max(
-      0,
-      dimensions.nameWidth + clamp(index, 0, Math.max(0, dateCount - 1)) * dimensions.dateWidth
-        - TODAY_ALIGNMENT_OFFSET,
-    )
+    const left = getAttendanceRegisterScrollLeft({
+      dateCount,
+      ...dimensions,
+      index,
+    })
     updateWindow(left)
     container.scrollTo({ left, behavior })
   }, [dateCount, updateWindow])

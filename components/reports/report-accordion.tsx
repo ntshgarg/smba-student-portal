@@ -174,15 +174,14 @@ export function ReportAccordion({
                           <AnimatePresence initial={false}>
                             {isReportOpen && (
                               <motion.div
-                                animate={{ height: "auto", opacity: 1 }}
+                                animate={{ opacity: 1, transform: "translateY(0px)" }}
                                 aria-labelledby={reportTriggerId}
-                                exit={{ height: 0, opacity: 0 }}
+                                exit={{ opacity: 0, transform: "translateY(-4px)" }}
                                 id={reportPanelId}
-                                initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+                                initial={reduceMotion ? false : { opacity: 0, transform: "translateY(-4px)" }}
                                 role="region"
-                                style={{ overflow: "hidden" }}
                                 transition={{
-                                  duration: reduceMotion ? 0 : 0.28,
+                                  duration: reduceMotion ? 0 : 0.18,
                                   ease: "easeOut",
                                 }}
                               >

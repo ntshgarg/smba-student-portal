@@ -1,4 +1,4 @@
-# Authenticated mobile capture harness
+# Authenticated responsive capture harness
 
 This harness captures deterministic coach and player UI states without seeding,
 editing, or resetting application data. Start the app against an externally
@@ -12,8 +12,11 @@ SMBA_CAPTURE_REPORT_MONTH=2026-07 \
 npx playwright test -c tests/e2e/playwright.config.ts
 ```
 
-The default output is
-`snapshots/mobile-regression/<run-label>/<scenario>/`. Every run writes:
+The default mobile output is
+`snapshots/mobile-regression/<run-label>/<scenario>/`. Set
+`SMBA_CAPTURE_VIEWPORT_SET=responsive` to create separate 1440 px web, 820 px
+tablet, and 390 px mobile evidence under `snapshots/responsive-regression/`.
+Every run writes:
 
 - `screenshots/`: a 390 px primary capture for every selected state, plus
   320/360/430 px captures for critical states. Short pages get a full-page PNG;
@@ -64,6 +67,7 @@ SMBA_CAPTURE_ACTORS=coach,player
 | --- | --- | --- |
 | `SMBA_CAPTURE_BASE_URL` | `http://127.0.0.1:3000` | Already-running fixture server |
 | `SMBA_CAPTURE_OUTPUT_DIR` | `snapshots/mobile-regression` | Output root |
+| `SMBA_CAPTURE_VIEWPORT_SET` | `mobile` | Use `responsive` for web, tablet, and mobile captures |
 | `SMBA_CAPTURE_ONLY` | all applicable IDs | Comma-separated capture IDs |
 | `SMBA_CAPTURE_STRICT` | `true` | Fail on page/console/network/image/document-overflow evidence |
 | `SMBA_CAPTURE_MAX_FULL_PAGE_HEIGHT` | `12000` | Height above which segmented capture is used |

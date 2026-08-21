@@ -160,8 +160,8 @@ export async function createActorContext(
     baseURL: captureSettings.baseURL,
     colorScheme: "light",
     deviceScaleFactor: 1,
-    hasTouch: true,
-    isMobile: true,
+    hasTouch: viewport.width <= 820,
+    isMobile: viewport.width <= 430,
     locale: "en-IN",
     reducedMotion: "reduce",
     storageState,
@@ -231,6 +231,28 @@ async function twoFrames(page: Page) {
   }))
 }
 
+async function waitForStableLayout(page: Page) {
+  let previous = ""
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const current = await page.evaluate(() => {
+      const openRegions = [...document.querySelectorAll<HTMLElement>(
+        '[role="region"], details[open]',
+      )]
+        .filter((element) => element.getClientRects().length > 0)
+        .map((element) => Math.round(element.getBoundingClientRect().height))
+      return JSON.stringify({
+        body: document.body.scrollHeight,
+        document: document.documentElement.scrollHeight,
+        openRegions,
+      })
+    })
+    if (current === previous) return
+    previous = current
+    await page.waitForTimeout(40)
+    await twoFrames(page)
+  }
+}
+
 export async function settlePage(page: Page, waitForNetwork = false) {
   const startedAt = Date.now()
   if (waitForNetwork) {
@@ -258,6 +280,7 @@ export async function settlePage(page: Page, waitForNetwork = false) {
     ])
   })
   await twoFrames(page)
+  await waitForStableLayout(page)
   return Date.now() - startedAt
 }
 
@@ -378,7 +401,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     case "financial-player-record-open": {
       await clickRequired(
-        page.getByRole("link", { name: "View record", exact: true }).first(),
+        page.getByRole("link", { name: /View fee record for/i }).first(),
         action,
       )
       await page.waitForURL((url) => (
@@ -499,11 +522,16 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       await page.getByRole("alert").waitFor({ state: "visible", timeout: 12_000 })
       break
     case "report-checklist-collapse": {
-      const closeButton = page.getByRole("button", { name: "Hide checklist" })
-      if (await closeButton.count()) {
-        await clickRequired(closeButton, action)
+      const toggle = page.locator(".coach-report-queue-toggle")
+      await toggle.waitFor({ state: "attached", timeout: 12_000 })
+      if (await toggle.isVisible()) {
+        if (await toggle.getAttribute("aria-expanded") === "true") {
+          await clickRequired(toggle, action)
+        }
+        await page.locator('.coach-report-queue-toggle[aria-expanded="false"]')
+          .waitFor({ state: "visible", timeout: 12_000 })
       } else {
-        await page.getByRole("button", { name: "Change player" })
+        await page.locator(".coach-report-editor")
           .waitFor({ state: "visible", timeout: 12_000 })
       }
       break
@@ -568,9 +596,19 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       if (!selected) throw new Error(`Capture action ${action} found no eligible player`)
       break
     }
-    case "student-report-open":
-      await clickRequired(page.locator(".report-month-trigger").first(), action)
+    case "student-report-open": {
+      const trigger = page.locator(".report-month-trigger").first()
+      await trigger.waitFor({ state: "visible", timeout: 12_000 })
+      const triggerId = await trigger.getAttribute("id")
+      if (!triggerId) throw new Error(`Capture action ${action} found a report without an ID`)
+      await clickRequired(trigger, action)
+      const expandedTrigger = page.locator(`[id="${triggerId}"][aria-expanded="true"]`)
+      await expandedTrigger.waitFor({ state: "visible", timeout: 12_000 })
+      const panelId = await expandedTrigger.getAttribute("aria-controls")
+        ?? triggerId.replace(/-trigger$/u, "-panel")
+      await page.locator(`[id="${panelId}"]`).waitFor({ state: "visible", timeout: 12_000 })
       break
+    }
   }
   await settlePage(page)
   return Date.now() - startedAt

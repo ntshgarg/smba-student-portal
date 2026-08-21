@@ -73,7 +73,7 @@ export default async function AccountSecurityPage() {
           requiresSecondFactor={recoverySecondFactorRequired}
         />
       ) : (
-        <section className="security-panel security-mfa-callout">
+        <section className="security-panel security-recovery-callout">
           <div>
             <p className="eyebrow">Account recovery</p>
             <h2>Add a recovery email</h2>

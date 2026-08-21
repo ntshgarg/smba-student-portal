@@ -6,6 +6,7 @@ import {
   captureScenarios,
   type CaptureActor,
   type CaptureScenario,
+  type CaptureViewportSet,
 } from "./capture-types"
 
 type FixtureSummary = {
@@ -105,9 +106,14 @@ const scenario = requiredChoice(
 )
 const fixtureSummary = readFixtureSummary(process.env.SMBA_CAPTURE_FIXTURE_MANIFEST)
 const runLabel = safeLabel(process.env.SMBA_CAPTURE_RUN_LABEL ?? defaultRunLabel())
+const viewportSet = requiredChoice(
+  process.env.SMBA_CAPTURE_VIEWPORT_SET ?? "mobile",
+  ["mobile", "responsive"] as const satisfies readonly CaptureViewportSet[],
+  "SMBA_CAPTURE_VIEWPORT_SET",
+)
 const outputRoot = path.resolve(
   process.env.SMBA_CAPTURE_OUTPUT_DIR
-    ?? path.join(projectRoot, "snapshots", "mobile-regression"),
+    ?? path.join(projectRoot, "snapshots", `${viewportSet}-regression`),
 )
 
 export const captureSettings = {
@@ -137,6 +143,7 @@ export const captureSettings = {
   runLabel,
   scenario,
   strict: booleanValue(process.env.SMBA_CAPTURE_STRICT, true),
+  viewportSet,
 } as const
 
 if (!/^\d{4}-\d{2}-\d{2}$/.test(captureSettings.referenceDate)) {
