@@ -31,8 +31,14 @@
   flex: 0 0 auto;
 }
 
-.viewNavigation a:hover,
-.viewNavigation .activeView {
+.viewNavigation a:hover {
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
+  color: var(--navy);
+}
+
+/* Selection keeps the solid navy fill so hover can never be read as selected. */
+.viewNavigation .activeView,
+.viewNavigation .activeView:hover {
   background: var(--navy);
   color: var(--white);
 }
@@ -131,9 +137,17 @@
   border-left: 1px solid var(--line);
 }
 
-.modeSwitch .activeMode {
-  background: color-mix(in srgb, var(--navy) 7%, var(--ivory));
+.modeSwitch a:hover {
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
   color: var(--navy);
+}
+
+/* Mirrors the view tabs above: the navy fill means selected, so a
+   low-contrast wash stays reserved for disabled controls. */
+.modeSwitch .activeMode,
+.modeSwitch .activeMode:hover {
+  background: var(--navy);
+  color: var(--white);
 }
 
 .registrationPanelHeader {
