@@ -8794,10 +8794,21 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-occurrence-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.coach-occurrence-actions > button {
+  flex-shrink: 0;
+}
+
+/* The replacement form needs the whole pane, so an open disclosure takes its
+   own row instead of sharing one with Cancel session and overflowing. */
+.coach-occurrence-actions details[open] {
+  flex: 1 1 100%;
 }
 
 .coach-occurrence-actions > button,
@@ -8820,9 +8831,11 @@ tr.is-expanded .coach-member-row-action button svg {
   width: 15px;
 }
 
+/* Fluid tracks so the form always fits the day pane, which is only ~340-450px
+   wide at every supported desktop and tablet width. */
 .coach-occurrence-actions details > div {
   display: grid;
-  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
   margin-top: 12px;
   padding: 18px;
