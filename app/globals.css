@@ -8607,6 +8607,11 @@ tr.is-expanded .coach-member-row-action button svg {
   text-align: left;
 }
 
+/* Translucent so the cancelled-session tint on the row still reads through. */
+.coach-day-session > button:hover {
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
+}
+
 .coach-day-session > button > time {
   color: var(--red);
   font-size: 11px;
@@ -8953,6 +8958,12 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-month-grid > button.has-sessions {
   background: var(--white);
+}
+
+/* Translucent so the day's own fill still reads through, and skipped on the
+   selected cell so hover stays subordinate to the navy selection ring. */
+.coach-month-grid > button:hover:not(.is-selected) {
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
 }
 
 .coach-month-grid > button.is-selected {
