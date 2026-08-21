@@ -2908,9 +2908,37 @@
 }
 
 .focusedLedger .planEditor > summary,
-.focusedLedger .concessions > summary {
-  min-height: 44px;
+.focusedLedger .concessions > summary,
+.focusedLedger .paymentHistory summary,
+.focusedLedger .corrections > summary {
+  min-height: 48px;
+  justify-content: space-between;
+  gap: 14px;
+  padding-inline: clamp(18px, 2.3vw, 26px);
   font-size: 11px;
+  list-style: none;
+}
+
+.focusedLedger .planEditor > summary::-webkit-details-marker,
+.focusedLedger .paymentHistory summary::-webkit-details-marker,
+.focusedLedger .corrections > summary::-webkit-details-marker {
+  display: none;
+}
+
+.focusedLedger .planEditor > summary::after,
+.focusedLedger .paymentHistory summary::after,
+.focusedLedger .corrections > summary::after {
+  flex: 0 0 auto;
+  color: var(--red);
+  content: "+";
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.focusedLedger .planEditor[open] > summary::after,
+.focusedLedger .paymentHistory[open] summary::after,
+.focusedLedger .corrections[open] > summary::after {
+  content: "−";
 }
 
 .focusedLedger .setupPanel {
@@ -3171,8 +3199,8 @@
 }
 
 .focusedLedger .paymentHistory summary {
-  min-height: 44px;
-  font-size: 11px;
+  padding-right: 14px;
+  padding-left: 18px;
 }
 
 .focusedLedger .paymentHistory strong,
@@ -3660,6 +3688,14 @@
     min-width: 0;
   }
 
+  .periodControl button {
+    height: 56px;
+  }
+
+  .periodControl > div {
+    padding-inline: 12px;
+  }
+
   .workspaceHeaderControls {
     width: 100%;
   }
@@ -4040,6 +4076,16 @@
     padding: 0;
   }
 
+  .focusedLedger .planEditor > summary,
+  .focusedLedger .concessions > summary,
+  .focusedLedger .corrections > summary {
+    padding-inline: 16px;
+  }
+
+  .focusedLedger .paymentHistory summary {
+    padding-inline: 14px;
+  }
+
   .focusedLedger .setupPanel {
     grid-template-columns: 1fr;
   }
@@ -4206,4 +4252,39 @@
   .loadingWorkspace {
     animation: none;
   }
+}
+
+/* Player-ledger utility text follows the same readable register scale. */
+.focusedLedger .ledgerBalance > span,
+.focusedLedger .ledgerBalance em,
+.focusedLedger .feePlan dt,
+.focusedLedger .chargeAmounts dt,
+.focusedLedger .setupDefaults dt,
+.focusedLedger .sectionHeading > p,
+.focusedLedger .receiptMeta dt,
+.focusedLedger .receiptAllocations > span,
+.focusedLedger .refundHistory > span,
+.focusedLedger .receipt > summary small,
+.focusedLedger .receiptAllocations li small,
+.focusedLedger .chargeHeading > div > span,
+.focusedLedger .chargeHeading small,
+.focusedLedger .paymentHistory span,
+.focusedLedger .paymentHistory small {
+  font-size: var(--type-utility-label);
+}
+
+.focusedLedger .planEditor > summary,
+.focusedLedger .concessions > summary,
+.focusedLedger .paymentHistory summary {
+  font-size: var(--type-operational-action);
+}
+
+.focusedLedger .setupHeading p,
+.focusedLedger .planEditorBody > p,
+.focusedLedger .receipt > summary strong,
+.focusedLedger .receiptMeta dd,
+.focusedLedger .receiptAllocations li strong,
+.focusedLedger .paymentHistory strong,
+.focusedLedger .paymentHistory time {
+  font-size: var(--type-utility-meta);
 }

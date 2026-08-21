@@ -41,7 +41,8 @@ const definitions = captureDefinitions.filter((definition) => {
 })
 
 const cases = definitions.flatMap((definition) => (
-  viewportsForCapture(definition).map((viewport) => ({ definition, viewport }))
+  viewportsForCapture(definition, captureSettings.viewportSet)
+    .map((viewport) => ({ definition, viewport }))
 ))
 
 function errorMessage(error: unknown) {
@@ -61,7 +62,7 @@ function collectorEvidence(
   evidence.requestFailures = [...collector.requestFailures]
 }
 
-test.describe("authenticated mobile regression capture", () => {
+test.describe("authenticated responsive regression capture", () => {
   test.beforeAll(async () => {
     await prepareCaptureDirectories()
   })

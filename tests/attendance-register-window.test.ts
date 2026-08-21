@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  getAttendanceRegisterScrollLeft,
   getAttendanceRegisterWindow,
   getInitialAttendanceRegisterWindow,
 } from "@/components/coach/use-attendance-register-window"
@@ -44,5 +45,29 @@ describe("annual attendance register window", () => {
 
     expect(window.end).toBe(365)
     expect(window.start).toBe(360)
+  })
+
+  it("aligns the desktop target to complete date columns", () => {
+    const left = getAttendanceRegisterScrollLeft({
+      dateCount: 365,
+      dateWidth: 58,
+      index: 221,
+      nameWidth: 250,
+    })
+
+    expect(left).toBe(220 * 58)
+    expect(left % 58).toBe(0)
+  })
+
+  it("aligns the mobile target while retaining two preceding dates", () => {
+    const left = getAttendanceRegisterScrollLeft({
+      dateCount: 365,
+      dateWidth: 54,
+      index: 221,
+      nameWidth: 148,
+    })
+
+    expect(left).toBe(219 * 54)
+    expect(left % 54).toBe(0)
   })
 })

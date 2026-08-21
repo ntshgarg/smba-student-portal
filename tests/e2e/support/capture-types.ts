@@ -54,9 +54,17 @@ export type CaptureAction =
 
 export type CaptureViewport = {
   height: number
-  label: "mobile-320" | "mobile-360" | "mobile-390" | "mobile-430"
+  label:
+    | "mobile-320"
+    | "mobile-360"
+    | "mobile-390"
+    | "mobile-430"
+    | "tablet-820"
+    | "web-1440"
   width: number
 }
+
+export type CaptureViewportSet = "mobile" | "responsive"
 
 export type SegmentPolicy = "auto" | "always"
 

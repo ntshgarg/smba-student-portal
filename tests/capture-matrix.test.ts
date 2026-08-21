@@ -4,6 +4,7 @@ import {
   captureDefinitions,
   criticalViewports,
   primaryViewport,
+  responsiveViewports,
   viewportsForCapture,
 } from "./e2e/support/capture-matrix"
 
@@ -90,5 +91,14 @@ describe("player attendance regression capture matrix", () => {
       segmentPolicy: "always",
     })
     expect(definition && viewportsForCapture(definition)).toEqual(criticalViewports)
+  })
+
+  it("can capture any selected state at web, tablet, and mobile widths", () => {
+    const definition = captureDefinitions.find((item) => (
+      item.id === "player-dashboard-attendance-calendar"
+    ))
+
+    expect(definition && viewportsForCapture(definition, "responsive"))
+      .toEqual(responsiveViewports)
   })
 })

@@ -1470,3 +1470,74 @@
     transition: none;
   }
 }
+
+@media (min-width: 721px) and (max-width: 980px) {
+  .monthlyFilters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .monthlyFilters .searchField,
+  .monthlyFilters > label:last-of-type,
+  .monthlyFilters > button {
+    grid-column: span 2;
+  }
+
+  .monthlyFilters > button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 780px) and (max-width: 980px) {
+  .registrationFilters:not(.monthlyFilters) {
+    grid-template-columns: minmax(0, 1.65fr) repeat(3, minmax(0, 0.8fr));
+  }
+
+  .registrationFilters:not(.monthlyFilters) .searchField {
+    grid-column: auto;
+  }
+}
+
+/* Shared finance-register type floor: compact rows, readable operational detail. */
+.panelHeader > div > span,
+.registrationRecordCount span,
+.registrationEquation span,
+.registrationAmounts dt,
+.registrationFilters label > span:first-child,
+.summaryGrid dt,
+.methodSummary dt,
+.recordsTable th,
+.activityBody > span {
+  font-size: var(--type-utility-label);
+}
+
+.downloadLink,
+.rowAction,
+.modeSwitch a,
+.registrationHeaderActions .downloadLink,
+.registrationHeaderActions .modeSwitch a,
+.registrationFilters > button,
+.registrationAction .rowAction,
+.pagination a,
+.pagination > div > span {
+  font-size: var(--type-operational-action);
+}
+
+.recordsTable td,
+.activityBody p {
+  font-size: var(--type-operational-body);
+}
+
+.recordsTable td > small,
+.activityTime,
+.pagination > span,
+.registrationPanel .pagination > span,
+.registrationPanel .pagination a,
+.registrationPanel .pagination > div > span {
+  font-size: var(--type-utility-meta);
+}
+
+.status,
+.registrationStatus .status {
+  font-size: var(--type-utility-label);
+  letter-spacing: 0.045em;
+}

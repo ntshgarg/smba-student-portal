@@ -347,7 +347,7 @@ test("Staff Roll Call matches the player roster choice controls across responsiv
       .toBeLessThanOrEqual(1)
     expect(Math.abs(boxes[1].left - boxes[0].right)).toBeLessThanOrEqual(1)
     expect(boxes[0].boxShadow).toBe("none")
-    expect(boxes[0].fontSize).toBe(viewport.width <= 760 ? "8px" : "9px")
+    expect(boxes[0].fontSize).toBe("11px")
     if (viewport.width <= 760) {
       expect(Math.min(...boxes.map((box) => box.height))).toBeGreaterThanOrEqual(44)
     }
