@@ -10536,8 +10536,6 @@ tr.is-expanded .coach-member-row-action button svg {
   font-size: 18px;
   font-style: italic;
   line-height: 1;
-  text-decoration: underline dotted;
-  text-underline-offset: 6px;
 }
 
 .coach-published-report-register-footer {
@@ -13081,8 +13079,6 @@ tr.is-expanded .coach-member-row-action button svg {
   font-size: 18px !important;
   font-style: italic;
   line-height: 1;
-  text-decoration: underline dotted;
-  text-underline-offset: 6px;
 }
 
 .coach-member-name {
