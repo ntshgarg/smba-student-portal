@@ -55,6 +55,7 @@ export function FinancialsCard({
           ? `${attentionCount} attention`
           : "Ready"
         : "Setup"}
+      statusTone={active && attentionCount > 0 ? "attention" : undefined}
       title="Financials"
       titleId="coach-financials-card-title"
     >

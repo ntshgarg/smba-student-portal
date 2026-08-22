@@ -11775,16 +11775,26 @@ tr.is-expanded .coach-member-row-action button svg {
   text-transform: uppercase;
 }
 
+/* The same red chip used to label the next session date, the attendance month
+   and an unpaid fee alike, so "PAYMENT DUE" read exactly like "CLEAR". The
+   chip is now quiet by default and the alert tone is a filled swatch, which
+   also survives greyscale. */
 .player-ticket-dashboard .player-ticket-context {
   flex: 0 0 auto;
   padding: 6px 9px;
-  border: 1px solid color-mix(in srgb, var(--red) 52%, var(--line));
-  color: var(--red);
+  border: 1px solid var(--line);
+  color: var(--steel);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.1em;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.player-ticket-dashboard .player-ticket-context[data-tone="attention"] {
+  border-color: var(--red-dark);
+  background: var(--red-dark);
+  color: var(--white);
 }
 
 .player-ticket-dashboard .player-ticket-action {

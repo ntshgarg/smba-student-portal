@@ -32,6 +32,7 @@ export function CoachDashboardCard({
   children,
   id,
   status,
+  statusTone,
   title,
   titleId,
 }: {
@@ -39,6 +40,7 @@ export function CoachDashboardCard({
   children: ReactNode
   id?: string
   status?: ReactNode
+  statusTone?: "attention"
   title: string
   titleId: string
 }) {
@@ -52,7 +54,9 @@ export function CoachDashboardCard({
       <article className={styles.card}>
         <header className={styles.masthead}>
           <h2 id={titleId}>{title}</h2>
-          {status ? <span className={styles.status}>{status}</span> : null}
+          {status ? (
+            <span className={styles.status} data-tone={statusTone}>{status}</span>
+          ) : null}
         </header>
         <div className={styles.meta}>{children}</div>
       </article>

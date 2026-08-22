@@ -46,7 +46,7 @@ export function PlayerAnnouncementsCard({
       >
         <header className="player-ticket-masthead">
           <h3 className="player-ticket-title">Announcements</h3>
-          <span className="player-ticket-context">Unavailable</span>
+          <span className="player-ticket-context" data-tone="attention">Unavailable</span>
         </header>
         <strong className="player-ticket-announcement-state">Announcements unavailable</strong>
         <p className={styles.dashboardUnavailableCopy}>
