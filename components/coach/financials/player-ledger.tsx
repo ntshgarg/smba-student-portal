@@ -72,6 +72,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const requestKey = useIdempotencyKey()
+  const allocationFeedbackId = `refund-allocation-feedback-${receipt.id}`
 
   const allocationValidation = reviewedAmountPaise === null
     ? null
@@ -83,6 +84,9 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
         })),
         values: allocationValues,
       })
+  const invalidAllocationId = allocationValidation && !allocationValidation.ok
+    ? allocationValidation.fieldId
+    : undefined
 
   useUnsavedWorkGuard({
     isDirty: dirty && pending === null,
@@ -295,9 +299,14 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
                   <span className={styles.allocationInput}>
                     <span aria-hidden="true">₹</span>
                     <input
+                      id={`refund-allocation-${allocation.paymentAllocationId}`}
                       name={`refundAllocation.${allocation.paymentAllocationId}`}
                       inputMode="decimal"
                       aria-label={`Refund allocated from ${allocation.description}`}
+                      aria-invalid={invalidAllocationId === allocation.paymentAllocationId || undefined}
+                      aria-describedby={invalidAllocationId === allocation.paymentAllocationId
+                        ? allocationFeedbackId
+                        : undefined}
                       value={allocationValues[allocation.paymentAllocationId] ?? "0"}
                       disabled={Boolean(pending)}
                       onChange={(event) => {
@@ -312,6 +321,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
             <div className={styles.paymentFooter}>
               <InlineNotice
                 className={styles.notice}
+                id={allocationFeedbackId}
                 message={feedback?.message ?? (allocationValidation && !allocationValidation.ok ? allocationValidation.message : undefined)}
                 tone={feedback?.tone ?? (allocationValidation && !allocationValidation.ok ? "error" : undefined)}
               />
@@ -1223,6 +1233,10 @@ type CorrectionMode =
   | "manual_debit"
   | "void_charge"
 
+type CorrectionFeedback = ActionFeedback & {
+  field?: "amount" | "reason"
+}
+
 function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
   const router = useRouter()
   const activeCharges = ledger.charges.filter((charge) => charge.status !== "void")
@@ -1246,10 +1260,12 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<CorrectionFeedback | null>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const requestKey = useIdempotencyKey()
+  const feedbackId = `correction-feedback-${ledger.playerId}`
+  const invalidField = feedback?.tone === "error" ? feedback.field : undefined
 
   useUnsavedWorkGuard({
     isDirty: dirty && !pending,
@@ -1267,8 +1283,18 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
     event.preventDefault()
     if (pending) return
     if (!reason.trim()) {
-      setFeedback({ message: "Add a reason for this correction", tone: "error" })
+      setFeedback({ field: "reason", message: "Add a reason for this correction", tone: "error" })
       reasonRef.current?.focus()
+      return
+    }
+
+    // The amount has to be checked before the confirmation, otherwise the coach
+    // approves a correction and only then learns the amount was unusable.
+    const isManualAdjustment = mode === "manual_credit" || mode === "manual_debit"
+    const adjustmentAmountPaise = isManualAdjustment ? rupeesToPaise(amount) : 0
+    if (adjustmentAmountPaise === null) {
+      setFeedback({ field: "amount", message: "Enter a valid adjustment amount", tone: "error" })
+      amountRef.current?.focus()
       return
     }
 
@@ -1311,14 +1337,8 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
           reason: reason.trim(),
         })
       } else {
-        const amountPaise = rupeesToPaise(amount)
-        if (amountPaise === null) {
-          setFeedback({ message: "Enter a valid adjustment amount", tone: "error" })
-          amountRef.current?.focus()
-          return
-        }
         result = await applyChargeAdjustmentAction({
-          amountPaise,
+          amountPaise: adjustmentAmountPaise,
           chargeId,
           idempotencyKey: requestKey.current(),
           kind: mode as "manual_credit" | "manual_debit",
@@ -1413,18 +1433,18 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
               <span>Amount</span>
               <div className={styles.moneyInput}>
                 <span aria-hidden="true">₹</span>
-                <input name="amount" ref={amountRef} inputMode="decimal" value={amount} disabled={pending} onChange={(event) => { setAmount(event.target.value); markDirty() }} />
+                <input name="amount" ref={amountRef} inputMode="decimal" value={amount} disabled={pending} aria-invalid={invalidField === "amount" || undefined} aria-describedby={invalidField === "amount" ? feedbackId : undefined} onChange={(event) => { setAmount(event.target.value); markDirty() }} />
               </div>
             </label>
           ) : null}
 
           <label className={styles.field}>
             <span>Reason</span>
-            <textarea name="reason" ref={reasonRef} rows={3} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); markDirty() }} />
+            <textarea name="reason" ref={reasonRef} rows={3} value={reason} disabled={pending} aria-invalid={invalidField === "reason" || undefined} aria-describedby={invalidField === "reason" ? feedbackId : undefined} onChange={(event) => { setReason(event.target.value); markDirty() }} />
           </label>
 
           <div className={styles.paymentFooter}>
-            <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+            <InlineNotice className={styles.notice} id={feedbackId} message={feedback?.message} tone={feedback?.tone} />
             <button className={styles.correctionButton} type="submit" disabled={pending || (mode === "reverse_payment" && !paymentId) || (mode === "reverse_adjustment" && !adjustmentId) || (mode === "void_charge" && !chargeId)}>
               {pending ? "Saving…" : "Apply correction"}
             </button>
