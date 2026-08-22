@@ -34,8 +34,8 @@ export const metadata: Metadata = {
   authors: [{ name: "Sathiya Moorthy Badminton Academy" }],
   creator: "Sathiya Moorthy Badminton Academy",
   icons: {
-    icon: [{ url: "/images/smba-logo.jpeg", type: "image/jpeg" }],
-    apple: [{ url: "/images/smba-logo.jpeg", type: "image/jpeg" }],
+    icon: [{ url: "/images/icon.png", sizes: "512x512", type: "image/png" }],
+    apple: [{ url: "/images/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
     type: "website",

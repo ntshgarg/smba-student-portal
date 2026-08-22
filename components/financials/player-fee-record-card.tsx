@@ -6,6 +6,7 @@ import type { PlayerFinanceDashboardSummary } from "@/lib/finance/types"
 import {
   dashboardFeeRecordCopy,
   financeStatusLabel,
+  financeStatusTone,
 } from "@/components/financials/player-finance-presentation"
 
 export function PlayerFeeRecordCard({
@@ -19,6 +20,11 @@ export function PlayerFeeRecordCard({
     : summary.currentBalancePaise === 0
       ? "Up to date"
       : financeStatusLabel(summary.status)
+  const tone = !summary || (
+    summary.currentBalancePaise > 0 && financeStatusTone(summary.status) === "attention"
+  )
+    ? "attention"
+    : undefined
 
   return (
     <Reveal
@@ -27,7 +33,7 @@ export function PlayerFeeRecordCard({
     >
       <header className="player-ticket-masthead">
         <h3 className="player-ticket-title">Fee record</h3>
-        <span className="player-ticket-context">{context}</span>
+        <span className="player-ticket-context" data-tone={tone}>{context}</span>
       </header>
       <div className="player-ticket-record-primary">
         <strong className="player-ticket-record-value">{copy.status}</strong>

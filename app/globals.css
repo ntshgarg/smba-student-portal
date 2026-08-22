@@ -5526,6 +5526,13 @@ tr.is-expanded .coach-member-row-action button svg {
   mix-blend-mode: multiply;
 }
 
+.coach-report-letterhead-mark {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  text-align: right;
+}
+
 .coach-report-letterhead span {
   color: var(--red);
   font-size: 11px;
@@ -5534,8 +5541,19 @@ tr.is-expanded .coach-member-row-action button svg {
   text-transform: uppercase;
 }
 
+.coach-report-letterhead small {
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* The printed letterhead closes with a short red rule sitting under the navy
+   one. The preview stands in for that document, so it carries the same mark,
+   painted from the block below the rule so the letterhead stays unpositioned
+   and cannot come to sit over the dialog's close control. */
 .coach-report-preview-heading {
   padding: 42px 0;
+  background: linear-gradient(var(--red), var(--red)) top left / 132px 3px no-repeat;
 }
 
 .coach-report-preview-heading > p {
@@ -6398,6 +6416,11 @@ tr.is-expanded .coach-member-row-action button svg {
     align-items: flex-start;
     flex-direction: column;
     gap: 14px;
+  }
+
+  .coach-report-letterhead-mark {
+    justify-items: start;
+    text-align: left;
   }
 
   .coach-report-preview-heading dl {
@@ -10252,16 +10275,26 @@ tr.is-expanded .coach-member-row-action button svg {
   text-transform: uppercase;
 }
 
+/* The same red chip used to label the next session date, the attendance month
+   and an unpaid fee alike, so "PAYMENT DUE" read exactly like "CLEAR". The
+   chip is now quiet by default and the alert tone is a filled swatch, which
+   also survives greyscale. */
 .player-ticket-dashboard .player-ticket-context {
   flex: 0 0 auto;
   padding: 6px 9px;
-  border: 1px solid color-mix(in srgb, var(--red) 52%, var(--line));
-  color: var(--red);
+  border: 1px solid var(--line);
+  color: var(--steel);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.1em;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.player-ticket-dashboard .player-ticket-context[data-tone="attention"] {
+  border-color: var(--red-dark);
+  background: var(--red-dark);
+  color: var(--white);
 }
 
 .player-ticket-dashboard .player-ticket-action {

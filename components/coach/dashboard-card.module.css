@@ -117,13 +117,16 @@
   text-transform: uppercase;
 }
 
+/* Every card used to wear the same red chip, so "39 ATTENTION" was the same
+   colour as "ROSTER CURRENT" and "2 ACTIVE". The chip is now quiet by default
+   and the alert tone is a filled swatch, which also survives greyscale. */
 .status {
   flex: 0 0 auto;
   max-width: 58%;
   padding: 6px 9px 5px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--red) 52%, var(--line));
-  color: var(--red);
+  border: 1px solid var(--line);
+  color: var(--steel);
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -131,6 +134,12 @@
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.status[data-tone="attention"] {
+  border-color: var(--red-dark);
+  background: var(--red-dark);
+  color: var(--white);
 }
 
 .meta {
