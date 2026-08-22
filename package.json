@@ -54,7 +54,7 @@
   },
   "dependencies": {
     "better-auth": "^1.6.30",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.2",
     "libsql": "^0.5.29",
     "lucide-react": "^1.27.0",
