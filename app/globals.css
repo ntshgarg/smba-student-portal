@@ -12305,7 +12305,15 @@ tr.is-expanded .coach-member-row-action button svg {
   background: color-mix(in srgb, var(--white) 84%, var(--ivory));
 }
 
-.personal-attendance-calendar .player-attendance-calendar-day.is-outside-month .player-attendance-calendar-date {
+/* Limited to cells with no status fill. The recorded states paint a saturated
+   brand background and set their date text to maximum contrast against it, so
+   dimming there compounds against the fill rather than the page: white fell to
+   3.35:1 on --green and 3.17:1 on --red, and the makeup ink to 2.57:1, all
+   under the 4.5:1 needed for this row's 7-18px type. Those cells are already
+   set apart by the fill, so they keep the date at full strength. */
+.personal-attendance-calendar
+  .player-attendance-calendar-day.is-outside-month:not(.is-present):not(.is-absent):not(.is-rescheduled)
+  .player-attendance-calendar-date {
   opacity: 0.66;
 }
 
