@@ -5,18 +5,23 @@ the application-level audit trail or the head coach's operating process.
 
 ## Deployment gate
 
-`.github/workflows/quality.yml` runs on every pull request and every push to `main`. It checks:
+`.github/workflows/quality.yml` runs on every pull request and every push to `main`. It isolates
+static validation, Vitest, and browser regression work on separate pinned runners so database setup
+and production builds cannot starve the unit-test worker pool. It checks:
 
 - ESLint and TypeScript;
 - Drizzle migration consistency;
-- the complete Vitest suite;
+- the complete Vitest suite, with ordinary tests bounded to two workers and the fixture lifecycle
+  suite run separately on one worker;
 - clean, demo, edge-case and stress database construction and verification;
 - a production Next.js build; and
-- responsive authentication E2E against an isolated stress database.
+- registration and activation E2E against an isolated clean database, plus responsive authentication,
+  onboarding and attendance E2E against an isolated stress database.
 
-Vercel still deploys `main` automatically. For a strict pre-deployment gate, protect `main` in
-GitHub, require the `Application regression` check, and merge through a pull request. Direct pushes
-start Vercel and GitHub Actions at the same time and therefore are not a true gate.
+The final `Application regression` job is a stable aggregate check and passes only when all three
+isolated jobs pass. Vercel still deploys `main` automatically. For a strict pre-deployment gate,
+protect `main` in GitHub, require `Application regression`, and merge through a pull request. Direct
+pushes start Vercel and GitHub Actions at the same time and therefore are not a true gate.
 
 `main` is protected with strict status checks, administrator enforcement, pull requests, linear history,
 conversation resolution and force-push/deletion prevention. Do not weaken those rules to bypass a failure.
