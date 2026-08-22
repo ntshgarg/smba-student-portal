@@ -14,8 +14,10 @@ export default defineConfig({
     colorScheme: "light",
     headless: true,
     locale: "en-IN",
+    screenshot: "off",
     timezoneId: "Asia/Kolkata",
-    trace: "retain-on-failure",
+    trace: "off",
+    video: "off",
   },
   workers: 1,
 })

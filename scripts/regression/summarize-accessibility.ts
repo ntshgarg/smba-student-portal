@@ -16,7 +16,7 @@ const root = path.resolve(argument("--root") ?? "output/accessibility")
 const output = argument("--output")
 const missingProfiles: string[] = []
 const results = accessibilityProfiles.flatMap((profile) => {
-  const resultPath = path.join(root, profile, "results.json")
+  const resultPath = path.join(root, profile, "results.sanitized.json")
   if (!existsSync(resultPath)) {
     missingProfiles.push(profile)
     return []

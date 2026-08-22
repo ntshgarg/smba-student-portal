@@ -7,12 +7,13 @@ import {
 } from "node:fs"
 import path from "node:path"
 
-import { expect, test } from "@playwright/test"
 import type { Browser, Page, Route, TestInfo } from "@playwright/test"
 import { base32 } from "@better-auth/utils/base32"
 import { createOTP } from "@better-auth/utils/otp"
 import Database from "better-sqlite3"
 import { symmetricDecrypt } from "better-auth/crypto"
+
+import { expect, test } from "./support/failure-evidence"
 
 const projectRoot = path.resolve(process.cwd())
 const canonicalDataDirectory = path.join(projectRoot, ".data")

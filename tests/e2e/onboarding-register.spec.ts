@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test } from "./support/failure-evidence"
 
 const viewports = [
   { height: 1000, name: "web", width: 1440 },

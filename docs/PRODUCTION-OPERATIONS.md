@@ -19,9 +19,13 @@ and production builds cannot starve the unit-test worker pool. It checks:
   onboarding and attendance E2E against an isolated stress database.
 
 The final `Application regression` job is a stable aggregate check and passes only when all three
-isolated jobs pass. Vercel still deploys `main` automatically. For a strict pre-deployment gate,
-protect `main` in GitHub, require `Application regression`, and merge through a pull request. Direct
-pushes start Vercel and GitHub Actions at the same time and therefore are not a true gate.
+isolated jobs pass. Browser failures retain only masked PNG files and sanitized text/JSON evidence for
+14 days. Passwords, PINs, recovery material, inputs and QR codes are masked; raw traces, video, HTML
+reports, reporter JSON, databases and storage state are never uploaded. Successful runs upload no
+diagnostic artifact.
+
+Vercel deploys `main` automatically. Merge through a pull request so the required `Application
+regression` and `UI accessibility / WCAG 2.2 AA` checks complete before a production deployment.
 
 `main` is protected with strict status checks, administrator enforcement, pull requests, linear history,
 conversation resolution and force-push/deletion prevention. Do not weaken those rules to bypass a failure.
@@ -31,10 +35,12 @@ conversation resolution and force-push/deletion prevention. Do not weaken those 
 `GET /api/health` performs a read-only database query. It returns only `{"status":"ok"}` or a
 generic 503 response and is never cached. It does not expose counts, credentials or provider names.
 
-`.github/workflows/production-health.yml` checks the database probe and public login page once per
-hour without authenticating or mutating data. A failed run appears in GitHub Actions. GitHub
-notifications should be enabled for failed Actions runs. For faster paging, connect the same URL to
-an external uptime service later.
+`.github/workflows/production-health.yml` checks the database probe, public homepage identity and login
+page once per hour without authenticating or mutating data. The scheduled probe retries three times.
+After a trusted Vercel Production deployment, `.github/workflows/production-alerts.yml` checks the
+canonical domain up to 12 times and synchronizes the `Production health` issue within minutes. Preview,
+transitional, forged-actor and non-`main` deployment events are ignored. The workflow checks out the
+default branch rather than event-controlled deployment code.
 
 `.github/workflows/operations-monitor.yml` checks sanitized server-error counts, authentication-email
 API failures and repeated login lockouts twice per hour. `.github/workflows/production-alerts.yml`
@@ -48,8 +54,13 @@ notification arrives, and immediately running it again with `resolved`.
 Manual check:
 
 ```bash
-npm run ops:smoke -- https://smbaacademy.in
+npm run ops:smoke -- https://smbaacademy.in --attempts 3 --delay-ms 5000
 ```
+
+Vercel's Production Branch must remain `main`. GitHub's `Production` environment is restricted to
+`main` without a manual reviewer. If Vercel's SHA-based deployment reference is ever rejected by that
+environment policy, remove only the GitHub environment branch policy, retain Vercel's restriction and
+the workflow's runtime SHA-ancestry validation, and record the integration limitation here.
 
 ## Database recovery
 

@@ -2,7 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 import AxeBuilder from "@axe-core/playwright"
-import type { Page, TestInfo } from "@playwright/test"
+import type { Page } from "@playwright/test"
+
+import { captureMaskedFailure } from "./failure-evidence"
 
 import type {
   AccessibilityActor,
@@ -650,36 +652,11 @@ export function writeAccessibilityResults(
   results: readonly AccessibilityResult[],
 ) {
   mkdirSync(outputDirectory, { recursive: true })
-  const jsonPath = path.join(outputDirectory, "results.json")
-  const summaryPath = path.join(outputDirectory, "summary.md")
+  const jsonPath = path.join(outputDirectory, "results.sanitized.json")
+  const summaryPath = path.join(outputDirectory, "summary.sanitized.txt")
   writeFileSync(jsonPath, `${JSON.stringify(results, null, 2)}\n`, { mode: 0o600 })
   writeFileSync(summaryPath, buildAccessibilitySummary(results), { mode: 0o600 })
   return { jsonPath, summaryPath }
 }
 
-export async function captureMaskedFailure(
-  page: Page,
-  testInfo: TestInfo,
-  name: string,
-) {
-  const screenshotPath = testInfo.outputPath(`${name}.png`)
-  await page.screenshot({
-    animations: "disabled",
-    fullPage: true,
-    mask: [page.locator([
-      '.recovery-email-sent',
-      '.totp-qr',
-      '[aria-label="Authenticator setup QR code"]',
-      "input",
-      "textarea",
-      "code",
-      '[data-sensitive="true"]',
-    ].join(","))],
-    maskColor: "#0a1f38",
-    path: screenshotPath,
-  })
-  await testInfo.attach(`${name}-screenshot`, {
-    contentType: "image/png",
-    path: screenshotPath,
-  })
-}
+export { captureMaskedFailure }

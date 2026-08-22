@@ -73,6 +73,8 @@ jobs:
     name: Build and browser regression
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      SMBA_FAILURE_EVIDENCE_ROOT: output/failure-evidence/browser
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,6 +101,19 @@ jobs:
       - name: Install Chromium for browser regressions
         run: npx playwright install --with-deps chromium
 
+      - name: Prove masked failure evidence is safe
+        env:
+          SMBA_FAILURE_EVIDENCE_ROOT: output/failure-evidence-sentinel
+          SMBA_FAILURE_EVIDENCE_SENTINEL: "true"
+          SMBA_FAILURE_EVIDENCE_SENTINEL_EMAIL: clumsy.thumbs@example.test
+          SMBA_FAILURE_EVIDENCE_SENTINEL_SECRET: SMBA-sentinel-password-246810
+        run: |
+          if npx playwright test -c tests/e2e/playwright.failure-evidence.config.ts; then
+            echo "The failure-evidence sentinel was expected to fail."
+            exit 1
+          fi
+          node scripts/regression/verify-failure-evidence.mjs output/failure-evidence-sentinel --clean
+
       - name: Prepare disposable registration database
         run: cp .data/academy-clean.db /tmp/smba-ci-registration.db
 
@@ -116,7 +131,9 @@ jobs:
             fi
             sleep 1
           done
-          tail -n 200 /tmp/smba-ci-registration-server.log
+          npx tsx scripts/regression/sanitize-server-log.ts \
+            /tmp/smba-ci-registration-server.log \
+            output/failure-evidence/browser/registration-server.sanitized.txt
           exit 1
 
       - name: Run registration and activation E2E
@@ -127,7 +144,7 @@ jobs:
 
       - name: Show registration server log after a failure
         if: failure()
-        run: tail -n 200 /tmp/smba-ci-registration-server.log 2>/dev/null || true
+        run: npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-ci-registration-server.log output/failure-evidence/browser/registration-server.sanitized.txt
 
       - name: Stop isolated registration workspace
         if: always()
@@ -153,7 +170,9 @@ jobs:
             fi
             sleep 1
           done
-          tail -n 200 /tmp/smba-ci-stress-server.log
+          npx tsx scripts/regression/sanitize-server-log.ts \
+            /tmp/smba-ci-stress-server.log \
+            output/failure-evidence/browser/stress-server.sanitized.txt
           exit 1
 
       - name: Run responsive authentication E2E
@@ -171,7 +190,7 @@ jobs:
 
       - name: Show stress server log after a failure
         if: failure()
-        run: tail -n 200 /tmp/smba-ci-stress-server.log 2>/dev/null || true
+        run: npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-ci-stress-server.log output/failure-evidence/browser/stress-server.sanitized.txt
 
       - name: Stop isolated stress workspace
         if: always()
@@ -182,6 +201,18 @@ jobs:
 
       - name: Confirm canonical fixtures remain unchanged
         run: npm run fixture:verify:all
+
+      - name: Upload sanitized browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output/failure-evidence/**/*.masked.png
+            output/failure-evidence/**/*.sanitized.json
+            output/failure-evidence/**/*.sanitized.txt
+          if-no-files-found: warn
+          retention-days: 14
 
   verify:
     name: Application regression
