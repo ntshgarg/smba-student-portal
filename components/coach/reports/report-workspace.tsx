@@ -178,8 +178,16 @@ function ReportPreview({
           <X aria-hidden="true" />
         </button>
         <div className="coach-report-letterhead">
-          <Image src="/images/smba-logo.jpeg" alt="SMBA" width={720} height={488} />
-          <span>Monthly development report</span>
+          <Image
+            src="/images/smba-logo.jpeg"
+            alt="Sathiya Moorthy Badminton Academy"
+            width={720}
+            height={488}
+          />
+          <div className="coach-report-letterhead-mark">
+            <span>Monthly development report</span>
+            <small>Private player record</small>
+          </div>
         </div>
         <div className="coach-report-preview-heading">
           <p>{formatReportMonth(month)}</p>

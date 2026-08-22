@@ -6508,12 +6508,25 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-report-letterhead {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 30px;
   padding-bottom: 28px;
   border-bottom: 2px solid var(--navy);
+}
+
+/* The printed letterhead closes with a short red rule sitting under the navy
+   one. The preview stands in for that document, so it carries the same mark. */
+.coach-report-letterhead::after {
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  width: 132px;
+  height: 3px;
+  background: var(--red);
+  content: "";
 }
 
 .coach-report-letterhead img {
@@ -6523,12 +6536,25 @@ tr.is-expanded .coach-member-row-action button svg {
   mix-blend-mode: multiply;
 }
 
+.coach-report-letterhead-mark {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  text-align: right;
+}
+
 .coach-report-letterhead span {
   color: var(--red);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.coach-report-letterhead small {
+  color: var(--steel);
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .coach-report-preview-heading {
@@ -7781,6 +7807,11 @@ tr.is-expanded .coach-member-row-action button svg {
     align-items: flex-start;
     flex-direction: column;
     gap: 14px;
+  }
+
+  .coach-report-letterhead-mark {
+    justify-items: start;
+    text-align: left;
   }
 
   .coach-report-preview-heading dl {
