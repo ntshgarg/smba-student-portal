@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto"
+import { createHash, randomInt } from "node:crypto"
 
 import { isValidDateKey, isValidMonthKey } from "@/lib/attendance/domain"
 import type {
@@ -38,10 +38,9 @@ export type LedgerChargeFact = {
 }
 
 export function createOpaqueFeeReference() {
-  const bytes = randomBytes(8)
   let token = ""
   for (let index = 0; index < 8; index += 1) {
-    token += FEE_REFERENCE_ALPHABET[bytes[index] % FEE_REFERENCE_ALPHABET.length]
+    token += FEE_REFERENCE_ALPHABET[randomInt(FEE_REFERENCE_ALPHABET.length)]
   }
   return `SMBA-${token}`
 }

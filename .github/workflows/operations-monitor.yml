@@ -15,18 +15,13 @@ permissions:
 jobs:
   security-signals:
     name: Authentication delivery and lockout signals
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
-    env:
-      SMBA_MONITOR_DATABASE_URL: ${{ secrets.SMBA_BACKUP_DATABASE_URL }}
-      SMBA_MONITOR_DATABASE_TOKEN: ${{ secrets.SMBA_BACKUP_DATABASE_TOKEN }}
-      SMBA_MONITOR_APPLICATION_ERROR_THRESHOLD: "1"
-      SMBA_MONITOR_EMAIL_FAILURE_THRESHOLD: "1"
-      SMBA_MONITOR_LOCKOUT_THRESHOLD: "3"
-      SMBA_MONITOR_LOOKBACK_MINUTES: "60"
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Use Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -38,4 +33,11 @@ jobs:
         run: npm ci
 
       - name: Check production security signals without exposing accounts
+        env:
+          SMBA_MONITOR_DATABASE_URL: ${{ secrets.SMBA_BACKUP_DATABASE_URL }}
+          SMBA_MONITOR_DATABASE_TOKEN: ${{ secrets.SMBA_BACKUP_DATABASE_TOKEN }}
+          SMBA_MONITOR_APPLICATION_ERROR_THRESHOLD: "1"
+          SMBA_MONITOR_EMAIL_FAILURE_THRESHOLD: "1"
+          SMBA_MONITOR_LOCKOUT_THRESHOLD: "3"
+          SMBA_MONITOR_LOOKBACK_MINUTES: "60"
         run: npm run ops:security-signals

@@ -10,6 +10,7 @@ vi.mock("server-only", () => ({}))
 
 import {
   ensureBootstrapCredential,
+  provisionDevelopmentCredential,
   verifyCurrentPassword,
 } from "@/lib/auth/credential-service"
 import type { SmbaDatabase } from "@/lib/db/client"
@@ -39,6 +40,15 @@ afterEach(() => {
 })
 
 describe("production head-coach bootstrap", () => {
+  it("rejects deterministic fixture credentials on every Vercel deployment", () => {
+    expect(() => provisionDevelopmentCredential({
+      academyId: "SMBA-PL-0001",
+      accountId: "fixture-player",
+      fullName: "Fixture Player",
+    }, { database })).toThrow("must never be provisioned during a Vercel deployment")
+    expect(database.select().from(schema.authProviderAccounts).all()).toHaveLength(0)
+  })
+
   it("provisions a fresh production head coach only through the configured bootstrap password", async () => {
     seedDatabase(database)
     expect(database.select().from(schema.authUsers)
