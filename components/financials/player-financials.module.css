@@ -800,6 +800,14 @@ a.monthCell:focus-visible {
     padding-left: 14px;
   }
 
+  /* The fact count varies with concessions, withdrawals and arrears, so an odd
+     one out can end up alone on the final row. Each fact carries the closing
+     rule for its row, so let that one span the pair or the rule stops at the
+     halfway mark. */
+  .monthFacts > div:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
   .monthHistory {
     grid-template-columns: 1fr;
   }
