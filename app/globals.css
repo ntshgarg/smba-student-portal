@@ -119,48 +119,6 @@
   background: var(--white);
 }
 
-.coach-adjustments-back-row a {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 9px;
-  color: var(--steel);
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.coach-adjustments-back-row svg {
-  width: 15px;
-  height: 15px;
-}
-
-.coach-adjustments-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.56fr);
-  align-items: end;
-  gap: clamp(44px, 8vw, 120px);
-  margin-top: clamp(38px, 5vw, 64px);
-}
-
-.coach-adjustments-header h1 {
-  max-width: 820px;
-  margin-top: 16px;
-  color: var(--navy);
-  font-size: clamp(58px, 7.1vw, 96px);
-  font-weight: 545;
-  letter-spacing: -0.075em;
-  line-height: 0.9;
-}
-
-.coach-adjustments-header > p {
-  max-width: 420px;
-  color: var(--steel);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(18px, 1.8vw, 23px);
-  font-style: italic;
-  line-height: 1.48;
-}
-
 .coach-adjustments-notice {
   margin-top: 10px;
 }
@@ -169,8 +127,7 @@
   display: block;
 }
 
-.coach-adjustment-editor,
-.coach-adjustment-guidance {
+.coach-adjustment-editor{
   min-width: 0;
 }
 
@@ -179,19 +136,9 @@
   background: transparent;
 }
 
-.coach-adjustment-editor-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 28px;
-}
-
-.coach-adjustment-editor-heading > div > span,
 .coach-adjustment-review-heading,
-.coach-adjustment-guidance > span,
-.coach-adjustment-history-heading > div > span,
 .coach-adjustment-transfer span,
-.coach-adjustment-review-reason > span {
+.coach-adjustment-review-reason > span{
   color: var(--red);
   font-size: 10px;
   font-weight: 800;
@@ -522,54 +469,6 @@
   font-size: 12px;
 }
 
-.coach-adjustment-date-grid {
-  display: grid;
-  width: min(100%, 720px);
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.coach-adjustment-date-grid button {
-  width: 100%;
-  min-height: 54px;
-  padding: 7px 9px;
-  border: 1px solid var(--line);
-  background: var(--ivory);
-  color: var(--navy);
-  text-align: left;
-}
-
-.coach-adjustment-date-grid button:hover,
-.coach-adjustment-date-grid button.is-active {
-  background: var(--navy);
-  color: var(--white);
-}
-
-.coach-adjustment-date-grid span,
-.coach-adjustment-date-grid strong {
-  display: block;
-}
-
-.coach-adjustment-date-grid span {
-  color: var(--steel);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.coach-adjustment-date-grid button.is-active span,
-.coach-adjustment-date-grid button:hover span {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.coach-adjustment-date-grid strong {
-  margin-top: 5px;
-  font-size: 11px;
-  font-weight: 730;
-}
-
 .coach-adjustment-reason {
   margin-top: 20px;
 }
@@ -785,67 +684,6 @@
   line-height: 1.55;
 }
 
-.coach-adjustment-guidance {
-  padding: clamp(30px, 4vw, 52px);
-  background: var(--navy);
-  color: var(--white);
-}
-
-.coach-adjustment-guidance > span {
-  color: var(--rose-strong);
-}
-
-.coach-adjustment-guidance h2 {
-  margin-top: 14px;
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(26px, 3vw, 38px);
-  font-weight: 400;
-  line-height: 1.18;
-}
-
-.coach-adjustment-guidance ol {
-  display: grid;
-  gap: 0;
-  margin: clamp(38px, 5vw, 68px) 0 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: adjustment-guidance;
-}
-
-.coach-adjustment-guidance li {
-  position: relative;
-  padding: 22px 0 22px 38px;
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
-  counter-increment: adjustment-guidance;
-}
-
-.coach-adjustment-guidance li::before {
-  position: absolute;
-  top: 22px;
-  left: 0;
-  color: var(--rose-strong);
-  content: "0" counter(adjustment-guidance);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.coach-adjustment-guidance li strong,
-.coach-adjustment-guidance li span {
-  display: block;
-}
-
-.coach-adjustment-guidance li strong {
-  font-size: 12px;
-}
-
-.coach-adjustment-guidance li span {
-  margin-top: 5px;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 11px;
-  line-height: 1.55;
-}
-
 .coach-adjustment-history {
   margin-top: 20px;
   border-top: 1px solid var(--line);
@@ -893,26 +731,6 @@
 
 .coach-adjustment-history-disclosure[aria-expanded="true"] > svg {
   transform: rotate(180deg);
-}
-
-.coach-adjustment-history-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 30px;
-}
-
-.coach-adjustment-history-heading h2 {
-  margin-top: 8px;
-  color: var(--navy);
-  font-size: clamp(34px, 4vw, 50px);
-  font-weight: 570;
-  letter-spacing: -0.058em;
-}
-
-.coach-adjustment-history-heading > p {
-  color: var(--steel);
-  font-size: 11px;
 }
 
 .coach-adjustment-history-list {
@@ -1164,22 +982,6 @@
     padding: 18px 14px 24px;
   }
 
-  .coach-adjustments-header {
-    grid-template-columns: 1fr;
-    gap: 18px;
-    margin-top: 30px;
-  }
-
-  .coach-adjustments-header h1 {
-    font-size: clamp(48px, 15.5vw, 68px);
-    line-height: 0.92;
-  }
-
-  .coach-adjustments-header > p {
-    max-width: 340px;
-    font-size: 18px;
-  }
-
   .coach-adjustments-grid {
     grid-template-columns: 1fr;
     margin-top: 0;
@@ -1235,11 +1037,6 @@
     width: 34px;
   }
 
-  .coach-adjustment-date-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-  }
-
   .coach-adjustment-transfer {
     grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr);
   }
@@ -1290,22 +1087,8 @@
     padding: 13px 18px 18px;
   }
 
-  .coach-adjustment-guidance ol {
-    margin-top: 28px;
-  }
-
   .coach-adjustment-history {
     margin-top: 18px;
-  }
-
-  .coach-adjustment-history-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .coach-adjustment-history-heading h2 {
-    font-size: 36px;
   }
 
   .coach-adjustment-history-item > button {
@@ -1358,9 +1141,6 @@
 }
 
 @media (max-width: 340px) {
-  .coach-adjustment-date-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 
   .coach-adjustment-draft-actions {
     gap: 7px;
@@ -1782,25 +1562,10 @@ h3 {
   background: var(--white);
 }
 
-.login-select-wrap {
-  position: relative;
-}
-
 .login-field select {
   appearance: none;
   padding-right: 48px;
   cursor: pointer;
-}
-
-.login-select-wrap > svg {
-  position: absolute;
-  top: calc(50% + 5px);
-  right: 17px;
-  width: 16px;
-  height: 16px;
-  color: var(--red);
-  pointer-events: none;
-  transform: translateY(-50%);
 }
 
 .login-field input[aria-invalid="true"] {
@@ -2240,8 +2005,7 @@ h3 {
 .security-form button,
 .security-panel button,
 .security-mfa-callout a,
-.security-recovery-callout > a,
-.security-code-receipt button {
+.security-recovery-callout > a{
   min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--navy);
@@ -2410,12 +2174,6 @@ h3 {
   color: var(--navy);
 }
 
-.security-request-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-}
-
 .security-mfa-callout {
   position: relative;
   display: grid;
@@ -2489,8 +2247,7 @@ h3 {
   min-width: 0;
 }
 
-.security-mfa-copy p:last-child,
-.security-account-access > p {
+.security-mfa-copy p:last-child{
   margin-top: 7px;
   color: var(--steel);
   font-size: 12px;
@@ -2537,102 +2294,6 @@ h3 {
   color: var(--steel);
   font-size: 12px;
   line-height: 1.55;
-}
-
-.security-account-table {
-  display: grid;
-  margin-top: 18px;
-  border: 1px solid var(--line);
-}
-
-.security-account-table > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px 140px;
-  align-items: center;
-  gap: 14px;
-  min-height: 68px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.security-account-table > div:last-child {
-  border-bottom: 0;
-}
-
-.security-account-table > div > div:first-child {
-  display: grid;
-  gap: 4px;
-}
-
-.security-account-table strong {
-  font-size: 13px;
-}
-
-.security-account-table span {
-  color: var(--steel);
-  font-size: 10px;
-}
-
-.security-status {
-  width: fit-content;
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  color: var(--steel);
-  font-weight: 760;
-}
-
-.security-status-active {
-  border-color: var(--green);
-  color: var(--green) !important;
-}
-
-.security-status-reset_required {
-  border-color: var(--red);
-  color: var(--red) !important;
-}
-
-.security-code-receipt {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  align-items: center;
-  gap: 10px;
-  margin-top: 18px;
-  padding: 12px;
-  border: 1px solid var(--green);
-  background: var(--green-soft);
-}
-
-.security-code-receipt > div {
-  display: grid;
-  gap: 3px;
-}
-
-.security-code-receipt span,
-.security-code-receipt small {
-  color: var(--steel);
-  font-size: 10px;
-}
-
-.security-code-receipt code {
-  color: var(--navy);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.security-code-receipt button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.security-code-receipt button svg {
-  width: 14px;
-  height: 14px;
-}
-
-.security-code-receipt small {
-  grid-column: 1 / -1;
 }
 
 @media (max-width: 760px) {
@@ -2723,32 +2384,6 @@ h3 {
     grid-column: 1 / -1;
   }
 
-  .security-account-table {
-    border: 0;
-    gap: 10px;
-  }
-
-  .security-account-table > div {
-    grid-template-columns: minmax(0, 1fr) auto;
-    border: 1px solid var(--line);
-  }
-
-  .security-account-table > div:last-child {
-    border-bottom: 1px solid var(--line);
-  }
-
-  .security-account-table button {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-
-  .security-code-receipt {
-    grid-template-columns: 1fr;
-  }
-
-  .security-code-receipt small {
-    grid-column: auto;
-  }
 }
 
 .login-back svg {
@@ -2777,11 +2412,6 @@ h3 {
   pointer-events: none;
   stroke: currentColor;
   stroke-width: 1.15;
-}
-
-.welcome-court .welcome-net {
-  color: rgba(247, 245, 240, 0.21);
-  stroke-width: 1.5;
 }
 
 .welcome-inner {
@@ -2888,33 +2518,6 @@ h3 {
   padding-block: clamp(100px, 11vw, 160px);
 }
 
-.dashboard-heading,
-.section-heading-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
-  align-items: end;
-  gap: clamp(40px, 8vw, 110px);
-}
-
-.dashboard-heading h2,
-.section-heading-row h2 {
-  max-width: 720px;
-  margin-top: 17px;
-  color: var(--navy);
-  font-size: clamp(43px, 5.4vw, 76px);
-  font-weight: 580;
-  letter-spacing: -0.065em;
-  line-height: 0.98;
-}
-
-.dashboard-heading > p,
-.section-heading-row > p {
-  max-width: 500px;
-  color: var(--steel);
-  font-size: 16px;
-  line-height: 1.75;
-}
-
 .player-profile-reveal {
   width: 100%;
   margin-top: var(--space-content);
@@ -2937,8 +2540,7 @@ h3 {
   border-left: 1px solid var(--line);
 }
 
-.player-profile-ledger dt,
-.card-label {
+.player-profile-ledger dt{
   margin: 0;
   color: var(--steel);
   font-size: 11px;
@@ -2974,67 +2576,6 @@ h3 {
   overflow: hidden;
 }
 
-.report-primary-link {
-  display: grid;
-  min-height: clamp(168px, 15vw, 190px);
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: flex-end;
-  gap: clamp(28px, 5vw, 72px);
-  padding: var(--player-dashboard-card-padding);
-  color: var(--navy);
-}
-
-.report-primary-link > div {
-  min-width: 0;
-}
-
-.report-card-header {
-  display: flex;
-  align-items: center;
-  gap: var(--player-dashboard-header-gap);
-}
-
-.report-primary-link h3 {
-  margin-top: 20px;
-  font-size: clamp(30px, 3.2vw, 38px);
-  font-weight: 600;
-  letter-spacing: -0.05em;
-  line-height: 1;
-}
-
-.report-primary-link p {
-  max-width: 560px;
-  margin-top: 14px;
-  color: var(--steel);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.6;
-}
-
-.report-arrow {
-  display: grid;
-  width: clamp(46px, 4.5vw, 54px);
-  aspect-ratio: 1;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  transition: background 180ms ease, border-color 180ms ease, color 180ms ease,
-    transform 180ms ease;
-}
-
-.report-arrow svg {
-  width: 19px;
-  height: 19px;
-}
-
-.report-primary-link:hover .report-arrow {
-  border-color: var(--red);
-  background: var(--red);
-  color: var(--white);
-  transform: translateX(3px);
-}
-
 .primary-link,
 .back-link {
   display: inline-flex;
@@ -3068,32 +2609,11 @@ h3 {
   flex-direction: column;
 }
 
-.card-icon {
-  display: grid;
-  width: var(--player-dashboard-icon-size);
-  height: var(--player-dashboard-icon-size);
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--line);
-  color: var(--red);
-}
-
-.card-icon svg {
-  width: var(--player-dashboard-icon-glyph);
-  height: var(--player-dashboard-icon-glyph);
-  stroke-width: 1.7;
-}
-
 .session-card-header,
 .attendance-card-header {
   display: flex;
   align-items: center;
   gap: var(--player-dashboard-header-gap);
-}
-
-.session-card-header .card-label,
-.attendance-card-header .card-label {
-  margin: 0;
 }
 
 .attendance-value {
@@ -3363,28 +2883,6 @@ h3 {
   text-align: center;
 }
 
-.player-attendance-register-table .player-attendance-month-row th:not(.player-attendance-session-column) {
-  height: 30px;
-  background: var(--navy);
-  color: var(--white);
-  text-align: left;
-}
-
-.player-attendance-register-table .player-attendance-month-row th:not(.player-attendance-session-column) > span {
-  position: sticky;
-  left: 210px;
-  display: inline-block;
-  padding-inline: 12px;
-  font-size: 9px;
-  font-weight: 780;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.player-attendance-register-table .player-attendance-date-row th {
-  height: 50px;
-}
-
 .player-attendance-register-table thead th > span {
   display: block;
   font-size: 9px;
@@ -3401,120 +2899,8 @@ h3 {
   font-weight: 730;
 }
 
-.player-attendance-register-table .player-attendance-session-column {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  width: 190px;
-  padding-inline: 18px;
-  box-shadow: 10px 0 20px rgba(7, 27, 50, 0.04);
-  text-align: left;
-}
-
-.player-attendance-register-table thead .player-attendance-session-column {
-  z-index: 2;
-  color: var(--navy);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.player-attendance-register-table tbody .player-attendance-session-column strong,
-.player-attendance-register-table tbody .player-attendance-session-column small {
-  display: block;
-}
-
-.player-attendance-register-table tbody .player-attendance-session-column strong {
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 720;
-}
-
-.player-attendance-register-table tbody .player-attendance-session-column small {
-  margin-top: 4px;
-  color: var(--steel);
-  font-size: 10px;
-  font-weight: 680;
-  line-height: 1.25;
-}
-
 .player-attendance-register-table thead th.is-today {
   box-shadow: inset 0 -3px 0 var(--red);
-}
-
-.player-attendance-register-table .player-attendance-date-row th.is-unavailable {
-  background: #f0efec;
-  color: var(--steel);
-}
-
-.player-attendance-register-table td.is-today .player-attendance-cell:not(.is-present):not(.is-absent):not(.is-makeup) {
-  box-shadow: inset 0 0 0 2px rgba(200, 29, 42, 0.18);
-}
-
-.player-attendance-cell {
-  position: relative;
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  background: var(--white);
-}
-
-.player-attendance-cell.is-present {
-  background: var(--green);
-}
-
-.player-attendance-cell.is-absent {
-  background: var(--red);
-}
-
-.player-attendance-cell.is-pending {
-  background: linear-gradient(var(--steel), var(--steel)) center / 9px 1px no-repeat;
-}
-
-.player-attendance-cell.is-future {
-  background: #faf9f6;
-}
-
-.player-attendance-cell.is-unmarked {
-  background: var(--white);
-}
-
-.player-attendance-cell.is-unavailable {
-  background: repeating-linear-gradient(-45deg, #f3f2ef 0, #f3f2ef 7px, #e4e1dc 7px, #e4e1dc 8px);
-}
-
-.player-attendance-cell.is-makeup {
-  background: var(--makeup);
-}
-
-.player-attendance-cell > b {
-  display: grid;
-  min-width: 24px;
-  height: 24px;
-  place-items: center;
-  padding-inline: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 999px;
-  background: var(--green);
-  color: var(--white);
-  font-size: 10px;
-  line-height: 1;
-}
-
-.player-attendance-cell.is-present > b {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.player-attendance-empty-year {
-  display: grid;
-  min-height: 160px;
-  place-items: center;
-  margin-top: 20px;
-  border: 1px solid var(--line);
-  color: var(--steel);
-  font-size: 12px;
 }
 
 .session-card h3 {
@@ -3691,151 +3077,8 @@ h3 {
   line-height: 1.55;
 }
 
-.progress-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.6fr);
-  gap: clamp(50px, 9vw, 128px);
-  margin-top: clamp(74px, 9vw, 126px);
-  padding: clamp(40px, 6vw, 76px);
-  background: var(--navy);
-  color: var(--ivory);
-}
-
-.progress-summary blockquote {
-  max-width: 800px;
-  margin-top: 24px;
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(28px, 3.5vw, 48px);
-  font-style: italic;
-  line-height: 1.34;
-}
-
-.progress-summary aside {
-  position: relative;
-  align-self: end;
-  padding-top: 24px;
-  border-top: 1px solid rgba(247, 245, 240, 0.2);
-}
-
-.progress-summary aside span {
-  color: var(--rose-strong);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.progress-summary aside p {
-  margin-top: 14px;
-  color: rgba(247, 245, 240, 0.7);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.progress-summary aside svg {
-  position: absolute;
-  right: 0;
-  bottom: -4px;
-  width: 22px;
-  color: var(--rose-strong);
-}
-
-.development-section,
-.journey-section,
-.reports-ledger {
+.reports-ledger{
   margin-top: clamp(100px, 11vw, 160px);
-}
-
-.development-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  margin-top: 64px;
-  border: 1px solid var(--line);
-  background: var(--line);
-}
-
-.development-grid > *,
-.development-grid .development-meter {
-  background: var(--ivory);
-}
-
-.development-grid .development-meter {
-  min-height: 260px;
-  padding: 30px;
-}
-
-.journey-section {
-  padding-top: clamp(94px, 10vw, 146px);
-  border-top: 1px solid var(--line);
-}
-
-.progress-timeline {
-  margin: 72px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.progress-timeline > li {
-  position: relative;
-  padding-left: 34px;
-  border-left: 1px solid #bfc5c9;
-}
-
-.progress-timeline > li::before {
-  position: absolute;
-  top: 34px;
-  left: -5px;
-  width: 9px;
-  height: 9px;
-  border: 2px solid var(--ivory);
-  border-radius: 50%;
-  background: var(--red);
-  box-shadow: 0 0 0 1px var(--red);
-  content: "";
-}
-
-.timeline-entry {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 44px;
-  padding: 28px 0 44px;
-  border-top: 1px solid var(--line);
-}
-
-.timeline-date {
-  display: flex;
-  flex-direction: column;
-}
-
-.timeline-date time {
-  color: var(--navy);
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.timeline-date span {
-  margin-top: 7px;
-  color: var(--red);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.timeline-entry h3 {
-  color: var(--navy);
-  font-size: clamp(22px, 2.5vw, 31px);
-  font-weight: 620;
-  letter-spacing: -0.04em;
-}
-
-.timeline-entry p {
-  max-width: 700px;
-  margin-top: 12px;
-  color: var(--steel);
-  font-size: 14px;
-  line-height: 1.7;
 }
 
 .reports-page {
@@ -4359,60 +3602,11 @@ h3 {
   border-top: 0;
 }
 
-.coach-attendance-summary {
-  display: grid;
-  width: 100%;
-  min-height: clamp(170px, 16vw, 210px);
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: clamp(36px, 7vw, 96px);
-  padding: clamp(28px, 4vw, 48px);
-  background: transparent;
-  color: var(--navy);
-  text-align: left;
-}
-
-.coach-attendance-summary-copy {
-  display: block;
-}
-
-.coach-attendance-summary-label {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
-
-.coach-attendance-summary-label > svg {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  margin-top: 0;
-  color: var(--red);
-  stroke-width: 1.7;
-}
-
-.coach-attendance-summary-label span,
-.coach-register-heading span {
+.coach-register-heading span{
   color: var(--red);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.coach-attendance-summary h2 {
-  margin-top: 10px;
-  font-size: clamp(44px, 5vw, 64px);
-  font-weight: 570;
-  letter-spacing: -0.068em;
-  line-height: 0.95;
-}
-
-.coach-attendance-summary-count {
-  color: var(--steel);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -4428,34 +3622,6 @@ h3 {
   justify-content: space-between;
   gap: 28px;
   margin-bottom: 18px;
-}
-
-.coach-schedule-toggle {
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(110px, 1fr));
-  border: 1px solid var(--line);
-}
-
-.coach-schedule-toggle button {
-  min-height: 42px;
-  padding-inline: 20px;
-  border: 0;
-  background: var(--ivory);
-  color: var(--steel);
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 780;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.coach-schedule-toggle button + button {
-  border-left: 1px solid var(--line);
-}
-
-.coach-schedule-toggle button.is-active {
-  background: var(--navy);
-  color: var(--white);
 }
 
 .coach-year-selector {
@@ -4879,54 +4045,6 @@ h3 {
   color: var(--line);
   font-size: 14px;
 }
-.coach-attendance-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 30px;
-  margin-top: 38px;
-}
-
-.coach-attendance-footer p {
-  color: var(--steel);
-  font-size: 12px;
-}
-
-.coach-attendance-save-copy {
-  display: grid;
-  gap: 6px;
-}
-
-.coach-attendance-save-copy .coach-attendance-save-error {
-  max-width: 620px;
-  color: var(--red);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.coach-attendance-footer button {
-  display: inline-flex;
-  min-height: 48px;
-  align-items: center;
-  gap: 10px;
-  padding-inline: 20px;
-  border: 0;
-  background: var(--navy);
-  color: var(--white);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 760;
-}
-
-.coach-attendance-footer button:disabled {
-  cursor: not-allowed;
-  opacity: 0.38;
-}
-
-.coach-attendance-footer svg {
-  width: 15px;
-  height: 15px;
-}
 
 .coach-members-directory {
   padding: 28px 0 clamp(110px, 12vw, 170px);
@@ -4977,56 +4095,7 @@ h3 {
   margin-top: clamp(62px, 8vw, 96px);
 }
 
-.coach-registration-queue {
-  margin-bottom: 24px;
-  border: 1px solid var(--line);
-  background: var(--white);
-}
-
-.coach-registration-queue-heading {
-  display: flex;
-  min-height: 86px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--line);
-}
-
-.coach-registration-queue-heading span {
-  color: var(--red);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.coach-registration-queue-heading h2 {
-  margin-top: 7px;
-  color: var(--navy);
-  font-size: 21px;
-  font-weight: 620;
-  letter-spacing: -0.035em;
-}
-
-.coach-registration-queue-heading h2:focus-visible {
-  outline: 2px solid var(--red);
-  outline-offset: 4px;
-}
-
-.coach-registration-queue-heading > strong {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--navy);
-  color: var(--white);
-  font-size: 11px;
-}
-
-.coach-registration-list article,
-.coach-registration-approved {
+.coach-registration-approved{
   display: flex;
   min-height: 76px;
   align-items: center;
@@ -5035,37 +4104,7 @@ h3 {
   padding: 14px 22px;
 }
 
-.coach-registration-list article + article {
-  border-top: 1px solid var(--line);
-}
-
-.coach-registration-list article > div:first-child {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.coach-registration-list article strong {
-  color: var(--navy);
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
-.coach-registration-list article span {
-  color: var(--steel);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.coach-registration-list article > div:last-child {
-  display: flex;
-  gap: 8px;
-}
-
-.coach-registration-list button,
-.coach-registration-approved button {
+.coach-registration-approved button{
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -5078,20 +4117,12 @@ h3 {
   font-weight: 760;
 }
 
-.coach-registration-list button.is-primary {
-  border-color: var(--navy);
-  background: var(--navy);
-  color: var(--white);
-}
-
-.coach-registration-list button:disabled,
-.coach-registration-approved button:disabled {
+.coach-registration-approved button:disabled{
   cursor: wait;
   opacity: 0.55;
 }
 
-.coach-registration-list svg,
-.coach-registration-approved svg {
+.coach-registration-approved svg{
   width: 14px;
   height: 14px;
 }
@@ -5130,8 +4161,7 @@ h3 {
 }
 
 .coach-registration-approved p span,
-.coach-registration-empty,
-.coach-directory-notice {
+.coach-directory-notice{
   color: var(--steel);
   font-size: 11px;
 }
@@ -5151,10 +4181,6 @@ h3 {
 .coach-registration-approved p input:focus-visible {
   outline: 2px solid var(--red);
   outline-offset: 3px;
-}
-
-.coach-registration-empty {
-  padding: 22px;
 }
 
 .coach-directory-notice {
@@ -5388,43 +4414,9 @@ h3 {
   letter-spacing: 0.05em;
 }
 
-.coach-member-mobile-meta {
-  display: none;
-}
-
-.coach-member-initials {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  color: var(--navy);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-}
-
 .coach-member-table tbody td:nth-child(3) > span {
   display: block;
   line-height: 1.5;
-}
-
-.coach-member-batch-plan strong,
-.coach-member-batch-plan small {
-  display: block;
-}
-
-.coach-member-batch-plan strong {
-  color: var(--navy);
-  font-size: 11px;
-  font-weight: 680;
-}
-
-.coach-member-batch-plan small {
-  margin-top: 3px;
-  color: var(--steel);
-  font-size: 9px;
 }
 
 .coach-member-status {
@@ -6610,60 +5602,9 @@ tr.is-expanded .coach-member-row-action button svg {
   font-style: italic;
 }
 
-.coach-section {
-  padding-block: clamp(110px, 12vw, 170px);
-}
-
-.coach-section-heading {
-  display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(310px, 0.68fr);
-  align-items: end;
-  gap: clamp(48px, 9vw, 126px);
-}
-
-.coach-section-heading h2 {
-  max-width: 760px;
-  margin-top: 17px;
-  color: var(--navy);
-  font-size: clamp(46px, 6vw, 80px);
-  font-weight: 570;
-  letter-spacing: -0.068em;
-  line-height: 0.96;
-}
-
-.coach-section-heading > p {
-  max-width: 510px;
-  color: var(--steel);
-  font-size: 15px;
-  line-height: 1.78;
-}
-
 .coach-report-queue {
   margin-top: clamp(66px, 8vw, 104px);
   border-bottom: 1px solid var(--line);
-}
-
-.coach-report-task {
-  display: grid;
-  grid-template-columns: 50px minmax(230px, 1.15fr) minmax(150px, 0.55fr) minmax(140px, 0.45fr);
-  min-height: 132px;
-  align-items: center;
-  gap: clamp(24px, 4vw, 58px);
-  padding-block: 25px;
-  border-top: 1px solid var(--line);
-}
-
-.coach-player-avatar {
-  display: grid;
-  width: 48px;
-  height: 48px;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  color: var(--navy);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
 }
 
 .coach-report-player h3 {
@@ -6673,16 +5614,14 @@ tr.is-expanded .coach-member-row-action button svg {
   letter-spacing: -0.045em;
 }
 
-.coach-report-player p,
-.coach-report-status p {
+.coach-report-player p{
   margin-top: 7px;
   color: var(--steel);
   font-size: 11px;
   font-weight: 650;
 }
 
-.coach-report-month span,
-.coach-report-status > span {
+.coach-report-month span{
   color: var(--steel);
   font-size: 10px;
   font-weight: 800;
@@ -6696,188 +5635,6 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--navy);
   font-size: 13px;
   font-weight: 720;
-}
-
-.coach-report-status {
-  justify-self: end;
-  text-align: right;
-}
-
-.coach-report-status.status-due > span {
-  color: var(--red);
-}
-
-.coach-report-status.status-draft > span {
-  color: var(--navy);
-}
-
-.coach-sessions-section {
-  padding-block: clamp(105px, 11vw, 160px);
-  background: var(--navy);
-  color: var(--ivory);
-}
-
-.coach-section-heading-light h2 {
-  color: var(--ivory);
-}
-
-.coach-section-heading-light > p {
-  color: rgba(247, 245, 240, 0.64);
-}
-
-.coach-session-list {
-  margin: clamp(64px, 8vw, 100px) 0 0;
-  padding: 0;
-  border-top: 1px solid rgba(247, 245, 240, 0.18);
-  list-style: none;
-}
-
-.coach-session-row {
-  display: grid;
-  grid-template-columns: 120px minmax(210px, 0.8fr) minmax(290px, 1.2fr) auto;
-  min-height: 144px;
-  align-items: center;
-  gap: clamp(28px, 5vw, 72px);
-  padding-block: 30px;
-  border-bottom: 1px solid rgba(247, 245, 240, 0.18);
-}
-
-.coach-session-row > time {
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 29px;
-  font-style: italic;
-}
-
-.coach-session-row h3 {
-  font-size: clamp(22px, 2.3vw, 30px);
-  font-weight: 560;
-  letter-spacing: -0.045em;
-}
-
-.coach-session-row > div p {
-  margin-top: 6px;
-  color: rgba(247, 245, 240, 0.58);
-  font-size: 12px;
-}
-
-.coach-session-row ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  color: rgba(247, 245, 240, 0.7);
-  font-size: 11px;
-  list-style: none;
-}
-
-.coach-session-row ul li {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.coach-session-row ul svg {
-  width: 14px;
-  height: 14px;
-  color: var(--rose-strong);
-}
-
-.coach-attendance-state {
-  position: relative;
-  padding-left: 15px;
-  color: rgba(247, 245, 240, 0.72);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-align: right;
-  text-transform: uppercase;
-}
-
-.coach-attendance-state::before {
-  position: absolute;
-  top: 0.55em;
-  left: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--rose-strong);
-  content: "";
-}
-
-.coach-attendance-state.state-marked::before {
-  background: #8db9a0;
-}
-
-.coach-players-section {
-  padding-bottom: clamp(130px, 14vw, 210px);
-}
-
-.coach-player-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  margin-top: clamp(66px, 8vw, 104px);
-  border: 1px solid var(--line);
-  background: var(--line);
-}
-
-.coach-player-card {
-  min-height: 238px;
-  padding: clamp(28px, 3.5vw, 42px);
-  background: var(--ivory);
-}
-
-.coach-player-card-heading {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
-
-.coach-player-card-heading h3 {
-  color: var(--navy);
-  font-size: clamp(23px, 2.4vw, 30px);
-  font-weight: 610;
-  letter-spacing: -0.045em;
-}
-
-.coach-player-card-heading p {
-  margin-top: 5px;
-  color: var(--steel);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.coach-player-card dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 34px;
-  border-top: 1px solid var(--line);
-}
-
-.coach-player-card dl > div {
-  min-width: 0;
-  padding-top: 20px;
-}
-
-.coach-player-card dl > div + div {
-  padding-left: 20px;
-  border-left: 1px solid var(--line);
-}
-
-.coach-player-card dt {
-  color: var(--steel);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.coach-player-card dd {
-  margin-top: 7px;
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 710;
-  line-height: 1.45;
 }
 
 .not-found {
@@ -6915,10 +5672,6 @@ tr.is-expanded .coach-member-row-action button svg {
   .attendance-card,
   .session-card {
     grid-column: span 6;
-  }
-
-  .progress-summary {
-    grid-template-columns: 1fr;
   }
 
 }
@@ -7087,22 +5840,6 @@ tr.is-expanded .coach-member-row-action button svg {
     margin-top: 36px;
   }
 
-  .dashboard-heading,
-  .section-heading-row {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-
-  .dashboard-heading h2,
-  .section-heading-row h2 {
-    font-size: clamp(40px, 12vw, 58px);
-  }
-
-  .dashboard-heading > p,
-  .section-heading-row > p {
-    font-size: 15px;
-  }
-
   .player-profile-reveal {
     margin-top: var(--space-group);
   }
@@ -7138,27 +5875,6 @@ tr.is-expanded .coach-member-row-action button svg {
   .attendance-card,
   .session-card {
     grid-column: 1;
-  }
-
-  .report-primary-link {
-    position: relative;
-    display: block;
-    min-height: 0;
-    padding: 24px 22px;
-  }
-
-  .report-primary-link h3 {
-    font-size: clamp(32px, 9.5vw, 38px);
-  }
-
-  .report-primary-link p {
-    max-width: calc(100% - 68px);
-  }
-
-  .report-arrow {
-    position: absolute;
-    right: 22px;
-    bottom: 24px;
   }
 
   .attendance-card,
@@ -7198,15 +5914,6 @@ tr.is-expanded .coach-member-row-action button svg {
     min-width: var(--player-register-mobile-width);
   }
 
-  .player-attendance-register-table .player-attendance-session-column {
-    width: 136px;
-    padding-inline: 12px;
-  }
-
-  .player-attendance-register-table .player-attendance-month-row th:not(.player-attendance-session-column) > span {
-    left: 148px;
-  }
-
   .dashboard-card.is-empty {
     min-height: 204px;
   }
@@ -7221,30 +5928,8 @@ tr.is-expanded .coach-member-row-action button svg {
     overflow-wrap: anywhere;
   }
 
-  .development-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .progress-summary {
-    grid-template-columns: 1fr;
-    gap: 42px;
-    margin-inline: -16px;
-    padding: 42px 16px;
-  }
-
-  .development-section,
-  .journey-section,
-  .reports-ledger {
+  .reports-ledger{
     margin-top: 88px;
-  }
-
-  .development-grid {
-    margin-top: 44px;
-  }
-
-  .timeline-entry {
-    grid-template-columns: 1fr;
-    gap: 16px;
   }
 
   .report-year-trigger {
@@ -7363,19 +6048,6 @@ tr.is-expanded .coach-member-row-action button svg {
     padding-block: 68px;
   }
 
-  .dashboard-heading {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
-  }
-
-  .dashboard-heading h2 {
-    font-size: clamp(40px, 12vw, 58px);
-  }
-
-  .dashboard-heading > p {
-    font-size: 15px;
-  }
-
   .dashboard-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
@@ -7386,26 +6058,6 @@ tr.is-expanded .coach-member-row-action button svg {
   .attendance-card,
   .session-card {
     grid-column: 1;
-  }
-
-  .report-primary-link {
-    position: relative;
-    display: block;
-    min-height: 0;
-  }
-
-  .report-primary-link h3 {
-    font-size: clamp(30px, 9vw, 36px);
-  }
-
-  .report-primary-link p:not(.card-label) {
-    max-width: calc(100% - 68px);
-  }
-
-  .report-arrow {
-    position: absolute;
-    right: 22px;
-    bottom: 24px;
   }
 
   .attendance-card,
@@ -7443,21 +6095,6 @@ tr.is-expanded .coach-member-row-action button svg {
     border-right: 1px solid var(--line);
   }
 
-  .coach-report-task {
-    grid-template-columns: 48px minmax(200px, 1fr) 140px 120px;
-    gap: 24px;
-  }
-
-  .coach-session-row {
-    grid-template-columns: 92px minmax(190px, 0.8fr) minmax(230px, 1.2fr);
-    gap: 28px;
-  }
-
-  .coach-attendance-state {
-    grid-column: 2 / -1;
-    justify-self: start;
-    text-align: left;
-  }
 }
 
 @media (max-width: 720px) {
@@ -7502,27 +6139,6 @@ tr.is-expanded .coach-member-row-action button svg {
     font-size: 28px;
   }
 
-  .coach-attendance-summary {
-    min-height: 0;
-    grid-template-columns: 1fr;
-    gap: 14px;
-    padding: 24px 20px 20px;
-  }
-
-  .coach-attendance-summary h2 {
-    margin-top: 14px;
-    font-size: clamp(38px, 12vw, 48px);
-  }
-
-  .coach-attendance-summary-label {
-    gap: 14px;
-  }
-
-  .coach-attendance-summary-label > svg {
-    width: 22px;
-    height: 22px;
-  }
-
   .coach-attendance-register {
     padding: 24px 20px;
   }
@@ -7534,8 +6150,7 @@ tr.is-expanded .coach-member-row-action button svg {
     margin-bottom: 12px;
   }
 
-  .coach-schedule-toggle,
-  .coach-year-selector {
+  .coach-year-selector{
     width: 100%;
   }
 
@@ -7629,15 +6244,6 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-register-table tbody .coach-register-name-column small {
     font-size: 10px;
     line-height: 1.25;
-  }
-
-  .coach-attendance-footer {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .coach-attendance-footer button {
-    justify-content: center;
   }
 
   .coach-reports-workspace {
@@ -7802,30 +6408,8 @@ tr.is-expanded .coach-member-row-action button svg {
     margin-inline: -22px;
   }
 
-  .coach-section,
-  .coach-sessions-section {
-    padding-block: 88px;
-  }
-
-  .coach-section-heading {
-    grid-template-columns: 1fr;
-    gap: 28px;
-  }
-
-  .coach-section-heading h2 {
-    font-size: clamp(42px, 12vw, 58px);
-  }
-
-  .coach-report-queue,
-  .coach-session-list,
-  .coach-player-grid {
+  .coach-report-queue{
     margin-top: 60px;
-  }
-
-  .coach-report-task {
-    grid-template-columns: 48px minmax(0, 1fr);
-    gap: 22px 18px;
-    padding-block: 28px;
   }
 
   .coach-report-player {
@@ -7836,45 +6420,6 @@ tr.is-expanded .coach-member-row-action button svg {
     grid-column: 2;
   }
 
-  .coach-report-status {
-    grid-column: 2;
-    justify-self: start;
-    text-align: left;
-  }
-
-  .coach-session-row {
-    grid-template-columns: 1fr;
-    gap: 20px;
-    padding-block: 34px;
-  }
-
-  .coach-session-row ul {
-    gap: 10px;
-  }
-
-  .coach-attendance-state {
-    grid-column: 1;
-  }
-
-  .coach-player-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-player-card {
-    min-height: 220px;
-    padding: 28px 22px;
-  }
-
-  .coach-player-card dl {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-player-card dl > div + div {
-    margin-top: 16px;
-    padding: 16px 0 0;
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
 }
 
 @media (max-width: 900px) {
@@ -7974,40 +6519,14 @@ tr.is-expanded .coach-member-row-action button svg {
     margin-top: 38px;
   }
 
-  .coach-registration-queue {
-    margin-inline: -16px;
-  }
-
-  .coach-registration-queue.is-empty .coach-registration-queue-heading {
-    min-height: 62px;
-    padding-block: 12px;
-    border-bottom: 0;
-  }
-
-  .coach-registration-queue.is-empty .coach-registration-queue-heading h2 {
-    margin-top: 3px;
-    font-size: 17px;
-  }
-
-  .coach-registration-queue.is-empty .coach-registration-empty {
-    display: none;
-  }
-
-  .coach-registration-list article,
-  .coach-registration-approved {
+  .coach-registration-approved{
     align-items: flex-start;
     flex-direction: column;
     padding: 18px 16px;
   }
 
-  .coach-registration-list article > div:last-child,
-  .coach-registration-approved button {
+  .coach-registration-approved button{
     width: 100%;
-  }
-
-  .coach-registration-list button {
-    flex: 1;
-    justify-content: center;
   }
 
   .coach-registration-approved button {
@@ -8089,32 +6608,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .coach-member-table tbody > tr:not(.coach-member-detail-row) > th {
     grid-template-columns: 36px minmax(0, 1fr);
-  }
-
-  .coach-member-table tbody .coach-member-mobile-hide {
-    display: none;
-  }
-
-  .coach-member-mobile-meta {
-    display: flex;
-    min-width: 0;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 7px 12px;
-    margin-top: 5px;
-    color: var(--steel);
-    font-size: 10px;
-    font-weight: 560;
-    line-height: 1.45;
-  }
-
-  .coach-member-mobile-meta > span:first-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .coach-member-mobile-meta .coach-member-status {
-    font-size: 8px;
   }
 
   .coach-member-table .coach-member-row-action {
@@ -8292,15 +6785,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-schedule-roster-link svg {
   width: 16px;
-}
-
-.coach-calendar-notice {
-  margin-top: 24px;
-  padding: 14px 16px;
-  border-left: 2px solid var(--red);
-  background: rgba(200, 29, 42, 0.06);
-  color: var(--red-dark);
-  font-size: 13px;
 }
 
 .coach-series-form {
@@ -9637,14 +8121,6 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 }
 
-.coach-schedule-create-notice.reserves-space {
-  margin-top: 6px;
-}
-
-.coach-schedule-create-notice + .coach-series-form {
-  margin-top: 12px;
-}
-
 .coach-roster-inline-notice {
   margin-top: 10px;
 }
@@ -10174,11 +8650,6 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--white);
 }
 
-.staff-roll-call-list article > [role="group"] button.is-cleared {
-  background: var(--navy);
-  color: var(--white);
-}
-
 .staff-roll-call-list article > [role="group"] button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -10307,24 +8778,19 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-member-filter-toggle small,
-  .coach-member-name small,
-  .coach-member-mobile-meta,
-  .coach-report-month-control span,
-  .coach-report-player-list small,
-  .coach-report-player-list em,
-  .coach-day-view-heading > strong,
-  .coach-day-session > button small,
-  .coach-schedule-programme-toggle-heading small,
-  .coach-roster-list small,
-  .coach-roster-assign > div:first-child small,
-  .coach-assignment-days > p,
-  .coach-assignment-days label > span,
-  .coach-roster-eligibility-note {
+.coach-member-name small,
+.coach-report-month-control span,
+.coach-report-player-list small,
+.coach-report-player-list em,
+.coach-day-view-heading > strong,
+.coach-day-session > button small,
+.coach-schedule-programme-toggle-heading small,
+.coach-roster-list small,
+.coach-roster-assign > div:first-child small,
+.coach-assignment-days > p,
+.coach-assignment-days label > span,
+.coach-roster-eligibility-note{
     font-size: 11px;
-  }
-
-  .coach-member-mobile-meta .coach-member-status {
-    font-size: 10px;
   }
 
   .coach-roster-list button,
@@ -12955,70 +11421,14 @@ tr.is-expanded .coach-member-row-action button svg {
   margin-top: clamp(24px, 3vw, 38px);
 }
 
-.coach-registration-queue {
-  margin-bottom: 18px;
-  border-top: 4px solid var(--navy);
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.coach-registration-queue-heading {
-  min-height: 56px;
-  gap: 18px;
-  padding: 10px 16px;
-}
-
-.coach-registration-queue-heading > div {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 14px;
-}
-
-.coach-registration-queue-heading h2 {
-  margin-top: 0;
-  font-size: 15px;
-  font-weight: 690;
-  letter-spacing: -0.025em;
-}
-
-.coach-registration-queue-heading > strong {
-  width: auto;
-  min-width: 30px;
-  height: 28px;
-  padding-inline: 8px;
-  border: 1px solid color-mix(in srgb, var(--red) 48%, var(--line));
-  border-radius: 0;
-  background: transparent;
-  color: var(--red);
-  font-size: 9px;
-}
-
-.coach-registration-list article,
-.coach-registration-approved {
+.coach-registration-approved{
   min-height: 60px;
   padding: 8px 16px;
 }
 
-.coach-registration-list article strong {
-  font-size: 12px;
-}
-
-.coach-registration-list article > div:last-child {
-  display: grid;
-  width: min(100%, 238px);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-}
-
-.coach-registration-list button,
-.coach-registration-approved button {
+.coach-registration-approved button{
   min-height: 44px;
   justify-content: center;
-}
-
-.coach-registration-empty {
-  padding: 15px 16px;
 }
 
 .coach-directory-notice {
@@ -13490,46 +11900,13 @@ tr.is-expanded .coach-member-row-action button svg {
     margin-top: 20px;
   }
 
-  .coach-registration-queue {
-    margin-inline: -16px;
-    border-top-width: 3px;
-  }
-
-  .coach-registration-queue-heading,
-  .coach-registration-queue.is-empty .coach-registration-queue-heading {
-    min-height: 52px;
-    padding: 9px 14px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .coach-registration-queue-heading > div {
-    display: grid;
-    gap: 2px;
-  }
-
-  .coach-registration-queue-heading h2,
-  .coach-registration-queue.is-empty .coach-registration-queue-heading h2 {
-    font-size: 14px;
-  }
-
-  .coach-registration-list article,
-  .coach-registration-approved {
+  .coach-registration-approved{
     gap: 10px;
     padding: 12px 14px;
   }
 
-  .coach-registration-list article > div:last-child,
-  .coach-registration-approved button {
+  .coach-registration-approved button{
     width: 100%;
-  }
-
-  .coach-registration-list article > div:last-child {
-    display: grid;
-  }
-
-  .coach-registration-queue.is-empty .coach-registration-empty {
-    display: block;
-    padding: 12px 14px;
   }
 
   .coach-member-register-tools,
@@ -15190,6 +13567,32 @@ tr.is-expanded .coach-member-row-action button svg {
   font-weight: 800;
 }
 
+/* Shares the full-width band shape of the preview banner because it answers the
+   same kind of question: why is this page not the one that was asked for. */
+.coach-access-notice {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--red);
+  background: color-mix(in srgb, var(--red) 7%, var(--white));
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.coach-access-notice svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--red);
+  stroke-width: 1.8;
+}
+
 @media (max-width: 860px) {
   .admin-page-header {
     min-height: 360px;
@@ -15431,7 +13834,6 @@ textarea:focus-visible {
 
 /* Internal operations typography floor: keep registers compact without miniature copy. */
 .coach-members-directory-header .eyebrow,
-.coach-registration-queue-heading > strong,
 .coach-member-filter > span,
 .coach-member-table thead th,
 .coach-member-name small,
@@ -15443,7 +13845,7 @@ textarea:focus-visible {
 .coach-member-edit-form legend,
 .coach-member-form-grid label > span,
 .coach-member-form-status > span,
-.coach-member-access-actions span {
+.coach-member-access-actions span{
   font-size: var(--type-utility-label);
 }
 
