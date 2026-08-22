@@ -25,6 +25,7 @@ jobs:
       SMBA_ACCESSIBILITY_PIN: "246810"
       SMBA_AUTH_MAIL_TRANSPORT: memory
       SMBA_FIXTURE_PASSWORD: SMBA fixture access 2026!
+      SMBA_FAILURE_EVIDENCE_ROOT: output/failure-evidence/accessibility
       SMBA_INITIAL_ADMIN_NAME: Accessibility Platform Owner
       SMBA_INITIAL_ADMIN_PASSWORD: SMBA accessibility admin 2026!
       SMBA_INITIAL_ADMIN_PIN: "574482"
@@ -102,7 +103,7 @@ jobs:
             fi
             sleep 1
           done
-          tail -n 200 /tmp/smba-accessibility-admin.log
+          npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-admin.log output/failure-evidence/accessibility/admin-server.sanitized.txt
           exit 1
 
       - name: Audit clean activation academy
@@ -126,7 +127,7 @@ jobs:
             fi
             sleep 1
           done
-          tail -n 200 /tmp/smba-accessibility-clean.log
+          npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-clean.log output/failure-evidence/accessibility/clean-server.sanitized.txt
           exit 1
 
       - name: Audit populated stress academy
@@ -150,7 +151,7 @@ jobs:
             fi
             sleep 1
           done
-          tail -n 200 /tmp/smba-accessibility-stress.log
+          npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-stress.log output/failure-evidence/accessibility/stress-server.sanitized.txt
           exit 1
 
       - name: Write accessibility job summary
@@ -168,20 +169,21 @@ jobs:
       - name: Show server logs after a failure
         if: always() && (steps.admin.outcome == 'failure' || steps.clean.outcome == 'failure' || steps.stress.outcome == 'failure')
         run: |
-          mkdir -p output/accessibility/server-logs
-          cp /tmp/smba-accessibility-admin.log output/accessibility/server-logs/admin.log 2>/dev/null || true
-          cp /tmp/smba-accessibility-clean.log output/accessibility/server-logs/clean.log 2>/dev/null || true
-          cp /tmp/smba-accessibility-stress.log output/accessibility/server-logs/stress.log 2>/dev/null || true
-          tail -n 120 /tmp/smba-accessibility-admin.log 2>/dev/null || true
-          tail -n 120 /tmp/smba-accessibility-clean.log 2>/dev/null || true
-          tail -n 120 /tmp/smba-accessibility-stress.log 2>/dev/null || true
+          npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-admin.log output/failure-evidence/accessibility/admin-server.sanitized.txt
+          npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-clean.log output/failure-evidence/accessibility/clean-server.sanitized.txt
+          npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-stress.log output/failure-evidence/accessibility/stress-server.sanitized.txt
 
       - name: Upload failure evidence
         if: always() && (steps.admin.outcome == 'failure' || steps.clean.outcome == 'failure' || steps.stress.outcome == 'failure' || steps.summary.outcome == 'failure')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ui-accessibility-failure-${{ github.run_id }}
-          path: output/accessibility
+          name: ui-accessibility-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            output/failure-evidence/**/*.masked.png
+            output/failure-evidence/**/*.sanitized.json
+            output/failure-evidence/**/*.sanitized.txt
+            output/accessibility/**/results.sanitized.json
+            output/accessibility/**/summary.sanitized.txt
           if-no-files-found: warn
           retention-days: 14
 

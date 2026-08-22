@@ -4,9 +4,10 @@ import path from "node:path"
 
 import { base32 } from "@better-auth/utils/base32"
 import { createOTP } from "@better-auth/utils/otp"
-import { expect, test } from "@playwright/test"
-import type { Browser, BrowserContext, Page, TestInfo } from "@playwright/test"
+import type { Browser, Page, TestInfo } from "@playwright/test"
 import Database from "better-sqlite3"
+
+import { expect, test } from "./support/failure-evidence"
 
 import {
   auditAccessibilityState,
@@ -539,34 +540,17 @@ async function authenticatedContext(
 }
 
 async function scanContextStates({
-  actor,
-  context,
   page,
   results,
   states,
   testInfo,
 }: {
-  actor: AccessibilityActor
-  context: BrowserContext
   page: Page
   results: AccessibilityResult[]
   states: readonly AccessibilityState[]
   testInfo: TestInfo
 }) {
-  const findingCount = formatAccessibilityFailures(results).length
-  await context.tracing.start({ screenshots: true, snapshots: true, sources: true })
   for (const state of states) await auditMatrixState(page, state, results, testInfo)
-  const hasNewFindings = formatAccessibilityFailures(results).length > findingCount
-  if (hasNewFindings) {
-    const tracePath = testInfo.outputPath(`${profile}-${actor}-trace.zip`)
-    await context.tracing.stop({ path: tracePath })
-    await testInfo.attach(`${profile}-${actor}-trace`, {
-      contentType: "application/zip",
-      path: tracePath,
-    })
-  } else {
-    await context.tracing.stop()
-  }
 }
 
 async function registerActivationContext(browser: Browser, fullName: string) {
@@ -828,8 +812,6 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
         const guestContext = await newContext(browser)
         const guestPage = await guestContext.newPage()
         await scanContextStates({
-          actor: "guest",
-          context: guestContext,
           page: guestPage,
           results,
           states: selectedStatesForProfile(profile).filter((state) => state.actor === "guest"),
@@ -868,8 +850,6 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
           : null
         try {
           await scanContextStates({
-            actor: "platform-admin",
-            context: admin.context,
             page: admin.page,
             results,
             states: adminStates,
@@ -898,8 +878,6 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
         const guestContext = await newContext(browser)
         const guestPage = await guestContext.newPage()
         await scanContextStates({
-          actor: "guest",
-          context: guestContext,
           page: guestPage,
           results,
           states: selectedStatesForProfile(profile).filter((state) => state.actor === "guest"),
@@ -948,8 +926,6 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
           if (!actorStates.length) continue
           const session = await authenticatedContext(browser, actor)
           await scanContextStates({
-            actor,
-            context: session.context,
             page: session.page,
             results,
             states: actorStates,

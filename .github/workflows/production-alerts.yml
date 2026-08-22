@@ -64,8 +64,13 @@ jobs:
             })
 
   deployment-result:
-    if: github.event_name == 'deployment_status'
-    name: Deliver deployment alert
+    if: >-
+      github.event_name == 'deployment_status' &&
+      github.event.deployment.environment == 'Production' &&
+      github.event.deployment.creator.login == 'vercel[bot]' &&
+      github.event.deployment.task == 'deploy' &&
+      contains(fromJSON('["success","failure","error"]'), github.event.deployment_status.state)
+    name: Validate and smoke production deployment
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -73,21 +78,33 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Classify trusted production deployment
+        id: deployment
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const classify = require("./.github/scripts/classify-production-deployment.js")
+            const classification = await classify({
+              deployment: context.payload.deployment,
+              deploymentStatus: context.payload.deployment_status,
+              github,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            })
+            core.notice(classification.reason)
+            core.setOutput("should-smoke", classification.shouldSmoke ? "true" : "false")
+            core.setOutput("state", classification.state || "ignored")
+            core.setOutput("trusted", classification.trusted ? "true" : "false")
 
       - name: Synchronize production deployment alert
+        if: steps.deployment.outputs.trusted == 'true'
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
         with:
           script: |
             const deployment = context.payload.deployment
             const deploymentStatus = context.payload.deployment_status
-            if (deployment.environment.toLowerCase() !== "production") {
-              core.notice(`Ignoring ${deployment.environment} deployment.`)
-              return
-            }
-            if (!["success", "failure", "error"].includes(deploymentStatus.state)) {
-              core.notice(`Ignoring transitional deployment state: ${deploymentStatus.state}.`)
-              return
-            }
             const syncAlert = require("./.github/scripts/sync-production-alert.js")
             await syncAlert({
               core,
@@ -99,6 +116,44 @@ jobs:
               status: deploymentStatus.state === "success" ? "resolved" : "open",
               summary: `The production deployment for ${deployment.ref} reported: ${deploymentStatus.state}.`,
             })
+
+      - name: Use Node.js 22 for immediate smoke
+        if: steps.deployment.outputs.should-smoke == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Verify canonical production without signing in
+        id: smoke
+        if: steps.deployment.outputs.should-smoke == 'true'
+        continue-on-error: true
+        run: node scripts/operations/check-production.mjs https://smbaacademy.in --attempts 12 --delay-ms 10000
+
+      - name: Synchronize immediate production health
+        if: always() && steps.deployment.outputs.should-smoke == 'true'
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const syncAlert = require("./.github/scripts/sync-production-alert.js")
+            const healthy = "${{ steps.smoke.outcome }}" === "success"
+            await syncAlert({
+              core,
+              detailsUrl: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              github,
+              key: "Production health",
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              status: healthy ? "resolved" : "open",
+              summary: healthy
+                ? "The canonical production smoke passed after deployment."
+                : "The canonical production smoke failed after deployment.",
+            })
+
+      - name: Require immediate production smoke
+        if: always() && steps.deployment.outputs.should-smoke == 'true'
+        env:
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: test "$SMOKE_OUTCOME" = success
 
   manual-delivery-test:
     if: github.event_name == 'workflow_dispatch'

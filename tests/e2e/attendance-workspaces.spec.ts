@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test"
 import type { Page } from "@playwright/test"
+
+import { expect, test } from "./support/failure-evidence"
 
 const COACH_ACADEMY_ID = "SMBA-HC-0001"
 const FIXTURE_PASSWORD = process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!"

@@ -14,10 +14,7 @@ export default defineConfig({
   fullyParallel: false,
   outputDir: path.join(outputRoot, "playwright-artifacts"),
   preserveOutput: "always",
-  reporter: [
-    ["list"],
-    ["html", { open: "never", outputFolder: path.join(outputRoot, "html-report") }],
-  ],
+  reporter: [["list"]],
   retries: 0,
   testDir: ".",
   testMatch: [
