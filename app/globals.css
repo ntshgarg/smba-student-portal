@@ -13556,6 +13556,32 @@ tr.is-expanded .coach-member-row-action button svg {
   font-weight: 800;
 }
 
+/* Shares the full-width band shape of the preview banner because it answers the
+   same kind of question: why is this page not the one that was asked for. */
+.coach-access-notice {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--red);
+  background: color-mix(in srgb, var(--red) 7%, var(--white));
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.coach-access-notice svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--red);
+  stroke-width: 1.8;
+}
+
 @media (max-width: 860px) {
   .admin-page-header {
     min-height: 360px;

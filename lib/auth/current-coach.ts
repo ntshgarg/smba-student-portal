@@ -42,8 +42,15 @@ export async function requireCoachPage() {
   return { access, identity }
 }
 
+// A refusal that only changes the address bar is indistinguishable from a
+// mis-click: the junior coach asked for a page, landed on their dashboard, and
+// nothing said why. The destination is told to explain the refusal instead.
+export const HEAD_COACH_ONLY_NOTICE = "head-coach-only"
+
 export async function requireHeadAdminPage() {
   const context = await requireCoachPage()
-  if (context.access.accessLevel !== "head_admin") redirect("/coach")
+  if (context.access.accessLevel !== "head_admin") {
+    redirect(`/coach?notice=${HEAD_COACH_ONLY_NOTICE}`)
+  }
   return context
 }

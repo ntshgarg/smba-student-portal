@@ -14,7 +14,11 @@ import { MembersCard } from "@/components/coach/members-card"
 import { PlayerOnboardingCard } from "@/components/coach/player-onboarding-card"
 import { ReportsCard } from "@/components/coach/reports-card"
 import { SessionsCard } from "@/components/coach/sessions-card"
-import { requireCoachPage } from "@/lib/auth/current-coach"
+import { CoachAccessNotice } from "@/components/coach/coach-access-notice"
+import {
+  HEAD_COACH_ONLY_NOTICE,
+  requireCoachPage,
+} from "@/lib/auth/current-coach"
 import { listCoachAnnouncements } from "@/lib/announcements/queries"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
@@ -53,6 +57,7 @@ export const metadata = {
 type CoachDashboardSearchParams = {
   adjustment?: string | string[]
   attendance?: string | string[]
+  notice?: string | string[]
   player?: string | string[]
 }
 
@@ -109,6 +114,9 @@ export default async function CoachDashboardPage({
 
     return (
       <>
+        {firstQueryValue(query.notice) === HEAD_COACH_ONLY_NOTICE ? (
+          <CoachAccessNotice />
+        ) : null}
         <JuniorCoachWelcomeHero
           coachName={identity.firstName}
           greeting={currentGreeting()}
