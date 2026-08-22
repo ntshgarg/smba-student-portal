@@ -364,6 +364,7 @@ export function PlayerAttendanceCard({
                 <span><i className="is-present" aria-hidden="true" />Present</span>
                 <span><i className="is-absent" aria-hidden="true" />Absent</span>
                 <span><i className="is-pending" aria-hidden="true" />Pending</span>
+                <span><i className="is-scheduled" aria-hidden="true" />Scheduled</span>
                 <span><i className="is-makeup" aria-hidden="true" />Rescheduled</span>
                 <span><i className="is-unavailable" aria-hidden="true" />Not scheduled</span>
               </div>

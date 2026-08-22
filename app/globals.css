@@ -969,14 +969,18 @@
   transform: rotate(180deg);
 }
 
+/* The default mark belongs to a published adjustment and sits in the same row
+   as its green PUBLISHED chip, so it is green too. It used to be amber, which
+   gave one state two colours across a single row and stretched amber over both
+   success here and caution on the requires-review chip below. */
 .coach-adjustment-history-mark {
   display: grid;
   width: 28px;
   height: 28px;
   place-items: center;
   border-radius: 50%;
-  background: var(--makeup);
-  color: var(--makeup-dark);
+  background: var(--green);
+  color: var(--white);
   font-size: 11px;
   font-weight: 850;
 }
@@ -3292,6 +3296,13 @@ h3 {
 .player-attendance-legend i.is-pending {
   border-color: var(--steel);
   background: linear-gradient(var(--steel), var(--steel)) center / 8px 1px no-repeat;
+}
+
+/* Matches the ivory tint on .player-attendance-calendar-day.is-future exactly,
+   including the --line border the base swatch already carries, so the key is
+   the same colour as the cells it explains. */
+.player-attendance-legend i.is-scheduled {
+  background: color-mix(in srgb, var(--white) 84%, var(--ivory));
 }
 
 .player-attendance-legend i.is-makeup {
