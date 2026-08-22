@@ -32,7 +32,7 @@ Do not write passwords, PINs, email codes, recovery links, authenticator secrets
 | Head-coach recovery | Protected recovery succeeds with authenticator or backup code | ☐ Pass ☐ Fail | |
 | Responsive use | Principal workflows remain usable on phone, tablet and desktop | ☐ Pass ☐ Fail | |
 | Monitoring | Health, security-signal and deployment monitors are green | ☐ Pass ☐ Fail | |
-| Recovery | A fresh encrypted backup exists and the recorded restore drill passed | ☐ Pass ☐ Fail | |
+| Recovery | Daily encrypted backup, monthly stored restore and the latest quarterly remote drill passed | ☐ Pass ☐ Fail | |
 
 ## Go-live decision
 

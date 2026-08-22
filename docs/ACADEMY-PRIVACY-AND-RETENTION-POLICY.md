@@ -68,7 +68,7 @@ retained exception is documented with its reason and review date.
 | Sanitized application-error events | 90 days | Delete after operational review |
 | Expired email challenges, sessions and rate-limit records | No more than 90 days after expiry | Delete |
 | Verified recovery email | While the account remains recoverable | Remove after account closure and required record reconciliation |
-| Encrypted logical backups | 35 days | Automatic artifact expiry; verify at least four recent backups exist |
+| Encrypted logical backups | 35 days | Automatic artifact expiry; monitor daily freshness and monthly stored restoration |
 | Turso point-in-time recovery | Provider-plan window | Let the provider expire it automatically |
 | Security incident record | 3 years after closure | Review, then securely delete |
 
@@ -85,6 +85,8 @@ written confirmation.
   personal details.
 - Backups are encrypted before upload. The passphrase is stored separately from GitHub and production
   credentials.
+- GitHub workflow artifacts are the only long-term backup store in this phase; deleting a backup workflow
+  run can delete its encrypted artifact and must be treated as a controlled data-recovery action.
 - Suspected incidents follow `docs/PRODUCTION-OPERATIONS.md`; affected sessions and secrets are revoked
   before normal operation resumes.
 

@@ -3,7 +3,7 @@ import "server-only"
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm"
 
 import { weekdayForDateKey } from "@/lib/date-keys"
-import { formatAcademyId } from "@/lib/auth/identity"
+import { academyIdSerial, formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   academyIdAllocations,
@@ -729,9 +729,7 @@ export function listFinancePlayers(
 ): FinancePlayerListItem[] {
   const normalizedQuery = query.trim().toLocaleLowerCase("en-IN")
   const searchPattern = `%${normalizedQuery.replace(/[\\%_]/gu, "\\$&")}%`
-  const academySerial = /^smba#\d{4}$/u.test(normalizedQuery)
-    ? Number(normalizedQuery.slice(5))
-    : null
+  const academySerial = academyIdSerial(normalizedQuery)
   const paymentTotal = sql<number>`coalesce((
     select sum(${paymentAllocations.amountPaise}) from ${paymentAllocations}
     inner join ${payments} on ${payments.id} = ${paymentAllocations.paymentId}

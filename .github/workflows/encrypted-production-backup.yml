@@ -2,8 +2,8 @@ name: Encrypted production backup
 
 on:
   schedule:
-    # Sunday 08:17 India Standard Time. The unusual minute reduces runner congestion.
-    - cron: "47 2 * * 0"
+    # Daily 08:17 India Standard Time. The unusual minute reduces runner congestion.
+    - cron: "47 2 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -19,10 +19,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Check out repository
+      - name: Check out trusted default-branch backup code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -52,24 +53,24 @@ jobs:
           SMBA_BACKUP_PASSPHRASE: ${{ secrets.SMBA_BACKUP_PASSPHRASE }}
         run: |
           test "${#SMBA_BACKUP_PASSPHRASE}" -ge 24 || { echo "SMBA_BACKUP_PASSPHRASE must contain at least 24 characters."; exit 1; }
-          tar -C .data/backup-run -czf .data/smba-production-${{ github.run_id }}.tar.gz \
+          tar -C .data/backup-run -czf .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz \
             smba-production.db smba-production.db.manifest.json
           printf '%s' "$SMBA_BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
             --passphrase-fd 0 \
             --symmetric --cipher-algo AES256 --s2k-digest-algo SHA512 \
-            --output .data/smba-production-${{ github.run_id }}.tar.gz.gpg \
-            .data/smba-production-${{ github.run_id }}.tar.gz
+            --output .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz.gpg \
+            .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
 
       - name: Remove plaintext copies
         if: always()
         run: |
-          rm -f .data/smba-production-${{ github.run_id }}.tar.gz
+          rm -f .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
           rm -rf .data/backup-run
 
       - name: Store encrypted snapshot
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: smba-production-backup-${{ github.run_id }}
-          path: .data/smba-production-${{ github.run_id }}.tar.gz.gpg
+          name: smba-production-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz.gpg
           if-no-files-found: error
           retention-days: 35

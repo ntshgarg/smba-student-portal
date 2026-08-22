@@ -41,5 +41,11 @@ Turso recovery point has been confirmed.
 - Review failed production-health runs and Resend delivery failures.
 - Review active sessions in Account Security and log out unfamiliar devices.
 - Confirm recovery emails and offline authenticator backup codes remain available.
-- Create and verify an encrypted logical database snapshot.
+- Confirm the daily encrypted backup, monthly stored-artifact restore and freshness monitor are green.
 - Review the retention schedule and delete only records whose approved period has ended.
+
+## Quarterly platform-owner routine
+
+- Restore one selected recovery point into a disposable Turso database, verify application health, record
+  the result in `docs/RESTORE-DRILL-LOG.md`, and delete the disposable database after double-checking that
+  it is not production.

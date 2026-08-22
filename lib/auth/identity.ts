@@ -41,6 +41,32 @@ export function normalizeAcademyId(value: string) {
   return value.trim().replace(/\s+/gu, "").toLocaleUpperCase("en-IN")
 }
 
+export function academyIdSerial(value: string) {
+  const normalized = normalizeAcademyId(value)
+  const legacy = /^SMBA#(\d{4})$/u.exec(normalized)
+  if (legacy) {
+    const serial = Number(legacy[1])
+    return serial >= 1 && serial <= LEGACY_SERIAL_MAX ? serial : null
+  }
+
+  const rolePrefixed = /^SMBA-(HC|JC|PL)-(\d{4})$/u.exec(normalized)
+  if (!rolePrefixed) {
+    return null
+  }
+
+  const suffix = Number(rolePrefixed[2])
+  if (suffix < 1 || suffix > 9_999) {
+    return null
+  }
+  if (rolePrefixed[1] === "JC") {
+    return JUNIOR_COACH_SERIAL_BASE + suffix
+  }
+  if (rolePrefixed[1] === "PL") {
+    return PLAYER_SERIAL_BASE + suffix
+  }
+  return HEAD_COACH_SERIAL_BASE + suffix
+}
+
 export function isAcademyId(value: string) {
   const normalized = normalizeAcademyId(value)
   return /^SMBA#\d{4}$/u.test(normalized)

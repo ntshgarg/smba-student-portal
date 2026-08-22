@@ -33,6 +33,9 @@ describe("CI reliability controls", () => {
     expect(workflow).toContain("needs: [static, unit, browser]")
     expect(workflow).toContain("npm run test:ci")
     expect(workflow).toContain("npm run regression:test")
+    expect(workflow).toContain("npm run regression:finance:prepare")
+    expect(workflow).toContain("npm run regression:finance")
+    expect(workflow).toContain("/tmp/smba-ci-finance-${{ github.run_id }}-${{ github.run_attempt }}.db")
     expect(workflow).not.toContain("runs-on: ubuntu-latest")
   })
 

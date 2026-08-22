@@ -153,6 +153,50 @@ jobs:
             kill "$(cat /tmp/smba-ci-registration-server.pid)" 2>/dev/null || true
           fi
 
+      - name: Prepare disposable finance database
+        env:
+          SMBA_FINANCE_DB: /tmp/smba-ci-finance-${{ github.run_id }}-${{ github.run_attempt }}.db
+        run: npm run regression:finance:prepare -- .data/academy-clean.db "$SMBA_FINANCE_DB"
+
+      - name: Start isolated finance workspace
+        env:
+          BETTER_AUTH_SECURE_COOKIES: "false"
+          DB_FILE_NAME: /tmp/smba-ci-finance-${{ github.run_id }}-${{ github.run_attempt }}.db
+          SMBA_REQUIRE_COACH_TOTP: "false"
+        run: |
+          npx next start -p 3102 > /tmp/smba-ci-finance-server.log 2>&1 &
+          echo $! > /tmp/smba-ci-finance-server.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3102/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          npx tsx scripts/regression/sanitize-server-log.ts \
+            /tmp/smba-ci-finance-server.log \
+            output/failure-evidence/browser/finance-server.sanitized.txt
+          exit 1
+
+      - name: Run coach-to-player finance E2E
+        env:
+          SMBA_FINANCE_BASE_URL: http://127.0.0.1:3102
+          SMBA_FINANCE_DB: /tmp/smba-ci-finance-${{ github.run_id }}-${{ github.run_attempt }}.db
+        run: npm run regression:finance
+
+      - name: Show finance server log after a failure
+        if: failure()
+        run: npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-ci-finance-server.log output/failure-evidence/browser/finance-server.sanitized.txt
+
+      - name: Stop isolated finance workspace and remove its database
+        if: always()
+        env:
+          SMBA_FINANCE_DB: /tmp/smba-ci-finance-${{ github.run_id }}-${{ github.run_attempt }}.db
+        run: |
+          if test -f /tmp/smba-ci-finance-server.pid; then
+            kill "$(cat /tmp/smba-ci-finance-server.pid)" 2>/dev/null || true
+          fi
+          rm -f "$SMBA_FINANCE_DB" "$SMBA_FINANCE_DB-shm" "$SMBA_FINANCE_DB-wal"
+
       - name: Prepare disposable stress database
         run: cp .data/academy-stress.db /tmp/smba-ci-stress.db
 

@@ -43,7 +43,8 @@ transitional, forged-actor and non-`main` deployment events are ignored. The wor
 default branch rather than event-controlled deployment code.
 
 `.github/workflows/operations-monitor.yml` checks sanitized server-error counts, authentication-email
-API failures and repeated login lockouts twice per hour. `.github/workflows/production-alerts.yml`
+API failures, repeated login lockouts, backup age, restore-verification age and artifact availability
+twice per hour. `.github/workflows/production-alerts.yml`
 turns failed default-branch quality, accessibility, health, monitoring, backup and production-deployment
 events into one assigned, deduplicated `production-alert` issue. Pull-request and fork runs cannot open or
 resolve production incidents. A successful default-branch recovery closes the corresponding issue. The repository
@@ -87,9 +88,12 @@ keep its decryption key in a separate password manager.
 
 ### Scheduled encrypted backups
 
-`.github/workflows/encrypted-production-backup.yml` creates and verifies a logical snapshot every Sunday,
+`.github/workflows/encrypted-production-backup.yml` creates and verifies a logical snapshot every day at
+08:17 IST,
 encrypts the database and manifest with GnuPG AES-256 before upload, removes every plaintext runner copy,
-and retains the encrypted artifact for 35 days. Configure these GitHub Actions secrets:
+and retains the encrypted artifact for 35 days (approximately 35 daily restore points). A repository
+administrator who deletes workflow runs can also delete their artifacts; GitHub-only storage is the
+accepted boundary for this phase. Configure these GitHub Actions secrets:
 
 - `SMBA_BACKUP_DATABASE_URL`: production Turso database URL;
 - `SMBA_BACKUP_DATABASE_TOKEN`: database-scoped read-only token created with
@@ -101,15 +105,30 @@ The operations monitor shares only the two read-only database secrets. It cannot
 Trigger the workflow manually after configuring the secrets and retain its successful run as the first
 backup record.
 
-### Quarterly restore drill
+### Automated stored-artifact restore verification
+
+`.github/workflows/encrypted-backup-restore.yml` downloads the newest successful, unexpired `main`
+backup on the first day of each month at 10:17 IST. It validates the selected run and artifact, decrypts
+inside a mode-0700 runner directory, rejects unsafe or unexpected archive entries, verifies the manifest,
+checksum, row counts, integrity and foreign keys, migrates a copy, builds against a separate empty
+database, and boots the application against the restored copy for health and login smoke checks. The
+workflow receives only `SMBA_BACKUP_PASSPHRASE`, never production database credentials, and always
+removes decrypted material. A manual run may select a specific successful backup workflow run ID.
+
+Operations Monitor fails when the latest successful backup is older than 30 hours, the latest successful
+stored-artifact restore is older than 35 days, or the referenced artifact is missing or expired.
+
+### Quarterly remote restore drill
 
 Record completed exercises in `docs/RESTORE-DRILL-LOG.md`.
 
-1. Create and verify a fresh logical snapshot.
-2. Download one encrypted workflow artifact and decrypt it outside the repository:
+1. Confirm the latest automated daily backup and monthly stored-artifact restore are green.
+2. Download one encrypted workflow artifact and decrypt it outside the repository only when the
+   quarterly remote drill requires it:
    `gpg --output smba-restore.tar.gz --decrypt smba-production-<run>.tar.gz.gpg`, then extract it into a
    temporary directory and run `npm run db:snapshot:verify -- <snapshot> <manifest>`.
-3. Create a disposable Turso database from the snapshot or from a chosen PITR timestamp.
+3. Create a disposable Turso database from the snapshot or from a chosen PITR timestamp. This remains
+   manual because automating database creation and deletion would require a write-capable management token.
 4. Use a temporary deployment or local environment to run migrations, `/api/health`, the fixture
    verifier where applicable, and a read-only login-page smoke check.
 5. Record the timestamp, selected recovery point, result and operator.

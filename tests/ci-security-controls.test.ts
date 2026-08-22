@@ -21,6 +21,25 @@ describe("CI security controls", () => {
     expect(workflow.indexOf("Install dependencies")).toBeLessThan(
       workflow.indexOf("SMBA_DATABASE_SNAPSHOT_SOURCE"),
     )
+    expect(workflow).toContain("ref: ${{ github.event.repository.default_branch }}")
+    expect(workflow).toContain('- cron: "47 2 * * *"')
+    expect(workflow).toContain("smba-production-backup-${{ github.run_id }}-${{ github.run_attempt }}")
+    expect(workflow).toContain("retention-days: 35")
+  })
+
+  it("gives the stored restore only Actions read access and step-scoped passphrase", () => {
+    const workflow = readRepositoryFile(".github/workflows/encrypted-backup-restore.yml")
+
+    expect(workflow).toContain("permissions:\n  actions: read\n  contents: read")
+    expect(workflow).not.toContain("SMBA_BACKUP_DATABASE_URL")
+    expect(workflow).not.toContain("SMBA_BACKUP_DATABASE_TOKEN")
+    expect(workflow.match(/SMBA_BACKUP_PASSPHRASE: \$\{\{ secrets\.SMBA_BACKUP_PASSPHRASE \}\}/gu))
+      .toHaveLength(1)
+    expect(workflow).toContain('- cron: "47 4 1 * *"')
+    expect(workflow).toContain("run-id: ${{ steps.backup.outputs.run-id }}")
+    expect(workflow).toContain("repository: ${{ github.repository }}")
+    expect(workflow).toContain("cleanup-restore-workspace.mjs")
+    expect(workflow).not.toContain("upload-artifact")
   })
 
   it("exposes monitor credentials only to the read-only monitoring step", () => {
@@ -33,6 +52,8 @@ describe("CI security controls", () => {
     expect(workflow.indexOf("Install dependencies")).toBeLessThan(
       workflow.indexOf("SMBA_MONITOR_DATABASE_URL"),
     )
+    expect(workflow).toContain("actions: read")
+    expect(workflow).toContain("check-backup-freshness.js")
   })
 
   it("allows only default-branch workflow runs to synchronize production alerts", () => {

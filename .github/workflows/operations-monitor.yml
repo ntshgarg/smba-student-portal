@@ -10,9 +10,34 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
+  backup-freshness:
+    name: Backup and restore freshness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted freshness helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Require a recent encrypted backup and restore verification
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        with:
+          script: |
+            const checkFreshness = require("./.github/scripts/check-backup-freshness.js")
+            const result = await checkFreshness({
+              defaultBranch: context.payload.repository.default_branch,
+              github,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            })
+            core.notice(`Backup run ${result.backupRunId}, restore run ${result.restoreRunId}, artifact ${result.artifactId} are current.`)
+
   security-signals:
     name: Authentication delivery and lockout signals
     runs-on: ubuntu-24.04
@@ -22,6 +47,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
