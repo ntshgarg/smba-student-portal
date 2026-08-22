@@ -3298,6 +3298,13 @@ h3 {
   background: linear-gradient(var(--steel), var(--steel)) center / 8px 1px no-repeat;
 }
 
+/* Matches the ivory tint on .player-attendance-calendar-day.is-future exactly,
+   including the --line border the base swatch already carries, so the key is
+   the same colour as the cells it explains. */
+.player-attendance-legend i.is-scheduled {
+  background: color-mix(in srgb, var(--white) 84%, var(--ivory));
+}
+
 .player-attendance-legend i.is-makeup {
   border-color: var(--makeup-dark);
   background: var(--makeup);
