@@ -952,6 +952,12 @@
   background: var(--ivory);
 }
 
+/* The wash alone is shared with hover, so the review alert owns a red keyline
+   the pointer never paints. Same split as the adjustment choice list above. */
+.coach-adjustment-history-item.requires-review:has(> button[aria-expanded="false"]) {
+  box-shadow: inset 3px 0 0 var(--red);
+}
+
 .coach-adjustment-history-item > button > svg {
   width: 16px;
   height: 16px;
@@ -3980,10 +3986,16 @@ h3 {
   transition: transform 240ms ease;
 }
 
-.report-year-trigger:hover .report-year-toggle,
-.report-month-trigger:hover .report-month-toggle,
-.report-year-group.is-open > h2 .report-year-toggle,
-.report-month-item.is-open .report-month-toggle {
+.report-month-trigger:hover .report-month-toggle {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+}
+
+/* The filled red disc stays reserved for the month that is actually open, so
+   running the pointer down the list cannot read as each row opening. */
+.report-month-item.is-open .report-month-toggle,
+.report-month-item.is-open .report-month-trigger:hover .report-month-toggle {
   border-color: var(--red);
   background: var(--red);
   color: var(--white);
@@ -8600,6 +8612,11 @@ tr.is-expanded .coach-member-row-action button svg {
   text-align: left;
 }
 
+/* Translucent so the cancelled-session tint on the row still reads through. */
+.coach-day-session > button:hover {
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
+}
+
 .coach-day-session > button > time {
   color: var(--red);
   font-size: 11px;
@@ -8946,6 +8963,12 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-month-grid > button.has-sessions {
   background: var(--white);
+}
+
+/* Translucent so the day's own fill still reads through, and skipped on the
+   selected cell so hover stays subordinate to the navy selection ring. */
+.coach-month-grid > button:hover:not(.is-selected) {
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
 }
 
 .coach-month-grid > button.is-selected {

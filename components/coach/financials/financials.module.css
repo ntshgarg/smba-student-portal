@@ -2212,9 +2212,16 @@
   cursor: pointer;
 }
 
-.rapidScope button:hover,
-.rapidScope button:focus-visible,
-.rapidScope .activeRapidScope {
+.rapidScope button:hover {
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
+  color: var(--navy);
+}
+
+/* Matches the fee-record tabs: the solid navy fill means "this filter is
+   applied", so hover keeps a light wash and can never be read as selected.
+   Keyboard focus is left to the global :focus-visible ring. */
+.rapidScope .activeRapidScope,
+.rapidScope .activeRapidScope:hover {
   border-color: var(--navy);
   background: var(--navy);
   color: var(--white);
