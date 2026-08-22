@@ -275,6 +275,9 @@ test("coach-to-player finance journey remains atomic, idempotent and private", a
   })
   await expect(playerPage.getByRole("heading", { name: "Your fee record." })).toBeVisible()
   await expect(playerPage.locator('[data-registration-state="paid"]')).toContainText("Paid")
+  await expect(playerPage.locator(
+    `[data-fee-month-cell="${fixture.today.slice(0, 7)}"][data-fee-month-state="paid"]`,
+  )).toContainText("Paid")
   await expect(playerPage.locator("[data-fee-receipt-row]")).toHaveCount(2)
   await expect(playerPage.getByText("INR 1,500", { exact: true })).toBeVisible()
   await expect(playerPage.getByText("INR 3,000", { exact: true })).toBeVisible()
