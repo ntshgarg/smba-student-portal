@@ -165,10 +165,15 @@
   border-left: 1px solid var(--line);
 }
 
+/* A selected season is a navigation state, not a money state. This used to
+   reuse --fee-due, the payment-outstanding wash that also paints the due
+   registration outcome and the due month cells, so the chosen year read as a
+   year with money owed. It now takes the solid navy fill the player's
+   attendance year selector already uses for the same job, which keeps
+   --fee-due for amounts that are genuinely outstanding. */
 .yearControl a[aria-current="page"] {
-  border-bottom-color: var(--red);
-  background: var(--fee-due);
-  color: var(--red-dark);
+  background: var(--navy);
+  color: var(--white);
 }
 
 .currentSummary {
