@@ -12,18 +12,18 @@ concurrency:
 permissions:
   contents: read
 
-jobs:
-  verify:
-    name: Application regression
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      BETTER_AUTH_SECRET: smba-ci-only-secret-never-used-in-production-2026
-      NEXT_PUBLIC_SMBA_SITE_ORIGIN: https://ci.smbaacademy.in
-      SMBA_AUTH_MAIL_TRANSPORT: memory
-      SMBA_REQUIRE_COACH_TOTP: "true"
-      SMBA_REQUIRE_RECOVERY_EMAIL: "false"
+env:
+  BETTER_AUTH_SECRET: smba-ci-only-secret-never-used-in-production-2026
+  NEXT_PUBLIC_SMBA_SITE_ORIGIN: https://ci.smbaacademy.in
+  SMBA_AUTH_MAIL_TRANSPORT: memory
+  SMBA_REQUIRE_COACH_TOTP: "true"
+  SMBA_REQUIRE_RECOVERY_EMAIL: "false"
 
+jobs:
+  static:
+    name: Static validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -46,8 +46,45 @@ jobs:
       - name: Validate migrations
         run: npm run db:check
 
-      - name: Run unit and operational regression tests
-        run: npm test
+  unit:
+    name: Unit and operational tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          cache: npm
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run bounded unit and operational tests
+        run: npm run test:ci
+
+      - name: Run fixture lifecycle regression in isolation
+        run: npm run regression:test
+
+  browser:
+    name: Build and browser regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          cache: npm
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build and verify every regression database
         run: |
@@ -145,3 +182,20 @@ jobs:
 
       - name: Confirm canonical fixtures remain unchanged
         run: npm run fixture:verify:all
+
+  verify:
+    name: Application regression
+    if: ${{ always() }}
+    needs: [static, unit, browser]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every isolated regression job
+        env:
+          BROWSER_RESULT: ${{ needs.browser.result }}
+          STATIC_RESULT: ${{ needs.static.result }}
+          UNIT_RESULT: ${{ needs.unit.result }}
+        run: |
+          test "$STATIC_RESULT" = success
+          test "$UNIT_RESULT" = success
+          test "$BROWSER_RESULT" = success

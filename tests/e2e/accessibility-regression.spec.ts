@@ -251,6 +251,9 @@ async function newContext(browser: Browser) {
 async function settle(page: Page) {
   await page.waitForLoadState("domcontentloaded")
   await page.waitForLoadState("networkidle", { timeout: 2_000 }).catch(() => undefined)
+  await page.waitForFunction(() => document.title.trim().length > 0, undefined, {
+    timeout: 5_000,
+  }).catch(() => undefined)
   await page.evaluate(async () => {
     await document.fonts.ready.catch(() => undefined)
     await new Promise<void>((resolve) => {
