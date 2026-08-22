@@ -455,21 +455,30 @@ test("A player without missed sessions gets a compact empty step", async ({ page
       .map((option) => (option as HTMLOptionElement).value)
       .filter(Boolean)
   ))
+  const missedSessionStep = page.locator(".coach-adjustment-choice-group").first()
+  const compactEmptyStep = missedSessionStep.locator(".coach-adjustment-empty-step.is-compact")
+  const missedCalendar = missedSessionStep.locator(".coach-adjustment-missed-calendar")
   let compactEmptyStepFound = false
 
   for (const playerId of playerIds) {
     await playerSelect.selectOption(playerId)
     await expect(page).toHaveURL((url) => url.searchParams.get("player") === playerId)
-    await page.waitForLoadState("networkidle")
-    const compactEmptyStep = page.locator(".coach-adjustment-empty-step.is-compact")
-    if (!await compactEmptyStep.isVisible()) continue
+    // Choosing a player paints this step from client state and then re-renders it when the
+    // router round-trip lands, so wait for the selection to survive that re-render and for
+    // the step to reach one of its two terminal shapes before reading it.
+    await expect(playerSelect).toHaveValue(playerId)
+    await expect(compactEmptyStep.or(missedCalendar)).toBeVisible()
+
+    const emptyStep = await missedSessionStep.evaluate((fieldset) => {
+      const step = fieldset.querySelector(".coach-adjustment-empty-step.is-compact")
+      if (!step) return null
+      return { height: step.getBoundingClientRect().height, text: step.textContent ?? "" }
+    })
+    if (!emptyStep) continue
 
     compactEmptyStepFound = true
-    await expect(compactEmptyStep).toContainText("has no unreconciled absences")
-    const height = await compactEmptyStep.evaluate((element) => (
-      element.getBoundingClientRect().height
-    ))
-    expect(height).toBeLessThanOrEqual(56)
+    expect(emptyStep.text).toContain("has no unreconciled absences")
+    expect(emptyStep.height).toBeLessThanOrEqual(56)
     break
   }
 
