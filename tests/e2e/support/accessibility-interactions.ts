@@ -2,18 +2,27 @@ import { expect, type Locator, type Page } from "@playwright/test"
 
 import type { AccessibilityInteraction } from "./accessibility-matrix"
 
-async function clickFirstVisible(locator: Locator) {
+export async function firstVisible(
+  locator: Locator,
+  matches: (candidate: Locator) => Promise<boolean> = async () => true,
+) {
   const count = await locator.count()
   for (let index = 0; index < count; index += 1) {
     const candidate = locator.nth(index)
     if (await candidate.isVisible().catch(() => false)
-      && await candidate.isEnabled().catch(() => false)) {
+      && await candidate.isEnabled().catch(() => false)
+      && await matches(candidate).catch(() => false)) {
       await candidate.scrollIntoViewIfNeeded()
-      await candidate.click()
       return candidate
     }
   }
   throw new Error("The interaction did not find an enabled, visible control.")
+}
+
+async function clickFirstVisible(locator: Locator) {
+  const candidate = await firstVisible(locator)
+  await candidate.click()
+  return candidate
 }
 
 export async function executeAccessibilityInteraction(
@@ -27,11 +36,17 @@ export async function executeAccessibilityInteraction(
     }
     case "attendance-session-open": {
       const initialUrl = page.url()
-      const selectedSession = await clickFirstVisible(page.locator(
-        '.attendance-occurrence-list > button[aria-controls="attendance-roster-panel"]:not([disabled])',
-      ))
-      await page.waitForURL((url) => url.href !== initialUrl
-        && Boolean(url.searchParams.get("occurrence")), { timeout: 10_000 })
+      const selectedSession = await firstVisible(
+        page.locator(
+          '.attendance-occurrence-list > button[aria-controls="attendance-roster-panel"]:not([disabled])',
+        ),
+        async (candidate) => await candidate.getAttribute("aria-expanded") === "false",
+      )
+      await selectedSession.click()
+      await expect.poll(() => {
+        const url = new URL(page.url())
+        return url.href !== initialUrl && Boolean(url.searchParams.get("occurrence"))
+      }, { timeout: 10_000 }).toBe(true)
       await expect(selectedSession).toHaveAttribute("aria-expanded", "true")
       await expect(page.locator("#attendance-roster-panel")).toHaveClass(/has-selection/u)
       break
