@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test"
+import { expect, type Locator, type Page } from "@playwright/test"
 
 import type { AccessibilityInteraction } from "./accessibility-matrix"
 
@@ -26,9 +26,14 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "attendance-session-open": {
-      await clickFirstVisible(page.locator(
-        '.attendance-occurrence-list > button[aria-expanded="false"]:not([disabled])',
+      const initialUrl = page.url()
+      const selectedSession = await clickFirstVisible(page.locator(
+        '.attendance-occurrence-list > button[aria-controls="attendance-roster-panel"]:not([disabled])',
       ))
+      await page.waitForURL((url) => url.href !== initialUrl
+        && Boolean(url.searchParams.get("occurrence")), { timeout: 10_000 })
+      await expect(selectedSession).toHaveAttribute("aria-expanded", "true")
+      await expect(page.locator("#attendance-roster-panel")).toHaveClass(/has-selection/u)
       break
     }
     case "authenticator-recovery-queue": {
