@@ -11,6 +11,10 @@ const IVORY = "#f6f3ec"
 const STEEL = "#617083"
 const WHITE = "#ffffff"
 
+/* The JPEG has no alpha, so its white plate showed as a rectangle on the
+   ivory page. The PNG carries the same artwork with a transparent surround. */
+const LOGO_PATH = path.join(process.cwd(), "public", "images", "smba-logo.png")
+
 const PAGE_MARGIN = 54
 const REPORT_COPY_FONT_SIZE = 11.5
 const REPORT_COPY_LINE_GAP = 5
@@ -172,8 +176,7 @@ function drawFooter(
 }
 
 function drawLetterhead(document: PDFKit.PDFDocument) {
-  const logoPath = path.join(process.cwd(), "public", "images", "smba-logo.jpeg")
-  document.image(logoPath, PAGE_MARGIN, 42, { fit: [132, 90] })
+  document.image(LOGO_PATH, PAGE_MARGIN, 42, { fit: [132, 90] })
   document
     .font("Helvetica-Bold")
     .fontSize(9)
@@ -207,11 +210,10 @@ function drawContinuationHeader(
   report: MonthlyReport,
   playerName: string,
 ) {
-  const logoPath = path.join(process.cwd(), "public", "images", "smba-logo.jpeg")
   const copyX = 272
   const copyWidth = document.page.width - 326
   const playerNameY = 57
-  document.image(logoPath, PAGE_MARGIN, 32, { fit: [82, 56] })
+  document.image(LOGO_PATH, PAGE_MARGIN, 32, { fit: [82, 56] })
   document
     .font("Helvetica-Bold")
     .fontSize(8)

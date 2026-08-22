@@ -27,6 +27,11 @@ const PALE = "#ece9e1"
 const WHITE = "#ffffff"
 const GREEN = "#176b4d"
 const AMBER = "#8a5a00"
+
+/* The JPEG has no alpha, so its white plate showed as a rectangle on the
+   ivory page. The PNG carries the same artwork with a transparent surround. */
+const LOGO_PATH = path.join(process.cwd(), "public", "images", "smba-logo.png")
+
 const PAGE_MARGIN = 50
 const CONTENT_BOTTOM = 758
 
@@ -144,9 +149,8 @@ class FinancePdfFlow {
   }
 
   private drawPageHeader() {
-    const logoPath = path.join(process.cwd(), "public", "images", "smba-logo.jpeg")
     this.document.rect(0, 0, this.document.page.width, this.document.page.height).fill(IVORY)
-    this.document.image(logoPath, PAGE_MARGIN, 35, { fit: [112, 76] })
+    this.document.image(LOGO_PATH, PAGE_MARGIN, 35, { fit: [112, 76] })
     this.document
       .font("Helvetica-Bold")
       .fontSize(8)
