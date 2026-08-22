@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
-import { sanitizeFailureText } from "../../tests/e2e/support/failure-evidence"
+import { sanitizeFailureText } from "./failure-evidence-sanitizer"
 
 const [input, output] = process.argv.slice(2)
 if (!input || !output || !output.endsWith(".sanitized.txt")) {

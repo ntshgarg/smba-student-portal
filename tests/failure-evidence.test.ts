@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   sanitizeFailureText,
   sanitizeFailureUrl,
-} from "./e2e/support/failure-evidence"
+} from "../scripts/regression/failure-evidence-sanitizer"
 
 describe("sanitized Playwright failure evidence", () => {
   it("removes credentials and account recovery material from text", () => {

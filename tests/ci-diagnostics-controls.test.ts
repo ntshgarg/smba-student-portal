@@ -38,6 +38,13 @@ describe("CI failure diagnostics and deployment verification", () => {
     }
   })
 
+  it("keeps production-included log sanitization independent from ignored test files", () => {
+    const sanitizer = readRepositoryFile("scripts/regression/sanitize-server-log.ts")
+
+    expect(sanitizer).toContain('from "./failure-evidence-sanitizer"')
+    expect(sanitizer).not.toContain("tests/")
+  })
+
   it("smokes only the canonical origin after a trusted deployment", () => {
     const alerts = readRepositoryFile(".github/workflows/production-alerts.yml")
     const health = readRepositoryFile(".github/workflows/production-health.yml")
