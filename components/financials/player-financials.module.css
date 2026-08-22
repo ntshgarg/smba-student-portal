@@ -193,6 +193,18 @@
   line-height: 1.35;
 }
 
+/* Headline values are neutral navy until the record gives the colour meaning:
+   an outstanding balance or an attention status turns red, a settled status
+   turns green, and everything else stays navy so a zero balance can never
+   raise a false alarm. Same rule as the registration band below. */
+.currentSummary > div[data-tone="due"] dd {
+  color: var(--red-dark);
+}
+
+.currentSummary > div[data-tone="paid"] dd {
+  color: var(--green);
+}
+
 .registrationBand {
   display: grid;
   min-height: 68px;
