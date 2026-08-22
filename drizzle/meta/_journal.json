@@ -183,6 +183,13 @@
       "when": 1787181624249,
       "tag": "0025_operational_events",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1787436214184,
+      "tag": "0026_issuer_scoped_account_identity",
+      "breakpoints": true
     }
   ]
 }

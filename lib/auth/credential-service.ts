@@ -6,6 +6,7 @@ import { and, eq, gt, isNull, lt } from "drizzle-orm"
 import { hashPassword, verifyPassword } from "better-auth/crypto"
 
 import {
+  CREDENTIAL_ACCOUNT_ISSUER,
   isAcademyId,
   normalizeAcademyId,
 } from "@/lib/auth/identity"
@@ -248,6 +249,7 @@ export function upsertPasswordCredential(input: {
     id: randomUUID(),
     accountId: input.accountId,
     createdAt: now,
+    issuer: CREDENTIAL_ACCOUNT_ISSUER,
     password: input.passwordHash,
     providerId: "credential",
     updatedAt: now,
@@ -359,6 +361,7 @@ export async function completeAccountActivation(input: {
       id: randomUUID(),
       accountId: status.accountId,
       createdAt: now,
+      issuer: CREDENTIAL_ACCOUNT_ISSUER,
       password: passwordHash,
       providerId: "credential",
       updatedAt: now,

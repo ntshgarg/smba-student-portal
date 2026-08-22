@@ -92,6 +92,10 @@ export const authUsers = sqliteTable("auth_users", {
 export const authProviderAccounts = sqliteTable("auth_provider_accounts", {
   id: text("id").primaryKey(),
   accountId: text("account_id").notNull(),
+  // Better Auth 1.7 recognizes an account by (issuer, accountId); providerId
+  // stays the local provider configuration. Deliberately without a default so
+  // every insert has to name its issuer instead of silently inheriting one.
+  issuer: text("issuer").notNull(),
   providerId: text("provider_id").notNull(),
   userId: text("user_id").notNull().references(() => authUsers.id),
   accessToken: text("access_token"),
@@ -104,6 +108,8 @@ export const authProviderAccounts = sqliteTable("auth_provider_accounts", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 }, (table) => [
+  uniqueIndex("auth_provider_accounts_issuer_account_idx")
+    .on(table.issuer, table.accountId),
   uniqueIndex("auth_provider_accounts_provider_account_idx")
     .on(table.providerId, table.accountId),
   index("auth_provider_accounts_user_idx").on(table.userId),

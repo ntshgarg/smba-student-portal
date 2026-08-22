@@ -90,6 +90,7 @@ describe("Better Auth runtime adapter", () => {
       returnHeaders: true,
     })
     const enabled = enableResult.response
+    if (enabled.method !== "totp") throw new Error("Expected a TOTP authenticator enrolment.")
     const rotatedSessionCookie = sessionCookie(enableResult.headers) || initialSessionCookie
     const verificationHeaders = new Headers({ cookie: rotatedSessionCookie })
     expect(enabled.backupCodes.length).toBeGreaterThan(0)
