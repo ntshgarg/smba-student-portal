@@ -497,15 +497,20 @@ function OccurrenceDetails({
                 if (pendingAction !== null) event.preventDefault()
               }}
             ><RefreshCw aria-hidden="true" /> Replace session</summary>
-            <div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                onReplace()
+              }}
+            >
               <label><span>Date</span><input ref={dateInputRef} name="replacementDate" type="date" disabled={pendingAction !== null} min={today} value={replacement.dateKey} aria-invalid={feedback?.field === "dateKey" || undefined} aria-describedby={feedback?.field === "dateKey" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, dateKey: event.target.value })} /></label>
               <label><span>Time</span><input ref={timeInputRef} name="replacementStartTime" type="time" disabled={pendingAction !== null} value={replacement.startTime} aria-invalid={feedback?.field === "startTime" || undefined} aria-describedby={feedback?.field === "startTime" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, startTime: event.target.value })} /></label>
               <label><span>Duration</span><input ref={durationInputRef} name="replacementDurationMinutes" type="number" disabled={pendingAction !== null} min={30} max={300} step={15} value={replacement.durationMinutes} aria-invalid={feedback?.field === "durationMinutes" || undefined} aria-describedby={feedback?.field === "durationMinutes" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, durationMinutes: event.target.value })} /></label>
               <label><span>Venue</span><input ref={venueInputRef} name="replacementVenue" required maxLength={120} disabled={pendingAction !== null} value={replacement.venue} aria-invalid={feedback?.field === "venue" || undefined} aria-describedby={feedback?.field === "venue" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, venue: event.target.value })} /></label>
-              <button type="button" disabled={pendingAction !== null} onClick={onReplace}>
+              <button type="submit" disabled={pendingAction !== null}>
                 {pendingAction === "replace" ? "Creating…" : "Create replacement"}
               </button>
-            </div>
+            </form>
           </details>
         </div>
       )}
