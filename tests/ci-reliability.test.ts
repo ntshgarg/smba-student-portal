@@ -36,7 +36,7 @@ describe("CI reliability controls", () => {
     expect(workflow).not.toContain("runs-on: ubuntu-latest")
   })
 
-  it("waits for the attendance client transition instead of relying on animation frames", () => {
+  it("polls the attendance URL state after opening a collapsed session", () => {
     const interactions = readRepositoryFile(
       "tests/e2e/support/accessibility-interactions.ts",
     )
@@ -44,6 +44,10 @@ describe("CI reliability controls", () => {
 
     expect(interactions).toContain('url.searchParams.get("occurrence")')
     expect(interactions).toContain("url.href !== initialUrl")
+    expect(interactions).toContain('candidate.getAttribute("aria-expanded")')
+    expect(interactions).toContain('=== "false"')
+    expect(interactions).toContain("await expect.poll(() => {")
+    expect(interactions).not.toContain("await page.waitForURL((url) => url.href !== initialUrl")
     expect(interactions).toContain('toHaveAttribute("aria-expanded", "true")')
     expect(interactions).toContain('toHaveClass(/has-selection/u)')
     expect(regression).toContain([
