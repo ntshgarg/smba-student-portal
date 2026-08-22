@@ -36,6 +36,8 @@ describe("CI security controls", () => {
     expect(workflow.match(/SMBA_BACKUP_PASSPHRASE: \$\{\{ secrets\.SMBA_BACKUP_PASSPHRASE \}\}/gu))
       .toHaveLength(1)
     expect(workflow).toContain('- cron: "47 4 1 * *"')
+    expect(workflow).toContain("run-id: ${{ steps.backup.outputs.run-id }}")
+    expect(workflow).toContain("repository: ${{ github.repository }}")
     expect(workflow).toContain("cleanup-restore-workspace.mjs")
     expect(workflow).not.toContain("upload-artifact")
   })

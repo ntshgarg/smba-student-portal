@@ -73,6 +73,8 @@ jobs:
           github-token: ${{ github.token }}
           merge-multiple: true
           path: ${{ runner.temp }}/smba-backup-download
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.backup.outputs.run-id }}
 
       - name: Create isolated restore workspace
         id: workspace
