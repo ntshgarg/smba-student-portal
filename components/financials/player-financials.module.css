@@ -343,6 +343,24 @@ a.monthCell:hover {
   background: var(--white);
 }
 
+/* A month becomes a link when it holds an issued fee or any receipt, and a
+   receipt-only month resolves to the same quiet tone as the inert "Not issued"
+   and "Before plan" cells, so hover was the only thing separating them and
+   touch devices never see it. This caret marks every interactive cell at rest.
+   It is steel rather than red or green because those carry payment state here,
+   and it leaves the underlined label and the navy focus outline alone. */
+a.monthCell::before {
+  position: absolute;
+  top: 17px;
+  right: 15px;
+  width: 5px;
+  height: 5px;
+  border-top: 1.5px solid var(--steel);
+  border-right: 1.5px solid var(--steel);
+  content: "";
+  transform: rotate(45deg);
+}
+
 .monthCell > span {
   align-self: start;
 }
