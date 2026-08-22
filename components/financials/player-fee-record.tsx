@@ -10,6 +10,7 @@ import type {
 } from "@/lib/finance/types"
 import {
   financeStatusLabel,
+  financeStatusTone,
   formatBillingPeriod,
   formatFinanceAmount,
   formatFinanceDate,
@@ -207,6 +208,15 @@ function monthState(
     label: financeStatusLabel(charge.status),
     tone: "quiet" as const,
   }
+}
+
+/* Maps the record status onto the ledger's own paid/due tone vocabulary so the
+   headline status carries the same colour language as the bands below it. */
+function summaryStatusTone(status: PlayerFeeRecord["status"]) {
+  const tone = financeStatusTone(status)
+  if (tone === "attention") return "due"
+  if (tone === "settled") return "paid"
+  return undefined
 }
 
 function feeRecordHref(year: string, month: string | null) {
@@ -501,11 +511,11 @@ export function PlayerFeeRecordView({
         </div>
 
         <dl className={styles.currentSummary}>
-          <div>
+          <div data-tone={record.currentBalancePaise > 0 ? "due" : undefined}>
             <dt>Current balance</dt>
             <dd>{formatFinanceAmount(record.currentBalancePaise)}</dd>
           </div>
-          <div>
+          <div data-tone={summaryStatusTone(record.status)}>
             <dt>Overall status</dt>
             <dd>{financeStatusLabel(record.status)}</dd>
           </div>
