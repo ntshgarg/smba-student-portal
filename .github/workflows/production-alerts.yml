@@ -16,6 +16,8 @@ on:
       - Operations monitor
       - Production health
       - Quality gate
+      - UI accessibility
+      - Encrypted backup restore verification
     types: [completed]
   deployment_status:
 
@@ -29,12 +31,20 @@ permissions:
 
 jobs:
   workflow-result:
-    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.conclusion != 'skipped'
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      github.event.workflow_run.conclusion != 'skipped'
     name: Deliver workflow alert
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Check out alert helper
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Synchronize workflow alert
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
@@ -56,10 +66,13 @@ jobs:
   deployment-result:
     if: github.event_name == 'deployment_status'
     name: Deliver deployment alert
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Check out alert helper
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Synchronize production deployment alert
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
@@ -90,10 +103,13 @@ jobs:
   manual-delivery-test:
     if: github.event_name == 'workflow_dispatch'
     name: Test alert delivery
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Check out alert helper
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Synchronize harmless test alert
         uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0

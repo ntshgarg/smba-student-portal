@@ -6,6 +6,7 @@ import {
   calculateConcessionAmount,
   calculateUnusedMonthRefundLimit,
   combineFinanceStatuses,
+  createOpaqueFeeReference,
   deriveFinanceStatus,
   financialPayloadFingerprint,
   formatFinancialSequenceReference,
@@ -72,6 +73,9 @@ describe("finance domain", () => {
   })
 
   it("uses opaque references and deterministic date-only calendar arithmetic", () => {
+    for (let index = 0; index < 100; index += 1) {
+      expect(isValidFeeReference(createOpaqueFeeReference())).toBe(true)
+    }
     expect(isValidFeeReference("SMBA-7K4M2P8Q")).toBe(true)
     expect(isValidFeeReference("SMBA-202608-7K4M2P8Q")).toBe(false)
     expect(addCalendarDays("2026-08-31", 3)).toBe("2026-09-03")

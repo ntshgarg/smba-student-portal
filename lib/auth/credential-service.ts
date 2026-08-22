@@ -186,8 +186,9 @@ function createDevelopmentPasswordHash(password: string) {
   const cached = developmentPasswordHashes.get(password)
   if (cached) return cached
   // Every account in a disposable fixture intentionally shares one documented
-  // password. Reusing its expensive hash keeps 100-player fixture builds fast;
-  // this path is hard-disabled on Vercel and is never used for real accounts.
+  // password. Reusing its expensive deterministic hash keeps fixture builds
+  // reproducible and fast. provisionDevelopmentCredential hard-rejects Vercel;
+  // real account activation uses Better Auth's randomly salted hashPassword.
   const salt = createHash("sha256").update(`smba-development-salt:${password}`).digest("hex").slice(0, 32)
   const key = scryptSync(password.normalize("NFKC"), salt, 64, {
     N: 16384,

@@ -38,8 +38,9 @@ an external uptime service later.
 
 `.github/workflows/operations-monitor.yml` checks sanitized server-error counts, authentication-email
 API failures and repeated login lockouts twice per hour. `.github/workflows/production-alerts.yml`
-turns failed quality, health, monitoring, backup and production-deployment events into one assigned,
-deduplicated `production-alert` issue. A successful recovery closes the corresponding issue. The repository
+turns failed default-branch quality, accessibility, health, monitoring, backup and production-deployment
+events into one assigned, deduplicated `production-alert` issue. Pull-request and fork runs cannot open or
+resolve production incidents. A successful default-branch recovery closes the corresponding issue. The repository
 owner must keep GitHub issue and Actions email or mobile notifications enabled.
 Test delivery quarterly by manually running `Production alerts` with `open`, confirming the assigned issue
 notification arrives, and immediately running it again with `resolved`.
