@@ -1,6 +1,4 @@
-"use client"
-
-import { motion, useReducedMotion } from "motion/react"
+import styles from "./reveal.module.css"
 
 export function Reveal({
   children,
@@ -11,17 +9,12 @@ export function Reveal({
   className?: string
   delay?: number
 }) {
-  const reduceMotion = useReducedMotion()
-
   return (
-    <motion.div
-      className={className}
-      initial={{ opacity: 0, transform: "translateY(14px)" }}
-      whileInView={{ opacity: 1, transform: "translateY(0px)" }}
-      viewport={{ once: true, amount: 0.16 }}
-      transition={{ duration: reduceMotion ? 0 : 0.28, delay, ease: "easeOut" }}
+    <div
+      className={className ? `${styles.reveal} ${className}` : styles.reveal}
+      style={delay ? { animationDelay: `${delay}s` } : undefined}
     >
       {children}
-    </motion.div>
+    </div>
   )
 }

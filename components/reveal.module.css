@@ -1,0 +1,29 @@
+/*
+ * The reveal animates *from* a hidden state rather than *to* a visible one, so
+ * the resting style of the element is fully visible. Nothing outside this
+ * stylesheet has to run for the content to be on screen: no client JavaScript,
+ * no successful hydration, and no intersection observer. A CSS animation is
+ * finite and self-terminating, so the content cannot be stranded mid-reveal the
+ * way a scroll-triggered opacity gate can.
+ */
+.reveal {
+  animation: revealRise 280ms ease-out backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    animation: none;
+  }
+}
+
+@keyframes revealRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
