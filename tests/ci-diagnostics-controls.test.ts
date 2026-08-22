@@ -42,6 +42,10 @@ describe("CI failure diagnostics and deployment verification", () => {
     const alerts = readRepositoryFile(".github/workflows/production-alerts.yml")
     const health = readRepositoryFile(".github/workflows/production-health.yml")
 
+    expect(alerts).toContain("github.event.deployment.environment == 'Production'")
+    expect(alerts).toContain("github.event.deployment.creator.login == 'vercel[bot]'")
+    expect(alerts).toContain("github.event.deployment.task == 'deploy'")
+    expect(alerts).toContain("contains(fromJSON('[\"success\",\"failure\",\"error\"]'), github.event.deployment_status.state)")
     expect(alerts).toContain('ref: ${{ github.event.repository.default_branch }}')
     expect(alerts).toContain("classify-production-deployment.js")
     expect(alerts).toContain("https://smbaacademy.in --attempts 12 --delay-ms 10000")
