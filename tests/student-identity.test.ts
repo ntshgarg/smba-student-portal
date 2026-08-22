@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  academyIdSerial,
   createSessionIdentity,
   createStudentIdentity,
   formatAcademyId,
@@ -21,6 +22,15 @@ describe("shared account identity", () => {
     expect(formatAcademyId(20_001)).toBe("SMBA-PL-0001")
     expect(formatAcademyId(30_001)).toBe("SMBA-HC-0001")
     expect(isAcademyId("smba-admin-0001")).toBe(true)
+  })
+
+  it("parses legacy and role-prefixed Academy IDs back to their serials", () => {
+    expect(academyIdSerial("SMBA#0001")).toBe(1)
+    expect(academyIdSerial("smba-jc-0001")).toBe(10_001)
+    expect(academyIdSerial("SMBA-PL-0001")).toBe(20_001)
+    expect(academyIdSerial("SMBA-HC-0001")).toBe(30_001)
+    expect(academyIdSerial("SMBA-PL-0000")).toBeNull()
+    expect(academyIdSerial("SMBA-ADMIN-0001")).toBeNull()
   })
 
   it("creates role-aware session identities around immutable account IDs", () => {

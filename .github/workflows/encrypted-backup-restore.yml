@@ -1,0 +1,182 @@
+name: Encrypted backup restore verification
+
+on:
+  schedule:
+    # First day of each month at 10:17 India Standard Time.
+    - cron: "47 4 1 * *"
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: Optional successful encrypted-backup workflow run ID
+        required: false
+        type: string
+
+concurrency:
+  group: encrypted-backup-restore-verification
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  BETTER_AUTH_SECRET: smba-restore-only-secret-never-used-in-production-2026
+  NEXT_PUBLIC_SMBA_SITE_ORIGIN: https://ci.smbaacademy.in
+  SMBA_AUTH_MAIL_TRANSPORT: memory
+  SMBA_REQUIRE_COACH_TOTP: "false"
+  SMBA_REQUIRE_RECOVERY_EMAIL: "false"
+
+jobs:
+  restore:
+    name: Restore and boot stored snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out trusted default-branch verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          cache: npm
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Select a trusted stored backup
+        id: backup
+        uses: actions/github-script@d746ffe35508b1917358783b479e04febd2b8f71 # v9.0.0
+        env:
+          REQUESTED_RUN_ID: ${{ inputs.backup_run_id }}
+        with:
+          script: |
+            const selectBackup = require("./.github/scripts/select-backup-artifact.js")
+            const selected = await selectBackup({
+              defaultBranch: context.payload.repository.default_branch,
+              github,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              requestedRunId: process.env.REQUESTED_RUN_ID,
+            })
+            for (const [key, value] of Object.entries(selected)) {
+              core.setOutput(key.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`), String(value))
+            }
+
+      - name: Download the selected encrypted artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.backup.outputs.artifact-id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/smba-backup-download
+
+      - name: Create isolated restore workspace
+        id: workspace
+        run: |
+          restore_directory="$(mktemp -d "${RUNNER_TEMP}/smba-restore-XXXXXX")"
+          chmod 700 "$restore_directory"
+          mapfile -t encrypted_files < <(find "${RUNNER_TEMP}/smba-backup-download" -type f -name '*.gpg' -print)
+          test "${#encrypted_files[@]}" -eq 1
+          test "$(find "${RUNNER_TEMP}/smba-backup-download" -type f | wc -l)" -eq 1
+          echo "directory=$restore_directory" >> "$GITHUB_OUTPUT"
+          echo "encrypted=${encrypted_files[0]}" >> "$GITHUB_OUTPUT"
+          echo "result=${RUNNER_TEMP}/smba-restore-result-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json" >> "$GITHUB_OUTPUT"
+
+      - name: Decrypt, inspect and verify stored snapshot
+        id: restore
+        env:
+          RESULT_PATH: ${{ steps.workspace.outputs.result }}
+          SMBA_BACKUP_PASSPHRASE: ${{ secrets.SMBA_BACKUP_PASSPHRASE }}
+        run: |
+          test "${#SMBA_BACKUP_PASSPHRASE}" -ge 24 || { echo "The backup passphrase is unavailable."; exit 1; }
+          node scripts/operations/restore-backup-artifact.mjs \
+            "${{ steps.workspace.outputs.encrypted }}" \
+            "${{ steps.workspace.outputs.directory }}" \
+            "${{ steps.workspace.outputs.result }}"
+          node - <<'NODE'
+          const fs = require("node:fs")
+          const result = JSON.parse(fs.readFileSync(process.env.RESULT_PATH, "utf8"))
+          const lines = [
+            `ciphertext-sha256=${result.ciphertextSha256}`,
+            `manifest-path=${result.manifestPath}`,
+            `snapshot-path=${result.snapshotPath}`,
+            `snapshot-sha256=${result.snapshotSha256}`,
+          ]
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join("\n")}\n`)
+          NODE
+      - name: Copy restored database and apply current migrations
+        env:
+          DB_FILE_NAME: ${{ steps.workspace.outputs.directory }}/restored-migrated.db
+          SNAPSHOT_PATH: ${{ steps.restore.outputs.snapshot-path }}
+        run: |
+          cp "$SNAPSHOT_PATH" "$DB_FILE_NAME"
+          chmod 600 "$DB_FILE_NAME"
+          npm run db:migrate
+          node scripts/operations/verify-local-database-health.mjs "$DB_FILE_NAME"
+
+      - name: Build against a separate empty disposable database
+        env:
+          DB_FILE_NAME: ${{ steps.workspace.outputs.directory }}/build-empty.db
+        run: |
+          npm run db:prepare:empty
+          npm run build
+
+      - name: Start the application against the restored copy
+        env:
+          BETTER_AUTH_SECURE_COOKIES: "false"
+          DB_FILE_NAME: ${{ steps.workspace.outputs.directory }}/restored-migrated.db
+        run: |
+          npx next start -p 3103 > "${RUNNER_TEMP}/smba-restore-server.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/smba-restore-server.pid"
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3103/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Smoke restored health and login
+        run: node scripts/operations/check-restored-app.mjs http://127.0.0.1:3103
+
+      - name: Write sanitized restore summary
+        if: success()
+        env:
+          ARTIFACT_CREATED_AT: ${{ steps.backup.outputs.artifact-created-at }}
+          ARTIFACT_DIGEST: ${{ steps.backup.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.backup.outputs.artifact-id }}
+          ARTIFACT_NAME: ${{ steps.backup.outputs.artifact-name }}
+          BACKUP_RUN_ID: ${{ steps.backup.outputs.run-id }}
+          CIPHERTEXT_SHA256: ${{ steps.restore.outputs.ciphertext-sha256 }}
+          SNAPSHOT_SHA256: ${{ steps.restore.outputs.snapshot-sha256 }}
+        run: |
+          {
+            echo "## Encrypted backup restore verification"
+            echo
+            echo "- Result: passed"
+            echo "- Backup run: ${BACKUP_RUN_ID}"
+            echo "- Artifact: ${ARTIFACT_NAME} (${ARTIFACT_ID})"
+            echo "- Artifact created: ${ARTIFACT_CREATED_AT}"
+            echo "- Stored artifact digest: \`${ARTIFACT_DIGEST}\`"
+            echo "- Ciphertext SHA-256: \`${CIPHERTEXT_SHA256}\`"
+            echo "- Snapshot SHA-256: \`${SNAPSHOT_SHA256}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove all restored plaintext and stop the server
+        if: always()
+        env:
+          RESTORE_DIRECTORY: ${{ steps.workspace.outputs.directory }}
+          RESULT_PATH: ${{ steps.workspace.outputs.result }}
+        run: |
+          if test -f "${RUNNER_TEMP}/smba-restore-server.pid"; then
+            kill "$(cat "${RUNNER_TEMP}/smba-restore-server.pid")" 2>/dev/null || true
+          fi
+          if test -n "$RESTORE_DIRECTORY" && test -d "$RESTORE_DIRECTORY"; then
+            node scripts/operations/cleanup-restore-workspace.mjs "$RESTORE_DIRECTORY"
+          fi
+          rm -rf "${RUNNER_TEMP}/smba-backup-download"
+          rm -f "$RESULT_PATH" "${RUNNER_TEMP}/smba-restore-server.log" "${RUNNER_TEMP}/smba-restore-server.pid"

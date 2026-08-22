@@ -122,7 +122,7 @@ describe("Financials Rapid Desk focused reads", () => {
       idempotencyKey: "rapid-desk-activation",
     }, { coachId, database, now })
 
-    createPlayer("rapid-due", "Asha Due", 5_001)
+    createPlayer("rapid-due", "Asha Due", 20_001)
     createPlayer("rapid-settled", "Bina Settled", 5_002)
     createPlayer("rapid-no-plan", "Chitra Unconfigured", 5_003)
     createPlayer("rapid-future", "Deepa Future", 5_004)
