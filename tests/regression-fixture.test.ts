@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process"
+import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
@@ -17,35 +17,57 @@ const sourceDatabase = path.join(temporaryDirectory, "clean-source.db")
 
 type JsonRecord = Record<string, unknown>
 
+// Every fixture command must run asynchronously. A synchronous spawn would
+// stall this worker's event loop for the whole subprocess, and Vitest reports
+// task results over an RPC channel whose acknowledgement can only be read
+// while the loop turns. Fixture builds routinely take longer than the 60-second
+// RPC timeout, so a blocking spawn makes Vitest raise an unhandled
+// "Timeout calling onTaskUpdate" error and fail an otherwise green run.
 function runFixture(databasePath: string, args: string[]) {
   const nodeOptions = [process.env.NODE_OPTIONS, "--conditions=react-server"]
     .filter(Boolean)
     .join(" ")
-  const result = spawnSync(tsxExecutable, [fixtureEntry, ...args], {
-    cwd: projectRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      DB_FILE_NAME: databasePath,
-      NODE_OPTIONS: nodeOptions,
-      NODE_PATH: path.join(projectRoot, "node_modules", "next", "dist", "compiled"),
-    },
+
+  return new Promise<string>((resolve, reject) => {
+    const fixture = spawn(tsxExecutable, [fixtureEntry, ...args], {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        DB_FILE_NAME: databasePath,
+        NODE_OPTIONS: nodeOptions,
+        NODE_PATH: path.join(projectRoot, "node_modules", "next", "dist", "compiled"),
+      },
+    })
+
+    let stdout = ""
+    let stderr = ""
+    fixture.stdout.setEncoding("utf8")
+    fixture.stderr.setEncoding("utf8")
+    fixture.stdout.on("data", (chunk: string) => {
+      stdout += chunk
+    })
+    fixture.stderr.on("data", (chunk: string) => {
+      stderr += chunk
+    })
+
+    fixture.on("error", reject)
+    fixture.on("close", (status) => {
+      if (status === 0) {
+        resolve(stdout.trim())
+        return
+      }
+
+      reject(new Error([
+        `Fixture command failed: ${args.join(" ")}`,
+        stdout.trim(),
+        stderr.trim(),
+      ].filter(Boolean).join("\n")))
+    })
   })
-
-  if (result.error) throw result.error
-  if (result.status !== 0) {
-    throw new Error([
-      `Fixture command failed: ${args.join(" ")}`,
-      result.stdout.trim(),
-      result.stderr.trim(),
-    ].filter(Boolean).join("\n"))
-  }
-
-  return result.stdout.trim()
 }
 
-function runJsonFixture(databasePath: string, args: string[]): JsonRecord {
-  const output = runFixture(databasePath, args)
+async function runJsonFixture(databasePath: string, args: string[]): Promise<JsonRecord> {
+  const output = await runFixture(databasePath, args)
   const parsed: unknown = JSON.parse(output)
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`Expected an object from fixture command: ${args.join(" ")}`)
@@ -75,11 +97,11 @@ function fileChecksum(databasePath: string) {
   return createHash("sha256").update(fs.readFileSync(databasePath)).digest("hex")
 }
 
-function prepareAndLoad(databasePath: string, profile = "stress") {
-  runFixture(databasePath, [
+async function prepareAndLoad(databasePath: string, profile = "stress") {
+  await runFixture(databasePath, [
     "prepare", "--profile", profile, "--source", sourceDatabase, "--target", databasePath,
   ])
-  runFixture(databasePath, [
+  await runFixture(databasePath, [
     "seed", "--profile", profile, "--stage", "loaded", "--target", databasePath,
   ])
 }
@@ -96,16 +118,19 @@ afterAll(() => {
   fs.rmSync(temporaryDirectory, { force: true, recursive: true })
 })
 
-beforeAll(() => {
-  runFixture(sourceDatabase, ["prepare-source", "--source", sourceDatabase])
-})
+// Building the source database costs as much as the cases below, so it needs
+// the same budget. Vitest's default hook timeout is ten seconds, which a loaded
+// machine exceeds and which then fails the whole suite rather than one case.
+beforeAll(async () => {
+  await runFixture(sourceDatabase, ["prepare-source", "--source", sourceDatabase])
+}, 120_000)
 
 describe("regression fixture repeatability", () => {
-  it("upgrades only a disposable clone and rejects stale schema without mutating it", () => {
+  it("upgrades only a disposable clone and rejects stale schema without mutating it", async () => {
     const preparedDatabase = path.join(temporaryDirectory, "schema-current.db")
     const sourceBefore = fileChecksum(sourceDatabase)
 
-    const prepared = runJsonFixture(preparedDatabase, [
+    const prepared = await runJsonFixture(preparedDatabase, [
       "prepare", "--profile", "stress", "--source", sourceDatabase, "--target", preparedDatabase,
     ])
 
@@ -137,9 +162,9 @@ describe("regression fixture repeatability", () => {
       stale.close()
     }
     const staleBefore = fileChecksum(staleDatabase)
-    expect(() => runFixture(staleDatabase, [
+    await expect(runFixture(staleDatabase, [
       "verify", "--profile", "stress", "--target", staleDatabase,
-    ])).toThrow(/Fixture schema is stale[\s\S]*missing tables[\s\S]*missing columns/)
+    ])).rejects.toThrow(/Fixture schema is stale[\s\S]*missing tables[\s\S]*missing columns/)
     expect(fileChecksum(staleDatabase)).toBe(staleBefore)
 
     const orphanDatabase = path.join(temporaryDirectory, "schema-orphan.db")
@@ -155,28 +180,28 @@ describe("regression fixture repeatability", () => {
       orphan.close()
     }
     const orphanBefore = fileChecksum(orphanDatabase)
-    expect(() => runFixture(orphanDatabase, [
+    await expect(runFixture(orphanDatabase, [
       "verify", "--profile", "stress", "--target", orphanDatabase,
-    ])).toThrow(/SQLite foreign-key check failed/)
+    ])).rejects.toThrow(/SQLite foreign-key check failed/)
     expect(fileChecksum(orphanDatabase)).toBe(orphanBefore)
 
-    expect(() => runFixture(preparedDatabase, [
+    await expect(runFixture(preparedDatabase, [
       "prepare",
       "--source", preparedDatabase,
       "--target", preparedDatabase,
-    ])).toThrow(/source and target must be different/)
+    ])).rejects.toThrow(/source and target must be different/)
     expect(fs.existsSync(preparedDatabase)).toBe(true)
   }, 120_000)
 
-  it("produces the same normalized verification report across fresh and repeated loads", () => {
+  it("produces the same normalized verification report across fresh and repeated loads", async () => {
     const firstDatabase = path.join(temporaryDirectory, "first.db")
     const secondDatabase = path.join(temporaryDirectory, "second.db")
 
-    prepareAndLoad(firstDatabase)
-    prepareAndLoad(secondDatabase)
+    await prepareAndLoad(firstDatabase)
+    await prepareAndLoad(secondDatabase)
 
-    const firstVerification = runJsonFixture(firstDatabase, ["verify", "--target", firstDatabase])
-    const secondVerification = runJsonFixture(secondDatabase, ["verify", "--target", secondDatabase])
+    const firstVerification = await runJsonFixture(firstDatabase, ["verify", "--target", firstDatabase])
+    const secondVerification = await runJsonFixture(secondDatabase, ["verify", "--target", secondDatabase])
     const checksum = findChecksum(firstVerification)
 
     expect(checksum).toMatch(/^[a-f\d]{64}$/i)
@@ -205,15 +230,15 @@ describe("regression fixture repeatability", () => {
     expect(Number(summary.occurrences)).toBeGreaterThan(0)
     expect(normalizedVerification(secondVerification)).toEqual(normalizedVerification(firstVerification))
 
-    runFixture(firstDatabase, ["seed", "--stage", "loaded", "--target", firstDatabase])
+    await runFixture(firstDatabase, ["seed", "--stage", "loaded", "--target", firstDatabase])
     expect(normalizedVerification(
-      runJsonFixture(firstDatabase, ["verify", "--target", firstDatabase]),
+      await runJsonFixture(firstDatabase, ["verify", "--target", firstDatabase]),
     )).toEqual(normalizedVerification(firstVerification))
   }, 120_000)
 
-  it("persists the representative Stress lifecycle and attendance states", () => {
+  it("persists the representative Stress lifecycle and attendance states", async () => {
     const databasePath = path.join(temporaryDirectory, "stress-lifecycle.db")
-    prepareAndLoad(databasePath)
+    await prepareAndLoad(databasePath)
     const db = openFixture(databasePath)
 
     try {
@@ -336,9 +361,9 @@ describe("regression fixture repeatability", () => {
     }
   }, 120_000)
 
-  it("persists the representative Stress report, finance, and announcement states", () => {
+  it("persists the representative Stress report, finance, and announcement states", async () => {
     const databasePath = path.join(temporaryDirectory, "stress-records.db")
-    prepareAndLoad(databasePath)
+    await prepareAndLoad(databasePath)
     const db = openFixture(databasePath)
 
     try {
@@ -439,16 +464,16 @@ describe("regression fixture repeatability", () => {
     ["edge", 32, 3, 3, 41, 10, 7],
   ] as const)(
     "builds a deterministic %s profile with staff and supported exceptions",
-    (profile, players, pending, coachProfiles, staffAttendance, reports, publications) => {
+    async (profile, players, pending, coachProfiles, staffAttendance, reports, publications) => {
       const firstDatabase = path.join(temporaryDirectory, `${profile}-first.db`)
       const secondDatabase = path.join(temporaryDirectory, `${profile}-second.db`)
-      prepareAndLoad(firstDatabase, profile)
-      prepareAndLoad(secondDatabase, profile)
+      await prepareAndLoad(firstDatabase, profile)
+      await prepareAndLoad(secondDatabase, profile)
 
-      const first = runJsonFixture(firstDatabase, [
+      const first = await runJsonFixture(firstDatabase, [
         "verify", "--profile", profile, "--target", firstDatabase,
       ])
-      const second = runJsonFixture(secondDatabase, [
+      const second = await runJsonFixture(secondDatabase, [
         "verify", "--profile", profile, "--target", secondDatabase,
       ])
       expect(first).toMatchObject({
