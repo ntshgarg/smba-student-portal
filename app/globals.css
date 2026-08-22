@@ -8899,7 +8899,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 /* Fluid tracks so the form always fits the day pane, which is only ~340-450px
    wide at every supported desktop and tablet width. */
-.coach-occurrence-actions details > div {
+.coach-occurrence-actions details > form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
@@ -8909,7 +8909,7 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--navy);
 }
 
-.coach-occurrence-actions details > div > button {
+.coach-occurrence-actions details > form > button {
   grid-column: 1 / -1;
   min-height: 44px;
   border: 0;
@@ -9504,7 +9504,7 @@ tr.is-expanded .coach-member-row-action button svg {
     width: 100%;
   }
 
-  .coach-occurrence-actions details > div {
+  .coach-occurrence-actions details > form {
     grid-template-columns: 1fr;
   }
 

@@ -217,6 +217,10 @@ function ReportPreview({
   )
 }
 
+type ReportEditorFeedback = ActionFeedback & {
+  field?: "reportText"
+}
+
 function ReportEditor({
   attendance,
   coach,
@@ -245,10 +249,13 @@ function ReportEditor({
   const { publishReport, saveReportDraft } = useReportPortal()
   const [reportText, setReportText] = useState(report?.reportText ?? "")
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<ReportEditorFeedback | null>(null)
   const dirtyRef = useRef(false)
   const reportTextRef = useRef<HTMLTextAreaElement>(null)
   const publicationKeyRef = useRef<string | null>(null)
+  const fieldId = `report-${player.member.id}-${month}`
+  const feedbackId = `${fieldId}-feedback`
+  const reportTextInvalid = feedback?.tone === "error" && feedback.field === "reportText"
   const published = report?.published
   const isPublished = Boolean(published)
   const adjustmentReviewMessage = "Attendance includes a make-up adjustment that requires review. Publish this report with the current attendance record?"
@@ -280,7 +287,11 @@ function ReportEditor({
         reportText,
       })
       if (!result.ok) {
-        setFeedback({ message: result.message, tone: "error" })
+        setFeedback({
+          field: result.field === "reportText" ? "reportText" : undefined,
+          message: result.message,
+          tone: "error",
+        })
         if (result.field === "reportText") focusReportText()
         return
       }
@@ -301,7 +312,11 @@ function ReportEditor({
   async function publish() {
     if (pendingAction !== null) return
     if (!reportText.trim()) {
-      setFeedback({ message: "Write the coach’s report before publishing", tone: "error" })
+      setFeedback({
+        field: "reportText",
+        message: "Write the coach’s report before publishing",
+        tone: "error",
+      })
       focusReportText()
       return
     }
@@ -331,7 +346,11 @@ function ReportEditor({
         })
       }
       if (!result.ok) {
-        setFeedback({ message: result.message, tone: "error" })
+        setFeedback({
+          field: result.field === "reportText" ? "reportText" : undefined,
+          message: result.message,
+          tone: "error",
+        })
         if (result.field === "reportText") focusReportText()
         return
       }
@@ -380,19 +399,21 @@ function ReportEditor({
       </dl>
 
       <form autoComplete="off" onSubmit={(event) => event.preventDefault()}>
-        <label className="coach-report-field" htmlFor={`report-${player.member.id}-${month}`}>
+        <label className="coach-report-field" htmlFor={fieldId}>
           <span>
             <strong>Coach’s report</strong>
-            <small>One or two clear paragraphs. Maximum 5,000 characters.</small>
+            <small>Required to publish. One or two clear paragraphs. Maximum 5,000 characters.</small>
           </span>
           <textarea
             ref={reportTextRef}
-            id={`report-${player.member.id}-${month}`}
+            id={fieldId}
             name="reportText"
             rows={10}
             maxLength={REPORT_TEXT_MAX_LENGTH}
             disabled={pendingAction !== null}
             value={reportText}
+            aria-invalid={reportTextInvalid || undefined}
+            aria-describedby={reportTextInvalid ? feedbackId : undefined}
             placeholder="Write what changed, what became consistent, and what the player should carry into the next month."
             onChange={(event) => updateReportText(event.target.value)}
           />
@@ -401,6 +422,7 @@ function ReportEditor({
         <div className="coach-report-editor-footer">
           <InlineNotice
             className="coach-report-editor-notice"
+            id={feedbackId}
             message={feedback?.message}
             tone={feedback?.tone}
           />

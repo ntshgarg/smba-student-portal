@@ -427,6 +427,10 @@ function AssessmentStep({
   )
 }
 
+type SessionStepFeedback = ActionFeedback & {
+  field?: "weekdays"
+}
+
 function SessionStep({
   item,
   onSuccess,
@@ -451,8 +455,11 @@ function SessionStep({
   const [effectiveFrom, setEffectiveFrom] = useState(
     firstSeries ? suggestedEffectiveDate(item, firstSeries, referenceDate) : referenceDate,
   )
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SessionStepFeedback | null>(null)
   const [busy, setBusy] = useState(false)
+  const weekdaysRef = useRef<HTMLFieldSetElement>(null)
+  const feedbackId = `onboarding-${item.id}-session-feedback`
+  const weekdaysInvalid = feedback?.tone === "error" && feedback.field === "weekdays"
   const selectedSeries = options.find((series) => series.id === seriesId) ?? null
   const initialSeriesId = firstSeries?.id ?? ""
   const initialWeekdays = firstSeries ? seriesWeekdays(firstSeries).slice(0, initialLimit) : []
@@ -481,6 +488,7 @@ function SessionStep({
     setWeekdays((current) => current.includes(weekday)
       ? current.filter((item) => item !== weekday)
       : current.length < limit ? [...current, weekday].sort((a, b) => a - b) : current)
+    setFeedback(null)
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -489,11 +497,13 @@ function SessionStep({
     const required = academyPlanRequiredWeekdayCount(item.academyPlan)
     if ((required !== null && weekdays.length !== required) || !weekdays.length) {
       setFeedback({
+        field: "weekdays",
         message: required === null
           ? "Choose at least one attendance day."
           : `Choose exactly ${required} attendance days for this Training plan.`,
         tone: "error",
       })
+      weekdaysRef.current?.querySelector<HTMLInputElement>("input:not(:disabled)")?.focus()
       return
     }
     setBusy(true)
@@ -558,7 +568,11 @@ function SessionStep({
       </fieldset>
 
       <div className={styles.sessionDetails}>
-        <fieldset>
+        <fieldset
+          ref={weekdaysRef}
+          aria-invalid={weekdaysInvalid || undefined}
+          aria-describedby={weekdaysInvalid ? feedbackId : undefined}
+        >
           <legend>Attendance days {requiredDays !== null ? `· choose ${requiredDays}` : "· up to 2"}</legend>
           <div className={styles.weekdayChoices}>
             {offeredWeekdays.map((weekday) => (
@@ -587,7 +601,7 @@ function SessionStep({
           />
         </label>
       </div>
-      <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {effectiveFrom < referenceDate ? (
         <p className={styles.backdateNote}>
           This start date also makes earlier scheduled sessions eligible for attendance.
@@ -601,6 +615,10 @@ function SessionStep({
       </div>
     </form>
   )
+}
+
+type FeePlanStepFeedback = ActionFeedback & {
+  field?: "monthlyFee"
 }
 
 function FeePlanStep({
@@ -617,8 +635,11 @@ function FeePlanStep({
   const [monthlyFee, setMonthlyFee] = useState("")
   const firstFeeMonth = item.firstFeeMonth ?? referenceDate.slice(0, 7)
   const [effectiveMonth, setEffectiveMonth] = useState(firstFeeMonth)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<FeePlanStepFeedback | null>(null)
   const [busy, setBusy] = useState(false)
+  const monthlyFeeRef = useRef<HTMLInputElement>(null)
+  const feedbackId = `onboarding-${item.id}-fee-feedback`
+  const monthlyFeeInvalid = feedback?.tone === "error" && feedback.field === "monthlyFee"
   const isDirty = monthlyFee !== "" || effectiveMonth !== firstFeeMonth
   const guard = useUnsavedWorkGuard({
     isDirty,
@@ -660,7 +681,12 @@ function FeePlanStep({
     if (busy || !item.level || !item.batch || !item.academyPlan) return
     const rupees = Number(monthlyFee)
     if (!Number.isFinite(rupees) || rupees <= 0 || !Number.isInteger(rupees)) {
-      setFeedback({ message: "Enter the agreed monthly fee in whole rupees.", tone: "error" })
+      setFeedback({
+        field: "monthlyFee",
+        message: "Enter the agreed monthly fee in whole rupees.",
+        tone: "error",
+      })
+      monthlyFeeRef.current?.focus()
       return
     }
     setBusy(true)
@@ -697,6 +723,7 @@ function FeePlanStep({
         <label>
           <span>Agreed monthly fee</span>
           <span className={styles.moneyInput}><b>₹</b><input
+            ref={monthlyFeeRef}
             name="monthlyFee"
             inputMode="numeric"
             min="1"
@@ -704,7 +731,12 @@ function FeePlanStep({
             type="number"
             value={monthlyFee}
             placeholder="3,500"
-            onChange={(event) => setMonthlyFee(event.target.value)}
+            aria-invalid={monthlyFeeInvalid || undefined}
+            aria-describedby={monthlyFeeInvalid ? feedbackId : undefined}
+            onChange={(event) => {
+              setMonthlyFee(event.target.value)
+              setFeedback(null)
+            }}
           /></span>
         </label>
         <label>
@@ -721,7 +753,7 @@ function FeePlanStep({
       <p className={styles.feeNote}>
         Completing onboarding issues the registration fee. Choosing this month prorates the first monthly fee by scheduled sessions remaining and rounds it to the nearest ₹50; a future month joins that month’s full fee issue.
       </p>
-      <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <Link href={`/coach/financials/players/${encodeURIComponent(item.id)}?mode=monthly`}>Open finance record</Link>
         <button className={styles.primaryButton} type="submit" disabled={busy}>

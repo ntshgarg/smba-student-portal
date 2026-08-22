@@ -231,10 +231,10 @@ export function StaffRollCall({
 
         <div className="attendance-record-footer">
           <InlineNotice
-            message={drafts.length
+            message={feedback?.message ?? (drafts.length
               ? `${drafts.length} unsaved ${drafts.length === 1 ? "change" : "changes"}`
-              : feedback?.message}
-            tone={drafts.length ? "info" : feedback?.tone}
+              : undefined)}
+            tone={feedback?.tone ?? (drafts.length ? "info" : undefined)}
           />
           <button
             type="button"
