@@ -14,7 +14,7 @@ function monthOrdinal(dateKey: string) {
   return Number(dateKey.slice(0, 4)) * 12 + Number(dateKey.slice(5, 7))
 }
 
-export function trainingStartBackfillMonths(trainingStartOn: string, referenceDateKey: string) {
+function trainingStartBackfillMonths(trainingStartOn: string, referenceDateKey: string) {
   return monthOrdinal(referenceDateKey) - monthOrdinal(trainingStartOn)
 }
 

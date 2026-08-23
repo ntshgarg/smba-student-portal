@@ -6,7 +6,7 @@ export type AcademyPlan =
   | "weekday-5-day"
   | "weekend-standard"
 
-export const academyPlanLabels: Record<AcademyPlan, string> = {
+const academyPlanLabels: Record<AcademyPlan, string> = {
   "weekday-3-day": "3-day plan",
   "weekday-4-day": "4-day plan",
   "weekday-5-day": "5-day plan",

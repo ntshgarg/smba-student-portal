@@ -10,7 +10,7 @@ const REPORT_PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/u
 const REPORT_SHOWN_PATTERN = /^\d+$/u
 
 export const PUBLISHED_REPORT_INITIAL_COUNT = 10
-export const PUBLISHED_REPORT_REVEAL_INCREMENT = 10
+const PUBLISHED_REPORT_REVEAL_INCREMENT = 10
 
 export function isCompletedReportPeriod(
   value: string | undefined,

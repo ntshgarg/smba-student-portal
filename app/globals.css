@@ -2710,8 +2710,7 @@ h3 {
   line-height: 1.65;
 }
 
-.attendance-track,
-.development-track {
+.attendance-track {
   height: 3px;
   overflow: hidden;
   background: #d9dddf;
@@ -2721,8 +2720,7 @@ h3 {
   margin-top: 22px;
 }
 
-.attendance-track span,
-.development-track span {
+.attendance-track span {
   display: block;
   height: 100%;
   background: var(--red);
@@ -3019,43 +3017,6 @@ h3 {
   color: var(--steel);
   font-size: 12px;
   line-height: 1.65;
-}
-
-.development-meter-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.development-meter-heading p {
-  color: var(--navy);
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.development-meter-heading span {
-  display: block;
-  margin-top: 4px;
-  color: var(--steel);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.development-meter-heading strong {
-  color: var(--red);
-  font-size: 13px;
-}
-
-.development-track {
-  margin-top: 17px;
-}
-
-.development-meter > p {
-  margin-top: 16px;
-  color: var(--steel);
-  font-size: 12px;
-  line-height: 1.6;
 }
 
 .interior-page {
@@ -4103,92 +4064,9 @@ h3 {
   margin-top: clamp(62px, 8vw, 96px);
 }
 
-.coach-registration-approved{
-  display: flex;
-  min-height: 76px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 14px 22px;
-}
-
-.coach-registration-approved button{
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 7px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--navy);
-  font-size: 10px;
-  font-weight: 760;
-}
-
-.coach-registration-approved button:disabled{
-  cursor: wait;
-  opacity: 0.55;
-}
-
-.coach-registration-approved svg{
-  width: 14px;
-  height: 14px;
-}
-
-.coach-registration-approved {
-  border-bottom: 1px solid var(--line);
-  background: rgba(32, 117, 82, 0.07);
-}
-
-.coach-registration-approved > div {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 12px;
-}
-
-.coach-registration-approved > div > svg {
-  width: 26px;
-  height: 26px;
-  padding: 6px;
-  border-radius: var(--radius-circle);
-  background: var(--green);
-  color: var(--white);
-}
-
-.coach-registration-approved p {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.coach-registration-approved p strong {
-  color: var(--navy);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
-.coach-registration-approved p span,
 .coach-directory-notice{
   color: var(--steel);
   font-size: 11px;
-}
-
-.coach-registration-approved p input {
-  width: min(100%, 220px);
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--navy);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 760;
-}
-
-.coach-registration-approved p input:focus-visible {
-  outline: 2px solid var(--red);
-  outline-offset: 3px;
 }
 
 .coach-directory-notice {
@@ -4735,56 +4613,6 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-member-batch-field > small {
   color: var(--red);
   font-size: 10px;
-}
-
-.coach-member-batch-field {
-  margin-top: 28px;
-}
-
-.coach-member-batch-field > div {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.coach-member-batch-field label {
-  position: relative;
-}
-
-.coach-member-batch-field input {
-  position: absolute;
-  opacity: 0;
-}
-
-.coach-member-batch-field label > span {
-  display: flex;
-  min-height: 46px;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  color: var(--steel);
-  font-size: 10px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.coach-member-batch-field input:checked + span {
-  border-color: var(--navy);
-  background: var(--navy);
-  color: var(--white);
-}
-
-.coach-member-batch-field input:disabled + span {
-  background: var(--ivory);
-  color: var(--steel);
-  cursor: not-allowed;
-  opacity: 0.48;
-}
-
-.coach-member-batch-field input:focus-visible + span {
-  outline: 2px solid var(--red);
-  outline-offset: 3px;
 }
 
 .coach-member-form-actions {
@@ -11447,16 +11275,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-member-directory-panel {
   margin-top: clamp(24px, 3vw, 38px);
-}
-
-.coach-registration-approved{
-  min-height: 60px;
-  padding: 8px 16px;
-}
-
-.coach-registration-approved button{
-  min-height: 44px;
-  justify-content: center;
 }
 
 .coach-directory-notice {

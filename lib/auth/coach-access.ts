@@ -71,7 +71,7 @@ export function getCoachAccessProfile(
   }
 }
 
-export function requireCoachAccessProfile(
+function requireCoachAccessProfile(
   accountId: string,
   options: CoachAccessOptions = {},
 ) {

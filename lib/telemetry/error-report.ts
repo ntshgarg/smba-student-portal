@@ -14,7 +14,7 @@ export const CLIENT_ERROR_REPORT_ENDPOINT = "/api/client-errors"
 // endpoint cannot be used to push volume at the server.
 export const MAX_CLIENT_ERROR_REPORT_BYTES = 2_048
 
-export const CLIENT_ERROR_REPORT_TYPES = ["client_error", "unhandled_rejection"] as const
+const CLIENT_ERROR_REPORT_TYPES = ["client_error", "unhandled_rejection"] as const
 export type ClientErrorReportType = (typeof CLIENT_ERROR_REPORT_TYPES)[number]
 
 /** Which reporting site observed the failure. One entry per wired boundary. */

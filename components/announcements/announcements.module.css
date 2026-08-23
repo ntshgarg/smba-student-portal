@@ -155,53 +155,6 @@
   padding: var(--player-dashboard-card-padding, clamp(24px, 3vw, 34px));
 }
 
-.dashboardHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--player-dashboard-header-gap, 16px);
-}
-
-.dashboardIcon {
-  display: grid;
-  width: var(--player-dashboard-icon-size, 44px);
-  height: var(--player-dashboard-icon-size, 44px);
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--line);
-  color: var(--red);
-}
-
-.dashboardIcon svg {
-  width: var(--player-dashboard-icon-glyph, 18px);
-  height: var(--player-dashboard-icon-glyph, 18px);
-  stroke-width: 1.7;
-}
-
-.dashboardHeader p {
-  color: var(--red);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.dashboardHeader h3 {
-  margin-top: 4px;
-  color: var(--navy);
-  font-size: clamp(21px, 2.5vw, 28px);
-  font-weight: 620;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-}
-
-.dashboardHeader .dashboardUnavailableTitle {
-  color: var(--steel);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: 1.35;
-}
-
 .dashboardUnavailableCopy {
   margin-top: 18px;
   padding-top: 16px;
