@@ -85,7 +85,7 @@
 
 .activationConfirmation {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: start;
   gap: 11px;
   color: var(--steel);
@@ -94,8 +94,8 @@
 }
 
 .activationConfirmation input {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   accent-color: var(--navy);
 }
