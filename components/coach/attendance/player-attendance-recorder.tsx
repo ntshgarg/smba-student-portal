@@ -28,7 +28,7 @@ import {
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
 } from "@/lib/attendance/recording-workspace"
-import { describeSaveFailure } from "@/lib/client/network-failure"
+import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import {
   academyTimeInputValue,
   formatAcademyTime,
@@ -53,6 +53,16 @@ const attendanceChoices = [
  * withdraws the retry prompt.
  */
 type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
+
+/**
+ * Courtside connections are slow rather than dead, so this deadline only has to
+ * beat an indefinite hang. A register is a few kilobytes, but the server runs
+ * several validation queries per player inside one immediate transaction and
+ * then revalidates the academy data in the response, so it is set well above a
+ * slow-network round trip to the Mumbai region rather than tuned to payload
+ * size. It is a deadline, not a cancellation — see `withSaveDeadline`.
+ */
+const saveDeadlineMs = 20_000
 
 function sessionLabel(
   occurrence: TrainingSessionOccurrence,
@@ -218,7 +228,10 @@ export function PlayerAttendanceRecorder({
     setIsSaving(true)
     setFeedback(null)
     try {
-      const result = await saveAttendanceRegister(draftChanges)
+      const result = await withSaveDeadline(
+        saveAttendanceRegister(draftChanges),
+        saveDeadlineMs,
+      )
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
         return
@@ -234,7 +247,7 @@ export function PlayerAttendanceRecorder({
       })
       setFeedback({
         message: failure.message,
-        offerRetry: failure.isNetworkFailure,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {

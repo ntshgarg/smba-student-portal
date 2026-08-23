@@ -8,7 +8,7 @@ import { useMemo, useState } from "react"
 import { saveStaffAttendanceAction } from "@/app/coach/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
-import { describeSaveFailure } from "@/lib/client/network-failure"
+import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import type {
   StaffAttendanceChange,
   StaffAttendanceChoice,
@@ -40,6 +40,14 @@ const choices: Array<{
  * withdraws the retry prompt.
  */
 type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
+
+/**
+ * Shorter than the player register's deadline: one day of junior coaches is a
+ * handful of changes with fewer validation queries each, so a healthy save
+ * settles sooner. Still far above a slow-network round trip. It is a deadline,
+ * not a cancellation — see `withSaveDeadline`.
+ */
+const saveDeadlineMs = 15_000
 
 export function StaffRollCall({
   initialDate,
@@ -116,7 +124,10 @@ export function StaffRollCall({
     setIsSaving(true)
     setFeedback(null)
     try {
-      const result = await saveStaffAttendanceAction({ changes: drafts })
+      const result = await withSaveDeadline(
+        saveStaffAttendanceAction({ changes: drafts }),
+        saveDeadlineMs,
+      )
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
         return
@@ -142,7 +153,7 @@ export function StaffRollCall({
       })
       setFeedback({
         message: failure.message,
-        offerRetry: failure.isNetworkFailure,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {

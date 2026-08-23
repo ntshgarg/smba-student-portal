@@ -1,12 +1,53 @@
 export type NetworkFailureKind = "offline" | "unreachable"
 
+export type SaveFailureKind = NetworkFailureKind | "timeout" | "unknown"
+
 export type SaveFailureDescription = {
-  isNetworkFailure: boolean
+  kind: SaveFailureKind
   message: string
+  offerRetry: boolean
 }
 
 function deviceIsOnline() {
   return typeof navigator === "undefined" ? true : navigator.onLine !== false
+}
+
+/**
+ * Raised when a save passes its deadline. It does not mean the save failed: the
+ * server was never told to stop, so the write may still land afterwards. Only
+ * `withSaveDeadline` throws this.
+ */
+export class SaveTimeoutError extends Error {
+  constructor(message = "The save was not confirmed in time") {
+    super(message)
+    this.name = "SaveTimeoutError"
+  }
+}
+
+/**
+ * Rejects with `SaveTimeoutError` when `timeoutMs` elapses before `save`
+ * settles.
+ *
+ * This is a deadline, NOT a cancellation. Next.js invokes a server action
+ * through React's `callServer(actionId, actionArgs)`, which takes no options,
+ * and the reducer behind it builds its own `fetch(url, { method, headers,
+ * body })` with no `signal`. There is no seam to pass an `AbortSignal` through,
+ * so `AbortSignal.timeout()` is unusable here and the request keeps running
+ * after the deadline passes. Callers must therefore treat a timeout as an
+ * unknown outcome rather than a failure.
+ *
+ * `Promise.race` subscribes to `save`, so a later rejection from the abandoned
+ * request stays handled and never surfaces as an unhandled rejection.
+ */
+export function withSaveDeadline<T>(save: Promise<T>, timeoutMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new SaveTimeoutError()), timeoutMs)
+  })
+
+  return Promise.race([save, deadline]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer)
+  })
 }
 
 /**
@@ -32,11 +73,20 @@ export function classifyNetworkFailure(
   return isOnline ? "unreachable" : "offline"
 }
 
+function isSaveTimeout(error: unknown) {
+  return error instanceof SaveTimeoutError
+    || (error instanceof Error && error.name === "SaveTimeoutError")
+}
+
 /**
- * Turns a rejected save into operational copy. `subject` names what was not
+ * Turns a rejected save into operational copy. `subject` names what was being
  * saved, `retained` states what is still on screen, and `fallbackMessage`
  * covers a non-`Error` throw. Both sentences are supplied without trailing
  * punctuation.
+ *
+ * A timeout is deliberately never described as a failure, because the write may
+ * have landed. Offline and unreachable are safe to call failures: the request
+ * never reached the server, so nothing can have been recorded.
  */
 export function describeSaveFailure({
   error,
@@ -51,11 +101,21 @@ export function describeSaveFailure({
   retained: string
   subject: string
 }): SaveFailureDescription {
+  if (isSaveTimeout(error)) {
+    return {
+      kind: "timeout",
+      message: `${subject} was not confirmed in time and may or may not have been`
+        + ` recorded. ${retained}. Saving again is safe and will confirm the result.`,
+      offerRetry: true,
+    }
+  }
+
   const failure = classifyNetworkFailure(error, isOnline)
   if (!failure) {
     return {
-      isNetworkFailure: false,
+      kind: "unknown",
       message: error instanceof Error ? error.message : fallbackMessage,
+      offerRetry: false,
     }
   }
 
@@ -67,7 +127,8 @@ export function describeSaveFailure({
     : "Check the connection and try again"
 
   return {
-    isNetworkFailure: true,
+    kind: failure,
     message: `${subject} could not be saved because ${cause}. ${retained}. ${nextStep}.`,
+    offerRetry: true,
   }
 }
