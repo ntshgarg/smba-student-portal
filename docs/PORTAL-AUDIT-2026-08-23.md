@@ -103,9 +103,15 @@ The mechanics are correct (drafts preserved, `isSaving` reset). The *message* is
 
 **Partially resolved (2026-08-23).** Network failures in both attendance savers now produce operational copy naming the cause, stating the marks are still on screen, and saying what to do — and the existing Save control relabels to "Save attendance again" as the retry, since no secondary-button class exists in the stylesheet. Classification keys on the error's **constructor** (`TypeError`, plus a `name` check for realm-crossed errors) rather than its message, because the message differs per engine: "Failed to fetch" in Chrome, "NetworkError when attempting to fetch resource." in Firefox, "Load failed" in Safari. `navigator.onLine` only selects between two messages; it never decides whether a failure was network-related, since `onLine === true` means an interface exists, not that the server is reachable.
 
-**Three gaps remain, and one is arguably worse than the bug that was fixed:**
+**Gap 1 — resolved (`75d3c88`).** The indefinite hang is bounded by a 20s/15s deadline. Two findings came out of implementing it:
 
-1. **A slow-but-alive network never rejects.** There is no `AbortController` timeout, so the save hangs on "Saving…" with the button disabled indefinitely. Courtside, an indefinite hang is worse than a clean failure — the coach cannot tell whether to wait or retry, and there is no path out but a reload. This is the highest-value remaining piece of ST-2.
+- **Abort cannot propagate through a Next.js server action.** `callServer(actionId, actionArgs)` accepts exactly two parameters with no options object, and `server-action-reducer.js:72-78` builds its own `fetch` with no `signal` — zero matches for `signal`/`AbortController`/`AbortSignal` in that file. The plumbing beneath it *would* forward an `init`, but the only caller is Next-internal and never populates it. So the deadline is a UI-level escape, not a cancellation: the request keeps running, and the copy says the outcome is unknown rather than failed.
+- **Retry after a timeout is provably safe**, which is why the copy can say so. Both attendance services skip a change when the stored choice already equals the target (`lib/sessions/service.ts:652`, before the conflict check is even reached), write via `onConflictDoUpdate` keyed on `(accountId, occurrenceId)` rather than appending, and run in `{ behavior: "immediate" }` transactions that serialise a retry against the in-flight original. So a landed-but-timed-out write makes the retry a no-op reporting success. This also means a *premature* deadline destroys nothing, which is what makes a generous duration low-risk.
+
+**Latent trap discovered in Next.js config (not our code).** `server-action-reducer.js:81-98` contains an offline auto-replay path — on a fetch rejection it waits for connectivity and replays the action — gated on `process.env.__NEXT_USE_OFFLINE`. It is currently disabled (`next.config.ts` has no `experimental` block), which is the only reason the `TypeError` reaches our `catch` at all. **If anyone enables that flag, Next will swallow the rejection and hang, and the offline messaging shipped in `f543d10` will silently stop appearing.** Worth a comment near the classification helper.
+
+**Gap 2 is now the highest-value remaining item, and the deadline slightly enlarged it.** A coach can now sit on a "may or may not have been recorded" state while holding unsaved drafts with no durable copy — so the ambiguity and the volatility compound. Combined with ST-8 (where unsaved-work protection can be silently absent), this is the product's worst realistic failure path.
+
 2. **Drafts are React state only, so a tab close loses everything.** `unsaved-work-guard.tsx:189` fires the browser's generic "leave site?" dialog, but if the coach confirms it, the OS kills the tab, or mobile Safari discards the page under memory pressure (routine on iOS), every mark is gone silently. Note the new copy promises the marks are safe *on screen*, which is true and deliberately scoped — but a coach may read more into it. Persisting drafts to `localStorage` keyed by occurrence would close this without the correctness hazards of a write queue, because the replay still passes through the same optimistic-concurrency check on the next save.
 3. **Nothing auto-recovers.** There is no `online` listener, so the coach must notice connectivity returning and press the button themselves. A captive portal also reports `onLine === true`, producing the vaguer "the request did not complete" message rather than naming the real problem.
 
@@ -195,6 +201,28 @@ The defect and the fix are unchanged — PR-3 added `tabIndex`, `role="region"` 
 #### A11Y-6 · OBJ · S3 · Effort S · Confidence High
 **Seven routes and two dialog states sit outside the otherwise-excellent axe matrix**: `/coach/announcements/[id]`, `/coach/reports/publications/[publicationId]`, `/announcements/[announcementId]`, `/coach/financials` (inactive/activation), `app/not-found.tsx`, and both financials `error.tsx` pages; plus the announcement **Review** and **Withdraw** dialogs, which are never opened during the run. Given W-1, these are the only places a11y regressions can enter unnoticed.
 
+**Addressed (2026-08-23).** Seven states and three interactions added, verified live across all three profiles — 316 audits (stress 177, admin 87, clean 52). Both dialog states are covered, and the `data-accessibility-dialog-opener` hook — previously set inline by the single dialog interaction that had it — is now a shared `openDialogFrom(trigger)` helper, so every future dialog state inherits the focus-trap, Escape and focus-return checks automatically.
+
+The six `error.tsx` boundaries remain unreachable: an `error.tsx` renders only when its segment throws during render, and the harness has no fault injection. A concrete route exists — `readFinanceActivation` throws when the `finance_activated` audit metadata lacks `trackingMonth`, so corrupting that one row would render the boundary — and the spec already mutates fixture databases directly for recovery-challenge setup, so the precedent is there. It is a new harness capability and belongs in its own change.
+
+**The new coverage immediately found two real defects, which is the entire point:**
+- `app/not-found.tsx` renders a bare `<section>` with **no `main` landmark** — `main-landmark-count`, serious, all three viewports. Every other route group supplies its own; the 404 was the only page with none.
+- The finance-activation consent checkbox `input[name="confirmPermanentLedger"]` is an **18px tap target** at tablet width against a 24px minimum. It passes at 390px only because the consent sentence wraps and props the grid row open — accidental compliance rather than a sized control.
+
+#### A11Y-9 · OBJ · S3 · Effort S · Confidence High
+**The accessibility matrix silently drops states it cannot route.** *Found while extending coverage, 2026-08-23. Not fixed.*
+
+`accessibility-regression.spec.ts` wires up specific profile-and-actor pairs. A matrix state whose pair is not wired up is **not an error** — it never executes, never appears in results, and reports nothing. Two of the seven states added in this pass fell into exactly that gap: the `stress` branch never opened a guest context, and the `clean` branch only scanned guest states, never head-coach ones. Both would have been dead entries that looked live.
+
+**Why it matters.** This is A11Y-8's failure class one level up: the gate's *coverage* is as invisible as its discarded results. Someone adding a state with a mistyped profile gets a green run and believes the surface is protected. Taken together, a green result today means "no WCAG-tagged violations, among the states that happened to be routable, excluding everything axe could not decide automatically."
+
+**Fix shape.** Assert every selected state produced at least one result. That is a new blocking check, so it warrants a deliberate decision rather than a quiet addition.
+
+#### A11Y-10 · OBJ · S4 · Effort S · Confidence High
+**`aria-label` on role-less containers is a recurring pattern, not isolated incidents.** Five instances across three separate passes: both fee-register scroll wrappers, the attendance register scroll container, the attendance year selector, and the announcement Review dialog's `channelPills`. Every one was found by accident, and all are invisible to the gate because `aria-prohibited-attr` returns *incomplete* rather than a violation when the element has subtree text (A11Y-8).
+
+Fixing them one at a time is not converging. An assertion — no `aria-label`/`aria-labelledby` on an element lacking an explicit `role`, outside an allowlist of elements whose implicit role permits naming — would catch the whole family for the cost of one file. Same shape as the `var()`-undeclared assertion added in `5204109`, which has already proved its worth.
+
 #### A11Y-7 · SUBJ · S4 · Effort S · Confidence High
 **Dropdown menus have no focus trap or background `inert`.** `account-menu.tsx:63`, `public-header.tsx`. Escape closes and focus returns correctly; Tab can walk out into the page behind the open menu. Not a WCAG failure — a polish gap relative to the three `<dialog>` implementations, which are exemplary.
 
@@ -220,6 +248,29 @@ So the labelled-but-role-less scroll containers in this codebase (`.coach-regist
 
 **Why it matters.** Given how strong this gate otherwise is (W-1), the blind spot is disproportionately costly: the team reasonably treats a green run as "no accessibility problems", when in fact an entire result class is invisible. Contrast checks on gradients/images, and several ARIA name checks, commonly land in `incomplete`.
 **Suggested fix.** Surface `axe.incomplete` as a distinct non-blocking "needs review" section in the report first, so the existing backlog is visible before deciding what to promote to blocking.
+
+**Backlog now measured (2026-08-23) — 1,243 advisories across 316 audits, and it is one rule plus a tail:**
+
+| Rule | Bucket | Occurrences | States |
+|---|---|---:|---:|
+| `color-contrast` | needs-review | 1,122 | 25 |
+| `aria-prohibited-attr` | needs-review | 105 → 101 | 13 |
+| `aria-allowed-role` | best-practice | 7 | 2 |
+| `landmark-unique` | best-practice | 3 | 1 |
+| `landmark-one-main` | best-practice | 3 → **0** | 1 |
+| `region` | best-practice | 3 → **0** | 1 |
+
+`color-contrast` alone is **90.3%** of the backlog and two rules are 98.7%. Per profile: stress 1,068 over 177 audits, admin 175 over 87, **clean 0 over 52** — so the backlog concentrates on data-dense and auth surfaces, not empty-state paths.
+
+**Promotion recommendation, in three tiers rather than 1,243 obligations:**
+
+1. **Promote now, free.** `landmark-one-main` and `region` are both at zero after the `not-found` fix, and either would independently have caught that defect. Promoting an already-green rule costs nothing and locks the fix in.
+2. **Fix then promote, small.** `landmark-unique` (3 occurrences, one state) and `aria-allowed-role` (7, two states) — ten occurrences across three states, narrow enough that promotion won't generate churn.
+3. **Sequence, do not promote yet.** `aria-prohibited-attr` is the only advisory rule with **demonstrated true positives** — all five instances in A11Y-10 were real. It deserves to be blocking, but promoting it today turns the gate red on 13 states. Remediate, then promote.
+
+**Do not promote `color-contrast`.** These are *incomplete* results, not violations: axe returns incomplete when it cannot resolve the effective background, which happens with gradients, background images and transparency — all of which this UI uses heavily. The count scales with element volume rather than defect count, which is exactly why one profile contributes 1,068 and another contributes zero. Promoting it would make the gate permanently red on 1,122 cases where axe declined to decide. Contrast assurance belongs in a direct token-level test, plus a hand-checked sample to establish whether any real failure is hiding in the pile.
+
+**Operational caveat for the next run:** the `clean` fixture database is effectively single-use, because its flow requires the head coach to be at first-time authenticator setup. Both `clean` and `stress` are now partially consumed and must be restored from source before a full three-profile run.
 
 **Second, related blind spot (same root cause).** `withTags([...WCAG_TAGS])` also excludes every rule axe tags `best-practice`, which is where all the landmark and structural rules live. Verified in axe-core 4.13.0: `region` (`axe.js:33358`), `landmark-unique` (`:33128`), `landmark-one-main` (`:33114`), `landmark-no-duplicate-main` (`:33101`) and `aria-allowed-role` (`:32200`) are all `best-practice`-tagged and therefore never evaluated. So landmark structure — a primary screen-reader navigation mechanism — is currently unchecked. The custom `collectDomAudit` partially compensates by asserting exactly one `<main>` and one `<h1>`, but nothing verifies landmark naming, uniqueness, or that content sits within a landmark at all.
 
@@ -300,6 +351,22 @@ The 1px media-query pairs **760/761, 720/721, 900/901, 340/341** are clean mutua
 
 `--color-navy` does not exist in any stylesheet — the only occurrence in the repository is this consumption site. The hardcoded fallback therefore always wins. It renders correctly today and will keep rendering correctly, which is exactly why it is dangerous: it is an invisible dead reference that a future theming or dark-mode pass would silently skip.
 
+**Resolved (`5204109`), and the sweep found two more.** `--player-register-width` (`globals.css:2887-2888`) and `--player-register-mobile-width` (`:5973-5974`) are also declared nowhere — and unlike `--color-navy` they carry **no fallback**, so those declarations are invalid at computed-value time. It does not currently matter, because they live inside a `.player-attendance-register-table` rule whose class no element carries: the player register became a focused-month calendar, and `tests/junior-coach-dashboard.test.tsx` already asserts the class is absent from rendered output.
+
+**Fully resolved (`7fcbba4`).** The dead block was removed — 74 lines — along with the two baseline entries in the token test that existed solely to excuse it. Removing the allowlist made the assertion stricter and surfaced nothing new, confirming it covered exactly those two properties. Positive proof of death rather than an absent grep hit: both components that render `player-attendance-register` now emit `<section className="player-attendance-month-sheet personal-attendance-calendar">` where the table used to be (`player-attendance-card.tsx:256`, `junior-coach-attendance-card.tsx:216`), and the coach-side register is a different component using different, live classes.
+
+That deletion turned out to be the smaller half. A sweep of `financials.module.css` found **23 dead class keys totalling 615 lines** — the residue of the financials-to-modules migration, with every replacement live elsewhere (`setupPanel` → `setupDefaults`/`activationPanel`, `paymentPanel` → `balancePaymentPanel`, `filters` → `financial-records.module.css`). **Total dead CSS removed: 693 net lines.**
+
+One side effect worth knowing: `tests/junior-coach-dashboard.test.tsx`'s `not.toContain("player-attendance-register-table")` assertion is now **tautological** — neither the class nor any styling for it exists, so it can no longer fail. The `role="columnheader"` and `role="gridcell"` counts above it are what actually pin the calendar shape now.
+
+A guardrail now prevents recurrence: `tests/design-tokens.test.ts` asserts no `var()` reads an undeclared custom property, gathering declarations from all CSS plus React `style` props and `setProperty` calls, with the `next/font`-injected `--font-manrope`/`--font-newsreader` allowlisted. It was verified non-vacuous by catching both the original `--color-navy` and a synthetic typo.
+
+**The guardrail immediately earned its place.** Merging `origin/main` (three commits, including a 74-file feature) failed this assertion on **upstream** code: a new fee-preview panel reads `var(--line-strong)`, a token declared nowhere — not upstream, not locally, not at the merge base. An undeclared custom property invalidates the whole `border` shorthand, so that panel was rendering with **no border at all**.
+
+Two things make this worth recording beyond the fix itself. First, **upstream's CI could not have caught it**, because the token-integrity assertion exists only on this branch — the same test file upstream ships contains only the colour-role block. Second, it is the identical bug class as DS-1, arriving from a different author within days, which is the strongest argument available that this assertion needed to exist rather than the two DS-1 instances being one-off mistakes.
+
+Resolved by repointing to `--line`, matching the eleven other neutral panel borders in that module. **Flagged for review:** that it was broken is certain, but `--line` being the *intended* shade is a judgement call — upstream wrote "strong", implying a heavier rule than `--line`. If a darker rule was wanted, the token needs declaring.
+
 #### DS-2 · OBJ · S3 · Effort XS · Confidence High
 **Nine raw `#071b32` literals where `--navy` exists**, all inside the platform-admin block: `app/globals.css:13289, 13291, 13300, 13313, 13349, 13360, 13400, 13538, 13549`. The admin surface was evidently built without the token layer in view.
 
@@ -313,10 +380,20 @@ The 1px media-query pairs **760/761, 720/721, 900/901, 340/341** are clean mutua
 **An implicit spacing sub-scale exists but is untokenized.** `18px` (176×), `12px` (175×), `10px` (154×), `14px` (129×), `20px` (128×), `22px` (87×) — a coherent operational rhythm below the 8/16/24/32/40/48/56 token scale, used consistently but expressed as raw values.
 
 #### DS-6 · SUBJ · S4 · Effort S · Confidence High
-**Tailwind v4 is installed, imported, and used for exactly one utility.** `@import "tailwindcss"` at `globals.css:1`; the only utility appearing in any `className` is `sr-only` (25×). No `@theme` block, no config file, zero matches for `flex`/`p-4`/`text-sm`/`bg-`/`rounded-`. This is a decision to make explicitly — adopt it properly or drop it and define `.sr-only` directly.
+**Tailwind v4 is installed, imported, and used for exactly one utility.** `@import "tailwindcss"` at `globals.css:1`; the only utility appearing in any `className` was `sr-only` (25×). No `@theme` block, no config file, zero matches for `flex`/`p-4`/`text-sm`/`bg-`/`rounded-`.
 
-#### DS-7 · SUBJ · S4 · Effort XS · Confidence High
+**Correction (2026-08-23).** I framed this as "adopt it properly or drop it and define `.sr-only` directly", implying that consolidating off `sr-only` would free the project from Tailwind. **It does not.** Tailwind's Preflight (`@layer base`) is load-bearing here: the `box-sizing`/margin/padding/border reset, `list-style: none` on lists, `display: block` on replaced elements, `font-size`/`font-weight: inherit` on headings, and `[hidden] { display: none !important }`. Dropping Tailwind means reproducing that reset by hand, which is a materially larger question than one utility class. DS-7 is now resolved and Tailwind is still required — the adopt-or-drop decision stands on its own, but its cost is higher than stated.
+
+**Related discovery, and the more important one.** `@import "tailwindcss"` establishes `@layer theme, base, components, utilities`, and **unlayered CSS outranks every cascade layer regardless of specificity**. So every Tailwind utility in this project sits in the `utilities` layer, beneath ~14,000 lines of unlayered hand-written CSS. Any future adoption of Tailwind utilities here would find them systematically outranked — which is a real constraint on the "adopt it properly" option, not a detail.
+
+#### DS-7 · OBJ · S4 · Effort XS · Confidence High · **Resolved (`5204109`)**
 **Two parallel visually-hidden implementations**: Tailwind `sr-only` (25×) and custom `.coach-published-visually-hidden` (`globals.css:8909`, 10×).
+
+They were **not** equivalent, and the difference mattered. Tailwind's uses `clip-path: inset(50%)` and `border-width: 0`; the custom one used the deprecated `clip: rect(0,0,0,0)`, `border: 0`, and `!important` on all nine declarations. That `!important` was load-bearing, for the cascade-layer reason above: a content-hiding class being the weakest thing in the cascade is a hazard, not a stylistic preference.
+
+Consolidated onto a single **unlayered** local `.sr-only` using the union of both recipes. Keeping the name means all 25 existing call sites are untouched and only the 10 renamed ones changed — the smallest possible DOM diff.
+
+**Residual:** a *third* visually-hidden implementation exists — `.personal-attendance-calendar .player-attendance-month-nav span` — a scoped rule rather than a utility, and the only one that already carried both `clip` and `clip-path`. Folding it in needs `.tsx` edits inside frozen calendar surfaces, so it is left.
 
 #### DS-8 · OBJ · S4 · Effort XS · Confidence High
 **The generated design context is stale.** `.21st/DESIGN.md` documents 15 tokens and reports "Components: None detected"; the real `:root` set is 36. Anyone trusting the doc under-counts the system by more than half.
@@ -352,6 +429,30 @@ Cost: **1 + 2N**, N = active fee agreements. This runs in `getCoachFinanceDashbo
 
 **Why it matters.** SQLite queries are cheap individually, which is why this has not surfaced; the cost is linear in academy size and lands on the two most frequently loaded finance surfaces. Mitigating factor: finance is the best-tested domain in the repo (~2,630 lines of tests), so this refactor is unusually safe.
 
+**Resolved across two passes (`1d57db1`, `d197bcb`).** All measured on the 100-player stress fixture:
+
+| Path | Before | After |
+|---|---|---|
+| Coach fee record, dense player | 697 | 23 |
+| Player fee record, dense player | 97 | 13 |
+| Fee register, any page size | 375 | 7 |
+| Fee register, registration mode | 394 | 6 |
+| Collections day book, 92-day range | 266 | 6 |
+| Candidate assignment reads, N=100 | 200 | 2 |
+
+All now constant rather than linear in academy size. Behaviour was proven rather than assumed: parity harnesses compared old against new as JSON strings across every account, every charge at both `includeInternal` values, 675 register filter combinations and 27 deep cursor walks — with row-ID and cursor sequences identical throughout, which was the real risk given the register is cursor-paginated.
+
+**One correction to this finding's framing.** The register cost was never page-size-bound. `loadFeeRegister` builds a row for every approved player *before* filtering, because the summary counts cover the whole filtered set and the cursor is an in-memory slice. So the cost scaled with player count, not page size — confirmed by measuring identically at `limit=10` and `limit=100`.
+
+**Remaining N+1 sites, on the record:**
+
+1. **`lib/finance/documents.ts:216`** — `loadChargeView` per charge across *all* of a player's charges when building the statement read model. A player with 30 charges costs ~120 queries **per statement PDF**. `loadChargeViews` serves it with no new code. **This one cross-references PERF-4:** that finding treated the player statement as an unbounded *memory* problem, but a large part of its cost is 120 queries before a single byte is drawn. Since PERF-4's own remedies were both retracted, this is the actual actionable improvement to statement generation — and it is cheap.
+2. `prepareMonthlyCharges` (`service.ts:1288-1301`) — one existence query per candidate inside a write transaction, so it needs separate care.
+3. Four bounded `loadChargeView` maps at `service.ts:1490`, `:2083`, `:2363`, `:2469` — small in practice, flattened by the same loader.
+4. `readCharge` per allocation at `service.ts:1414`.
+
+**Known bound:** `loadChargeViews` binds one parameter per charge ID, so it is capped by SQLite's 32,766 variable limit — roughly 32k charges in one register. Not a practical concern at academy scale, but it is a real ceiling rather than an unbounded batch.
+
 #### PERF-2 · OBJ · S3 · Effort M · Confidence High
 **Every route parses the entire portal stylesheet.** `app/globals.css` (14,005 lines, 1,806 distinct selectors) is imported by the root layout and therefore ships to `/` and `/login`:
 
@@ -361,7 +462,30 @@ import "./globals.css"
 
 Measured from the existing build: the globals chunk is **277,041 bytes raw → 42,521 gzip → 33,647 brotli**. An anonymous homepage visitor also gets the public chunk (31,847 raw / 6,304 brotli) for a CSS total of ~40 KB brotli, of which roughly 85% is coach/player/admin rules they can never see. `/login` downloads the globals chunk alone, using a small fraction of it.
 
-**Honest framing:** ~28 KB of wasted brotli is a *modest* transfer cost, not a crisis. The real cost is **CSSOM construction and style recalculation over 277 KB of raw CSS and 1,806 selectors on every page**, which is felt on the low-end Android hardware this product's coaches actually use. Treat this as a parse/recalc optimisation, not a bandwidth one.
+**Measured verdict (2026-08-23) — my framing was wrong in both directions.** Full report at `output/PERF-2-measurement-report.md`, raw data in `output/perf-harness/results/`, measured from an isolated production build of `4722fe3`.
+
+**The CSSOM hypothesis is disproven by 14×.** I claimed the real cost was parse and style-recalculation, not bandwidth. Removing 315 KB and ~3,030 unmatched rules is worth **7 ms** on `/` and **2.4 ms** on `/login` at 6× CPU throttling; steady-state full-tree recalc goes 0.6 ms → 0.0 ms. That is below the ±90 ms FCP noise floor — not measurable end-to-end. The reason: Blink lazily parses declaration blocks and buckets rules by their rightmost compound selector, so unmatched rules sit in hash buckets that are never probed. `ParseAuthorStyleSheet` totals **14 ms for all 366 KB**. Recalc scales with elements (456 on the homepage), not stylesheet size.
+
+**There is a trap here worth recording.** Eagerly parsing that CSS via `new CSSStyleSheet().replaceSync()` genuinely does cost 50–60 ms at 6×. So the obvious way to benchmark this hypothesis would have *confirmed* it — but the browser never takes that path. Anyone re-testing this must measure the real load path, not a synthetic parse.
+
+**The waste percentage was understated.** `/` is **89.0%** unused CSS and `/login` **94.8%**. The homepage matches **67 of 3,097** rules in the globals chunk. The CSS modules are fine — already route-scoped, ~76% used. The entire problem is one file reaching every route through the root layout.
+
+**The real win is transfer — which this finding explicitly dismissed.** CSS is the only render-blocking resource type on these routes; every stylesheet is a `<link>` in `<head>` while every script is non-blocking. On slow 4G at 6× CPU a split moves FCP and LCP on `/` from 1,678 ms to 842 ms. Decomposed: **161 ms is protocol-independent bytes** (matching the 32,420 B brotli arithmetic to within 1 ms) and ~600 ms is bandwidth contention whose survival on Vercel's HTTP/2 depends on prioritisation quality. So the case holds even at the pessimistic end — but for the opposite reason to the one I gave.
+
+**The proposed three-way split is unjustified.** A *binary* public/portal split captures **95%** of the perfect per-route ceiling, because `/` and `/login` together need only 176 of 3,097 rules. The `(coach)`/`(student)`/auth partition buys almost nothing over something far smaller and safer.
+
+**Revised recommendation:** decline PERF-2 as written (L effort, three-way split, parse-cost rationale). Do the font fix in PERF-8 first, then a **binary** globals split at M effort. **Decline splitting portal CSS entirely** — `/coach` and `/player` are warm-cache surfaces behind a login whose real cost is 660–671 KB of JS and 460–534 ms of scripting at 6×, not their stylesheet.
+
+Two measurement gaps stated for the record: `openssl` is policy-blocked so no local HTTP/2 origin could be stood up, which is why the win is decomposed rather than assumed; and `UpdateLayerTree` no longer exists as a trace event in Chromium 151, that work having folded into `PrePaint`.
+
+#### PERF-8 · OBJ · S2 · Effort S · Confidence High
+**Font preloading is the largest render-blocking cost on the public routes, and it outweighs the CSS problem.** *Found while measuring PERF-2, 2026-08-23.*
+
+`app/layout.tsx` loads Manrope and Newsreader, the latter in both normal and italic, and the root layout preloads them across four files — **147–187 KB per route**. That is as much wire weight as all the JavaScript, and unlike CSS it is already compressed, so brotli cannot help.
+
+Removing just the three font preloads on `/` moves FCP from **1,472 ms to 1,148 ms** with zero CSS work — the best win per unit of risk anywhere in this audit, confined to a single file.
+
+**This is not simply "delete the preloads", and the trade-off needs deciding rather than assuming.** Both fonts already use `display: swap`, so text paints in the fallback and swaps when the font arrives; dropping a preload makes that swap land later and the flash of fallback text more visible. The real work is deciding *which* faces genuinely need preloading on *which* routes — Newsreader italic almost certainly does not need it anywhere, and the authenticated portal has different needs from the editorial public homepage. The audit's original estimate of "~85–130 KB, SUSPECTED" was low and marked unverified; it is now measured.
 
 #### PERF-3 · OBJ · S3 · Effort XS · Confidence High
 **Four presentational dashboard cards are needlessly client components.** `attendance-card.tsx`, `members-card.tsx`, `sessions-card.tsx` and `player-onboarding-card.tsx` each declare `"use client"` while containing **zero** hooks, handlers or browser APIs — and they are rendered from `app/coach/page.tsx`, which is a server component. Their sibling `financials-card.tsx` is correctly left server-side, proving the intended pattern.
@@ -487,6 +611,7 @@ Two findings from the parallel audits did not survive verification and are recor
 |---|---|
 | "~265 KB / 86% of CSS bytes wasted on the homepage" | Raw-byte framing. Actual transfer is **42.5 KB gzip / 33.6 KB brotli** for the globals chunk; wasted brotli ≈ 28 KB. The percentage stands, the magnitude does not. Reframed as a parse/recalc issue in PERF-2. |
 | "532 duplicate selector groups in `globals.css`" | Not reproducible. Measured: **235 of 1,806 distinct selectors (13%) appear 2+ times, maximum 5 repetitions** — the normal base-rule-plus-responsive-override pattern. Not a defect; removed. |
+| "Dead CSS: `.status-draft`, `.status-published`, `.status-revision` not found in any `.tsx`" | **False positive — all three are live.** They are constructed dynamically as `` `status-${getCoachReportState(report)}` `` at `report-workspace.tsx:386` and `:778`, with the state strings asserted by `tests/coach-report-utils.test.ts`. Nine `is-*` state classes were flagged the same way and are live for the same reason. **A literal-name grep is not proof of death in this codebase** — it builds class strings via template literals, `styles[key]` bracket access, and `data-*` attribute selectors. Any future dead-code claim must rule out all three. |
 | §4.4: "`--line-disabled: #9aa3ab` — 3.1:1" | **Wrong — it is 2.56:1 and fails.** Found during PR-2 implementation. The proposed remedy for a contrast defect was itself a contrast defect. Corrected to `#858d94` (3.37:1). Lesson: compute every proposed token value rather than eyeballing it, and composite translucent backgrounds first. |
 | PERF-3: "five dashboard cards have zero hooks" | **Four, not five.** Found during PR-5 implementation. The verification grep matched React's built-in hooks (`useState`, `useEffect`, `useMemo`, …) but not *custom* hooks, so `reports-card.tsx`'s call to `useReportResume()` was invisible to it. That card reads `localStorage` and must stay a client component. Any future "could this be a server component?" check must match `use[A-Z]\w*\(`, not an enumerated list of React hooks. |
 
