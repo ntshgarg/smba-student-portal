@@ -61,7 +61,15 @@ function recoveryDigest(label: string, value: string) {
 
 function selectedStatesForProfile(selectedProfile: AccessibilityProfile) {
   const states = statesForProfile(selectedProfile)
-  return stateFilter ? states.filter((state) => state.id === stateFilter) : states
+  if (!stateFilter) return states
+  const filtered = states.filter((state) => state.id === stateFilter)
+  if (!filtered.length) {
+    throw new Error(
+      `SMBA_ACCESSIBILITY_STATE=${stateFilter} matches no ${selectedProfile} state. `
+      + `Valid ids: ${states.map((state) => state.id).join(", ")}`,
+    )
+  }
+  return filtered
 }
 
 function executionFinding(error: unknown): AccessibilityFinding {
@@ -803,6 +811,162 @@ async function auditStressRecoveryStates(
   }
 }
 
+type SessionKey = `${AccessibilityProfile}/${AccessibilityActor}`
+
+type SessionContext = {
+  browser: Browser
+  results: AccessibilityResult[]
+  testInfo: TestInfo
+}
+
+type ActorSession = {
+  // Dynamic states that need this session's live page, audited after the pair's
+  // matrix states and before the context closes.
+  after?: (page: Page) => Promise<void>
+  close: () => Promise<void>
+  page: Page
+  // Fixture state that must exist only while this pair's states are scanned.
+  wrap?: (scan: () => Promise<void>) => Promise<void>
+}
+
+type SessionProvider = (context: SessionContext) => Promise<ActorSession>
+
+async function guestSession({ browser }: SessionContext): Promise<ActorSession> {
+  const context = await newContext(browser)
+  const page = await context.newPage()
+  return { close: () => context.close(), page }
+}
+
+async function protectedAdminSession({
+  browser,
+  results,
+  testInfo,
+}: SessionContext): Promise<ActorSession> {
+  const setupContext = await newContext(browser)
+  const setupPage = await setupContext.newPage()
+  await loginWithPassword(setupPage, "SMBA-ADMIN-0001", adminPassword)
+  const secret = await completeAuthenticatorSetup({
+    actor: "platform-admin",
+    page: setupPage,
+    password: adminPassword,
+    results,
+    testInfo,
+  })
+  await completePinSetup(setupPage)
+  await setupContext.close()
+
+  const admin = await loginReturningProtectedAccount({
+    academyId: "SMBA-ADMIN-0001",
+    actor: "platform-admin",
+    browser,
+    password: adminPassword,
+    results,
+    secret,
+    testInfo,
+  })
+  return { close: () => admin.context.close(), page: admin.page }
+}
+
+async function cleanHeadCoachSession({
+  browser,
+  results,
+  testInfo,
+}: SessionContext): Promise<ActorSession> {
+  const setupContext = await newContext(browser)
+  const setupPage = await setupContext.newPage()
+  await loginWithPassword(setupPage, "SMBA-HC-0001", fixturePassword)
+  const secret = await completeAuthenticatorSetup({
+    actor: "head-coach",
+    page: setupPage,
+    password: fixturePassword,
+    results,
+    testInfo,
+  })
+  if (new URL(setupPage.url()).pathname === "/auth/pin/setup") {
+    await auditDynamicState({
+      actor: "head-coach",
+      description: "Mandatory head-coach PIN setup",
+      id: "head-coach-pin-setup",
+      page: setupPage,
+      results,
+      testInfo,
+    })
+  }
+  await completePinSetup(setupPage)
+  await setupContext.close()
+  const coach = await loginReturningProtectedAccount({
+    academyId: "SMBA-HC-0001",
+    actor: "head-coach",
+    browser,
+    password: fixturePassword,
+    results,
+    secret,
+    testInfo,
+  })
+  return { close: () => coach.context.close(), page: coach.page }
+}
+
+async function passwordAndPinSession(
+  browser: Browser,
+  actor: "head-coach" | "junior-coach" | "player",
+): Promise<ActorSession> {
+  const session = await authenticatedContext(browser, actor)
+  return { close: () => session.context.close(), page: session.page }
+}
+
+// Session creation depends on the profile as well as the actor: the clean head
+// coach starts at first-time authenticator setup, while the stress head coach
+// only needs a password and a PIN. Declaration order is execution order, which
+// is why stress/platform-admin stays ahead of the other stress pairs.
+const sessionProviders = new Map<SessionKey, SessionProvider>([
+  ["admin/guest", guestSession],
+  ["admin/platform-admin", async (context) => ({
+    ...await protectedAdminSession(context),
+    after: async (page) => {
+      await page.goto("/admin", { waitUntil: "domcontentloaded" })
+      await page.getByRole("button", { name: "Open secure coach setup" }).click()
+      await page.waitForURL((url) => url.pathname === "/setup/head-coach")
+      await auditDynamicState({
+        actor: "platform-admin",
+        description: "Secure first-head-coach setup form",
+        id: "admin-head-coach-setup",
+        page,
+        results: context.results,
+        testInfo: context.testInfo,
+      })
+    },
+  })],
+  ["clean/guest", guestSession],
+  ["clean/head-coach", async (context) => ({
+    ...await cleanHeadCoachSession(context),
+    // The activation walkthrough approves and rejects registrations, so it has
+    // to follow the head-coach states that still expect a pristine academy.
+    after: (page) => auditCleanActivationStates(
+      context.browser,
+      page,
+      context.results,
+      context.testInfo,
+    ),
+  })],
+  ["stress/platform-admin", async (context) => ({
+    ...await protectedAdminSession(context),
+    wrap: async (scan) => {
+      const recoveryQueue = prepareAuthenticatorRecoveryQueue()
+      try {
+        await scan()
+      } finally {
+        recoveryQueue.restore()
+      }
+    },
+  })],
+  // Public surfaces that need published content have to be audited here: the
+  // stress academy is the only fixture that has any.
+  ["stress/guest", guestSession],
+  ["stress/head-coach", ({ browser }) => passwordAndPinSession(browser, "head-coach")],
+  ["stress/junior-coach", ({ browser }) => passwordAndPinSession(browser, "junior-coach")],
+  ["stress/player", ({ browser }) => passwordAndPinSession(browser, "player")],
+])
+
 test.describe("UI accessibility / WCAG 2.2 AA", () => {
   test("audits the representative role and state matrix", async ({ browser }, testInfo) => {
     // GitHub Actions owns the 25-minute wall-clock limit. Keep Playwright's
@@ -811,159 +975,37 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
     test.setTimeout(2 * 60 * 60_000)
     mkdirSync(outputRoot, { recursive: true })
     const results: AccessibilityResult[] = []
+    const selected = selectedStatesForProfile(profile)
+    const statesByPair = new Map<SessionKey, AccessibilityState[]>()
+    for (const state of selected) {
+      const key: SessionKey = `${state.profile}/${state.actor}`
+      statesByPair.set(key, [...(statesByPair.get(key) ?? []), state])
+    }
+    // A matrix pair with no provider used to be filtered out of every branch and
+    // vanish from the results. Refuse to run rather than under-report coverage.
+    const unwired = [...statesByPair].filter(([key]) => !sessionProviders.has(key))
+    if (unwired.length) {
+      throw new Error(unwired.map(([key, states]) =>
+        `No session provider for ${key}. ${states.length} state(s) would be skipped: `
+        + states.map((state) => state.id).join(", ")).join(" "))
+    }
 
     try {
-      if (profile === "admin") {
-        const guestContext = await newContext(browser)
-        const guestPage = await guestContext.newPage()
-        await scanContextStates({
-          page: guestPage,
-          results,
-          states: selectedStatesForProfile(profile).filter((state) => state.actor === "guest"),
-          testInfo,
-        })
-        await guestContext.close()
-      }
-
-      if ((profile === "admin" || profile === "stress")
-        && selectedStatesForProfile(profile).some((state) => state.actor === "platform-admin")) {
-        const setupContext = await newContext(browser)
-        const setupPage = await setupContext.newPage()
-        await loginWithPassword(setupPage, "SMBA-ADMIN-0001", adminPassword)
-        const secret = await completeAuthenticatorSetup({
-          actor: "platform-admin",
-          page: setupPage,
-          password: adminPassword,
-          results,
-          testInfo,
-        })
-        await completePinSetup(setupPage)
-        await setupContext.close()
-
-        const admin = await loginReturningProtectedAccount({
-          academyId: "SMBA-ADMIN-0001",
-          actor: "platform-admin",
-          browser,
-          password: adminPassword,
-          results,
-          secret,
-          testInfo,
-        })
-        const adminStates = selectedStatesForProfile(profile).filter((state) => state.actor === "platform-admin")
-        const recoveryQueue = profile === "stress"
-          ? prepareAuthenticatorRecoveryQueue()
-          : null
+      for (const [key, createSession] of sessionProviders) {
+        const states = statesByPair.get(key)
+        if (!states) continue
+        const session = await createSession({ browser, results, testInfo })
         try {
-          await scanContextStates({
-            page: admin.page,
-            results,
-            states: adminStates,
-            testInfo,
-          })
+          const scan = () => scanContextStates({ page: session.page, results, states, testInfo })
+          if (session.wrap) await session.wrap(scan)
+          else await scan()
+          await session.after?.(session.page)
         } finally {
-          recoveryQueue?.restore()
+          await session.close()
         }
-        if (profile === "admin") {
-          await admin.page.goto("/admin", { waitUntil: "domcontentloaded" })
-          await admin.page.getByRole("button", { name: "Open secure coach setup" }).click()
-          await admin.page.waitForURL((url) => url.pathname === "/setup/head-coach")
-          await auditDynamicState({
-            actor: "platform-admin",
-            description: "Secure first-head-coach setup form",
-            id: "admin-head-coach-setup",
-            page: admin.page,
-            results,
-            testInfo,
-          })
-        }
-        await admin.context.close()
       }
 
-      if (profile === "clean") {
-        const guestContext = await newContext(browser)
-        const guestPage = await guestContext.newPage()
-        await scanContextStates({
-          page: guestPage,
-          results,
-          states: selectedStatesForProfile(profile).filter((state) => state.actor === "guest"),
-          testInfo,
-        })
-        await guestContext.close()
-
-        const setupContext = await newContext(browser)
-        const setupPage = await setupContext.newPage()
-        await loginWithPassword(setupPage, "SMBA-HC-0001", fixturePassword)
-        const secret = await completeAuthenticatorSetup({
-          actor: "head-coach",
-          page: setupPage,
-          password: fixturePassword,
-          results,
-          testInfo,
-        })
-        if (new URL(setupPage.url()).pathname === "/auth/pin/setup") {
-          await auditDynamicState({
-            actor: "head-coach",
-            description: "Mandatory head-coach PIN setup",
-            id: "head-coach-pin-setup",
-            page: setupPage,
-            results,
-            testInfo,
-          })
-        }
-        await completePinSetup(setupPage)
-        await setupContext.close()
-        const coach = await loginReturningProtectedAccount({
-          academyId: "SMBA-HC-0001",
-          actor: "head-coach",
-          browser,
-          password: fixturePassword,
-          results,
-          secret,
-          testInfo,
-        })
-        // Before the activation walkthrough approves and rejects registrations,
-        // so head-coach states still see the pristine clean academy.
-        await scanContextStates({
-          page: coach.page,
-          results,
-          states: selectedStatesForProfile(profile).filter((state) => state.actor === "head-coach"),
-          testInfo,
-        })
-        await auditCleanActivationStates(browser, coach.page, results, testInfo)
-        await coach.context.close()
-      }
-
-      if (profile === "stress") {
-        // Public surfaces that need published content have to be audited here:
-        // the stress academy is the only fixture that has any.
-        const guestStates = selectedStatesForProfile(profile)
-          .filter((state) => state.actor === "guest")
-        if (guestStates.length) {
-          const guestContext = await newContext(browser)
-          const guestPage = await guestContext.newPage()
-          await scanContextStates({
-            page: guestPage,
-            results,
-            states: guestStates,
-            testInfo,
-          })
-          await guestContext.close()
-        }
-
-        for (const actor of ["head-coach", "junior-coach", "player"] as const) {
-          const actorStates = selectedStatesForProfile(profile).filter((state) => state.actor === actor)
-          if (!actorStates.length) continue
-          const session = await authenticatedContext(browser, actor)
-          await scanContextStates({
-            page: session.page,
-            results,
-            states: actorStates,
-            testInfo,
-          })
-          await session.context.close()
-        }
-        await auditStressRecoveryStates(browser, results, testInfo)
-      }
+      if (profile === "stress") await auditStressRecoveryStates(browser, results, testInfo)
     } finally {
       const { jsonPath } = writeAccessibilityResults(outputRoot, results)
       if (formatAccessibilityFailures(results).length) {
@@ -973,6 +1015,12 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
         })
       }
     }
+
+    // Compared against the filtered selection, not the whole matrix, so a
+    // single-state run stays valid.
+    const executed = new Set(results.map((result) => result.id))
+    const missing = selected.filter((state) => !executed.has(state.id)).map((state) => state.id)
+    expect(missing, `States selected but never executed: ${missing.join(", ")}`).toEqual([])
 
     const failures = formatAccessibilityFailures(results)
     expect(failures, failures.slice(0, 80).join("\n")).toEqual([])
