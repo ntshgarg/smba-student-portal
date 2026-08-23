@@ -225,8 +225,18 @@ function RequestStep({
     if (busy) return
     setBusy("approve")
     setFeedback(null)
-    const result = await approveRegistrationAction(item.id, item.requestedRole)
-    setBusy(null)
+    let result: Awaited<ReturnType<typeof approveRegistrationAction>>
+    try {
+      result = await approveRegistrationAction(item.id, item.requestedRole)
+    } catch (error) {
+      setFeedback({
+        message: error instanceof Error ? error.message : "Approval could not be saved",
+        tone: "error",
+      })
+      return
+    } finally {
+      setBusy(null)
+    }
     if (!result.ok) {
       setFeedback({ message: result.message, tone: "error" })
       return
@@ -243,8 +253,18 @@ function RequestStep({
     if (busy || !window.confirm(`Reject ${item.fullName}’s registration request?`)) return
     setBusy("reject")
     setFeedback(null)
-    const result = await rejectRegistrationAction(item.id)
-    setBusy(null)
+    let result: Awaited<ReturnType<typeof rejectRegistrationAction>>
+    try {
+      result = await rejectRegistrationAction(item.id)
+    } catch (error) {
+      setFeedback({
+        message: error instanceof Error ? error.message : "The rejection could not be saved",
+        tone: "error",
+      })
+      return
+    } finally {
+      setBusy(null)
+    }
     if (!result.ok) {
       setFeedback({ message: result.message, tone: "error" })
       return
@@ -330,37 +350,45 @@ function AssessmentStep({
 
     setBusy(true)
     setFeedback(null)
-    const result = await saveMemberAction({
-      memberId: item.id,
-      expectedRevision: item.recordRevision,
-      profile: {
-        fullName: item.fullName,
-        joinedAt: item.joinedAt,
-        primaryContact: item.primaryContact,
-      },
-      training: {
-        academyPlan: trainingPlan as AcademyPlan,
-        batch: batch as TrainingBatch,
-        level: level as TrainingProgramme,
-      },
-    })
-    setBusy(false)
-    if (!result.ok) {
-      const nextFieldErrors = {
-        level: result.fieldErrors?.level,
-        batch: result.fieldErrors?.batch,
-        academyPlan: result.fieldErrors?.academyPlan,
+    try {
+      const result = await saveMemberAction({
+        memberId: item.id,
+        expectedRevision: item.recordRevision,
+        profile: {
+          fullName: item.fullName,
+          joinedAt: item.joinedAt,
+          primaryContact: item.primaryContact,
+        },
+        training: {
+          academyPlan: trainingPlan as AcademyPlan,
+          batch: batch as TrainingBatch,
+          level: level as TrainingProgramme,
+        },
+      })
+      if (!result.ok) {
+        const nextFieldErrors = {
+          level: result.fieldErrors?.level,
+          batch: result.fieldErrors?.batch,
+          academyPlan: result.fieldErrors?.academyPlan,
+        }
+        setErrors(nextFieldErrors)
+        setFeedback({ message: result.message, tone: "error" })
+        if (nextFieldErrors.level) levelRef.current?.focus()
+        else if (nextFieldErrors.batch) batchRef.current?.focus()
+        else if (nextFieldErrors.academyPlan) planRef.current?.focus()
+        return
       }
-      setErrors(nextFieldErrors)
-      setFeedback({ message: result.message, tone: "error" })
-      if (nextFieldErrors.level) levelRef.current?.focus()
-      else if (nextFieldErrors.batch) batchRef.current?.focus()
-      else if (nextFieldErrors.academyPlan) planRef.current?.focus()
-      return
+      guard.navigateAfterCommit(() => onSuccess({
+        message: `${item.fullName}’s assessment is saved. Assign the matching session next.`,
+      }))
+    } catch (error) {
+      setFeedback({
+        message: error instanceof Error ? error.message : "The assessment could not be saved",
+        tone: "error",
+      })
+    } finally {
+      setBusy(false)
     }
-    guard.navigateAfterCommit(() => onSuccess({
-      message: `${item.fullName}’s assessment is saved. Assign the matching session next.`,
-    }))
   }
 
   return (
@@ -508,22 +536,30 @@ function SessionStep({
     }
     setBusy(true)
     setFeedback(null)
-    const result = await assignOnboardingSessionAction({
-      effectiveFrom,
-      playerId: item.id,
-      seriesId: selectedSeries.id,
-      weekdays,
-    })
-    setBusy(false)
-    if (!result.ok) {
-      setFeedback({ message: result.message, tone: "error" })
-      return
+    try {
+      const result = await assignOnboardingSessionAction({
+        effectiveFrom,
+        playerId: item.id,
+        seriesId: selectedSeries.id,
+        weekdays,
+      })
+      if (!result.ok) {
+        setFeedback({ message: result.message, tone: "error" })
+        return
+      }
+      guard.navigateAfterCommit(() => onSuccess({
+        message: item.feePlanRecorded
+          ? `${item.fullName}’s session is assigned. Their existing Fee Plan was retained.`
+          : `${item.fullName}’s session is assigned. Confirm the Fee Plan next.`,
+      }))
+    } catch (error) {
+      setFeedback({
+        message: error instanceof Error ? error.message : "The session could not be assigned",
+        tone: "error",
+      })
+    } finally {
+      setBusy(false)
     }
-    guard.navigateAfterCommit(() => onSuccess({
-      message: item.feePlanRecorded
-        ? `${item.fullName}’s session is assigned. Their existing Fee Plan was retained.`
-        : `${item.fullName}’s session is assigned. Confirm the Fee Plan next.`,
-    }))
   }
 
   if (!options.length) {
@@ -691,25 +727,33 @@ function FeePlanStep({
     }
     setBusy(true)
     setFeedback(null)
-    const result = await completeOnboardingFinanceAction({
-      playerId: item.id,
-      academyPlan: item.academyPlan,
-      level: item.level,
-      batch: item.batch,
-      agreedMonthlyFeePaise: rupees * 100,
-      effectiveFrom: `${effectiveMonth}-01`,
-      monthlyDueDay: 5,
-      idempotencyKey: `onboarding-fee:${item.id}:${crypto.randomUUID()}`,
-    })
-    setBusy(false)
-    if (!result.ok) {
-      setFeedback({ message: result.message, tone: "error" })
-      return
+    try {
+      const result = await completeOnboardingFinanceAction({
+        playerId: item.id,
+        academyPlan: item.academyPlan,
+        level: item.level,
+        batch: item.batch,
+        agreedMonthlyFeePaise: rupees * 100,
+        effectiveFrom: `${effectiveMonth}-01`,
+        monthlyDueDay: 5,
+        idempotencyKey: `onboarding-fee:${item.id}:${crypto.randomUUID()}`,
+      })
+      if (!result.ok) {
+        setFeedback({ message: result.message, tone: "error" })
+        return
+      }
+      guard.navigateAfterCommit(() => onSuccess({
+        message: `${item.fullName} is fully onboarded. ${result.message}.`,
+        remove: true,
+      }))
+    } catch (error) {
+      setFeedback({
+        message: error instanceof Error ? error.message : "The Fee Plan could not be saved",
+        tone: "error",
+      })
+    } finally {
+      setBusy(false)
     }
-    guard.navigateAfterCommit(() => onSuccess({
-      message: `${item.fullName} is fully onboarded. ${result.message}.`,
-      remove: true,
-    }))
   }
 
   return (

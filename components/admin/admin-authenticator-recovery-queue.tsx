@@ -37,11 +37,20 @@ export function AdminAuthenticatorRecoveryQueue({
     setBusyId(requestId)
     setMessage(null)
     startTransition(async () => {
-      const result = decision === "approve"
-        ? await approveAuthenticatorResetRequestAction(requestId)
-        : await rejectAuthenticatorResetRequestAction(requestId)
-      setBusyId(null)
-      setMessage(result.message)
+      try {
+        const result = decision === "approve"
+          ? await approveAuthenticatorResetRequestAction(requestId)
+          : await rejectAuthenticatorResetRequestAction(requestId)
+        setMessage(result.message)
+      } catch (error) {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "The recovery decision could not be saved",
+        )
+      } finally {
+        setBusyId(null)
+      }
     })
   }
 
