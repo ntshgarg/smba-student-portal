@@ -141,6 +141,57 @@ export function hasAssignmentInPeriod(
     )).get())
 }
 
+/**
+ * Batched form of {@link hasAssignmentInPeriod}: the period predicates are the
+ * same for every player, so one read answers the question for a whole player set
+ * against each player's own programme and batch.
+ */
+export function loadPeriodAssignmentIndex(
+  database: Executor,
+  playerIds: string[],
+  period: string,
+) {
+  const assigned = new Set<string>()
+  const key = (
+    playerId: string,
+    training: {
+      programme: typeof feeAgreements.$inferSelect.level
+      batch: typeof feeAgreements.$inferSelect.batch
+    },
+  ) => `${playerId}\u0000${training.programme}\u0000${training.batch}`
+  if (playerIds.length) {
+    database.select({
+      accountId: sessionAssignments.accountId,
+      batch: sessionSeries.batch,
+      programme: sessionSeries.programme,
+    }).from(sessionAssignments)
+      .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+      .where(and(
+        inArray(sessionAssignments.accountId, [...new Set(playerIds)]),
+        eq(sessionSeries.status, "active"),
+        lte(sessionAssignments.effectiveFrom, monthEnd(period)),
+        or(
+          isNull(sessionAssignments.effectiveTo),
+          gt(sessionAssignments.effectiveTo, monthStart(period)),
+        ),
+        lte(sessionSeries.startsOn, monthEnd(period)),
+        or(isNull(sessionSeries.endsOn), gte(sessionSeries.endsOn, monthStart(period))),
+      )).all()
+      .forEach((row) => assigned.add(key(row.accountId, row)))
+  }
+  return {
+    has(
+      playerId: string,
+      training: {
+        programme: typeof feeAgreements.$inferSelect.level
+        batch: typeof feeAgreements.$inferSelect.batch
+      },
+    ) {
+      return assigned.has(key(playerId, training))
+    },
+  }
+}
+
 export function readFirstMonthSessionProration(
   database: Executor,
   {
@@ -269,22 +320,58 @@ export function readCharge(database: Executor, chargeId: string) {
     .where(eq(financialCharges.id, chargeId)).get()
 }
 
-function chargeView(
-  database: Executor,
-  charge: typeof financialCharges.$inferSelect,
-  now: Date,
-  includeInternal = false,
-) {
-  const allocationRows = database.select({
+type ChargeRelations = {
+  adjustments: (typeof chargeAdjustments.$inferSelect)[]
+  payments: {
+    allocation: typeof paymentAllocations.$inferSelect
+    payment: typeof payments.$inferSelect
+  }[]
+  refunds: {
+    allocation: typeof refundAllocations.$inferSelect
+    refund: typeof refunds.$inferSelect
+  }[]
+}
+
+// SQLite returns unordered rows in rowid (insertion) order and its sorter keeps
+// equal sort keys in that same order. A batched read spans many parents at once,
+// so the rowid is pinned as the last sort key: every group then holds exactly the
+// order a single-parent read produced.
+const paymentAllocationSequence = sql`${paymentAllocations}."rowid"`
+const refundAllocationSequence = sql`${refundAllocations}."rowid"`
+const chargeAdjustmentSequence = sql`${chargeAdjustments}."rowid"`
+
+function emptyChargeRelations(): ChargeRelations {
+  return { adjustments: [], payments: [], refunds: [] }
+}
+
+/**
+ * Reads the payment, refund and adjustment rows behind a whole set of charges in
+ * three queries instead of three per charge, grouped by charge in the order SQL
+ * returned them.
+ */
+function loadChargeRelations(database: Executor, chargeIds: string[]) {
+  const relations = new Map<string, ChargeRelations>(chargeIds.map((chargeId) => [
+    chargeId,
+    emptyChargeRelations(),
+  ]))
+  // Drizzle 0.45 renders `inArray(column, [])` as `false`, so an empty set would
+  // be three round trips that can only return nothing. Skip them.
+  if (!relations.size) return relations
+  const ids = [...relations.keys()]
+
+  database.select({
     allocation: paymentAllocations,
     payment: payments,
   }).from(paymentAllocations)
     .innerJoin(payments, eq(payments.id, paymentAllocations.paymentId))
-    .where(eq(paymentAllocations.chargeId, charge.id))
-    .orderBy(asc(payments.receivedOn), asc(payments.recordedAt))
+    .where(inArray(paymentAllocations.chargeId, ids))
+    .orderBy(asc(payments.receivedOn), asc(payments.recordedAt), asc(paymentAllocationSequence))
     .all()
-  const refundRows = database.select({
+    .forEach((row) => relations.get(row.allocation.chargeId)?.payments.push(row))
+
+  database.select({
     allocation: refundAllocations,
+    chargeId: paymentAllocations.chargeId,
     refund: refunds,
   }).from(refundAllocations)
     .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
@@ -292,11 +379,31 @@ function chargeView(
       paymentAllocations,
       eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
     )
-    .where(eq(paymentAllocations.chargeId, charge.id))
+    .where(inArray(paymentAllocations.chargeId, ids))
+    .orderBy(asc(refundAllocationSequence))
     .all()
-  const adjustmentRows = database.select().from(chargeAdjustments)
-    .where(eq(chargeAdjustments.chargeId, charge.id))
+    .forEach(({ allocation, chargeId, refund }) => {
+      relations.get(chargeId)?.refunds.push({ allocation, refund })
+    })
+
+  database.select().from(chargeAdjustments)
+    .where(inArray(chargeAdjustments.chargeId, ids))
+    .orderBy(asc(chargeAdjustmentSequence))
     .all()
+    .forEach((adjustment) => relations.get(adjustment.chargeId)?.adjustments.push(adjustment))
+
+  return relations
+}
+
+function chargeView(
+  charge: typeof financialCharges.$inferSelect,
+  relations: ChargeRelations,
+  now: Date,
+  includeInternal = false,
+) {
+  const allocationRows = relations.payments
+  const refundRows = relations.refunds
+  const adjustmentRows = relations.adjustments
   const ledgerInput = {
     originalAmountPaise: charge.originalAmountPaise,
     dueDate: charge.dueDate,
@@ -364,14 +471,254 @@ function chargeView(
   return view
 }
 
+/**
+ * Reads a whole set of charges in four queries instead of four per charge. The
+ * map is keyed by charge ID and iterates in the requested order; charges that do
+ * not exist are absent from it, exactly as `loadChargeView` returns null.
+ */
+export function loadChargeViews(
+  database: Executor,
+  chargeIds: string[],
+  now = new Date(),
+  includeInternal = false,
+) {
+  const views = new Map<string, ChargeView>()
+  const ids = [...new Set(chargeIds)]
+  if (!ids.length) return views
+
+  const charges = new Map(database.select().from(financialCharges)
+    .where(inArray(financialCharges.id, ids)).all()
+    .map((charge) => [charge.id, charge]))
+  const relations = loadChargeRelations(database, [...charges.keys()])
+  ids.forEach((chargeId) => {
+    const charge = charges.get(chargeId)
+    if (!charge) return
+    views.set(chargeId, chargeView(
+      charge,
+      relations.get(chargeId) ?? emptyChargeRelations(),
+      now,
+      includeInternal,
+    ))
+  })
+  return views
+}
+
 export function loadChargeView(
   database: Executor,
   chargeId: string,
   now = new Date(),
   includeInternal = false,
 ) {
-  const charge = readCharge(database, chargeId)
-  return charge ? chargeView(database, charge, now, includeInternal) : null
+  return loadChargeViews(database, [chargeId], now, includeInternal).get(chargeId) ?? null
+}
+
+type ReceiptAllocationRow = {
+  allocation: typeof paymentAllocations.$inferSelect
+  charge: typeof financialCharges.$inferSelect
+}
+
+function loadReceiptAllocations(database: Executor, paymentIds: string[]) {
+  const grouped = new Map<string, ReceiptAllocationRow[]>(paymentIds.map((paymentId) => [
+    paymentId,
+    [],
+  ]))
+  if (!grouped.size) return grouped
+  database.select({
+    allocation: paymentAllocations,
+    charge: financialCharges,
+  }).from(paymentAllocations)
+    .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
+    .where(inArray(paymentAllocations.paymentId, [...grouped.keys()]))
+    .orderBy(asc(financialCharges.dueDate), asc(financialCharges.id))
+    .all()
+    .forEach((row) => grouped.get(row.allocation.paymentId)?.push(row))
+  return grouped
+}
+
+function loadReceiptRefunds(database: Executor, paymentIds: string[]) {
+  const grouped = new Map<string, (typeof refunds.$inferSelect)[]>(paymentIds.map((paymentId) => [
+    paymentId,
+    [],
+  ]))
+  if (!grouped.size) return grouped
+  database.select().from(refunds)
+    .where(inArray(refunds.paymentId, [...grouped.keys()]))
+    .orderBy(desc(refunds.refundedOn), desc(refunds.recordedAt), desc(refunds.id))
+    .all()
+    .forEach((refund) => grouped.get(refund.paymentId)?.push(refund))
+  return grouped
+}
+
+function loadRecordedRefundPaiseByPayment(database: Executor, paymentIds: string[]) {
+  const totals = new Map<string, number>()
+  if (!paymentIds.length) return totals
+  database.select({
+    paymentId: paymentAllocations.paymentId,
+    total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
+  }).from(refundAllocations)
+    .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+    .innerJoin(
+      paymentAllocations,
+      eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+    )
+    .where(and(
+      inArray(paymentAllocations.paymentId, paymentIds),
+      eq(refunds.lifecycle, "recorded"),
+    ))
+    .groupBy(paymentAllocations.paymentId)
+    .all()
+    .forEach((row) => totals.set(row.paymentId, Number(row.total)))
+  return totals
+}
+
+function loadRecordedRefundPaiseByAllocation(database: Executor, allocationIds: string[]) {
+  const totals = new Map<string, number>()
+  if (!allocationIds.length) return totals
+  database.select({
+    paymentAllocationId: refundAllocations.paymentAllocationId,
+    total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
+  }).from(refundAllocations)
+    .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+    .where(and(
+      inArray(refundAllocations.paymentAllocationId, allocationIds),
+      eq(refunds.lifecycle, "recorded"),
+    ))
+    .groupBy(refundAllocations.paymentAllocationId)
+    .all()
+    .forEach((row) => totals.set(row.paymentAllocationId, Number(row.total)))
+  return totals
+}
+
+function loadRefundBreakdowns(database: Executor, refundIds: string[]) {
+  const grouped = new Map<string, {
+    amountPaise: number
+    paymentAllocationId: string
+    chargeId: string
+    feeReference: string
+  }[]>(refundIds.map((refundId) => [refundId, []]))
+  if (!grouped.size) return grouped
+  database.select({
+    amountPaise: refundAllocations.amountPaise,
+    paymentAllocationId: paymentAllocations.id,
+    chargeId: financialCharges.id,
+    feeReference: financialCharges.feeReference,
+    refundId: refundAllocations.refundId,
+  }).from(refundAllocations)
+    .innerJoin(
+      paymentAllocations,
+      eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+    )
+    .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
+    .where(inArray(refundAllocations.refundId, [...grouped.keys()]))
+    .orderBy(asc(refundAllocationSequence))
+    .all()
+    .forEach(({ refundId, ...allocation }) => grouped.get(refundId)?.push(allocation))
+  return grouped
+}
+
+function loadFeeAgreementsById(database: Executor, agreementIds: string[]) {
+  const agreements = new Map<string, typeof feeAgreements.$inferSelect>()
+  if (!agreementIds.length) return agreements
+  database.select().from(feeAgreements)
+    .where(inArray(feeAgreements.id, agreementIds))
+    .all()
+    .forEach((agreement) => agreements.set(agreement.id, agreement))
+  return agreements
+}
+
+function loadLatestIssuedMonthlyPeriods(database: Executor, playerIds: string[]) {
+  const periods = new Map<string, string>()
+  if (!playerIds.length) return periods
+  database.select({
+    playerId: financialCharges.playerAccountId,
+    latestPeriod: sql<string | null>`max(${financialCharges.billingPeriod})`,
+  }).from(financialCharges)
+    .where(and(
+      inArray(financialCharges.playerAccountId, playerIds),
+      eq(financialCharges.type, "monthly_training"),
+      eq(financialCharges.lifecycle, "issued"),
+    ))
+    .groupBy(financialCharges.playerAccountId)
+    .all()
+    .forEach((row) => {
+      if (row.latestPeriod !== null) periods.set(row.playerId, row.latestPeriod)
+    })
+  return periods
+}
+
+function loadRecordedWithdrawalChargeIds(database: Executor, chargeIds: string[]) {
+  const marked = new Set<string>()
+  if (!chargeIds.length) return marked
+  database.select({ chargeId: paymentAllocations.chargeId })
+    .from(refundAllocations)
+    .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+    .innerJoin(
+      paymentAllocations,
+      eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+    )
+    .where(and(
+      inArray(paymentAllocations.chargeId, chargeIds),
+      eq(refunds.lifecycle, "recorded"),
+      eq(refunds.purpose, "mid_term_withdrawal"),
+    )).all()
+    .forEach((row) => marked.add(row.chargeId))
+  return marked
+}
+
+function loadReversedWithdrawalRefunds(database: Executor, chargeIds: string[]) {
+  const grouped = new Map<string, { withdrawalEffectiveOn: string | null }[]>(
+    chargeIds.map((chargeId) => [chargeId, []]),
+  )
+  if (!grouped.size) return grouped
+  database.select({
+    chargeId: paymentAllocations.chargeId,
+    withdrawalEffectiveOn: refunds.withdrawalEffectiveOn,
+  }).from(refundAllocations)
+    .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
+    .innerJoin(
+      paymentAllocations,
+      eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+    )
+    .where(and(
+      inArray(paymentAllocations.chargeId, [...grouped.keys()]),
+      eq(refunds.lifecycle, "reversed"),
+      eq(refunds.purpose, "mid_term_withdrawal"),
+    ))
+    .orderBy(asc(refundAllocationSequence))
+    .all()
+    .forEach(({ chargeId, withdrawalEffectiveOn }) => {
+      grouped.get(chargeId)?.push({ withdrawalEffectiveOn })
+    })
+  return grouped
+}
+
+/**
+ * Reads everything the coach-only receipt view needs for a whole payment history
+ * in a fixed number of queries. Only the internal view reaches this data, so the
+ * caller loads it exclusively when internal fields were requested.
+ */
+function loadCoachReceiptContext(
+  database: Executor,
+  allocationRows: ReceiptAllocationRow[],
+  refundRows: (typeof refunds.$inferSelect)[],
+) {
+  const chargeIds = [...new Set(allocationRows.map(({ charge }) => charge.id))]
+  return {
+    agreements: loadFeeAgreementsById(database, [...new Set(allocationRows
+      .map(({ charge }) => charge.feeAgreementId)
+      .filter((agreementId): agreementId is string => agreementId !== null))]),
+    chargeRelations: loadChargeRelations(database, chargeIds),
+    latestIssuedMonthlyPeriods: loadLatestIssuedMonthlyPeriods(database, [...new Set(
+      allocationRows.map(({ charge }) => charge.playerAccountId),
+    )]),
+    recordedWithdrawalChargeIds: loadRecordedWithdrawalChargeIds(database, chargeIds),
+    refundBreakdowns: loadRefundBreakdowns(database, refundRows.map((refund) => refund.id)),
+    refundedPaiseByAllocation: loadRecordedRefundPaiseByAllocation(
+      database,
+      allocationRows.map(({ allocation }) => allocation.id),
+    ),
+    reversedWithdrawalRefunds: loadReversedWithdrawalRefunds(database, chargeIds),
+  }
 }
 
 function loadPlayerPhaseTwoHistory(
@@ -384,31 +731,21 @@ function loadPlayerPhaseTwoHistory(
     .where(eq(payments.playerAccountId, playerId))
     .orderBy(desc(payments.receivedOn), desc(payments.recordedAt), desc(payments.id))
     .all()
+  const paymentIds = paymentRows.map((payment) => payment.id)
+  const allocationsByPayment = loadReceiptAllocations(database, paymentIds)
+  const refundsByPayment = loadReceiptRefunds(database, paymentIds)
+  const refundedPaiseByPayment = loadRecordedRefundPaiseByPayment(database, paymentIds)
+  const coachContext = includeInternal
+    ? loadCoachReceiptContext(
+      database,
+      [...allocationsByPayment.values()].flat(),
+      [...refundsByPayment.values()].flat(),
+    )
+    : null
   const receiptPairs = paymentRows.map((payment) => {
-    const allocations = database.select({
-      allocation: paymentAllocations,
-      charge: financialCharges,
-    }).from(paymentAllocations)
-      .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
-      .where(eq(paymentAllocations.paymentId, payment.id))
-      .orderBy(asc(financialCharges.dueDate), asc(financialCharges.id))
-      .all()
-    const paymentRefunds = database.select().from(refunds)
-      .where(eq(refunds.paymentId, payment.id))
-      .orderBy(desc(refunds.refundedOn), desc(refunds.recordedAt), desc(refunds.id))
-      .all()
-    const activeAllocatedRefundPaise = database.select({
-      total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
-    }).from(refundAllocations)
-      .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
-      .innerJoin(
-        paymentAllocations,
-        eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
-      )
-      .where(and(
-        eq(paymentAllocations.paymentId, payment.id),
-        eq(refunds.lifecycle, "recorded"),
-      )).get()?.total ?? 0
+    const allocations = allocationsByPayment.get(payment.id) ?? []
+    const paymentRefunds = refundsByPayment.get(payment.id) ?? []
+    const activeAllocatedRefundPaise = refundedPaiseByPayment.get(payment.id) ?? 0
     const publicRefunds = paymentRefunds.map((refund) => ({
       id: refund.id,
       paymentId: payment.id,
@@ -440,60 +777,35 @@ function loadPlayerPhaseTwoHistory(
       refunds: publicRefunds,
       refundedPaise: Number(activeAllocatedRefundPaise),
     }
-    if (!includeInternal) return { publicReceipt, coachReceipt: null, coachRefunds: [] }
+    if (!includeInternal || !coachContext) {
+      return { publicReceipt, coachReceipt: null, coachRefunds: [] }
+    }
 
     const coachAllocations = allocations.map(({ allocation, charge }) => {
-      const activeRefunded = database.select({
-        total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
-      }).from(refundAllocations)
-        .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
-        .where(and(
-          eq(refundAllocations.paymentAllocationId, allocation.id),
-          eq(refunds.lifecycle, "recorded"),
-        )).get()?.total ?? 0
-      const chargeLedger = chargeView(database, charge, now)
+      const activeRefunded = coachContext.refundedPaiseByAllocation.get(allocation.id) ?? 0
+      const chargeLedger = chargeView(
+        charge,
+        coachContext.chargeRelations.get(charge.id) ?? emptyChargeRelations(),
+        now,
+      )
       const agreement = charge.feeAgreementId
-        ? database.select().from(feeAgreements)
-          .where(eq(feeAgreements.id, charge.feeAgreementId)).get()
+        ? coachContext.agreements.get(charge.feeAgreementId) ?? null
         : null
-      const laterCharge = charge.billingPeriod
-        ? database.select({ id: financialCharges.id }).from(financialCharges).where(and(
-          eq(financialCharges.playerAccountId, charge.playerAccountId),
-          eq(financialCharges.type, "monthly_training"),
-          eq(financialCharges.lifecycle, "issued"),
-          gt(financialCharges.billingPeriod, charge.billingPeriod),
-        )).get()
-        : null
-      const activeWithdrawalRefund = database.select({ id: refunds.id })
-        .from(refundAllocations)
-        .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
-        .innerJoin(
-          paymentAllocations,
-          eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
-        )
-        .where(and(
-          eq(paymentAllocations.chargeId, charge.id),
-          eq(refunds.lifecycle, "recorded"),
-          eq(refunds.purpose, "mid_term_withdrawal"),
-        )).get()
-      const reversedWithdrawalRefund = database.select({
-        id: refunds.id,
-        withdrawalEffectiveOn: refunds.withdrawalEffectiveOn,
-      })
-        .from(refundAllocations)
-        .innerJoin(refunds, eq(refunds.id, refundAllocations.refundId))
-        .innerJoin(
-          paymentAllocations,
-          eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
-        )
-        .where(and(
-          eq(paymentAllocations.chargeId, charge.id),
-          eq(refunds.lifecycle, "reversed"),
-          eq(refunds.purpose, "mid_term_withdrawal"),
-          agreement?.effectiveTo
-            ? eq(refunds.withdrawalEffectiveOn, agreement.effectiveTo)
-            : undefined,
-        )).get()
+      const latestIssuedPeriod = coachContext.latestIssuedMonthlyPeriods
+        .get(charge.playerAccountId) ?? null
+      const laterCharge = charge.billingPeriod !== null
+        && latestIssuedPeriod !== null
+        && latestIssuedPeriod > charge.billingPeriod
+      const activeWithdrawalRefund = coachContext.recordedWithdrawalChargeIds.has(charge.id)
+      const reversedWithdrawalRefunds = coachContext.reversedWithdrawalRefunds
+        .get(charge.id) ?? []
+      // The per-charge read took the first row it found, narrowed to the
+      // agreement's end date whenever the agreement carried one.
+      const reversedWithdrawalRefund = agreement?.effectiveTo
+        ? reversedWithdrawalRefunds.find((row) => (
+          row.withdrawalEffectiveOn === agreement.effectiveTo
+        ))
+        : reversedWithdrawalRefunds[0]
       const agreementCanClose = agreement?.status === "active"
         || (agreement?.status === "ended"
           && reversedWithdrawalRefund?.withdrawalEffectiveOn === agreement.effectiveTo)
@@ -515,19 +827,7 @@ function loadPlayerPhaseTwoHistory(
       }
     })
     const coachRefunds = paymentRefunds.map((refund) => {
-      const allocationsForRefund = database.select({
-        amountPaise: refundAllocations.amountPaise,
-        paymentAllocationId: paymentAllocations.id,
-        chargeId: financialCharges.id,
-        feeReference: financialCharges.feeReference,
-      }).from(refundAllocations)
-        .innerJoin(
-          paymentAllocations,
-          eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
-        )
-        .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
-        .where(eq(refundAllocations.refundId, refund.id))
-        .all()
+      const allocationsForRefund = coachContext.refundBreakdowns.get(refund.id) ?? []
       return {
         ...publicRefunds.find((item) => item.id === refund.id)!,
         method: refund.method as PaymentMethod,
@@ -636,11 +936,17 @@ export function loadPlayerFeeRecord(
 ): PlayerFeeRecord | null {
   const player = readFinancePlayer(database, playerId)
   if (!player) return null
-  const charges = database.select().from(financialCharges)
+  const chargeRows = database.select().from(financialCharges)
     .where(eq(financialCharges.playerAccountId, playerId))
     .orderBy(asc(financialCharges.dueDate), asc(financialCharges.issuedAt))
     .all()
-    .map((charge) => chargeView(database, charge, now, includeInternal))
+  const chargeRelations = loadChargeRelations(database, chargeRows.map((charge) => charge.id))
+  const charges = chargeRows.map((charge) => chargeView(
+    charge,
+    chargeRelations.get(charge.id) ?? emptyChargeRelations(),
+    now,
+    includeInternal,
+  ))
   const activeCharges = charges.filter((charge) => charge.lifecycle === "issued")
   const agreement = readActiveFeeAgreement(database, playerId)
   const activation = readFinanceActivation(database)

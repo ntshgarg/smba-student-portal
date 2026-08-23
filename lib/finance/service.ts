@@ -60,6 +60,7 @@ import {
   listMonthlyPreparationCandidates,
   listPreparedPlayerIds,
   loadChargeView,
+  loadPeriodAssignmentIndex,
   loadPlayerFeeRecord,
   readActiveFeeAgreement,
   readActivePlayer,
@@ -67,7 +68,6 @@ import {
   readCharge,
   readFinanceActivation,
   readFirstMonthSessionProration,
-  hasAssignmentInPeriod,
   hasCurrentOrFutureMatchingAssignment,
   readPaymentByIdempotencyKey,
   readPeriodReceivedPaise,
@@ -679,17 +679,15 @@ function monthlyPreparationCandidates(
       candidatesByPlayer.set(playerId, candidate)
     }
   })
-  return [...candidatesByPlayer.values()].map((candidate) => ({
+  const candidates = [...candidatesByPlayer.values()]
+  const playerIds = candidates.map((candidate) => candidate.agreement.playerAccountId)
+  const periodAssignments = loadPeriodAssignmentIndex(database, playerIds, period)
+  return candidates.map((candidate) => ({
     ...candidate,
-    hasAssignment: hasAssignmentInPeriod(
-      database,
-      candidate.agreement.playerAccountId,
-      period,
-      {
-        programme: candidate.agreement.level,
-        batch: candidate.agreement.batch,
-      },
-    ),
+    hasAssignment: periodAssignments.has(candidate.agreement.playerAccountId, {
+      programme: candidate.agreement.level,
+      batch: candidate.agreement.batch,
+    }),
   }))
 }
 
@@ -4150,24 +4148,48 @@ export function listFinanceCollectionEvents(
       lte(refunds.refundedOn, input.to),
     )).all()
 
-  const feeReferencesForPayment = (paymentId: string) => [...new Set(database.select({
-    feeReference: financialCharges.feeReference,
-  }).from(paymentAllocations)
-    .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
-    .where(eq(paymentAllocations.paymentId, paymentId))
-    .orderBy(asc(financialCharges.dueDate), asc(financialCharges.id))
-    .all().map((row) => row.feeReference))]
-  const feeReferencesForRefund = (refundId: string) => [...new Set(database.select({
-    feeReference: financialCharges.feeReference,
-  }).from(refundAllocations)
-    .innerJoin(
-      paymentAllocations,
-      eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
-    )
-    .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
-    .where(eq(refundAllocations.refundId, refundId))
-    .orderBy(asc(financialCharges.dueDate), asc(financialCharges.id))
-    .all().map((row) => row.feeReference))]
+  // Both reads cover every event in the range at once. The charge ID breaks ties
+  // in the shared sort, so grouping by parent keeps each list in the order a
+  // single-parent read produced.
+  const groupReferences = <Row extends { feeReference: string }>(
+    rows: Row[],
+    parentOf: (row: Row) => string,
+  ) => {
+    const grouped = new Map<string, string[]>()
+    rows.forEach((row) => {
+      const references = grouped.get(parentOf(row)) ?? []
+      if (!references.includes(row.feeReference)) references.push(row.feeReference)
+      grouped.set(parentOf(row), references)
+    })
+    return grouped
+  }
+  const paymentIds = [...new Set(paymentRows.map((row) => row.paymentId))]
+  const refundIds = [...new Set(refundRows.map((row) => row.refundId))]
+
+  const feeReferencesByPayment = groupReferences(paymentIds.length
+    ? database.select({
+      feeReference: financialCharges.feeReference,
+      paymentId: paymentAllocations.paymentId,
+    }).from(paymentAllocations)
+      .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
+      .where(inArray(paymentAllocations.paymentId, paymentIds))
+      .orderBy(asc(financialCharges.dueDate), asc(financialCharges.id))
+      .all()
+    : [], (row) => row.paymentId)
+  const feeReferencesByRefund = groupReferences(refundIds.length
+    ? database.select({
+      feeReference: financialCharges.feeReference,
+      refundId: refundAllocations.refundId,
+    }).from(refundAllocations)
+      .innerJoin(
+        paymentAllocations,
+        eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+      )
+      .innerJoin(financialCharges, eq(financialCharges.id, paymentAllocations.chargeId))
+      .where(inArray(refundAllocations.refundId, refundIds))
+      .orderBy(asc(financialCharges.dueDate), asc(financialCharges.id))
+      .all()
+    : [], (row) => row.refundId)
 
   return [
     ...paymentRows.map((row): FinanceCollectionEvent => ({
@@ -4178,7 +4200,7 @@ export function listFinanceCollectionEvents(
       academyId: formatAcademyId(row.academyIdSerial),
       method: row.method as PaymentMethod,
       amountPaise: row.amountPaise,
-      coveredFeeReferences: feeReferencesForPayment(row.paymentId),
+      coveredFeeReferences: feeReferencesByPayment.get(row.paymentId) ?? [],
     })),
     ...refundRows.map((row): FinanceCollectionEvent => ({
       eventDate: row.eventDate,
@@ -4188,7 +4210,7 @@ export function listFinanceCollectionEvents(
       academyId: formatAcademyId(row.academyIdSerial),
       method: row.method as PaymentMethod,
       amountPaise: row.amountPaise,
-      coveredFeeReferences: feeReferencesForRefund(row.refundId),
+      coveredFeeReferences: feeReferencesByRefund.get(row.refundId) ?? [],
     })),
   ].sort((left, right) => (
     right.eventDate.localeCompare(left.eventDate)

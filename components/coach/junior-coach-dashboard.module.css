@@ -30,7 +30,7 @@
   width: 20px;
   height: 20px;
   border: 1px solid var(--line);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--ivory);
   content: "";
   transform: translateY(-50%);
@@ -68,7 +68,7 @@
   padding: 6px 9px 5px;
   border: 1px solid color-mix(in srgb, var(--red) 55%, var(--line));
   color: var(--red);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -169,7 +169,7 @@
   font-size: 11px;
   font-weight: 780;
   text-align: left;
-  transition: background 180ms ease, color 180ms ease;
+  transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
 
 .ledgerActionButton:hover {

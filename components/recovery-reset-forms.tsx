@@ -9,30 +9,48 @@ import {
   type RecoveryPasswordState,
   type RecoverySecondFactorState,
 } from "@/app/recover/actions"
+import { AuthField } from "@/components/auth-field"
 import { PasswordInput } from "@/components/password-input"
 
 const initialFactorState: RecoverySecondFactorState = { error: null }
 const initialPasswordState: RecoveryPasswordState = { error: null, errorField: null }
+const factorErrorId = "recovery-factor-error"
+const passwordErrorId = "recovery-password-error"
 
 export function RecoverySecondFactorForm() {
   const [state, action, pending] = useActionState(verifyRecoverySecondFactorAction, initialFactorState)
+  const credentialRef = useRef<HTMLInputElement>(null)
+  const submissionStartedRef = useRef(false)
+  useEffect(() => {
+    if (pending) {
+      submissionStartedRef.current = true
+      return
+    }
+    if (!submissionStartedRef.current || !state.error) return
+    submissionStartedRef.current = false
+    const timeout = window.setTimeout(() => credentialRef.current?.focus(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [pending, state])
   return (
     <form className="login-form" action={action} noValidate>
-      <div className="login-field">
-        <label htmlFor="recovery-second-factor">Authenticator or recovery code</label>
-        <input
-          id="recovery-second-factor"
-          name="credential"
-          type="text"
-          autoComplete="one-time-code"
-          required
-          aria-describedby="recovery-second-factor-help"
-        />
-        <p id="recovery-second-factor-help" className="login-helper">
-          Enter the current six-digit authenticator code or one unused saved recovery code.
-        </p>
-      </div>
-      {state.error ? <p className="login-error" role="alert">{state.error}</p> : null}
+      <AuthField
+        id="recovery-second-factor"
+        label="Authenticator or recovery code"
+        errorId={state.error ? factorErrorId : undefined}
+        helper="Enter the current six-digit authenticator code or one unused saved recovery code."
+      >
+        {(control) => (
+          <input
+            {...control}
+            ref={credentialRef}
+            name="credential"
+            type="text"
+            autoComplete="one-time-code"
+            required
+          />
+        )}
+      </AuthField>
+      {state.error ? <p id={factorErrorId} className="login-error" role="alert">{state.error}</p> : null}
       <button className="login-submit" type="submit" disabled={pending}>
         <span>{pending ? "Verifying…" : "Verify and continue"}</span>
         <ArrowRight aria-hidden="true" />
@@ -48,19 +66,29 @@ export function RecoveryPasswordForm() {
   useEffect(() => {
     if (state.errorField === "password") passwordRef.current?.focus()
     if (state.errorField === "confirmPassword") confirmRef.current?.focus()
-  }, [state.errorField])
+  }, [state])
   return (
     <form className="login-form" action={action} noValidate>
-      <div className="login-field">
-        <label htmlFor="recovery-new-password">New password</label>
-        <PasswordInput ref={passwordRef} id="recovery-new-password" name="password" autoComplete="new-password" minLength={12} maxLength={128} required />
-      </div>
-      <div className="login-field">
-        <label htmlFor="recovery-confirm-password">Confirm new password</label>
-        <PasswordInput ref={confirmRef} id="recovery-confirm-password" name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required />
-      </div>
+      <AuthField
+        id="recovery-new-password"
+        label="New password"
+        errorId={state.error && state.errorField === "password" ? passwordErrorId : undefined}
+      >
+        {(control) => (
+          <PasswordInput {...control} ref={passwordRef} name="password" autoComplete="new-password" minLength={12} maxLength={128} required />
+        )}
+      </AuthField>
+      <AuthField
+        id="recovery-confirm-password"
+        label="Confirm new password"
+        errorId={state.error && state.errorField === "confirmPassword" ? passwordErrorId : undefined}
+      >
+        {(control) => (
+          <PasswordInput {...control} ref={confirmRef} name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required />
+        )}
+      </AuthField>
       <p className="login-helper">Resetting logs out every device and removes the old PIN. Your authenticator remains connected.</p>
-      {state.error ? <p className="login-error" role="alert">{state.error}</p> : null}
+      {state.error ? <p id={passwordErrorId} className="login-error" role="alert">{state.error}</p> : null}
       <button className="login-submit" type="submit" disabled={pending}>
         <span>{pending ? "Resetting password…" : "Reset password"}</span>
         <ArrowRight aria-hidden="true" />

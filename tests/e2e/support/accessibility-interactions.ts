@@ -25,6 +25,17 @@ async function clickFirstVisible(locator: Locator) {
   return candidate
 }
 
+// The audit only checks that closing a dialog restores focus when it can identify
+// the trigger, which it does through this attribute. Marking the trigger here
+// keeps that check available to every dialog state rather than just one.
+async function openDialogFrom(trigger: Locator) {
+  await trigger.evaluate((element) => {
+    element.setAttribute("data-accessibility-dialog-opener", "true")
+  })
+  await trigger.click()
+  await trigger.page().locator("dialog[open]").waitFor({ state: "visible" })
+}
+
 export async function executeAccessibilityInteraction(
   page: Page,
   interaction: AccessibilityInteraction,
@@ -32,6 +43,25 @@ export async function executeAccessibilityInteraction(
   switch (interaction) {
     case "account-security-errors": {
       await clickFirstVisible(page.getByRole("button", { name: "Change password" }))
+      break
+    }
+    case "announcement-review-open": {
+      // The composer only opens the dialog once a title, a message and one
+      // destination are present, so the audited state has to be typed first.
+      await page.getByRole("textbox", { name: "Title" })
+        .fill("Accessibility review dialog announcement")
+      await page.getByRole("textbox", { name: "Message" })
+        .fill("The audit opens the review dialog to check its focus handling.")
+      await page.getByRole("checkbox", { name: "Homepage" }).check()
+      await openDialogFrom(page.getByRole("button", { name: "Review announcement" }))
+      break
+    }
+    case "announcement-withdraw-open": {
+      // Scoped to the detail panel because the dialog it opens carries a button
+      // with the same accessible name.
+      await openDialogFrom(
+        page.locator("article").getByRole("button", { name: "Withdraw announcement" }),
+      )
       break
     }
     case "attendance-session-open": {
@@ -117,10 +147,17 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "report-preview-open": {
-      const trigger = page.getByRole("button", { name: "Preview", exact: true })
-      await trigger.evaluate((element) => element.setAttribute("data-accessibility-dialog-opener", "true"))
-      await trigger.click()
-      await page.locator("dialog[open]").waitFor({ state: "visible" })
+      await openDialogFrom(page.getByRole("button", { name: "Preview", exact: true }))
+      break
+    }
+    case "report-publication-open": {
+      // Publications get random ids, so the detail page is reached by opening one
+      // from the archive. A report with several revisions renders the most.
+      const withHistory = page.getByRole("link", { name: /latest revision [2-9]/u })
+      await clickFirstVisible(await withHistory.count()
+        ? withHistory
+        : page.getByRole("link", { name: /^Open report for/u }))
+      await page.waitForLoadState("domcontentloaded")
       break
     }
     case "search-admin-directory": {

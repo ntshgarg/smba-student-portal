@@ -70,6 +70,9 @@ export default async function AdminPage() {
 
   return (
     <>
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <header className="portal-header">
         <Link className="portal-brand" href="/admin" aria-label="SMBA platform owner home">
           <Image
@@ -87,7 +90,7 @@ export default async function AdminPage() {
         <AccountMenu account={identity} publicSiteHref="/" />
       </header>
 
-      <main className="admin-page page-shell">
+      <main id="main-content" className="admin-page page-shell" tabIndex={-1}>
         <header className="admin-page-header">
           <div className="admin-signal-copy">
             <div className="admin-owner-ribbon">

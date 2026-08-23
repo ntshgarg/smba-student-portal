@@ -6,7 +6,7 @@
 .site-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--z-header);
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -57,7 +57,7 @@
   background: var(--red);
   content: "";
   transform: scaleX(0);
-  transition: transform 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
 .desktop-nav a:hover::after,
@@ -72,14 +72,14 @@
   justify-content: center;
   gap: 12px;
   padding: 0 18px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--navy);
   color: var(--white);
   font-size: 13px;
   font-weight: 700;
   transition:
-    background 180ms ease,
-    transform 180ms ease;
+    background var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
 }
 
 .header-actions {
@@ -121,7 +121,7 @@
   content: "";
   transform: scaleX(0);
   transform-origin: right;
-  transition: transform 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
 .header-login:hover::after,
@@ -136,7 +136,7 @@
   height: 44px;
   place-items: center;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: transparent;
   color: var(--white);
 }
@@ -146,12 +146,12 @@
   width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--navy);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.05em;
-  transition: transform 180ms ease, background 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard), background var(--duration-base) var(--ease-standard);
 }
 
 .header-account-button:hover > span,
@@ -310,14 +310,14 @@
   gap: 14px;
   padding: 0 22px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 750;
   transition:
-    transform 180ms ease,
-    color 180ms ease,
-    background 180ms ease,
-    border-color 180ms ease;
+    transform var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard),
+    background var(--duration-base) var(--ease-standard),
+    border-color var(--duration-base) var(--ease-standard);
 }
 
 .button svg {
@@ -382,7 +382,7 @@
   width: 3px;
   height: 3px;
   margin-inline: 14px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--red);
   content: "";
 }
@@ -811,7 +811,7 @@
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
-  transition: color 180ms ease;
+  transition: color var(--duration-base) var(--ease-standard);
 }
 
 .path-level {
@@ -954,9 +954,9 @@
   font-weight: 750;
   text-align: left;
   transition:
-    background 180ms ease,
-    color 180ms ease,
-    box-shadow 180ms ease;
+    background var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
 }
 
 .segmented button > span {
@@ -972,7 +972,7 @@
 .segmented button[aria-pressed="true"] {
   background: var(--ivory);
   color: var(--navy);
-  box-shadow: inset 0 -3px 0 var(--red);
+  box-shadow: var(--shadow-keyline-bottom);
 }
 
 .segmented button > svg {
@@ -1027,15 +1027,15 @@
   gap: 6px;
   padding: 0 13px;
   border: 1px solid rgba(247, 245, 240, 0.16);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: rgba(247, 245, 240, 0.66);
   font-size: 11px;
   font-weight: 750;
   transition:
-    border 160ms ease,
-    color 160ms ease,
-    background 160ms ease;
+    border var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
 }
 
 .choice-row button:hover {
@@ -1152,7 +1152,7 @@
   padding: clamp(24px, 2.4vw, 30px);
   overflow: hidden;
   background: var(--ivory);
-  transition: background 180ms ease;
+  transition: background var(--duration-base) var(--ease-standard);
 }
 
 .proof-card:hover {
@@ -1304,7 +1304,7 @@
   width: 100%;
   min-height: 46px;
   border: 1px solid #ced4d7;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: transparent;
   box-shadow: none;
   color: var(--ink);
@@ -1552,7 +1552,7 @@
   gap: 18px;
   padding: 24px;
   background: var(--ivory);
-  transition: background 180ms ease;
+  transition: background var(--duration-base) var(--ease-standard);
 }
 
 .contact-card:hover {
@@ -1752,7 +1752,7 @@
 
   .mobile-nav-overlay {
     position: fixed;
-    z-index: 40;
+    z-index: var(--z-overlay);
     top: var(--public-mobile-header-height);
     right: 0;
     bottom: 0;

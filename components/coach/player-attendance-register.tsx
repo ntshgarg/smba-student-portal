@@ -185,7 +185,7 @@ export function PlayerAttendanceRegister({
           ) : (
             <>
               <div className="coach-register-controls">
-                <div className="coach-year-selector" aria-label="Choose attendance year">
+                <div className="coach-year-selector" role="group" aria-label="Choose attendance year">
                   {yearOptions.map((year) => (
                     <button
                       key={year}
@@ -265,6 +265,7 @@ export function PlayerAttendanceRegister({
                   ref={registerScrollRef}
                   onScroll={handleRegisterScroll}
                   tabIndex={0}
+                  role="region"
                   aria-label="Scrollable annual player attendance register"
                 >
                   <table

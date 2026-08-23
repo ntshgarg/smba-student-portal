@@ -20,6 +20,11 @@ const WCAG_TAGS = [
   "wcag22aa",
 ] as const
 
+// Every landmark and structural rule axe ships — region, landmark-one-main,
+// landmark-unique, aria-allowed-role — carries only this tag, so the WCAG tags
+// above never evaluate them.
+const BEST_PRACTICE_TAGS = ["best-practice"] as const
+
 export type AccessibilityFinding = {
   helpUrl?: string
   id: string
@@ -29,8 +34,19 @@ export type AccessibilityFinding = {
   targets?: string[]
 }
 
+export type AccessibilityAdvisoryCategory =
+  | "best-practice"
+  | "best-practice-needs-review"
+  | "needs-review"
+
+export type AccessibilityAdvisory = AccessibilityFinding & {
+  category: AccessibilityAdvisoryCategory
+}
+
 export type AccessibilityResult = {
   actor: AccessibilityActor
+  // Reported and never asserted on. The gate fails on findings alone.
+  advisories?: AccessibilityAdvisory[]
   description: string
   findings: AccessibilityFinding[]
   id: string
@@ -40,6 +56,8 @@ export type AccessibilityResult = {
   url: string
   viewport: AccessibilityViewport
 }
+
+type AxeRuleResult = Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"][number]
 
 type DomAudit = {
   ariaReferences: Array<{ attribute: string; id: string; source: string }>
@@ -78,6 +96,24 @@ function finding(input: AccessibilityFinding): AccessibilityFinding {
     message: sanitizeAccessibilityText(input.message),
     targets: input.targets?.map(sanitizeAccessibilityText),
   }
+}
+
+function axeFindings(results: readonly AxeRuleResult[]): AccessibilityFinding[] {
+  return results.flatMap((result) => result.nodes.map((node) => finding({
+    helpUrl: result.helpUrl,
+    id: result.id,
+    impact: severity(node.impact ?? result.impact),
+    message: `${result.help}: ${node.failureSummary ?? result.description}`,
+    source: "axe",
+    targets: node.target.map(String),
+  })))
+}
+
+function axeAdvisories(
+  category: AccessibilityAdvisoryCategory,
+  results: readonly AxeRuleResult[],
+): AccessibilityAdvisory[] {
+  return axeFindings(results).map((item) => ({ ...item, category }))
 }
 
 function domFindings(audit: DomAudit, viewport: AccessibilityViewport) {
@@ -570,6 +606,28 @@ async function keyboardFindings(page: Page) {
   return findings
 }
 
+async function bestPracticeAdvisories(page: Page): Promise<AccessibilityAdvisory[]> {
+  try {
+    const audit = await new AxeBuilder({ page }).withTags([...BEST_PRACTICE_TAGS]).analyze()
+    return [
+      ...axeAdvisories("best-practice", audit.violations),
+      ...axeAdvisories("best-practice-needs-review", audit.incomplete),
+    ]
+  } catch (error) {
+    // The caller turns a thrown error into a critical blocking finding, and
+    // nothing here is allowed to fail the gate.
+    return [{
+      category: "best-practice",
+      id: "best-practice-audit",
+      impact: "moderate",
+      message: sanitizeAccessibilityText(
+        `The best-practice pass did not complete: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+      source: "axe",
+    }]
+  }
+}
+
 export async function auditAccessibilityState({
   actor,
   description,
@@ -588,19 +646,19 @@ export async function auditAccessibilityState({
   viewport: AccessibilityViewport
 }): Promise<AccessibilityResult> {
   const axe = await new AxeBuilder({ page }).withTags([...WCAG_TAGS]).analyze()
-  const findings = axe.violations.flatMap((violation) => violation.nodes.map((node) => finding({
-    helpUrl: violation.helpUrl,
-    id: violation.id,
-    impact: severity(node.impact ?? violation.impact),
-    message: `${violation.help}: ${node.failureSummary ?? violation.description}`,
-    source: "axe",
-    targets: node.target.map(String),
-  })))
+  const findings = axeFindings(axe.violations)
+  // Both advisory sets are collected before the checks below move focus and
+  // scroll the page, so they describe the same state the blocking pass saw.
+  const advisories = [
+    ...axeAdvisories("needs-review", axe.incomplete),
+    ...await bestPracticeAdvisories(page),
+  ]
   findings.push(...domFindings(await collectDomAudit(page, viewport), viewport))
   findings.push(...await interactionFindings(page))
   findings.push(...await keyboardFindings(page))
   return {
     actor,
+    advisories,
     description,
     findings,
     id,
@@ -617,6 +675,72 @@ export function formatAccessibilityFailures(results: readonly AccessibilityResul
     const targets = item.targets?.length ? ` [${item.targets.join(", ")}]` : ""
     return `${result.id} · ${result.viewport.label} · ${item.impact} · ${item.id}: ${item.message}${targets}`
   }))
+}
+
+export function formatAccessibilityAdvisories(results: readonly AccessibilityResult[]) {
+  return results.flatMap((result) => (result.advisories ?? []).map((item) => {
+    const targets = item.targets?.length ? ` [${item.targets.join(", ")}]` : ""
+    return `${result.id} · ${result.viewport.label} · ${item.category} · ${item.id}: ${item.message}${targets}`
+  }))
+}
+
+export function countAccessibilityAdvisories(results: readonly AccessibilityResult[]) {
+  const counts: Record<AccessibilityAdvisoryCategory, number> = {
+    "best-practice": 0,
+    "best-practice-needs-review": 0,
+    "needs-review": 0,
+  }
+  for (const result of results) {
+    for (const item of result.advisories ?? []) counts[item.category] += 1
+  }
+  return counts
+}
+
+function advisorySummaryLines(results: readonly AccessibilityResult[]) {
+  const total = formatAccessibilityAdvisories(results).length
+  if (!total) return []
+  const counts = countAccessibilityAdvisories(results)
+  const rules = new Map<string, {
+    category: AccessibilityAdvisoryCategory
+    id: string
+    occurrences: number
+    states: Set<string>
+  }>()
+  for (const result of results) {
+    for (const item of result.advisories ?? []) {
+      const key = `${item.category}\u0000${item.id}`
+      const entry = rules.get(key)
+        ?? { category: item.category, id: item.id, occurrences: 0, states: new Set<string>() }
+      entry.occurrences += 1
+      entry.states.add(result.id)
+      rules.set(key, entry)
+    }
+  }
+  const lines = [
+    "",
+    "### Non-blocking advisories",
+    "",
+    "Reported for triage; these do not fail the gate. Needs-review items are axe"
+      + " checks that could not decide without a human. Best-practice items come from"
+      + " rules outside the WCAG tags, which is where every landmark rule lives.",
+    "",
+    `- Needs review: ${counts["needs-review"]}`,
+    `- Best practice: ${counts["best-practice"]}`,
+    `- Best practice needs review: ${counts["best-practice-needs-review"]}`,
+    `- Advisories: ${total}`,
+    "",
+    "| Category | Rule | Occurrences | States |",
+    "|---|---|---|---|",
+  ]
+  const ranked = [...rules.entries()]
+    .sort(([leftKey, left], [rightKey, right]) => (
+      right.occurrences - left.occurrences || leftKey.localeCompare(rightKey)
+    ))
+  for (const [, entry] of ranked.slice(0, 30)) {
+    lines.push(`| ${entry.category} | ${entry.id} | ${entry.occurrences} | ${entry.states.size} |`)
+  }
+  if (ranked.length > 30) lines.push(`| … | ${ranked.length - 30} further rules | | |`)
+  return lines
 }
 
 export function buildAccessibilitySummary(results: readonly AccessibilityResult[]) {
@@ -644,6 +768,7 @@ export function buildAccessibilitySummary(results: readonly AccessibilityResult[
       }
     }
   }
+  lines.push(...advisorySummaryLines(results))
   return `${lines.join("\n")}\n`
 }
 
@@ -656,6 +781,15 @@ export function writeAccessibilityResults(
   const summaryPath = path.join(outputDirectory, "summary.sanitized.txt")
   writeFileSync(jsonPath, `${JSON.stringify(results, null, 2)}\n`, { mode: 0o600 })
   writeFileSync(summaryPath, buildAccessibilitySummary(results), { mode: 0o600 })
+  const advisories = countAccessibilityAdvisories(results)
+  // The spec attaches this JSON only when the gate fails, so a passing run would
+  // otherwise carry no trace of the advisories in its own output.
+  console.log(
+    `Non-blocking accessibility advisories: ${advisories["needs-review"]} needs-review,`
+    + ` ${advisories["best-practice"]} best-practice,`
+    + ` ${advisories["best-practice-needs-review"]} best-practice-needs-review`
+    + ` (${summaryPath})`,
+  )
   return { jsonPath, summaryPath }
 }
 

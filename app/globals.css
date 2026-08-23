@@ -16,8 +16,10 @@
   --makeup-dark: #694500;
   --mist: #e7eaed;
   --steel: #596673;
+  --text-placeholder: #6b7480;
   --line: #d7dbde;
   --border: var(--line);
+  --line-disabled: #858d94;
   --white: #ffffff;
   --paper: #fbfaf7;
   --green-soft: #e8f3ec;
@@ -37,10 +39,41 @@
   --type-utility-meta: 12px;
   --type-operational-body: 13px;
   --type-operational-action: 12px;
+  --type-operational-floor: 10px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-pill: 999px;
+  --radius-circle: 50%;
+  --shadow-keyline-lead: inset 3px 0 0 var(--red);
+  --shadow-keyline-bottom: inset 0 -3px 0 var(--red);
+  --shadow-focus-ring: 0 0 0 1px var(--navy);
+  --duration-fast: 160ms;
+  --duration-base: 180ms;
+  --ease-standard: ease;
+  --z-overlay: 40;
+  --z-header: 50;
+  --z-dialog: 90;
+  --z-skip-link: 100;
+  --z-admin-banner: 1000;
 }
 
 :where(a, button, input, select, textarea, summary, [role="button"]) {
   touch-action: manipulation;
+}
+
+/* Local replacement for Tailwind's `sr-only`. Declared unlayered so it outranks
+   the thousands of unlayered rules below it, which a utility-layer class cannot. */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 .coach-register-table td .coach-register-cell-control {
@@ -97,7 +130,7 @@
   place-items: center;
   padding-inline: 4px;
   border: 1px solid rgba(255, 255, 255, 0.48);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--green);
   color: var(--white);
   font-size: 10px;
@@ -244,7 +277,7 @@
 }
 
 .coach-adjustment-choice-list button.is-active {
-  box-shadow: inset 3px 0 0 var(--red);
+  box-shadow: var(--shadow-keyline-lead);
 }
 
 .coach-adjustment-choice-list button span,
@@ -342,7 +375,7 @@
   height: 10px;
   flex: 0 0 auto;
   border: 1.5px solid var(--red);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .coach-adjustment-missed-calendar-grid {
@@ -412,10 +445,10 @@
   max-width: calc(100% - 8px);
   aspect-ratio: 1;
   border: 1.5px solid var(--red);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--white);
   content: "";
-  transition: background 160ms ease, transform 160ms ease;
+  transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
 }
 
 .coach-adjustment-missed-calendar-grid > button > span {
@@ -726,7 +759,7 @@
   height: 14px;
   flex: 0 0 auto;
   color: var(--red);
-  transition: transform 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
 .coach-adjustment-history-disclosure[aria-expanded="true"] > svg {
@@ -773,14 +806,14 @@
 /* The wash alone is shared with hover, so the review alert owns a red keyline
    the pointer never paints. Same split as the adjustment choice list above. */
 .coach-adjustment-history-item.requires-review:has(> button[aria-expanded="false"]) {
-  box-shadow: inset 3px 0 0 var(--red);
+  box-shadow: var(--shadow-keyline-lead);
 }
 
 .coach-adjustment-history-item > button > svg {
   width: 16px;
   height: 16px;
   color: var(--steel);
-  transition: transform 160ms ease;
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .coach-adjustment-history-item > button[aria-expanded="true"] > svg {
@@ -796,7 +829,7 @@
   width: 28px;
   height: 28px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--green);
   color: var(--white);
   font-size: 11px;
@@ -1122,7 +1155,7 @@
   .coach-adjustment-history-void {
     min-height: 44px;
     padding-inline: 10px;
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .coach-adjustment-history-details {
@@ -1227,7 +1260,7 @@ h3 {
   position: fixed;
   top: 10px;
   left: 12px;
-  z-index: 100;
+  z-index: var(--z-skip-link);
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -1237,7 +1270,7 @@ h3 {
   font-size: 13px;
   font-weight: 750;
   transform: translateY(-160%);
-  transition: transform 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
 .skip-link:focus {
@@ -1259,7 +1292,7 @@ h3 {
 .portal-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--z-header);
   display: grid;
   grid-template-columns: 1fr auto;
   min-height: var(--portal-header-height);
@@ -1320,7 +1353,7 @@ h3 {
   width: 38px;
   height: 38px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--navy);
   color: var(--white);
   font-size: 11px;
@@ -1538,11 +1571,11 @@ h3 {
   background: rgba(255, 255, 255, 0.68);
   color: var(--navy);
   font-size: 16px;
-  transition: border-color 160ms ease, background 160ms ease;
+  transition: border-color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard);
 }
 
 .login-field input::placeholder {
-  color: #8a939b;
+  color: var(--text-placeholder);
 }
 
 .login-field .login-pin-input,
@@ -1627,7 +1660,7 @@ h3 {
   width: 36px;
   height: 36px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--green);
   color: var(--white);
 }
@@ -1672,7 +1705,7 @@ h3 {
   color: var(--white);
   font-size: 12px;
   font-weight: 800;
-  transition: background 160ms ease, transform 160ms ease;
+  transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
 }
 
 .login-submit:hover:not(:disabled) {
@@ -2497,7 +2530,7 @@ h3 {
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  transition: color 180ms ease;
+  transition: color var(--duration-base) var(--ease-standard);
 }
 
 .scroll-cue:hover {
@@ -2681,7 +2714,7 @@ h3 {
   height: 17px;
   flex: 0 0 auto;
   color: var(--red);
-  transition: transform 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
 .player-attendance-card.is-open .player-attendance-toggle svg {
@@ -2834,75 +2867,6 @@ h3 {
   background: repeating-linear-gradient(-45deg, #f3f2ef 0, #f3f2ef 4px, #d8d5cf 4px, #d8d5cf 5px);
 }
 
-.player-attendance-register-scroll {
-  width: 100%;
-  max-width: 100%;
-  margin-top: 20px;
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  outline: none;
-  scrollbar-color: var(--steel) var(--ivory-deep);
-  scrollbar-width: thin;
-}
-
-.player-attendance-register-scroll:focus-visible {
-  outline: 2px solid var(--red);
-  outline-offset: 4px;
-}
-
-.player-attendance-register-table {
-  width: var(--player-register-width);
-  min-width: var(--player-register-width);
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
-}
-
-.player-attendance-register-table th,
-.player-attendance-register-table td {
-  height: 52px;
-  padding: 0;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: var(--white);
-}
-
-.player-attendance-register-table th:last-child,
-.player-attendance-register-table td:last-child {
-  border-right: 0;
-}
-
-.player-attendance-register-table tbody tr:last-child th,
-.player-attendance-register-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.player-attendance-register-table thead th {
-  background: var(--ivory);
-  color: var(--steel);
-  text-align: center;
-}
-
-.player-attendance-register-table thead th > span {
-  display: block;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.player-attendance-register-table thead th > strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--navy);
-  font-size: 10px;
-  font-weight: 730;
-}
-
-.player-attendance-register-table thead th.is-today {
-  box-shadow: inset 0 -3px 0 var(--red);
-}
-
 .session-card h3 {
   margin-top: 22px;
   color: var(--navy);
@@ -2947,7 +2911,7 @@ h3 {
 .empty-card-link svg {
   width: 15px;
   height: 15px;
-  transition: transform 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
 .empty-card-link:hover svg {
@@ -3180,7 +3144,7 @@ h3 {
   grid-template-columns: 48px minmax(0, 1fr) minmax(136px, auto) 40px;
   gap: clamp(12px, 2.3vw, 30px);
   padding: 12px 12px 12px 16px;
-  transition: background 180ms ease;
+  transition: background var(--duration-base) var(--ease-standard);
 }
 
 .report-month-item.is-open .report-month-trigger {
@@ -3224,8 +3188,8 @@ h3 {
   height: 40px;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 50%;
-  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+  border-radius: var(--radius-circle);
+  transition: background var(--duration-base) var(--ease-standard), border-color var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
 
 .report-year-toggle {
@@ -3446,7 +3410,7 @@ h3 {
   cursor: pointer;
   font-size: 11px;
   font-weight: 760;
-  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+  transition: background var(--duration-base) var(--ease-standard), border-color var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
 
 .report-export-button:hover {
@@ -3677,7 +3641,7 @@ h3 {
   color: var(--steel);
   cursor: pointer;
   text-align: left;
-  transition: background 160ms ease, color 160ms ease;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 
 .coach-session-picker button:hover {
@@ -3881,7 +3845,7 @@ h3 {
 }
 
 .coach-register-table thead th.is-today {
-  box-shadow: inset 0 -3px 0 var(--red);
+  box-shadow: var(--shadow-keyline-bottom);
 }
 
 .coach-register-table .coach-register-date-row th.is-unavailable {
@@ -3974,7 +3938,7 @@ h3 {
 
 .coach-register-table td button:disabled {
   background: #f3f3f1;
-  color: var(--line);
+  color: var(--line-disabled);
   cursor: not-allowed;
 }
 
@@ -4037,12 +4001,12 @@ h3 {
 }
 
 .coach-register-table td button > span {
-  color: var(--line);
+  color: var(--steel);
   font-size: 14px;
 }
 
 .coach-register-table td .coach-register-cell-status > span:not(.coach-register-makeup-count) {
-  color: var(--line);
+  color: var(--steel);
   font-size: 14px;
 }
 
@@ -4143,7 +4107,7 @@ h3 {
   width: 26px;
   height: 26px;
   padding: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--green);
   color: var(--white);
 }
@@ -4309,7 +4273,7 @@ h3 {
   color: var(--steel);
   font-size: 11px;
   font-weight: 720;
-  transition: background 160ms ease, color 160ms ease;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 
 .coach-member-show-more:hover {
@@ -4361,7 +4325,7 @@ h3 {
 
 .coach-member-table tbody > tr:not(.coach-member-detail-row) {
   border-bottom: 1px solid var(--line);
-  transition: background 160ms ease;
+  transition: background var(--duration-fast) var(--ease-standard);
 }
 
 .coach-member-table tbody > tr.is-expanded {
@@ -4413,7 +4377,6 @@ h3 {
 
 .coach-member-name small {
   color: var(--steel);
-  font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.05em;
 }
@@ -4437,7 +4400,7 @@ h3 {
 .coach-member-status::before {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: currentColor;
   content: "";
 }
@@ -4470,7 +4433,7 @@ h3 {
 .coach-member-row-action button svg {
   width: 14px;
   height: 14px;
-  transition: transform 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
 tr.is-expanded .coach-member-row-action button svg {
@@ -5035,7 +4998,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-report-month-control button:disabled {
-  color: var(--line);
+  color: var(--line-disabled);
   cursor: not-allowed;
 }
 
@@ -5123,7 +5086,7 @@ tr.is-expanded .coach-member-row-action button svg {
   flex: 0 0 auto;
   margin-top: 8px;
   padding: 5px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--green);
   color: var(--white);
   stroke-width: 2.6;
@@ -5167,12 +5130,12 @@ tr.is-expanded .coach-member-row-action button svg {
   flex: 0 0 auto;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--steel);
   font-size: 10px;
   font-weight: 720;
-  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  transition: border-color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 
 .coach-category-filter button.is-active {
@@ -5198,7 +5161,7 @@ tr.is-expanded .coach-member-row-action button svg {
   background: transparent;
   color: var(--navy);
   text-align: left;
-  transition: background 160ms ease;
+  transition: background var(--duration-fast) var(--ease-standard);
 }
 
 .coach-report-player-list > button:hover,
@@ -5207,7 +5170,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-report-player-list > button.is-active {
-  box-shadow: inset 3px 0 0 var(--red);
+  box-shadow: var(--shadow-keyline-lead);
 }
 
 .coach-report-list-avatar {
@@ -5216,7 +5179,7 @@ tr.is-expanded .coach-member-row-action button svg {
   height: 38px;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -5392,12 +5355,12 @@ tr.is-expanded .coach-member-row-action button svg {
   resize: vertical;
   border: 1px solid var(--line);
   border-radius: 0;
-  background: #fbfaf7;
+  background: var(--paper);
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 19px;
   line-height: 1.65;
-  transition: border-color 160ms ease, background 160ms ease;
+  transition: border-color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard);
 }
 
 .coach-report-field textarea:focus {
@@ -5407,7 +5370,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-report-field textarea::placeholder {
-  color: #8a939b;
+  color: var(--text-placeholder);
 }
 
 .coach-report-field-counter {
@@ -5468,7 +5431,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-report-preview-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: var(--z-dialog);
   display: none;
   width: 100%;
   max-width: none;
@@ -5510,7 +5473,7 @@ tr.is-expanded .coach-member-row-action button svg {
   height: 44px;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--white);
   color: var(--navy);
 }
@@ -5937,11 +5900,6 @@ tr.is-expanded .coach-member-row-action button svg {
     padding-inline: 9px;
   }
 
-  .player-attendance-register-table {
-    width: var(--player-register-mobile-width);
-    min-width: var(--player-register-mobile-width);
-  }
-
   .dashboard-card.is-empty {
     min-height: 204px;
   }
@@ -5972,10 +5930,6 @@ tr.is-expanded .coach-member-row-action button svg {
     gap: 3px;
   }
 
-  .report-season-label {
-    font-size: 8px;
-  }
-
   .report-year-title strong {
     font-size: 36px;
   }
@@ -5983,7 +5937,7 @@ tr.is-expanded .coach-member-row-action button svg {
   .report-year-count {
     align-self: end;
     padding-bottom: 4px;
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .report-year-toggle {
@@ -6320,7 +6274,7 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-report-queue-toggle svg {
     width: 14px;
     height: 14px;
-    transition: transform 160ms ease;
+    transition: transform var(--duration-fast) var(--ease-standard);
   }
 
   .coach-report-queue-panel:not(.is-collapsed) .coach-report-queue-toggle svg {
@@ -6490,7 +6444,7 @@ tr.is-expanded .coach-member-row-action button svg {
     margin-bottom: 5px;
     color: var(--steel);
     content: attr(data-label);
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
     font-weight: 800;
     letter-spacing: 0.09em;
     text-transform: uppercase;
@@ -6602,7 +6556,7 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-member-filter-toggle svg {
     width: 15px;
     height: 15px;
-    transition: transform 160ms ease;
+    transition: transform var(--duration-fast) var(--ease-standard);
   }
 
   .coach-member-directory-controls.is-filters-open .coach-member-filter-toggle svg {
@@ -7192,7 +7146,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-day-session > button > svg {
   width: 17px;
-  transition: transform 180ms ease;
+  transition: transform var(--duration-base) var(--ease-standard);
 }
 
 .coach-day-session > button[aria-expanded="true"] > svg {
@@ -7328,7 +7282,7 @@ tr.is-expanded .coach-member-row-action button svg {
   width: 32px;
   height: 32px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: rgba(255, 255, 255, 0.1);
   font-size: 10px;
   font-weight: 800;
@@ -7511,7 +7465,7 @@ tr.is-expanded .coach-member-row-action button svg {
   right: 10px;
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--red);
   content: "";
 }
@@ -7662,7 +7616,7 @@ tr.is-expanded .coach-member-row-action button svg {
   width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: rgba(255, 255, 255, 0.12);
   font-size: 10px;
   font-weight: 800;
@@ -8107,7 +8061,7 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-schedule-programme-toggle-heading svg {
     width: 17px;
     flex: none;
-    transition: transform 180ms ease;
+    transition: transform var(--duration-base) var(--ease-standard);
   }
 
   .coach-schedule-programme-toggle-heading button[aria-expanded="true"] svg {
@@ -8455,7 +8409,7 @@ tr.is-expanded .coach-member-row-action button svg {
   width: 32px;
   height: 32px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: rgba(255, 255, 255, 0.1);
   font-size: 9px;
   font-weight: 800;
@@ -8903,19 +8857,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-published-reports-header .coach-report-month-control > .coach-published-month-disabled {
-  color: var(--line);
-}
-
-.coach-published-visually-hidden {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
+  color: var(--line-disabled);
 }
 
 .coach-published-reports-workspace {
@@ -9166,7 +9108,7 @@ tr.is-expanded .coach-member-row-action button svg {
   align-items: center;
   padding: 0 8px;
   border: 1px solid rgba(97, 112, 131, 0.28);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--steel);
   font-size: 9px;
   font-style: normal;
@@ -9342,7 +9284,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-published-report-revisions nav a.is-current {
-  box-shadow: inset 3px 0 0 var(--red);
+  box-shadow: var(--shadow-keyline-lead);
   background: var(--ivory);
   color: var(--navy);
 }
@@ -10258,13 +10200,13 @@ tr.is-expanded .coach-member-row-action button svg {
 .player-ticket-dashboard .player-ticket-card::before {
   left: -1px;
   border-left: 0;
-  border-radius: 0 999px 999px 0;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
 }
 
 .player-ticket-dashboard .player-ticket-card::after {
   right: -1px;
   border-right: 0;
-  border-radius: 999px 0 0 999px;
+  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
 }
 
 .player-ticket-dashboard .player-ticket-masthead {
@@ -10297,7 +10239,7 @@ tr.is-expanded .coach-member-row-action button svg {
   padding: 6px 9px;
   border: 1px solid var(--line);
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   line-height: 1;
@@ -10328,7 +10270,7 @@ tr.is-expanded .coach-member-row-action button svg {
   font-weight: 780;
   line-height: 1.3;
   text-align: left;
-  transition: background 160ms ease, color 160ms ease;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 
 .player-ticket-dashboard .player-ticket-action:hover {
@@ -10346,7 +10288,7 @@ tr.is-expanded .coach-member-row-action button svg {
   height: 17px;
   flex: 0 0 auto;
   color: currentColor;
-  transition: transform 160ms ease;
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .player-ticket-dashboard .player-ticket-action:hover svg {
@@ -10624,7 +10566,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .personal-attendance-calendar .player-attendance-month-current > span {
   color: var(--rose);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -10675,7 +10617,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .personal-attendance-calendar .player-attendance-calendar-schedule span {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -10714,7 +10656,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .personal-attendance-calendar .player-attendance-month-tools > p {
   flex: 0 0 auto;
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 650;
 }
 
@@ -10743,7 +10685,7 @@ tr.is-expanded .coach-member-row-action button svg {
   padding: 11px 7px 8px;
   border-right: 1px solid var(--line);
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-align: center;
@@ -10876,7 +10818,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .personal-attendance-calendar .player-attendance-calendar-date span {
-  font-size: 7px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -10905,12 +10847,12 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .personal-attendance-calendar .player-attendance-calendar-session strong {
-  font-size: 7px;
+  font-size: var(--type-operational-floor);
   font-weight: 760;
 }
 
 .personal-attendance-calendar .player-attendance-calendar-session small {
-  font-size: 6px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -10962,10 +10904,10 @@ tr.is-expanded .coach-member-row-action button svg {
   height: 25px;
   place-items: center;
   padding-inline: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--green);
   color: var(--white);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
 }
 
@@ -10974,9 +10916,10 @@ tr.is-expanded .coach-member-row-action button svg {
   right: 7px;
   bottom: 6px;
   color: var(--red);
-  font-size: 6px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
+  line-height: 1;
   text-transform: uppercase;
 }
 
@@ -10991,7 +10934,7 @@ tr.is-expanded .coach-member-row-action button svg {
   gap: 18px;
   padding-top: 11px;
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -11311,7 +11254,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .personal-attendance-calendar .player-attendance-month-tools .player-attendance-legend {
     gap: 8px 11px;
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .personal-attendance-calendar .player-attendance-month-tools .player-attendance-legend i {
@@ -11324,8 +11267,7 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .personal-attendance-calendar .player-attendance-calendar-weekday {
-    padding: 9px 2px 6px;
-    font-size: 7px;
+    padding: 9px 1px 6px;
   }
 
   .personal-attendance-calendar .player-attendance-weekday-long {
@@ -11375,23 +11317,20 @@ tr.is-expanded .coach-member-row-action button svg {
     min-width: 20px;
     height: 20px;
     padding-inline: 3px;
-    font-size: 7px;
   }
 
+  /* The cell is only about 32px wide here, so this word cannot reach the 10px
+     operational floor without being clipped mid-way. It is redundant rather
+     than load-bearing: the word sits inside an aria-hidden subtree, and today
+     is still carried by aria-current, the cell's aria-label, the 2px red inset
+     ring and the red top bar. Hiding it beats rendering it illegibly. */
   .personal-attendance-calendar .player-attendance-calendar-today {
-    right: 4px;
-    bottom: 4px;
-    font-size: 5px;
-  }
-
-  .personal-attendance-calendar .player-attendance-calendar-day:has(.player-attendance-calendar-completion) .player-attendance-calendar-today {
-    bottom: 27px;
+    display: none;
   }
 
   .personal-attendance-calendar .player-attendance-calendar-note {
     display: grid;
     gap: 4px;
-    font-size: 7px;
   }
 
   .personal-attendance-calendar .player-attendance-calendar-note span:last-child {
@@ -11421,7 +11360,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .player-ticket-dashboard .player-ticket-context {
     padding-inline: 7px;
-    font-size: 7px;
   }
 
   .player-ticket-dashboard .player-ticket-action {
@@ -11807,7 +11745,7 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-member-filter-toggle svg {
     width: 14px;
     height: 14px;
-    transition: transform 160ms ease;
+    transition: transform var(--duration-fast) var(--ease-standard);
   }
 
   .coach-member-directory-controls.is-filters-open .coach-member-filter-toggle svg {
@@ -12613,7 +12551,6 @@ tr.is-expanded .coach-member-row-action button svg {
   .player-attendance-recorder .attendance-roster-adjustment {
     min-height: 44px;
     padding-inline: 6px;
-    font-size: 8px;
   }
 
   .player-attendance-recorder .attendance-record-footer {
@@ -12689,7 +12626,6 @@ tr.is-expanded .coach-member-row-action button svg {
   border-bottom: 1px solid var(--line);
   background: var(--ivory);
   color: var(--steel);
-  font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -12978,7 +12914,7 @@ tr.is-expanded .coach-member-row-action button svg {
   display: flex;
   min-height: 44px;
   align-items: center;
-  color: var(--color-navy, #071b32);
+  color: var(--navy);
   font-weight: 700;
 }
 
@@ -13286,9 +13222,9 @@ tr.is-expanded .coach-member-row-action button svg {
 .admin-setup-panel button,
 .admin-preview-list button {
   min-height: 44px;
-  border: 1px solid #071b32;
+  border: 1px solid var(--navy);
   background: transparent;
-  color: #071b32;
+  color: var(--navy);
   padding: 10px 18px;
   font: inherit;
   font-weight: 700;
@@ -13297,7 +13233,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-setup-panel button:hover,
 .admin-preview-list button:hover {
-  background: #071b32;
+  background: var(--navy);
   color: #fffdf8;
 }
 
@@ -13310,7 +13246,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-directory-tools > label {
-  color: #071b32;
+  color: var(--navy);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -13346,7 +13282,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 1px solid rgba(7, 27, 50, 0.34);
   border-radius: 0;
   background: transparent;
-  color: #071b32;
+  color: var(--navy);
   padding: 10px 42px;
   font: inherit;
   font-size: 14px;
@@ -13357,7 +13293,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-directory-search-field input:focus-visible {
-  border-color: #071b32;
+  border-color: var(--navy);
   outline: 2px solid var(--red);
   outline-offset: 2px;
 }
@@ -13397,7 +13333,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-preview-group-header h3 {
-  color: #071b32;
+  color: var(--navy);
   font-family: var(--font-manrope), Arial, sans-serif;
   font-size: 11px;
   font-style: normal;
@@ -13451,13 +13387,13 @@ tr.is-expanded .coach-member-row-action button svg {
 .admin-preview-list article::before {
   left: -1px;
   border-left: 0;
-  border-radius: 0 999px 999px 0;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
 }
 
 .admin-preview-list article::after {
   right: -1px;
   border-right: 0;
-  border-radius: 999px 0 0 999px;
+  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
 }
 
 .admin-preview-list article div {
@@ -13506,7 +13442,7 @@ tr.is-expanded .coach-member-row-action button svg {
   width: 17px;
   height: 17px;
   flex: 0 0 auto;
-  transition: transform 160ms ease;
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .admin-preview-list button:hover svg {
@@ -13526,7 +13462,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-preview-banner {
   position: sticky;
-  z-index: 1000;
+  z-index: var(--z-admin-banner);
   top: 0;
   display: flex;
   min-height: 48px;
@@ -13535,7 +13471,7 @@ tr.is-expanded .coach-member-row-action button svg {
   gap: 24px;
   border-bottom: 1px solid var(--red);
   background: #f2eadc;
-  color: #071b32;
+  color: var(--navy);
   padding: 10px 20px;
   text-align: center;
 }
@@ -13546,7 +13482,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-preview-banner button {
   appearance: none;
-  border: 1px solid #071b32;
+  border: 1px solid var(--navy);
   background: transparent;
   color: inherit;
   cursor: pointer;

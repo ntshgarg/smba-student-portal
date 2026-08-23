@@ -158,7 +158,7 @@ function ReviewDialog({
         </div>
 
         <div className={styles.reviewMeta}>
-          <div className={styles.channelPills} aria-label="Announcement locations">
+          <div className={styles.channelPills} role="group" aria-label="Announcement locations">
             {values.channels.map((channel) => (
               <span key={channel}><Check aria-hidden="true" /> {announcementChannelLabel(channel)}</span>
             ))}

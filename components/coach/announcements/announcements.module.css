@@ -21,7 +21,7 @@
   color: var(--navy);
   font-size: 12px;
   font-weight: 760;
-  transition: background 180ms ease, color 180ms ease;
+  transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
 
 .newAnnouncementLink:hover {
@@ -809,7 +809,7 @@
 
 .monthControl > div span {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 780;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1051,7 +1051,7 @@
 .rowMeta dt,
 .detailMeta dt {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;

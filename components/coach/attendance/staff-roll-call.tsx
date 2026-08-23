@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Check, UsersRound } from "lucide-react"
+import { ArrowLeft, Check, RotateCcw, UsersRound } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
@@ -8,6 +8,7 @@ import { useMemo, useState } from "react"
 import { saveStaffAttendanceAction } from "@/app/coach/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import type {
   StaffAttendanceChange,
   StaffAttendanceChoice,
@@ -34,6 +35,20 @@ const choices: Array<{
   { label: "Absent", value: "absent" },
 ]
 
+/**
+ * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
+ * withdraws the retry prompt.
+ */
+type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
+
+/**
+ * Shorter than the player register's deadline: one day of junior coaches is a
+ * handful of changes with fewer validation queries each, so a healthy save
+ * settles sooner. Still far above a slow-network round trip. It is a deadline,
+ * not a cancellation — see `withSaveDeadline`.
+ */
+const saveDeadlineMs = 15_000
+
 export function StaffRollCall({
   initialDate,
   initialRecords,
@@ -49,7 +64,7 @@ export function StaffRollCall({
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [records, setRecords] = useState(initialRecords)
   const [drafts, setDrafts] = useState<StaffAttendanceChange[]>([])
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: drafts.length > 0,
@@ -109,7 +124,10 @@ export function StaffRollCall({
     setIsSaving(true)
     setFeedback(null)
     try {
-      const result = await saveStaffAttendanceAction({ changes: drafts })
+      const result = await withSaveDeadline(
+        saveStaffAttendanceAction({ changes: drafts }),
+        saveDeadlineMs,
+      )
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
         return
@@ -127,8 +145,15 @@ export function StaffRollCall({
       setDrafts([])
       setFeedback({ message: "Staff attendance saved", tone: "success" })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "Staff attendance could not be saved",
+        retained: "Your marks are still on screen",
+        subject: "Staff attendance",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "Staff attendance could not be saved",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -241,7 +266,12 @@ export function StaffRollCall({
             disabled={!drafts.length || isSaving || futureDate}
             onClick={saveRollCall}
           >
-            <Check aria-hidden="true" /> {isSaving ? "Saving…" : "Save staff attendance"}
+            {feedback?.offerRetry
+              ? <RotateCcw aria-hidden="true" />
+              : <Check aria-hidden="true" />}
+            {isSaving
+              ? "Saving…"
+              : feedback?.offerRetry ? "Save staff attendance again" : "Save staff attendance"}
           </button>
         </div>
       </section>

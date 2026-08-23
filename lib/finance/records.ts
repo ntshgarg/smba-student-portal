@@ -19,8 +19,9 @@ import {
   refunds,
 } from "@/lib/db/schema"
 import { monthEnd, monthStart } from "@/lib/finance/domain"
-import { loadChargeView } from "@/lib/finance/repository"
+import { loadChargeViews } from "@/lib/finance/repository"
 import type {
+  ChargeView,
   FinanceActivityInput,
   FinanceActivityItem,
   FinanceActivityResult,
@@ -68,7 +69,7 @@ function paginateById<T>(
   }
 }
 
-function activeAdjustmentTotals(adjustments: NonNullable<ReturnType<typeof loadChargeView>>["adjustments"]) {
+function activeAdjustmentTotals(adjustments: ChargeView["adjustments"]) {
   return (adjustments ?? []).reduce((totals, adjustment) => {
     if (adjustment.reversed) return totals
     if (adjustment.kind === "manual_debit") totals.debit += adjustment.amountPaise
@@ -118,12 +119,24 @@ export function loadFeeRegister(
     or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, monthStart(period))),
   )).all() : []
 
-  const rows = players.map((player): FinanceRegisterRow => {
-    const charge = (chargesByPlayer.get(player.playerId) ?? []).sort((left, right) => (
+  // Every approved player contributes a row, so the views are batched ahead of
+  // the row build: four queries for the whole register, not four per player.
+  const registerCharges = players.map((player) => (
+    (chargesByPlayer.get(player.playerId) ?? []).sort((left, right) => (
       Number(right.lifecycle === "issued") - Number(left.lifecycle === "issued")
       || right.issuedAt.getTime() - left.issuedAt.getTime()
       || right.id.localeCompare(left.id)
     ))[0]
+  ))
+  const chargeViews = loadChargeViews(
+    database,
+    registerCharges.flatMap((charge) => (charge ? [charge.id] : [])),
+    now,
+    true,
+  )
+
+  const rows = players.map((player, index): FinanceRegisterRow => {
+    const charge = registerCharges[index]
     if (!charge) {
       const hasAgreement = period !== null && agreementRows.some((agreement) => (
         agreement.playerAccountId === player.playerId
@@ -150,7 +163,7 @@ export function loadFeeRegister(
         status: hasAgreement ? "not_prepared" : "setup_required",
       }
     }
-    const view = loadChargeView(database, charge.id, now, true)
+    const view = chargeViews.get(charge.id)
     if (!view) throw new Error("The fee-register Charge is unavailable.")
     const adjustments = activeAdjustmentTotals(view.adjustments)
     return {

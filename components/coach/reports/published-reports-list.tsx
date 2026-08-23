@@ -104,35 +104,35 @@ export function PublishedReportsList({
                 <div className="coach-published-report-player">
                   <h3 id={headingId}>{report.playerName}</h3>
                   <p>
-                    <span><span className="coach-published-visually-hidden">Academy ID </span>{report.academyId}</span>
+                    <span><span className="sr-only">Academy ID </span>{report.academyId}</span>
                     {report.playerArchived ? (
-                      <em>Archived<span className="coach-published-visually-hidden"> player</span></em>
+                      <em>Archived<span className="sr-only"> player</span></em>
                     ) : null}
                   </p>
                 </div>
 
                 <div className="coach-published-report-version">
-                  <span className="coach-published-visually-hidden">Latest revision</span>
+                  <span className="sr-only">Latest revision</span>
                   <strong>Rev {report.latestRevision}</strong>
                   <small>· {report.revisionCount} {report.revisionCount === 1 ? "revision" : "revisions"}</small>
                 </div>
 
                 <div className="coach-published-report-updated">
-                  <span className="coach-published-visually-hidden">Last updated</span>
+                  <span className="sr-only">Last updated</span>
                   <time dateTime={report.latestPublishedAt}>{formatPublishedReportDate(report.latestPublishedAt)}</time>
                 </div>
 
                 <div className="coach-published-report-actions">
                   <Link href={detailHref}>
                     Open report
-                    <span className="coach-published-visually-hidden">
+                    <span className="sr-only">
                       {` for ${report.playerName}, Academy ID ${report.academyId}, ${periodLabel}, latest revision ${report.latestRevision}`}
                     </span>
                     <ArrowUpRight aria-hidden="true" />
                   </Link>
                   <a href={downloadHref}>
                     PDF
-                    <span className="coach-published-visually-hidden">
+                    <span className="sr-only">
                       {` download for ${report.playerName}, Academy ID ${report.academyId}, ${periodLabel}, latest revision ${report.latestRevision}`}
                     </span>
                     <ArrowDownToLine aria-hidden="true" />
@@ -152,7 +152,7 @@ export function PublishedReportsList({
           role="status"
         >
           Showing {visibleReports.length} of {reports.length}
-          <span className="coach-published-visually-hidden"> published reports.</span>
+          <span className="sr-only"> published reports.</span>
         </p>
         {hasMoreReports ? (
           <button

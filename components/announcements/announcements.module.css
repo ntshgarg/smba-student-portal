@@ -307,7 +307,7 @@
   align-items: center;
   gap: 7px 10px;
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   line-height: 1.35;
@@ -320,7 +320,7 @@
 }
 
 .dashboardLabels > span {
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
 }
 
 .dashboardNoticeTitle {
@@ -623,7 +623,7 @@
     width: 44px;
     padding: 0;
     border: 1px solid var(--line);
-    border-radius: 50%;
+    border-radius: var(--radius-circle);
     font-size: 0;
   }
 
