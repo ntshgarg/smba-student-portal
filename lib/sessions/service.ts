@@ -226,7 +226,7 @@ export function assignSessionRecords({
     approvalStatus: accounts.approvalStatus,
     archivedAt: accounts.archivedAt,
     recordRevision: playerEnrollments.recordRevision,
-    joinedAt: playerEnrollments.joinedAt,
+    trainingStartOn: playerEnrollments.trainingStartOn,
     batch: playerEnrollments.batch,
     level: playerEnrollments.level,
     academyPlan: playerEnrollments.academyPlan,
@@ -307,7 +307,7 @@ export function assignSessionRecords({
       "weekdays",
     )
   }
-  const joinedOn = getIndiaDateKey(player.joinedAt)
+  const joinedOn = player.trainingStartOn
   const earliestDate = joinedOn > series.startsOn ? joinedOn : series.startsOn
   if (effectiveFrom < earliestDate) {
     operationalActionError(
@@ -329,7 +329,7 @@ export function assignSessionRecords({
       approvalStatus: accounts.approvalStatus,
       archivedAt: accounts.archivedAt,
       recordRevision: playerEnrollments.recordRevision,
-      joinedAt: playerEnrollments.joinedAt,
+      trainingStartOn: playerEnrollments.trainingStartOn,
       batch: playerEnrollments.batch,
       level: playerEnrollments.level,
       academyPlan: playerEnrollments.academyPlan,
@@ -343,7 +343,7 @@ export function assignSessionRecords({
       operationalActionError("NOT_FOUND", "Approved player was not found.", "playerId")
     }
     if (transactionPlayer.recordRevision !== player.recordRevision
-      || transactionPlayer.joinedAt.getTime() !== player.joinedAt.getTime()
+      || transactionPlayer.trainingStartOn !== player.trainingStartOn
       || transactionPlayer.batch !== player.batch
       || transactionPlayer.level !== player.level
       || transactionPlayer.academyPlan !== player.academyPlan) {
@@ -595,7 +595,7 @@ export function saveSessionAttendanceRecords({
           "changes",
         )
       }
-      const enrollment = tx.select({ joinedAt: playerEnrollments.joinedAt })
+      const enrollment = tx.select({ trainingStartOn: playerEnrollments.trainingStartOn })
         .from(playerEnrollments)
         .innerJoin(accounts, eq(accounts.id, playerEnrollments.accountId))
         .where(and(
@@ -611,7 +611,7 @@ export function saveSessionAttendanceRecords({
           "changes",
         )
       }
-      if (!playerWasEnrolledForOccurrence(getIndiaDateKey(enrollment.joinedAt), occurrence)) {
+      if (!playerWasEnrolledForOccurrence(enrollment.trainingStartOn, occurrence)) {
         operationalActionError(
           "BUSINESS_RULE",
           "The player was not enrolled for this session.",

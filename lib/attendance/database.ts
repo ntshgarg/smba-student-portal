@@ -7,7 +7,6 @@ import {
   type AttendanceDomainRecord,
   type MonthlyAttendanceInput,
 } from "@/lib/attendance/domain"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   attendanceAdjustments,
@@ -27,7 +26,7 @@ export function getPlayerAttendanceInput(
   database?: SmbaDatabaseExecutor,
 ): MonthlyAttendanceInput | null {
   const db = database ?? initializeDatabase()
-  const enrollment = db.select({ joinedAt: playerEnrollments.joinedAt })
+  const enrollment = db.select({ trainingStartOn: playerEnrollments.trainingStartOn })
     .from(playerEnrollments)
     .where(eq(playerEnrollments.accountId, accountId))
     .get()
@@ -86,7 +85,7 @@ export function getPlayerAttendanceInput(
     month,
     referenceDate,
     referenceInstant,
-    joinedOn: getIndiaDateKey(enrollment.joinedAt),
+    joinedOn: enrollment.trainingStartOn,
     assignments: assignments.map((assignment) => ({
       seriesId: assignment.seriesId,
       effectiveFrom: assignment.effectiveFrom,

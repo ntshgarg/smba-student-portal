@@ -194,6 +194,7 @@ export type PlayerFeeRecord = {
   fullName: string
   archived: boolean
   feePlanSetupReady: boolean
+  financeTrackingMonth: string | null
   registrationResolutionRequired: boolean
   status: FinanceStatus
   currentBalancePaise: number
@@ -285,12 +286,45 @@ export type CreateFeeAgreementInput = {
 
 export type CompleteOnboardingFinanceResult = {
   agreementId: string
+  createdMonthlyChargeIds: string[]
   firstMonthlyChargeId: string | null
   firstMonthlyFeePaise: number | null
   firstMonthlyRemainingSessions: number | null
   firstMonthlyTotalSessions: number | null
   registrationChargeId: string
   reused: boolean
+}
+
+export type OnboardingFinanceTerms = Omit<
+  CreateFeeAgreementInput,
+  "effectiveFrom" | "expectedAgreementRevision" | "idempotencyKey"
+>
+
+export type OnboardingFinancePreviewLine = {
+  amountPaise: number | null
+  denominator: number | null
+  description: string
+  dueDate: string | null
+  kind: "registration" | "monthly_training" | "before_tracking"
+  numerator: number | null
+  period: string | null
+}
+
+export type OnboardingFinancePreview = {
+  academyDateKey: string
+  blockers: string[]
+  feePlanStartOn: string
+  fingerprint: string
+  lines: OnboardingFinancePreviewLine[]
+  playerRecordRevision: number
+  totalIssuedPaise: number
+  trackingMonth: string
+  trainingStartOn: string
+  warnings: string[]
+}
+
+export type CommitOnboardingFinanceInput = OnboardingFinanceTerms & {
+  previewFingerprint: string
 }
 
 export type PrepareMonthlyChargesInput = {

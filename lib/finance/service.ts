@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, asc, desc, eq, gt, gte, isNull, lte, ne, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm"
 
 import { isValidDateKey, isValidMonthKey } from "@/lib/attendance/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
@@ -22,6 +22,10 @@ import {
   payments,
   refundAllocations,
   refunds,
+  playerEnrollments,
+  sessionAssignments,
+  sessionOccurrences,
+  sessionSeries,
 } from "@/lib/db/schema"
 import { formatAcademyId } from "@/lib/auth/identity"
 import { DEFAULT_MONTHLY_DUE_DAY, REGISTRATION_FEE_PAISE } from "@/lib/finance/config"
@@ -78,6 +82,7 @@ import {
   type CoachFinanceDashboardSummary,
   type CoachFinanceRapidDesk,
   type CompleteOnboardingFinanceResult,
+  type CommitOnboardingFinanceInput,
   type CreateFeeAgreementInput,
   type CreateConcessionInput,
   type ExistingPlayerFinanceSetupInput,
@@ -103,6 +108,9 @@ import {
   type PlayerFinancialCloseoutState,
   type PlayerFinanceDashboardSummary,
   type MonthlyPreparationPreview,
+  type OnboardingFinancePreview,
+  type OnboardingFinancePreviewLine,
+  type OnboardingFinanceTerms,
   type PrepareMonthlyChargesInput,
   type PrepareMonthlyChargesResult,
   type RecordPaymentInput,
@@ -847,8 +855,270 @@ export function createOrReplaceFeeAgreement(
   }, { behavior: "immediate" })
 }
 
+function nextMonth(period: string) {
+  return addCalendarDays(monthEnd(period), 1).slice(0, 7)
+}
+
+function monthsBetween(first: string, last: string) {
+  const periods: string[] = []
+  for (let period = first; period <= last; period = nextMonth(period)) periods.push(period)
+  return periods
+}
+
+function onboardingTerms(input: OnboardingFinanceTerms) {
+  if (!input || typeof input !== "object") financeError("INVALID_INPUT", "Review the Fee Plan.")
+  if (!input.playerId?.trim()) financeError("INVALID_INPUT", "Choose a player.", "playerId")
+  const monthlyDueDay = input.monthlyDueDay ?? DEFAULT_MONTHLY_DUE_DAY
+  if (!Number.isInteger(monthlyDueDay) || monthlyDueDay < 1 || monthlyDueDay > 28) {
+    financeError("INVALID_INPUT", "Choose a monthly due day from 1 to 28.", "monthlyDueDay")
+  }
+  if (!academyPlanIsValid(input.academyPlan, input.level, input.batch)) {
+    financeError("INVALID_INPUT", "The Fee Plan must match the player’s training plan.", "academyPlan")
+  }
+  return {
+    amountPaise: validateMoney(input.agreedMonthlyFeePaise, "agreedMonthlyFeePaise"),
+    monthlyDueDay,
+  }
+}
+
+function buildOnboardingFinancePreview(
+  database: SmbaDatabaseExecutor,
+  input: OnboardingFinanceTerms,
+  now: Date,
+): OnboardingFinancePreview {
+  const validated = onboardingTerms(input)
+  const activation = requireFinanceActive(database)
+  const academyDateKey = getAcademyDateKey(now)
+  const academyPeriod = academyDateKey.slice(0, 7)
+  const enrollment = database.select({
+    academyPlan: playerEnrollments.academyPlan,
+    batch: playerEnrollments.batch,
+    level: playerEnrollments.level,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
+    recordRevision: playerEnrollments.recordRevision,
+    trainingStartConfirmedAt: playerEnrollments.trainingStartConfirmedAt,
+    trainingStartOn: playerEnrollments.trainingStartOn,
+  }).from(playerEnrollments).where(eq(playerEnrollments.accountId, input.playerId)).get()
+  if (!enrollment) financeError("PLAYER_UNAVAILABLE", "Choose an approved active player.", "playerId")
+
+  const blockers: string[] = []
+  const warnings: string[] = []
+  if (!enrollment.trainingStartConfirmedAt) blockers.push("Confirm the training start date in Assessment.")
+  if (enrollment.onboardingCompletedAt) blockers.push("This player’s onboarding is already complete.")
+  if (enrollment.trainingStartOn > academyDateKey) {
+    blockers.push(`Fee completion opens on ${enrollment.trainingStartOn}.`)
+  }
+  if (enrollment.academyPlan !== input.academyPlan
+    || enrollment.level !== input.level
+    || enrollment.batch !== input.batch) {
+    blockers.push("The Fee Plan no longer matches the player’s confirmed assessment.")
+  }
+
+  const assignments = database.select({
+    effectiveFrom: sessionAssignments.effectiveFrom,
+    effectiveTo: sessionAssignments.effectiveTo,
+    id: sessionAssignments.id,
+    seriesEndsOn: sessionSeries.endsOn,
+    seriesId: sessionSeries.id,
+    seriesStartsOn: sessionSeries.startsOn,
+    seriesStatus: sessionSeries.status,
+  }).from(sessionAssignments)
+    .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+    .where(and(
+      eq(sessionAssignments.accountId, input.playerId),
+      eq(sessionSeries.programme, input.level),
+      eq(sessionSeries.batch, input.batch),
+    )).all()
+  const usableAssignments = assignments.filter((assignment) => {
+    const start = [
+      enrollment.trainingStartOn,
+      assignment.effectiveFrom,
+      assignment.seriesStartsOn,
+    ].reduce((latest, value) => value > latest ? value : latest)
+    const ends = [assignment.effectiveTo, assignment.seriesEndsOn]
+      .filter((value): value is string => value !== null)
+    return !ends.length || ends.every((value) => value >= start)
+  })
+  if (!usableAssignments.length) blockers.push("Assign a matching session before completing fees.")
+
+  const firstEligibleDate = usableAssignments
+    .map((assignment) => [
+      enrollment.trainingStartOn,
+      assignment.effectiveFrom,
+      assignment.seriesStartsOn,
+    ].reduce((latest, value) => value > latest ? value : latest))
+    .sort()[0] ?? enrollment.trainingStartOn
+  let feePlanPeriod = firstEligibleDate.slice(0, 7)
+  let firstProration = readFirstMonthSessionProration(database, {
+    batch: input.batch,
+    period: feePlanPeriod,
+    playerId: input.playerId,
+    programme: input.level,
+    trainingStartOn: firstEligibleDate,
+  })
+  while (feePlanPeriod <= academyPeriod
+    && (firstProration.totalSessions === 0 || firstProration.remainingSessions === 0)) {
+    feePlanPeriod = nextMonth(feePlanPeriod)
+    firstProration = readFirstMonthSessionProration(database, {
+      batch: input.batch,
+      period: feePlanPeriod,
+      playerId: input.playerId,
+      programme: input.level,
+      trainingStartOn: firstEligibleDate,
+    })
+  }
+  const feePlanStartOn = `${feePlanPeriod}-01`
+  const relevantPeriods = feePlanPeriod <= academyPeriod
+    ? monthsBetween(feePlanPeriod, academyPeriod)
+    : []
+
+  const existingAgreements = database.select().from(feeAgreements)
+    .where(eq(feeAgreements.playerAccountId, input.playerId)).all()
+  if (existingAgreements.length) blockers.push("An existing Fee Plan must be resolved in the finance record.")
+  const existingCharges = database.select().from(financialCharges)
+    .where(eq(financialCharges.playerAccountId, input.playerId)).all()
+  if (existingCharges.some((charge) => (
+    charge.type === "registration"
+    || (charge.billingPeriod !== null && relevantPeriods.includes(charge.billingPeriod))
+  ))) blockers.push("Existing issued or voided charges conflict with this onboarding timeline.")
+
+  const completionReadyOn = addCalendarDays(academyDateKey, 3)
+  const lines: OnboardingFinancePreviewLine[] = [{
+    amountPaise: REGISTRATION_FEE_PAISE,
+    denominator: null,
+    description: "SMBA registration fee",
+    dueDate: academyDateKey,
+    kind: "registration",
+    numerator: null,
+    period: null,
+  }]
+  relevantPeriods.forEach((period, index) => {
+    const covered = usableAssignments.some((assignment) => (
+      assignment.effectiveFrom <= monthEnd(period)
+      && (assignment.effectiveTo === null || assignment.effectiveTo > monthStart(period))
+      && assignment.seriesStartsOn <= monthEnd(period)
+      && (assignment.seriesEndsOn === null || assignment.seriesEndsOn >= monthStart(period))
+    ))
+    if (!covered) blockers.push(`No matching session assignment covers ${period}.`)
+    if (period < activation.trackingMonth) {
+      lines.push({
+        amountPaise: null,
+        denominator: index === 0 ? firstProration.totalSessions : null,
+        description: "Training history before financial tracking",
+        dueDate: null,
+        kind: "before_tracking",
+        numerator: index === 0 ? firstProration.remainingSessions : null,
+        period,
+      })
+      return
+    }
+    const isProrated = index === 0
+      && firstProration.totalSessions > 0
+      && firstProration.remainingSessions < firstProration.totalSessions
+    const isFirstSessionMonth = index === 0 && firstProration.totalSessions > 0
+    const amountPaise = isProrated
+      ? calculateProratedSessionFee(
+          validated.amountPaise,
+          firstProration.remainingSessions,
+          firstProration.totalSessions,
+        )
+      : validated.amountPaise
+    if (amountPaise === 0) {
+      blockers.push("The partial fee rounds to ₹0. Increase the agreed fee or review the start date.")
+    }
+    const normalDueDate = dateInMonth(period, validated.monthlyDueDay)
+    lines.push({
+      amountPaise,
+      denominator: isFirstSessionMonth ? firstProration.totalSessions : null,
+      description: isFirstSessionMonth
+        ? `First monthly training fee · ${firstProration.remainingSessions}/${firstProration.totalSessions} sessions`
+        : `Monthly training fee · ${period}`,
+      dueDate: completionReadyOn > normalDueDate ? completionReadyOn : normalDueDate,
+      kind: "monthly_training",
+      numerator: isFirstSessionMonth ? firstProration.remainingSessions : null,
+      period,
+    })
+  })
+  if (lines.some((line) => line.kind === "before_tracking")) {
+    warnings.push("Periods before financial tracking will be recorded as history without charges.")
+  }
+  if (feePlanPeriod > academyPeriod) {
+    warnings.push(`No monthly charge is due now; the Fee Plan begins in ${feePlanPeriod}.`)
+  }
+
+  const concessionState = database.select().from(concessions).where(and(
+    eq(concessions.playerAccountId, input.playerId),
+    eq(concessions.mode, "recurring"),
+  )).orderBy(asc(concessions.createdAt), asc(concessions.id)).all()
+  const occurrenceState = usableAssignments.length
+    ? database.select({
+      id: sessionOccurrences.id,
+      occurrenceDate: sessionOccurrences.occurrenceDate,
+      replacementForOccurrenceId: sessionOccurrences.replacementForOccurrenceId,
+      status: sessionOccurrences.status,
+    }).from(sessionOccurrences).where(inArray(
+      sessionOccurrences.seriesId,
+      [...new Set(usableAssignments.map(({ seriesId }) => seriesId))],
+    )).orderBy(asc(sessionOccurrences.id)).all()
+    : []
+  if (usableAssignments.length && !occurrenceState.some(({ status }) => status === "scheduled")) {
+    blockers.push("The assigned session calendar has no eligible scheduled sessions.")
+  }
+  const fingerprintInput = {
+    academyDateKey,
+    assignments: usableAssignments,
+    blockers,
+    charges: existingCharges.map((charge) => ({
+      billingPeriod: charge.billingPeriod,
+      id: charge.id,
+      lifecycle: charge.lifecycle,
+      recordRevision: charge.recordRevision,
+      type: charge.type,
+    })),
+    concessions: concessionState,
+    existingAgreements: existingAgreements.map((agreement) => ({
+      effectiveFrom: agreement.effectiveFrom,
+      effectiveTo: agreement.effectiveTo,
+      id: agreement.id,
+      recordRevision: agreement.recordRevision,
+      status: agreement.status,
+    })),
+    lines,
+    occurrences: occurrenceState,
+    playerRecordRevision: enrollment.recordRevision,
+    terms: { ...input, monthlyDueDay: validated.monthlyDueDay },
+    trackingMonth: activation.trackingMonth,
+    trainingStartOn: enrollment.trainingStartOn,
+    warnings,
+  }
+  return {
+    academyDateKey,
+    blockers,
+    feePlanStartOn,
+    fingerprint: financialPayloadFingerprint(fingerprintInput),
+    lines,
+    playerRecordRevision: enrollment.recordRevision,
+    totalIssuedPaise: lines.reduce((total, line) => total + (line.amountPaise ?? 0), 0),
+    trackingMonth: activation.trackingMonth,
+    trainingStartOn: enrollment.trainingStartOn,
+    warnings,
+  }
+}
+
+export function previewPlayerOnboardingFinance(
+  input: OnboardingFinanceTerms,
+  {
+    coachId,
+    database = initializeDatabase(),
+    now = new Date(),
+  }: Pick<CoachContext, "coachId" | "database" | "now">,
+) {
+  requireCoach(database, coachId)
+  return buildOnboardingFinancePreview(database, input, now)
+}
+
 export function completePlayerOnboardingFinance(
-  input: CreateFeeAgreementInput,
+  input: CommitOnboardingFinanceInput,
   {
     coachId,
     createFeeReference = createOpaqueFeeReference,
@@ -857,130 +1127,138 @@ export function completePlayerOnboardingFinance(
     now = new Date(),
   }: CoachContext,
 ): CompleteOnboardingFinanceResult {
-  if (!input || typeof input !== "object" || typeof input.effectiveFrom !== "string") {
-    financeError("INVALID_INPUT", "Choose a valid first fee month.", "effectiveFrom")
+  if (!input?.previewFingerprint || !/^[0-9a-f]{64}$/u.test(input.previewFingerprint)) {
+    financeError("INVALID_INPUT", "Review the latest onboarding fee preview.")
   }
-  const onboardingDate = getAcademyDateKey(now)
-  const onboardingPeriod = onboardingDate.slice(0, 7)
-  const firstFeePeriod = input.effectiveFrom.slice(0, 7)
-  if (!isValidMonthKey(firstFeePeriod) || firstFeePeriod < onboardingPeriod) {
-    financeError(
-      "INVALID_INPUT",
-      "The first fee month cannot be earlier than the onboarding month.",
-      "effectiveFrom",
-    )
+  const submittedTerms: OnboardingFinanceTerms = {
+    academyPlan: input.academyPlan,
+    agreedMonthlyFeePaise: input.agreedMonthlyFeePaise,
+    batch: input.batch,
+    level: input.level,
+    monthlyDueDay: input.monthlyDueDay,
+    playerId: input.playerId,
   }
+  const submittedTermsFingerprint = financialPayloadFingerprint(submittedTerms)
+  const operationKey = `onboarding:${input.playerId}:${input.previewFingerprint}`
 
   return database.transaction((tx) => {
     requireCoach(tx, coachId)
     requireFinanceActive(tx)
-    let firstMonthProration: { remainingSessions: number; totalSessions: number } | null = null
-    let agreementInput = input
-    if (!hasAssignmentInPeriod(tx, input.playerId, firstFeePeriod, {
-      programme: input.level,
-      batch: input.batch,
-    })) {
-      financeError(
-        "SETUP_REQUIRED",
-        "Choose a first fee month covered by the player’s assigned session.",
-        "effectiveFrom",
-      )
-    }
-    if (firstFeePeriod === onboardingPeriod) {
-      firstMonthProration = readFirstMonthSessionProration(tx, {
-        batch: input.batch,
-        period: firstFeePeriod,
-        playerId: input.playerId,
-        programme: input.level,
-        referenceInstant: now,
-      })
-      if (firstMonthProration.totalSessions === 0) {
-        financeError(
-          "SETUP_REQUIRED",
-          "The assigned session has no scheduled training days for this month.",
-          "effectiveFrom",
-        )
+    const replay = readAuditEventByIdempotencyKey(tx, operationKey)
+    if (replay) {
+      const metadata = parseAuditMetadata<{
+        fingerprint?: string
+        operation?: string
+        result?: CompleteOnboardingFinanceResult
+        termsFingerprint?: string
+      }>(replay.metadata)
+      if (replay.eventType !== "historical_reconciled"
+        || metadata.operation !== "onboarding_completed"
+        || metadata.fingerprint !== input.previewFingerprint
+        || metadata.termsFingerprint !== submittedTermsFingerprint
+        || !metadata.result) {
+        financeError("IDEMPOTENCY_CONFLICT", "This onboarding confirmation was already used differently.")
       }
-      if (firstMonthProration.remainingSessions === 0) {
-        agreementInput = {
-          ...input,
-          effectiveFrom: addCalendarDays(monthEnd(firstFeePeriod), 1),
-        }
-      }
+      return { ...metadata.result, reused: true }
     }
 
-    const agreementResult = createAgreement(tx, agreementInput, { actorId: coachId, createId, now })
-    const firstMonthlyAmountPaise = firstMonthProration?.remainingSessions
-      ? calculateProratedSessionFee(
-          agreementResult.agreement.agreedMonthlyFeePaise,
-          firstMonthProration.remainingSessions,
-          firstMonthProration.totalSessions,
-        )
-      : null
-    if (firstMonthlyAmountPaise === 0) {
-      financeError(
-        "INVALID_INPUT",
-        "The agreed monthly fee is too low to create a partial fee rounded to ₹50.",
-        "agreedMonthlyFeePaise",
-      )
+    const preview = buildOnboardingFinancePreview(tx, submittedTerms, now)
+    if (preview.fingerprint !== input.previewFingerprint) {
+      financeError("CONFLICT", "The onboarding fee preview changed. Review it again before confirming.")
+    }
+    if (preview.blockers.length) {
+      financeError("SETUP_REQUIRED", preview.blockers[0], "playerId")
+    }
+
+    const agreementResult = createAgreement(tx, {
+      ...submittedTerms,
+      effectiveFrom: preview.feePlanStartOn,
+      idempotencyKey: `${operationKey}:plan`,
+    }, { actorId: coachId, createId, now })
+    const registrationLine = preview.lines.find((line) => line.kind === "registration")
+    if (!registrationLine?.amountPaise || !registrationLine.dueDate) {
+      throw new Error("The registration preview is incomplete.")
     }
     const registration = issueCharge(tx, {
       actorId: coachId,
-      amountPaise: REGISTRATION_FEE_PAISE,
+      amountPaise: registrationLine.amountPaise,
       createFeeReference,
       createId,
-      description: "SMBA registration fee",
-      dueDate: onboardingDate,
+      description: registrationLine.description,
+      dueDate: registrationLine.dueDate,
       now,
       playerId: input.playerId,
       type: "registration",
     })
-
-    let firstMonthlyCharge: ReturnType<typeof issueCharge> | null = null
-    if (firstMonthProration && firstMonthProration.remainingSessions > 0) {
-      if (firstMonthlyAmountPaise === null) {
-        throw new Error("The first monthly fee could not be calculated.")
+    const monthlyResults = preview.lines.flatMap((line) => {
+      if (line.kind !== "monthly_training" || !line.period || !line.amountPaise || !line.dueDate) {
+        return []
       }
-      const normalDueDate = dateInMonth(firstFeePeriod, agreementResult.agreement.monthlyDueDay)
-      const firstAssignment = readFirstAssignmentDate(tx, input.playerId)
-      const chargeReadyDate = [onboardingDate, firstAssignment ?? onboardingDate]
-        .reduce((latest, value) => value > latest ? value : latest)
-      const dueDate = chargeReadyDate > normalDueDate
-        ? addCalendarDays(chargeReadyDate, 3)
-        : normalDueDate
-      firstMonthlyCharge = issueCharge(tx, {
+      const issued = issueCharge(tx, {
         actorId: coachId,
         agreementId: agreementResult.agreement.id,
-        amountPaise: firstMonthlyAmountPaise,
-        billingPeriod: firstFeePeriod,
+        amountPaise: line.amountPaise,
+        billingPeriod: line.period,
         createFeeReference,
         createId,
-        description: `First monthly training fee · ${firstMonthProration.remainingSessions}/${firstMonthProration.totalSessions} sessions`,
-        dueDate,
+        description: line.description,
+        dueDate: line.dueDate,
         now,
         playerId: input.playerId,
         type: "monthly_training",
       })
-      applyRecurringConcessionForCharge(tx, firstMonthlyCharge.charge, firstFeePeriod, {
+      applyRecurringConcessionForCharge(tx, issued.charge, line.period, {
         actorId: coachId,
         createId,
         now,
       })
+      return [{ issued, line }]
+    })
+    const enrollmentUpdate = tx.update(playerEnrollments).set({
+      onboardingCompletedAt: now,
+      onboardingCompletedByAccountId: coachId,
+      recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
+      updatedAt: now,
+    }).where(and(
+      eq(playerEnrollments.accountId, input.playerId),
+      eq(playerEnrollments.recordRevision, preview.playerRecordRevision),
+      isNull(playerEnrollments.onboardingCompletedAt),
+    )).run()
+    if (enrollmentUpdate.changes !== 1) {
+      financeError("CONFLICT", "The onboarding record changed. Review the fee preview again.")
     }
 
-    return {
+    const firstMonthly = monthlyResults[0] ?? null
+    const result: CompleteOnboardingFinanceResult = {
       agreementId: agreementResult.agreement.id,
-      firstMonthlyFeePaise: firstMonthProration
-        ? firstMonthlyCharge?.charge.originalAmountPaise ?? 0
-        : null,
-      firstMonthlyChargeId: firstMonthlyCharge?.charge.id ?? null,
-      firstMonthlyRemainingSessions: firstMonthProration?.remainingSessions ?? null,
-      firstMonthlyTotalSessions: firstMonthProration?.totalSessions ?? null,
+      createdMonthlyChargeIds: monthlyResults.map(({ issued }) => issued.charge.id),
+      firstMonthlyChargeId: firstMonthly?.issued.charge.id ?? null,
+      firstMonthlyFeePaise: firstMonthly?.issued.charge.originalAmountPaise ?? null,
+      firstMonthlyRemainingSessions: firstMonthly?.line.numerator ?? null,
+      firstMonthlyTotalSessions: firstMonthly?.line.denominator ?? null,
       registrationChargeId: registration.charge.id,
-      reused: agreementResult.reused
-        && !registration.created
-        && (firstMonthlyCharge === null || !firstMonthlyCharge.created),
+      reused: false,
     }
+    insertAudit(tx, {
+      actorId: coachId,
+      createId,
+      entityId: input.playerId,
+      entityType: "player",
+      eventType: "historical_reconciled",
+      idempotencyKey: operationKey,
+      metadata: {
+        beforeTrackingPeriods: preview.lines
+          .filter((line) => line.kind === "before_tracking")
+          .map((line) => line.period),
+        fingerprint: preview.fingerprint,
+        operation: "onboarding_completed",
+        result,
+        termsFingerprint: submittedTermsFingerprint,
+        trainingStartOn: preview.trainingStartOn,
+      },
+      now,
+    })
+    return result
   }, { behavior: "immediate" })
 }
 

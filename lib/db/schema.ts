@@ -431,13 +431,24 @@ export const playerEnrollments = sqliteTable("player_enrollments", {
     enum: ["weekday-3-day", "weekday-4-day", "weekday-5-day", "weekend-standard"],
   }),
   status: text("status", { enum: ["unassigned", "active", "paused"] }).notNull().default("unassigned"),
-  joinedAt: integer("joined_at", { mode: "timestamp_ms" }).notNull(),
+  trainingStartOn: text("training_start_on").notNull(),
+  trainingStartConfirmedAt: integer("training_start_confirmed_at", { mode: "timestamp_ms" }),
+  trainingStartConfirmedByAccountId: text("training_start_confirmed_by_account_id")
+    .references(() => accounts.id),
+  onboardingCompletedAt: integer("onboarding_completed_at", { mode: "timestamp_ms" }),
+  onboardingCompletedByAccountId: text("onboarding_completed_by_account_id")
+    .references(() => accounts.id),
   primaryContactName: text("primary_contact_name"),
   primaryContactRelationship: text("primary_contact_relationship"),
   primaryContactPhone: text("primary_contact_phone"),
   recordRevision: integer("record_revision").notNull().default(0),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
-})
+}, (table) => [
+  check(
+    "player_enrollments_training_start_on_check",
+    sql`${table.trainingStartOn} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' and date(${table.trainingStartOn}) = ${table.trainingStartOn}`,
+  ),
+])
 
 export const batches = sqliteTable("batches", {
   id: text("id").primaryKey(),

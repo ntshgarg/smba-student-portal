@@ -23,8 +23,13 @@ export type OnboardingPendingRequest = {
 
 export type OnboardingWorkspacePlayer = OnboardingPlayer & {
   academyId: string
+  activatedAt?: string | null
+  approvedAt?: string | null
   fullName: string
-  joinedAt: string
+  onboardingCompletedAt?: string | null
+  requestedAt?: string
+  trainingStartOn: string
+  trainingStartConfirmedAt?: string | null
   primaryContact: {
     name: string
     phone: string
@@ -34,14 +39,17 @@ export type OnboardingWorkspacePlayer = OnboardingPlayer & {
 }
 
 export type PlayerOnboardingCase = {
+  activatedAt?: string | null
   academyId: string | null
+  approvedAt?: string | null
   academyPlan: AcademyPlan | null
   batch: TrainingBatch | null
   feePlanRecorded: boolean
-  firstFeeMonth: string | null
   fullName: string
   id: string
-  joinedAt: string | null
+  onboardingCompletedAt?: string | null
+  trainingStartOn: string | null
+  trainingStartConfirmedAt?: string | null
   level: TrainingProgramme | null
   primaryContact: OnboardingWorkspacePlayer["primaryContact"] | null
   recordRevision: number | null
@@ -60,6 +68,8 @@ export type OnboardingPlayer = {
   batch: TrainingBatch | null
   id: string
   level: TrainingProgramme | null
+  onboardingCompletedAt?: string | null
+  trainingStartConfirmedAt?: string | null
 }
 
 export type OnboardingAssignment = {
@@ -150,7 +160,8 @@ function completedOnboarding(
 }
 
 function classificationIsComplete(player: OnboardingPlayer) {
-  return player.level !== null
+  return player.trainingStartConfirmedAt !== null
+    && player.level !== null
     && player.batch !== null
     && player.academyPlan !== null
     && academyPlanIsValid(player.academyPlan, player.level, player.batch)
@@ -173,37 +184,15 @@ function hasCurrentOrFutureAssignment(
   })
 }
 
-function firstFeeMonth(
-  assignments: OnboardingAssignment[],
-  player: OnboardingPlayer,
-  referenceDate: string,
-) {
-  if (!player.level || !player.batch) return null
-  const starts = assignments.flatMap((assignment) => {
-    const range = assignmentRange(assignment)
-    return range !== null
-      && assignment.programme === player.level
-      && assignment.batch === player.batch
-      && assignment.seriesStatus === "active"
-      && (range.end === null || range.end >= referenceDate)
-      ? [range.start]
-      : []
-  })
-  if (!starts.length) return null
-  const assignmentMonth = starts.reduce((earliest, value) => (
-    value < earliest ? value : earliest
-  )).slice(0, 7)
-  const referenceMonth = referenceDate.slice(0, 7)
-  return assignmentMonth > referenceMonth ? assignmentMonth : referenceMonth
-}
-
 function onboardingStage(
   assignments: OnboardingAssignment[],
   feePlans: OnboardingFeePlan[],
   player: OnboardingPlayer,
   referenceDate: string,
 ): Exclude<PlayerOnboardingStage, "request"> | null {
-  if (completedOnboarding(assignments, feePlans)) return null
+  if (player.onboardingCompletedAt !== undefined
+    ? player.onboardingCompletedAt !== null
+    : completedOnboarding(assignments, feePlans)) return null
   if (!classificationIsComplete(player)) return "assessment"
   if (!hasCurrentOrFutureAssignment(assignments, player, referenceDate)) return "session"
   return "feePlan"
@@ -261,14 +250,17 @@ export function derivePlayerOnboardingWorkspace({
   const assignmentsByPlayer = groupByPlayer(assignments)
   const feePlansByPlayer = groupByPlayer(feePlans)
   const requestCases: PlayerOnboardingCase[] = pendingRequests.map((request) => ({
+    activatedAt: null,
     academyId: null,
-    academyPlan: null,
-    batch: null,
-    feePlanRecorded: false,
-    firstFeeMonth: null,
+    approvedAt: null,
+      academyPlan: null,
+      batch: null,
+      feePlanRecorded: false,
     fullName: request.fullName,
     id: request.id,
-    joinedAt: null,
+    onboardingCompletedAt: null,
+    trainingStartOn: null,
+    trainingStartConfirmedAt: null,
     level: null,
     primaryContact: null,
     recordRevision: null,
@@ -288,27 +280,30 @@ export function derivePlayerOnboardingWorkspace({
     if (!stage) return []
 
     return [{
+      activatedAt: player.activatedAt,
       academyId: player.academyId,
+      approvedAt: player.approvedAt,
       academyPlan: player.academyPlan,
       batch: player.batch,
       feePlanRecorded: playerFeePlans.length > 0,
-      firstFeeMonth: firstFeeMonth(playerAssignments, player, referenceDate),
       fullName: player.fullName,
       id: player.id,
-      joinedAt: player.joinedAt,
+      onboardingCompletedAt: player.onboardingCompletedAt,
+      trainingStartOn: player.trainingStartOn,
+      trainingStartConfirmedAt: player.trainingStartConfirmedAt,
       level: player.level,
       primaryContact: player.primaryContact,
       recordRevision: player.recordRevision,
       requestedRole: "player",
-      requestedAt: null,
+      requestedAt: player.requestedAt ?? null,
       stage,
     }]
   })
   const cases = [...requestCases, ...playerCases].sort((left, right) => {
     const stageDifference = STAGE_ORDER[left.stage] - STAGE_ORDER[right.stage]
     if (stageDifference) return stageDifference
-    const leftDate = left.requestedAt ?? left.joinedAt ?? ""
-    const rightDate = right.requestedAt ?? right.joinedAt ?? ""
+    const leftDate = left.requestedAt ?? left.trainingStartOn ?? ""
+    const rightDate = right.requestedAt ?? right.trainingStartOn ?? ""
     return leftDate.localeCompare(rightDate) || left.fullName.localeCompare(right.fullName)
   })
   const summary = cases.reduce<PlayerOnboardingSummary>((current, item) => {

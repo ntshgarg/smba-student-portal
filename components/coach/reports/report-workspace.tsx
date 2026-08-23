@@ -94,7 +94,7 @@ function getReportAttendance(
     month,
     referenceDate: getIndiaDateKey(new Date(referenceInstant)),
     referenceInstant,
-    joinedOn: player.member.joinedAt,
+    joinedOn: player.member.trainingStartOn,
     assignments: playerAssignments,
     occurrences: monthOccurrences,
     records: monthOccurrences.flatMap((occurrence) => {
