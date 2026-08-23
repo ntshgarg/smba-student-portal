@@ -1,0 +1,21 @@
+{
+  // npm run typecheck reads this file so the gate checks one fixed set of files
+  // whether or not build output exists. The .next globs have to stay in
+  // tsconfig.json: next build re-adds them there and draws its own route
+  // validation from the file list that config resolves to, so excluding .next
+  // there would silently stop the build checking routes. Excluding it here
+  // costs the build nothing and survives the rewrite, since exclude filters
+  // include.
+  "extends": "./tsconfig.json",
+  // A child's exclude replaces the parent's rather than extending it, so these
+  // repeat tsconfig.json's entries and have to be kept in step with them. .next
+  // covers .next/dev as well, for the reason given there. next-env.d.ts is
+  // excluded because it imports ./.next/types/routes.d.ts, and TypeScript
+  // follows an import even when its target is excluded.
+  "exclude": ["node_modules", "output", "coverage", ".next", "next-env.d.ts"],
+  // next-env.d.ts also references the static image module declarations, which
+  // nothing else pulls in, so name that file directly rather than lose them;
+  // files entries are not filtered by exclude. Its other reference, to "next"
+  // itself, is already covered by the app's own next/* imports.
+  "files": ["node_modules/next/image-types/global.d.ts"]
+}

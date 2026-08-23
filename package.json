@@ -13,7 +13,7 @@
     "vercel-build": "npm run db:prepare:empty && next build",
     "start": "next start -p 3000",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.check.json --noEmit",
     "db:check": "drizzle-kit check",
     "test": "vitest run",
     "test:ci": "vitest run --exclude tests/regression-fixture.test.ts --maxWorkers=2 --minWorkers=1",
