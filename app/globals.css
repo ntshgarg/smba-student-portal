@@ -12998,11 +12998,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-page {
-  --admin-cobalt: #07529a;
-  --admin-cobalt-deep: #061f42;
-  --admin-signal-red: #d33243;
-  --admin-paper: #fffdf8;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--portal-header-height));
   padding-block: clamp(18px, 3vw, 42px);
 }
 
@@ -13025,24 +13021,13 @@ tr.is-expanded .coach-member-row-action button svg {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   overflow: hidden;
-  border-color: var(--admin-cobalt-deep);
+  border-color: var(--navy);
   background:
-    radial-gradient(circle at 78% 20%, rgba(35, 126, 214, 0.58), transparent 36%),
-    linear-gradient(125deg, var(--admin-cobalt-deep) 0%, var(--admin-cobalt) 100%);
-  color: var(--admin-paper);
+    radial-gradient(circle at 82% 12%, rgba(255, 255, 255, 0.045), transparent 24%),
+    var(--navy);
+  color: var(--ivory);
   isolation: isolate;
   padding: clamp(26px, 3.4vw, 48px);
-}
-
-.admin-page-header::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  background:
-    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.035) 48%, transparent 48%),
-    repeating-linear-gradient(108deg, transparent 0 68px, rgba(255, 255, 255, 0.025) 69px 70px);
-  content: "";
-  pointer-events: none;
 }
 
 .admin-page-header > * {
@@ -13067,9 +13052,9 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-owner-ribbon p {
   min-width: clamp(168px, 16vw, 232px);
-  background: var(--admin-paper);
+  background: var(--ivory);
   clip-path: polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%);
-  color: var(--admin-cobalt-deep);
+  color: var(--navy);
   padding: 9px 28px 8px 14px;
   font-size: clamp(11px, 1vw, 14px);
   font-weight: 850;
@@ -13084,7 +13069,7 @@ tr.is-expanded .coach-member-row-action button svg {
   background: repeating-linear-gradient(
     118deg,
     transparent 0 7px,
-    var(--admin-signal-red) 7px 11px,
+    var(--red) 7px 11px,
     transparent 11px 16px
   );
   transform: skewX(-10deg);
@@ -13093,14 +13078,12 @@ tr.is-expanded .coach-member-row-action button svg {
 .admin-page-header h1 {
   display: grid;
   width: fit-content;
-  max-width: calc(100% - clamp(108px, 15vw, 210px));
+  max-width: 100%;
   margin: 0;
-  font-family: var(--font-tournament-display), "Arial Narrow", sans-serif;
-  font-size: clamp(76px, 11vw, 166px);
-  font-weight: 700;
-  letter-spacing: -0.045em;
-  line-height: 0.72;
-  text-transform: uppercase;
+  font-size: clamp(56px, 7.8vw, 118px);
+  font-weight: 570;
+  letter-spacing: -0.07em;
+  line-height: 0.88;
 }
 
 .admin-page-header h1 span {
@@ -13109,49 +13092,8 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-page-header h1 i {
-  color: var(--admin-signal-red);
+  color: var(--rose);
   font-style: normal;
-}
-
-.admin-signal-number {
-  position: absolute;
-  right: clamp(24px, 4.2vw, 62px);
-  bottom: clamp(26px, 4vw, 54px);
-  color: color-mix(in srgb, var(--admin-signal-red) 86%, var(--admin-paper));
-  font-family: var(--font-tournament-display), "Arial Narrow", sans-serif;
-  font-size: clamp(76px, 10vw, 146px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 0.75;
-  text-orientation: sideways;
-  writing-mode: vertical-rl;
-}
-
-.admin-page-header .profile-chip {
-  min-width: 0;
-  border: 0;
-  padding: 0;
-}
-
-.admin-page-header .profile-chip > span {
-  width: clamp(46px, 4.3vw, 58px);
-  height: clamp(46px, 4.3vw, 58px);
-  border: 1px solid rgba(255, 253, 248, 0.9);
-  background: transparent;
-  color: var(--admin-paper);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(19px, 1.8vw, 25px);
-  font-weight: 400;
-}
-
-.admin-page-header .profile-chip > div {
-  display: none;
-}
-
-.admin-page-header .account-menu-root {
-  position: absolute;
-  top: clamp(22px, 3.2vw, 44px);
-  right: clamp(22px, 3.2vw, 44px);
 }
 
 .admin-access-strip {
@@ -13160,8 +13102,8 @@ tr.is-expanded .coach-member-row-action button svg {
   place-items: center;
   border: 1px solid rgba(7, 27, 50, 0.2);
   border-top: 0;
-  background: var(--admin-paper);
-  color: var(--admin-cobalt-deep);
+  background: var(--paper);
+  color: var(--navy);
 }
 
 .admin-access-strip span {
@@ -13209,9 +13151,9 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-support-panel header > span {
   flex: 0 0 auto;
-  border: 1px solid var(--admin-signal-red);
+  border: 1px solid var(--red);
   padding: 7px 10px;
-  color: var(--admin-signal-red);
+  color: var(--red);
   font-size: 9px;
   font-weight: 850;
   letter-spacing: 0.09em;
@@ -13222,7 +13164,7 @@ tr.is-expanded .coach-member-row-action button svg {
   margin-top: 16px;
   border: 1px solid rgba(7, 27, 50, 0.2);
   padding: 11px 13px;
-  color: var(--admin-cobalt-deep);
+  color: var(--navy);
   font-size: 12px;
 }
 
@@ -13245,7 +13187,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .admin-support-list article > svg {
   width: 22px;
   height: 22px;
-  color: var(--admin-signal-red);
+  color: var(--red);
 }
 
 .admin-support-list article > div:nth-child(2) {
@@ -13254,7 +13196,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-support-list small {
-  color: var(--admin-signal-red);
+  color: var(--red);
   font-size: 9px;
   font-weight: 820;
   letter-spacing: 0.08em;
@@ -13281,9 +13223,9 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-support-actions button {
   min-height: 44px;
-  border: 1px solid var(--admin-cobalt-deep);
+  border: 1px solid var(--navy);
   background: transparent;
-  color: var(--admin-cobalt-deep);
+  color: var(--navy);
   padding: 8px 12px;
   font: inherit;
   font-size: 11px;
@@ -13291,8 +13233,8 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-support-actions button.is-approve {
-  background: var(--admin-cobalt-deep);
-  color: var(--admin-paper);
+  background: var(--navy);
+  color: var(--paper);
 }
 
 .admin-support-actions button:disabled {
@@ -13403,7 +13345,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-directory-search-field input:focus-visible {
   border-color: #071b32;
-  outline: 2px solid #c52334;
+  outline: 2px solid var(--red);
   outline-offset: 2px;
 }
 
@@ -13527,7 +13469,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-preview-list small {
-  color: #c52334;
+  color: var(--red);
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -13559,7 +13501,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-preview-list button:focus-visible {
-  outline: 2px solid #c52334;
+  outline: 2px solid var(--red);
   outline-offset: 3px;
 }
 
@@ -13578,7 +13520,7 @@ tr.is-expanded .coach-member-row-action button svg {
   align-items: center;
   justify-content: center;
   gap: 24px;
-  border-bottom: 1px solid #c52334;
+  border-bottom: 1px solid var(--red);
   background: #f2eadc;
   color: #071b32;
   padding: 10px 20px;
@@ -13632,14 +13574,8 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .admin-page-header h1 {
-    max-width: calc(100% - 116px);
-    font-size: clamp(78px, 12.5vw, 106px);
-  }
-
-  .admin-signal-number {
-    right: 28px;
-    bottom: 34px;
-    font-size: 88px;
+    max-width: 100%;
+    font-size: clamp(52px, 9vw, 92px);
   }
 
   .admin-preview-list {
@@ -13678,16 +13614,6 @@ tr.is-expanded .coach-member-row-action button svg {
     padding: 18px;
   }
 
-  .admin-page-header::before {
-    inset: 0;
-    opacity: 1;
-  }
-
-  .admin-page-header .account-menu-root {
-    top: 14px;
-    right: 14px;
-  }
-
   .admin-page.page-shell {
     width: min(calc(100% - 20px), 1400px);
   }
@@ -13716,21 +13642,8 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .admin-page-header h1 {
-    max-width: calc(100% - 62px);
-    font-size: clamp(52px, 15.8vw, 64px);
-    line-height: 0.76;
-  }
-
-  .admin-signal-number {
-    right: 14px;
-    bottom: 22px;
-    font-size: 68px;
-  }
-
-  .admin-page-header .profile-chip > span {
-    width: 44px;
-    height: 44px;
-    font-size: 19px;
+    max-width: 100%;
+    font-size: clamp(38px, 14vw, 64px);
   }
 
   .admin-access-strip {
