@@ -3,6 +3,8 @@
 import { useActionState, useEffect, useRef } from "react"
 import { ArrowRight } from "lucide-react"
 
+import { AuthField } from "@/components/auth-field"
+
 import {
   setupPinAction,
   skipPinSetupAction,
@@ -10,6 +12,7 @@ import {
 } from "@/app/auth/pin/actions"
 
 const initialState: PinSetupState = { error: null, errorField: null }
+const pinSetupErrorId = "pin-setup-error"
 
 export function PinSetupForm({ allowSkip = true }: { allowSkip?: boolean }) {
   const [state, formAction, pending] = useActionState(setupPinAction, initialState)
@@ -22,41 +25,49 @@ export function PinSetupForm({ allowSkip = true }: { allowSkip?: boolean }) {
   return (
     <div className="pin-setup">
       <form className="login-form" action={formAction} noValidate>
-        <div className="login-field">
-          <label htmlFor="setup-pin">Enter PIN</label>
-          <input
-            ref={pinRef}
-            className="login-pin-input"
-            id="setup-pin"
-            name="pin"
-            type="password"
-            autoComplete="new-password"
-            inputMode="numeric"
-            pattern="[0-9]{6}"
-            minLength={6}
-            maxLength={6}
-            required
-            aria-invalid={state.errorField === "pin" ? true : undefined}
-          />
-        </div>
-        <div className="login-field">
-          <label htmlFor="confirm-pin">Confirm PIN</label>
-          <input
-            ref={confirmPinRef}
-            className="login-pin-input"
-            id="confirm-pin"
-            name="confirmPin"
-            type="password"
-            autoComplete="new-password"
-            inputMode="numeric"
-            pattern="[0-9]{6}"
-            minLength={6}
-            maxLength={6}
-            required
-            aria-invalid={state.errorField === "confirmPin" ? true : undefined}
-          />
-        </div>
-        {state.error ? <p className="login-error" role="alert">{state.error}</p> : null}
+        <AuthField
+          id="setup-pin"
+          label="Enter PIN"
+          errorId={state.error && state.errorField === "pin" ? pinSetupErrorId : undefined}
+        >
+          {(control) => (
+            <input
+              {...control}
+              ref={pinRef}
+              className="login-pin-input"
+              name="pin"
+              type="password"
+              autoComplete="new-password"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              minLength={6}
+              maxLength={6}
+              required
+            />
+          )}
+        </AuthField>
+        <AuthField
+          id="confirm-pin"
+          label="Confirm PIN"
+          errorId={state.error && state.errorField === "confirmPin" ? pinSetupErrorId : undefined}
+        >
+          {(control) => (
+            <input
+              {...control}
+              ref={confirmPinRef}
+              className="login-pin-input"
+              name="confirmPin"
+              type="password"
+              autoComplete="new-password"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              minLength={6}
+              maxLength={6}
+              required
+            />
+          )}
+        </AuthField>
+        {state.error ? <p id={pinSetupErrorId} className="login-error" role="alert">{state.error}</p> : null}
         <div className="pin-setup-actions">
           <button className="login-submit" type="submit" disabled={pending}>
             <span>{pending ? "Saving PIN…" : "Set up PIN"}</span>
