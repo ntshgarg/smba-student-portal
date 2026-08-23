@@ -33,11 +33,14 @@ export function ReportsCard({
   })
   if (hasActiveResumePoint) writeSearch.set("player", resumePoint.playerId)
   const monthLabel = formatReportMonth(month).replace(/\s+\d{4}$/, "")
+  const outstanding = activePlayerIds.length - completedCount
 
   return (
     <CoachDashboardCard
       area="reports"
-      status={`${monthLabel} · ${completedCount}/${activePlayerIds.length}`}
+      status={outstanding > 0
+        ? { count: outstanding, unit: "outstanding" }
+        : { state: "Clear" }}
       title="Monthly reports"
       titleId="coach-reports-card-title"
     >

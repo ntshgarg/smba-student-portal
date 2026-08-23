@@ -30,6 +30,37 @@ regression` and `UI accessibility / WCAG 2.2 AA` checks complete before a produc
 `main` is protected with strict status checks, administrator enforcement, pull requests, linear history,
 conversation resolution and force-push/deletion prevention. Do not weaken those rules to bypass a failure.
 
+## Environment separation
+
+Vercel runs `vercel-build` for every deployment, production and preview alike, and its
+`db:prepare:empty` step migrates and seeds whichever database `TURSO_DATABASE_URL` names in that
+environment. The academy database must therefore be reachable from Production only:
+
+| Variable | Production | Preview | Development |
+| --- | --- | --- | --- |
+| `TURSO_DATABASE_URL` | academy database | preview database, otherwise unset | unset |
+| `TURSO_AUTH_TOKEN` | academy database | preview database, otherwise unset | unset |
+| `SMBA_ALLOW_REMOTE_DB_MIGRATION` | unset | `true` only when Preview owns a disposable database | unset |
+
+The Turso Marketplace integration owns the two database variables. Scoping them means installing a
+separate integration resource per environment, or overriding the integration's values with
+manually-created Production-scoped variables. Confirm in the Vercel dashboard which of the two applies
+before editing; a variable the integration still manages can be rewritten on its next sync.
+
+`remoteDatabasePreparationBlocked()` in `lib/db/setup.ts` is the defence in depth behind that scoping.
+A Vercel deployment that is not `VERCEL_ENV=production` skips migration and seeding whenever it holds
+remote database credentials, unless that environment sets `SMBA_ALLOW_REMOTE_DB_MIGRATION=true` to
+declare the database its own. The build itself does not need a prepared database — every
+database-backed route is server-rendered on demand — so a skipped preparation still produces a
+reviewable preview deployment. Local development, CI and the restore drills are unaffected because
+they set no `VERCEL` variable.
+
+A preview database is populated from a synthetic fixture, never from academy data:
+
+```bash
+npm run preview:seed:turso
+```
+
 ## Availability monitoring
 
 `GET /api/health` performs a read-only database query. It returns only `{"status":"ok"}` or a

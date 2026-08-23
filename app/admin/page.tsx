@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 import { and, asc, eq, isNull, ne } from "drizzle-orm"
+import Image from "next/image"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { AccountMenu } from "@/components/account-menu"
@@ -67,52 +69,69 @@ export default async function AdminPage() {
   }))
 
   return (
-    <main className="admin-page page-shell">
-      <header className="admin-page-header">
-        <div className="admin-signal-copy">
-          <div className="admin-owner-ribbon">
-            <p>Platform owner</p>
-            <span aria-hidden="true" />
-          </div>
-          <h1>
-            <span>SMBA</span>
-            <span>Oversight<i>.</i></span>
-          </h1>
-        </div>
-        <span className="admin-signal-number" aria-hidden="true">0001</span>
+    <>
+      <header className="portal-header">
+        <Link className="portal-brand" href="/admin" aria-label="SMBA platform owner home">
+          <Image
+            src="/images/smba-logo.jpeg"
+            alt="Sathiya Moorthy Badminton Academy"
+            width={720}
+            height={488}
+            priority
+          />
+          <span>
+            Platform <em>Owner</em>
+          </span>
+        </Link>
+
         <AccountMenu account={identity} publicSiteHref="/" />
       </header>
 
-      <div className="admin-access-strip">
-        <span>Read-only dashboard previews · Audited security approvals</span>
-      </div>
-
-      {headCoachSetupAvailable({ database }) ? (
-        <section className="admin-setup-panel">
-          <div>
-            <p className="eyebrow">Academy not activated</p>
-            <h2>Set up the first head coach</h2>
-            <p>Open this on the coach’s device. They will create their own password and PIN, then connect an authenticator.</p>
+      <main className="admin-page page-shell">
+        <header className="admin-page-header">
+          <div className="admin-signal-copy">
+            <div className="admin-owner-ribbon">
+              <p>Platform owner</p>
+              <span aria-hidden="true" />
+            </div>
+            <h1>
+              <span>SMBA</span>
+              <span>Oversight<i>.</i></span>
+            </h1>
           </div>
-          <form action={openHeadCoachSetupAction}>
-            <button type="submit">Open secure coach setup</button>
-          </form>
-        </section>
-      ) : null}
-
-      {authenticatorResetRequests.length ? (
-        <AdminAuthenticatorRecoveryQueue requests={authenticatorResetRequests} />
-      ) : null}
-
-      <section className="admin-preview-panel" aria-labelledby="admin-preview-title">
-        <header>
-          <h2 id="admin-preview-title">View a dashboard</h2>
-          <p>Preview mode blocks attendance, finance, scheduling, report, and account changes.</p>
         </header>
-        {targets.length ? (
-          <AdminDashboardDirectory targets={targets} />
-        ) : <p className="admin-empty-copy">No academy accounts have completed setup yet.</p>}
-      </section>
-    </main>
+
+        <div className="admin-access-strip">
+          <span>Read-only dashboard previews · Audited security approvals</span>
+        </div>
+
+        {headCoachSetupAvailable({ database }) ? (
+          <section className="admin-setup-panel">
+            <div>
+              <p className="eyebrow">Academy not activated</p>
+              <h2>Set up the first head coach</h2>
+              <p>Open this on the coach’s device. They will create their own password and PIN, then connect an authenticator.</p>
+            </div>
+            <form action={openHeadCoachSetupAction}>
+              <button type="submit">Open secure coach setup</button>
+            </form>
+          </section>
+        ) : null}
+
+        {authenticatorResetRequests.length ? (
+          <AdminAuthenticatorRecoveryQueue requests={authenticatorResetRequests} />
+        ) : null}
+
+        <section className="admin-preview-panel" aria-labelledby="admin-preview-title">
+          <header>
+            <h2 id="admin-preview-title">View a dashboard</h2>
+            <p>Preview mode blocks attendance, finance, scheduling, report, and account changes.</p>
+          </header>
+          {targets.length ? (
+            <AdminDashboardDirectory targets={targets} />
+          ) : <p className="admin-empty-copy">No academy accounts have completed setup yet.</p>}
+        </section>
+      </main>
+    </>
   )
 }
