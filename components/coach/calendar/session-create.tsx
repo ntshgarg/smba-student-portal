@@ -233,7 +233,7 @@ export function SessionScheduleCreate({
             </select>
           </label>
           <label>
-            <span>Start time</span>
+            <span>Start time <span className="security-required-marker" aria-hidden="true">*</span></span>
             <input ref={startTimeRef} name="startTime" type="time" required disabled={isCreating} value={seriesForm.startTime} aria-invalid={feedback?.field === "startTime" || undefined} aria-describedby={feedback?.field === "startTime" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, startTime: event.target.value })} />
           </label>
           <label>
@@ -243,15 +243,15 @@ export function SessionScheduleCreate({
             </select>
           </label>
           <label className="is-wide">
-            <span>Venue or court</span>
+            <span>Venue or court <span className="security-required-marker" aria-hidden="true">*</span></span>
             <input ref={venueRef} name="venue" required disabled={isCreating} maxLength={120} value={seriesForm.venue} aria-invalid={feedback?.field === "venue" || undefined} aria-describedby={feedback?.field === "venue" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, venue: event.target.value })} />
           </label>
           <label>
-            <span>Starts</span>
+            <span>Starts <span className="security-required-marker" aria-hidden="true">*</span></span>
             <input ref={startsOnRef} name="startsOn" type="date" required disabled={isCreating} value={seriesForm.startsOn} aria-invalid={feedback?.field === "startsOn" || undefined} aria-describedby={feedback?.field === "startsOn" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, startsOn: event.target.value })} />
           </label>
           <label>
-            <span>Ends</span>
+            <span>Ends <span className="security-required-marker" aria-hidden="true">*</span></span>
             <input ref={endsOnRef} name="endsOn" type="date" required disabled={isCreating} min={seriesForm.startsOn} value={seriesForm.endsOn} aria-invalid={feedback?.field === "endsOn" || undefined} aria-describedby={feedback?.field === "endsOn" ? feedbackId : undefined} onChange={(event) => setSeriesForm({ ...seriesForm, endsOn: event.target.value })} />
           </label>
           <div className="coach-series-name-preview is-wide">
