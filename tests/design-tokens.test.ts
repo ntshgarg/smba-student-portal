@@ -32,11 +32,6 @@ function rootBlock(globals: string): string {
 // never declared in a hand-written stylesheet.
 const FONT_VARIABLES = new Set(["--font-manrope", "--font-newsreader"])
 
-// Baseline: both references live inside `.player-attendance-register-table`, a selector no
-// element carries since the player register became a focused-month calendar. Removing the
-// dead rules (app/globals.css 2870-2941 and 5972) belongs to a dead-selector pass.
-const DEAD_RULE_VARIABLES = new Set(["--player-register-width", "--player-register-mobile-width"])
-
 describe("design color tokens", () => {
   it("keeps the soft and strong rose roles centralized", () => {
     const projectRoot = process.cwd()
@@ -89,7 +84,7 @@ describe("design token layer integrity", () => {
     const undeclared = [...sheets, ...sources].flatMap((file) => (
       readFileSync(file, "utf8").split("\n").flatMap((line, index) => (
         [...line.matchAll(/var\(\s*(--[\w-]+)/gu)]
-          .filter((match) => !declared.has(match[1]) && !DEAD_RULE_VARIABLES.has(match[1]))
+          .filter((match) => !declared.has(match[1]))
           .map((match) => `${path.relative(projectRoot, file)}:${index + 1} ${match[1]}`)
       ))
     ))

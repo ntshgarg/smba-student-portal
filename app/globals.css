@@ -2867,75 +2867,6 @@ h3 {
   background: repeating-linear-gradient(-45deg, #f3f2ef 0, #f3f2ef 4px, #d8d5cf 4px, #d8d5cf 5px);
 }
 
-.player-attendance-register-scroll {
-  width: 100%;
-  max-width: 100%;
-  margin-top: 20px;
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  outline: none;
-  scrollbar-color: var(--steel) var(--ivory-deep);
-  scrollbar-width: thin;
-}
-
-.player-attendance-register-scroll:focus-visible {
-  outline: 2px solid var(--red);
-  outline-offset: 4px;
-}
-
-.player-attendance-register-table {
-  width: var(--player-register-width);
-  min-width: var(--player-register-width);
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
-}
-
-.player-attendance-register-table th,
-.player-attendance-register-table td {
-  height: 52px;
-  padding: 0;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: var(--white);
-}
-
-.player-attendance-register-table th:last-child,
-.player-attendance-register-table td:last-child {
-  border-right: 0;
-}
-
-.player-attendance-register-table tbody tr:last-child th,
-.player-attendance-register-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.player-attendance-register-table thead th {
-  background: var(--ivory);
-  color: var(--steel);
-  text-align: center;
-}
-
-.player-attendance-register-table thead th > span {
-  display: block;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.player-attendance-register-table thead th > strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--navy);
-  font-size: 10px;
-  font-weight: 730;
-}
-
-.player-attendance-register-table thead th.is-today {
-  box-shadow: var(--shadow-keyline-bottom);
-}
-
 .session-card h3 {
   margin-top: 22px;
   color: var(--navy);
@@ -5967,11 +5898,6 @@ tr.is-expanded .coach-member-row-action button svg {
   .player-attendance-year-selector button {
     flex: 1;
     padding-inline: 9px;
-  }
-
-  .player-attendance-register-table {
-    width: var(--player-register-mobile-width);
-    min-width: var(--player-register-mobile-width);
   }
 
   .dashboard-card.is-empty {
