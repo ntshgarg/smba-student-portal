@@ -9,6 +9,19 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    exclude: [...configDefaults.exclude, "tests/e2e/**"],
+    // Anchored at the real suite root. A deny-list alone cannot cover an
+    // extracted worktree under a name nobody has thought of yet, and those
+    // copies collect as duplicates of tests that already pass here.
+    include: ["tests/**/*.{test,spec}.?(c|m)[jt]s?(x)"],
+    // Verified against Vitest 3.2.4: a CLI --exclude, as test:ci passes for
+    // tests/regression-fixture.test.ts, adds to this list rather than
+    // replacing it.
+    exclude: [
+      ...configDefaults.exclude,
+      "tests/e2e/**",
+      "**/output/**",
+      "**/.next/**",
+      "**/coverage/**",
+    ],
   },
 })
