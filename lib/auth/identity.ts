@@ -3,6 +3,14 @@ export type AccountRole = "player" | "coach" | "platform_admin"
 export const PLATFORM_ADMIN_ACADEMY_ID = "SMBA-ADMIN-0001"
 export const HEAD_COACH_ACADEMY_ID = "SMBA-HC-0001"
 
+/**
+ * Better Auth scopes an account by (issuer, accountId) and derives this value
+ * for the built-in credential provider as `local:${encodeURIComponent(providerId)}`.
+ * Password and PIN sign-in only match an account whose issuer is exactly this,
+ * so it must stay in step with Better Auth rather than being chosen locally.
+ */
+export const CREDENTIAL_ACCOUNT_ISSUER = "local:credential"
+
 const LEGACY_SERIAL_MAX = 9_999
 const JUNIOR_COACH_SERIAL_BASE = 10_000
 const PLAYER_SERIAL_BASE = 20_000
