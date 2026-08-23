@@ -65,8 +65,10 @@ describe("platform-owner authentication runtime", () => {
       headers: new Headers({ cookie: firstSession }),
       returnHeaders: true,
     })
+    const enrolment = enabled.response
+    if (enrolment.method !== "totp") throw new Error("Expected a TOTP authenticator enrolment.")
     const setupSession = cookie(enabled.headers, "smba.session_token") || firstSession
-    const secret = new URL(enabled.response.totpURI).searchParams.get("secret")
+    const secret = new URL(enrolment.totpURI).searchParams.get("secret")
     expect(secret).toBeTruthy()
     const setupDatabase = new Database(databasePath, { readonly: true })
     const setupStored = setupDatabase.prepare("select secret from auth_two_factors limit 1")

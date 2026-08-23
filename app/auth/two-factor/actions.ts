@@ -198,6 +198,11 @@ export async function startTotpSetup(
       body: { issuer: "Sathiya Moorthy Badminton Academy", password },
       headers: await headers(),
     })
+    // Only an explicit method: "otp" request yields the non-TOTP enrolment, so
+    // reaching it here means the auth plugin is misconfigured, not a bad password.
+    if (response.method !== "totp") {
+      return { error: "The authenticator could not be set up. Contact support.", setup: null }
+    }
     return {
       error: null,
       setup: {
