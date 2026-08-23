@@ -623,7 +623,7 @@
     width: 44px;
     padding: 0;
     border: 1px solid var(--line);
-    border-radius: 50%;
+    border-radius: var(--radius-circle);
     font-size: 0;
   }
 

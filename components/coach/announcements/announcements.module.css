@@ -21,7 +21,7 @@
   color: var(--navy);
   font-size: 12px;
   font-weight: 760;
-  transition: background 180ms ease, color 180ms ease;
+  transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
 
 .newAnnouncementLink:hover {

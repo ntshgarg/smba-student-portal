@@ -728,7 +728,7 @@
 }
 
 .playerList > li > button.activePlayer {
-  box-shadow: inset 3px 0 0 var(--red);
+  box-shadow: var(--shadow-keyline-lead);
 }
 
 .playerInitials {
@@ -736,7 +736,7 @@
   width: 38px;
   height: 38px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--navy);
   color: var(--white);
   font-size: 10px;
@@ -1411,7 +1411,7 @@
 
 .allocationInput:focus-within {
   border-color: var(--navy);
-  box-shadow: 0 0 0 1px var(--navy);
+  box-shadow: var(--shadow-focus-ring);
 }
 
 .allocationTotal {
@@ -1770,7 +1770,7 @@
 .field textarea:focus,
 .moneyInput:focus-within {
   border-color: var(--navy);
-  box-shadow: 0 0 0 1px var(--navy);
+  box-shadow: var(--shadow-focus-ring);
 }
 
 .field small {
@@ -2203,7 +2203,7 @@
   min-height: 44px;
   padding: 0 15px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--steel);
   font: inherit;
@@ -2319,7 +2319,7 @@
 .rapidResultsToggle svg {
   width: 16px;
   height: 16px;
-  transition: transform 160ms ease;
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .rapidResultsToggle[aria-expanded="true"] svg {
@@ -2793,7 +2793,7 @@
 
 .balanceAllocationInput:focus-within {
   border-color: var(--navy);
-  box-shadow: 0 0 0 1px var(--navy);
+  box-shadow: var(--shadow-focus-ring);
 }
 
 .balancePaymentFooter {

@@ -30,7 +30,7 @@
   width: 20px;
   height: 20px;
   border: 1px solid var(--line);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--ivory);
   content: "";
   transform: translateY(-50%);
@@ -169,7 +169,7 @@
   font-size: 11px;
   font-weight: 780;
   text-align: left;
-  transition: background 180ms ease, color 180ms ease;
+  transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
 
 .ledgerActionButton:hover {

@@ -70,7 +70,7 @@ export function PublishedReportsArchive({
             </Link>
           )}
           <div>
-            <span className="coach-published-visually-hidden">Reporting month</span>
+            <span className="sr-only">Reporting month</span>
             <strong><time dateTime={period}>{periodLabel}</time></strong>
           </div>
           {nextDisabled ? (
@@ -89,7 +89,7 @@ export function PublishedReportsArchive({
       </header>
 
       <section className="coach-published-reports-workspace" aria-labelledby="published-report-list-title">
-        <h2 className="coach-published-visually-hidden" id="published-report-list-title">
+        <h2 className="sr-only" id="published-report-list-title">
           {periodLabel} published report register
         </h2>
         <div className="coach-published-reports-toolbar">
@@ -119,7 +119,7 @@ export function PublishedReportsArchive({
             role="search"
           >
             <input name="period" type="hidden" value={period} />
-            <label className="coach-published-visually-hidden" htmlFor="published-report-search">
+            <label className="sr-only" htmlFor="published-report-search">
               Find a player by name or Academy ID
             </label>
             <div>

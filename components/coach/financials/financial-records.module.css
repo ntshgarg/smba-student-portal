@@ -18,7 +18,7 @@
   font-size: 13px;
   font-weight: 760;
   text-align: center;
-  transition: background 160ms ease, color 160ms ease;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
 
 .viewNavigation a + a {

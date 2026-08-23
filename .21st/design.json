@@ -25,9 +25,17 @@
       "--border": {
         "value": "var(--line)",
         "source": "app/globals.css"
+      },
+      "--shadow-focus-ring": {
+        "value": "0 0 0 1px var(--navy)",
+        "source": "app/globals.css"
       }
     },
     "typography": {
+      "--text-placeholder": {
+        "value": "#6b7480",
+        "source": "app/globals.css"
+      },
       "--type-utility-label": {
         "value": "11px",
         "source": "app/globals.css"
@@ -42,6 +50,10 @@
       },
       "--type-operational-action": {
         "value": "12px",
+        "source": "app/globals.css"
+      },
+      "--type-operational-floor": {
+        "value": "10px",
         "source": "app/globals.css"
       }
     },
@@ -87,9 +99,48 @@
         "source": "app/globals.css"
       }
     },
-    "radius": {},
-    "shadows": {},
-    "motion": {},
+    "radius": {
+      "--radius-xs": {
+        "value": "2px",
+        "source": "app/globals.css"
+      },
+      "--radius-sm": {
+        "value": "4px",
+        "source": "app/globals.css"
+      },
+      "--radius-pill": {
+        "value": "999px",
+        "source": "app/globals.css"
+      },
+      "--radius-circle": {
+        "value": "50%",
+        "source": "app/globals.css"
+      }
+    },
+    "shadows": {
+      "--shadow-keyline-lead": {
+        "value": "inset 3px 0 0 var(--red)",
+        "source": "app/globals.css"
+      },
+      "--shadow-keyline-bottom": {
+        "value": "inset 0 -3px 0 var(--red)",
+        "source": "app/globals.css"
+      }
+    },
+    "motion": {
+      "--duration-fast": {
+        "value": "160ms",
+        "source": "app/globals.css"
+      },
+      "--duration-base": {
+        "value": "180ms",
+        "source": "app/globals.css"
+      },
+      "--ease-standard": {
+        "value": "ease",
+        "source": "app/globals.css"
+      }
+    },
     "density": "unknown"
   },
   "components": {
@@ -386,5 +437,5 @@
       "source": "package.json"
     }
   ],
-  "generatedAt": "2026-08-22T22:27:18.912Z"
+  "generatedAt": "2026-08-23T13:25:31.522Z"
 }
