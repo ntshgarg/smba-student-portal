@@ -770,7 +770,7 @@
 
 .feePreview {
   margin-top: 14px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   background: var(--white);
 }
 
