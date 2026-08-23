@@ -16,7 +16,7 @@ Every finding carries a classification, an objective/subjective marker, a severi
 
 ### What was independently re-verified
 
-Findings do not enter this report on an agent's authority. The load-bearing claim from each lens was re-proved from scratch, and the working is in `docs/audit/verification-log.md`. That process changed four things:
+Findings do not enter this report on an agent's authority. The load-bearing claim from each lens was re-proved from scratch, and the working is in `docs/audit/verification-log.md`. That process changed four things. The last two rows, marked *(implementation)*, were not produced by re-reading at all: they come from attempting the Wave 1 deletions, and they correct claims that had already survived the desk check.
 
 | Claim | Outcome |
 |---|---|
@@ -25,8 +25,18 @@ Findings do not enter this report on an agent's authority. The load-bearing clai
 | Placeholder contrast fails 1.4.3 (A11Y-1) | **Confirmed** by independent arithmetic: 2.93:1 and 3.05:1. |
 | Hardcoded colours are token bypasses (DS) | **Confirmed inverted** — exactly **zero** are. See §5. |
 | CI never validates the 67 route modules (IQ-1) | **Partly refuted.** Downgraded High → **Medium**; see §4.4. |
+| The `.development-track` styles are orphaned and deletable (DEBT-3) *(implementation)* | **Refuted.** `app/globals.css:2714-2718` is a shared selector list, and the other selector, `.attendance-track`, is live at `player-attendance-card.tsx:159`. Deleting the stated range would have unstyled the player attendance card. |
+| 307 lines of CSS are dead, at the stated ranges (DS-7) *(implementation)* | **Confirmed in substance, corrected in detail.** Every enumerated rule is dead, but the range `:4106-4192` spans a live rule, roughly 30 further dead rules were missed, and a test asserts on two of the dead selectors. 307 is a lower bound. |
 
 Two candidate findings were retracted before publication, both artifacts of stale build output that a naive scan would have reported: a `transition: all` that exists nowhere in real source, and error-level `focus-outline-none` hits from concatenated bundles of *older* CSS.
+
+### What Wave 1 implementation disproved
+
+Work on Wave 1 began before this report was published, and the attempt to land two of its PRs — the dead-CSS deletion (DS-7) and the dead-export deletion (DEBT-3) — disproved five claims and established that those two PRs cannot be parallelised. Acting on a finding is a harsher test than re-proving it, and these are results that only the harsher test produces.
+
+The serious one is DEBT-3's. One of the three ranges it lists for deletion is a shared selector list whose other selector styles the live player attendance card, so the deletion as specified would have shipped a visible regression. DS-7 came out better: every rule it enumerates is genuinely dead. But one of the summary *ranges* it is filed under spans a live rule, its proof search never covered `tests/`, and it misses roughly thirty further dead rules sitting in media queries. Two smaller corrections follow — VD-1 counts one dead selector among the live sites of a variant group, and the two deletion PRs turn out to be coupled through `components/development-meter.tsx`, whose only styles are the ones DS-7 removes.
+
+All six corrections are recorded with evidence in `docs/audit/verification-log.md`. None of them changes the counts in §3: DS-7 and DEBT-3 both survive as findings, corrected in scope rather than withdrawn.
 
 ---
 
@@ -147,7 +157,7 @@ This converges with the accessibility lens from the opposite direction. The two 
 
 ### Other structural findings
 
-The palette has grown from 23 declared colours to **72**, with 49 undeclared values across 96 sites. Weight, line-height and letter-spacing are continuous dials rather than scales: 37, 39 and 42 distinct values. The 1px hairline is used 583 times and is the only primitive in the system with no token. **307 lines of CSS are provably dead** — 13 false positives were eliminated first by tracing every dynamic `className` construction in the repo.
+The palette has grown from 23 declared colours to **72**, with 49 undeclared values across 96 sites. Weight, line-height and letter-spacing are continuous dials rather than scales: 37, 39 and 42 distinct values. The 1px hairline is used 583 times and is the only primitive in the system with no token. **At least 307 lines of CSS are provably dead** — 13 false positives were eliminated first by tracing every dynamic `className` construction in the repo. Every rule DS-7 enumerates is dead, but 307 is a lower bound rather than a total: implementation found roughly 30 further dead rules, nearly all inside media queries. The line *ranges* DS-7 is summarised by are a different matter and need care, because one of them spans a live rule; delete from the per-rule list, not the ranges. See §9 and `docs/audit/verification-log.md`.
 
 `app/public-home.css` is **not** outside the token system, despite its 105 raw literals: it reads `var()` 202 times across 28 tokens and drifted in exactly one role, the hairline. That makes it far cheaper to fix than the raw count suggests.
 
@@ -270,10 +280,13 @@ Real value, real risk, no urgency. Sequence behind the above.
 | 2 | Fix the stranded onboarding reset | ST-2 | `player-onboarding-register.tsx:744-760` | S | Low |
 | 3 | Add the five missing loading states | ST-5 | 4 new `loading.tsx` | S | Low — new files only |
 | 4 | Tokenise the 22 hairline greys | DS-3 | `public-home.css` (21), `globals.css` (1) | S | Very low — ΔE ≤ 2.74 |
-| 5 | Delete 307 lines of dead CSS | DS-7 | 3 modules, `globals.css` | S | Low — do a screenshot pass |
+| 5 | Delete the dead CSS **and** the orphaned exports together | DS-7, DEBT-3, DEBT-4 | 3 modules, `globals.css`, 9 `lib/` exports, `development-meter.tsx` | M | Medium — see the two notes below |
 | 6 | Make the typecheck gate deterministic | IQ-1 | `tsconfig.json` | S | Low |
 | 7 | Give the staff register scroll region a role | A11Y-7, A11Y-5 | `staff-attendance-register.tsx` +12 sites | S | Low — re-run the gate |
-| 8 | Delete dead code and orphaned exports | DEBT-3, DEBT-4 | various | S | Low — `tsc` catches misses |
+
+**PRs 5 and 8 have been merged into one, and the numbering after it is left unchanged so that the cross-references elsewhere in this section still resolve.** They are not independent. `components/development-meter.tsx` is the dead component DEBT-3 removes, and its only styles are rules DS-7 deletes — `app/globals.css:3024-3058` plus the `.development-track` fragments in the shared rules at `:2713-2718` and `:2724-2729`. Deleting the CSS alone leaves a component that still renders with no styling; deleting the component alone leaves orphaned rules behind. Land them as one PR, or land the component deletion first.
+
+**DS-7's line ranges are not safe to act on; its enumerated per-rule list is.** Delete from the rule list in `docs/audit/visual-design-system.md`, not from the ranges in its PR-2 line. Three specific hazards, all verified: `app/globals.css:4106-4192` spans `.coach-directory-notice` at `:4172`, live at `components/coach/members/member-directory.tsx:617`; DEBT-3's `app/globals.css:2714-2718` is a shared rule from which only the `.development-track` selector may be taken, since `.attendance-track` is live; and deleting the remaining `.coach-registration-approved` rules will fail `tests/accessibility-hardening.test.ts:48`, which asserts on the text of `globals.css`. The risk on this row is Medium for these reasons, not because the dead rules are in doubt.
 
 ### Wave 2 — round trips and adoption
 
@@ -341,7 +354,7 @@ Real value, real risk, no urgency. Sequence behind the above.
 
 ### Review order rationale
 
-Wave 1 is eight small, independent, low-risk PRs that between them fix a proved WCAG failure, a stranded-state bug, and the gate determinism problem — a good warm-up that also removes noise from later diffs. Wave 2 delivers most of the performance benefit at low risk, because the batched helpers already exist and are tested. Wave 3 holds the two genuinely dangerous refactors; both need their existing test suites green before merge, and neither should be reviewed while anything else is landing in the same file. Waves 4 and 5 are safe to defer indefinitely without the product degrading.
+Wave 1 is seven small, low-risk PRs that between them fix a proved WCAG failure, a stranded-state bug, and the gate determinism problem — a good warm-up that also removes noise from later diffs. Six of the seven are genuinely independent; PR 5 is the exception, and it carries the only real care requirement in the wave. Wave 2 delivers most of the performance benefit at low risk, because the batched helpers already exist and are tested. Wave 3 holds the two genuinely dangerous refactors; both need their existing test suites green before merge, and neither should be reviewed while anything else is landing in the same file. Waves 4 and 5 are safe to defer indefinitely without the product degrading.
 
 ---
 

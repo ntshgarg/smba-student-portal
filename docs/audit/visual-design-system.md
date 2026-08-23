@@ -246,6 +246,8 @@ At 9px, `0.08em` and `0.09em` are 0.72px and 0.81px of tracking per character �
 - **Confidence:** High (proved) — the variant census is exact.
 - **How to prove:** Already proved.
 
+**Correction (verified during implementation):** one of the seven sites listed for `9px | 800 | 0.09em | var(--steel)` is dead. `app/globals.css:4704` is `.coach-member-batch-field > span`, the dead half of a selector list kept alive by `.coach-member-form-grid label > span` at `:4703`, and `.coach-member-batch-field` is one of the two key families DS-7 proves unreferenced. The declaration does render, through the live selector, so the variant group is real and the argument above is unaffected — but it is not reached through the selector cited here. That group therefore has six live sites and one dead one, not seven, and the dead one disappears once the DS-7 fragment trim lands. The census of 103 variants across 160 rules was not re-derived and does not turn on a single site moving from live to dead. See `docs/audit/verification-log.md`.
+
 ---
 
 ### DS-3 — Seven near-identical hairline greys duplicate `--line` across 22 sites, all within ΔE 2.74
@@ -613,6 +615,16 @@ $ for frag in registration-approved registrationApproved coach-registration \
 - **Effort:** S (<2h) to delete, given the evidence above.
 - **Confidence:** High (proved) — every dynamic construction in the repository is enumerated above, and none can produce these keys.
 - **How to prove:** Already proved. A CI guard would be the durable fix; see PR-6.
+
+**Correction (verified during implementation):** the finding stands — every rule enumerated above is dead — but three things about it are wrong or missing, and all three matter to whoever deletes them. Full evidence in `docs/audit/verification-log.md`.
+
+*The summary ranges are unsafe; this per-rule list is authoritative.* PR-2 below gives `app/globals.css` (`:4106-4192`, …). That range spans a live rule: `.coach-registration-approved p span, .coach-directory-notice{ … }` at `:4171-4175`, where `.coach-directory-notice` is used at `components/coach/members/member-directory.tsx:617`. The enumerated list above is correct and skips it, leaving the gap at `:4170-4176` deliberately. Delete from the list, never from the range. The dead half of that rule is also a **tenth** fragment of the kind counted as nine above — the other nine are all in `components/coach/announcements/announcements.module.css`.
+
+*The search above never covered `tests/`.* Both keys are still dead in product code, but `tests/accessibility-hardening.test.ts:48` asserts that `app/globals.css` contains the string `".coach-registration-approved p input:not("`, and `:59` asserts that it does not contain `".coach-member-batch-field input"`. Both hold today, because the anti-zoom block at `app/globals.css:12909` was not touched. Deleting the remaining `.coach-registration-approved` rules will fail that test. This is the cost DEBT-2 describes, arriving in practice: a CSS refactor blocked by an assertion on file contents rather than on behaviour.
+
+*307 is a lower bound.* The count is sound to within a 16-line bookkeeping artifact — seven of the multi-line selector lists were counted from the brace line rather than the first selector line, and the nine fragments were never given a line count, which is exactly the 7 + 9 by which an implementation removing only these rules overshot 307. No extra CSS was deleted. But roughly 30 further dead rules were missed, nearly all inside media queries: in `app/globals.css`, the `.coach-member-batch-field` fragments at `:4693`, `:4704` and `:4735` that are mixed with live `.coach-member-form-grid` selectors, the media-query rules at `:6525`, `:6553`, `:6559`, `:6563`, `:6681`, `:11931` and `:11936`, and the anti-zoom selector at `:12909`; eight rules within `components/coach/announcements/announcements.module.css:1314-1381`; and in `components/financials/player-financials.module.css`, `.dashboardCard` at `:1`, `.dashboardLink` at `:724`, `.dashboardCopy h3` at `:731` and the `.dashboardArrow` fragment at `:1001`. The finding is incomplete, not wrong.
+
+That last file also contradicts the narrative in *Why it matters* above. The module whose `.dashboardCard` is live is `components/announcements/announcements.module.css:152`; the identically-named `.dashboardCard` at `components/financials/player-financials.module.css:1` has no consumer at all, since all three `styles.dashboardCard` references in the repository are in `components/announcements/player-announcements.tsx` and import the announcements module. Two modules share the class name and the finding reasoned about the wrong one.
 
 ---
 
@@ -1243,6 +1255,8 @@ Independent and parallelisable unless a dependency is stated. **File overlaps be
 - **Effort:** S · **Risk:** Low — every key is proved unreferenced and every dynamic constructor in the repo is enumerated. Still worth one screenshot pass over `/player/financials`, `/player/announcements` and `/coach/announcements/new`.
 - **Dependencies:** none.
 - **Overlap:** `app/globals.css` with PR-1, PR-3, PR-7. Do PR-2 **first** among the `globals.css` PRs so the others rebase onto smaller line numbers rather than the reverse.
+
+**Correction (verified during implementation):** the `app/globals.css` ranges on the Files line above are a summary and **`:4106-4192` is not safe to delete** — it spans the live rule at `:4171-4175`, whose `.coach-directory-notice` selector is used at `components/coach/members/member-directory.tsx:617`. Work from the enumerated per-rule list in DS-7 instead; the other two ranges, `:4740-4788` and `:11452-11460`, do check out. Three further amendments to this PR: it must also delete `components/development-meter.tsx` and the styles at `app/globals.css:3024-3058`, because DEBT-3's component deletion and this one are coupled and cannot land separately; deleting the remaining `.coach-registration-approved` rules will fail `tests/accessibility-hardening.test.ts:48`, which asserts on the text of `globals.css`, so that test must be updated in the same PR; and the scope is larger than 307 lines, with roughly 30 further dead rules listed in the DS-7 correction note. Risk is **Medium**, not Low. See `docs/audit/verification-log.md`.
 
 ### PR-3 — Add the on-dark colour tier and unify the coach status colours
 - **Scope:** introduce `--on-dark-success`, `--on-dark-error`, `--on-dark-muted`; migrate the 8 divergent sites; unify the two ochres for the make-up / rescheduled state.

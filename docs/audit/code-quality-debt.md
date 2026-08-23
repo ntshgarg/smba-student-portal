@@ -964,6 +964,24 @@ Note also that `.development-track` is declared **twice** in `app/globals.css`, 
 - **Effort:** S
 - **Confidence:** High (searched as described; the one residual risk is a reference from a file type I did not scan, but I scanned `.ts .tsx .mjs .js .json .yml .yaml .md`)
 
+**Correction (verified during implementation):** the nine unreachable exports are confirmed, but the **first of the three orphaned-style ranges above is wrong, and acting on it would have caused a visible regression.** `app/globals.css:2714-2718` is not a `.development-track` rule. It is a shared selector list:
+
+```css
+/* app/globals.css:2713-2718 */
+.attendance-track,
+.development-track {
+  height: 3px;
+  overflow: hidden;
+  background: #d9dddf;
+}
+```
+
+`.attendance-track` is live at `components/dashboard/player-attendance-card.tsx:159`. Deleting the stated range would have removed the height, overflow and background from the attendance track on the player attendance card. Only the `.development-track` selector line may be taken out of the list; the rule itself must survive.
+
+This is an inconsistency inside the finding rather than a blind spot about shared selectors. The note above flags the *second* shared rule correctly, eleven lines away, so the hazard was understood and then not applied to the neighbouring case. (Both cited ranges also start at the second selector line rather than the first, and the second is off by one at the end: that rule is `:2724-2729`, not `:2725-2730`.)
+
+Two consequences follow. Because the rule survives, so does its `background: #d9dddf` at `app/globals.css:2717`, which is a DS-3 tokenisation site and stays one rather than disappearing with a deletion — DS-3's count of 22 hairline-grey sites, 21 in `app/public-home.css` plus this one, is correct and unaffected. The two findings overlapped on exactly this line and made incompatible claims about it; DS-3's was the right one. And this finding is coupled to DS-7: `components/development-meter.tsx` is live in the tree and its only styles are rules DS-7 deletes, so the component deletion and the dead-CSS deletion must land as one PR, or the component must go first. Neither can be reviewed in isolation. See `docs/audit/verification-log.md`.
+
 ---
 
 ### DEBT-4 — Twenty module-internal helpers are exported without a single external consumer, widening the public surface of `lib/` for no reason

@@ -350,3 +350,242 @@ query pattern is real and it is inside an immediate write transaction. I verifie
 structure rather than recounting every branch, so treat the formula as the agent's
 derivation and the *pattern* as independently confirmed. The severity does not depend on the
 exact coefficients.
+
+---
+
+## Corrections raised by Wave 1 implementation, not by re-reading
+
+Everything above this line was written before any finding was acted on. The entries below have
+a different provenance. They came out of an attempt to land two Wave 1 PRs — the dead-CSS
+deletion (DS-7) and the dead-export deletion (DEBT-3) — and implementing a finding turns out
+to be a harsher test of it than re-proving it. Five claims did not survive that test, and a
+sixth correction concerns the PR plan rather than a claim about the code. All six are recorded
+here before publication.
+
+One mechanical note, because it affects every line number in this section. Part of
+`app/globals.css` had already been deleted when these observations were made, so the numbers
+the implementation reported are offsets into a partially-deleted file. Every one has been
+restated here against the unmodified file at `fa88c08`. The offsets are consistent and
+arithmetically checkable: **+121** lines below the deleted `.coach-registration-approved`
+block, **+171** once the `.coach-member-batch-field` block is also gone, **+181** once
+`:11452-11460` is too, and **+73** in `components/financials/player-financials.module.css`
+after its `:6-78` deletion. Anyone re-checking these should use the numbers below, not the
+ones in the implementation's own notes.
+
+---
+
+### Correction 1 — DEBT-3's `app/globals.css:2714-2718` is not deletable
+
+**Claimed:** DEBT-3 lists `app/globals.css:2714-2718` (`.development-track`) among the
+orphaned styles to be deleted alongside the dead `components/development-meter.tsx`.
+
+**Verdict: WRONG. This is the one that would have caused visible damage.**
+
+The range is not a `.development-track` rule. It is a shared selector list whose other
+selector is live:
+
+```css
+/* app/globals.css:2713-2718 */
+.attendance-track,
+.development-track {
+  height: 3px;
+  overflow: hidden;
+  background: #d9dddf;
+}
+```
+
+```
+$ rg -n 'attendance-track' components app --glob '!*.css'
+components/dashboard/player-attendance-card.tsx:159:              className="attendance-track"
+```
+
+Deleting the stated range would have taken the height, overflow and background off the
+attendance track on the live player attendance card. Only the `.development-track` selector
+line may be removed from the list; the rule itself must survive.
+
+**Why this is an inconsistency rather than a blind spot.** DEBT-3 flags the *other* shared
+rule correctly — its own prose says "line 2725 is a shared selector list `.attendance-track
+span, .development-track span` where `.attendance-track span` is still live". The finding
+therefore understood the hazard exactly, and applied it to one of the two rules and not to the
+other, eleven lines apart by its own citations. It is a lapse within a single finding, not a
+systematic failure to consider shared selectors. (Both of DEBT-3's cited ranges start at the second selector line
+rather than the first, and the second is also off by one at the end: that rule is
+`:2724-2729`, not `:2725-2730`.)
+
+**Consequence for DS-3.** Because the rule survives, so does its `background: #d9dddf` at
+`app/globals.css:2717` — which is a DS-3 tokenisation site, and remains one rather than
+disappearing with a deletion. DS-3's count of 22 hairline-grey sites, 21 in
+`app/public-home.css` plus this one in `globals.css`, is correct and unaffected. The two
+findings overlapped on exactly this line and made incompatible claims about its future.
+DS-3 was right and DEBT-3 was wrong.
+
+---
+
+### Correction 2 — DS-7's range `app/globals.css:4106-4192` contains a live rule
+
+**Claimed:** the files-and-ranges line of PR-2 in the design appendix gives `app/globals.css`
+(`:4106-4192`, `:4740-4788`, `:11452-11460`) for the dead-CSS deletion.
+
+**Verdict: THE RANGE IS WRONG; THE FINDING IS NOT.**
+
+`:4106-4192` spans a live rule:
+
+```css
+/* app/globals.css:4171-4175 */
+.coach-registration-approved p span,
+.coach-directory-notice{
+  color: var(--steel);
+  font-size: 11px;
+}
+```
+
+```
+$ rg -n 'coach-directory-notice' app components --glob '!*.css'
+components/coach/members/member-directory.tsx:617:          className="coach-directory-notice"
+```
+
+Deleting `:4106-4192` wholesale would have unstyled the coach directory notice.
+
+**The defect is in the summary, not in the detail.** DS-7's enumerated per-rule list is
+correct and does not contain this rule. It runs `:4106-4113`, `:4115-4126`, `:4128-4131`,
+`:4133-4136`, `:4138-4141`, `:4143-4148`, `:4150-4157`, `:4159-4163`, `:4165-4169`, and then
+skips to `:4177-4187` and `:4189-4192`. The gap at `:4170-4176` is exactly the live rule, and
+it was left out deliberately. **The enumerated list is authoritative; the ranges are not safe
+to act on directly.** The other two ranges on that line, `:4740-4788` and `:11452-11460`, do
+check out.
+
+**Consequence for the fragment count.** `.coach-registration-approved p span` at `:4171` is a
+dead selector inside a live rule — a **tenth** fragment of the same kind as the nine DS-7
+counts, all nine of which are in `components/coach/announcements/announcements.module.css`.
+The trim list is one entry short.
+
+---
+
+### Correction 3 — DS-7's search excluded `tests/`, and a test blocks the deletion
+
+**Claimed:** DS-7 proved `.coach-registration-approved` and `.coach-member-batch-field` dead by
+searching every plausible fragment and casing, reporting `(no non-CSS match) × 7`.
+
+**Verdict: THE SEARCH WAS UNDER-SCOPED. The keys are dead in product code, but the deletion is
+blocked by the test suite.**
+
+The quoted search ran against `app components lib`. It never covered `tests/`, and
+`tests/accessibility-hardening.test.ts` asserts on the *text content* of `app/globals.css`:
+
+```js
+// tests/accessibility-hardening.test.ts:48
+expect(antiZoomRule).toContain(".coach-registration-approved p input:not(")
+// tests/accessibility-hardening.test.ts:59
+expect(antiZoomRule).not.toContain(".coach-member-batch-field input")
+```
+
+Both assertions currently hold, because the anti-zoom block was not touched — the
+`@media (max-width: 720px), (pointer: coarse)` rule whose
+`.coach-registration-approved p input:not(…)` selector sits at `app/globals.css:12909`
+survived the attempt. So nothing is failing today. But DS-7's "no non-CSS match" is not true
+as stated, and **anyone who deletes the remaining `.coach-registration-approved` rules will
+break that test.** Recorded here as a live hazard for whoever implements DS-7, not as a reason
+to withdraw it.
+
+**Cross-reference to DEBT-2.** This is a concrete instance of the cost DEBT-2 describes. The
+blocker is not a behavioural regression; it is an assertion on file contents. The test would
+fail while the rendered product was unchanged, and it would equally pass if the selector were
+present but broken. DEBT-2 argues that roughly 250 such assertions can fail a correct refactor;
+here is one doing exactly that to a CSS refactor listed two waves earlier in the same plan.
+
+---
+
+### Correction 4 — DS-7 undercounts by 16 lines harmlessly, and misses about 30 dead rules
+
+**Claimed:** 307 lines of provably dead CSS.
+
+**Verdict: TWO SEPARATE FINDINGS, AND ONLY ONE OF THEM MATTERS.**
+
+**The 16-line gap is bookkeeping.** The implementation removed 323 rule lines against DS-7's
+claimed 307. No CSS was removed beyond DS-7's own enumerated rules, so the gap is not extra
+deletion. It decomposes exactly: seven of the rules are multi-line selector lists that DS-7
+counted from the brace line, which omits their first selector line (7 lines), and the nine
+dead fragments were never assigned a line count at all (9 lines). 7 + 9 = 16. This is a
+counting artifact and carries no risk.
+
+**The missed rules are real.** DS-7 misses roughly 30 further dead rules, nearly all of them
+inside media queries. Every one is still in the tree:
+
+| File | Dead sites not in DS-7 |
+|---|---|
+| `app/globals.css` | `.coach-member-batch-field` fragments at `:4693`, `:4704` and `:4735`, each mixed with a live `.coach-member-form-grid` selector; media-query rules at `:6525`, `:6553`, `:6559`, `:6563`, `:6681`, `:11931`, `:11936`; the anti-zoom selector at `:12909` |
+| `components/coach/announcements/announcements.module.css` | 8 dead rules within `:1314-1381` |
+| `components/financials/player-financials.module.css` | `.dashboardCard` at `:1`; `.dashboardLink` at `:724` and `.dashboardCopy h3` at `:731`, both inside `@media (max-width: 760px)`; the `.dashboardArrow` fragment at `:1001`, dead inside a rule kept live by `a.monthCell` |
+
+The `player-financials.module.css:1` case is worth separating out, because DS-7 does not merely
+miss it — the narrative in its *Why it matters* assumes the opposite. DS-7 writes that
+`player-announcements.tsx:44` keeps "only `.dashboardCard` (two declarations) from the module".
+That is true of `components/announcements/announcements.module.css:152`, which is live. The
+identically-named `.dashboardCard` in `components/financials/player-financials.module.css:1`
+has no consumer at all:
+
+```
+$ rg -n 'styles\.dashboardCard' app components
+components/announcements/player-announcements.tsx:44
+components/announcements/player-announcements.tsx:63
+components/announcements/player-announcements.tsx:84
+```
+
+All three import the announcements module, not the player-financials one. Two modules with the
+same class name, one live and one dead, and the finding reasoned about the wrong one.
+
+**Net verdict: DS-7 is incomplete, not wrong.** Every rule it enumerates is genuinely dead.
+307 should be read as a lower bound.
+
+---
+
+### Correction 5 — VD-1 counts a dead site among the live ones
+
+**Claimed:** VD-1's `9px | 800 | 0.09em | var(--steel)` variant group has 7 sites, one of them
+`app/globals.css:4704`.
+
+**Verdict: THAT SITE IS DEAD. The group has six live sites and one dead one.**
+
+```css
+/* app/globals.css:4703-4710 */
+.coach-member-form-grid label > span,
+.coach-member-batch-field > span {
+  color: var(--steel);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+```
+
+`:4704` is `.coach-member-batch-field > span`, the dead half of a rule kept alive by
+`.coach-member-form-grid label > span` at `:4703`. `.coach-member-batch-field` is one of the
+two key families DS-7 proves unreferenced. The declaration does render, through the live
+selector, so the variant group exists on screen and VD-1's argument about it is unaffected —
+but it is not reached through the selector VD-1 cites, so the site count for that one group is
+overstated by one, and the site disappears entirely once the DS-7 fragment trim lands.
+
+The headline census — 103 variants across 160 rules — was not re-derived here and does not turn
+on a single site moving from live to dead.
+
+---
+
+### Correction 6 — Wave 1's PR 5 and PR 8 are not independent
+
+**Claimed:** the Wave 1 table in the consolidated report lists the dead-CSS deletion (DS-7) and
+the dead-export deletion (DEBT-3, DEBT-4) as separate parallelisable PRs.
+
+**Verdict: THEY ARE COUPLED AND MUST NOT BE PARALLELISED.**
+
+`components/development-meter.tsx` is live in the tree and is the component DEBT-3 deletes. Its
+only styles are the rules DS-7 removes: `app/globals.css:3024-3058`, which holds the four
+`.development-meter-heading` rules, the second `.development-track` at `:3050` and
+`.development-meter > p` at `:3054-3058`, plus the `.development-track` fragments in the two
+shared rules at `:2713-2718` and `:2724-2729`.
+
+Either half on its own leaves the tree worse than not starting. Deleting the CSS while the
+component still renders leaves a live component unstyled. Deleting the component while the CSS
+remains leaves orphaned rules for the next dead-CSS pass to rediscover.
+
+They must land as one PR, or the component deletion must land first. The Wave 1 table in the
+consolidated report has been amended to merge them and to state the dependency.
