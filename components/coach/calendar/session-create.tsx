@@ -210,7 +210,7 @@ export function SessionScheduleCreate({
         </div>
       ) : null}
 
-      <form className="coach-series-form" autoComplete="off" onSubmit={submitSeries}>
+      <form className="coach-series-form" autoComplete="off" noValidate onSubmit={submitSeries}>
         <div className="coach-series-form-heading">
           <span>Recurring schedule</span>
           <h2>Create the training rhythm.</h2>

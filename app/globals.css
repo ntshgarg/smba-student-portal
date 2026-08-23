@@ -4257,6 +4257,10 @@ h3 {
 
 .coach-member-filter select {
   width: 100%;
+  /* The narrow breakpoint already floors this at 24px; without the same floor
+     here the pointer width fell back to the 19px intrinsic height, giving the
+     mouse the smaller target of the two. */
+  min-height: 24px;
   margin-top: 4px;
   padding: 0;
   border: 0;
@@ -5404,6 +5408,12 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-report-field textarea::placeholder {
   color: #8a939b;
+}
+
+.coach-report-field-counter {
+  display: block;
+  margin-top: 8px;
+  text-align: right;
 }
 
 .coach-report-editor-footer {
@@ -8310,7 +8320,10 @@ tr.is-expanded .coach-member-row-action button svg {
 .attendance-occurrence-list > button {
   display: grid;
   min-height: 76px;
-  grid-template-columns: 68px minmax(0, 1fr) auto;
+  /* A two-digit hour with a meridiem needs 68.53px on one line, so 68px wrapped
+     10, 11 and 12 o'clock rows while 7/8/9 stayed on one. Each row is its own
+     grid, so the track has to stay fixed to keep the column aligned. */
+  grid-template-columns: 76px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
@@ -12168,7 +12181,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .player-attendance-recorder .attendance-occurrence-list > button {
   min-height: 62px;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
   gap: 10px;
   padding: 9px 12px;
   border: 0;
@@ -13733,7 +13746,9 @@ textarea:focus-visible {
   }
 
   .coach-member-register-tools {
-    grid-template-columns: minmax(0, 1fr) minmax(210px, 0.38fr);
+    /* The summary panel carries min-width: 220px, so a 210px track floor left it
+       overflowing the bordered bar by up to 9px and hiding the right border. */
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.38fr);
   }
 
   .coach-member-directory-summary {
