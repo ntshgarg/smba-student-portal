@@ -13,6 +13,22 @@ export type CoachDashboardArea =
   | "announcements"
   | "members"
 
+/**
+ * The status stamp has exactly two shapes so a coach can scan the column of
+ * cards instead of reading each one: a number with the lowercase qualifier
+ * that says what it counts, or one of two capitalised state words used when no
+ * number would say anything — `Clear` for nothing outstanding and `Setup` for
+ * an area that is not configured yet. The attention tone belongs to the count
+ * shape only, because it marks a backlog.
+ */
+export type CoachDashboardStatus =
+  | { count: number; unit: string; tone?: "attention" }
+  | { state: "Clear" | "Setup" }
+
+function statusStamp(status: CoachDashboardStatus) {
+  return "state" in status ? status.state : `${status.count} ${status.unit}`
+}
+
 export function CoachDashboardStack({
   children,
   id,
@@ -32,15 +48,13 @@ export function CoachDashboardCard({
   children,
   id,
   status,
-  statusTone,
   title,
   titleId,
 }: {
   area: CoachDashboardArea
   children: ReactNode
   id?: string
-  status?: ReactNode
-  statusTone?: "attention"
+  status?: CoachDashboardStatus
   title: string
   titleId: string
 }) {
@@ -55,7 +69,12 @@ export function CoachDashboardCard({
         <header className={styles.masthead}>
           <h2 id={titleId}>{title}</h2>
           {status ? (
-            <span className={styles.status} data-tone={statusTone}>{status}</span>
+            <span
+              className={styles.status}
+              data-tone={"state" in status ? undefined : status.tone}
+            >
+              {statusStamp(status)}
+            </span>
           ) : null}
         </header>
         <div className={styles.meta}>{children}</div>
