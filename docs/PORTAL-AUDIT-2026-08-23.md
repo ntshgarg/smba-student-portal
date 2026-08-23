@@ -1,10 +1,13 @@
 # SMBA Student Portal — Product, Design & Engineering Audit
 
-**Date:** 2026-08-23 · **Commit:** `3cbd766` · **Branch:** `main`
+**Audited:** 2026-08-23 · **Audit baseline:** `3cbd766` on `main`
+**Remediated:** 24 commits on `audit-remediation`, squash-merged to `main` as `18a625e8` — [PR #56](https://github.com/ntshgarg/smba-student-portal/pull/56), 2026-08-23 — plus one follow-on commit, `de7f841` (PERF-8), not yet in that PR. The individual commits and their reasoning survive only on `audit-remediation`; `main` carries one squash commit, so that branch is the primary record of *why* each change took the shape it did.
 **Scope:** Full application — public marketing site, Player Journal, Head-Coach Workspace, Junior-Coach Dashboard, Platform Admin, authentication flows.
-**Reviewed:** 94 files in `app/`, 102 in `components/`, 80 in `lib/`, 16,364 lines of CSS, 137 unit tests + 13 Playwright suites.
+**Reviewed:** 94 files in `app/`, 102 in `components/`, 80 in `lib/`, 16,364 lines of CSS, 137 unit tests + 13 Playwright spec files (of which CI gates five as named regression suites, plus accessibility and failure-evidence — see DEBT-10).
 
-**Method.** Six parallel domain audits (design system, accessibility, UX states, responsiveness, implementation quality, performance), then independent verification of every headline claim against source. Two subagent findings were materially wrong and have been corrected in place — see [Corrected claims](#corrected-claims). Deterministic tooling: `21st review` (285 findings, all `design-hardcoded-color`), `tsc --noEmit`, `eslint .`.
+**How to read this.** §1 and §§2–4 describe the codebase **as it stood at `3cbd766`**. Individual findings carry inline status where remediation changed the picture: **Resolved** with the commit that did it, **Partially resolved** where part shipped and the rest is named, **Corrected** where implementation disproved the original claim, **Declined** where a proposal was measured and rejected, **Retracted** where a proposed remedy turned out to be wrong. Line and file references are baseline references and several have since shifted; the identifiers, not the line numbers, are what to search on. [Remediation status](#remediation-status) consolidates all of it in one place. §5 and §6 were rewritten after the merge and describe the position **now**, not at the baseline.
+
+**Method.** Six parallel domain audits (design system, accessibility, UX states, responsiveness, implementation quality, performance), then independent verification of every headline claim against source. Two subagent findings were materially wrong at that stage and were corrected before publication. Implementation then corrected sixteen more of the audit's own claims and retracted two proposed remedies outright — see [Corrected claims](#corrected-claims) for the five that changed a headline number, and the inline **Corrected** markers for the eleven others. Deterministic tooling: `21st review` (285 findings, all `design-hardcoded-color`), `tsc --noEmit`, `eslint .`.
 
 ---
 
@@ -20,6 +23,110 @@ The defects that remain are **not architectural failures**. They cluster in four
 4. **Delivery and build hygiene** — all portal CSS parsed on the marketing page, `typecheck` that passes or fails depending on stale build artifacts, and a validation library installed but used once.
 
 Nothing here is an emergency. The highest-severity item (ST-1) is a ~2-hour fix.
+
+**What changed since — addendum, 2026-08-23, after PR #56.** The assessment above is left as written, because its judgement was largely borne out: nothing found during remediation was architectural, and the four clusters were the right four. Three are now substantially closed. Client-handler resilience: ST-1, ST-7 and ST-2's copy-and-deadline work all shipped. The halfway token layer: the 36 baseline tokens became 39 with the contrast and type-floor additions, then **39 → 54** in the token-layer pass, no `var()` reads an undeclared property any more, and 693 lines of dead CSS are gone. Delivery hygiene: `typecheck` is deterministic and both finance N+1 patterns are constant-time rather than linear. What remains of the first cluster is a *durability* problem rather than a resilience one — attendance drafts still live only in React state.
+
+The closing line held: nothing was an emergency, and ST-1 was indeed small. What the verdict under-weighted is how much of this document's own reasoning would not survive contact with measurement. **Sixteen** of its claims were corrected, two findings had their remedies retracted outright, and the largest available win on the public routes was not in the document at all — PERF-8 was found while measuring a finding that then had to be withdrawn, and PERF-9 was found while measuring PERF-8. Both of those follow-on findings then corrected the finding that produced them: PERF-8's stated hypothesis was inverted, and its headline `1,472 ms` baseline did not reproduce. The audit's most valuable output turned out to be the measurements it provoked rather than the conclusions it drew. That is recorded finding by finding and summarised immediately below.
+
+---
+
+## Remediation status
+
+*Recorded 2026-08-23, after PR #56 and the follow-on commit `de7f841`. Of the 49 findings in this document — 41 from the original audit plus 8 discovered during implementation — **20 are resolved**, **4 are partially resolved**, **2 were retracted**, and **23 remain open**. Every figure below is from a commit message on `audit-remediation`, from a measurement report under `output/`, or from the finding body it summarises; where a number was not measured, it says so.*
+
+### What was implemented
+
+| Area | Findings | What changed | Measured outcome | Commits |
+|---|---|---|---|---|
+| Client-handler resilience | ST-1 | Six handlers now reset the busy flag in `finally`. The `catch` wraps only the awaited call, so a failure inside `onSuccess` is no longer reported as "could not be saved" against an approval that succeeded. | Not measured — a correctness fix | `8d60c85` |
+| Unsaved-work guard | ST-7 | The guard now always runs the caller's callback; only the history-boundary release stays conditional. Fixed in the guard, so all four call sites were corrected without being touched. The callback is scheduled on a microtask specifically so it cannot land inside ST-1's `try`. | Regression test drives the real provider with two dirty surfaces; 2 of its 3 cases fail against the previous implementation | `0254bbd` |
+| Courtside failure handling | ST-2 (partial) | Network failures get operational copy keyed on the error's **constructor**, not its message, because the message differs per engine. The existing Save control relabels to "Save attendance again". A 20s/15s deadline bounds the indefinite hang, with copy that reports an unknown outcome rather than a failure. | 17 unit tests. Retry-after-timeout is provably safe: both services skip a no-op change, write via `onConflictDoUpdate`, and run in immediate transactions | `f543d10`, `75d3c88` |
+| Route boundaries | ST-3, ST-4 | `app/global-error.tsx` plus 4 `loading.tsx` files covering 9 async routes by segment inheritance, and a boundary at the `announcements` segment rather than the `(public)` group so it cannot wrap the static homepage. | 15 routes, not the 18 originally claimed; 4 files, not the 7 estimated | `5f5312e`, `49ad19c` |
+| Contrast | A11Y-1, A11Y-2 | `--text-placeholder` and `--line-disabled` added, both computed against composited rather than assumed backgrounds. | Placeholders 3.12:1 → **4.74:1** on white (4.54:1 on paper); disabled month arrows 1.39:1 → **3.37:1** | `a13888f` |
+| Form error association | A11Y-3, DEBT-6 | `AuthField` extracted with the control as a render prop, and five forms wired to it — fixing the cause rather than the five symptoms. Two error props, one rendered in-field and one naming an alert the form renders elsewhere, so no existing error paragraph had to move. | Rendered DOM shape and class list unchanged, verified by static render. No `name`, `autocomplete`, `inputMode`, `type` or `required` value changed | `c087412` |
+| Keyboard and landmark parity | A11Y-4, A11Y-5 | Admin skip link. All three scroll containers carry `role="region"`, a name and `tabIndex` — including the attendance register this finding had cited as the *correct* example, which had the same defect. Year selector moved to `role="group"`. | Not measured beyond the original 79-Tab-stop reproduction | `5640ee0`, `49ad19c` |
+| Accessibility coverage | A11Y-6 | Seven states and three interactions added, with a shared `openDialogFrom` helper so future dialog states inherit the focus-trap, Escape and focus-return checks. | **316 audits** across three profiles (stress 177, admin 87, clean 52). Found three real defects: `not-found.tsx` had no `main` landmark, the finance-activation consent checkbox was an **18px** tap target passing only because a sentence happened to wrap, and `channelPills` carried `aria-label` on a role-less `div` | `eaf1dd4`, `7fac52d` |
+| Accessibility gate honesty | A11Y-8 (partial) | `axe.incomplete` and the `best-practice` rule family now surface as labelled non-blocking advisories in the job summary. The blocking path is factored out and unchanged. | Backlog sized at **1,243 advisories** over 316 audits; `color-contrast` is **90.3%** of it and two rules are 98.7%. Per profile: stress 1,068, admin 175, **clean 0** | `6abea0c`, `383ef87` |
+| Operational type floor | RESP-1 | `--type-operational-floor: 10px` added and applied across three passes — globals, then five rules whose narrow-viewport override was *larger* than its wide-viewport base, then the CSS modules. | **Zero declarations below 8px remain anywhere in the repo**, and exactly 3 at 8px, each with a stated reason. The sanctioned 9px tier is untouched; its count moved 98 → 99 only because the step-rail label was raised into it. Sizing measured from real Manrope glyph advances, not estimated | `a13888f`, `4722fe3`, `52c0fc9` |
+| Token layer | DS-1, DS-2, DS-3 (partial), DS-7, DS-8 | `:root` built out and adopted; `--color-navy` and two further undeclared properties fixed; nine raw `#071b32` plus one `#fbfaf7` the audit missed; one unlayered `.sr-only` keeping the name so 25 call sites are untouched; `.21st/DESIGN.md` and `design.json` regenerated. Two new assertions: no `var()` read of an undeclared property, and no raw hex matching a token value outside `:root`. | `:root` **39 → 54 tokens**, adopted across **101 declarations**. Provably inert: every stylesheet snapshotted, each new token mechanically expanded back to its literal and diffed. Both assertions verified non-vacuous against mutated input | `5204109` |
+| Dead CSS | DS-1 follow-on | The 74-line player-register table block, then 23 dead class keys in `financials.module.css` — the residue of a financials-to-modules migration the audit never saw. Pruned with PostCSS because 11 rules were comma-separated groups mixing dead and live selectors. | **693 net lines removed.** Exhaustive rather than probabilistic: CSS Modules hash per file, so all 8 importers were checked for dot access, both bracket forms, template construction, `composes`, destructuring and aliasing | `7fcbba4` |
+| Finance query cost | PERF-1 | Both named N+1 patterns rewritten as set-based reads grouped in memory, then the fee register and collections day book in a second pass. Adjustment ordering pinned on rowid, because the originals had no tiebreaker on observable output. | Coach fee record **697 → 23**; player fee record **97 → 13**; fee register **375 → 7** (monthly) and **394 → 6** (registration); collections day book, 92-day range, **266 → 6**; candidate assignment reads at N=100 **200 → 2**; all 291 charges through the loader **1,164 → 4**. All constant rather than linear. Parity proven across 106 accounts, 300+ charges at both `includeInternal` values, 675 register filter combinations and 27 deep cursor walks — JSON-identical row-ID and cursor sequences | `1d57db1`, `d197bcb` |
+| Client bundle | PERF-3 | Four presentational dashboard cards moved back to the server. `reports-card` keeps its directive because `useReportResume` reads `localStorage`. | Four cards, not the five originally claimed | `cb80117` |
+| Font preloading | PERF-8 | Newsreader split into two `next/font` instances so the upright face can drop its preload. The two styles turned out to be used on complementary surfaces — italic on `/`, `/player`, `/coach`; upright only on auth forms and operational registers — so every route was preloading one face it never rendered. `app/layout.tsx` alone, 20 insertions. | **−58,152 B** preloaded per route (−39.5%). FCP/LCP **−66.9 ms** on `/` [−129.4, −4.4], **−90.3 ms** on `/login`, **−87.4 ms** on `/player` FCP, at slow 4G with 6× CPU over 7 interleaved paired passes. CLS **0.0000 in all 63 runs**. Full-page PNGs byte-identical on seven routes; 0 typography, geometry or platform-font diffs. The finding's own hypothesis was inverted and one of its input numbers did not reproduce — both recorded in PERF-8 | `de7f841` |
+| Verification gates | DEBT-1 | `tsconfig` and `vitest.config` given real excludes. Fixed with an `exclude` rather than a narrowed `include`, because `next build` re-appends the `.next` glob and rewrites `tsconfig.json` — so removing an include self-reverts. `.next/types` deliberately kept, since `next build`'s own type check enumerates from this config. | Typecheck **2 → 0** errors; files `tsc` read from `output/` **919 → 0**; Vitest collected files **607 → 142** | `6abea0c` |
+| Repository hygiene | DEBT-9 | The 140 KB prompt playbook referencing a dead path and the generated `MASTER.md` wired to nothing, both deleted. | **3,653 lines** removed | `51677e2` |
+| Unplanned: upstream token defect | DS-1 class | Merging `origin/main` brought in a fee-preview panel reading `var(--line-strong)`, declared nowhere — not upstream, not locally, not at the merge base. An undeclared custom property invalidates the whole `border` shorthand, so the panel drew **no border at all**. Repointed at `--line`. | Caught by the assertion added for DS-1, on code from a different author within days. Upstream CI could not have caught it: that assertion exists only on this branch | `a47ba64`, `7b1acba` |
+
+### What was deliberately not done
+
+This is the more valuable half of the record, and none of it is a backlog. Two findings were withdrawn after measurement, and several proposals were declined because measuring them showed they would make things worse.
+
+**PERF-2 — the CSS route-group split, retracted as written. Zero code changed.** The finding's own rationale was that the real cost was parse and style-recalculation rather than bandwidth. That is wrong by **14×**: removing 315 KB and ~3,030 unmatched rules is worth **7 ms** on `/` and **2.4 ms** on `/login` at 6× CPU throttling, against a ±90 ms FCP noise floor, because Blink lazily parses declaration blocks and buckets rules by their rightmost compound selector — `ParseAuthorStyleSheet` totals 14 ms for all 366 KB. The cost the finding explicitly *dismissed*, transfer, is the real one: **161 ms of protocol-independent bytes** on slow 4G with up to ~600 ms more depending on HTTP/2 prioritisation. And the proposed three-way `(coach)`/`(student)`/auth partition was unjustified, because a **binary** public/portal split captures **95%** of the perfect per-route ceiling — `/` and `/login` together need 176 of 3,097 rules. Splitting portal CSS is declined entirely: those are warm-cache surfaces behind a login whose real cost is 660–671 KB of JS. **A trap worth preserving:** benchmarking the parse hypothesis via `new CSSStyleSheet().replaceSync()` does cost 50–60 ms at 6×, so the obvious experiment would have *confirmed* the wrong conclusion. The browser never takes that path.
+
+**PERF-4 — PDF streaming, retracted. Zero code changed, and that is the correct outcome.** Streaming cannot bound memory for two independent reasons: both generators pass `bufferPages: true` because they write a "Page N of M" footer, and knowing the total page count requires composing the whole document first — so no byte of page content can leave before the document is already in memory; and PDFKit's `_write` discards the `false` from `this.push()`, so a slow consumer cannot slow it down. The one attempt that produced a diff — removing `new Uint8Array(pdf)` from four routes — was reverted, because it does not compile (four `TS2345`: since TypeScript 5.7 `Buffer` is `Uint8Array<ArrayBufferLike>`, and `BodyInit` demands the concrete type; there is no assertion-free zero-copy form) and because `Response` copies its `ArrayBufferView` regardless, making the removed copy one of roughly six. The declined variant also carried a live hazard: omitting offset and length on a pooled buffer serves the backing store instead of the view — measured as 87,454 bytes beginning `"îîîîî"`, a corrupt PDF that still starts plausibly enough to pass a casual check. Scope was overstated too: only the player statement is unbounded, since the report routes are capped by `REPORT_TEXT_MAX_LENGTH` and the receipt is one page.
+
+Declined on measurement, each with its evidence:
+
+| Declined | Evidence |
+|---|---|
+| `.coach-month-grid button small` stays at 8px | "sessions" needs **43.3px** in a **25.7px** cell at 320px, so the caption already overflows at its current size. Raising it deepens a pre-existing overflow, on a surface `mobile-calendar-attendance-freeze` covers. |
+| The onboarding step-rail label went to 9px, not 10px | `ASSESSMENT` needs **70.5px** in a **64.5px** track at 320px and the grid is `minmax(0, 1fr)`, so the track cannot grow. 9px is the largest size that fits and one the design record already sanctions for small uppercase labels. |
+| `financials.module.css:2764` allocation caption stays at 8px | `nowrap` + `ellipsis`. At 8px `SMBA-ABCD2345 · Available ₹12,500` needs **133.6px** in a **135px** track and fits; at 10px it needs **167px** and the ellipsis lands mid-word, removing the amount. The design record's prohibition on hiding ledger facts outranks the type floor, and the adjacent 104px amount-input track is fixed. |
+| The mobile "Today" word is hidden, not enlarged | It cannot reach 10px inside a 32px cell. It now sits in an `aria-hidden` subtree, and the state is already carried by `aria-current`, the cell label, a 2px red inset ring and a red top bar. |
+| No shadow elevation tokens, against §4.1's proposal | Every drop shadow in the file has a unique value, so a scale could only be created by inventing one and silently unifying existing differences. The real cluster is inset keylines, so those became the tokens; three near-identical menu shadows are recorded as drift instead. |
+| No breakpoint tokens, against §4.1's proposal | Media features are evaluated **before** custom-property substitution, so `--bp-*` would be unusable in the only place it belongs. The 20 widths are documented instead. |
+| `border-radius: 0` left raw at 19 declarations | The system is deliberately square, and a `--radius-none` token would say nothing the `0` does not. |
+| No skip link on `app/not-found.tsx` | The 404 has no header or nav to bypass, so a skip link would add a focus stop before the page's only link in order to skip nothing. Verified empirically that a 404 beneath the coach shell audits clean. |
+| `color-contrast` not promoted to blocking | Its 1,122 results are *incomplete*, not violations — axe returns incomplete when it cannot resolve the effective background, which this UI's gradients and transparency cause constantly. The count scales with element volume, not defect count, which is why one profile contributes 1,068 and another zero. Promoting it would make the gate permanently red on cases axe declined to decide. |
+| A 320px title wrap accepted rather than avoided | Raising the coach dashboard status stamp to 10px makes the *Monthly reports* card title wrap at 320px only, with the longest stamp. Nothing clips or overlaps and it resolves by 340px — a fair exchange for eliminating illegible 7px text. Do not refile as a regression. |
+| Dropping the Newsreader **italic** preload as well, despite it being the largest single number measured | Worth **−241.1 ms** on `/` [−280.3, −202.0] and declined. It removes **31 bytes** — `/` goes 371,325 → 371,294 — because it does not stop the fetch, only moves it out of the render-blocking window. The price is the hero's emphasised word rendering in Times New Roman for an extra **344 ms** on the acquisition surface, a 494 ms delay to the `/player` greeting, and `/player` LCP moving from the shipped arm's 1,960 ms to 2,468 ms. Priced and left as a decision for the design owner, against `public-production-readiness`. |
+| Per-route font preloading via route-group instantiation — **rejected on mechanism, not preference** | The preload flag is part of the `next/font` instance and is encoded in the emitted filename (`…-s.p.…woff2` vs `…-s.…woff2`, verified by diffing built font CSS across three arms). Mixing a deferred and a preloaded instance of one family yields two URLs for identical bytes and two competing `@font-face` rules in one document; which wins depends on chunk order. Declaring italic only in the group layouts instead would strip it permanently from `/admin`, `/activate`, `/recover`, `/setup`, `/account` and `/auth/*`, which do render it. |
+
+### What remains
+
+**(a) Blocked on a human decision.** None of these is a code question, and each one blocks work behind it.
+
+| Decision | Finding | The conflict |
+|---|---|---|
+| The roll-call mobile type size | RESP-4 | The decision record contradicts itself — it mandates a ~10px operational floor for labels *and* separately sanctions "9px desktop/tablet and 8px mobile" for this specific control. Production contradicts both: a specificity accident (0,4,3 beating the floor block's 0,4,2) renders the first button at **11px** and the second at **8px** inside one joined control, up to 760px. Both halves must end up the same size; which size is the design call. |
+| Where production errors report to | ST-3 completion, DEBT-10 | `app/global-error.tsx` destructures only `reset` and never reads the `error` Next.js hands it, and the repository contains no error-reporting sink of any kind. So six boundaries now render branded recovery UI and report to nobody. Choosing a destination has a cost and is a platform decision. |
+| Tailwind: adopt or drop | DS-6 | The finding framed this as "adopt it properly or drop it and define `.sr-only` directly". Dropping is **more expensive than stated**, because Preflight is load-bearing here — the `box-sizing`/margin/padding/border reset, `list-style: none`, `display: block` on replaced elements, `font-size`/`font-weight: inherit` on headings, and `[hidden] { display: none !important }` all have to be reproduced by hand. Adopting means accepting that every utility sits in the `utilities` layer, beneath ~14,000 lines of unlayered CSS that outranks it regardless of specificity. |
+
+**(b) Ready to pick up, in value order.**
+
+1. **PERF-9 — the `₹` latin-ext pull, and the largest remaining byte win.** `subsets: ["latin"]` controls only *preloading*; all six Google subsets still ship as `@font-face` rules, and Blink fetches one the moment a rendered character falls in its `unicode-range`. `₹` (U+20B9) is in `latin-ext` and is the **only** character in the whole application outside latin. It costs 15,240 B on `/`, 39,708 B on `/player` and `/coach`, and **91,276 B across three separate latin-ext files on `/coach/financials/records`** — more, on the money route, than the 58,152 B PERF-8 removed. The files arrive with initiator `css` at roughly 2,224 ms on `/`, so this is bandwidth wasted after FCP rather than paint time, which is why it sits at S3 despite the larger count. The fix is a narrow `@font-face` scoped to U+20B9 with a `local()` source, ahead of the `next/font` rules; nothing else in the app is affected because nothing else is outside latin. Do **not** widen `subsets` — that would preload latin-ext as well and undo PERF-8.
+2. **`lib/finance/documents.ts:216` — the statement-PDF N+1.** `loadChargeView` per charge across all of a player's charges, so a 30-charge player costs **~120 queries per statement PDF**. `loadChargeViews` already serves it with no new code. This is the genuinely actionable part of PERF-4: the statement's problem is 120 queries before a byte is drawn, not its memory profile.
+3. **Draft persistence for courtside attendance** (ST-2, gap 2). Drafts are React state only. The guard's generic browser dialog is the only protection, and a confirmed leave, an OS tab kill, or mobile Safari discarding the page under memory pressure — routine on iOS — loses every mark silently. `localStorage` keyed by occurrence closes it without a write queue's correctness hazards, because replay still passes the same optimistic-concurrency check. The deadline shipped in `75d3c88` slightly *enlarged* this: a coach can now hold unsaved drafts while sitting on a "may or may not have been recorded" state.
+4. **ST-8's two guard traps.** A surface first dirtied inside the 1-second `allowNavigation` window never gets a history boundary and nothing establishes one later, so back-button protection is silently absent for the rest of that surface's life; and `committedRef` never re-arms on a still-mounted form. Both are silent, state-dependent, and invisible to manual testing. The onboarding steps are masked only incidentally, because `OnboardingEditor` remounts on its `key`.
+5. **A11Y-9's assertion** — every selected matrix state must produce at least one result. Two of the seven states added in `eaf1dd4` landed in unwired profile/actor pairs; they would have read as covered while never executing. This is a new blocking check, so it warrants a deliberate decision rather than a quiet addition.
+6. **A11Y-10's assertion** — no `aria-label`/`aria-labelledby` on an element lacking an explicit `role`, outside an allowlist. Five instances across three passes, every one found by accident, all invisible to the gate because `aria-prohibited-attr` returns *incomplete* when the element has subtree text. Same shape as the `var()` assertion in `5204109`, which has already earned its place twice.
+
+Also ready, smaller: the two Manrope rules requesting weight 820 and 830 above the font's 800 axis maximum, which clamp silently and should say 800 (PERF-9, secondary); the binary public/portal CSS split (PERF-2's surviving half, M effort — PERF-8 has now landed, so its ordering dependency is discharged); A11Y-8's promotion tiers 1 and 2 (`landmark-one-main` and `region` are already at zero and either would independently have caught the `not-found` defect, so promoting them is free; `landmark-unique` and `aria-allowed-role` are ten occurrences across three states); PERF-1's three other residual N+1 sites, beyond the statement path in item 2 above; and DEBT-1's two further gate instances — `scripts/regression/summarize-accessibility.ts` reads whatever results happen to be on disk and sets an exit code from them, and `npm test` and CI disagree by design over `tests/regression-fixture.test.ts`.
+
+**(c) Explicitly deferred, with reasoning.**
+
+| Deferred | Why |
+|---|---|
+| DEBT-2 — zod across ~76 actions in 14 modules | L effort, large and mechanical. Domain validators and service-layer invariants do provide real protection, so this is a correctness-and-refactoring hazard, not an open security hole. It does not compete with anything in (b). |
+| DEBT-3 — unify four-plus result shapes | M effort, and it is a precondition for DEBT-4 rather than valuable on its own. No user-visible change. |
+| DEBT-4 — god-file decomposition | L effort. Natural split boundaries exist, but the finance N+1 work rewrote reads inside the largest of these files and merged cleanly against a 74-file upstream feature — weak but real evidence that the current structure is survivable. |
+| The ~70-line dead-selector question | **Closed, not deferred.** `5204109` baselined that block in the token test pending a decision; `7fcbba4` then deleted it — 74 lines — with positive proof of death, and removed the two-entry allowlist that existed only to excuse it. Nothing remains. |
+| The S4 polish set | ST-5, ST-6, A11Y-7, RESP-2, RESP-3, DS-4, DS-5, DEBT-5, DEBT-7, DEBT-8, DEBT-10, PERF-5, PERF-6, PERF-7 — unchanged and correctly unprioritised. So are DS-7's third visually-hidden implementation (inside frozen calendar surfaces) and the fault-injection harness capability the six `error.tsx` boundaries need. |
+
+### What this exercise says about the audit's own method
+
+Sixteen of this document's claims were corrected on measurement — five in [Corrected claims](#corrected-claims) and eleven recorded inline in the findings — and two findings had their remedies retracted outright. That proportion is a finding about method, not an incidental blemish, and the pattern in it is consistent: **static reading systematically mis-sized things, in both directions.**
+
+A literal-name grep declared three live CSS classes dead, because they are built as `` `status-${…}` ``. A hook grep enumerated React's built-ins and so could not see a custom hook, inflating PERF-3 from four cards to five. A `font-style` grep declared Newsreader italic unused when it is the dominant face on 8 of 12 routes, because `<em>` and `<i>` are italic from the user-agent stylesheet and a rule can render italic without naming the property. A raw-byte figure (265 KB) stood in for a transfer figure (~28 KB brotli wasted), so the percentage stood but the magnitude did not. A proposed contrast token failed the very 3:1 target it was written for. A parse-cost hypothesis was wrong by 14×, and the obvious way to benchmark it would have confirmed it. An existing type-floor mechanism was missed entirely, which made four of the declarations this audit flagged into dead code. A breakpoint count was off by one and named a `340/341` pair that does not exist. In the other direction, ST-4's route count was inflated while its route *list* had three omissions; PERF-8 — the largest available win on the public routes — was absent until a retracted finding's measurement turned it up; and PERF-9, larger still on the routes it touches, was absent until PERF-8's measurement turned *it* up.
+
+Four rules generalise from that:
+
+1. **A grep is not proof** — not of death, not of absence, not of a property. Every claim of the form "X does not occur here" needs the positive form established instead. This one has now cost twice, in `.status-draft` and in Newsreader italic, and the two instances share a root: a static artifact was read to answer a question only the renderer can answer. Establish it from the running application.
+2. **Measure on the real path.** `replaceSync()` would have confirmed the CSSOM hypothesis; the browser never takes that path. The same trap in a different costume: CDP throttling overrides are silently discarded by the renderer swap during form login, so every authenticated measurement in this repository is unthrottled by default and will read as a null result.
+3. **Compute proposed values rather than eyeballing them,** and composite translucent backgrounds before computing a ratio.
+4. **Quote only the numbers that reproduce.** PERF-8's headline `1,472 ms` came from a synthetic arm at a different commit and does not survive re-measurement; the per-byte effect behind it does (2.25 vs 1.96 ms/KB). The fix was justified on the reproducible quantity. A finding whose conclusions rest on paired same-machine comparisons survives its own headline number failing; one that rests on the headline does not.
+
+And one process lesson, recorded in full under DEBT-1: instructing parallel agents not to run `tsc`, to stop them racing on `tsconfig.tsbuildinfo`, hid a genuine compile error behind runtime verification that was itself correct and thorough. Runtime verification does not substitute for the type checker. If concurrent workers must share a tree, give them a scoped way to typecheck rather than removing the check.
 
 ---
 
@@ -90,6 +197,8 @@ Same shape at `player-onboarding-register.tsx` lines ~242 (`reject`), ~331 (asse
 **Why it matters.** Onboarding is where a head coach approves real players and sets real fee plans. A stuck Approve button with no explanation reads as "the system lost my action" — the coach's only recovery is a page reload, and they cannot tell whether the approval landed. The correct pattern already exists in this codebase (W-7).
 **User impact.** Head coach and platform admin; blocks the primary onboarding workflow on any transient failure.
 
+**Resolved (`8d60c85`).** All six handlers now reset in `finally` and surface the failure through their existing feedback channel. One detail was not in the finding and shaped the fix: in the two request handlers the `catch` wraps **only** the awaited server-action call, not the subsequent `onSuccess`. Wrapping both would have reported a throw from `onSuccess` as "could not be saved" against an approval that had in fact succeeded — trading a stuck button for a false failure message on a money path. That same constraint then dictated how ST-7 could be fixed.
+
 #### ST-2 · OBJ · S2 · Effort M · Confidence High
 **No offline strategy on a courtside-mobile product.**
 
@@ -101,7 +210,7 @@ The mechanics are correct (drafts preserved, `isSaving` reset). The *message* is
 **User impact.** All coaches, daily, on mobile.
 **Note.** Full offline queueing is out of scope for a first pass; mapping network failure to operational copy plus an explicit Retry is the 80% fix.
 
-**Partially resolved (2026-08-23).** Network failures in both attendance savers now produce operational copy naming the cause, stating the marks are still on screen, and saying what to do — and the existing Save control relabels to "Save attendance again" as the retry, since no secondary-button class exists in the stylesheet. Classification keys on the error's **constructor** (`TypeError`, plus a `name` check for realm-crossed errors) rather than its message, because the message differs per engine: "Failed to fetch" in Chrome, "NetworkError when attempting to fetch resource." in Firefox, "Load failed" in Safari. `navigator.onLine` only selects between two messages; it never decides whether a failure was network-related, since `onLine === true` means an interface exists, not that the server is reachable.
+**Partially resolved (`f543d10`, `75d3c88`).** Network failures in both attendance savers now produce operational copy naming the cause, stating the marks are still on screen, and saying what to do — and the existing Save control relabels to "Save attendance again" as the retry, since no secondary-button class exists in the stylesheet. Classification keys on the error's **constructor** (`TypeError`, plus a `name` check for realm-crossed errors) rather than its message, because the message differs per engine: "Failed to fetch" in Chrome, "NetworkError when attempting to fetch resource." in Firefox, "Load failed" in Safari. `navigator.onLine` only selects between two messages; it never decides whether a failure was network-related, since `onLine === true` means an interface exists, not that the server is reachable.
 
 **Gap 1 — resolved (`75d3c88`).** The indefinite hang is bounded by a 20s/15s deadline. Two findings came out of implementing it:
 
@@ -110,13 +219,16 @@ The mechanics are correct (drafts preserved, `isSaving` reset). The *message* is
 
 **Latent trap discovered in Next.js config (not our code).** `server-action-reducer.js:81-98` contains an offline auto-replay path — on a fetch rejection it waits for connectivity and replays the action — gated on `process.env.__NEXT_USE_OFFLINE`. It is currently disabled (`next.config.ts` has no `experimental` block), which is the only reason the `TypeError` reaches our `catch` at all. **If anyone enables that flag, Next will swallow the rejection and hang, and the offline messaging shipped in `f543d10` will silently stop appearing.** Worth a comment near the classification helper.
 
-**Gap 2 is now the highest-value remaining item, and the deadline slightly enlarged it.** A coach can now sit on a "may or may not have been recorded" state while holding unsaved drafts with no durable copy — so the ambiguity and the volatility compound. Combined with ST-8 (where unsaved-work protection can be silently absent), this is the product's worst realistic failure path.
+**Gap 2 — open, and now the highest-value remaining item; the deadline slightly enlarged it.** A coach can now sit on a "may or may not have been recorded" state while holding unsaved drafts with no durable copy — so the ambiguity and the volatility compound. Combined with ST-8 (where unsaved-work protection can be silently absent), this is the product's worst realistic failure path.
 
-2. **Drafts are React state only, so a tab close loses everything.** `unsaved-work-guard.tsx:189` fires the browser's generic "leave site?" dialog, but if the coach confirms it, the OS kills the tab, or mobile Safari discards the page under memory pressure (routine on iOS), every mark is gone silently. Note the new copy promises the marks are safe *on screen*, which is true and deliberately scoped — but a coach may read more into it. Persisting drafts to `localStorage` keyed by occurrence would close this without the correctness hazards of a write queue, because the replay still passes through the same optimistic-concurrency check on the next save.
-3. **Nothing auto-recovers.** There is no `online` listener, so the coach must notice connectivity returning and press the button themselves. A captive portal also reports `onLine === true`, producing the vaguer "the request did not complete" message rather than naming the real problem.
+**Drafts are React state only, so a tab close loses everything.** `unsaved-work-guard.tsx:189` fires the browser's generic "leave site?" dialog, but if the coach confirms it, the OS kills the tab, or mobile Safari discards the page under memory pressure (routine on iOS), every mark is gone silently. Note the new copy promises the marks are safe *on screen*, which is true and deliberately scoped — but a coach may read more into it. Persisting drafts to `localStorage` keyed by occurrence would close this without the correctness hazards of a write queue, because the replay still passes through the same optimistic-concurrency check on the next save.
+
+**Gap 3 — open. Nothing auto-recovers.** There is no `online` listener, so the coach must notice connectivity returning and press the button themselves. A captive portal also reports `onLine === true`, producing the vaguer "the request did not complete" message rather than naming the real problem.
 
 #### ST-3 · OBJ · S3 · Effort XS · Confidence High
 **No `app/global-error.tsx`.** Confirmed absent. Root-layout render failures (font loading, metadata) bypass all five nested `error.tsx` boundaries and fall through to Next.js's unbranded default. Every other boundary is well-branded via `RouteErrorState`, so this is a one-file gap in an otherwise complete set.
+
+**Resolved (`5f5312e`).** It reuses the branded route recovery panel. Router context and the imported stylesheet both survive the boundary, but the `next/font` variables do not, so they are re-declared as system stacks rather than re-invoking `next/font` inside the boundary that may exist precisely to catch a font failure. **What it does not do:** the component destructures only `reset` and never reads the `error` Next.js passes it, and the repository has no error-reporting sink of any kind — so all six boundaries now render branded recovery UI and report to nobody. Where they should report is an open decision, not an oversight in this change.
 
 #### ST-4 · OBJ · S3 · Effort S · Confidence High
 **15 routes perform async data loads with no loading boundary and no `Suspense`.** `Suspense` appears zero times in application code. Navigation to these blocks with no visual feedback. `(student)/*` and `coach/*` are correctly covered.
@@ -127,11 +239,13 @@ Verified breakdown (revised 2026-08-23 during PR-4 — every candidate page was 
 |---|---|---|
 | Named trees | `/admin`, `/account/security`, `/account/recovery-email/setup`, `/auth/two-factor`, `/auth/two-factor/setup`, `/auth/two-factor/reconnect`, `/auth/two-factor/recovery`, `/auth/pin/setup`, `/setup/head-coach` | **Covered by PR-4** with 4 `loading.tsx` files via segment inheritance |
 | Root-level auth | `/login`, `/register`, `/recover`, `/recover/reset`, `/activate` | **Deliberately excluded.** Redirect-if-signed-in is the *common* outcome here, so a boundary would flash loading UI on the product's primary entry point. For the anonymous visitor who actually renders them, the session check is a cheap cookie miss. |
-| Public detail | `/(public)/announcements/[announcementId]` | Async (`getActiveHomepageAnnouncement`) and **missing from the original finding**. Needs `app/(public)/announcements/loading.tsx` specifically — a `(public)` boundary would wrap the static marketing homepage. One-file follow-up. |
+| Public detail | `/(public)/announcements/[announcementId]` | Async (`getActiveHomepageAnnouncement`) and **missing from the original finding**. Needed `app/(public)/announcements/loading.tsx` specifically — a `(public)` boundary would wrap the static marketing homepage. Added in `49ad19c`, at the `announcements` segment for exactly that reason. |
 
 **Corrections to this finding.** The original "18 routes" was inflated: `/progress` and `/reports` are one-line synchronous `redirect()` stubs with no `await`, and must never receive a loading boundary. The original list also omitted `/auth/two-factor` and `/auth/two-factor/recovery` (both async) and the public announcement detail page. PR-4's estimate of "7 new `loading.tsx`" became **4**, because a boundary is inherited by all nested segments.
 
 **Known trade-off accepted by PR-4.** A `loading.tsx` makes its segment stream, so Next can flush the fallback before a page's `redirect()` resolves — turning a clean 307 into a visible flash then a client-side redirect. For the nine covered routes the redirect is always the exception path (wrong role, unauthenticated, step already complete), so this trades a flash on the rare path for removing a blank block on the common one.
+
+**Resolved (`5f5312e`, `49ad19c`).** Four `loading.tsx` files cover the nine named-tree routes by segment inheritance, plus one at the `announcements` segment. The five root-level auth routes remain deliberately uncovered, per the table above.
 
 #### ST-5 · SUBJ · S4 · Effort XS · Confidence High
 **Player hitting `/coach` is silently redirected with no explanation**, while a junior coach in the same situation gets `CoachAccessNotice` (W-12). Inconsistent treatment of the same class of event.
@@ -161,7 +275,7 @@ The follow-on risk is worse than the missing message. A coach who retries the as
 **Why it matters.** Silent no-ops on a system of record are the failure mode users trust least, and this one is invisible to tests — `tests/coach-onboarding-register-ui.test.tsx:28` mocks the guard as `navigateAfterCommit: (navigate) => navigate()`, i.e. unconditionally synchronous, so the skip branch is never exercised.
 **Fix shape.** Either have the three call sites handle a `false` return by surfacing feedback themselves, or change the guard to always run the callback and let navigation be the only conditional part. Needs its own PR — 13 consumers.
 
-**Resolved (2026-08-23).** Fixed in the guard rather than at the call sites, so all four are corrected without being touched. The deciding evidence came from the same file: `RequestStep` already calls the identical `onSuccess` — `router.replace` and `router.refresh` included — with no guard involvement at all, which proves no caller can depend on boundary-release ordering. One subtlety worth preserving: the callback is scheduled through a microtask rather than invoked synchronously, because a synchronous call would execute *inside* the `try`/`catch` added by the ST-1 fix, and a throw from `onSuccess` would then be reported as "could not be saved" against a save that succeeded — trading one misleading-success bug for another. A regression test drives the real provider with two dirty surfaces; 2 of its 3 cases fail before the fix.
+**Resolved (`0254bbd`).** Fixed in the guard rather than at the call sites, so all four are corrected without being touched. The deciding evidence came from the same file: `RequestStep` already calls the identical `onSuccess` — `router.replace` and `router.refresh` included — with no guard involvement at all, which proves no caller can depend on boundary-release ordering. One subtlety worth preserving: the callback is scheduled through a microtask rather than invoked synchronously, because a synchronous call would execute *inside* the `try`/`catch` added by the ST-1 fix, and a throw from `onSuccess` would then be reported as "could not be saved" against a save that succeeded — trading one misleading-success bug for another. A regression test drives the real provider with two dirty surfaces; 2 of its 3 cases fail before the fix.
 
 #### ST-8 · OBJ · S3 · Effort M · Confidence Med
 **Two further latent traps in the unsaved-work guard.** *Found while fixing ST-7, 2026-08-23. Not fixed — reported.*
@@ -178,14 +292,22 @@ Also minor: `ignoreNextPopState` is a boolean rather than a counter, so it assum
 #### A11Y-1 · OBJ · S3 · Effort XS · Confidence High
 **Placeholder text fails WCAG AA contrast.** `#8a939b` at `app/globals.css:1545` and `:5410` gives **3.12:1** on `#ffffff` and **2.99:1** on `--paper` `#fbfaf7`, against a 4.5:1 requirement. Mitigated — not eliminated — by the fact that every field has a visible `<label>`, so no information is placeholder-only.
 
+**Resolved (`a13888f`).** Replaced with `--text-placeholder` `#6b7480` — **4.74:1** on white and 4.54:1 on `--paper`, computed against the composited background rather than an assumed one.
+
 #### A11Y-2 · OBJ · S3 · Effort XS · Confidence High
 **Disabled month-navigation controls are effectively invisible.** `app/globals.css:8905` sets `color: var(--line)` = `#d7dbde` on white → **1.39:1**, against the 3:1 non-text/UI minimum. A coach cannot tell a disabled month arrow from a rendering artifact.
+
+**Resolved (`a13888f`).** Replaced with `--line-disabled` `#858d94` — **3.37:1** on white, 3.23:1 on the composited `rgba(255,255,255,.48)`-over-ivory month control. The originally proposed value failed its own target; see [Corrected claims](#corrected-claims).
 
 #### A11Y-3 · OBJ · S3 · Effort S · Confidence High
 **Five forms omit the error-association pattern the login form implements correctly.** Missing `aria-invalid`, `aria-describedby` → error node, and/or first-invalid focus: `pin-setup-form.tsx` (error is a standalone `role="alert"`, not linked), `head-coach-setup-form.tsx:52`, `recovery-form.tsx:36`, `recovery-reset-forms.tsx:35` (2FA step), `two-factor-verification-form.tsx` (no post-error focus). The reference implementation is `components/login-form.tsx:36-41` and it is CI-tested — these five simply were not brought up to it.
 
+**Resolved (`c087412`), together with DEBT-6 and by way of it.** The five forms were fixed by extracting the `AuthField` primitive they had drifted for want of, so the cause was addressed rather than the five symptoms. `AuthField` takes the control as a render prop, letting `input`, `PasswordInput` and `select` share identical wiring; it exposes two error props, one rendered in-field and one naming an alert the form renders elsewhere, which is what allowed every form to be corrected without moving a single existing error paragraph — necessary because `.login-form` is a 24px grid on a surface the design record freezes. Rendered DOM shape and class list unchanged, verified by static render.
+
 #### A11Y-4 · OBJ · S3 · Effort XS · Confidence High
 **`/admin` has no skip link.** `components/app-shell.tsx:17`, `coach-shell.tsx:17`, `app/(public)/page.tsx:438` and the public announcement page all have one; `app/admin/page.tsx:90` renders `<main className="admin-page page-shell">` directly with none.
+
+**Resolved (`5640ee0`).** One further page turned out to have no landmark at all rather than no skip link — `app/not-found.tsx`, found later by the extended matrix (A11Y-6). It was given a `<main>` and deliberately *not* a skip link, since a 404 has no header or nav to bypass.
 
 #### A11Y-5 · OBJ · S3 · Effort XS · Confidence High
 **A horizontal scroll container is not keyboard operable.** `.tableWrap` sets `overflow-x: auto` over a `min-width: 980px` table but has no `tabIndex` and no `aria-label` — unlike the attendance register, which does both (`player-attendance-register.tsx:267-268`). A keyboard user cannot scroll the region to reach clipped columns.
@@ -196,32 +318,20 @@ The defect and the fix are unchanged — PR-3 added `tabIndex`, `role="region"` 
 
 **Extended during PR-3.** The attendance register's own container — the pattern this finding pointed at as correct — carried `aria-label` on a role-less `<div>`, where ARIA prohibits naming and the accessible name may be discarded by some browser/AT pairings. All three containers now carry `role="region"`, which is already this repo's dominant convention for named non-semantic containers (`attendance-adjustments-workspace.tsx:523`, `player-onboarding-register.tsx:833`, `report-accordion.tsx:119` and `:182`); `role="group"` is reserved here for radio-like button clusters.
 
-**Residual, not yet fixed:** `player-attendance-register.tsx:188` — `<div className="coach-year-selector" aria-label="Choose attendance year">` is the same shape, a named role-less div, while its three siblings at `:204`, `:217` and `:243` all carry `role="group"`. It looks like a straightforward oversight in the same family. One-word follow-up.
+**Residual, recorded as not yet fixed:** `player-attendance-register.tsx:188` — `<div className="coach-year-selector" aria-label="Choose attendance year">` is the same shape, a named role-less div, while its three siblings at `:204`, `:217` and `:243` all carry `role="group"`. It looks like a straightforward oversight in the same family. One-word follow-up.
+
+**Residual resolved (`49ad19c`), and the finding closed with it.** The year selector took `role="group"` rather than `role="region"` — group because it is a mutually-exclusive toggle cluster with nothing scrollable, so it does not earn a landmark, which is the same distinction the three scroll containers were decided on in the opposite direction. This was the fifth instance of the same shape, and finding it by accident for the fifth time is what produced A11Y-10.
 
 #### A11Y-6 · OBJ · S3 · Effort S · Confidence High
 **Seven routes and two dialog states sit outside the otherwise-excellent axe matrix**: `/coach/announcements/[id]`, `/coach/reports/publications/[publicationId]`, `/announcements/[announcementId]`, `/coach/financials` (inactive/activation), `app/not-found.tsx`, and both financials `error.tsx` pages; plus the announcement **Review** and **Withdraw** dialogs, which are never opened during the run. Given W-1, these are the only places a11y regressions can enter unnoticed.
 
-**Addressed (2026-08-23).** Seven states and three interactions added, verified live across all three profiles — 316 audits (stress 177, admin 87, clean 52). Both dialog states are covered, and the `data-accessibility-dialog-opener` hook — previously set inline by the single dialog interaction that had it — is now a shared `openDialogFrom(trigger)` helper, so every future dialog state inherits the focus-trap, Escape and focus-return checks automatically.
+**Partially resolved (`eaf1dd4`, `7fac52d`).** Seven states and three interactions added, verified live across all three profiles — 316 audits (stress 177, admin 87, clean 52). Both dialog states are covered, and the `data-accessibility-dialog-opener` hook — previously set inline by the single dialog interaction that had it — is now a shared `openDialogFrom(trigger)` helper, so every future dialog state inherits the focus-trap, Escape and focus-return checks automatically.
 
 The six `error.tsx` boundaries remain unreachable: an `error.tsx` renders only when its segment throws during render, and the harness has no fault injection. A concrete route exists — `readFinanceActivation` throws when the `finance_activated` audit metadata lacks `trackingMonth`, so corrupting that one row would render the boundary — and the spec already mutates fixture databases directly for recovery-challenge setup, so the precedent is there. It is a new harness capability and belongs in its own change.
 
 **The new coverage immediately found two real defects, which is the entire point:**
 - `app/not-found.tsx` renders a bare `<section>` with **no `main` landmark** — `main-landmark-count`, serious, all three viewports. Every other route group supplies its own; the 404 was the only page with none.
 - The finance-activation consent checkbox `input[name="confirmPermanentLedger"]` is an **18px tap target** at tablet width against a 24px minimum. It passes at 390px only because the consent sentence wraps and props the grid row open — accidental compliance rather than a sized control.
-
-#### A11Y-9 · OBJ · S3 · Effort S · Confidence High
-**The accessibility matrix silently drops states it cannot route.** *Found while extending coverage, 2026-08-23. Not fixed.*
-
-`accessibility-regression.spec.ts` wires up specific profile-and-actor pairs. A matrix state whose pair is not wired up is **not an error** — it never executes, never appears in results, and reports nothing. Two of the seven states added in this pass fell into exactly that gap: the `stress` branch never opened a guest context, and the `clean` branch only scanned guest states, never head-coach ones. Both would have been dead entries that looked live.
-
-**Why it matters.** This is A11Y-8's failure class one level up: the gate's *coverage* is as invisible as its discarded results. Someone adding a state with a mistyped profile gets a green run and believes the surface is protected. Taken together, a green result today means "no WCAG-tagged violations, among the states that happened to be routable, excluding everything axe could not decide automatically."
-
-**Fix shape.** Assert every selected state produced at least one result. That is a new blocking check, so it warrants a deliberate decision rather than a quiet addition.
-
-#### A11Y-10 · OBJ · S4 · Effort S · Confidence High
-**`aria-label` on role-less containers is a recurring pattern, not isolated incidents.** Five instances across three separate passes: both fee-register scroll wrappers, the attendance register scroll container, the attendance year selector, and the announcement Review dialog's `channelPills`. Every one was found by accident, and all are invisible to the gate because `aria-prohibited-attr` returns *incomplete* rather than a violation when the element has subtree text (A11Y-8).
-
-Fixing them one at a time is not converging. An assertion — no `aria-label`/`aria-labelledby` on an element lacking an explicit `role`, outside an allowlist of elements whose implicit role permits naming — would catch the whole family for the cost of one file. Same shape as the `var()`-undeclared assertion added in `5204109`, which has already proved its worth.
 
 #### A11Y-7 · SUBJ · S4 · Effort S · Confidence High
 **Dropdown menus have no focus trap or background `inert`.** `account-menu.tsx:63`, `public-header.tsx`. Escape closes and focus returns correctly; Tab can walk out into the page behind the open menu. Not a WCAG failure — a polish gap relative to the three `<dialog>` implementations, which are exemplary.
@@ -276,6 +386,22 @@ So the labelled-but-role-less scroll containers in this codebase (`.coach-regist
 
 Together with the discarded `incomplete` results, this means a green run is narrower evidence than it appears: it certifies "no WCAG-tagged violations axe could decide automatically", not "no accessibility problems". Both are cheap to surface as non-blocking sections.
 
+**Partially resolved (`6abea0c`).** Both blind spots now surface as labelled non-blocking advisories in the job summary — `axe.incomplete` and the `best-practice` rule family — with the blocking path factored out and unchanged. What remains is the promotion decision above, not the visibility problem.
+
+#### A11Y-9 · OBJ · S3 · Effort S · Confidence High
+**The accessibility matrix silently drops states it cannot route.** *Found while extending coverage, 2026-08-23. Not fixed.*
+
+`accessibility-regression.spec.ts` wires up specific profile-and-actor pairs. A matrix state whose pair is not wired up is **not an error** — it never executes, never appears in results, and reports nothing. Two of the seven states added in this pass fell into exactly that gap: the `stress` branch never opened a guest context, and the `clean` branch only scanned guest states, never head-coach ones. Both would have been dead entries that looked live.
+
+**Why it matters.** This is A11Y-8's failure class one level up: the gate's *coverage* is as invisible as its discarded results. Someone adding a state with a mistyped profile gets a green run and believes the surface is protected. Taken together, a green result today means "no WCAG-tagged violations, among the states that happened to be routable, excluding everything axe could not decide automatically."
+
+**Fix shape.** Assert every selected state produced at least one result. That is a new blocking check, so it warrants a deliberate decision rather than a quiet addition.
+
+#### A11Y-10 · OBJ · S4 · Effort S · Confidence High
+**`aria-label` on role-less containers is a recurring pattern, not isolated incidents.** Five instances across three separate passes: both fee-register scroll wrappers, the attendance register scroll container, the attendance year selector, and the announcement Review dialog's `channelPills`. Every one was found by accident, and all are invisible to the gate because `aria-prohibited-attr` returns *incomplete* rather than a violation when the element has subtree text (A11Y-8).
+
+Fixing them one at a time is not converging. An assertion — no `aria-label`/`aria-labelledby` on an element lacking an explicit `role`, outside an allowlist of elements whose implicit role permits naming — would catch the whole family for the cost of one file. Same shape as the `var()`-undeclared assertion added in `5204109`, which has already proved its worth.
+
 ### 3.3 Responsiveness
 
 #### RESP-1 · OBJ · S2 · Effort S · Confidence High
@@ -298,7 +424,7 @@ Also unsanctioned: 7px completion badge (`globals.css:11378`), 7px calendar note
 
 **Accepted trade-off (2026-08-23, confirmed by product).** Raising the coach dashboard status stamp from 7px to 10px makes it wider, which at **320px only** causes the *Monthly reports* card title to wrap to two lines when paired with the longest stamp (`76 OUTSTANDING`). Verified by measurement: nothing clips or overlaps, it is confined to that single longest title-plus-stamp combination (`ATTENDANCE` + `12 SCHEDULES` still fits on one line), and it resolves by 340px. Accepted as a fair exchange for eliminating illegible 7px text, at the extreme edge of the supported width range. Do not file this as a layout regression.
 
-**Status (2026-08-23): closed for sub-8px; 8px reduced to three documented exceptions.** `--type-operational-floor: 10px` now exists, **zero declarations below 8px remain anywhere in the repo**, and the 9px tier is untouched at exactly 99 declarations. Of the original 34 8px declarations, 23 were raised across two passes. **Three remain, each with a stated reason rather than an assumption:**
+**Resolved (`a13888f`, `4722fe3`, `52c0fc9`) — closed for sub-8px, 8px reduced to three documented exceptions.** `--type-operational-floor: 10px` now exists and **zero declarations below 8px remain anywhere in the repo**. Of the original 34 8px declarations, 23 were raised — 11 in globals, 12 in the CSS modules — and **exactly three remain**, each with a stated reason rather than an assumption:
 
 | Site | Why it stays at 8px |
 |---|---|
@@ -308,15 +434,25 @@ Also unsanctioned: 7px completion badge (`globals.css:11378`), 7px calendar note
 
 Two side findings from the final pass. `financials.module.css:3721` (`.summary dt`) is **unreachable**: the only `styles.summary` consumer is `dashboard-card.tsx`, which imports a different CSS module, and CSS Modules hash class names — so the rule cannot match. It was raised for sheet consistency but is a zero-render change and is a candidate for deletion. And `.balancePlayerRail > button` ("Change player") now wraps to two lines at 320px; nothing clips, and no defensible padding trim buys a single line — even at 5px padding the box is still 0.9px short.
 
+**Reconciling the 8px arithmetic, because the intermediate figures do not add up to 34.** 23 raised + 3 remaining + 4 dead is 30, not 34. The gap is not four unfixed declarations: a fresh count across all CSS today returns **exactly 3**, matching the table above, so nothing at 8px is unaccounted for in the current tree. The gap is in the bookkeeping — the three passes counted overlapping scopes at three different commits, and `7fcbba4`'s deletion of 693 lines of dead CSS removed rules that were never re-counted against the original 34. Trust the endpoints, which are directly verifiable (34 at `3cbd766`, 3 today); the middle terms are approximate.
+
+**The 9px tier is untouched, but the count moved from 98 to 99, and that is this finding's own doing.** The step-rail label below was raised 7px → 9px, which is exactly one addition to the sanctioned tier. Both numbers are correct: 98 at the baseline, 99 today. No pre-existing 9px declaration was changed.
+
 Measurement note: both passes computed real Manrope glyph advances from the font files Next.js cached in `.next/static/media`, applying HVAR weight deltas manually — `fontkit`'s `getVariation()` loses its cmap in this build and silently returns ExtraLight metrics, roughly 9% narrow. The second pass calibrated against the first by reproducing its published 43.3px figure for "sessions" exactly.
 
 Three corrections to this finding, all found by measurement during implementation:
 
 1. **8px is not unsanctioned everywhere.** I asserted it had no explicit sanction. It does: `.21st/design.json`'s `coach-staff-roll-call-daily-ledger` decision specifies "the same 9px desktop/tablet and **8px mobile** uppercase typography". The finding's premise was too strong.
 2. **A type floor mechanism already existed and I missed it.** `app/globals.css:13799-13855` contains an "Internal operations typography floor" block that overrides several selectors to `var(--type-utility-label)` (11px). Four of the 8px declarations are therefore **dead code** — they render at 11px today, and editing them would be a no-op. The vestigial 8px lines are the remains of the roll-call sanction above, already superseded in the stylesheet.
-3. **One site was declined on evidence, not preference.** `app/globals.css:8017` (`.coach-month-grid button small`, the "N sessions" caption in the coach Session Calendar month grid) offers 25.7px of content width at 320px, while the word "sessions" alone needs 43.3px at 10px — it already overflows at its current 8px. It also sits on the surface `mobile-calendar-attendance-freeze` explicitly freezes. Raising it would deepen a pre-existing overflow on frozen work.
+3. **One site was declined on evidence, not preference.** `app/globals.css:8016` (`.coach-month-grid button small`, the "N sessions" caption in the coach Session Calendar month grid) offers 25.7px of content width at 320px, while the word "sessions" alone needs 43.3px at 10px — it already overflows at its current 8px. It also sits on the surface `mobile-calendar-attendance-freeze` explicitly freezes. Raising it would deepen a pre-existing overflow on frozen work.
 
 One knock-on: the step-rail label at `player-onboarding-register.module.css` could not reach 10px either — the longest label `ASSESSMENT` needs 70.5px in a 64.5px track at 320px, and the grid uses `minmax(0, 1fr)` so the track cannot grow. It was raised 7px → **9px**, the largest size that fits and the size this design system already sanctions for small uppercase labels.
+
+#### RESP-2 · SUBJ · S4 · Effort S · Confidence High
+**Several coach controls sit at 42px against the design record's 44px contract**: `.coach-year-selector button` (`globals.css:3635`), `.coach-occurrence-actions > button` (`:7377`), `.coach-series-end-action` (`:7701`), `.coach-assignment-days label > span` (`:7813`). These **pass** WCAG 2.2 SC 2.5.8 (24px minimum), so this is a consistency issue against the team's own stricter bar, not an accessibility failure.
+
+#### RESP-3 · SUBJ · S4 · Effort XS · Confidence Med
+**The onboarding register uses off-grid breakpoints** (`max-width: 1000px` / `700px`) instead of the app's 980/760/720 system, leaving 701–720px on a cramped five-column desktop row.
 
 #### RESP-4 · OBJ · S3 · Effort XS · Confidence High
 **The two halves of the staff roll-call Present/Absent control render at different font sizes.** *Found while completing RESP-1, 2026-08-23. Not fixed — needs the design decision below.*
@@ -331,14 +467,10 @@ This contradicts the product's own spec. `.21st/design.json`'s `coach-staff-roll
 
 **Blocked on:** whether the recorded 8px mobile roll-call sanction still stands. Both halves should end up the same size; which size is the design call.
 
-#### RESP-2 · SUBJ · S4 · Effort S · Confidence High
-**Several coach controls sit at 42px against the design record's 44px contract**: `.coach-year-selector button` (`globals.css:3635`), `.coach-occurrence-actions > button` (`:7377`), `.coach-series-end-action` (`:7701`), `.coach-assignment-days label > span` (`:7813`). These **pass** WCAG 2.2 SC 2.5.8 (24px minimum), so this is a consistency issue against the team's own stricter bar, not an accessibility failure.
-
-#### RESP-3 · SUBJ · S4 · Effort XS · Confidence Med
-**The onboarding register uses off-grid breakpoints** (`max-width: 1000px` / `700px`) instead of the app's 980/760/720 system, leaving 701–720px on a cramped five-column desktop row.
-
 #### Verified NOT defects — do not "fix" these
 The 1px media-query pairs **760/761, 720/721, 900/901, 340/341** are clean mutually-exclusive gaps, not destructive overlaps; each produces exactly one correct layout at the boundary pixel. **980/981** has no `min-width: 981px` counterpart *by design* — above 980px the unprefixed desktop rules apply. The 900px + 980px member-directory overlap at 851–980px resolves correctly by source order. Distinct breakpoint widths total 19, which is high but coherent.
+
+**Corrected (`5204109`).** The count is **20**, not 19, and the `340/341` pair named above does not exist — there is no `min-width: 341px` rule anywhere in the tree, only the three genuine pairs `720/721`, `760/761` and `900/901`, plus the `980` with no counterpart, as stated. The enumerated set is 320, 340, 360, 380, 430, 600, 640, 700, 720, 721, 760, 761, 780, 820, 860, 900, 901, 980, 1000, 1100. The finding's conclusion — high but coherent — is unaffected; its arithmetic was not checked.
 
 ### 3.4 Design system
 
@@ -370,8 +502,17 @@ Resolved by repointing to `--line`, matching the eleven other neutral panel bord
 #### DS-2 · OBJ · S3 · Effort XS · Confidence High
 **Nine raw `#071b32` literals where `--navy` exists**, all inside the platform-admin block: `app/globals.css:13289, 13291, 13300, 13313, 13349, 13360, 13400, 13538, 13549`. The admin surface was evidently built without the token layer in view.
 
+**Resolved (`5204109`).** All nine, plus one raw `#fbfaf7` this finding missed. A second assertion in `tests/design-tokens.test.ts` now rejects any raw hex outside `:root` that matches a declared token value, so the class cannot recur silently.
+
 #### DS-3 · OBJ · S3 · Effort M · Confidence High
 **Five token categories are completely empty.** 36 `:root` tokens cover colour (20), typography (4) and spacing (12). There are **zero** tokens for radius, shadow, motion/duration, z-index and breakpoints — confirmed by empty `radius: {}` and `shadows: {}` in `.21st/design.json`. Consequence: 41 raw `box-shadow` declarations, 8 distinct raw `z-index` values (1, 2, 3, 40, 50, 90, 100, 1000), ~30 mixed `.16s`/`160ms` durations, and raw `999px`/`50%`/`4px` radii.
+
+**Partially resolved (`5204109`) — three categories filled, two declined on evidence.** `:root` went from 39 tokens to 54, adopted across 101 declarations and proved inert by snapshotting every stylesheet, mechanically expanding each new token back to its literal, and diffing. Radius, motion and z-layer tokens were added and adopted. The other two were **not** oversights in the implementation but corrections to this finding's premise:
+
+- **No shadow elevation tokens.** Every drop shadow in the file has a unique value, so a scale could only be produced by inventing one and silently unifying existing differences — a visual change disguised as a refactor. The genuine cluster turned out to be inset keylines, so those became the tokens instead. Three near-identical menu shadows are recorded as drift rather than quietly merged.
+- **No breakpoint tokens.** Media features are evaluated *before* custom-property substitution, so `--bp-*` is unusable in the only place it would belong. The 20 widths are documented in `.21st/DESIGN.md` instead. This finding proposed a token category that CSS cannot support.
+
+Also declined, and worth recording for the same reason: `border-radius: 0` is left raw at 19 declarations. The system is deliberately square, and a `--radius-none` token would say nothing the `0` does not.
 
 #### DS-4 · SUBJ · S3 · Effort M · Confidence High
 **Near-duplicate colour clusters have formed around tokenized values.** The strongest cluster is greys/borders around `--line` `#d7dbde`: `#d8dbdd` (8×), `#d6dadd` (4×), `#d9dddf` (3×), `#dde0e2` (3×), plus `#d5dadd`, `#d2d6d9`, `#ced4d7`, `#d8d5cf`, `#d7d2cb`. Also ivory (`#f3f2ef` 6×, `#ebe9e5` 4×), steel (`#667387` 6×), coral (`#f47c83` 5×). Token proposals in §4.
@@ -397,6 +538,8 @@ Consolidated onto a single **unlayered** local `.sr-only` using the union of bot
 
 #### DS-8 · OBJ · S4 · Effort XS · Confidence High
 **The generated design context is stale.** `.21st/DESIGN.md` documents 15 tokens and reports "Components: None detected"; the real `:root` set is 36. Anyone trusting the doc under-counts the system by more than half.
+
+**Resolved (`5204109`).** `.21st/DESIGN.md` and `.21st/design.json` were both regenerated against the 54-token set, and now also carry the two decisions this pass declined — the absent shadow scale and the 19 deliberate `border-radius: 0` declarations — so the record states what is intentionally missing rather than only what exists.
 
 ### 3.5 Performance
 
@@ -474,18 +617,9 @@ Measured from the existing build: the globals chunk is **277,041 bytes raw → 4
 
 **The proposed three-way split is unjustified.** A *binary* public/portal split captures **95%** of the perfect per-route ceiling, because `/` and `/login` together need only 176 of 3,097 rules. The `(coach)`/`(student)`/auth partition buys almost nothing over something far smaller and safer.
 
-**Revised recommendation:** decline PERF-2 as written (L effort, three-way split, parse-cost rationale). Do the font fix in PERF-8 first, then a **binary** globals split at M effort. **Decline splitting portal CSS entirely** — `/coach` and `/player` are warm-cache surfaces behind a login whose real cost is 660–671 KB of JS and 460–534 ms of scripting at 6×, not their stylesheet.
+**Revised recommendation:** decline PERF-2 as written (L effort, three-way split, parse-cost rationale). Do the font fix in PERF-8 first — it has since landed in `de7f841`, so this dependency is discharged — then a **binary** globals split at M effort. **Decline splitting portal CSS entirely** — `/coach` and `/player` are warm-cache surfaces behind a login whose real cost is 660–671 KB of JS and 460–534 ms of scripting at 6×, not their stylesheet.
 
 Two measurement gaps stated for the record: `openssl` is policy-blocked so no local HTTP/2 origin could be stood up, which is why the win is decomposed rather than assumed; and `UpdateLayerTree` no longer exists as a trace event in Chromium 151, that work having folded into `PrePaint`.
-
-#### PERF-8 · OBJ · S2 · Effort S · Confidence High
-**Font preloading is the largest render-blocking cost on the public routes, and it outweighs the CSS problem.** *Found while measuring PERF-2, 2026-08-23.*
-
-`app/layout.tsx` loads Manrope and Newsreader, the latter in both normal and italic, and the root layout preloads them across four files — **147–187 KB per route**. That is as much wire weight as all the JavaScript, and unlike CSS it is already compressed, so brotli cannot help.
-
-Removing just the three font preloads on `/` moves FCP from **1,472 ms to 1,148 ms** with zero CSS work — the best win per unit of risk anywhere in this audit, confined to a single file.
-
-**This is not simply "delete the preloads", and the trade-off needs deciding rather than assuming.** Both fonts already use `display: swap`, so text paints in the fallback and swaps when the font arrives; dropping a preload makes that swap land later and the flash of fallback text more visible. The real work is deciding *which* faces genuinely need preloading on *which* routes — Newsreader italic almost certainly does not need it anywhere, and the authenticated portal has different needs from the editorial public homepage. The audit's original estimate of "~85–130 KB, SUSPECTED" was low and marked unverified; it is now measured.
 
 #### PERF-3 · OBJ · S3 · Effort XS · Confidence High
 **Four presentational dashboard cards are needlessly client components.** `attendance-card.tsx`, `members-card.tsx`, `sessions-card.tsx` and `player-onboarding-card.tsx` each declare `"use client"` while containing **zero** hooks, handlers or browser APIs — and they are rendered from `app/coach/page.tsx`, which is a server component. Their sibling `financials-card.tsx` is correctly left server-side, proving the intended pattern.
@@ -493,6 +627,8 @@ Removing just the three font preloads on `/` moves FCP from **1,472 ms to 1,148 
 The shared `components/coach/dashboard-card.tsx` primitive has **no** directive of its own and imports only `next/link`, one `lucide-react` icon and a CSS module — so today each card's `"use client"` is the only thing pulling the primitive and its import graph into the client bundle.
 
 **Correction (2026-08-23):** this finding originally listed five cards. `reports-card.tsx:25` calls `useReportResume()`, and `components/coach/reports/report-resume.ts` is a `"use client"` module using `useState`/`useEffect` to read `localStorage` — so it legitimately requires the client boundary and is excluded. See [Corrected claims](#corrected-claims).
+
+**Resolved (`cb80117`).** The four remaining cards lost their directive, putting the boundary where interactivity actually begins and matching `financials-card.tsx`.
 
 #### PERF-4 · OBJ · S3 · Effort S · Confidence High
 **PDFs are fully buffered in memory.** `Buffer.concat(chunks)` at `lib/finance/pdf.ts:125` and `lib/reports/pdf.ts:371`, returned as a complete `Response` body. A player statement covering a long fee history buffers entirely before the first byte reaches the client.
@@ -536,6 +672,75 @@ The declined variant also carries a live hazard: omitting the offset/length argu
 #### PERF-7 · SUBJ · S4 · Effort S · Confidence Med
 **`/login` is forced dynamic** by a `sessionProvider.getCurrentIdentity()` call in the page (`app/login/page.tsx:26` → `headers()`), preventing a static login shell. A middleware cookie check would restore static rendering for the overwhelmingly common anonymous case.
 
+#### PERF-8 · OBJ · S2 · Effort S · Confidence High
+**Font preloading is the largest render-blocking cost on the public routes, and it outweighs the CSS problem.** *Found while measuring PERF-2, 2026-08-23.*
+
+`app/layout.tsx` loads Manrope and Newsreader, the latter in both normal and italic, and the root layout preloads them across four files — **147–187 KB per route**. That is as much wire weight as all the JavaScript, and unlike CSS it is already compressed, so brotli cannot help.
+
+Removing just the three font preloads on `/` moves FCP from **1,472 ms to 1,148 ms** with zero CSS work — the best win per unit of risk anywhere in this audit, confined to a single file.
+
+**This is not simply "delete the preloads", and the trade-off needs deciding rather than assuming.** Both fonts already use `display: swap`, so text paints in the fallback and swaps when the font arrives; dropping a preload makes that swap land later and the flash of fallback text more visible. The real work is deciding *which* faces genuinely need preloading on *which* routes — Newsreader italic almost certainly does not need it anywhere, and the authenticated portal has different needs from the editorial public homepage. The audit's original estimate of "~85–130 KB, SUSPECTED" was low and marked unverified; it is now measured.
+
+---
+
+**Resolved (`de7f841`) — and the hypothesis above is inverted.** Full report at `output/perf-font/PERF-8-report.md`, raw data in `output/perf-font/results/`. The direction of the finding was right and its reasoning was wrong, so both are worth reading.
+
+**Newsreader italic is not the face to suspect; it is the dominant one.** It renders above the fold on **8 of the 12 routes** audited, including the emphasised word of the `/` hero headline and the oversized greeting name on both portal dashboards. Static CSS analysis undercounts it structurally: `<em>` and `<i>` are italic from the **user-agent stylesheet**, so a rule like `.hero h1 em { font-family: var(--font-newsreader) }` renders italic without ever naming `font-style`. Faces were read from the renderer instead — computed `font-family`/`font-style` per text-bearing element, `document.fonts` activation state, glyph-level platform fonts via CDP `CSS.getPlatformFontsForNode`, and viewport intersection. Dropping italic would have changed rendered typography on the acquisition surface.
+
+**This is the second instance of one error class, which makes it a methodology finding.** The `.status-draft` false positive in [Corrected claims](#corrected-claims) came from grepping for literal class names in a codebase that builds them with template literals. This came from grepping for `font-style` in a stylesheet whose italics are inherited. Both are the same mistake: reading a static artifact to answer a question only the renderer can answer. Two independent instances in one day is a pattern, not bad luck. **Any claim of the form "X is unused" must be established from the running application.**
+
+**The real waste was structural, and neither the finding nor its "which faces" framing had spotted it.** The two Newsreader styles are used on almost perfectly *complementary* surfaces — italic on `/`, `/player`, `/coach` and their sub-routes; upright only on the auth forms and the operational registers, always as secondary copy — yet the root layout preloaded both on every route. So **every single route preloaded one Newsreader face it never rendered**: 58,152 B wasted on the eight italic routes, 64,500 B on the four upright ones. The question was never "which faces are unused" but "which faces are unused *here*".
+
+**What shipped.** `app/layout.tsx` only, 20 insertions and 2 deletions: Newsreader is split into two `next/font` instances so the upright face can carry `preload: false`. No stylesheet was touched.
+
+| Measure | Result |
+|---|---|
+| Preloaded font per route | **−58,152 B** (147,228 → 89,076, −39.5%) |
+| `/` FCP = LCP | **−66.9 ms** [CI −129.4, −4.4] |
+| `/login` FCP = LCP | **−90.3 ms** [CI −119.1, −61.5] |
+| `/player` FCP | **−87.4 ms** [CI −114.0, −60.9] |
+| `/player` LCP | −186.9 ms [CI −920.1, +546.4] — **not significant**, sd 470–630 ms |
+| CLS | **0.0000 in all 63 runs**, all arms |
+| Rendered output | Full-page PNGs **byte-identical** on seven routes; 0 typography, 0 geometry, 0 platform-font diffs across 508 text-bearing elements |
+
+Slow 4G (1.6 Mbit/s, 150 ms RTT), 6× CPU, mobile 390×800 DPR 2, cold cache, 7 interleaved paired passes with arms measured back-to-back within each pass. CLS holds at zero because `adjustFontFallback` is already on and emits `size-adjust: 105.48%` with ascent/descent overrides for Newsreader, so the swap repaints in place rather than reflowing.
+
+The bytes table states the trade-off more honestly than the timings do: the change removes 58.5 KB from the wire on `/` and `/player`, where the upright face is never rendered, and removes **117 bytes** on `/login`, where it is — there it merely stops a fetch competing with the render-blocking stylesheet before FCP, and still wins 90 ms.
+
+**Declined on measurement: dropping the italic preload as well.** Worth **−241.1 ms** on `/` [−280.3, −202.0], the largest single number in this audit, and declined anyway. It removes **31 bytes** — `/` goes from 371,325 to 371,294 — because it does not stop the font being fetched, only moves the fetch out of the render-blocking window. It buys those 241 ms by rendering the hero's emphasised word in Times New Roman for an extra **344 ms** on the acquisition surface, delaying the `/player` greeting by 494 ms, and moving `/player` LCP from the shipped arm's 1,960 ms to 2,468 ms (2,004 ms in the baseline arm). Against `public-production-readiness` — "a locked editorial composition … without changing SMBA's visual identity" — that is a decision for the design owner, not a unilateral one. It is priced and recorded, not forgotten.
+
+**Rejected on mechanism, not preference: per-route preloading.** Instantiating italic in the route-group layouts and leaving upright in the root would give true per-route preloading, and it is not safely available. The preload flag is part of the *instance* and is encoded in the emitted filename — the same face is `…-s.p.…woff2` when preloaded and `…-s.…woff2` when not, verified by diffing the built font CSS across the three arms. Mixing a deferred and a preloaded instance of one family therefore puts **two URLs for identical bytes** and two competing `@font-face` rules for the same family, style and unicode-range into a single document; which wins depends on chunk order, and the loser is either wasted or duplicated as a second 64.5 KB download. Declaring italic *only* in the group layouts avoids the duplication and is worse: `/admin`, `/activate`, `/recover`, `/setup`, `/account` and `/auth/*` do render italic Newsreader and would lose the face permanently.
+
+**One input number did not reproduce, and the fix is not justified on it.** The `1,472 ms` baseline quoted above came from the PERF-2 report's §4f **synthetic** arm — static copies of documents served by the harness's own HTTP/1.1 static server — at commit `4722fe3`. The live `next start` baseline at `7fcbba4`, 693 lines of CSS lighter, measures **1,752 ms**. Different arm, different commit, different host load; the absolute figure should not be quoted again. What did reproduce independently is the per-byte effect: the original stripped 147,228 B for −324 ms, or **2.25 ms/KB**; the arm-C measurement here strips 122,652 B for −241 ms, or **1.96 ms/KB**. Same mechanism at the same scale. Every conclusion above rests on paired, interleaved, same-machine comparisons and none on cross-run absolute medians — which is the only reason a headline number failing to reproduce does not take the finding down with it.
+
+**Also recorded, and not acted on.** Newsreader italic latin (64,500 B) is *larger* than Newsreader normal latin (58,152 B), so the face that must stay preloaded is the more expensive one, and there is no smaller option: the stylesheets ask for 24 distinct Manrope weights between 400 and 830 and 6 Newsreader weights between 400 and 620, most non-standard (470, 570, 580, 750), so static weight files cannot reproduce the rendered result. The larger remaining problem in this area is PERF-9.
+
+**A harness detail worth carrying forward.** CDP CPU and network overrides are silently discarded by the renderer swap during form login, so authenticated runs must inject session cookies into a pristine context rather than navigating through the login form. Without that fix the `/player` numbers were unthrottled — FCP ≈ 230 ms — and the change would have looked like a null result. Any future authenticated performance measurement in this repository is wrong by default until this is handled.
+
+#### PERF-9 · OBJ · S3 · Effort S · Confidence High
+**One currency symbol pulls a second font subset on almost every route, and 91 KB of it on the financial register.** *Found while measuring PERF-8, `de7f841`. Not fixed.*
+
+`subsets: ["latin"]` in `app/layout.tsx` controls **only preloading**. `next/font` emits an `@font-face` rule for every subset Google publishes — six of them — and Blink downloads any one of them the moment a rendered character falls inside its `unicode-range`. The build contains **12 woff2 files**, of which 3 were preloaded before `de7f841` and 2 after; the other 9 are live, unpreloaded, and one `₹` away from being fetched.
+
+The rupee sign **`₹` (U+20B9) is in `latin-ext`, not `latin`** — Google's latin range stops at U+20AC. It is the **only** character in the entire application outside the latin subset, and it costs:
+
+| Route | Extra subset fetched, for `₹` alone | Bytes |
+|---|---|---:|
+| `/` | Manrope latin-ext | 15,240 |
+| `/player`, `/coach`, `/coach/reports` | Newsreader italic latin-ext | 39,708 |
+| `/player/financials` | both of the above | 54,948 |
+| `/coach/financials/records` | Manrope + Newsreader italic + Newsreader normal latin-ext | **91,276** |
+
+**Size this against PERF-8, because the comparison is the point.** PERF-8 shipped and removed 58,152 B of preloaded font per route. This removes **91,276 B on `/coach/financials/records`** — the route whose entire purpose is displaying money — and 39,708 B on the two dashboards, so on the routes where it bites it is the larger byte win of the two, for one glyph. On `/` it is smaller, at 15,240 B.
+
+**It is S3 rather than S2 despite the larger byte count, and the timing data is why.** These files arrive with initiator `css` at roughly **2,224 ms** on `/`, i.e. discovered only after the stylesheet is parsed and the glyph is matched — well after FCP. They are not render-blocking, so they do not cost paint time the way PERF-8's preloads did; they cost bandwidth, and they cost it late, contending with everything else on a slow connection. Pure waste, but waste after the user has seen the page.
+
+**Fix direction: serve U+20B9 from a system font via `unicode-range`.** A single narrow `@font-face` scoped to U+20B9 with a `local()` source, placed ahead of the `next/font` rules in the cascade, takes the glyph out of every latin-ext range and nothing else changes — no other character in the app is affected, because no other character is outside latin. Substituting `Rs.` in the copy would also work and is a **product decision of last resort**, since it changes what a parent reads on a fee statement.
+
+**What not to do:** widening `subsets` to include `latin-ext` makes it strictly worse, since it would *preload* those files as well as ship them — undoing PERF-8 and more.
+
+**Secondary observation, non-performance.** Two CSS rules request Manrope weights of **820 and 830**, above the variable font's 800 axis maximum. They silently clamp to 800, so the rules render identically to a `font-weight: 800` rule while reading as if they do something. Correct them to 800 rather than leave a distinction the font cannot express.
+
 ### 3.6 Technical debt & maintainability
 
 #### DEBT-1 · OBJ · S2 · Effort XS · Confidence High
@@ -558,7 +763,7 @@ With a `.next` present, `tsc --noEmit` reports **2 errors** referencing a module
 
 Both instances share a root cause: **`tsconfig.json` includes `**/*.ts` with only `node_modules` excluded, and Vitest inherits an equally open default.** Any stray directory inside the repo silently changes what `typecheck` and `test` mean. Cheap fix: exclude `.next`, `output`, `coverage` and any worktree path from both, and narrow the tsconfig `include` to real source roots.
 
-**Resolved (2026-08-23), with measurements.** Typecheck errors 2 → **0**. Files `tsc` read from `output/`: 919 → **0**. Vitest collected files 607 → **143**. The Vitest baseline was observed growing from 451 to 607 *during* the session as another agent extracted a tree under `output/` — the defect demonstrating itself in real time.
+**Resolved (`6abea0c`), with measurements.** Typecheck errors 2 → **0**. Files `tsc` read from `output/`: 919 → **0**. Vitest collected files 607 → **142**. The Vitest baseline was observed growing from 451 to 607 *during* the session as another agent extracted a tree under `output/` — the defect demonstrating itself in real time.
 
 Root cause of the phantom errors was confirmed as a stale artifact, not a Next bug: `app/admin/layout.tsx` was deleted in commit `3cbd766` (Aug 23 12:46), while both validator files were written Aug 22. Two facts shaped the fix — `next build`/`next dev` **re-append** any missing `.next` type glob to `include` and rewrite `tsconfig.json` (`writeConfigurationDefaults.js:302-317`), so removing an include is self-reverting whereas an `exclude` is stable; and Next's own build type check already filters `.next/dev/types` out, commented *"to prevent stale dev types from causing errors when routes have been deleted since the last dev session"* (`runTypeCheck.js:31-40`). A bare `tsc` has no such filter. `include` was narrowed to real source roots, `.next/dev` excluded to mirror Next's own behaviour, and `.next/types` deliberately **kept**, because `next build`'s type check enumerates from this same tsconfig and excluding it would drop route-validator coverage from the build too.
 
@@ -591,6 +796,8 @@ Domain validators (`isAcademyId`, `validateNewPassword`) and service-layer invar
 #### DEBT-6 · SUBJ · S4 · Effort M · Confidence High
 **No shared form-field primitive across 12 auth/setup forms** — ~64 repetitions of the label + input + error/helper + `aria-*` block. This is the structural reason A11Y-3 exists: there was no single place to fix.
 
+**Resolved (`c087412`), jointly with A11Y-3.** `AuthField` now exists and five forms consume it. This was the one place the original roadmap's cross-finding pairing predicted correctly: extracting the primitive *was* the fix for the five forms, not a prerequisite to it.
+
 #### DEBT-7 · SUBJ · S4 · Effort S · Confidence High
 **The two-digit "folio" register pattern is reimplemented at 8 sites** — `folio()` helper, inline `padStart(2,"0")` (×2), and five separate CSS class families across `globals.css` and three modules.
 
@@ -600,12 +807,14 @@ Domain validators (`isAcademyId`, `validateNewPassword`) and service-layer invar
 #### DEBT-9 · OBJ · S4 · Effort XS · Confidence High
 **Stale repository artifacts.** `SMBA_UI_CARD_BY_CARD_PROMPT_PLAYBOOK.txt` (140 KB) references a dead path `/Users/nitishg/Documents/SMBA/student-portal`; `design-system/smba-player-journal/MASTER.md` is a generated doc with a generic palette wired to nothing. Neither is imported by runtime code.
 
+**Resolved (`51677e2`).** Both deleted — 3,653 lines. It shipped with a documentation pass rather than with the `tsconfig` change it was planned alongside, which is the only reason it does not appear under DEBT-1.
+
 #### DEBT-10 · SUBJ · S4 · Effort S · Confidence High
-**CI has no bundle, dependency or coverage gate.** `quality.yml` gates lint, typecheck, `drizzle-kit check`, unit tests, build and five Playwright suites — genuinely strong. Absent: bundle/CSS size budget, `npm audit`, coverage thresholds.
+**CI has no bundle, dependency or coverage gate.** `quality.yml` gates lint, typecheck, `drizzle-kit check`, unit tests, build and five named Playwright regression suites — registration, finance, authentication, onboarding, attendance — plus the accessibility matrix and the failure-evidence sentinel, in their own workflows. That is genuinely strong, and it is a subset: the repository holds 13 spec files, so the remainder run only on demand. Absent: bundle/CSS size budget, `npm audit`, coverage thresholds.
 
 ### Corrected claims
 
-Two findings from the parallel audits did not survive verification and are recorded here so they are not acted on:
+Claims from this audit that did not survive verification, recorded here so they are not acted on. The first two came from the parallel audits and were caught before publication; the rest were caught by implementation, which is later and more expensive. Each row is a headline number that changed; the corrections that only affected a finding's internals are marked **Corrected** in the findings themselves. PERF-8's inverted hypothesis is the sixth and is recorded in its own body, because the correction *is* the finding.
 
 | Claim | Reality |
 |---|---|
@@ -625,36 +834,42 @@ Two findings from the parallel audits did not survive verification and are recor
 
 Highest value, lowest risk: these are all *new* tokens that replace raw values with identical computed output, so they are visually inert.
 
+**Two of these five blocks were wrong, and are declined.** The proposals are left standing below so the error is legible; what shipped in `5204109` is radius, motion and z-layer only, and the annotations on each block say which is which.
+
 ```css
-/* Radius — replaces 7× 999px, 23× 50%, raw 4px */
+/* SHIPPED. Radius — replaces 7× 999px, 23× 50%, raw 4px */
 --radius-sm: 4px;
 --radius-pill: 999px;
 --radius-circle: 50%;
 
-/* Elevation — consolidates 41 raw box-shadow declarations */
+/* DECLINED — see below. Elevation, consolidating 41 raw box-shadow declarations */
 --shadow-raised: 0 1px 2px rgba(7, 27, 50, 0.06);
 --shadow-overlay: 0 12px 32px rgba(7, 27, 50, 0.12);
 --shadow-modal: 0 32px 90px rgba(0, 0, 0, 0.18);   /* from globals.css:1428 */
 
-/* Motion — normalises ~30 mixed .16s / 160ms values */
+/* SHIPPED. Motion — normalises ~30 mixed .16s / 160ms values */
 --duration-fast: 160ms;
 --duration-base: 240ms;
 --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
 
-/* Z-index — replaces 8 ad-hoc values (1,2,3,40,50,90,100,1000) */
+/* SHIPPED. Z-index — replaces 8 ad-hoc values (1,2,3,40,50,90,100,1000) */
 --z-base: 1;
 --z-sticky: 40;
 --z-header: 50;
 --z-overlay: 90;
 --z-dialog: 1000;
 
-/* Breakpoints — documents the real 19-width system; reference values for review discipline */
+/* DECLINED — CSS cannot do this. Breakpoints, documenting the real 19-width system */
 --bp-xs: 340px;
 --bp-sm: 430px;
 --bp-md: 720px;
 --bp-lg: 760px;
 --bp-xl: 980px;
 ```
+
+**Why the elevation block is declined.** It asserts that 41 raw shadows consolidate to three. They do not: every drop shadow in the file has a distinct value, so those three tokens could only be adopted by rewriting 41 declarations to one of three approximations — a visual change presented as an inert refactor, which is exactly what this section promises not to do. The three literals above were read off three arbitrary rules and given category names. The real cluster is inset keylines, and that is what `5204109` tokenised instead. The three near-identical menu shadows are recorded as drift in `.21st/DESIGN.md` rather than quietly unified.
+
+**Why the breakpoint block is declined.** Media features are evaluated before custom-property substitution, so `@media (max-width: var(--bp-md))` does not work in any browser. The tokens would be declared, never referenced from a media query, and would decay. The hedge "reference values for review discipline" was a comment pretending to be a mechanism. The 20 widths are documented in `.21st/DESIGN.md` instead — 20, not the 19 the comment above and RESP-2 both claim. A direct count returns 320, 340, 360, 380, 430, 600, 640, 700, 720, 721, 760, 761, 780, 820, 860, 900, 901, 980, 1000, 1100. RESP-2 is corrected accordingly.
 
 ### 4.2 Name the colour clusters (DS-4)
 
@@ -699,82 +914,87 @@ Extend `tests/design-tokens.test.ts` (W-15) rather than adding new tooling. Thre
 
 ## 5. Roadmap
 
-### Now — this week
-Cheap, high-confidence, user-visible. No structural risk.
+**Rewritten 2026-08-23, from the position after PR #56 and `de7f841`.** The original three-wave plan is spent. Its "Now" bucket has shipped almost entirely; its "Later" bucket led with PERF-2, which measurement retracted; and it predates eight of this document's findings. What is left is not a queue of cheap wins — it is three decisions, a handful of measurement-backed increments, and a cluster of large refactors that should not start this quarter. Sequencing the remainder aggressively would manufacture urgency the findings do not support, so this roadmap is deliberately short.
 
-| Finding | Why now |
-|---|---|
-| ST-1 | Stuck onboarding button; ~2h fix; pattern already exists in-repo |
-| RESP-1 | 5px text is unreadable and violates the team's own contract |
-| A11Y-1, A11Y-2 | Two-line contrast corrections |
-| A11Y-4, A11Y-5 | Two-line a11y parity fixes |
-| ST-3 | One missing file |
-| DS-1, DS-2, DS-8 | Dead token reference, 9 literals, stale doc |
-| DEBT-1 | A quality gate that depends on stale artifacts is not a gate |
-| PERF-3 | Five one-line deletions, smaller client bundle |
+### Decide first
 
-### Next — this month
-Real design or engineering work, contained blast radius.
+These block the work behind them and none is a code question. Each has been open since the finding that raised it.
 
-| Finding | Why next |
-|---|---|
-| ST-2 | Needs copy decisions and a retry affordance; highest real-world value after ST-1 |
-| PERF-1 | Two N+1 rewrites; safe because finance test coverage is excellent |
-| A11Y-3, DEBT-6 | Fix the five forms *by* extracting the field primitive — one change, two findings |
-| A11Y-6 | Extend the matrix to 7 routes + 2 dialogs; protects everything else |
-| DS-3, §4.1 | Fill the five empty token categories; visually inert |
-| PERF-4 | Stream PDFs using the established CSV pattern |
-| ST-4 | Loading boundaries for 18 routes |
-| DEBT-5, DEBT-7 | Extract court SVG and folio primitives |
+| Decision | Blocks | What is needed |
+|---|---|---|
+| Roll-call mobile type size | RESP-4, and the last open question in RESP-1 | The design record contradicts itself and production contradicts both readings. Pick one size for both halves of the control; the CSS is then a one-line change. |
+| Where production errors report to | ST-3's completion, DEBT-10 | Six branded boundaries currently report to nobody, and `global-error.tsx` does not even read the `error` it is handed. Choosing a destination has a real cost. |
+| Tailwind: adopt or drop | DS-6, and any future use of utilities | Dropping means hand-reproducing Preflight; adopting means accepting that utilities sit beneath ~14,000 lines of unlayered CSS. Leaving it undecided keeps a dependency for one class and blocks the utility question permanently. |
 
-### Later — next quarter
-Structural, needs planning and a design milestone.
+### Then, in this order
 
-| Finding | Why later |
-|---|---|
-| PERF-2 | CSS route-group split touches every stylesheet; must follow the token work |
-| DEBT-2 | Zod schemas across ~76 actions; large and mechanical |
-| DEBT-4 | God-file decomposition; do after DEBT-3 settles the result-type convention |
-| DEBT-3 | Unify action result shapes |
-| PERF-5, PERF-6 | Code splitting and motion removal |
-| DS-4, DS-5, DS-6, DS-7 | Colour/spacing consolidation and the Tailwind adopt-or-drop decision |
-| RESP-2, RESP-3, ST-5, ST-6, A11Y-7, DEBT-8, DEBT-9, DEBT-10 | Polish and hygiene |
+Each item is bounded, has a measured or stated justification, and depends on nothing else in the list.
+
+| # | Work | Finding | Why here | Effort |
+|---|---|---|---|---|
+| 1 | Serve `₹` from a system font via `unicode-range` | PERF-9 | 91,276 B of `latin-ext` on `/coach/financials/records` for one glyph, 39,708 B on the dashboards — larger, on those routes, than the 58,152 B PERF-8 removed. One `@font-face` rule; nothing else in the app is outside latin. Not render-blocking, which is why it is here rather than urgent. | S |
+| 2 | Batch the statement read model | PERF-1 residual | ~120 queries per statement PDF, and `loadChargeViews` already exists. Also the only actionable part of PERF-4. | XS |
+| 3 | Persist attendance drafts | ST-2 gap 2 | The product's worst realistic failure path, and the deadline in `75d3c88` enlarged it. `localStorage` per occurrence; replay keeps the existing concurrency check, so no write queue is needed. | S |
+| 4 | Close the two unsaved-work guard traps | ST-8 | Both silent and state-dependent; 13 consumers share the guard, and the one surface that looks safe is masked only incidentally. | M |
+| 5 | Assert matrix coverage, and prohibited names | A11Y-9, A11Y-10 | Two assertions, one file each, each catching a whole family that one-at-a-time fixing has not converged on. Both are new blocking checks, so decide before adding. | S |
+| 6 | Promote the free and cheap advisory rules | A11Y-8 tiers 1–2 | `landmark-one-main` and `region` are already at zero, so promotion costs nothing and locks in the `not-found` fix. `landmark-unique` and `aria-allowed-role` are ten occurrences across three states. Remediate `aria-prohibited-attr` before promoting it — it would turn 13 states red today. | S |
+| 7 | Binary public/portal CSS split | PERF-2, surviving half | 95% of the per-route ceiling; 161 ms of protocol-independent bytes on slow 4G. Its font-first dependency is discharged — PERF-8 landed in `de7f841`. Portal CSS stays unsplit. | M |
+
+Below that line, and genuinely optional: the two Manrope rules asking for weight 820 and 830 above the font's 800 axis maximum, which clamp silently (PERF-9, secondary); PERF-1's three other residual N+1 sites (item 2 above is the first of the four); and DEBT-1's two further gate instances. All are recorded so they are not rediscovered; none is worth displacing anything above.
+
+**Not on this list, and priced:** dropping the Newsreader italic preload is the largest single timing number in this audit at −241 ms on `/`, and it is declined rather than deferred — it removes 31 bytes and pays 344 ms of Times New Roman in the hero. It becomes available only if the design owner accepts that trade. See PERF-8.
+
+### Deferred, deliberately
+
+DEBT-2, DEBT-3 and DEBT-4 — zod adoption across ~76 actions, unifying four result shapes, and god-file decomposition — are all large, all mechanical, and none user-visible. DEBT-3 must precede DEBT-4. The S4 polish set (ST-5, ST-6, A11Y-7, RESP-2, RESP-3, DS-4, DS-5, DEBT-5, DEBT-7, DEBT-8, DEBT-10, PERF-5, PERF-6, PERF-7) is unchanged and correctly unprioritised.
+
+Not on this roadmap at all, and deliberately: the three-way CSS route-group split, PDF streaming and the `Uint8Array` copy removal — all retracted on measurement — and promoting `color-contrast` to blocking, which would make the gate permanently red on 1,122 results that are not violations.
 
 ---
 
-## 6. Pull request decomposition
+## 6. What actually shipped
 
-Ten PRs. Scoped for **parallel review** — the only serialised chain is the `globals.css` sequence (PR-2 → PR-6 → PR-9), because those three genuinely edit the same 14k-line file and would otherwise conflict continuously.
+This section previously proposed ten PRs in four waves. Reality was **one branch, squash-merged as `18a625e8`, plus one follow-on commit `de7f841`**. The decomposition survived in substance — nine of the ten planned PRs shipped in some form — but not in shape: three needed multiple passes because the first pass proved the finding's own scope wrong, one produced no code by design, one more was attempted and reverted, and six changes were not planned at all because their findings did not exist yet.
 
-| PR | Title | Findings | Primary files | Effort | Risk | Depends on | Conflicts with |
-|---|---|---|---|---|---|---|---|
-| **PR-1** | Make async action handlers failure-safe | ST-1 | `components/coach/onboarding/player-onboarding-register.tsx` (5 handlers), `components/admin/admin-authenticator-recovery-queue.tsx` | S | **Low** — adds `try`/`catch`/`finally` around existing calls; mirrors `player-attendance-recorder.tsx:208` | — | none |
-| **PR-2** | Contrast + operational type floor | A11Y-1, A11Y-2, RESP-1 | `app/globals.css` (~10 rules), `components/coach/dashboard-card.module.css:438` | S | **Medium** — visible change on frozen mobile calendar surfaces; needs design sign-off and screenshot diff | — | PR-6, PR-9 |
-| **PR-3** | Keyboard + landmark parity | A11Y-4, A11Y-5 | `app/admin/page.tsx`, `components/coach/financials/financial-records-workspace.tsx` | XS | **Low** — additive `tabIndex`/`aria-label`/skip link | — | none |
-| **PR-4** | Route error and loading boundaries | ST-3, ST-4 | new `app/global-error.tsx`, 7 new `loading.tsx` under `app/{admin,account,auth,setup}` | S | **Low** — new files only, reuses `RouteLoadingState`/`RouteErrorState` | — | none |
-| **PR-5** | Server-render dashboard cards | PERF-3 | `attendance-card.tsx`, `members-card.tsx`, `sessions-card.tsx`, `player-onboarding-card.tsx` (`reports-card.tsx` excluded — needs the boundary) | XS | **Low** — remove `"use client"`; verified no hooks, no custom hooks, and a server parent | — | none |
-| **PR-6** | Token layer: empty categories + dead reference | DS-1, DS-2, DS-3, DS-8, §4.1 | `app/globals.css` (`:root` + admin block), `.21st/DESIGN.md`, `tests/design-tokens.test.ts` | M | **Low-Medium** — value-preserving by construction; new lint assertions may surface further sites | PR-2 | PR-2, PR-9 |
-| **PR-7** | Batch finance read models | PERF-1 | `lib/finance/repository.ts` (`chargeView`, receipt pairs), `lib/finance/service.ts` (`monthlyPreparationCandidates`) | M | **Medium** — money-path logic, but ~2,630 lines of existing finance tests must stay green | — | none |
-| **PR-8** | Network-failure copy and retry | ST-2 | `components/coach/attendance/player-attendance-recorder.tsx`, `staff-roll-call.tsx`, shared network-error helper, `components/inline-notice.tsx` | M | **Medium** — needs copy decisions; scope to messaging + retry, not offline queueing | PR-1 | PR-1 (same files if merged late) |
-| **PR-9** | Split CSS by route group | PERF-2 | `app/layout.tsx`, new `(coach)`/`(student)`/auth layout imports, `app/globals.css` decomposition | L | **High** — touches every surface; requires full responsive + a11y capture run before merge | PR-2, PR-6 | PR-2, PR-6 |
-| **PR-10** | Restore deterministic typecheck | DEBT-1, DEBT-9 | `tsconfig.json`, `.gitignore`, delete stale playbook/MASTER.md | XS | **Low** — verify `next build` still type-checks routes after narrowing `include` | — | none |
+Nineteen changes below: **sixteen changed code, two produced none, one is documentation.** Planned PR numbers are retained because several finding bodies above cite them ("Found during PR-1 implementation", "Extended during PR-3").
 
-### Suggested review order
+| # | Change | Planned as | Findings | Commits | How it differed from the plan |
+|---|---|---|---|---|---|
+| 1 | Async action handlers made failure-safe | PR-1 | ST-1 | `8d60c85` | As scoped. Scoping the `catch` to only the awaited call prevented a new bug rather than fixing an old one. |
+| 2 | Unsaved-work guard stops discarding callbacks | — | ST-7 | `0254bbd` | **Unplanned**, found while implementing PR-1. Fixed in the guard rather than at the four call sites, so none was touched. |
+| 3 | Contrast and operational type floor | PR-2 | A11Y-1, A11Y-2, RESP-1 | `a13888f`, `4722fe3`, `52c0fc9` | **Three passes, not one.** Pass 1 closed sub-8px; pass 2 caught five rules whose narrow-viewport override exceeded its wide-viewport base; pass 3 reached the CSS modules. Two sites declined on measurement. |
+| 4 | Keyboard and landmark parity | PR-3 | A11Y-4, A11Y-5 | `5640ee0`, `49ad19c` | Widened: the container this finding cited as *correct* had the same defect. Surfaced A11Y-8 and A11Y-10. |
+| 5 | Route error and loading boundaries | PR-4 | ST-3, ST-4 | `5f5312e`, `49ad19c` | 4 `loading.tsx` covered the 9 routes rather than the planned 7, via segment inheritance. Route count corrected 18 → 15. |
+| 6 | Dashboard cards server-rendered | PR-5 | PERF-3 | `cb80117` | Four cards, not five. |
+| 7 | Design token layer | PR-6 | DS-1, DS-2, DS-3, DS-7, DS-8 | `5204109` | Shadow and breakpoint tokens from §4.1 declined with reasons rather than added. Added the two assertions that later caught upstream's undeclared token. |
+| 8 | Dead CSS removed | — | DS-1 follow-on | `7fcbba4` | **Unplanned, and the larger half** — 693 lines, mostly a financials-to-modules graveyard the audit never saw. |
+| 9 | Finance read models batched | PR-7 | PERF-1 | `1d57db1`, `d197bcb` | **Two passes.** Pass 2 covered the register and collections day book, which the finding had mis-framed as page-size-bound. Four further N+1 sites recorded rather than fixed. |
+| 10 | Courtside network copy and retry | PR-8 | ST-2 | `f543d10` | As scoped, and the commit named its own two remaining gaps rather than claiming the finding closed. |
+| 11 | Attendance saves bounded by a deadline | — | ST-2 gap 1 | `75d3c88` | **Unplanned.** A UI-level deadline, not a cancellation — abort cannot propagate through a Next.js server action. |
+| 12 | Auth field primitive | Next bucket | A11Y-3, DEBT-6 | `c087412` | Exactly as the roadmap intended: fixed the cause, not the five symptoms. DOM shape unchanged. |
+| 13 | Verification gates made deterministic | PR-10 + A11Y-8 | DEBT-1, A11Y-8 | `6abea0c` | **Two planned items merged**, because both were "a gate that does not mean what it says". DEBT-9's artifact deletion moved to the docs commit. |
+| 14 | Accessibility matrix extended | Next bucket | A11Y-6 | `eaf1dd4`, `7fac52d` | 316 audits, and it found three real defects — the point of the exercise. Surfaced A11Y-9. |
+| 15 | CSS split by route group | PR-9 | PERF-2 | **none** | **No code, and correctly so.** Measurement retracted the finding as written before the L-effort, High-risk PR was written. The surviving binary split is on the roadmap. |
+| 16 | PDF streaming | Next bucket | PERF-4 | **none** (one attempt reverted) | **No code, and correctly so.** `bufferPages: true` makes streaming structurally incapable of the claimed benefit; the incidental copy removal did not compile. |
+| 17 | Upstream merge and undeclared token fix | — | DS-1 class | `a47ba64`, `7b1acba` | **Unplanned.** Both sides had rewritten the finance read layer. The assertion from change 7 caught an undeclared `--line-strong` in upstream code that upstream's own CI could not see. |
+| 18 | Documentation | — | DEBT-9 | `0d856d7`, `51677e2`, `383ef87` | The audit itself, then two passes recording corrections, retractions and post-merge findings. The stale artifacts were deleted here. |
+| 19 | Newsreader upright preload dropped | — | PERF-8 | `de7f841` | **Unplanned, after the squash merge**, and the only change here justified entirely by its own measurement. The finding it implements had its hypothesis inverted by that measurement and one of its headline numbers fail to reproduce, yet the change stands — because the reasoning it rests on is paired and same-machine. It also produced PERF-9. |
 
-**Wave 1 — merge in parallel, any order.** PR-1, PR-3, PR-4, PR-5, PR-10.
-Five independent PRs, no shared files, all Low risk, mostly XS/S. Clears the cheap wins and the broken quality gate first so subsequent waves land on a trustworthy `typecheck`.
+### What the decomposition got right, and wrong
 
-**Wave 2 — parallel, two tracks.** PR-2 and PR-7.
-PR-2 opens the `globals.css` chain and needs a design decision, so start it early. PR-7 is fully independent and reviewed by whoever owns finance.
+**Right: the dependency claim.** The `globals.css` chain was real, was worked in the predicted order, and nothing outside it conflicted — the parallel-review framing held. Pairing A11Y-3 with DEBT-6 as a single change also worked exactly as predicted: extracting the primitive *was* the fix for the five forms.
 
-**Wave 3.** PR-6 (after PR-2 merges), PR-8 (after PR-1 merges).
+**Wrong, in four ways.**
 
-**Wave 4.** PR-9 alone, on a quiet branch, with a full `regression:capture:responsive` + `regression:accessibility` run attached to the PR.
+1. **It assumed one pass per finding.** RESP-1 took three and PERF-1 took two, in both cases because the first pass proved the finding had mis-scoped itself. A decomposition built from static reading inherits the reading's errors.
+2. **It scheduled an L-effort, High-risk PR that should never have been written.** PR-9 was the largest item in the plan and the finding behind it did not survive measurement. Measuring first cost a fraction of the PR and produced a better finding (PERF-8) as a by-product — which, measured in turn, produced PERF-9. Two of the three most valuable performance findings in this document were generated by measuring the one that had to be withdrawn. Any plan containing a High-risk item justified by an unmeasured hypothesis should measure before it schedules.
+3. **It could not schedule the eight findings that did not exist yet** — A11Y-8, A11Y-9, A11Y-10, ST-7, ST-8, RESP-4, PERF-8 and PERF-9. Six of the eight were found *while fixing or measuring something else*, and two of them outweigh every performance item in the original plan. Roughly a sixth of this document was written by implementing the rest of it.
+4. **It mispredicted coupling in both directions.** Nothing anticipated that ST-1's `try`/`catch` would constrain how ST-7 could be fixed, or that a token assertion written for DS-1 would fire on an unrelated upstream merge. Conversely, the `globals.css` "continuous conflict" risk never materialised.
 
-**Deferred to a planned milestone** (not in this set): DEBT-2 zod adoption, DEBT-3 result-type unification, DEBT-4 god-file splits, DS-4/5/6/7 colour and Tailwind decisions, PERF-5/6, and the remaining S4 polish items.
+### Cross-cutting guidance, still current
 
-### Cross-cutting review guidance
-
-- Every PR must keep `npm run lint`, `npm run typecheck`, `npm run test:ci` and `regression:accessibility` green. PR-2 and PR-9 additionally require `regression:capture:responsive`.
-- PR-2 and PR-9 touch surfaces explicitly frozen in `.21st/design.json` (mobile auth, account menu, mobile calendar/attendance, mobile member directory). Both need a recorded design decision, not just a code review.
-- PR-6's new token-enforcement assertions will likely fail on sites this audit did not enumerate. That is the point — treat new failures as scope, not as a broken test.
+- Every change must keep `npm run lint`, `npm run typecheck`, `npm run test:ci` and `regression:accessibility` green. Anything touching type sizes or layout additionally requires `regression:capture:responsive`.
+- The surfaces `.21st/design.json` freezes (mobile auth, account menu, mobile calendar/attendance, mobile member directory) need a recorded design decision, not just a code review. The RESP-1 work produced one accepted trade-off (the 320px title wrap) and left one decision open (RESP-4); both are recorded above rather than in `design.json`, which is where they should eventually land.
+- New token-enforcement assertions will fail on sites this audit did not enumerate. That is the point — treat new failures as scope, not as a broken test. This has now happened twice, once on this branch and once on upstream code.
+- **Restore the `clean` and `stress` fixture databases from source before any full three-profile accessibility run.** Both are partially consumed, and `clean` is effectively single-use because its flow requires the head coach to be at first-time authenticator setup.
+- If parallel workers share a tree, give them a scoped way to run `tsc` (or a separate `tsBuildInfoFile`) rather than forbidding it. Removing the type check to avoid a race hid a real compile error behind otherwise-correct runtime verification.
