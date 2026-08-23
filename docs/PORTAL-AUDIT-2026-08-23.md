@@ -101,6 +101,14 @@ The mechanics are correct (drafts preserved, `isSaving` reset). The *message* is
 **User impact.** All coaches, daily, on mobile.
 **Note.** Full offline queueing is out of scope for a first pass; mapping network failure to operational copy plus an explicit Retry is the 80% fix.
 
+**Partially resolved (2026-08-23).** Network failures in both attendance savers now produce operational copy naming the cause, stating the marks are still on screen, and saying what to do — and the existing Save control relabels to "Save attendance again" as the retry, since no secondary-button class exists in the stylesheet. Classification keys on the error's **constructor** (`TypeError`, plus a `name` check for realm-crossed errors) rather than its message, because the message differs per engine: "Failed to fetch" in Chrome, "NetworkError when attempting to fetch resource." in Firefox, "Load failed" in Safari. `navigator.onLine` only selects between two messages; it never decides whether a failure was network-related, since `onLine === true` means an interface exists, not that the server is reachable.
+
+**Three gaps remain, and one is arguably worse than the bug that was fixed:**
+
+1. **A slow-but-alive network never rejects.** There is no `AbortController` timeout, so the save hangs on "Saving…" with the button disabled indefinitely. Courtside, an indefinite hang is worse than a clean failure — the coach cannot tell whether to wait or retry, and there is no path out but a reload. This is the highest-value remaining piece of ST-2.
+2. **Drafts are React state only, so a tab close loses everything.** `unsaved-work-guard.tsx:189` fires the browser's generic "leave site?" dialog, but if the coach confirms it, the OS kills the tab, or mobile Safari discards the page under memory pressure (routine on iOS), every mark is gone silently. Note the new copy promises the marks are safe *on screen*, which is true and deliberately scoped — but a coach may read more into it. Persisting drafts to `localStorage` keyed by occurrence would close this without the correctness hazards of a write queue, because the replay still passes through the same optimistic-concurrency check on the next save.
+3. **Nothing auto-recovers.** There is no `online` listener, so the coach must notice connectivity returning and press the button themselves. A captive portal also reports `onLine === true`, producing the vaguer "the request did not complete" message rather than naming the real problem.
+
 #### ST-3 · OBJ · S3 · Effort XS · Confidence High
 **No `app/global-error.tsx`.** Confirmed absent. Root-layout render failures (font loading, metadata) bypass all five nested `error.tsx` boundaries and fall through to Next.js's unbranded default. Every other boundary is well-branded via `RouteErrorState`, so this is a one-file gap in an otherwise complete set.
 
@@ -146,6 +154,18 @@ The follow-on risk is worse than the missing message. A coach who retries the as
 **Likelihood.** Lower than it first appears in the onboarding register, because the design contract opens exactly one row at a time, so usually only one surface is dirty. But `useUnsavedWorkGuard` has **13 consumers**, the guard is shared, and the real defect is structural: a method whose contract includes "I did not run your callback" has four callers that never check.
 **Why it matters.** Silent no-ops on a system of record are the failure mode users trust least, and this one is invisible to tests — `tests/coach-onboarding-register-ui.test.tsx:28` mocks the guard as `navigateAfterCommit: (navigate) => navigate()`, i.e. unconditionally synchronous, so the skip branch is never exercised.
 **Fix shape.** Either have the three call sites handle a `false` return by surfacing feedback themselves, or change the guard to always run the callback and let navigation be the only conditional part. Needs its own PR — 13 consumers.
+
+**Resolved (2026-08-23).** Fixed in the guard rather than at the call sites, so all four are corrected without being touched. The deciding evidence came from the same file: `RequestStep` already calls the identical `onSuccess` — `router.replace` and `router.refresh` included — with no guard involvement at all, which proves no caller can depend on boundary-release ordering. One subtlety worth preserving: the callback is scheduled through a microtask rather than invoked synchronously, because a synchronous call would execute *inside* the `try`/`catch` added by the ST-1 fix, and a throw from `onSuccess` would then be reported as "could not be saved" against a save that succeeded — trading one misleading-success bug for another. A regression test drives the real provider with two dirty surfaces; 2 of its 3 cases fail before the fix.
+
+#### ST-8 · OBJ · S3 · Effort M · Confidence Med
+**Two further latent traps in the unsaved-work guard.** *Found while fixing ST-7, 2026-08-23. Not fixed — reported.*
+
+1. **Back-button protection can be permanently absent for a surface.** `ensureHistoryBoundary` returns early while `allowNavigation.current` is true (the 1-second window after a confirmed navigation), and `setSurface` only calls it when the dirty map *was* empty. A surface first dirtied inside that window therefore never gets a history boundary, and nothing establishes one later — so unsaved-work protection is silently missing for the rest of that surface's life.
+2. **`committedRef` never re-arms on a still-mounted form.** `navigateAfterCommit` sets it true, and the clearing effect only fires when `isDirty` transitions to false. A long-lived form edited again after a commit, without passing through a clean state, stays suppressed and unguarded. The onboarding steps are masked from this only incidentally, because `OnboardingEditor` remounts on its `key`.
+
+Also minor: `ignoreNextPopState` is a boolean rather than a counter, so it assumes at most one in-flight `history.back()`. Safe today because the release path clears the pending timer, but any new code path calling `history.back()` would consume the wrong `popstate`.
+
+**Why it matters.** Both failures are silent and state-dependent — the guard appears to work in every manual test, and only stops protecting under a specific interaction order. That is the hardest class of bug to catch by hand and the easiest to regress.
 
 ### 3.2 Accessibility
 
@@ -225,7 +245,19 @@ Also unsanctioned: 7px completion badge (`globals.css:11378`), 7px calendar note
 **Why it matters.** A 5px label is not small text, it is *absent* text — and it is the "today" marker on a player's attendance calendar at mobile width, which is precisely the orienting cue the calendar depends on.
 **User impact.** All players and junior coaches on mobile; worst at 320–360px.
 
-**Status (2026-08-23): closed for sub-8px, substantially closed for 8px.** `--type-operational-floor: 10px` now exists and **zero declarations below 8px remain anywhere in the repo**. Of the 34 8px declarations, 11 were raised, and 18 remain: 13 in CSS modules not yet in scope (7 of them on the coach Financials registers, whose own design decisions mandate the 10px floor by name — the obvious next PR), 4 that are dead code, and 1 declined on measured layout grounds.
+**Accepted trade-off (2026-08-23, confirmed by product).** Raising the coach dashboard status stamp from 7px to 10px makes it wider, which at **320px only** causes the *Monthly reports* card title to wrap to two lines when paired with the longest stamp (`76 OUTSTANDING`). Verified by measurement: nothing clips or overlaps, it is confined to that single longest title-plus-stamp combination (`ATTENDANCE` + `12 SCHEDULES` still fits on one line), and it resolves by 340px. Accepted as a fair exchange for eliminating illegible 7px text, at the extreme edge of the supported width range. Do not file this as a layout regression.
+
+**Status (2026-08-23): closed for sub-8px; 8px reduced to three documented exceptions.** `--type-operational-floor: 10px` now exists, **zero declarations below 8px remain anywhere in the repo**, and the 9px tier is untouched at exactly 99 declarations. Of the original 34 8px declarations, 23 were raised across two passes. **Three remain, each with a stated reason rather than an assumption:**
+
+| Site | Why it stays at 8px |
+|---|---|
+| `financials.module.css:2764` | Declined on measurement. The allocation-row caption is `nowrap` + `ellipsis`; at 8px `SMBA-ABCD2345 · Available ₹12,500` needs 133.6px in a 135px track and fits. At 10px it needs 167px and the ellipsis lands mid-word around "Availa…", removing the amount. The design record's prohibition on hiding ledger facts outranks the type floor here, and the adjacent 104px amount-input track is fixed, so widening is unavailable. |
+| `globals.css:8016` | `.coach-month-grid button small` — "sessions" needs 43.3px in a 25.7px cell at 320px, so it already overflows at 8px. On a surface `mobile-calendar-attendance-freeze` covers. |
+| `globals.css:12898` | Design-sanctioned roll-call mobile 8px, and demonstrably still live — see RESP-4, which also shows it is currently applied to only one of the control's two halves. |
+
+Two side findings from the final pass. `financials.module.css:3721` (`.summary dt`) is **unreachable**: the only `styles.summary` consumer is `dashboard-card.tsx`, which imports a different CSS module, and CSS Modules hash class names — so the rule cannot match. It was raised for sheet consistency but is a zero-render change and is a candidate for deletion. And `.balancePlayerRail > button` ("Change player") now wraps to two lines at 320px; nothing clips, and no defensible padding trim buys a single line — even at 5px padding the box is still 0.9px short.
+
+Measurement note: both passes computed real Manrope glyph advances from the font files Next.js cached in `.next/static/media`, applying HVAR weight deltas manually — `fontkit`'s `getVariation()` loses its cmap in this build and silently returns ExtraLight metrics, roughly 9% narrow. The second pass calibrated against the first by reproducing its published 43.3px figure for "sessions" exactly.
 
 Three corrections to this finding, all found by measurement during implementation:
 
@@ -234,6 +266,19 @@ Three corrections to this finding, all found by measurement during implementatio
 3. **One site was declined on evidence, not preference.** `app/globals.css:8017` (`.coach-month-grid button small`, the "N sessions" caption in the coach Session Calendar month grid) offers 25.7px of content width at 320px, while the word "sessions" alone needs 43.3px at 10px — it already overflows at its current 8px. It also sits on the surface `mobile-calendar-attendance-freeze` explicitly freezes. Raising it would deepen a pre-existing overflow on frozen work.
 
 One knock-on: the step-rail label at `player-onboarding-register.module.css` could not reach 10px either — the longest label `ASSESSMENT` needs 70.5px in a 64.5px track at 320px, and the grid uses `minmax(0, 1fr)` so the track cannot grow. It was raised 7px → **9px**, the largest size that fits and the size this design system already sanctions for small uppercase labels.
+
+#### RESP-4 · OBJ · S3 · Effort XS · Confidence High
+**The two halves of the staff roll-call Present/Absent control render at different font sizes.** *Found while completing RESP-1, 2026-08-23. Not fixed — needs the design decision below.*
+
+`app/globals.css:12898` styles the roll-call choice controls at 8px via a two-selector rule. The "Internal operations typography floor" block later in the file (`:13799-13855`) repeats those selectors at 11px and would normally win by source order — and for the first selector it does. But the second selector ends `> .staff-roll-call-choice-box button + button`, whose extra type selector gives it specificity **(0,4,3)** against the floor block's **(0,4,2)**. So it wins.
+
+The consequence: inside a single joined control, **the first button renders at 11px and the second at 8px** on screens up to 760px.
+
+This contradicts the product's own spec. `.21st/design.json`'s `coach-staff-roll-call-daily-ledger` requires "one joined Present and Absent pressed-state control inside a shared neutral outline… using the same 9px desktop/tablet and 8px mobile uppercase typography." Neither button is at 9px or 8px-consistently, and the two do not match each other.
+
+**Why it matters.** A joined two-option control with mismatched type reads as a rendering bug to a coach, and it is the kind of defect that survives indefinitely because each half looks plausible in isolation. It also resolves the ambiguity flagged under RESP-1: the 11px floor override was almost certainly accidental drift rather than a deliberate supersession of the 8px sanction, since a deliberate change would have moved both halves.
+
+**Blocked on:** whether the recorded 8px mobile roll-call sanction still stands. Both halves should end up the same size; which size is the design call.
 
 #### RESP-2 · SUBJ · S4 · Effort S · Confidence High
 **Several coach controls sit at 42px against the design record's 44px contract**: `.coach-year-selector button` (`globals.css:3635`), `.coach-occurrence-actions > button` (`:7377`), `.coach-series-end-action` (`:7701`), `.coach-assignment-days label > span` (`:7813`). These **pass** WCAG 2.2 SC 2.5.8 (24px minimum), so this is a consistency issue against the team's own stricter bar, not an accessibility failure.
@@ -326,7 +371,37 @@ The shared `components/coach/dashboard-card.tsx` primitive has **no** directive 
 **Correction (2026-08-23):** this finding originally listed five cards. `reports-card.tsx:25` calls `useReportResume()`, and `components/coach/reports/report-resume.ts` is a `"use client"` module using `useState`/`useEffect` to read `localStorage` — so it legitimately requires the client boundary and is excluded. See [Corrected claims](#corrected-claims).
 
 #### PERF-4 · OBJ · S3 · Effort S · Confidence High
-**PDFs are fully buffered in memory.** `Buffer.concat(chunks)` at `lib/finance/pdf.ts:125` and `lib/reports/pdf.ts:371`, returned as a complete `Response` body. A player statement covering a long fee history buffers entirely before the first byte reaches the client — slow perceived export and a memory-spike risk against Vercel function limits. The CSV path already does this correctly with `ReadableStream` (W-11), so the streaming pattern is established in-repo.
+**PDFs are fully buffered in memory.** `Buffer.concat(chunks)` at `lib/finance/pdf.ts:125` and `lib/reports/pdf.ts:371`, returned as a complete `Response` body. A player statement covering a long fee history buffers entirely before the first byte reaches the client.
+
+**Remedy retracted (2026-08-23) — streaming cannot fix this.** The original finding proposed converting to `ReadableStream`, citing the CSV path as precedent. That was wrong, for two independently verified reasons:
+
+1. **The page footers require full buffering.** Both generators pass `bufferPages: true` (`lib/finance/pdf.ts:112`, `lib/reports/pdf.ts:359`) because they write a "Page N of M" footer — `lib/finance/pdf.ts:405` calls `bufferedPageRange()` and `:421` writes `Page ${…} of ${range.count}`. Knowing the total page count requires composing the whole document first, so with `bufferPages: true` pages accumulate in `_pageBuffer` and are flushed only inside `end()`. No byte of page content can reach a client before the entire document is already in memory.
+2. **PDFKit ignores stream backpressure.** Verified in the installed source:
+```js
+  _write(data) {
+    if (!Buffer.isBuffer(data)) { data = Buffer.from(data + '\n', 'binary'); }
+    this.push(data);
+    this._offset += data.length;
+  }
+```
+The `false` return from `this.push()` is discarded, so a slow consumer cannot slow PDFKit down. Even a correct `pull`-based bridge bounds only its own buffering — peak memory stays O(document size).
+
+So streaming would buy a modest time-to-first-byte improvement and **no memory ceiling relief whatsoever**. Genuinely fixing the memory profile means dropping `bufferPages` and the "Page N of M" footer, which changes the PDF output and is a product decision rather than a refactor.
+
+**Scope was also overstated.** Only the player statement is unbounded. The two report routes are capped by `REPORT_TEXT_MAX_LENGTH` (5,000 characters, enforced in `lib/reports/service.ts`), making them bounded 2–4 page documents, and the receipt is a single page. Converting those would have been reflexive.
+
+**Nothing was fixed, and that is the correct outcome.** An attempt to remove the `new Uint8Array(pdf)` wrap from all four routes — on the reasoning that `Buffer` already *is* a `Uint8Array` — was **reverted**. Two reasons, both measured:
+
+- It does not compile. Since TypeScript 5.7 `Uint8Array` is generic over its backing buffer and `@types/node` types `Buffer` as `Uint8Array<ArrayBufferLike>`, which does not satisfy `BodyInit` (`BufferSource = ArrayBufferView<ArrayBuffer> | ArrayBuffer` demands the concrete type). Four `TS2345` errors. The zero-copy view form `new Uint8Array(pdf.buffer, pdf.byteOffset, pdf.byteLength)` fails identically, because the constructor overload is generic and infers `ArrayBufferLike` from `Buffer.buffer`. There is **no assertion-free zero-copy form**.
+- The win was not worth an assertion anyway. `Response` copies its `ArrayBufferView` argument regardless (verified by mutating the source after construction and observing an unchanged body), so on top of PDFKit's `_pageBuffer`, its internal readable buffer, the `chunks` array and `Buffer.concat`'s allocation, the removed copy was **one of roughly six** full-document copies. Going from ~6× to ~5× of 87 KB does not justify `pdf.buffer as ArrayBuffer` in a codebase with two total assertions — particularly since that assertion means "this Buffer is not backed by a `SharedArrayBuffer`", a non-local claim about a value produced in a different module.
+
+The declined variant also carries a live hazard: omitting the offset/length arguments on a pooled buffer (`Buffer.concat` was observed returning `byteOffset: 2912`) serves the backing store instead of the view — measured as 87,454 bytes beginning `"îîîîî"`, a corrupted PDF that still starts plausibly enough to pass a casual check. The retained form is structurally immune, because `new Uint8Array(typedArray)` copies the view and has no offset to forget.
+
+**Net: PERF-4 has no worthwhile remedy at the route layer.** The finding stands as a description of the memory profile, but both proposed fixes — streaming and copy removal — are retracted.
+
+**The one viable improvement lives in the generators, not the routes.** Replacing `Buffer.concat(chunks)` with a summed-length preallocated `Uint8Array` filled via `.set()` yields a single copy instead of two, returns `Uint8Array<ArrayBuffer>` so all four routes could drop their wrap entirely, needs no assertion, and leaves PDF bytes untouched since it does not go near the drawing code. Still ranks well below the `bufferPages` constraint in impact, and is not worth doing on its own.
+
+**Incidental finding — brittle test mocks.** All four routes are covered by tests whose `vi.mock` factories enumerate the mocked module's exports. Vitest 3.2.7 throws `No "X" export is defined on the mock` when the route imports anything not listed, the route's `catch` turns that into a 500, and the test fails. So **adding any new export to a mocked module breaks its route test**, independent of whether the new export is used. That is a latent tax on every future refactor in these modules.
 
 #### PERF-5 · SUBJ · S3 · Effort M · Confidence High
 **No code splitting anywhere.** Zero `next/dynamic` occurrences. The largest client surfaces load eagerly with their route bundles: `player-ledger.tsx` (1,593 lines), `member-directory.tsx` (1,072), `report-workspace.tsx` (805), `financials-rapid-desk.tsx` (679). `qrcode.react` is statically imported for a single 2FA route.
@@ -358,6 +433,17 @@ With a `.next` present, `tsc --noEmit` reports **2 errors** referencing a module
 **Same theme, second instance (found 2026-08-23).** `vitest.config.ts` has no `exclude` for build/artifact directories, so Vitest discovers and runs any test file that happens to sit under the repo root. Demonstrated accidentally during this work: a `git worktree` created at `output/baseline-worktree` for screenshot capture caused Vitest to collect **295 test files instead of 140**, reporting 17 failed files that were duplicates of passing tests. `eslint.config.mjs` already ignores `output`, and `tsconfig.json` only excludes `node_modules` — so of the three verification commands, one is protected and two are not.
 
 Both instances share a root cause: **`tsconfig.json` includes `**/*.ts` with only `node_modules` excluded, and Vitest inherits an equally open default.** Any stray directory inside the repo silently changes what `typecheck` and `test` mean. Cheap fix: exclude `.next`, `output`, `coverage` and any worktree path from both, and narrow the tsconfig `include` to real source roots.
+
+**Resolved (2026-08-23), with measurements.** Typecheck errors 2 → **0**. Files `tsc` read from `output/`: 919 → **0**. Vitest collected files 607 → **143**. The Vitest baseline was observed growing from 451 to 607 *during* the session as another agent extracted a tree under `output/` — the defect demonstrating itself in real time.
+
+Root cause of the phantom errors was confirmed as a stale artifact, not a Next bug: `app/admin/layout.tsx` was deleted in commit `3cbd766` (Aug 23 12:46), while both validator files were written Aug 22. Two facts shaped the fix — `next build`/`next dev` **re-append** any missing `.next` type glob to `include` and rewrite `tsconfig.json` (`writeConfigurationDefaults.js:302-317`), so removing an include is self-reverting whereas an `exclude` is stable; and Next's own build type check already filters `.next/dev/types` out, commented *"to prevent stale dev types from causing errors when routes have been deleted since the last dev session"* (`runTypeCheck.js:31-40`). A bare `tsc` has no such filter. `include` was narrowed to real source roots, `.next/dev` excluded to mirror Next's own behaviour, and `.next/types` deliberately **kept**, because `next build`'s type check enumerates from this same tsconfig and excluding it would drop route-validator coverage from the build too.
+
+**Two further instances of the same theme (found 2026-08-23, not fixed):**
+
+1. **`scripts/regression/summarize-accessibility.ts` reads whatever is on disk.** It loads `output/accessibility/<profile>/results.sanitized.json` for every profile with no freshness check, and sets exit code 1 from what it finds. Local runs today would summarise stale results — several sibling directories (`accessibility-before`, `accessibility-after`, `accessibility-full`) already exist. CI is safe only because it checks out clean.
+2. **`npm test` and CI disagree by design.** `npm test` collects `tests/regression-fixture.test.ts`, which CI deliberately splits into a separate `regression:test` invocation. So a developer's local full run fails where CI passes — the inverse of instance 1, and equally corrosive to trusting the gates.
+
+**Process lesson (mine).** While delegating this remediation I instructed agents not to run `tsc`, to stop them racing each other on `tsconfig.tsbuildinfo`. That hid a genuine compile error: a change to four PDF routes was correct at runtime and verified byte-identical by SHA-256, but `Buffer<ArrayBufferLike>` does not satisfy `BodyInit` under TypeScript 5.7+, so it broke the build and the agent's own verification could not see it. Runtime verification does not substitute for the type checker. If concurrent workers must share a tree, give them a way to typecheck (a scoped invocation or a separate `tsBuildInfoFile`) rather than removing the check.
 
 #### DEBT-2 · OBJ · S2 · Effort L · Confidence High
 **Zod is a dependency used in exactly one production file.** `lib/auth/pin-plugin.ts:14` is the sole consumer. Across 14 server-action modules (~76 exported actions), inputs are read with bare coercion:
