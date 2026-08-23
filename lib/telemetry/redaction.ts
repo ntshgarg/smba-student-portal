@@ -9,7 +9,14 @@ const SENSITIVE_PARAMETER = /^(?:auth|code|email|key|password|pin|recovery|secre
 
 export function sanitizeFailureText(value: string) {
   return value
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, "<redacted-email>")
+    // Both quantifiers are bounded to their RFC 5321 maxima rather than left open.
+    // Unbounded, the local part can begin matching at every offset of a run of the
+    // characters it accepts and rescan to the end of that run looking for the "@"
+    // each time, which is quadratic in the run length -- on a string an
+    // unauthenticated caller supplies to /api/client-errors. The bound caps the
+    // rescan rather than the input, so no address a mail server would accept is
+    // matched differently than before.
+    .replace(/[A-Z0-9._%+-]{1,64}@[A-Z0-9.-]{1,255}\.[A-Z]{2,}/giu, "<redacted-email>")
     .replace(/\b(?:SMBA-(?:HC|JC|PL)-\d{4})\b/gu, "<redacted-academy-id>")
     .replace(/\b[A-Z2-7]{20,}\b/gu, "<redacted-secret>")
     .replace(/((?:password|passphrase|pin|totp|recovery[ -]?(?:code|key)?|backup[ -]?code|secret)\s*(?:=|:|is)\s*)[^&\s,;]+/giu, "$1<redacted>")
