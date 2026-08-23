@@ -837,7 +837,7 @@
   }
 
   .stageSummary p {
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .registerHeading {
@@ -876,13 +876,13 @@
   }
 
   .identity small {
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .stageStamp {
     grid-area: stamp;
     padding: 5px 7px;
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .nextAction {
@@ -921,8 +921,11 @@
     text-align: center;
   }
 
+  /* "Assessment" is the longest unbreakable label and the four-across track is
+     only 64.5px at 320px, so 10px would overrun it by 6px. 9px is the largest
+     size that still fits on one line. */
   .stepRail li strong {
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 0.03em;
   }
 

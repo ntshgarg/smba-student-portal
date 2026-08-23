@@ -1125,7 +1125,7 @@
   .coach-adjustment-history-void {
     min-height: 44px;
     padding-inline: 10px;
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .coach-adjustment-history-details {
@@ -5975,10 +5975,6 @@ tr.is-expanded .coach-member-row-action button svg {
     gap: 3px;
   }
 
-  .report-season-label {
-    font-size: 8px;
-  }
-
   .report-year-title strong {
     font-size: 36px;
   }
@@ -5986,7 +5982,7 @@ tr.is-expanded .coach-member-row-action button svg {
   .report-year-count {
     align-self: end;
     padding-bottom: 4px;
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .report-year-toggle {
@@ -6493,7 +6489,7 @@ tr.is-expanded .coach-member-row-action button svg {
     margin-bottom: 5px;
     color: var(--steel);
     content: attr(data-label);
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
     font-weight: 800;
     letter-spacing: 0.09em;
     text-transform: uppercase;
@@ -10300,7 +10296,7 @@ tr.is-expanded .coach-member-row-action button svg {
   padding: 6px 9px;
   border: 1px solid var(--line);
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   line-height: 1;
@@ -10627,7 +10623,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .personal-attendance-calendar .player-attendance-month-current > span {
   color: var(--rose);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -10678,7 +10674,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .personal-attendance-calendar .player-attendance-calendar-schedule span {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -10717,7 +10713,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .personal-attendance-calendar .player-attendance-month-tools > p {
   flex: 0 0 auto;
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 650;
 }
 
@@ -10746,7 +10742,7 @@ tr.is-expanded .coach-member-row-action button svg {
   padding: 11px 7px 8px;
   border-right: 1px solid var(--line);
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-align: center;
@@ -10968,7 +10964,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border-radius: 999px;
   background: var(--green);
   color: var(--white);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
 }
 
@@ -10995,7 +10991,7 @@ tr.is-expanded .coach-member-row-action button svg {
   gap: 18px;
   padding-top: 11px;
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -11315,7 +11311,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .personal-attendance-calendar .player-attendance-month-tools .player-attendance-legend {
     gap: 8px 11px;
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .personal-attendance-calendar .player-attendance-month-tools .player-attendance-legend i {
@@ -11329,7 +11325,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .personal-attendance-calendar .player-attendance-calendar-weekday {
     padding: 9px 1px 6px;
-    font-size: var(--type-operational-floor);
   }
 
   .personal-attendance-calendar .player-attendance-weekday-long {
@@ -11379,7 +11374,6 @@ tr.is-expanded .coach-member-row-action button svg {
     min-width: 20px;
     height: 20px;
     padding-inline: 3px;
-    font-size: var(--type-operational-floor);
   }
 
   /* The cell is only about 32px wide here, so this word cannot reach the 10px
@@ -11394,7 +11388,6 @@ tr.is-expanded .coach-member-row-action button svg {
   .personal-attendance-calendar .player-attendance-calendar-note {
     display: grid;
     gap: 4px;
-    font-size: var(--type-operational-floor);
   }
 
   .personal-attendance-calendar .player-attendance-calendar-note span:last-child {
@@ -11424,7 +11417,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .player-ticket-dashboard .player-ticket-context {
     padding-inline: 7px;
-    font-size: var(--type-operational-floor);
   }
 
   .player-ticket-dashboard .player-ticket-action {

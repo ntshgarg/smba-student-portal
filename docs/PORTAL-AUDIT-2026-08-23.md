@@ -162,7 +162,11 @@ The follow-on risk is worse than the missing message. A coach who retries the as
 **`/admin` has no skip link.** `components/app-shell.tsx:17`, `coach-shell.tsx:17`, `app/(public)/page.tsx:438` and the public announcement page all have one; `app/admin/page.tsx:90` renders `<main className="admin-page page-shell">` directly with none.
 
 #### A11Y-5 · OBJ · S3 · Effort XS · Confidence High
-**The fee-register horizontal scroll container is not keyboard operable.** `.tableWrap` (`financial-records-workspace.tsx:314`, `:566`) sets `overflow-x: auto` over a `min-width: 980px` table but has no `tabIndex` and no `aria-label` — unlike the attendance register, which does both (`player-attendance-register.tsx:267-268`). A keyboard user cannot scroll the region to reach clipped columns.
+**A horizontal scroll container is not keyboard operable.** `.tableWrap` sets `overflow-x: auto` over a `min-width: 980px` table but has no `tabIndex` and no `aria-label` — unlike the attendance register, which does both (`player-attendance-register.tsx:267-268`). A keyboard user cannot scroll the region to reach clipped columns.
+
+**Evidence corrected (2026-08-23, by runtime measurement).** The original finding named `financial-records-workspace.tsx:314` (the registration/monthly fee register) and claimed it scrolls from 721px up. It does not: `.registrationTableWrap` is reset to `overflow: visible` with a stacked block table inside `@media (max-width: 980px)`, and at 1000px the table fits exactly (`clientWidth 950` = `scrollWidth 980`→`950`). The container that genuinely traps content is the **collections day book** at `financial-records-workspace.tsx:566`, which keeps `overflow-x: auto` over a 980px table down to 720px. Measured at 800px: `scrollWidth 980` vs `clientWidth 750`, no `tabindex`, no `aria-label`, **79 Tab stops never reach it**, and `End`/`ArrowRight` while hovered leaves `scrollLeft` at 0.
+
+The defect and the fix are unchanged — PR-3 added `tabIndex`, `role="region"` and labels to both containers. Only the reproduction viewport and the primary affected surface were wrong.
 
 **Extended during PR-3.** The attendance register's own container — the pattern this finding pointed at as correct — carried `aria-label` on a role-less `<div>`, where ARIA prohibits naming and the accessible name may be discarded by some browser/AT pairings. All three containers now carry `role="region"`, which is already this repo's dominant convention for named non-semantic containers (`attendance-adjustments-workspace.tsx:523`, `player-onboarding-register.tsx:833`, `report-accordion.tsx:119` and `:182`); `role="group"` is reserved here for radio-like button clusters.
 
@@ -220,6 +224,16 @@ Also unsanctioned: 7px completion badge (`globals.css:11378`), 7px calendar note
 
 **Why it matters.** A 5px label is not small text, it is *absent* text — and it is the "today" marker on a player's attendance calendar at mobile width, which is precisely the orienting cue the calendar depends on.
 **User impact.** All players and junior coaches on mobile; worst at 320–360px.
+
+**Status (2026-08-23): closed for sub-8px, substantially closed for 8px.** `--type-operational-floor: 10px` now exists and **zero declarations below 8px remain anywhere in the repo**. Of the 34 8px declarations, 11 were raised, and 18 remain: 13 in CSS modules not yet in scope (7 of them on the coach Financials registers, whose own design decisions mandate the 10px floor by name — the obvious next PR), 4 that are dead code, and 1 declined on measured layout grounds.
+
+Three corrections to this finding, all found by measurement during implementation:
+
+1. **8px is not unsanctioned everywhere.** I asserted it had no explicit sanction. It does: `.21st/design.json`'s `coach-staff-roll-call-daily-ledger` decision specifies "the same 9px desktop/tablet and **8px mobile** uppercase typography". The finding's premise was too strong.
+2. **A type floor mechanism already existed and I missed it.** `app/globals.css:13799-13855` contains an "Internal operations typography floor" block that overrides several selectors to `var(--type-utility-label)` (11px). Four of the 8px declarations are therefore **dead code** — they render at 11px today, and editing them would be a no-op. The vestigial 8px lines are the remains of the roll-call sanction above, already superseded in the stylesheet.
+3. **One site was declined on evidence, not preference.** `app/globals.css:8017` (`.coach-month-grid button small`, the "N sessions" caption in the coach Session Calendar month grid) offers 25.7px of content width at 320px, while the word "sessions" alone needs 43.3px at 10px — it already overflows at its current 8px. It also sits on the surface `mobile-calendar-attendance-freeze` explicitly freezes. Raising it would deepen a pre-existing overflow on frozen work.
+
+One knock-on: the step-rail label at `player-onboarding-register.module.css` could not reach 10px either — the longest label `ASSESSMENT` needs 70.5px in a 64.5px track at 320px, and the grid uses `minmax(0, 1fr)` so the track cannot grow. It was raised 7px → **9px**, the largest size that fits and the size this design system already sanctions for small uppercase labels.
 
 #### RESP-2 · SUBJ · S4 · Effort S · Confidence High
 **Several coach controls sit at 42px against the design record's 44px contract**: `.coach-year-selector button` (`globals.css:3635`), `.coach-occurrence-actions > button` (`:7377`), `.coach-series-end-action` (`:7701`), `.coach-assignment-days label > span` (`:7813`). These **pass** WCAG 2.2 SC 2.5.8 (24px minimum), so this is a consistency issue against the team's own stricter bar, not an accessibility failure.
