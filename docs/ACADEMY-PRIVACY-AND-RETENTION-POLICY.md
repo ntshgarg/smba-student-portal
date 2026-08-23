@@ -22,8 +22,11 @@ SMBA uses the minimum information needed to administer membership, coaching and 
 - fee plans, concessions, offline-payment records, refunds and financial audit history;
 - announcements and their intended audiences;
 - recovery email, password/PIN hashes, authenticator material, active sessions and security events; and
-- sanitized application-error fingerprints and route templates. Exception text and request content are
-  not stored in the operational error table.
+- sanitized application-error fingerprints and route templates, for both server request errors and
+  browser error reports. A browser report also records which error boundary reported it, the error
+  class from a fixed list, the framework's opaque error digest and, when the person was signed in, the
+  account reference. Exception text, stack traces, resolved URLs, query strings, device details and
+  request content are not stored in either error table.
 
 SMBA does not use portal data for advertising, behavioural profiling or sale. Card and bank credentials,
 email codes, passwords, PINs, authenticator secrets and backup codes must never be placed in notes.
@@ -65,7 +68,7 @@ retained exception is documented with its reason and review date.
 | Charges, payments, concessions, refunds and financial audit history | 8 financial years after the relevant financial year | Confirm with the academy's accountant, then securely delete |
 | Expired/withdrawn announcements | 1 year after expiry or withdrawal | Delete |
 | Authentication security events | 180 days | Delete unless attached to an open incident |
-| Sanitized application-error events | 90 days | Delete after operational review |
+| Sanitized application-error events, server and browser | 90 days | Delete after operational review |
 | Expired email challenges, sessions and rate-limit records | No more than 90 days after expiry | Delete |
 | Verified recovery email | While the account remains recoverable | Remove after account closure and required record reconciliation |
 | Encrypted logical backups | 35 days | Automatic artifact expiry; monitor daily freshness and monthly stored restoration |

@@ -4,8 +4,17 @@ import Link from "next/link"
 import { ArrowLeft, CircleAlert } from "lucide-react"
 
 import styles from "@/components/financials/player-financials.module.css"
+import { useErrorReport } from "@/lib/telemetry/use-error-report"
 
-export default function PlayerFinancialsError({ reset }: { reset: () => void }) {
+export default function PlayerFinancialsError({
+  error,
+  reset,
+}: {
+  error: Error
+  reset: () => void
+}) {
+  useErrorReport("player_financials", error)
+
   return (
     <div className={`${styles.page} interior-page page-shell`}>
       <div className={styles.toolbar}>

@@ -138,8 +138,8 @@ describe("regression fixture repeatability", () => {
       stage: "default",
       schema: {
         current: true,
-        latestMigrationTag: "0027_immutable_training_start",
-        migrationCount: 28,
+        latestMigrationTag: "0028_client_error_reports",
+        migrationCount: 29,
         missingColumns: [],
         missingTables: [],
       },
