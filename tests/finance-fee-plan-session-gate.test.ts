@@ -47,7 +47,7 @@ describe("Fee Plan session-assignment gate", () => {
       level: "Beginner",
       batch: "Weekday",
       status: "unassigned",
-      joinedAt: now,
+      trainingStartOn: now.toISOString().slice(0, 10),
       updatedAt: now,
     }).run()
     return playerId

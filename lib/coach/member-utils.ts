@@ -42,7 +42,7 @@ export function isAcademyMember(value: unknown): value is AcademyMember {
     && typeof member.academyId === "string"
     && typeof member.fullName === "string"
     && typeof member.initials === "string"
-    && typeof member.joinedAt === "string"
+    && typeof member.trainingStartOn === "string"
     && typeof contact?.name === "string"
     && typeof contact.relationship === "string"
     && typeof contact.phone === "string"

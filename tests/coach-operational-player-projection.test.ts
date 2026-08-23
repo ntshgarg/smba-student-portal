@@ -88,7 +88,7 @@ describe("coach operational player projection", () => {
     database.update(schema.playerEnrollments).set({
       academyPlan: "weekday-3-day",
       batch: "Weekday",
-      joinedAt: new Date("2023-08-01T06:00:00+05:30"),
+      trainingStartOn: "2023-08-01",
       level: "Beginner",
       status: "paused",
     }).where(eq(schema.playerEnrollments.accountId, playerId)).run()

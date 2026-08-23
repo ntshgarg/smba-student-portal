@@ -39,10 +39,9 @@ const workspace: PlayerOnboardingWorkspace = {
       academyPlan: null,
       batch: null,
       feePlanRecorded: false,
-      firstFeeMonth: null,
       fullName: "Myra Shah",
       id: "request-player",
-      joinedAt: null,
+      trainingStartOn: null,
       level: null,
       primaryContact: null,
       recordRevision: null,
@@ -55,10 +54,9 @@ const workspace: PlayerOnboardingWorkspace = {
       academyPlan: null,
       batch: null,
       feePlanRecorded: false,
-      firstFeeMonth: null,
       fullName: "Rohan Kulkarni",
       id: "assessment-player",
-      joinedAt: "2026-08-11",
+      trainingStartOn: "2026-08-11",
       level: null,
       primaryContact: { name: "", phone: "", relationship: "" },
       recordRevision: 0,
@@ -113,10 +111,9 @@ describe("Player Onboarding Next-Step Register", () => {
         academyPlan: null,
         batch: null,
         feePlanRecorded: false,
-        firstFeeMonth: null,
         fullName: "Arjun Kumar",
         id: "assessment-player",
-        joinedAt: null,
+        trainingStartOn: null,
         level: null,
         primaryContact: null,
         recordRevision: null,
@@ -149,10 +146,9 @@ describe("Player Onboarding Next-Step Register", () => {
         academyPlan: "weekday-3-day",
         batch: "Weekday",
         feePlanRecorded: false,
-        firstFeeMonth: "2026-09",
         fullName: "Rohan Kulkarni",
         id: "assessment-player",
-        joinedAt: "2026-08-11",
+        trainingStartOn: "2026-08-11",
         level: "Beginner",
         primaryContact: { name: "", phone: "", relationship: "" },
         recordRevision: 2,
@@ -171,13 +167,13 @@ describe("Player Onboarding Next-Step Register", () => {
       />,
     )
 
-    expect(html).toContain("First fee month")
-    expect(html).toContain('min="2026-09"')
-    expect(html).toContain('value="2026-09"')
+    expect(html).not.toContain("First fee month")
+    expect(html).not.toContain('type="month"')
+    expect(html).toContain("Fee timeline")
+    expect(html).toContain("Derived from training")
     expect(html).toContain("Completing onboarding issues the registration fee")
-    expect(html).toContain("prorates the first monthly fee by scheduled sessions remaining")
-    expect(html).toContain("rounds it to the nearest ₹50")
-    expect(html).toContain("Complete onboarding &amp; issue fees")
+    expect(html).toContain("rounded once to the nearest ₹50")
+    expect(html).toContain("Review fee timeline")
     expect(html).not.toContain("Monthly charges are prepared separately")
   })
 })

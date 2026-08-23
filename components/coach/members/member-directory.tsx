@@ -43,7 +43,6 @@ import type {
   MemberField,
   PlayerMemberRecord,
 } from "@/lib/coach/types"
-import { isValidDateKey } from "@/lib/attendance/domain"
 import { formatDateKey } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
@@ -55,7 +54,6 @@ import {
 
 type MemberDraft = {
   fullName: string
-  joinedAt: string
   contactName: string
   relationship: string
   phone: string
@@ -74,7 +72,6 @@ const relationships = ["Parent", "Guardian", "Self", "Other"]
 function draftFromPlayer(player: PlayerMemberRecord): MemberDraft {
   return {
     fullName: player.member.fullName,
-    joinedAt: player.member.joinedAt,
     contactName: player.member.primaryContact.name,
     relationship: player.member.primaryContact.relationship,
     phone: player.member.primaryContact.phone,
@@ -91,6 +88,16 @@ function formatJoinedDate(value: string) {
     year: "numeric",
     weekday: undefined,
   })
+}
+
+function formatTimelineInstant(value: string | null | undefined) {
+  if (!value) return "Not completed"
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(value))
 }
 
 function formatOutstandingBalance(paise: number) {
@@ -123,9 +130,6 @@ function validateDraft(draft: MemberDraft) {
 
   if (fullName.length < 2 || fullName.length > 80) {
     errors.fullName = "Enter a player name between 2 and 80 characters."
-  }
-  if (!isValidDateKey(draft.joinedAt)) {
-    errors.joinedAt = "Choose a valid joining date."
   }
   const hasContact = Boolean(contactName || relationship || phone)
   if (hasContact) {
@@ -431,7 +435,6 @@ export function MemberDirectory() {
         expectedRevision: editingRevision,
         profile: {
           fullName: draft.fullName,
-          joinedAt: draft.joinedAt,
           primaryContact: {
             name: draft.contactName.trim(),
             relationship: draft.contactName.trim() ? draft.relationship : "",
@@ -447,7 +450,6 @@ export function MemberDirectory() {
       if (!result.ok) {
         const fieldMap: Partial<Record<MemberField, keyof MemberDraft>> = {
           fullName: "fullName",
-          joinedAt: "joinedAt",
           "primaryContact.name": "contactName",
           "primaryContact.relationship": "relationship",
           "primaryContact.phone": "phone",
@@ -649,7 +651,7 @@ export function MemberDirectory() {
                   <th scope="col">Member</th>
                   <th scope="col">Training</th>
                   <th scope="col">Sessions</th>
-                  <th scope="col">Joined</th>
+                  <th scope="col">Training from</th>
                   <th scope="col">Status</th>
                   <th scope="col"><span className="sr-only">Details</span></th>
                 </tr>
@@ -690,7 +692,7 @@ export function MemberDirectory() {
                             ? `${activeSessionLabels.length} active`
                             : "Not assigned"}</span>
                         </td>
-                        <td className="coach-member-joined" data-label="Joined">{formatJoinedDate(player.member.joinedAt)}</td>
+                        <td className="coach-member-joined" data-label="Training from">{formatJoinedDate(player.member.trainingStartOn)}</td>
                         <td className="coach-member-status-cell" data-label="Status">
                           <span className={`coach-member-status is-${player.training.status}`}>
                             {player.training.status}
@@ -757,20 +759,6 @@ export function MemberDirectory() {
                                           onChange={(event) => updateDraftField("fullName", event.target.value)}
                                         />
                                         {errors.fullName ? <small id={`member-${memberId}-full-name-error`}>{errors.fullName}</small> : null}
-                                      </label>
-                                      <label>
-                                        <span>Joined date</span>
-                                        <input
-                                          id={`member-${memberId}-joined-at`}
-                                          name="joinedAt"
-                                          type="date"
-                                          max={memberIndex.earliestByPlayer.get(memberId)}
-                                          value={draft.joinedAt}
-                                          aria-invalid={Boolean(errors.joinedAt)}
-                                          aria-describedby={errors.joinedAt ? `member-${memberId}-joined-at-error` : undefined}
-                                          onChange={(event) => updateDraftField("joinedAt", event.target.value)}
-                                        />
-                                        {errors.joinedAt ? <small id={`member-${memberId}-joined-at-error`}>{errors.joinedAt}</small> : null}
                                       </label>
                                       <label>
                                         <span>Primary contact</span>
@@ -936,8 +924,24 @@ export function MemberDirectory() {
                                     <h4 id={`profile-${memberId}`}>Member details</h4>
                                     <dl>
                                       <div>
-                                        <dt>Joined</dt>
-                                        <dd>{formatJoinedDate(player.member.joinedAt)}</dd>
+                                        <dt>Registration requested</dt>
+                                        <dd>{formatTimelineInstant(player.member.requestedAt)}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>Coach approved</dt>
+                                        <dd>{formatTimelineInstant(player.member.approvedAt)}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>Training from</dt>
+                                        <dd>{formatJoinedDate(player.member.trainingStartOn)}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>Account activated</dt>
+                                        <dd>{formatTimelineInstant(player.member.activatedAt)}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>Onboarding completed</dt>
+                                        <dd>{formatTimelineInstant(player.member.onboardingCompletedAt)}</dd>
                                       </div>
                                       <div>
                                         <dt>Academy ID</dt>

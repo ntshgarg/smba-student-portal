@@ -160,7 +160,7 @@ export function SessionSchedules({
     series.status === "active"
     && series.programme === guidedPlayer.training.level
     && series.batch === guidedPlayer.training.batch
-    && (!series.endsOn || guidedPlayer.member.joinedAt <= series.endsOn)
+    && (!series.endsOn || guidedPlayer.member.trainingStartOn <= series.endsOn)
     && !assignmentIndex.activeByPlayerSeries.has(assignmentKey(guidedPlayer.member.id, series.id))
   )) : [], [assignmentIndex.activeByPlayerSeries, guidedPlayer, sessionSeries])
   const guidedActiveAssignments = useMemo(() => guidedPlayer
@@ -207,7 +207,7 @@ export function SessionSchedules({
 
         setExpandedSeriesId(series.id)
         setAssignPlayerId(guidedPlayer.member.id)
-        setEffectiveFrom(earliestAssignmentDate(guidedPlayer.member.joinedAt, series.startsOn))
+        setEffectiveFrom(earliestAssignmentDate(guidedPlayer.member.trainingStartOn, series.startsOn))
         setAssignWeekdays(preselectedWeekdays)
         setAssignmentTouched(false)
         setRosterFeedback({
@@ -324,7 +324,7 @@ export function SessionSchedules({
       ? [1, 2, 3, 4, 5]
       : []
     setAssignWeekdays(preselectedWeekdays)
-    setEffectiveFrom(earliestAssignmentDate(player.member.joinedAt, series.startsOn))
+    setEffectiveFrom(earliestAssignmentDate(player.member.trainingStartOn, series.startsOn))
   }
 
   function toggleAssignmentWeekday(
@@ -373,7 +373,7 @@ export function SessionSchedules({
       })
       return
     }
-    const earliestDate = earliestAssignmentDate(player.member.joinedAt, series.startsOn)
+    const earliestDate = earliestAssignmentDate(player.member.trainingStartOn, series.startsOn)
     const assignmentDate = effectiveFrom < earliestDate ? earliestDate : effectiveFrom
     if (assignmentDate !== effectiveFrom) setEffectiveFrom(assignmentDate)
     const backfillCount = backfillOccurrences.filter((occurrence) => (
@@ -510,7 +510,7 @@ export function SessionSchedules({
           const availablePlayers = players.filter((player) => (
             player.training.level === series.programme
             && player.training.batch === series.batch
-            && (!series.endsOn || player.member.joinedAt <= series.endsOn)
+            && (!series.endsOn || player.member.trainingStartOn <= series.endsOn)
             && !assignmentIndex.activeByPlayerSeries.has(assignmentKey(player.member.id, series.id))
           ))
           const selectedAssignmentPlayer = availablePlayers.find((player) => (
@@ -694,7 +694,7 @@ export function SessionSchedules({
                         disabled={!assignPlayerId || hasPendingMutation}
                         min={assignPlayerId
                           ? earliestAssignmentDate(
-                              playerById.get(assignPlayerId)?.member.joinedAt ?? series.startsOn,
+                              playerById.get(assignPlayerId)?.member.trainingStartOn ?? series.startsOn,
                               series.startsOn,
                             )
                           : undefined}
@@ -704,7 +704,7 @@ export function SessionSchedules({
                         aria-describedby={rosterFeedback?.seriesId === series.id && rosterFeedback.field === "effectiveFrom" ? assignmentFeedbackId : undefined}
                         onChange={(event) => {
                           const player = playerById.get(assignPlayerId)
-                          const minimum = earliestAssignmentDate(player?.member.joinedAt ?? series.startsOn, series.startsOn)
+                          const minimum = earliestAssignmentDate(player?.member.trainingStartOn ?? series.startsOn, series.startsOn)
                           setAssignmentTouched(true)
                           setEffectiveFrom(event.target.value < minimum ? minimum : event.target.value)
                         }}

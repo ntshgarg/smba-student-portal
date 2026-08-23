@@ -326,7 +326,7 @@ export function approveRegistration(
       tx.insert(playerEnrollments).values({
         accountId: registration.id,
         status: "unassigned",
-        joinedAt: now,
+        trainingStartOn: getAcademyDateKey(now),
         updatedAt: now,
       }).run()
     } else {

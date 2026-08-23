@@ -77,7 +77,7 @@ describe("stored session occurrence lifecycle", () => {
     database.update(schema.playerEnrollments).set({
       academyPlan: "weekday-3-day",
       batch: "Weekday",
-      joinedAt: new Date("2026-08-03T00:00:00.000Z"),
+      trainingStartOn: "2026-08-03",
       level: "Beginner",
       status: "unassigned",
       updatedAt: now,

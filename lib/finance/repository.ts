@@ -114,14 +114,6 @@ export function readActiveFeeAgreement(database: Executor, playerId: string) {
   )).get()
 }
 
-export function readFirstAssignmentDate(database: Executor, playerId: string) {
-  return database.select({ effectiveFrom: sessionAssignments.effectiveFrom })
-    .from(sessionAssignments)
-    .where(eq(sessionAssignments.accountId, playerId))
-    .orderBy(asc(sessionAssignments.effectiveFrom))
-    .get()?.effectiveFrom ?? null
-}
-
 export function hasAssignmentInPeriod(
   database: Executor,
   playerId: string,
@@ -156,13 +148,13 @@ export function readFirstMonthSessionProration(
     period,
     playerId,
     programme,
-    referenceInstant,
+    trainingStartOn,
   }: {
     batch: typeof feeAgreements.$inferSelect.batch
     period: string
     playerId: string
     programme: typeof feeAgreements.$inferSelect.level
-    referenceInstant: Date
+    trainingStartOn: string
   },
 ) {
   const assignments = database.select({
@@ -197,11 +189,12 @@ export function readFirstMonthSessionProration(
     database,
     database.select().from(sessionOccurrences).where(and(
       inArray(sessionOccurrences.seriesId, seriesIds),
-      gte(sessionOccurrences.occurrenceDate, monthStart(period)),
-      lte(sessionOccurrences.occurrenceDate, monthEnd(period)),
       eq(sessionOccurrences.status, "scheduled"),
     )).orderBy(asc(sessionOccurrences.startsAt), asc(sessionOccurrences.id)).all(),
-  )
+  ).filter((occurrence) => (
+    occurrence.eligibilityDate >= monthStart(period)
+    && occurrence.eligibilityDate <= monthEnd(period)
+  ))
 
   const totalOccurrences = occurrences.filter((occurrence) => assignments.some((assignment) => (
     assignment.seriesId === occurrence.seriesId
@@ -209,9 +202,9 @@ export function readFirstMonthSessionProration(
     && weekdaysByAssignment.get(assignment.id)?.has(weekdayForDateKey(occurrence.eligibilityDate))
   )))
   const remainingOccurrences = totalOccurrences.filter((occurrence) => (
-    occurrence.startsAt.getTime() > referenceInstant.getTime()
-    && assignments.some((assignment) => (
+    assignments.some((assignment) => (
       assignment.seriesId === occurrence.seriesId
+      && occurrence.eligibilityDate >= trainingStartOn
       && occurrence.eligibilityDate >= assignment.effectiveFrom
       && (assignment.effectiveTo === null || occurrence.eligibilityDate < assignment.effectiveTo)
       && weekdaysByAssignment.get(assignment.id)?.has(weekdayForDateKey(occurrence.eligibilityDate))
@@ -650,10 +643,11 @@ export function loadPlayerFeeRecord(
     .map((charge) => chargeView(database, charge, now, includeInternal))
   const activeCharges = charges.filter((charge) => charge.lifecycle === "issued")
   const agreement = readActiveFeeAgreement(database, playerId)
+  const activation = readFinanceActivation(database)
   const registrationCharge = charges.find((charge) => (
     charge.type === "registration" && charge.lifecycle === "issued"
   )) ?? [...charges].reverse().find((charge) => charge.type === "registration") ?? null
-  const registrationResolutionRequired = readFinanceActivation(database) !== null
+  const registrationResolutionRequired = activation !== null
     && !activeCharges.some((charge) => charge.type === "registration")
   const suggestedAmount = player.academyPlan && player.level && player.batch
     ? defaultMonthlyFeePaise({
@@ -687,6 +681,7 @@ export function loadPlayerFeeRecord(
     academyId: formatAcademyId(player.academyIdSerial),
     fullName: player.fullName,
     archived: player.archivedAt !== null,
+    financeTrackingMonth: activation?.trackingMonth ?? null,
     registrationResolutionRequired,
     status: combineFinanceStatuses(activeCharges.map((charge) => charge.status)),
     currentBalancePaise: activeCharges.reduce(
@@ -941,6 +936,7 @@ export function listMonthlyPreparationCandidates(database: Executor, period: str
       academyPlan: playerEnrollments.academyPlan,
       level: playerEnrollments.level,
       batch: playerEnrollments.batch,
+      trainingStartOn: playerEnrollments.trainingStartOn,
     },
   }).from(feeAgreements)
     .innerJoin(accounts, eq(accounts.id, feeAgreements.playerAccountId))

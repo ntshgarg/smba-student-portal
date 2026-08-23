@@ -55,6 +55,64 @@
   margin-top: 12px;
 }
 
+.assessmentDateField {
+  margin-bottom: 16px;
+}
+
+.dateTimeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+}
+
+.dateTimeline > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border-right: 1px solid var(--line);
+}
+
+.dateTimeline > div:last-child {
+  border-right: 0;
+}
+
+.dateTimeline dt {
+  color: var(--red);
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dateTimeline dd {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.assessmentDateField > label {
+  display: grid;
+  max-width: 520px;
+  gap: 7px;
+}
+
+.assessmentDateField input {
+  min-height: 44px;
+}
+
+.assessmentDateField small {
+  color: var(--steel);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.assessmentDateField [aria-invalid="true"] {
+  border-color: var(--red);
+}
+
 .stageSummary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -398,6 +456,38 @@
   border-right: 1px solid var(--line);
 }
 
+.derivedFeeMonth {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 5px;
+  padding: 13px;
+}
+
+.derivedFeeMonth > span,
+.feePreview header span,
+.previewLines span {
+  color: var(--steel);
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.derivedFeeMonth strong {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 19px;
+  font-style: italic;
+  font-weight: 560;
+}
+
+.derivedFeeMonth small {
+  color: var(--steel);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .threeFieldGrid > label:last-child,
 .feeFields > label:last-child {
   border-right: 0;
@@ -678,6 +768,132 @@
   line-height: 1.4;
 }
 
+.feePreview {
+  margin-top: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--white);
+}
+
+.feePreview > header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 18px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--ivory-deep);
+}
+
+.feePreview > header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.feePreview > header > div:last-child {
+  text-align: right;
+}
+
+.feePreview h4,
+.feePreview header strong {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 20px;
+  font-style: italic;
+  font-weight: 580;
+  line-height: 1.1;
+}
+
+.previewLines article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.62fr);
+  gap: 18px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.previewLines article > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.previewLines article > div:last-child {
+  text-align: right;
+}
+
+.previewLines strong {
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.previewLines small {
+  color: var(--steel);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.previewWarnings,
+.previewBlockers {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--steel);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.previewWarnings p,
+.previewBlockers ul {
+  margin: 0;
+}
+
+.previewBlockers {
+  border-left: 3px solid var(--red);
+  color: var(--navy);
+}
+
+.previewBlockers ul {
+  padding-left: 17px;
+}
+
+.finalConfirmation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 14px;
+  cursor: pointer;
+}
+
+.finalConfirmation input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--navy);
+}
+
+.finalConfirmation input[aria-invalid="true"] {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.finalConfirmation span {
+  display: grid;
+  gap: 4px;
+  color: var(--steel);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.finalConfirmation strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+
 .backdateNote {
   margin-top: 10px;
   padding: 10px 12px;
@@ -939,6 +1155,23 @@
     font-size: 10px;
   }
 
+  .dateTimeline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dateTimeline > div {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .dateTimeline > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .dateTimeline > div:last-child {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
+
   .threeFieldGrid,
   .feeFields,
   .requestFacts,
@@ -948,6 +1181,7 @@
 
   .threeFieldGrid > label,
   .feeFields > label,
+  .derivedFeeMonth,
   .requestFacts > div,
   .trainingFacts > div {
     border-right: 0;
@@ -956,6 +1190,7 @@
 
   .threeFieldGrid > label:last-child,
   .feeFields > label:last-child,
+  .derivedFeeMonth:last-child,
   .requestFacts > div:last-child,
   .trainingFacts > div:last-child {
     border-bottom: 0;
@@ -979,6 +1214,17 @@
 
   .formActions > .primaryButton {
     grid-row: 1;
+  }
+
+  .feePreview > header,
+  .previewLines article {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .feePreview > header > div:last-child,
+  .previewLines article > div:last-child {
+    text-align: left;
   }
 
   .seriesChoices > label {

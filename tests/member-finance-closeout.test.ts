@@ -35,6 +35,9 @@ describe("member archival financial closeout", () => {
       level: "Beginner",
       batch: "Weekday",
       status: "unassigned",
+      trainingStartConfirmedAt: now,
+      trainingStartConfirmedByAccountId: coachId,
+      trainingStartOn: "2026-08-20",
       updatedAt: now,
     }).where(eq(schema.playerEnrollments.accountId, playerId)).run()
     const seriesId = `${playerId}:series`
@@ -58,22 +61,40 @@ describe("member archival financial closeout", () => {
       assignedByAccountId: coachId,
       assignedAt: now,
     }).run()
-    const completion = finance.completePlayerOnboardingFinance({
+    database.insert(schema.sessionAssignmentWeekdays).values({
+      id: `${playerId}:weekday`,
+      assignmentId: `${playerId}:assignment`,
+      weekday: 3,
+    }).run()
+    database.insert(schema.sessionOccurrences).values({
+      id: `${playerId}:occurrence`,
+      createdAt: now,
+      durationMinutes: 60,
+      occurrenceDate: "2026-09-02",
+      seriesId,
+      startsAt: new Date("2026-09-02T06:00:00+05:30"),
+      venue: "SMBA Court",
+    }).run()
+    const terms = {
       playerId,
       academyPlan: "weekday-3-day",
       level: "Beginner",
       batch: "Weekday",
       agreedMonthlyFeePaise: 350_000,
-      effectiveFrom: "2026-09-01",
       monthlyDueDay: 5,
-      idempotencyKey: `${playerId}:fee-plan`,
-    }, {
+    } as const
+    const context = {
       coachId,
       createFeeReference: () => feeReference,
       createId,
       database,
       now,
-    })
+    }
+    const preview = finance.previewPlayerOnboardingFinance(terms, context)
+    const completion = finance.completePlayerOnboardingFinance({
+      ...terms,
+      previewFingerprint: preview.fingerprint,
+    }, context)
     const agreement = database.select().from(schema.feeAgreements)
       .where(eq(schema.feeAgreements.id, completion.agreementId)).get()
     if (!agreement) throw new Error("The completed onboarding Fee Plan is unavailable.")
@@ -84,10 +105,14 @@ describe("member archival financial closeout", () => {
   }
 
   function archive(playerId: string) {
+    const expectedRevision = database.select({ revision: schema.playerEnrollments.recordRevision })
+      .from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get()?.revision
+    if (expectedRevision === undefined) throw new Error("The member enrollment is unavailable.")
     return memberService.archiveMemberRecord({
       coachId,
       database,
-      input: { memberId: playerId, expectedRevision: 0 },
+      input: { memberId: playerId, expectedRevision },
       now,
     })
   }
