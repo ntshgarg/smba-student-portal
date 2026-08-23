@@ -2713,7 +2713,7 @@ h3 {
 .attendance-track {
   height: 3px;
   overflow: hidden;
-  background: #d9dddf;
+  background: var(--line);
 }
 
 .attendance-track {
