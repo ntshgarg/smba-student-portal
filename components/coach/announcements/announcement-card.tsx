@@ -13,7 +13,9 @@ export function AnnouncementCard({ activeCount = 0 }: { activeCount?: number }) 
   return (
     <CoachDashboardCard
       area="announcements"
-      status={activeCount > 0 ? `${activeCount} active` : "Clear"}
+      status={activeCount > 0
+        ? { count: activeCount, unit: "active" }
+        : { state: "Clear" }}
       title="Announcements"
       titleId="coach-announcements-card-title"
     >

@@ -224,7 +224,13 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
 
   function updateValues(next: Partial<ComposerValues>) {
     setValues((current) => ({ ...current, ...next }))
-    setErrors({})
+    // Clear only the errors for the fields being edited. Clearing all of them
+    // wiped outstanding errors on fields the coach had not touched.
+    setErrors((current) => {
+      const remaining = { ...current }
+      for (const field of Object.keys(next)) delete remaining[field as FieldName]
+      return remaining
+    })
   }
 
   function toggleChannel(channel: AnnouncementChannel) {
@@ -296,8 +302,8 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
         </div>
 
         <div className={styles.slipBody}>
-          <label className={styles.slipField}>
-            <span>Title</span>
+          <div className={styles.slipField}>
+            <span><label htmlFor="announcement-title">Title</label></span>
             <input
               ref={titleRef}
               aria-describedby={errors.title
@@ -305,6 +311,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                 : "announcement-title-limit"}
               aria-invalid={Boolean(errors.title)}
               autoComplete="off"
+              id="announcement-title"
               maxLength={120}
               name="title"
               onChange={(event) => updateValues({ title: event.target.value })}
@@ -325,10 +332,10 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                 Maximum 120 characters.
               </small>
             </span>
-          </label>
+          </div>
 
-          <label className={styles.slipField}>
-            <span>Message</span>
+          <div className={styles.slipField}>
+            <span><label htmlFor="announcement-content">Message</label></span>
             <textarea
               ref={contentRef}
               aria-describedby={errors.content
@@ -336,6 +343,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                 : "announcement-content-limit"}
               aria-invalid={Boolean(errors.content)}
               autoComplete="off"
+              id="announcement-content"
               maxLength={5000}
               name="content"
               onChange={(event) => updateValues({ content: event.target.value })}
@@ -356,7 +364,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                 Maximum 5,000 characters.
               </small>
             </span>
-          </label>
+          </div>
         </div>
 
         <div className={styles.slipDocket}>
@@ -408,17 +416,21 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
               type="checkbox"
             />
             <span>Pin announcement</span>
-            <small id="announcement-pin-help" className="sr-only">
-              Keep it above ordinary notices while active.
-            </small>
           </label>
+          {/* Outside the label: nested description text leaks into the
+              checkbox's accessible name. `sr-only` is absolutely positioned,
+              so it takes no grid cell here. */}
+          <small id="announcement-pin-help" className="sr-only">
+            Keep it above ordinary notices while active.
+          </small>
 
-          <label className={styles.slipExpiryField}>
-            <span>Expiry date</span>
+          <div className={styles.slipExpiryField}>
+            <span><label htmlFor="announcement-expires-on">Expiry date</label></span>
             <input
               ref={expiryRef}
               aria-describedby="announcement-expiry-help"
               aria-invalid={Boolean(errors.expiresOn)}
+              id="announcement-expires-on"
               min={academyToday}
               name="expiresOn"
               onChange={(event) => updateValues({ expiresOn: event.target.value })}
@@ -431,7 +443,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
             >
               {errors.expiresOn ?? "The notice remains visible through this date."}
             </small>
-          </label>
+          </div>
 
           <button
             className={styles.slipReviewButton}

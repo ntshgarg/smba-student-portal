@@ -22,12 +22,13 @@ const staffAttendanceLinks = [
 ]
 
 export function AttendanceCard({ scheduleCount }: { scheduleCount: number }) {
-  const scheduleLabel = `${scheduleCount} ${scheduleCount === 1 ? "schedule" : "schedules"}`
-
   return (
     <CoachDashboardCard
       area="attendance"
-      status={scheduleLabel}
+      status={{
+        count: scheduleCount,
+        unit: scheduleCount === 1 ? "schedule" : "schedules",
+      }}
       title="Attendance"
       titleId="attendance-card-title"
     >

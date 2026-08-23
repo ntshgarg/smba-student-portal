@@ -32,7 +32,9 @@ export function PlayerOnboardingCard({
     <CoachDashboardCard
       area="onboarding"
       id="onboarding"
-      status={summary.total ? `${summary.total} in progress` : "All complete"}
+      status={summary.total
+        ? { count: summary.total, unit: "in progress" }
+        : { state: "Clear" }}
       title="Academy onboarding"
       titleId="player-onboarding-card-title"
     >
