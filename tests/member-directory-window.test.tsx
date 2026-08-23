@@ -58,7 +58,7 @@ function players(count: number): PlayerMemberRecord[] {
         fullName: `Member ${serial}`,
         id: memberId,
         initials: `M${serial}`,
-        joinedAt: "2026-01-01",
+        trainingStartOn: "2026-01-01",
         primaryContact: { name: "", phone: "", relationship: "" },
         role: "player",
       },

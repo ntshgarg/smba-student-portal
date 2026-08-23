@@ -123,6 +123,7 @@ function feeRecord(overrides: Partial<PlayerFeeRecord> = {}): PlayerFeeRecord {
   return {
     archived: false,
     feePlanSetupReady: false,
+    financeTrackingMonth: null,
     registrationResolutionRequired: false,
     playerId: "player-owner",
     academyId: "SMBA#0002",

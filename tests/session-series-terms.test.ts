@@ -107,7 +107,7 @@ function createAssignablePlayer() {
     accountId: playerId,
     academyPlan: "weekday-3-day",
     batch: "Weekday",
-    joinedAt: new Date("2026-08-01T00:00:00+05:30"),
+    trainingStartOn: "2026-08-01",
     level: "Beginner",
     status: "unassigned",
     updatedAt: CREATED_AT,

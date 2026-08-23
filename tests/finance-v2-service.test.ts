@@ -57,7 +57,7 @@ describe("Financials V2 service", () => {
       level: "Beginner",
       batch: "Weekday",
       status: "active",
-      joinedAt: createdAt,
+      trainingStartOn: createdAt.toISOString().slice(0, 10),
       updatedAt: createdAt,
     }).run()
     database.insert(schema.feeAgreements).values({

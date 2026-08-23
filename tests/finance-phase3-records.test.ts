@@ -59,7 +59,7 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
       level: "Beginner",
       batch: "Weekday",
       status: "active",
-      joinedAt: createdAt,
+      trainingStartOn: createdAt.toISOString().slice(0, 10),
       updatedAt: createdAt,
     }).run()
     return id
