@@ -5410,6 +5410,12 @@ tr.is-expanded .coach-member-row-action button svg {
   color: #8a939b;
 }
 
+.coach-report-field-counter {
+  display: block;
+  margin-top: 8px;
+  text-align: right;
+}
+
 .coach-report-editor-footer {
   display: flex;
   min-height: 60px;
