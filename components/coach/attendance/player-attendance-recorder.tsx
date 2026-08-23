@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Clock3,
   MapPin,
+  RotateCcw,
   Users,
 } from "lucide-react"
 import Link from "next/link"
@@ -27,6 +28,7 @@ import {
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
 } from "@/lib/attendance/recording-workspace"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import {
   academyTimeInputValue,
   formatAcademyTime,
@@ -45,6 +47,12 @@ const attendanceChoices = [
   { label: "Present", value: "present" },
   { label: "Absent", value: "absent" },
 ] satisfies Array<{ label: string; value: SessionAttendanceChoice }>
+
+/**
+ * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
+ * withdraws the retry prompt.
+ */
+type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
 
 function sessionLabel(
   occurrence: TrainingSessionOccurrence,
@@ -84,7 +92,7 @@ export function PlayerAttendanceRecorder({
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [selectedOccurrenceId, setSelectedOccurrenceId] = useState(initialOccurrenceId)
   const [draftChanges, setDraftChanges] = useState<SessionAttendanceChange[]>([])
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
   const { confirmDiscard } = useUnsavedWorkGuard({
@@ -218,8 +226,15 @@ export function PlayerAttendanceRecorder({
       setDraftChanges([])
       setFeedback({ message: "Attendance saved", tone: "success" })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "Attendance could not be saved",
+        retained: "Your marks are still on screen",
+        subject: "Attendance",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "Attendance could not be saved",
+        message: failure.message,
+        offerRetry: failure.isNetworkFailure,
         tone: "error",
       })
     } finally {
@@ -388,7 +403,12 @@ export function PlayerAttendanceRecorder({
               disabled={!draftChanges.length || isSaving || selectedUnavailable}
               onClick={saveAttendance}
             >
-              <Check aria-hidden="true" /> {isSaving ? "Saving…" : "Save attendance"}
+              {feedback?.offerRetry
+                ? <RotateCcw aria-hidden="true" />
+                : <Check aria-hidden="true" />}
+              {isSaving
+                ? "Saving…"
+                : feedback?.offerRetry ? "Save attendance again" : "Save attendance"}
             </button>
           </div>
         </>

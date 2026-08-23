@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Check, UsersRound } from "lucide-react"
+import { ArrowLeft, Check, RotateCcw, UsersRound } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
@@ -8,6 +8,7 @@ import { useMemo, useState } from "react"
 import { saveStaffAttendanceAction } from "@/app/coach/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import type {
   StaffAttendanceChange,
   StaffAttendanceChoice,
@@ -34,6 +35,12 @@ const choices: Array<{
   { label: "Absent", value: "absent" },
 ]
 
+/**
+ * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
+ * withdraws the retry prompt.
+ */
+type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
+
 export function StaffRollCall({
   initialDate,
   initialRecords,
@@ -49,7 +56,7 @@ export function StaffRollCall({
   const [selectedDate, setSelectedDate] = useState(initialDate)
   const [records, setRecords] = useState(initialRecords)
   const [drafts, setDrafts] = useState<StaffAttendanceChange[]>([])
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: drafts.length > 0,
@@ -127,8 +134,15 @@ export function StaffRollCall({
       setDrafts([])
       setFeedback({ message: "Staff attendance saved", tone: "success" })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "Staff attendance could not be saved",
+        retained: "Your marks are still on screen",
+        subject: "Staff attendance",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "Staff attendance could not be saved",
+        message: failure.message,
+        offerRetry: failure.isNetworkFailure,
         tone: "error",
       })
     } finally {
@@ -241,7 +255,12 @@ export function StaffRollCall({
             disabled={!drafts.length || isSaving || futureDate}
             onClick={saveRollCall}
           >
-            <Check aria-hidden="true" /> {isSaving ? "Saving…" : "Save staff attendance"}
+            {feedback?.offerRetry
+              ? <RotateCcw aria-hidden="true" />
+              : <Check aria-hidden="true" />}
+            {isSaving
+              ? "Saving…"
+              : feedback?.offerRetry ? "Save staff attendance again" : "Save staff attendance"}
           </button>
         </div>
       </section>
