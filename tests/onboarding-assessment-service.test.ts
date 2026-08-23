@@ -107,6 +107,21 @@ describe("coach-confirmed onboarding assessment", () => {
     })
   })
 
+  it("refuses a confirmed date beyond the backfill window", () => {
+    const playerId = approvedPlayer("Implausible Assessment")
+
+    expect(() => assessment(playerId, 0, "2023-08-18")).toThrow(expect.objectContaining({
+      code: "INVALID_INPUT",
+      field: "trainingStartOn",
+    }))
+    expect(database.select().from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get())
+      .toMatchObject({ recordRevision: 0, trainingStartConfirmedAt: null })
+    expect(assessment(playerId, 0, "2024-09-02")).toMatchObject({
+      trainingStartOn: "2024-09-02",
+    })
+  })
+
   it("requires an unfinished assignment reset before moving the date later", () => {
     const playerId = approvedPlayer("Reset Assignment")
     assessment(playerId, 0, "2026-07-01")
