@@ -311,7 +311,14 @@ function FeeRegisterTable({
   const visibleStart = Number.parseInt(register.pagination.label.match(/^\d+/u)?.[0] ?? "1", 10)
 
   return (
-    <div className={`${recordsStyles.tableWrap} ${recordsStyles.registrationTableWrap}`}>
+    <div
+      className={`${recordsStyles.tableWrap} ${recordsStyles.registrationTableWrap}`}
+      tabIndex={0}
+      role="region"
+      aria-label={isRegistration
+        ? "Scrollable registration fee register"
+        : "Scrollable monthly fee register"}
+    >
       <table className={`${recordsStyles.recordsTable} ${recordsStyles.registrationTable}`}>
         <caption className="sr-only">
           {isRegistration ? "One-time academy registration fee records" : `${formatPeriod(register.filters.period)} monthly fee records`}
@@ -563,7 +570,12 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
       <CollectionsSummary summary={dayBook.summary} />
 
       {dayBook.events.length ? (
-        <div className={recordsStyles.tableWrap}>
+        <div
+          className={recordsStyles.tableWrap}
+          tabIndex={0}
+          role="region"
+          aria-label="Scrollable collections day book register"
+        >
           <table className={recordsStyles.recordsTable}>
             <caption className="sr-only">Payment and refund records</caption>
             <thead>

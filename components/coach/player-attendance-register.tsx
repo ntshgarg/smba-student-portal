@@ -265,6 +265,7 @@ export function PlayerAttendanceRegister({
                   ref={registerScrollRef}
                   onScroll={handleRegisterScroll}
                   tabIndex={0}
+                  role="region"
                   aria-label="Scrollable annual player attendance register"
                 >
                   <table
