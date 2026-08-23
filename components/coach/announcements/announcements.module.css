@@ -809,7 +809,7 @@
 
 .monthControl > div span {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 780;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1051,7 +1051,7 @@
 .rowMeta dt,
 .detailMeta dt {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;

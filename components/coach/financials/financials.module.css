@@ -1739,7 +1739,7 @@
 
 .field > span em {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 700;
 }
@@ -2299,7 +2299,7 @@
 
 .rapidResultsToggle small {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2440,7 +2440,7 @@
 
 .balancePlayerOutstanding span {
   margin-top: 0;
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2612,7 +2612,7 @@
 
 .balanceField > span em {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 700;
 }
@@ -3563,7 +3563,7 @@
 
   .balancePlayerRail > button {
     padding-inline: 10px;
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
   }
 
   .balanceEquation {
@@ -3718,7 +3718,7 @@
   }
 
   .summary dt {
-    font-size: 8px;
+    font-size: var(--type-operational-floor);
     line-height: 1.35;
   }
 

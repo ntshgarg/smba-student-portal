@@ -68,7 +68,7 @@
   padding: 6px 9px 5px;
   border: 1px solid color-mix(in srgb, var(--red) 55%, var(--line));
   color: var(--red);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.11em;
   text-transform: uppercase;
