@@ -435,7 +435,7 @@
 
   .status {
     padding-inline: 7px;
-    font-size: 7px;
+    font-size: var(--type-operational-floor);
   }
 
   .action {
