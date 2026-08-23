@@ -123,7 +123,7 @@ function assignmentsCoveringOccurrences(
  * Returns only the occurrence window and roster facts needed by a Calendar month.
  * Replacement lineage remains resolved by the shared session database reader.
  */
-export function getCoachSessionSnapshotForWindow({
+function getCoachSessionSnapshotForWindow({
   from,
   to,
 }: {

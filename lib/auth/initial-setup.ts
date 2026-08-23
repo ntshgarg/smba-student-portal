@@ -163,7 +163,7 @@ export type InitialPlatformAdminSetupInput = {
   pin: string
 }
 
-export function validateInitialPlatformAdminSetup(input: InitialPlatformAdminSetupInput) {
+function validateInitialPlatformAdminSetup(input: InitialPlatformAdminSetupInput) {
   const fullName = normalizeFullName(input.fullName)
   if (fullName.length < 2 || fullName.length > 80) return "Enter your full name."
   const passwordError = validateNewPassword(input.password)

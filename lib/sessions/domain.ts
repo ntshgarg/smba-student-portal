@@ -11,7 +11,7 @@ import type {
   TrainingSessionOccurrence,
   TrainingSessionSeries,
 } from "@/lib/sessions/types"
-import { occurrenceHasStarted, type ReferenceInstant } from "@/lib/sessions/occurrence-time"
+import type { ReferenceInstant } from "@/lib/sessions/occurrence-time"
 
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/u
 const TRAINING_PROGRAMMES = new Set(["Beginner", "Intermediate", "Advanced", "Adult"])
@@ -324,25 +324,4 @@ export function resolveNextScheduledOccurrence({
       new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime()
       || first.id.localeCompare(second.id)
     ))[0] ?? null
-}
-
-export function sessionIsEligible({
-  assignment,
-  joinedOn,
-  occurrence,
-  referenceInstant,
-}: {
-  assignment: SessionAssignment
-  joinedOn: string
-  occurrence: TrainingSessionOccurrence
-  referenceInstant: ReferenceInstant
-}) {
-  return occurrence.status === "scheduled"
-    && playerWasEnrolledForOccurrence(joinedOn, occurrence)
-    && occurrenceHasStarted(occurrence, referenceInstant)
-    && assignmentCoversOccurrence(assignment, occurrence)
-}
-
-export function calendarWindowForYear(year: number) {
-  return { from: `${year}-01-01`, to: `${year}-12-31` }
 }

@@ -167,10 +167,6 @@ function attendanceRecords({
   }, {})
 }
 
-export function listSessionAttendanceRecords(): SessionAttendanceRecords {
-  return attendanceRecords()
-}
-
 export function listSessionAttendanceRecordsForOccurrences(
   occurrenceIds: readonly string[],
 ): SessionAttendanceRecords {

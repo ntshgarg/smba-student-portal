@@ -12,7 +12,7 @@ import type { SessionAttendanceChange } from "@/lib/sessions/types"
  * key, a parser that rejects anything it does not recognise, and callers that
  * treat storage as optional rather than load-bearing.
  */
-export const ATTENDANCE_DRAFT_KEY_PREFIX = "smba-attendance-draft-v1"
+const ATTENDANCE_DRAFT_KEY_PREFIX = "smba-attendance-draft-v1"
 
 /**
  * The key already pins a draft to one occurrence or one date, so no expiry is

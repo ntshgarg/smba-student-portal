@@ -88,7 +88,7 @@ export function readActivePlayer(database: Executor, playerId: string) {
     )).get()
 }
 
-export function readFinancePlayer(database: Executor, playerId: string) {
+function readFinancePlayer(database: Executor, playerId: string) {
   return database.select({
     academyIdSerial: academyIdAllocations.serial,
     academyPlan: playerEnrollments.academyPlan,

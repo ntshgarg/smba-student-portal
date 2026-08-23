@@ -7,7 +7,7 @@ export const memberDirectoryLevels: TrainingProgramme[] = [
   "Adult",
 ]
 export const memberDirectoryBatches: TrainingBatch[] = ["Weekday", "Weekend"]
-export const memberDirectoryStatuses = ["all", "unassigned", "active", "paused"] as const
+const memberDirectoryStatuses = ["all", "unassigned", "active", "paused"] as const
 
 export type MemberDirectoryLevel = TrainingProgramme | "All levels"
 export type MemberDirectoryBatch = TrainingBatch | "All batches"
