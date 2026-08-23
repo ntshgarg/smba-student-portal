@@ -389,8 +389,9 @@ function AssessmentStep({
 
     setBusy(true)
     setFeedback(null)
+    let result: Awaited<ReturnType<typeof saveOnboardingAssessmentAction>>
     try {
-      const result = await saveOnboardingAssessmentAction({
+      result = await saveOnboardingAssessmentAction({
         playerId: item.id,
         expectedRevision: item.recordRevision,
         trainingStartOn,
@@ -398,32 +399,33 @@ function AssessmentStep({
         batch: batch as TrainingBatch,
         level: level as TrainingProgramme,
       })
-      if (!result.ok) {
-        const nextFieldErrors = {
-          trainingStartOn: result.field === "trainingStartOn" ? result.message : undefined,
-          level: result.field === "level" ? result.message : undefined,
-          batch: result.field === "batch" ? result.message : undefined,
-          academyPlan: result.field === "academyPlan" ? result.message : undefined,
-        }
-        setErrors(nextFieldErrors)
-        setFeedback({ message: result.message, tone: "error" })
-        if (nextFieldErrors.trainingStartOn) trainingStartRef.current?.focus()
-        else if (nextFieldErrors.level) levelRef.current?.focus()
-        else if (nextFieldErrors.batch) batchRef.current?.focus()
-        else if (nextFieldErrors.academyPlan) planRef.current?.focus()
-        return
-      }
-      guard.navigateAfterCommit(() => onSuccess({
-        message: `${item.fullName}’s assessment is saved. Assign the matching session next.`,
-      }))
     } catch (error) {
       setFeedback({
         message: error instanceof Error ? error.message : "The assessment could not be saved",
         tone: "error",
       })
+      return
     } finally {
       setBusy(false)
     }
+    if (!result.ok) {
+      const nextFieldErrors = {
+        trainingStartOn: result.field === "trainingStartOn" ? result.message : undefined,
+        level: result.field === "level" ? result.message : undefined,
+        batch: result.field === "batch" ? result.message : undefined,
+        academyPlan: result.field === "academyPlan" ? result.message : undefined,
+      }
+      setErrors(nextFieldErrors)
+      setFeedback({ message: result.message, tone: "error" })
+      if (nextFieldErrors.trainingStartOn) trainingStartRef.current?.focus()
+      else if (nextFieldErrors.level) levelRef.current?.focus()
+      else if (nextFieldErrors.batch) batchRef.current?.focus()
+      else if (nextFieldErrors.academyPlan) planRef.current?.focus()
+      return
+    }
+    guard.navigateAfterCommit(() => onSuccess({
+      message: `${item.fullName}’s assessment is saved. Assign the matching session next.`,
+    }))
   }
 
   return (
@@ -593,30 +595,32 @@ function SessionStep({
     }
     setBusy(true)
     setFeedback(null)
+    let result: Awaited<ReturnType<typeof assignOnboardingSessionAction>>
     try {
-      const result = await assignOnboardingSessionAction({
+      result = await assignOnboardingSessionAction({
         effectiveFrom,
         playerId: item.id,
         seriesId: selectedSeries.id,
         weekdays,
       })
-      if (!result.ok) {
-        setFeedback({ message: result.message, tone: "error" })
-        return
-      }
-      guard.navigateAfterCommit(() => onSuccess({
-        message: item.feePlanRecorded
-          ? `${item.fullName}’s session is assigned. Their existing Fee Plan was retained.`
-          : `${item.fullName}’s session is assigned. Confirm the Fee Plan next.`,
-      }))
     } catch (error) {
       setFeedback({
         message: error instanceof Error ? error.message : "The session could not be assigned",
         tone: "error",
       })
+      return
     } finally {
       setBusy(false)
     }
+    if (!result.ok) {
+      setFeedback({ message: result.message, tone: "error" })
+      return
+    }
+    guard.navigateAfterCommit(() => onSuccess({
+      message: item.feePlanRecorded
+        ? `${item.fullName}’s session is assigned. Their existing Fee Plan was retained.`
+        : `${item.fullName}’s session is assigned. Confirm the Fee Plan next.`,
+    }))
   }
 
   if (!options.length) {
@@ -745,14 +749,24 @@ function FeePlanStep({
     if (busy) return
     setBusy(true)
     setFeedback(null)
-    setPreview(null)
-    setConfirmed(false)
-    const result = await resetOnboardingSessionAssignmentAction(item.id)
-    setBusy(false)
+    let result: Awaited<ReturnType<typeof resetOnboardingSessionAssignmentAction>>
+    try {
+      result = await resetOnboardingSessionAssignmentAction(item.id)
+    } catch (error) {
+      setFeedback({
+        message: error instanceof Error ? error.message : "The session assignment could not be reset",
+        tone: "error",
+      })
+      return
+    } finally {
+      setBusy(false)
+    }
     if (!result.ok) {
       setFeedback({ message: result.message, tone: "error" })
       return
     }
+    setPreview(null)
+    setConfirmed(false)
     guard.navigateAfterCommit(() => onSuccess({
       message: `${item.fullName}’s unfinished assignment was reset. Confirm the assessment again.`,
       remove: false,
@@ -823,67 +837,82 @@ function FeePlanStep({
       agreedMonthlyFeePaise: rupees * 100,
       monthlyDueDay: 5,
     }
-    setBusy(true)
-    setFeedback(null)
-    try {
-      if (!preview) {
-        const result = await previewOnboardingFinanceAction(terms)
-        if (!result.ok) {
-          setFeedback({ message: result.message, tone: "error" })
-          return
-        }
-        setPreview(result.data)
-        setConfirmed(false)
+    if (!preview) {
+      setBusy(true)
+      setFeedback(null)
+      let previewResult: Awaited<ReturnType<typeof previewOnboardingFinanceAction>>
+      try {
+        previewResult = await previewOnboardingFinanceAction(terms)
+      } catch (error) {
         setFeedback({
-          message: result.data.blockers.length
-            ? "Review the blockers below before completing onboarding."
-            : "Fee timeline ready. Confirm the permanent training start date to complete onboarding.",
-          tone: result.data.blockers.length ? "error" : "success",
-        })
-        return
-      }
-      if (preview.blockers.length) {
-        setFeedback({ message: "Resolve every blocker, then generate a fresh fee timeline.", tone: "error" })
-        return
-      }
-      if (!confirmed) {
-        setFeedback({
-          field: "confirmation",
-          message: "Confirm the permanent training start date before completing onboarding.",
+          message: error instanceof Error ? error.message : "The Fee Plan could not be saved",
           tone: "error",
         })
-        confirmationRef.current?.focus()
+        return
+      } finally {
+        setBusy(false)
+      }
+      if (!previewResult.ok) {
+        setFeedback({ message: previewResult.message, tone: "error" })
         return
       }
-      const result = await completeOnboardingFinanceAction({
+      setPreview(previewResult.data)
+      setConfirmed(false)
+      setFeedback({
+        message: previewResult.data.blockers.length
+          ? "Review the blockers below before completing onboarding."
+          : "Fee timeline ready. Confirm the permanent training start date to complete onboarding.",
+        tone: previewResult.data.blockers.length ? "error" : "success",
+      })
+      return
+    }
+    if (preview.blockers.length) {
+      setFeedback({ message: "Resolve every blocker, then generate a fresh fee timeline.", tone: "error" })
+      return
+    }
+    if (!confirmed) {
+      setFeedback({
+        field: "confirmation",
+        message: "Confirm the permanent training start date before completing onboarding.",
+        tone: "error",
+      })
+      confirmationRef.current?.focus()
+      return
+    }
+    setBusy(true)
+    setFeedback(null)
+    let result: Awaited<ReturnType<typeof completeOnboardingFinanceAction>>
+    try {
+      result = await completeOnboardingFinanceAction({
         ...terms,
         previewFingerprint: preview.fingerprint,
       })
-      if (!result.ok) {
-        if (result.code === "CONFLICT") {
-          setPreview(null)
-          setConfirmed(false)
-        }
-        setFeedback({
-          message: result.code === "CONFLICT"
-            ? `${result.message} Generate a fresh fee timeline.`
-            : result.message,
-          tone: "error",
-        })
-        return
-      }
-      guard.navigateAfterCommit(() => onSuccess({
-        message: `${item.fullName} is fully onboarded. ${result.message}.`,
-        remove: true,
-      }))
     } catch (error) {
       setFeedback({
         message: error instanceof Error ? error.message : "The Fee Plan could not be saved",
         tone: "error",
       })
+      return
     } finally {
       setBusy(false)
     }
+    if (!result.ok) {
+      if (result.code === "CONFLICT") {
+        setPreview(null)
+        setConfirmed(false)
+      }
+      setFeedback({
+        message: result.code === "CONFLICT"
+          ? `${result.message} Generate a fresh fee timeline.`
+          : result.message,
+        tone: "error",
+      })
+      return
+    }
+    guard.navigateAfterCommit(() => onSuccess({
+      message: `${item.fullName} is fully onboarded. ${result.message}.`,
+      remove: true,
+    }))
   }
 
   return (
