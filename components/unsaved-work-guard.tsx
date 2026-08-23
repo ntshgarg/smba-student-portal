@@ -95,28 +95,6 @@ export function UnsavedWorkProvider({ children }: { children: React.ReactNode })
     return override ?? onlySurface?.message ?? DEFAULT_WARNING
   }, [])
 
-  const grantOneNavigation = useCallback(() => {
-    allowNavigation.current = true
-    if (allowanceTimer.current !== null) window.clearTimeout(allowanceTimer.current)
-    allowanceTimer.current = window.setTimeout(() => {
-      allowNavigation.current = false
-      allowanceTimer.current = null
-    }, 1_000)
-  }, [])
-
-  const confirmNavigation = useCallback((message?: string) => {
-    if (!dirtySurfaces.current.size || allowNavigation.current) return true
-    const confirmed = window.confirm(dirtyMessage(message))
-    if (confirmed) grantOneNavigation()
-    return confirmed
-  }, [dirtyMessage, grantOneNavigation])
-
-  const confirmSurfaceDiscard = useCallback((id: string, message?: string) => {
-    const surface = dirtySurfaces.current.get(id)
-    if (!surface) return true
-    return window.confirm(message ?? surface.message)
-  }, [])
-
   const ensureHistoryBoundary = useCallback(() => {
     if (historyBoundaryReleaseTimer.current !== null) {
       window.clearTimeout(historyBoundaryReleaseTimer.current)
@@ -133,6 +111,34 @@ export function UnsavedWorkProvider({ children }: { children: React.ReactNode })
     )
     historyBoundaryActive.current = true
   }, [historyBoundaryToken])
+
+  const grantOneNavigation = useCallback(() => {
+    allowNavigation.current = true
+    if (allowanceTimer.current !== null) window.clearTimeout(allowanceTimer.current)
+    allowanceTimer.current = window.setTimeout(() => {
+      allowNavigation.current = false
+      allowanceTimer.current = null
+      // The allowance suppresses boundary creation while it lasts, so a surface
+      // that became dirty inside the window got no boundary and nothing else
+      // would ever give it one. The boundary follows from a surface being dirty,
+      // not from when it happened to become dirty, so it is re-evaluated the
+      // moment the suppression lifts.
+      if (dirtySurfaces.current.size) ensureHistoryBoundary()
+    }, 1_000)
+  }, [ensureHistoryBoundary])
+
+  const confirmNavigation = useCallback((message?: string) => {
+    if (!dirtySurfaces.current.size || allowNavigation.current) return true
+    const confirmed = window.confirm(dirtyMessage(message))
+    if (confirmed) grantOneNavigation()
+    return confirmed
+  }, [dirtyMessage, grantOneNavigation])
+
+  const confirmSurfaceDiscard = useCallback((id: string, message?: string) => {
+    const surface = dirtySurfaces.current.get(id)
+    if (!surface) return true
+    return window.confirm(message ?? surface.message)
+  }, [])
 
   const releaseHistoryBoundary = useCallback(() => {
     if (!historyBoundaryActive.current || historyBoundaryReleaseTimer.current !== null) return
@@ -182,9 +188,12 @@ export function UnsavedWorkProvider({ children }: { children: React.ReactNode })
     },
     setSurface(id, dirty, message) {
       if (dirty) {
-        const wasEmpty = dirtySurfaces.current.size === 0
         dirtySurfaces.current.set(id, { message })
-        if (wasEmpty) ensureHistoryBoundary()
+        // Asked for on every dirty registration rather than only the first.
+        // `ensureHistoryBoundary` is already idempotent — an active boundary
+        // returns early — and gating on an empty map meant a surface arriving
+        // while the boundary was missing could not restore it.
+        ensureHistoryBoundary()
       } else {
         dirtySurfaces.current.delete(id)
         if (!dirtySurfaces.current.size) releaseHistoryBoundary()
@@ -304,15 +313,28 @@ export function useUnsavedWorkGuard({
   const context = useContext(UnsavedWorkContext)
   const reactId = useId()
   const id = `${scope}:${reactId}`
-  const committedRef = useRef(false)
 
   if (!context) {
     throw new Error("useUnsavedWorkGuard must be used inside UnsavedWorkProvider")
   }
 
+  /**
+   * A commit's own navigation is covered by `commitSurfaceAndNavigate`, which
+   * removes the surface for exactly as long as it stays removed — until the
+   * consumer registers again.
+   *
+   * A latch was kept here instead, set on commit and cleared only when `isDirty`
+   * went false, and it suppressed every registration in between. `isDirty` is a
+   * boolean, so a registration reporting dirty work after a commit cannot be
+   * told apart from the work the commit saved; a surface edited again without
+   * passing through a clean state therefore stayed suppressed for the rest of
+   * its life. The latch could not earn that risk either: this effect only re-runs
+   * when `context`, `id`, `message` or `isDirty` change, and a commit is made
+   * from a dirty surface, so the one pass the latch could legitimately cover is
+   * the settling pass — which reports `isDirty` false and needs no suppression.
+   */
   useEffect(() => {
-    if (!isDirty) committedRef.current = false
-    context.setSurface(id, committedRef.current ? false : isDirty, message)
+    context.setSurface(id, isDirty, message)
     return () => context.removeSurface(id)
   }, [context, id, isDirty, message])
 
@@ -323,10 +345,7 @@ export function useUnsavedWorkGuard({
     ),
     confirmNavigation: context.confirmNavigation,
     navigateAfterCommit: useCallback(
-      (navigate: () => void) => {
-        committedRef.current = true
-        return context.commitSurfaceAndNavigate(id, navigate)
-      },
+      (navigate: () => void) => context.commitSurfaceAndNavigate(id, navigate),
       [context, id],
     ),
   }

@@ -3,11 +3,17 @@
 import { ArrowLeft, Check, RotateCcw, UsersRound } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { saveStaffAttendanceAction } from "@/app/coach/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import {
+  discardStaffAttendanceDraft,
+  persistStaffAttendanceDraft,
+  readStaffAttendanceDraft,
+  restoredAttendanceDraftNotice,
+} from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import type {
   StaffAttendanceChange,
@@ -80,6 +86,28 @@ export function StaffRollCall({
     [drafts],
   )
 
+  // The roll call is one day of marks, so the stored copy is keyed by date and
+  // can only ever return to the date it was made for — yesterday's marks cannot
+  // surface on today's register. Restoring is announced rather than silent:
+  // these are unsaved marks, not the saved record.
+  //
+  // Read after the mounting render rather than during it, as the report resume
+  // hint is (`components/coach/reports/report-resume.ts`), so the server-rendered
+  // roll call is what hydrates.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const restored = readStaffAttendanceDraft(selectedDate)
+      if (!restored.length) return
+      setDrafts(restored)
+      setFeedback({
+        message: restoredAttendanceDraftNotice(restored.length, "save staff attendance"),
+        tone: "info",
+      })
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [selectedDate])
+
   function resolvedChoice(coachAccountId: string) {
     return draftByCoach.get(coachAccountId)
       ?? storedByCoach.get(coachAccountId)
@@ -89,6 +117,7 @@ export function StaffRollCall({
   function chooseDate(dateKey: string) {
     if (!dateKey || dateKey === selectedDate) return
     if (drafts.length && !confirmDiscard()) return
+    if (drafts.length) discardStaffAttendanceDraft(selectedDate)
     setDrafts([])
     setFeedback(null)
     setSelectedDate(dateKey)
@@ -105,17 +134,20 @@ export function StaffRollCall({
     const base = storedByCoach.get(coachAccountId) ?? "cleared"
     const current = resolvedChoice(coachAccountId)
     const next = current === choice ? "cleared" : choice
-    setDrafts((current) => {
-      const rest = current.filter((draft) => draft.coachAccountId !== coachAccountId)
-      return next === base
-        ? rest
-        : [...rest, {
-          choice: next,
-          coachAccountId,
-          dateKey: selectedDate,
-          expectedChoice: base,
-        }]
-    })
+    // Resolved against this render's `drafts`, exactly as `resolvedChoice` above
+    // already is, so the next roll-call state is known here and can be stored on
+    // the same tick it is shown.
+    const rest = drafts.filter((draft) => draft.coachAccountId !== coachAccountId)
+    const nextDrafts = next === base
+      ? rest
+      : [...rest, {
+        choice: next,
+        coachAccountId,
+        dateKey: selectedDate,
+        expectedChoice: base,
+      }]
+    setDrafts(nextDrafts)
+    persistStaffAttendanceDraft(selectedDate, nextDrafts)
     setFeedback(null)
   }
 
@@ -142,6 +174,7 @@ export function StaffRollCall({
           })),
         ]
       })
+      discardStaffAttendanceDraft(selectedDate)
       setDrafts([])
       setFeedback({ message: "Staff attendance saved", tone: "success" })
     } catch (error) {
