@@ -252,15 +252,20 @@ async function newContext(browser: Browser) {
 async function settle(page: Page) {
   await page.waitForLoadState("domcontentloaded")
   await page.waitForLoadState("networkidle", { timeout: 2_000 }).catch(() => undefined)
-  await page.waitForFunction(() => document.title.trim().length > 0, undefined, {
-    timeout: 5_000,
-  }).catch(() => undefined)
   await page.evaluate(async () => {
     await document.fonts.ready.catch(() => undefined)
     await new Promise<void>((resolve) => {
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
     })
   })
+  // Next's streamed metadata can briefly replace the title after a responsive
+  // reflow. Let that transition finish before asking Axe to inspect the head;
+  // otherwise Axe can observe an empty intermediate <title> even though the
+  // page title is correct immediately before and after the audit.
+  await page.waitForTimeout(100)
+  await page.waitForFunction(() => document.title.trim().length > 0, undefined, {
+    timeout: 5_000,
+  }).catch(() => undefined)
 }
 
 async function auditCurrentPage({

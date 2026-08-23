@@ -116,25 +116,25 @@ describe("cross-weekday replacement eligibility", () => {
     const players = [
       {
         id: sourcePlayerId,
-        joinedAt: "2026-07-01",
+        trainingStartOn: "2026-07-01",
         weekday: 6,
         effectiveTo: null,
       },
       {
         id: endedPlayerId,
-        joinedAt: "2026-07-01",
+        trainingStartOn: "2026-07-01",
         weekday: 6,
         effectiveTo: "2026-08-01",
       },
       {
         id: joinedLaterPlayerId,
-        joinedAt: "2026-08-01",
+        trainingStartOn: "2026-08-01",
         weekday: 6,
         effectiveTo: null,
       },
       {
         id: targetDayPlayerId,
-        joinedAt: "2026-07-01",
+        trainingStartOn: "2026-07-01",
         weekday: 4,
         effectiveTo: null,
       },
@@ -157,7 +157,7 @@ describe("cross-weekday replacement eligibility", () => {
         batch: "Weekend",
         academyPlan: "weekend-standard",
         status: "active",
-        joinedAt: new Date(`${player.joinedAt}T00:00:00+05:30`),
+        trainingStartOn: player.trainingStartOn,
         updatedAt: setupNow,
       }).run()
       const assignmentId = `${player.id}-assignment`

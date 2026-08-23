@@ -12,6 +12,7 @@ import {
   createOrReplaceFeeAgreement,
   endFeeAgreement,
   FinanceServiceError,
+  previewPlayerOnboardingFinance,
   previewPaymentAllocations,
   previewRefundAllocations,
   prepareMonthlyCharges,
@@ -19,6 +20,7 @@ import {
   recordPayment,
   recordRefund,
   reconcileRegistrationStatus,
+  redateConfirmedTrainingStart,
   reverseChargeAdjustment,
   reverseConcession,
   reverseConcessionApplication,
@@ -30,6 +32,7 @@ import {
 import type {
   ApplyAdjustmentInput,
   ApplyConcessionInput,
+  CommitOnboardingFinanceInput,
   CreateFeeAgreementInput,
   CreateConcessionInput,
   ExistingPlayerFinanceSetupInput,
@@ -40,9 +43,12 @@ import type {
   PreviewPaymentAllocationsInput,
   PreviewRefundAllocationsInput,
   PaymentAllocationPreview,
+  OnboardingFinancePreview,
+  OnboardingFinanceTerms,
   RecordPaymentInput,
   RecordAllocatedPaymentInput,
   RecordRefundInput,
+  RedateConfirmedTrainingStartInput,
   RefundAllocationPreview,
   ReversePaymentInput,
   ReverseRefundInput,
@@ -150,20 +156,24 @@ export async function replaceFeeAgreementAction(
 }
 
 export async function completeOnboardingFinanceAction(
-  input: CreateFeeAgreementInput,
+  input: CommitOnboardingFinanceInput,
 ): Promise<FinanceActionResult> {
   return runFinanceAction((coachId) => {
     const result = completePlayerOnboardingFinance(input, { coachId })
     return {
       message: result.reused
         ? "Onboarding fees were already issued"
-        : result.firstMonthlyChargeId
-          ? `Registration and prorated first monthly fee issued for ${result.firstMonthlyRemainingSessions} of ${result.firstMonthlyTotalSessions} sessions`
-          : result.firstMonthlyTotalSessions !== null
-            ? "Registration fee issued; no monthly fee is due because no sessions remain this month"
-            : "Registration fee issued; the first monthly fee will join its selected month",
+        : result.createdMonthlyChargeIds.length
+          ? `Onboarding completed; registration and ${result.createdMonthlyChargeIds.length} ${result.createdMonthlyChargeIds.length === 1 ? "monthly fee" : "monthly fees"} issued`
+          : "Onboarding completed; registration fee issued and the monthly Fee Plan starts in its derived month",
     }
   })
+}
+
+export async function previewOnboardingFinanceAction(
+  input: OnboardingFinanceTerms,
+): Promise<FinanceDataActionResult<OnboardingFinancePreview>> {
+  return runFinanceQuery((coachId) => previewPlayerOnboardingFinance(input, { coachId }))
 }
 
 export async function endFeeAgreementAction(
@@ -172,6 +182,19 @@ export async function endFeeAgreementAction(
   return runFinanceAction((coachId) => {
     const result = endFeeAgreement(input, { coachId })
     return { message: result.reused ? "Fee plan already ended" : "Fee plan ended" }
+  })
+}
+
+export async function redateConfirmedTrainingStartAction(
+  input: RedateConfirmedTrainingStartInput,
+): Promise<FinanceActionResult> {
+  return runFinanceAction((coachId) => {
+    const result = redateConfirmedTrainingStart(input, { coachId })
+    return {
+      message: result.reused
+        ? "Training start date already corrected"
+        : `Training start date corrected to ${result.trainingStartOn}`,
+    }
   })
 }
 

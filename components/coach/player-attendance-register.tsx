@@ -353,7 +353,7 @@ export function PlayerAttendanceRegister({
                           const source = occurrenceById.get(adjustment.sourceOccurrenceId)
                           return Boolean(source
                             && source.seriesId === row.series.id
-                            && playerWasEnrolledForOccurrence(row.player.member.joinedAt, source)
+                            && playerWasEnrolledForOccurrence(row.player.member.trainingStartOn, source)
                             && assignmentCoversOccurrence(row.assignment, source))
                         })
                         const rowYearAdjustments = rowAdjustments.filter((adjustment) => (
@@ -405,7 +405,7 @@ export function PlayerAttendanceRegister({
                               const occurrence = occurrenceBySeriesDate.get(`${row.series.id}:${date.key}`)
                               const unavailable = !occurrence
                                 || occurrence.status !== "scheduled"
-                                || !playerWasEnrolledForOccurrence(row.player.member.joinedAt, occurrence)
+                                || !playerWasEnrolledForOccurrence(row.player.member.trainingStartOn, occurrence)
                                 || !assignmentCoversOccurrence(row.assignment, occurrence)
                               const future = occurrence ? occurrenceIsUpcoming(occurrence, referenceInstant) : false
                               const choice = occurrence ? attendanceRecords[occurrence.id]?.[row.player.member.id] : undefined

@@ -53,15 +53,15 @@ function writeDisposableDatabase<T>(operation: (database: BetterSqlite3.Database
 function readFixture(): FinanceFixture {
   return readDatabase((database) => {
     const row = database.prepare(`
-      select a.id as playerId, m.identifier as academyId, e.joined_at as joinedAt
+      select a.id as playerId, m.identifier as academyId, e.training_start_on as trainingStartOn
       from accounts a
       join auth_methods m on m.account_id = a.id
         and m.method = 'academy_id' and m.revoked_at is null
       join player_enrollments e on e.account_id = a.id
       where a.full_name = 'Finance Regression Player'
-    `).get() as { academyId: string; joinedAt: number; playerId: string } | undefined
+    `).get() as { academyId: string; trainingStartOn: string; playerId: string } | undefined
     if (!row) throw new Error("The finance regression player is unavailable.")
-    const today = new Date(row.joinedAt).toISOString().slice(0, 10)
+    const today = row.trainingStartOn
     const firstMonth = new Date(`${today.slice(0, 7)}-01T00:00:00.000Z`)
     firstMonth.setUTCMonth(firstMonth.getUTCMonth() + 1)
     return {
@@ -158,7 +158,9 @@ test("coach-to-player finance journey remains atomic, idempotent and private", a
   await page.goto(`/coach/onboarding?player=${fixture.playerId}`, { waitUntil: "networkidle" })
   await expect(page.getByRole("heading", { name: /Confirm .+ Fee Plan/u })).toBeVisible()
   await page.getByLabel("Agreed monthly fee").fill("3500")
-  await page.getByLabel("First fee month").fill(fixture.firstFeeMonth)
+  await page.getByRole("button", { name: "Review fee timeline" }).click()
+  await expect(page.getByRole("heading", { name: /onward/u })).toBeVisible()
+  await page.getByRole("checkbox").check()
   await page.getByRole("button", { name: "Complete onboarding & issue fees" }).click()
   await expect(page.getByRole("status").filter({ hasText: "fully onboarded" })).toBeVisible()
 

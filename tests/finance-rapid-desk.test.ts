@@ -42,7 +42,7 @@ describe("Financials Rapid Desk focused reads", () => {
       level: "Beginner",
       batch: "Weekday",
       status: "active",
-      joinedAt: now,
+      trainingStartOn: now.toISOString().slice(0, 10),
       updatedAt: now,
     }).run()
   }

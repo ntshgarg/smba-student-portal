@@ -104,7 +104,7 @@ function findPlayer(accountId: string) {
     academyPlan: playerEnrollments.academyPlan,
     level: playerEnrollments.level,
     status: playerEnrollments.status,
-    joinedAt: playerEnrollments.joinedAt,
+    trainingStartOn: playerEnrollments.trainingStartOn,
   })
     .from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
@@ -136,7 +136,7 @@ function toPlayerProfile(accountId: string): PlayerProfile | null {
     academyPlan: player.batch
       ? academyPlanSummary(player.batch, player.academyPlan)
       : "Assigned after assessment",
-    memberSince: player.joinedAt.toISOString(),
+    memberSince: player.trainingStartOn,
     currentFocus: player.status === "unassigned" ? "First assessment" : "Current training block",
     status: player.status,
   }

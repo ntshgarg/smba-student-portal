@@ -292,7 +292,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         && attendanceRecords[occurrence.id]?.[selectedPlayerId] === "present"
         && !usedCompletionIds.has(occurrence.id)
         && !legacyCompletionDates.has(occurrence.occurrenceDate)
-        && playerWasEnrolledForOccurrence(selectedPlayer.member.joinedAt, occurrence)
+        && playerWasEnrolledForOccurrence(selectedPlayer.member.trainingStartOn, occurrence)
         && playerAssignments.some((assignment) => (
           assignmentCoversOccurrence(assignment, occurrence)
         ))

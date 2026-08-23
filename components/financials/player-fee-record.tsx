@@ -165,6 +165,9 @@ function monthState(
     if (agreementStart && period < agreementStart) {
       return { detail: "", label: "Before plan", tone: "quiet" as const }
     }
+    if (record.financeTrackingMonth && period < record.financeTrackingMonth) {
+      return { detail: "", label: "Before tracking", tone: "quiet" as const }
+    }
     if (agreementEnd && period > agreementEnd) {
       return { detail: "", label: "Plan ended", tone: "quiet" as const }
     }

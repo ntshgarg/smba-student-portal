@@ -22,7 +22,7 @@ export function getPlayerAttendanceRecord(
   referenceInstant = new Date(),
 ): PlayerAttendanceRecord | null {
   const database = initializeDatabase()
-  const enrollment = database.select({ joinedAt: playerEnrollments.joinedAt })
+  const enrollment = database.select({ trainingStartOn: playerEnrollments.trainingStartOn })
     .from(playerEnrollments)
     .where(eq(playerEnrollments.accountId, accountId))
     .get()
@@ -52,7 +52,7 @@ export function getPlayerAttendanceRecord(
     return {
       referenceDate,
       referenceInstant: referenceInstant.toISOString(),
-      joinedOn: getIndiaDateKey(enrollment.joinedAt),
+      joinedOn: enrollment.trainingStartOn,
       years,
       sessions: [],
       assignments: [],
@@ -103,7 +103,7 @@ export function getPlayerAttendanceRecord(
   return {
     referenceDate,
     referenceInstant: referenceInstant.toISOString(),
-    joinedOn: getIndiaDateKey(enrollment.joinedAt),
+    joinedOn: enrollment.trainingStartOn,
     years,
     sessions: seriesRows.map((series) => {
       const slot = recurrenceRows.find((row) => row.seriesId === series.id)

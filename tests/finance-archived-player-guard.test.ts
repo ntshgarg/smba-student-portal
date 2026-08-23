@@ -50,7 +50,7 @@ describe("Financials archived-player mutation guard", () => {
       level: "Beginner",
       batch: "Weekday",
       status: "active",
-      joinedAt: now,
+      trainingStartOn: now.toISOString().slice(0, 10),
       updatedAt: now,
     }).run()
     const seriesId = `${playerId}-series`

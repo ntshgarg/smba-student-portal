@@ -124,9 +124,14 @@ The copier omits authentication sessions, one-time codes and security telemetry 
 containing application data. It accepts either a completely empty database or an
 empty schema already prepared by the Vercel build.
 
-Vercel runs migrations and the idempotent reference-data bootstrap as
-an explicit build step before starting application functions. Request handling
-never migrates or seeds the remote database. The local SQLite database is ignored by Git.
+A Vercel **Production** deployment runs migrations and the idempotent reference-data
+bootstrap as an explicit build step before starting application functions. Request
+handling never migrates or seeds the remote database. A deployment that is not
+production skips that step while it holds remote database credentials, unless its
+environment sets `SMBA_ALLOW_REMOTE_DB_MIGRATION=true` to declare the database
+disposable and its own; see
+[Environment separation](docs/PRODUCTION-OPERATIONS.md#environment-separation).
+The local SQLite database is ignored by Git.
 
 ## Authentication and account activation
 
@@ -198,8 +203,9 @@ one-use recovery codes must not be shared or photographed.
 3. The head coach reviews it in **Coach Workspace → Academy onboarding**. Player and junior-coach requests share the same ordered approval queue.
 4. Approval allocates a random, permanent `SMBA-JC-xxxx` or `SMBA-PL-xxxx` username. The original registration browser shows that Academy ID immediately, then requires a verified recovery email before password creation.
 5. A new player begins as **Unassigned**. Approval alone does not make the player attendance-eligible.
-6. The coach records one Level, one Weekday or Weekend Batch and an informational Academy Plan, then continues directly to matching recurring-session assignment. Weekday plans require an exact union of 3, 4 or 5 distinct weekdays across active assignments; the first complete assignment makes the player Active.
-7. Saved attendance is read from the same database by the player dashboard and coach report workflow.
+6. The coach confirms the academy-local Training start date together with one Level, one Weekday or Weekend Batch and an informational Academy Plan, then continues directly to matching recurring-session assignment. Weekday plans require an exact union of 3, 4 or 5 distinct weekdays across active assignments; the first complete assignment makes the player Active.
+7. The final Fee Plan review derives the continuous fee timeline, issues registration and applicable monthly Charges atomically, and permanently locks the Training start date when onboarding completes.
+8. Saved attendance is read from the same database by the player dashboard and coach report workflow.
 
 Duplicate names are allowed. Internal relationships use immutable account UUIDs, never Academy IDs.
 Academy IDs are immutable, human-friendly academy identifiers that are never edited or reused. Roster
@@ -221,7 +227,7 @@ membership does not depend on an Academy ID authentication method remaining acti
   idempotent legacy backfill treats every existing series/date row—including cancellations—as historical truth.
 - Level and Batch determine assignment eligibility; session assignments determine participation.
 - players may hold multiple matching, non-overlapping active session assignments, and each assignment owns its effective-dated weekday selection. Each occurrence is counted independently.
-- attendance eligibility requires a real, scheduled, non-cancelled occurrence covered by the player's assignment and on or after their joining date.
+- attendance eligibility requires a real, scheduled, non-cancelled occurrence covered by the player's assignment and on or after the head-coach-confirmed Training start date.
 - late assignment can expose already-existing past occurrences from its effective date, but it never invents sessions or marks them absent automatically.
 - attendance uses Asia/Kolkata date-only rules and is committed transactionally against occurrence and player UUIDs.
 - unmarked completed sessions remain pending and do not reduce the recorded attendance rate.
@@ -237,6 +243,9 @@ membership does not depend on an Academy ID authentication method remaining acti
   Payment/Refund reversal, Charge void, Adjustment and Concession facts so the original history
   remains visible. Human receipt and refund references are presentation identifiers; UUIDs remain
   the canonical relationship keys.
+- Player onboarding derives its first Fee Plan month from the confirmed Training start date and matching
+  assignment. It records pre-tracking periods without Charges, prorates the first eligible month by
+  calendar-date session eligibility, and rejects stale previews or conflicting existing ledger facts.
 - Coach Financial Records provides a calculator-backed Fee Register, Collections Day Book and
   readable Activity History. Private receipt and player-statement PDFs and CSV exports are generated
   on demand and never persisted. Fee Plans end through an explicit effective-dated, audited action;

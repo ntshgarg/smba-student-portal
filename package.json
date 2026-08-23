@@ -58,7 +58,7 @@
     "drizzle-orm": "^0.45.2",
     "libsql": "^0.5.29",
     "lucide-react": "^1.27.0",
-    "motion": "^12.43.0",
+    "motion": "^13.1.0",
     "next": "16.2.12",
     "pdfkit": "^0.19.1",
     "qrcode.react": "^4.2.0",

@@ -168,7 +168,7 @@ export function SessionCalendar({
 
   function occurrenceRoster(occurrence: TrainingSessionOccurrence) {
     return players.filter((player) => (
-      playerWasEnrolledForOccurrence(player.member.joinedAt, occurrence)
+      playerWasEnrolledForOccurrence(player.member.trainingStartOn, occurrence)
       && sessionAssignments.some((assignment) => (
         assignment.playerId === player.member.id
         && assignmentCoversOccurrence(assignment, occurrence)

@@ -63,11 +63,16 @@ export type OperationalAcademyMember = {
   role: "player"
   fullName: string
   initials: string
-  joinedAt: string
+  trainingStartOn: string
 }
 
 export type AcademyMember = OperationalAcademyMember & {
   academyId: string
+  requestedAt?: string
+  approvedAt?: string | null
+  trainingStartConfirmedAt?: string | null
+  activatedAt?: string | null
+  onboardingCompletedAt?: string | null
   primaryContact: {
     name: string
     relationship: string
@@ -105,8 +110,11 @@ export type OperationalPlayerMemberRecord = {
 
 export type MemberProfileUpdate = Pick<
   AcademyMember,
-  "fullName" | "joinedAt" | "primaryContact"
->
+  "fullName" | "primaryContact"
+> & {
+  /** Legacy callers may send this value; generic member edits never persist it. */
+  trainingStartOn?: string
+}
 
 export type PlayerTrainingUpdate = Pick<
   PlayerTrainingProfile,
@@ -115,7 +123,6 @@ export type PlayerTrainingUpdate = Pick<
 
 export type MemberField =
   | "fullName"
-  | "joinedAt"
   | "primaryContact.name"
   | "primaryContact.relationship"
   | "primaryContact.phone"

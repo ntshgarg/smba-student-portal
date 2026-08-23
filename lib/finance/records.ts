@@ -397,6 +397,7 @@ const ACTIVITY_ACTIONS: Record<FinanceAuditEventType, string> = {
   adjustment_created: "Fee adjustment recorded",
   adjustment_reversed: "Fee adjustment reversed",
   historical_reconciled: "Historical fee status recorded",
+  training_start_redated: "Training start date corrected",
 }
 
 function parseMetadata(value: string) {

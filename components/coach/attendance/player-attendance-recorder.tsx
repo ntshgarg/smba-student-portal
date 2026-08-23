@@ -136,7 +136,7 @@ export function PlayerAttendanceRecorder({
       occurrence: selectedOccurrence,
       players: players.map((player) => ({
         id: player.member.id,
-        joinedOn: player.member.joinedAt,
+        joinedOn: player.member.trainingStartOn,
       })),
     }))
     : new Set<string>()
