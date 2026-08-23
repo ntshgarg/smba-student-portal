@@ -13,6 +13,10 @@ import {
 const DEFAULT_WARNING = "You have unsaved changes. Leave without saving?"
 const HISTORY_BOUNDARY_KEY = "__smbaUnsavedWorkBoundary"
 
+function scheduleCommittedNavigation(navigate: () => void) {
+  window.queueMicrotask(navigate)
+}
+
 export function createCommittedNavigationCoordinator(
   schedule: (navigate: () => void) => void,
 ) {
@@ -51,6 +55,8 @@ type DirtySurface = {
 }
 
 type UnsavedWorkContextValue = {
+  // Always schedules `navigate`. The boolean reports whether the history
+  // boundary was released, which callers commonly have no reason to inspect.
   commitSurfaceAndNavigate: (id: string, navigate: () => void) => boolean
   confirmNavigation: (message?: string) => boolean
   confirmSurfaceDiscard: (id: string, message?: string) => boolean
@@ -77,9 +83,9 @@ export function UnsavedWorkProvider({ children }: { children: React.ReactNode })
   const committedNavigation = useRef<ReturnType<
     typeof createCommittedNavigationCoordinator
   > | null>(null)
-  committedNavigation.current ??= createCommittedNavigationCoordinator((navigate) => {
-    window.queueMicrotask(navigate)
-  })
+  committedNavigation.current ??= createCommittedNavigationCoordinator(
+    scheduleCommittedNavigation,
+  )
   const historyBoundaryToken = useId()
 
   const dirtyMessage = useCallback((override?: string) => {
@@ -145,7 +151,13 @@ export function UnsavedWorkProvider({ children }: { children: React.ReactNode })
   const value = useMemo<UnsavedWorkContextValue>(() => ({
     commitSurfaceAndNavigate(id, navigate) {
       dirtySurfaces.current.delete(id)
-      if (dirtySurfaces.current.size) return false
+      if (dirtySurfaces.current.size) {
+        // Another surface still guards unsaved work, so the history boundary has
+        // to stay. This surface was committed all the same, so its callback runs
+        // on the same schedule it would have used had the boundary been released.
+        scheduleCommittedNavigation(navigate)
+        return false
+      }
 
       if (historyBoundaryReleaseTimer.current !== null) {
         window.clearTimeout(historyBoundaryReleaseTimer.current)
