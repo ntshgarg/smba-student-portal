@@ -255,6 +255,7 @@ function ReportEditor({
   const publicationKeyRef = useRef<string | null>(null)
   const fieldId = `report-${player.member.id}-${month}`
   const feedbackId = `${fieldId}-feedback`
+  const helperId = `${fieldId}-helper`
   const reportTextInvalid = feedback?.tone === "error" && feedback.field === "reportText"
   const published = report?.published
   const isPublished = Boolean(published)
@@ -399,10 +400,10 @@ function ReportEditor({
       </dl>
 
       <form autoComplete="off" onSubmit={(event) => event.preventDefault()}>
-        <label className="coach-report-field" htmlFor={fieldId}>
+        <div className="coach-report-field">
           <span>
-            <strong>Coach’s report</strong>
-            <small>Required to publish. One or two clear paragraphs. Maximum 5,000 characters.</small>
+            <label htmlFor={fieldId}><strong>Coach’s report</strong></label>
+            <small id={helperId}>Required to publish. One or two clear paragraphs. Maximum 5,000 characters.</small>
           </span>
           <textarea
             ref={reportTextRef}
@@ -413,11 +414,14 @@ function ReportEditor({
             disabled={pendingAction !== null}
             value={reportText}
             aria-invalid={reportTextInvalid || undefined}
-            aria-describedby={reportTextInvalid ? feedbackId : undefined}
+            aria-describedby={reportTextInvalid ? `${helperId} ${feedbackId}` : helperId}
             placeholder="Write what changed, what became consistent, and what the player should carry into the next month."
             onChange={(event) => updateReportText(event.target.value)}
           />
-        </label>
+          <small className="coach-report-field-counter" aria-hidden="true">
+            {reportText.length.toLocaleString("en-IN")} / {REPORT_TEXT_MAX_LENGTH.toLocaleString("en-IN")}
+          </small>
+        </div>
 
         <div className="coach-report-editor-footer">
           <InlineNotice

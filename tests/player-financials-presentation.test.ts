@@ -184,8 +184,8 @@ function occurrenceCount(value: string, search: string) {
 
 describe("player financial presentation", () => {
   it("formats integer paise, date keys and billing periods for the player ledger", () => {
-    expect(formatFinanceAmount(100_000)).toBe("INR 1,000")
-    expect(formatFinanceAmount(100_050)).toBe("INR 1,000.50")
+    expect(formatFinanceAmount(100_000)).toBe("₹1,000")
+    expect(formatFinanceAmount(100_050)).toBe("₹1,000.50")
     expect(formatFinanceDate("2026-08-05")).toBe("5 August 2026")
     expect(formatBillingPeriod("2026-08")).toBe("August")
   })
@@ -212,7 +212,7 @@ describe("player financial presentation", () => {
       currentBalancePaise: 200_000,
       nextDueDate: "2026-08-05",
     })).toMatchObject({
-      status: "INR 2,000 remaining",
+      status: "₹2,000 remaining",
       detail: "A payment is recorded. The remaining balance is due by 5 August 2026.",
     })
     expect(dashboardFeeRecordCopy({
@@ -242,7 +242,7 @@ describe("player financial presentation", () => {
     const august = selectedMonthMarkup(html, "2026-08")
 
     expect(registration).toContain("Registration fee")
-    expect(registration).toContain("INR 1,000")
+    expect(registration).toContain("₹1,000")
     expect(registration).toContain("Paid")
     expect(registration).not.toContain("Paid on")
     expect(registration).not.toContain("Settlement")
@@ -250,7 +250,7 @@ describe("player financial presentation", () => {
     expect(registration).not.toContain("Fee reference")
     expect(registration).not.toContain("SMBA-REG-0002")
     expect(html).toContain("data-selected-fee-month=\"2026-08\"")
-    expect(html).toContain("INR 500 due")
+    expect(html).toContain("₹500 due")
     expect(html).toContain("Partially paid")
     expect(august).toContain("Monthly fee received")
     expect(august).not.toContain("Net received")
@@ -298,7 +298,7 @@ describe("player financial presentation", () => {
     const registration = registrationMarkup(html, "due")
 
     expect(registration).toContain("Registration fee")
-    expect(registration).toContain("INR 500")
+    expect(registration).toContain("₹500")
     expect(registration).toContain(">Due<")
     expect(registration).not.toContain("Received")
     expect(registration).not.toContain("Remaining")
@@ -323,7 +323,7 @@ describe("player financial presentation", () => {
     expect(july).toContain("Registration receipt")
     expect(july).toContain("SMBA-RCP-REGISTRATION")
     expect(july).toContain("Registration fee")
-    expect(july).toContain("INR 1,000")
+    expect(july).toContain("₹1,000")
     expect(july).not.toContain("Monthly fee received")
     expect(july).not.toContain("Fee charged")
     expect(july).not.toContain("Due date")
@@ -386,9 +386,9 @@ describe("player financial presentation", () => {
     expect(august).toContain("Registration + monthly receipt")
     expect(august).toContain("Registration fee")
     expect(august).toContain("August monthly fee")
-    expect(august).toContain("INR 1,000")
-    expect(august).toContain("INR 3,000")
-    expect(august).toContain("INR 4,000")
+    expect(august).toContain("₹1,000")
+    expect(august).toContain("₹3,000")
+    expect(august).toContain("₹4,000")
     expect(occurrenceCount(august, "SMBA-RCP-COMBINED")).toBe(1)
   })
 
@@ -605,7 +605,7 @@ describe("player financial presentation", () => {
 
     expect(html).toContain("Closed after withdrawal")
     expect(html).toContain("Offline paid")
-    expect(html).toContain("INR 3,500")
+    expect(html).toContain("₹3,500")
     expect(html).toContain("Unused-training credit")
     expect(html).toContain("Refund issued")
     expect(html).toContain("SMBA-RFD-AUGUST")

@@ -15,10 +15,10 @@ export function SessionsCard({
   todaySessionCount: number
 }) {
   const status = todaySessionCount
-    ? `${todaySessionCount} today`
+    ? { count: todaySessionCount, unit: "today" } as const
     : nextSessionLabel
-      ? "Next session"
-      : "No sessions"
+      ? { state: "Clear" } as const
+      : { state: "Setup" } as const
   const detail = todaySessionCount
     ? `${todaySessionCount} ${todaySessionCount === 1 ? "session" : "sessions"} today. Today’s running sheet and future schedules.`
     : nextSessionLabel

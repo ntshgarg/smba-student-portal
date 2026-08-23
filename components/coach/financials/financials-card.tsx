@@ -52,10 +52,9 @@ export function FinancialsCard({
       area="financials"
       status={active
         ? attentionCount > 0
-          ? `${attentionCount} attention`
-          : "Ready"
-        : "Setup"}
-      statusTone={active && attentionCount > 0 ? "attention" : undefined}
+          ? { count: attentionCount, unit: "attention", tone: "attention" }
+          : { state: "Clear" }
+        : { state: "Setup" }}
       title="Financials"
       titleId="coach-financials-card-title"
     >

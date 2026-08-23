@@ -17,11 +17,15 @@ export function MembersCard({
   return (
     <CoachDashboardCard
       area="members"
-      status="Roster current"
+      status={memberCount > 0 ? { state: "Clear" } : { state: "Setup" }}
       title="Members"
       titleId="coach-members-card-title"
     >
-      <CoachDashboardSummary detail="The academy directory is up to date.">
+      <CoachDashboardSummary
+        detail={memberCount > 0
+          ? "Approved players and staff, with their training and contact records."
+          : "Approved players and staff appear here once onboarding is complete."}
+      >
         {memberLabel}
       </CoachDashboardSummary>
       <CoachDashboardActions ariaLabel="Member actions">

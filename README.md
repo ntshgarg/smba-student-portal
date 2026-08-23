@@ -124,9 +124,14 @@ The copier omits authentication sessions, one-time codes and security telemetry 
 containing application data. It accepts either a completely empty database or an
 empty schema already prepared by the Vercel build.
 
-Vercel runs migrations and the idempotent reference-data bootstrap as
-an explicit build step before starting application functions. Request handling
-never migrates or seeds the remote database. The local SQLite database is ignored by Git.
+A Vercel **Production** deployment runs migrations and the idempotent reference-data
+bootstrap as an explicit build step before starting application functions. Request
+handling never migrates or seeds the remote database. A deployment that is not
+production skips that step while it holds remote database credentials, unless its
+environment sets `SMBA_ALLOW_REMOTE_DB_MIGRATION=true` to declare the database
+disposable and its own; see
+[Environment separation](docs/PRODUCTION-OPERATIONS.md#environment-separation).
+The local SQLite database is ignored by Git.
 
 ## Authentication and account activation
 

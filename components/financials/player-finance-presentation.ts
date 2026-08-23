@@ -27,12 +27,12 @@ const PAYMENT_METHOD_LABELS: Record<PaymentView["method"], string> = {
 
 export function formatFinanceAmount(amountPaise: number) {
   const hasPaise = amountPaise % 100 !== 0
-  const formatted = new Intl.NumberFormat("en-IN", {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
     minimumFractionDigits: hasPaise ? 2 : 0,
     maximumFractionDigits: 2,
   }).format(amountPaise / 100)
-
-  return `INR ${formatted}`
 }
 
 export function formatFinanceDate(dateKey: string) {
