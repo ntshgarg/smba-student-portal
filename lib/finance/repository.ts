@@ -497,21 +497,45 @@ function chargeView(
   return view
 }
 
+/**
+ * Reads a whole set of charges in four queries instead of four per charge. The
+ * map is keyed by charge ID and iterates in the requested order; charges that do
+ * not exist are absent from it, exactly as `loadChargeView` returns null.
+ */
+export function loadChargeViews(
+  database: Executor,
+  chargeIds: string[],
+  now = new Date(),
+  includeInternal = false,
+) {
+  const views = new Map<string, ChargeView>()
+  const ids = [...new Set(chargeIds)]
+  if (!ids.length) return views
+
+  const charges = new Map(database.select().from(financialCharges)
+    .where(inArray(financialCharges.id, ids)).all()
+    .map((charge) => [charge.id, charge]))
+  const relations = loadChargeRelations(database, [...charges.keys()])
+  ids.forEach((chargeId) => {
+    const charge = charges.get(chargeId)
+    if (!charge) return
+    views.set(chargeId, chargeView(
+      charge,
+      relations.get(chargeId) ?? emptyChargeRelations(),
+      now,
+      includeInternal,
+    ))
+  })
+  return views
+}
+
 export function loadChargeView(
   database: Executor,
   chargeId: string,
   now = new Date(),
   includeInternal = false,
 ) {
-  const charge = readCharge(database, chargeId)
-  if (!charge) return null
-  const relations = loadChargeRelations(database, [charge.id])
-  return chargeView(
-    charge,
-    relations.get(charge.id) ?? emptyChargeRelations(),
-    now,
-    includeInternal,
-  )
+  return loadChargeViews(database, [chargeId], now, includeInternal).get(chargeId) ?? null
 }
 
 type ReceiptAllocationRow = {
