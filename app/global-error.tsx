@@ -1,6 +1,7 @@
 "use client"
 
 import { RouteErrorState } from "@/components/route-recovery"
+import { useErrorReport } from "@/lib/telemetry/use-error-report"
 
 import "./globals.css"
 
@@ -11,7 +12,12 @@ const rootFontFallback = ":root{"
   + "--font-newsreader:Georgia,\"Times New Roman\",serif"
   + "}"
 
-export default function GlobalError({ reset }: { reset: () => void }) {
+export default function GlobalError({ error, reset }: { error: Error; reset: () => void }) {
+  // Safe here because useErrorReport reaches nothing beyond React and two
+  // dependency-free modules. This boundary renders when the root layout has
+  // already failed, so it cannot rely on the database, fonts or a provider.
+  useErrorReport("global", error)
+
   return (
     <html lang="en">
       <body>

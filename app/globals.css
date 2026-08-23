@@ -1,5 +1,49 @@
 @import "tailwindcss";
 
+/* --- BEGIN generated rupee subset (build-rupee-css.mjs) --- */
+/* `₹` (U+20B9) is the only character this app renders outside Google's `latin`
+   subset, and next/font emits an @font-face rule for every subset the family
+   publishes. Blink therefore fetched a whole `latin-ext` file per family as soon
+   as a currency string painted: 15 KB on `/`, 40 KB on `/player` and `/coach`,
+   and 52 KB across two files on `/coach/financials/records` — to draw one glyph.
+
+   These faces re-declare U+20B9 for the same families. next/font's stylesheet is
+   emitted before this one, and for overlapping unicode-ranges within a family the
+   last rule declared wins, so these take the match and the latin-ext files are
+   never requested. Each file in public/fonts/ is that same family's own outline
+   for U+20B9, subset from the file next/font already builds, with the 200-800
+   weight axis intact — so the rendered symbol is identical at every weight and
+   size. See public/fonts/README.md.
+
+   Regenerate after a font version bump:
+     node output/perf-rupee/build-rupee-css.mjs <built-tree> \
+       --assets public/fonts --write app/globals.css */
+@font-face {
+  font-family: Manrope;
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/manrope-normal-rupee.woff2") format("woff2");
+  unicode-range: U+20B9;
+}
+@font-face {
+  font-family: Newsreader;
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/newsreader-italic-rupee.woff2") format("woff2");
+  unicode-range: U+20B9;
+}
+@font-face {
+  font-family: Newsreader;
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/newsreader-normal-rupee.woff2") format("woff2");
+  unicode-range: U+20B9;
+}
+/* --- END generated rupee subset --- */
+
 :root {
   --ivory: #f7f5f0;
   --ivory-deep: #efebe3;

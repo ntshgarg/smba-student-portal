@@ -9,11 +9,29 @@ const manrope = Manrope({
   display: "swap",
 })
 
+// Newsreader ships one file per style and the two are used on complementary
+// surfaces: italic carries the editorial voice above the fold on /, /player and
+// /coach, while upright Newsreader appears only on the auth forms and the
+// operational registers, always as secondary copy. Preloading both from here
+// made every route download ~58 KB of font it never rendered, so only the
+// italic face keeps its preload.
 const newsreader = Newsreader({
   variable: "--font-newsreader",
   subsets: ["latin"],
-  style: ["normal", "italic"],
+  style: ["italic"],
   display: "swap",
+})
+
+// Same family, so `--font-newsreader` resolves to these faces too; declared
+// separately only so its preload can be dropped. The variable it defines is
+// deliberately unread — it exists to keep this instance's @font-face rules in
+// the root layout's stylesheet.
+const newsreaderUpright = Newsreader({
+  variable: "--font-newsreader-upright",
+  subsets: ["latin"],
+  style: ["normal"],
+  display: "swap",
+  preload: false,
 })
 
 export const metadata: Metadata = {
@@ -67,7 +85,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${manrope.variable} ${newsreader.variable}`}>
+      <body className={`${manrope.variable} ${newsreader.variable} ${newsreaderUpright.variable}`}>
         {children}
       </body>
     </html>

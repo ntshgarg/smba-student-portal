@@ -4,8 +4,17 @@ import { ArrowLeft, CircleAlert } from "lucide-react"
 import Link from "next/link"
 
 import styles from "@/components/coach/financials/financials.module.css"
+import { useErrorReport } from "@/lib/telemetry/use-error-report"
 
-export default function CoachFinancialsError({ reset }: { reset: () => void }) {
+export default function CoachFinancialsError({
+  error,
+  reset,
+}: {
+  error: Error
+  reset: () => void
+}) {
+  useErrorReport("coach_financials", error)
+
   return (
     <div className={`${styles.workspace} page-shell`}>
       <div className={styles.backRow}>

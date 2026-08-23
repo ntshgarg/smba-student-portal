@@ -28,6 +28,12 @@ import {
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
 } from "@/lib/attendance/recording-workspace"
+import {
+  discardPlayerAttendanceDraft,
+  persistPlayerAttendanceDraft,
+  readPlayerAttendanceDraft,
+  restoredAttendanceDraftNotice,
+} from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import {
   academyTimeInputValue,
@@ -116,6 +122,29 @@ export function PlayerAttendanceRecorder({
     return () => window.clearInterval(timer)
   }, [])
 
+  // Marks the coach never got to save survive only here. The stored copy is
+  // keyed by occurrence, so it can come back to the register it was made on and
+  // nowhere else. Restoring is announced rather than silent: these are unsaved
+  // marks, not saved state, and the coach has to know which they are looking at.
+  //
+  // Read after the mounting render rather than during it, as the report resume
+  // hint is (`components/coach/reports/report-resume.ts`), so the server-rendered
+  // register is what hydrates.
+  useEffect(() => {
+    if (!selectedOccurrenceId) return
+    const timer = window.setTimeout(() => {
+      const restored = readPlayerAttendanceDraft(selectedOccurrenceId)
+      if (!restored.length) return
+      setDraftChanges(restored)
+      setFeedback({
+        message: restoredAttendanceDraftNotice(restored.length, "save attendance"),
+        tone: "info",
+      })
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [selectedOccurrenceId])
+
   const seriesById = useMemo(
     () => new Map(sessionSeries.map((series) => [series.id, series])),
     [sessionSeries],
@@ -174,6 +203,7 @@ export function PlayerAttendanceRecorder({
   function discardDraftForSelectionChange() {
     if (!draftChanges.length) return true
     if (!confirmDiscard()) return false
+    if (selectedOccurrenceId) discardPlayerAttendanceDraft(selectedOccurrenceId)
     setDraftChanges([])
     setFeedback(null)
     return true
@@ -208,18 +238,21 @@ export function PlayerAttendanceRecorder({
     const base = attendanceRecords[selectedOccurrence.id]?.[playerId]
     const current = resolvedChoice(playerId)
     const next = current === choice ? "cleared" : choice
-    setDraftChanges((changes) => {
-      const rest = changes.filter((change) => change.playerId !== playerId)
-      const matchesBase = next === base || (next === "cleared" && !base)
-      return matchesBase
-        ? rest
-        : [...rest, {
-          choice: next,
-          expectedChoice: base ?? "cleared",
-          occurrenceId: selectedOccurrence.id,
-          playerId,
-        }]
-    })
+    // Resolved against this render's `draftChanges`, exactly as `resolvedChoice`
+    // above already is, so the next register state is known here and can be
+    // stored on the same tick it is shown.
+    const rest = draftChanges.filter((change) => change.playerId !== playerId)
+    const matchesBase = next === base || (next === "cleared" && !base)
+    const nextChanges: SessionAttendanceChange[] = matchesBase
+      ? rest
+      : [...rest, {
+        choice: next,
+        expectedChoice: base ?? "cleared",
+        occurrenceId: selectedOccurrence.id,
+        playerId,
+      }]
+    setDraftChanges(nextChanges)
+    persistPlayerAttendanceDraft(selectedOccurrence.id, nextChanges)
     setFeedback(null)
   }
 
@@ -236,6 +269,7 @@ export function PlayerAttendanceRecorder({
         setFeedback({ message: result.message, tone: "error" })
         return
       }
+      discardPlayerAttendanceDraft(selectedOccurrence.id)
       setDraftChanges([])
       setFeedback({ message: "Attendance saved", tone: "success" })
     } catch (error) {

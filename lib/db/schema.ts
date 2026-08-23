@@ -381,6 +381,49 @@ export const operationalEvents = sqliteTable("operational_events", {
   index("operational_events_fingerprint_idx").on(table.fingerprint, table.occurredAt),
 ])
 
+// The browser-side counterpart to operational_events, which instrumentation.ts
+// already fills for server request errors. It holds the same class of record:
+// a sanitized fingerprint and a route template, never exception text, a stack,
+// a resolved URL or a query string. The occurred_at index exists so the 90-day
+// retention baseline for sanitized application-error events can be applied as a
+// single indexed range delete.
+export const clientErrorReports = sqliteTable("client_error_reports", {
+  id: text("id").primaryKey(),
+  eventType: text("event_type", {
+    enum: ["client_error", "unhandled_rejection"],
+  }).notNull(),
+  boundary: text("boundary", {
+    enum: [
+      "root",
+      "global",
+      "student",
+      "coach",
+      "coach_financials",
+      "player_financials",
+      "window",
+    ],
+  }).notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  routePath: text("route_path").notNull(),
+  errorName: text("error_name").notNull(),
+  digest: text("digest"),
+  accountId: text("account_id").references(() => accounts.id),
+  occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("client_error_reports_type_occurred_idx").on(table.eventType, table.occurredAt),
+  index("client_error_reports_fingerprint_idx").on(table.fingerprint, table.occurredAt),
+  index("client_error_reports_occurred_idx").on(table.occurredAt),
+  index("client_error_reports_account_idx").on(table.accountId),
+  check(
+    "client_error_reports_event_type_check",
+    sql`${table.eventType} in ('client_error', 'unhandled_rejection')`,
+  ),
+  check(
+    "client_error_reports_boundary_check",
+    sql`${table.boundary} in ('root', 'global', 'student', 'coach', 'coach_financials', 'player_financials', 'window')`,
+  ),
+])
+
 export const coachProfiles = sqliteTable("coach_profiles", {
   accountId: text("account_id").primaryKey().references(() => accounts.id),
   accessLevel: text("access_level", {

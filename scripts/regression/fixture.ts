@@ -62,6 +62,7 @@ const REQUIRED_CURRENT_TABLES = [
   "auth_users",
   "auth_verifications",
   "operational_events",
+  "client_error_reports",
   "broadcasts",
   "broadcast_audience_targets",
   "broadcast_channels",
@@ -102,6 +103,7 @@ const CLEAN_OPERATIONAL_TABLES = [
   "broadcast_withdrawals",
   "auth_setup_claims",
   "operational_events",
+  "client_error_reports",
 ] as const
 const selectedProfile = resolveFixtureProfile((() => {
   const args = process.argv.slice(2)
