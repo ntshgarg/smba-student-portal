@@ -27,6 +27,8 @@ export type AccessibilityActor =
 
 export type AccessibilityInteraction =
   | "account-security-errors"
+  | "announcement-review-open"
+  | "announcement-withdraw-open"
   | "authenticator-recovery-queue"
   | "attendance-session-open"
   | "calendar-session-open"
@@ -43,7 +45,14 @@ export type AccessibilityInteraction =
   | "register-error"
   | "register-junior-coach"
   | "report-preview-open"
+  | "report-publication-open"
   | "search-admin-directory"
+
+// Deterministic ids the stress fixture builder assigns, so parameterised routes
+// can be deep-linked the same way the query-string routes below already are.
+// Report publications get random ids, so those routes are reached by interaction.
+const stressAnnouncementId = "00000000-0000-4000-8003-000000000001"
+const stressHomepageAnnouncementId = "00000000-0000-4000-8003-000000000002"
 
 export type AccessibilityState = {
   actor: AccessibilityActor
@@ -157,6 +166,13 @@ export const accessibilityStates: readonly AccessibilityState[] = [
     route: "/auth/two-factor/recovery",
   },
   {
+    actor: "guest",
+    description: "Unknown address",
+    id: "not-found",
+    profile: "admin",
+    route: "/this-address-does-not-exist",
+  },
+  {
     actor: "platform-admin",
     description: "Platform-owner directory",
     id: "admin-dashboard",
@@ -203,6 +219,23 @@ export const accessibilityStates: readonly AccessibilityState[] = [
     id: "clean-activation-baseline",
     profile: "clean",
     route: "/activate",
+  },
+  {
+    actor: "head-coach",
+    compact: true,
+    // Only the clean academy has no finance-activation audit event, so this is
+    // the one profile where the route renders instead of redirecting to records.
+    description: "Financial tracking not yet started",
+    id: "coach-financials-activation",
+    profile: "clean",
+    route: "/coach/financials",
+  },
+  {
+    actor: "guest",
+    description: "Public academy notice",
+    id: "public-announcement-detail",
+    profile: "stress",
+    route: `/announcements/${stressHomepageAnnouncementId}`,
   },
   {
     actor: "head-coach",
@@ -322,6 +355,31 @@ export const accessibilityStates: readonly AccessibilityState[] = [
   },
   {
     actor: "head-coach",
+    compact: true,
+    description: "Announcement composer review dialog",
+    id: "coach-announcement-review",
+    interaction: "announcement-review-open",
+    profile: "stress",
+    route: "/coach/announcements/new",
+  },
+  {
+    actor: "head-coach",
+    description: "Published announcement detail",
+    id: "coach-announcement-detail",
+    profile: "stress",
+    route: `/coach/announcements/${stressAnnouncementId}`,
+  },
+  {
+    actor: "head-coach",
+    compact: true,
+    description: "Announcement withdrawal dialog",
+    id: "coach-announcement-withdraw",
+    interaction: "announcement-withdraw-open",
+    profile: "stress",
+    route: `/coach/announcements/${stressAnnouncementId}`,
+  },
+  {
+    actor: "head-coach",
     description: "Published monthly reports",
     id: "coach-reports",
     profile: "stress",
@@ -335,6 +393,14 @@ export const accessibilityStates: readonly AccessibilityState[] = [
     interaction: "report-preview-open",
     profile: "stress",
     route: "/coach/reports/write?period=2026-08",
+  },
+  {
+    actor: "head-coach",
+    description: "Published report detail with a revision history",
+    id: "coach-report-publication",
+    interaction: "report-publication-open",
+    profile: "stress",
+    route: "/coach/reports?period=2026-07",
   },
   {
     actor: "head-coach",

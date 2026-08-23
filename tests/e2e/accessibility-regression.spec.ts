@@ -916,11 +916,35 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
           secret,
           testInfo,
         })
+        // Before the activation walkthrough approves and rejects registrations,
+        // so head-coach states still see the pristine clean academy.
+        await scanContextStates({
+          page: coach.page,
+          results,
+          states: selectedStatesForProfile(profile).filter((state) => state.actor === "head-coach"),
+          testInfo,
+        })
         await auditCleanActivationStates(browser, coach.page, results, testInfo)
         await coach.context.close()
       }
 
       if (profile === "stress") {
+        // Public surfaces that need published content have to be audited here:
+        // the stress academy is the only fixture that has any.
+        const guestStates = selectedStatesForProfile(profile)
+          .filter((state) => state.actor === "guest")
+        if (guestStates.length) {
+          const guestContext = await newContext(browser)
+          const guestPage = await guestContext.newPage()
+          await scanContextStates({
+            page: guestPage,
+            results,
+            states: guestStates,
+            testInfo,
+          })
+          await guestContext.close()
+        }
+
         for (const actor of ["head-coach", "junior-coach", "player"] as const) {
           const actorStates = selectedStatesForProfile(profile).filter((state) => state.actor === actor)
           if (!actorStates.length) continue
