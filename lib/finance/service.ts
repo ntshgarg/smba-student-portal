@@ -54,6 +54,7 @@ import {
   listMonthlyPreparationCandidates,
   listPreparedPlayerIds,
   loadChargeView,
+  loadPeriodAssignmentIndex,
   loadPlayerFeeRecord,
   readActiveFeeAgreement,
   readActivePlayer,
@@ -61,6 +62,7 @@ import {
   readCharge,
   readFinanceActivation,
   readFirstAssignmentDate,
+  readFirstAssignmentDates,
   readFirstMonthSessionProration,
   hasAssignmentInPeriod,
   hasCurrentOrFutureMatchingAssignment,
@@ -663,18 +665,17 @@ function monthlyPreparationCandidates(
       candidatesByPlayer.set(playerId, candidate)
     }
   })
-  return [...candidatesByPlayer.values()].map((candidate) => ({
+  const candidates = [...candidatesByPlayer.values()]
+  const playerIds = candidates.map((candidate) => candidate.agreement.playerAccountId)
+  const firstAssignments = readFirstAssignmentDates(database, playerIds)
+  const periodAssignments = loadPeriodAssignmentIndex(database, playerIds, period)
+  return candidates.map((candidate) => ({
     ...candidate,
-    firstAssignment: readFirstAssignmentDate(database, candidate.agreement.playerAccountId),
-    hasAssignment: hasAssignmentInPeriod(
-      database,
-      candidate.agreement.playerAccountId,
-      period,
-      {
-        programme: candidate.agreement.level,
-        batch: candidate.agreement.batch,
-      },
-    ),
+    firstAssignment: firstAssignments.get(candidate.agreement.playerAccountId) ?? null,
+    hasAssignment: periodAssignments.has(candidate.agreement.playerAccountId, {
+      programme: candidate.agreement.level,
+      batch: candidate.agreement.batch,
+    }),
   }))
 }
 
