@@ -87,7 +87,7 @@ describe("shared academy session workflow", () => {
     joined.setUTCDate(joined.getUTCDate() - 7)
     const joinedOn = joined.toISOString().slice(0, 10)
     database.update(schema.playerEnrollments).set({
-      joinedAt: joined,
+      trainingStartOn: joined.toISOString().slice(0, 10),
       batch: "Weekend",
       level: "Beginner",
       academyPlan: "weekend-standard",
@@ -518,7 +518,7 @@ describe("shared academy session workflow", () => {
       database.update(schema.playerEnrollments).set({
         academyPlan: fixture.plan,
         batch: "Weekday",
-        joinedAt: new Date(`${startsOn}T00:00:00.000Z`),
+        trainingStartOn: startsOn,
         level: fixture.level,
         status: "unassigned",
         updatedAt: now,

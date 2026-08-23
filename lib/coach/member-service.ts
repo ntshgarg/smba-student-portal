@@ -1,8 +1,7 @@
 import "server-only"
 
-import { and, asc, eq, isNull, sql } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 
-import { isValidDateKey } from "@/lib/attendance/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import {
   formatAcademyId,
@@ -10,7 +9,6 @@ import {
   normalizeFullName,
   normalizedNameKey,
 } from "@/lib/auth/identity"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import type {
   ArchiveMemberInput,
   ArchiveMemberResult,
@@ -56,8 +54,6 @@ type ValidatedMemberUpdate = {
   contactPhone: string | null
   contactRelationship: string | null
   fullName: string
-  joinedAt: Date
-  joinedOn: string
   level: TrainingProgramme | null
 }
 
@@ -82,11 +78,6 @@ function validateMemberUpdate(input: UpdateMemberInput):
   const fullName = fullNameInput === null ? "" : normalizeFullName(fullNameInput)
   if (fullName.length < 2 || fullName.length > 80) {
     fieldErrors.fullName = "Enter a player name between 2 and 80 characters."
-  }
-
-  const joinedOn = textValue(input.profile?.joinedAt) ?? ""
-  if (!isValidDateKey(joinedOn)) {
-    fieldErrors.joinedAt = "Choose a valid joining date."
   }
 
   const rawLevel = input.training?.level as unknown
@@ -177,8 +168,6 @@ function validateMemberUpdate(input: UpdateMemberInput):
       contactPhone: hasContact ? contactPhone : null,
       contactRelationship: hasContact ? contactRelationship : null,
       fullName,
-      joinedAt: new Date(`${joinedOn}T00:00:00.000Z`),
-      joinedOn,
       level: level as TrainingProgramme | null,
     },
   }
@@ -189,6 +178,7 @@ export function readCanonicalPlayerRecord(
   memberId: string,
 ): PlayerMemberRecord | null {
   const row = database.select({
+    activatedAt: authCredentialStates.activatedAt,
     academyIdSerial: academyIdAllocations.serial,
     academyPlan: playerEnrollments.academyPlan,
     ageGroup: playerEnrollments.ageGroup,
@@ -198,13 +188,18 @@ export function readCanonicalPlayerRecord(
     contactRelationship: playerEnrollments.primaryContactRelationship,
     fullName: accounts.fullName,
     id: accounts.id,
-    joinedAt: playerEnrollments.joinedAt,
+    approvedAt: accounts.approvedAt,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
+    requestedAt: accounts.createdAt,
+    trainingStartOn: playerEnrollments.trainingStartOn,
+    trainingStartConfirmedAt: playerEnrollments.trainingStartConfirmedAt,
     level: playerEnrollments.level,
     recordRevision: playerEnrollments.recordRevision,
     status: playerEnrollments.status,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
+    .leftJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
     .where(and(
       eq(accounts.id, memberId),
       eq(accounts.role, "player"),
@@ -231,9 +226,14 @@ export function readCanonicalPlayerRecord(
       id: row.id,
       role: "player",
       academyId: formatAcademyId(row.academyIdSerial),
+      activatedAt: row.activatedAt?.toISOString() ?? null,
+      approvedAt: row.approvedAt?.toISOString() ?? null,
       fullName: row.fullName,
       initials: identityNameParts(row.fullName).initials,
-      joinedAt: getIndiaDateKey(row.joinedAt),
+      onboardingCompletedAt: row.onboardingCompletedAt?.toISOString() ?? null,
+      requestedAt: row.requestedAt.toISOString(),
+      trainingStartOn: row.trainingStartOn,
+      trainingStartConfirmedAt: row.trainingStartConfirmedAt?.toISOString() ?? null,
       primaryContact: {
         name: row.contactName ?? "",
         relationship: row.contactRelationship ?? "",
@@ -331,23 +331,9 @@ export function updateMemberRecord({
       )
     }
 
-    const earliestAssignment = tx.select({ effectiveFrom: sessionAssignments.effectiveFrom })
-      .from(sessionAssignments)
-      .where(eq(sessionAssignments.accountId, input.memberId))
-      .orderBy(asc(sessionAssignments.effectiveFrom))
-      .get()
-    if (earliestAssignment && validated.value.joinedOn > earliestAssignment.effectiveFrom) {
-      return memberFailure(
-        "VALIDATION",
-        "The joining date cannot be later than the player’s first session assignment.",
-        { joinedAt: "Choose a date on or before the first session assignment." },
-      )
-    }
-
     const enrollmentUpdate = tx.update(playerEnrollments).set({
       academyPlan: validated.value.academyPlan,
       batch: validated.value.batch,
-      joinedAt: validated.value.joinedAt,
       level: validated.value.level,
       primaryContactName: validated.value.contactName,
       primaryContactPhone: validated.value.contactPhone,

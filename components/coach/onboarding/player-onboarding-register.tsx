@@ -18,18 +18,30 @@ import {
 import {
   approveRegistrationAction,
   rejectRegistrationAction,
-  saveMemberAction,
 } from "@/app/coach/actions"
-import { completeOnboardingFinanceAction } from "@/app/coach/financials/actions"
-import { assignOnboardingSessionAction } from "@/app/coach/onboarding/actions"
+import {
+  completeOnboardingFinanceAction,
+  previewOnboardingFinanceAction,
+} from "@/app/coach/financials/actions"
+import {
+  assignOnboardingSessionAction,
+  resetOnboardingSessionAssignmentAction,
+  saveOnboardingAssessmentAction,
+} from "@/app/coach/onboarding/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import {
+  formatBillingPeriod,
+  formatFinanceAmount,
+  formatFinanceDate,
+} from "@/components/financials/player-finance-presentation"
 import type {
   PlayerOnboardingCase,
   PlayerOnboardingStage,
   PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
 import { formatDateKey, formatSessionTimeRange } from "@/lib/format"
+import type { OnboardingFinancePreview } from "@/lib/finance/types"
 import type {
   TrainingBatch,
   TrainingProgramme,
@@ -95,8 +107,30 @@ function rowMeta(item: PlayerOnboardingCase) {
   }
   return [
     item.academyId,
-    item.joinedAt ? `Joined ${shortDate(item.joinedAt)}` : null,
+    item.trainingStartOn ? `Training from ${shortDate(item.trainingStartOn)}` : null,
   ].filter(Boolean).join(" · ")
+}
+
+function timelineDate(value: string | null | undefined, fallback = "Pending") {
+  if (!value) return fallback
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(value))
+}
+
+function OnboardingTimeline({ item }: { item: PlayerOnboardingCase }) {
+  return (
+    <dl className={styles.dateTimeline} aria-label="Onboarding dates">
+      <div><dt>Requested</dt><dd>{timelineDate(item.requestedAt)}</dd></div>
+      <div><dt>Approved</dt><dd>{timelineDate(item.approvedAt)}</dd></div>
+      <div><dt>Training start</dt><dd>{item.trainingStartOn ? formatDateKey(item.trainingStartOn) : "Pending"}</dd></div>
+      <div><dt>Activated</dt><dd>{timelineDate(item.activatedAt)}</dd></div>
+      <div><dt>Completed</dt><dd>{timelineDate(item.onboardingCompletedAt)}</dd></div>
+    </dl>
+  )
 }
 
 function nextAction(item: PlayerOnboardingCase) {
@@ -149,7 +183,7 @@ function editorCopy(item: PlayerOnboardingCase) {
 }
 
 function firstDayForSeries(item: PlayerOnboardingCase, series: TrainingSessionSeries) {
-  return [item.joinedAt ?? "", series.startsOn].reduce((latest, value) => (
+  return [item.trainingStartOn ?? "", series.startsOn].reduce((latest, value) => (
     value > latest ? value : latest
   ))
 }
@@ -157,11 +191,8 @@ function firstDayForSeries(item: PlayerOnboardingCase, series: TrainingSessionSe
 function suggestedEffectiveDate(
   item: PlayerOnboardingCase,
   series: TrainingSessionSeries,
-  referenceDate: string,
 ) {
-  return [firstDayForSeries(item, series), referenceDate].reduce((latest, value) => (
-    value > latest ? value : latest
-  ))
+  return firstDayForSeries(item, series)
 }
 
 function seriesWeekdays(series: TrainingSessionSeries) {
@@ -282,19 +313,23 @@ function AssessmentStep({
   const [level, setLevel] = useState<TrainingProgramme | "">(item.level ?? "")
   const [batch, setBatch] = useState<TrainingBatch | "">(item.batch ?? "")
   const [trainingPlan, setTrainingPlan] = useState<AcademyPlan | "">(item.academyPlan ?? "")
-  const [errors, setErrors] = useState<Partial<Record<"level" | "batch" | "academyPlan", string>>>({})
+  const [trainingStartOn, setTrainingStartOn] = useState(item.trainingStartOn ?? "")
+  const [errors, setErrors] = useState<Partial<Record<"trainingStartOn" | "level" | "batch" | "academyPlan", string>>>({})
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   const [busy, setBusy] = useState(false)
   const levelRef = useRef<HTMLSelectElement>(null)
+  const trainingStartRef = useRef<HTMLInputElement>(null)
   const batchRef = useRef<HTMLSelectElement>(null)
   const planRef = useRef<HTMLSelectElement>(null)
-  const isDirty = level !== (item.level ?? "")
+  const isDirty = trainingStartOn !== (item.trainingStartOn ?? "")
+    || level !== (item.level ?? "")
     || batch !== (item.batch ?? "")
     || trainingPlan !== (item.academyPlan ?? "")
   const guard = useUnsavedWorkGuard({
     isDirty,
     scope: `onboarding-assessment-${item.id}`,
   })
+
   const plans = level && batch ? academyPlansFor(level, batch) : []
 
   function updateLevel(value: TrainingProgramme | "") {
@@ -315,45 +350,45 @@ function AssessmentStep({
     event.preventDefault()
     if (busy) return
     const nextErrors: typeof errors = {}
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(trainingStartOn)) {
+      nextErrors.trainingStartOn = "Choose the player’s training start date."
+    }
     if (!level) nextErrors.level = "Choose the assessed training level."
     if (!batch) nextErrors.batch = "Choose the player’s batch."
     if (!trainingPlan) nextErrors.academyPlan = "Choose the days-per-week Training plan."
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) {
       setFeedback({ message: "Review the highlighted assessment details.", tone: "error" })
-      if (nextErrors.level) levelRef.current?.focus()
+      if (nextErrors.trainingStartOn) trainingStartRef.current?.focus()
+      else if (nextErrors.level) levelRef.current?.focus()
       else if (nextErrors.batch) batchRef.current?.focus()
       else planRef.current?.focus()
       return
     }
-    if (!item.primaryContact || !item.joinedAt || item.recordRevision === null) return
+    if (item.recordRevision === null) return
 
     setBusy(true)
     setFeedback(null)
-    const result = await saveMemberAction({
-      memberId: item.id,
+    const result = await saveOnboardingAssessmentAction({
+      playerId: item.id,
       expectedRevision: item.recordRevision,
-      profile: {
-        fullName: item.fullName,
-        joinedAt: item.joinedAt,
-        primaryContact: item.primaryContact,
-      },
-      training: {
-        academyPlan: trainingPlan as AcademyPlan,
-        batch: batch as TrainingBatch,
-        level: level as TrainingProgramme,
-      },
+      trainingStartOn,
+      academyPlan: trainingPlan as AcademyPlan,
+      batch: batch as TrainingBatch,
+      level: level as TrainingProgramme,
     })
     setBusy(false)
     if (!result.ok) {
       const nextFieldErrors = {
-        level: result.fieldErrors?.level,
-        batch: result.fieldErrors?.batch,
-        academyPlan: result.fieldErrors?.academyPlan,
+        trainingStartOn: result.field === "trainingStartOn" ? result.message : undefined,
+        level: result.field === "level" ? result.message : undefined,
+        batch: result.field === "batch" ? result.message : undefined,
+        academyPlan: result.field === "academyPlan" ? result.message : undefined,
       }
       setErrors(nextFieldErrors)
       setFeedback({ message: result.message, tone: "error" })
-      if (nextFieldErrors.level) levelRef.current?.focus()
+      if (nextFieldErrors.trainingStartOn) trainingStartRef.current?.focus()
+      else if (nextFieldErrors.level) levelRef.current?.focus()
       else if (nextFieldErrors.batch) batchRef.current?.focus()
       else if (nextFieldErrors.academyPlan) planRef.current?.focus()
       return
@@ -365,6 +400,28 @@ function AssessmentStep({
 
   return (
     <form className={styles.compactForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
+      <div className={styles.assessmentDateField}>
+        <label>
+          <span>Training start date</span>
+          <input
+            ref={trainingStartRef}
+            name="trainingStartOn"
+            type="date"
+            required
+            value={trainingStartOn}
+            aria-invalid={Boolean(errors.trainingStartOn)}
+            aria-describedby={`onboarding-${item.id}-training-start-help${errors.trainingStartOn ? ` onboarding-${item.id}-training-start-error` : ""}`}
+            onChange={(event) => {
+              setTrainingStartOn(event.target.value)
+              setErrors((current) => ({ ...current, trainingStartOn: undefined }))
+            }}
+          />
+          <small id={`onboarding-${item.id}-training-start-help`}>
+            Enter the start of the player’s current continuous training period. This becomes permanent when onboarding is completed.
+          </small>
+          {errors.trainingStartOn ? <small id={`onboarding-${item.id}-training-start-error`}>{errors.trainingStartOn}</small> : null}
+        </label>
+      </div>
       <div className={styles.threeFieldGrid}>
         <label>
           <span>Level</span>
@@ -453,7 +510,7 @@ function SessionStep({
     firstSeries ? seriesWeekdays(firstSeries).slice(0, initialLimit) : [],
   )
   const [effectiveFrom, setEffectiveFrom] = useState(
-    firstSeries ? suggestedEffectiveDate(item, firstSeries, referenceDate) : referenceDate,
+    firstSeries ? suggestedEffectiveDate(item, firstSeries) : referenceDate,
   )
   const [feedback, setFeedback] = useState<SessionStepFeedback | null>(null)
   const [busy, setBusy] = useState(false)
@@ -464,7 +521,7 @@ function SessionStep({
   const initialSeriesId = firstSeries?.id ?? ""
   const initialWeekdays = firstSeries ? seriesWeekdays(firstSeries).slice(0, initialLimit) : []
   const initialEffectiveFrom = firstSeries
-    ? suggestedEffectiveDate(item, firstSeries, referenceDate)
+    ? suggestedEffectiveDate(item, firstSeries)
     : referenceDate
   const isDirty = seriesId !== initialSeriesId
     || weekdays.join(",") !== initialWeekdays.join(",")
@@ -478,7 +535,7 @@ function SessionStep({
     const limit = item.academyPlan ? academyPlanAssignmentLimit(item.academyPlan) : 0
     setSeriesId(nextSeries.id)
     setWeekdays(seriesWeekdays(nextSeries).slice(0, limit))
-    setEffectiveFrom(suggestedEffectiveDate(item, nextSeries, referenceDate))
+    setEffectiveFrom(suggestedEffectiveDate(item, nextSeries))
     setFeedback(null)
   }
 
@@ -594,7 +651,7 @@ function SessionStep({
           <input
             name="effectiveFrom"
             type="date"
-            min={selectedSeries ? firstDayForSeries(item, selectedSeries) : item.joinedAt ?? undefined}
+            min={selectedSeries ? firstDayForSeries(item, selectedSeries) : item.trainingStartOn ?? undefined}
             max={selectedSeries?.endsOn ?? undefined}
             value={effectiveFrom}
             onChange={(event) => setEffectiveFrom(event.target.value)}
@@ -618,7 +675,7 @@ function SessionStep({
 }
 
 type FeePlanStepFeedback = ActionFeedback & {
-  field?: "monthlyFee"
+  field?: "confirmation" | "monthlyFee"
 }
 
 function FeePlanStep({
@@ -633,18 +690,38 @@ function FeePlanStep({
   referenceDate: string
 }) {
   const [monthlyFee, setMonthlyFee] = useState("")
-  const firstFeeMonth = item.firstFeeMonth ?? referenceDate.slice(0, 7)
-  const [effectiveMonth, setEffectiveMonth] = useState(firstFeeMonth)
+  const [preview, setPreview] = useState<OnboardingFinancePreview | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
   const [feedback, setFeedback] = useState<FeePlanStepFeedback | null>(null)
   const [busy, setBusy] = useState(false)
   const monthlyFeeRef = useRef<HTMLInputElement>(null)
+  const confirmationRef = useRef<HTMLInputElement>(null)
   const feedbackId = `onboarding-${item.id}-fee-feedback`
   const monthlyFeeInvalid = feedback?.tone === "error" && feedback.field === "monthlyFee"
-  const isDirty = monthlyFee !== "" || effectiveMonth !== firstFeeMonth
+  const confirmationInvalid = feedback?.tone === "error" && feedback.field === "confirmation"
+  const isDirty = monthlyFee !== "" || preview !== null || confirmed
   const guard = useUnsavedWorkGuard({
     isDirty,
     scope: `onboarding-fee-plan-${item.id}`,
   })
+
+  async function resetAssignment() {
+    if (busy) return
+    setBusy(true)
+    setFeedback(null)
+    setPreview(null)
+    setConfirmed(false)
+    const result = await resetOnboardingSessionAssignmentAction(item.id)
+    setBusy(false)
+    if (!result.ok) {
+      setFeedback({ message: result.message, tone: "error" })
+      return
+    }
+    guard.navigateAfterCommit(() => onSuccess({
+      message: `${item.fullName}’s unfinished assignment was reset. Confirm the assessment again.`,
+      remove: false,
+    }))
+  }
 
   if (!financeActive) {
     return (
@@ -676,6 +753,19 @@ function FeePlanStep({
     )
   }
 
+  if (item.trainingStartOn && item.trainingStartOn > referenceDate) {
+    return (
+      <div className={styles.recoveryPanel}>
+        <strong>Fee completion opens on {formatDateKey(item.trainingStartOn)}.</strong>
+        <p>The future training date is saved. Assessment and session setup can be prepared now, but fees and the permanent date lock wait until training begins.</p>
+        <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+        <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
+          {busy ? "Resetting…" : "Reset session assignment"}
+        </button>
+      </div>
+    )
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || !item.level || !item.batch || !item.academyPlan) return
@@ -689,21 +779,64 @@ function FeePlanStep({
       monthlyFeeRef.current?.focus()
       return
     }
-    setBusy(true)
-    setFeedback(null)
-    const result = await completeOnboardingFinanceAction({
+    const terms = {
       playerId: item.id,
       academyPlan: item.academyPlan,
       level: item.level,
       batch: item.batch,
       agreedMonthlyFeePaise: rupees * 100,
-      effectiveFrom: `${effectiveMonth}-01`,
       monthlyDueDay: 5,
-      idempotencyKey: `onboarding-fee:${item.id}:${crypto.randomUUID()}`,
+    }
+    setBusy(true)
+    setFeedback(null)
+    if (!preview) {
+      const result = await previewOnboardingFinanceAction(terms)
+      setBusy(false)
+      if (!result.ok) {
+        setFeedback({ message: result.message, tone: "error" })
+        return
+      }
+      setPreview(result.data)
+      setConfirmed(false)
+      setFeedback({
+        message: result.data.blockers.length
+          ? "Review the blockers below before completing onboarding."
+          : "Fee timeline ready. Confirm the permanent training start date to complete onboarding.",
+        tone: result.data.blockers.length ? "error" : "success",
+      })
+      return
+    }
+    if (preview.blockers.length) {
+      setBusy(false)
+      setFeedback({ message: "Resolve every blocker, then generate a fresh fee timeline.", tone: "error" })
+      return
+    }
+    if (!confirmed) {
+      setBusy(false)
+      setFeedback({
+        field: "confirmation",
+        message: "Confirm the permanent training start date before completing onboarding.",
+        tone: "error",
+      })
+      confirmationRef.current?.focus()
+      return
+    }
+    const result = await completeOnboardingFinanceAction({
+      ...terms,
+      previewFingerprint: preview.fingerprint,
     })
     setBusy(false)
     if (!result.ok) {
-      setFeedback({ message: result.message, tone: "error" })
+      if (result.code === "CONFLICT") {
+        setPreview(null)
+        setConfirmed(false)
+      }
+      setFeedback({
+        message: result.code === "CONFLICT"
+          ? `${result.message} Generate a fresh fee timeline.`
+          : result.message,
+        tone: "error",
+      })
       return
     }
     guard.navigateAfterCommit(() => onSuccess({
@@ -735,29 +868,99 @@ function FeePlanStep({
             aria-describedby={monthlyFeeInvalid ? feedbackId : undefined}
             onChange={(event) => {
               setMonthlyFee(event.target.value)
+              setPreview(null)
+              setConfirmed(false)
               setFeedback(null)
             }}
           /></span>
         </label>
-        <label>
-          <span>First fee month</span>
-          <input
-            name="effectiveMonth"
-            type="month"
-            min={firstFeeMonth}
-            value={effectiveMonth}
-            onChange={(event) => setEffectiveMonth(event.target.value)}
-          />
-        </label>
+        <div className={styles.derivedFeeMonth}>
+          <span>Fee timeline</span>
+          <strong>{preview ? formatBillingPeriod(preview.feePlanStartOn.slice(0, 7)) : "Derived from training"}</strong>
+          <small>The server uses the confirmed start date and session assignment.</small>
+        </div>
       </div>
       <p className={styles.feeNote}>
-        Completing onboarding issues the registration fee. Choosing this month prorates the first monthly fee by scheduled sessions remaining and rounds it to the nearest ₹50; a future month joins that month’s full fee issue.
+        Review first. Completing onboarding issues the registration fee and every applicable monthly fee. The joining month is prorated by eligible scheduled sessions and rounded once to the nearest ₹50.
       </p>
+      {preview ? (
+        <section className={styles.feePreview} aria-labelledby={`onboarding-${item.id}-fee-preview-title`}>
+          <header>
+            <div>
+              <span>Derived fee timeline</span>
+              <h4 id={`onboarding-${item.id}-fee-preview-title`}>
+                {formatBillingPeriod(preview.feePlanStartOn.slice(0, 7))} onward
+              </h4>
+            </div>
+            <div>
+              <span>Issued now</span>
+              <strong>{formatFinanceAmount(preview.totalIssuedPaise)}</strong>
+            </div>
+          </header>
+          <div className={styles.previewLines}>
+            {preview.lines.map((line, index) => (
+              <article key={`${line.kind}:${line.period ?? "registration"}:${index}`}>
+                <div>
+                  <span>{line.period ? formatBillingPeriod(line.period) : "Registration"}</span>
+                  <strong>{line.description}</strong>
+                </div>
+                <div>
+                  <span>{line.kind === "before_tracking" ? "Record only" : line.dueDate ? `Due ${formatFinanceDate(line.dueDate)}` : "No charge due"}</span>
+                  <strong>{line.amountPaise === null ? "Before tracking" : formatFinanceAmount(line.amountPaise)}</strong>
+                  {line.numerator !== null && line.denominator !== null ? (
+                    <small>{line.numerator} of {line.denominator} eligible sessions</small>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+          {preview.warnings.length ? (
+            <div className={styles.previewWarnings}>
+              {preview.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+            </div>
+          ) : null}
+          {preview.blockers.length ? (
+            <div className={styles.previewBlockers} role="alert">
+              <strong>Resolve before completion</strong>
+              <ul>{preview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
+            </div>
+          ) : (
+            <label className={styles.finalConfirmation}>
+              <input
+                ref={confirmationRef}
+                type="checkbox"
+                name="confirmTrainingStart"
+                value="confirmed"
+                required
+                checked={confirmed}
+                aria-invalid={confirmationInvalid || undefined}
+                aria-describedby={confirmationInvalid ? feedbackId : undefined}
+                onChange={(event) => {
+                  setConfirmed(event.target.checked)
+                  setFeedback(null)
+                }}
+              />
+              <span>
+                <strong>Training start date: {formatDateKey(preview.trainingStartOn)}</strong>
+                I confirm this is the start of the player’s current continuous training period. It cannot be changed after onboarding is completed.
+              </span>
+            </label>
+          )}
+        </section>
+      ) : null}
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
-        <Link href={`/coach/financials/players/${encodeURIComponent(item.id)}?mode=monthly`}>Open finance record</Link>
+        <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
+          Reset session assignment
+        </button>
         <button className={styles.primaryButton} type="submit" disabled={busy}>
-          {busy ? "Completing…" : "Complete onboarding & issue fees"} <ArrowRight aria-hidden="true" />
+          {busy
+            ? preview ? "Completing…" : "Building timeline…"
+            : !preview
+              ? "Review fee timeline"
+              : preview.blockers.length
+                ? "Resolve blockers"
+                : "Complete onboarding & issue fees"} <ArrowRight aria-hidden="true" />
         </button>
       </div>
     </form>
@@ -796,6 +999,7 @@ function OnboardingEditor({
           <h3 id={`onboarding-editor-title-${item.id}`} tabIndex={-1}>{copy.title}</h3>
           <p>{copy.body}</p>
         </div>
+        <OnboardingTimeline item={item} />
         {item.stage === "request" ? <RequestStep item={item} onSuccess={onSuccess} /> : null}
         {item.stage === "assessment" ? <AssessmentStep item={item} onSuccess={onSuccess} /> : null}
         {item.stage === "session" ? (

@@ -84,7 +84,7 @@ describe("attendance adjustments", () => {
       batch: "Weekday",
       academyPlan: "weekday-3-day",
       status: "active",
-      joinedAt: new Date("2026-08-01T00:00:00+05:30"),
+      trainingStartOn: "2026-08-01",
       updatedAt: now,
     }).run()
     database.insert(schema.sessionSeries).values([

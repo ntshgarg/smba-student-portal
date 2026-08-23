@@ -8,6 +8,7 @@ import { initializeDatabase } from "@/lib/db/client"
 import {
   academyIdAllocations,
   accounts,
+  authCredentialStates,
   feeAgreements,
   monthlyReports,
   playerEnrollments,
@@ -20,13 +21,13 @@ import {
   type PlayerOnboardingSummary,
   type PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
+import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import type {
   AcademyMember,
   CoachMonthlyReportRecord,
   OperationalAcademyMember,
   PlayerTrainingProfile,
 } from "@/lib/coach/types"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   listSessionAssignments,
   listSessionOccurrences,
@@ -34,16 +35,12 @@ import {
   sessionPortalWindow,
 } from "@/lib/sessions/database"
 
-function dateKey(value: Date) {
-  return getIndiaDateKey(value)
-}
-
 type PlayerTrainingRow = Pick<
   typeof playerEnrollments.$inferSelect,
   | "academyPlan"
   | "ageGroup"
   | "batch"
-  | "joinedAt"
+  | "trainingStartOn"
   | "level"
   | "recordRevision"
   | "status"
@@ -101,7 +98,7 @@ export function listOperationalPlayerRecords(accountIds?: readonly string[]) {
   const rows = db.select({
     id: accounts.id,
     fullName: accounts.fullName,
-    joinedAt: playerEnrollments.joinedAt,
+    trainingStartOn: playerEnrollments.trainingStartOn,
     ageGroup: playerEnrollments.ageGroup,
     level: playerEnrollments.level,
     batch: playerEnrollments.batch,
@@ -125,7 +122,7 @@ export function listOperationalPlayerRecords(accountIds?: readonly string[]) {
     role: "player",
     fullName: row.fullName,
     initials: identityNameParts(row.fullName).initials,
-    joinedAt: dateKey(row.joinedAt),
+    trainingStartOn: row.trainingStartOn,
   }))
 
   return {
@@ -146,7 +143,7 @@ export function listAttendanceRegisterPlayerRecords(accountIds?: readonly string
   const rows = db.select({
     id: accounts.id,
     fullName: accounts.fullName,
-    joinedAt: playerEnrollments.joinedAt,
+    trainingStartOn: playerEnrollments.trainingStartOn,
     ageGroup: playerEnrollments.ageGroup,
     level: playerEnrollments.level,
     batch: playerEnrollments.batch,
@@ -169,7 +166,7 @@ export function listAttendanceRegisterPlayerRecords(accountIds?: readonly string
     role: "player",
     fullName: row.fullName,
     initials: identityNameParts(row.fullName).initials,
-    joinedAt: dateKey(row.joinedAt),
+    trainingStartOn: row.trainingStartOn,
   }))
 
   return {
@@ -181,10 +178,12 @@ export function listAttendanceRegisterPlayerRecords(accountIds?: readonly string
 export function listApprovedPlayerRecords() {
   const db = initializeDatabase()
   const rows = db.select({
+    activatedAt: authCredentialStates.activatedAt,
+    approvedAt: accounts.approvedAt,
     id: accounts.id,
     fullName: accounts.fullName,
     academyIdSerial: academyIdAllocations.serial,
-    joinedAt: playerEnrollments.joinedAt,
+    trainingStartOn: playerEnrollments.trainingStartOn,
     ageGroup: playerEnrollments.ageGroup,
     level: playerEnrollments.level,
     batch: playerEnrollments.batch,
@@ -194,10 +193,14 @@ export function listApprovedPlayerRecords() {
     contactName: playerEnrollments.primaryContactName,
     contactRelationship: playerEnrollments.primaryContactRelationship,
     contactPhone: playerEnrollments.primaryContactPhone,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
+    requestedAt: accounts.createdAt,
+    trainingStartConfirmedAt: playerEnrollments.trainingStartConfirmedAt,
   })
     .from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
+    .leftJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
     .where(and(
       eq(accounts.role, "player"),
       eq(accounts.approvalStatus, "approved"),
@@ -210,9 +213,14 @@ export function listApprovedPlayerRecords() {
     id: row.id,
     role: "player",
     academyId: formatAcademyId(row.academyIdSerial),
+    activatedAt: row.activatedAt?.toISOString() ?? null,
+    approvedAt: row.approvedAt?.toISOString() ?? null,
     fullName: row.fullName,
     initials: identityNameParts(row.fullName).initials,
-    joinedAt: dateKey(row.joinedAt),
+    onboardingCompletedAt: row.onboardingCompletedAt?.toISOString() ?? null,
+    requestedAt: row.requestedAt.toISOString(),
+    trainingStartOn: row.trainingStartOn,
+    trainingStartConfirmedAt: row.trainingStartConfirmedAt?.toISOString() ?? null,
     primaryContact: {
       name: row.contactName ?? "",
       relationship: row.contactRelationship ?? "",
@@ -255,20 +263,26 @@ export function getPlayerOnboardingWorkspace(
       requestedRole: request.requestedRole === "coach" ? "coach" as const : "player" as const,
     }))
   const players = db.select({
+    activatedAt: authCredentialStates.activatedAt,
     academyPlan: playerEnrollments.academyPlan,
     academyIdSerial: academyIdAllocations.serial,
+    approvedAt: accounts.approvedAt,
     batch: playerEnrollments.batch,
     contactName: playerEnrollments.primaryContactName,
     contactPhone: playerEnrollments.primaryContactPhone,
     contactRelationship: playerEnrollments.primaryContactRelationship,
     fullName: accounts.fullName,
     id: accounts.id,
-    joinedAt: playerEnrollments.joinedAt,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
+    requestedAt: accounts.createdAt,
+    trainingStartOn: playerEnrollments.trainingStartOn,
+    trainingStartConfirmedAt: playerEnrollments.trainingStartConfirmedAt,
     level: playerEnrollments.level,
     recordRevision: playerEnrollments.recordRevision,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
+    .leftJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
     .where(and(
       eq(accounts.role, "player"),
       eq(accounts.approvalStatus, "approved"),
@@ -277,11 +291,16 @@ export function getPlayerOnboardingWorkspace(
     .all()
     .map((player) => ({
       academyId: formatAcademyId(player.academyIdSerial),
+      activatedAt: player.activatedAt?.toISOString() ?? null,
       academyPlan: player.academyPlan,
+      approvedAt: player.approvedAt?.toISOString() ?? null,
       batch: player.batch,
       fullName: player.fullName,
       id: player.id,
-      joinedAt: dateKey(player.joinedAt),
+      onboardingCompletedAt: player.onboardingCompletedAt?.toISOString() ?? null,
+      requestedAt: player.requestedAt.toISOString(),
+      trainingStartOn: player.trainingStartOn,
+      trainingStartConfirmedAt: player.trainingStartConfirmedAt?.toISOString() ?? null,
       level: player.level,
       primaryContact: {
         name: player.contactName ?? "",

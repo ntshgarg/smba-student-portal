@@ -20,7 +20,7 @@ const player = {
     fullName: "Aarav Kulkarni",
     id: "player-one",
     initials: "AK",
-    joinedAt: "2026-01-02",
+    trainingStartOn: "2026-01-02",
     primaryContact: { name: "Ria", phone: "+91 99999 99999", relationship: "Parent" },
     role: "player",
   },

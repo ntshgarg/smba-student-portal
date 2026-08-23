@@ -40,7 +40,7 @@ const [
   credentialService,
   databaseClient,
   schema,
-  memberService,
+  onboardingService,
   sessionService,
   financeService,
   format,
@@ -49,7 +49,7 @@ const [
   import("../../lib/auth/credential-service"),
   import("../../lib/db/client"),
   import("../../lib/db/schema"),
-  import("../../lib/coach/member-service"),
+  import("../../lib/coach/onboarding-service"),
   import("../../lib/sessions/service"),
   import("../../lib/finance/service"),
   import("../../lib/format"),
@@ -95,32 +95,20 @@ credentialService.provisionDevelopmentCredential({
   password: process.env.SMBA_FIXTURE_PASSWORD ?? credentialService.FIXTURE_PASSWORD,
 }, { database, now })
 
-const member = memberService.readCanonicalPlayerRecord(database, playerId)
-if (!member) throw new Error("The approved finance regression player could not be loaded.")
-const updated = memberService.updateMemberRecord({
+const updated = onboardingService.saveOnboardingAssessment({
   coachId: coach.id,
   database,
   input: {
-    expectedRevision: member.training.recordRevision,
-    memberId: playerId,
-    profile: {
-      fullName,
-      joinedAt: today,
-      primaryContact: {
-        name: "Regression Guardian",
-        phone: "+91 99999 00000",
-        relationship: "Guardian",
-      },
-    },
-    training: {
-      academyPlan: "weekday-3-day",
-      batch: "Weekday",
-      level: "Beginner",
-    },
+    academyPlan: "weekday-3-day",
+    batch: "Weekday",
+    expectedRevision: 0,
+    level: "Beginner",
+    playerId,
+    trainingStartOn: today,
   },
   now,
 })
-if (!updated.ok) throw new Error(`Finance regression assessment failed: ${updated.message}`)
+if (updated.playerId !== playerId) throw new Error("Finance regression assessment failed.")
 
 const weekdays = [1, 3, 5]
 const seriesId = sessionService.createSessionSeriesRecords({
@@ -131,7 +119,7 @@ const seriesId = sessionService.createSessionSeriesRecords({
     durationMinutes: 60,
     endsOn: scheduleEndsOn,
     programme: "Beginner",
-    startsOn: today,
+    startsOn: `${firstFeeMonth}-01`,
     startTime: "06:00",
     venue: "SMBA Regression Court",
     weekdays,
@@ -141,7 +129,7 @@ const seriesId = sessionService.createSessionSeriesRecords({
 sessionService.assignSessionRecords({
   coachId: coach.id,
   database,
-  effectiveFrom: today,
+  effectiveFrom: `${firstFeeMonth}-01`,
   now,
   playerId,
   seriesId,

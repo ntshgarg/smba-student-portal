@@ -6,6 +6,9 @@ import { and, eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { calculateProratedSessionFee } from "@/lib/finance/domain"
+import type {
+  OnboardingFinanceTerms,
+} from "@/lib/finance/types"
 
 vi.mock("server-only", () => ({}))
 
@@ -43,21 +46,58 @@ describe("onboarding finance issuance", () => {
   ]
   const references = () => feeReferences.shift() ?? "SMBA-ABCDEFGH"
   const onboardingNow = new Date("2026-08-18T10:00:00+05:30")
+  const previewFingerprints = new Map<string, string>()
+
+  type TestOnboardingInput = OnboardingFinanceTerms & {
+    effectiveFrom?: string
+    idempotencyKey?: string
+  }
+
+  function financeTerms(input: TestOnboardingInput): OnboardingFinanceTerms {
+    return {
+      academyPlan: input.academyPlan,
+      agreedMonthlyFeePaise: input.agreedMonthlyFeePaise,
+      batch: input.batch,
+      level: input.level,
+      monthlyDueDay: input.monthlyDueDay,
+      playerId: input.playerId,
+    }
+  }
+
+  function completeFromPreview(
+    input: TestOnboardingInput,
+    context: Parameters<typeof finance.completePlayerOnboardingFinance>[1],
+  ) {
+    const replayKey = input.idempotencyKey ?? input.playerId
+    let previewFingerprint = previewFingerprints.get(replayKey)
+    if (!previewFingerprint) {
+      const preview = finance.previewPlayerOnboardingFinance(financeTerms(input), context)
+      previewFingerprint = preview.fingerprint
+      previewFingerprints.set(replayKey, previewFingerprint)
+    }
+    return finance.completePlayerOnboardingFinance({
+      ...financeTerms(input),
+      previewFingerprint,
+    }, context)
+  }
 
   function createAssessedPlayer({
     assignmentFrom,
     assignmentTo,
     name,
     occurrences = [],
+    trainingStartOn = assignmentFrom,
   }: {
     assignmentFrom: string
     assignmentTo?: string
     name: string
     occurrences?: Array<{
       date: string
+      replacementForDate?: string
       startTime?: string
       status?: "scheduled" | "cancelled"
     }>
+    trainingStartOn?: string
   }) {
     const playerId = accountService.registerAccount(name, "player")
     accountService.approveRegistration(playerId, coachId, { now: onboardingNow })
@@ -66,6 +106,9 @@ describe("onboarding finance issuance", () => {
       batch: "Weekday",
       level: "Beginner",
       status: "active",
+      trainingStartConfirmedAt: onboardingNow,
+      trainingStartConfirmedByAccountId: coachId,
+      trainingStartOn,
       updatedAt: onboardingNow,
     }).where(eq(schema.playerEnrollments.accountId, playerId)).run()
     const seriesId = ids()
@@ -101,11 +144,18 @@ describe("onboarding finance issuance", () => {
       }))).run()
     }
     if (occurrences.length) {
-      database.insert(schema.sessionOccurrences).values(occurrences.map((occurrence) => ({
+      const occurrenceRows = occurrences.map((occurrence) => ({
+        ...occurrence,
         id: ids(),
+      }))
+      database.insert(schema.sessionOccurrences).values(occurrenceRows.map((occurrence) => ({
+        id: occurrence.id,
         createdAt: onboardingNow,
         durationMinutes: 60,
         occurrenceDate: occurrence.date,
+        replacementForOccurrenceId: occurrence.replacementForDate
+          ? occurrenceRows.find(({ date }) => date === occurrence.replacementForDate)?.id
+          : null,
         seriesId,
         startsAt: new Date(`${occurrence.date}T${occurrence.startTime ?? "06:00"}:00+05:30`),
         status: occurrence.status ?? "scheduled",
@@ -153,7 +203,7 @@ describe("onboarding finance issuance", () => {
       level: "Beginner" as const,
       playerId,
     }
-    const completed = finance.completePlayerOnboardingFinance(input, {
+    const completed = completeFromPreview(input, {
       coachId,
       createFeeReference: references,
       createId: ids,
@@ -162,8 +212,8 @@ describe("onboarding finance issuance", () => {
     })
     expect(completed).toMatchObject({
       firstMonthlyChargeId: expect.any(String),
-      firstMonthlyFeePaise: 145_000,
-      firstMonthlyRemainingSessions: 5,
+      firstMonthlyFeePaise: 175_000,
+      firstMonthlyRemainingSessions: 6,
       firstMonthlyTotalSessions: 12,
       registrationChargeId: expect.any(String),
       reused: false,
@@ -176,11 +226,11 @@ describe("onboarding finance issuance", () => {
       monthlyCharges: [expect.objectContaining({
         billingPeriod: "2026-08",
         dueDate: "2026-08-21",
-        originalAmountPaise: 145_000,
+        originalAmountPaise: 175_000,
       })],
     })
 
-    expect(finance.completePlayerOnboardingFinance(input, {
+    expect(completeFromPreview(input, {
       coachId,
       createFeeReference: references,
       createId: ids,
@@ -218,49 +268,37 @@ describe("onboarding finance issuance", () => {
     )).get()?.originalAmountPaise).toBe(350_000)
   })
 
-  it("defers a future first month to that month’s normal bulk issue", () => {
+  it("keeps a future training start incomplete until the date arrives", () => {
     const playerId = createAssessedPlayer({
       assignmentFrom: "2026-09-01",
       name: "Future Month Player",
       occurrences: ["02", "04", "07"].map((day) => ({ date: `2026-09-${day}` })),
     })
-    const completed = finance.completePlayerOnboardingFinance({
+    const terms = {
       academyPlan: "weekday-3-day",
       agreedMonthlyFeePaise: 350_000,
       batch: "Weekday",
-      effectiveFrom: "2026-09-01",
-      idempotencyKey: "complete-future-month-onboarding",
       level: "Beginner",
       playerId,
-    }, {
+    } as const
+    const context = {
       coachId,
-      createFeeReference: references,
-      createId: ids,
       database,
       now: onboardingNow,
-    })
-    expect(completed).toMatchObject({ firstMonthlyChargeId: null })
-    expect(finance.getPlayerFeeRecord(playerId, { database, now: onboardingNow }))
-      .toMatchObject({ registrationCharge: expect.any(Object), monthlyCharges: [] })
-
-    const september = finance.prepareMonthlyCharges({
-      idempotencyKey: "issue-september-fees",
-      period: "2026-09",
-    }, {
-      coachId,
-      createFeeReference: references,
-      createId: ids,
-      database,
-      now: new Date("2026-09-01T10:00:00+05:30"),
-    })
-    expect(september).toMatchObject({ alreadyPrepared: 1, ready: 1 })
-    expect(database.select().from(schema.financialCharges).where(and(
-      eq(schema.financialCharges.playerAccountId, playerId),
-      eq(schema.financialCharges.billingPeriod, "2026-09"),
-    )).all()).toHaveLength(1)
+    }
+    const preview = finance.previewPlayerOnboardingFinance(terms, context)
+    expect(preview.blockers).toContain("Fee completion opens on 2026-09-01.")
+    expect(() => finance.completePlayerOnboardingFinance({
+      ...terms,
+      previewFingerprint: preview.fingerprint,
+    }, context)).toThrow(expect.objectContaining({ code: "SETUP_REQUIRED" }))
+    expect(database.select().from(schema.financialCharges).where(eq(
+      schema.financialCharges.playerAccountId,
+      playerId,
+    )).all()).toHaveLength(0)
   })
 
-  it("rejects a future first fee month outside the assigned session period", () => {
+  it("derives the first fee month instead of accepting a caller-selected month", () => {
     const playerId = createAssessedPlayer({
       assignmentFrom: "2026-09-01",
       assignmentTo: "2026-09-30",
@@ -268,60 +306,41 @@ describe("onboarding finance issuance", () => {
       occurrences: [{ date: "2026-09-02" }],
     })
 
-    expect(() => finance.completePlayerOnboardingFinance({
+    const preview = finance.previewPlayerOnboardingFinance({
       academyPlan: "weekday-3-day",
       agreedMonthlyFeePaise: 350_000,
       batch: "Weekday",
-      effectiveFrom: "2026-10-01",
-      idempotencyKey: "reject-fee-after-assignment",
       level: "Beginner",
       playerId,
     }, {
       coachId,
-      createFeeReference: references,
-      createId: ids,
       database,
-      now: onboardingNow,
-    })).toThrow(expect.objectContaining({ code: "SETUP_REQUIRED", field: "effectiveFrom" }))
-    expect(database.select().from(schema.feeAgreements).where(eq(
-      schema.feeAgreements.playerAccountId,
-      playerId,
-    )).all()).toHaveLength(0)
-    expect(database.select().from(schema.financialCharges).where(eq(
-      schema.financialCharges.playerAccountId,
-      playerId,
-    )).all()).toHaveLength(0)
+      now: new Date("2026-09-02T10:00:00+05:30"),
+    })
+    expect(preview.feePlanStartOn).toBe("2026-09-01")
+    expect(preview.lines.filter((line) => line.kind === "monthly_training"))
+      .toEqual([expect.objectContaining({ period: "2026-09" })])
   })
 
-  it("rolls back every finance record when the selected month has no matching session", () => {
+  it("does not manufacture a fee for a month before the assignment begins", () => {
     const playerId = createAssessedPlayer({
       assignmentFrom: "2026-09-01",
       name: "Invalid Month Player",
       occurrences: [{ date: "2026-09-02" }],
     })
-    expect(() => finance.completePlayerOnboardingFinance({
+    const preview = finance.previewPlayerOnboardingFinance({
       academyPlan: "weekday-3-day",
       agreedMonthlyFeePaise: 350_000,
       batch: "Weekday",
-      effectiveFrom: "2026-08-01",
-      idempotencyKey: "reject-invalid-first-month",
       level: "Beginner",
       playerId,
     }, {
       coachId,
-      createFeeReference: references,
-      createId: ids,
       database,
-      now: onboardingNow,
-    })).toThrow(expect.objectContaining({ code: "SETUP_REQUIRED", field: "effectiveFrom" }))
-    expect(database.select().from(schema.feeAgreements).where(eq(
-      schema.feeAgreements.playerAccountId,
-      playerId,
-    )).all()).toHaveLength(0)
-    expect(database.select().from(schema.financialCharges).where(eq(
-      schema.financialCharges.playerAccountId,
-      playerId,
-    )).all()).toHaveLength(0)
+      now: new Date("2026-09-02T10:00:00+05:30"),
+    })
+    expect(preview.lines.some((line) => line.period === "2026-08")).toBe(false)
+    expect(preview.lines).toContainEqual(expect.objectContaining({ period: "2026-09" }))
   })
 
   it("counts a later same-day session and excludes cancelled training days", () => {
@@ -334,8 +353,9 @@ describe("onboarding finance issuance", () => {
         { date: "2026-08-18", startTime: "18:00" },
         { date: "2026-08-25", status: "cancelled" },
       ],
+      trainingStartOn: "2026-08-18",
     })
-    const completed = finance.completePlayerOnboardingFinance({
+    const completed = completeFromPreview({
       academyPlan: "weekday-3-day",
       agreedMonthlyFeePaise: 350_000,
       batch: "Weekday",
@@ -350,9 +370,24 @@ describe("onboarding finance issuance", () => {
       firstMonthlyRemainingSessions: 1,
       firstMonthlyTotalSessions: 3,
     })
+
+    const issuedCharge = database.select().from(schema.financialCharges).where(and(
+      eq(schema.financialCharges.playerAccountId, playerId),
+      eq(schema.financialCharges.type, "monthly_training"),
+    )).get()
+    database.update(schema.sessionOccurrences).set({
+      status: "cancelled",
+    }).where(eq(schema.sessionOccurrences.occurrenceDate, "2026-08-18")).run()
+    expect(database.select().from(schema.financialCharges).where(eq(
+      schema.financialCharges.id,
+      issuedCharge?.id ?? "missing-charge",
+    )).get()).toMatchObject({
+      originalAmountPaise: 115_000,
+      recordRevision: issuedCharge?.recordRevision,
+    })
   })
 
-  it("treats a session at the exact onboarding instant as already started", () => {
+  it("includes a session whose eligibility date equals the training start date", () => {
     const playerId = createAssessedPlayer({
       assignmentFrom: "2026-08-01",
       name: "Exact Start Player",
@@ -360,8 +395,9 @@ describe("onboarding finance issuance", () => {
         { date: "2026-08-18", startTime: "10:00" },
         { date: "2026-08-25", startTime: "10:00" },
       ],
+      trainingStartOn: "2026-08-18",
     })
-    const completed = finance.completePlayerOnboardingFinance({
+    const completed = completeFromPreview({
       academyPlan: "weekday-3-day",
       agreedMonthlyFeePaise: 350_000,
       batch: "Weekday",
@@ -372,8 +408,8 @@ describe("onboarding finance issuance", () => {
     }, { coachId, createFeeReference: references, createId: ids, database, now: onboardingNow })
 
     expect(completed).toMatchObject({
-      firstMonthlyFeePaise: 175_000,
-      firstMonthlyRemainingSessions: 1,
+      firstMonthlyFeePaise: 350_000,
+      firstMonthlyRemainingSessions: 2,
       firstMonthlyTotalSessions: 2,
     })
   })
@@ -385,11 +421,12 @@ describe("onboarding finance issuance", () => {
       occurrences: [
         { date: "2026-08-04" },
         { date: "2026-08-11" },
-        { date: "2026-08-25" },
+        { date: "2026-08-18" },
       ],
+      trainingStartOn: "2026-08-18",
     })
 
-    expect(() => finance.completePlayerOnboardingFinance({
+    expect(() => completeFromPreview({
       academyPlan: "weekday-3-day",
       agreedMonthlyFeePaise: 100,
       batch: "Weekday",
@@ -398,10 +435,7 @@ describe("onboarding finance issuance", () => {
       level: "Beginner",
       playerId,
     }, { coachId, createFeeReference: references, createId: ids, database, now: onboardingNow }))
-      .toThrow(expect.objectContaining({
-        code: "INVALID_INPUT",
-        field: "agreedMonthlyFeePaise",
-      }))
+      .toThrow(expect.objectContaining({ code: "SETUP_REQUIRED" }))
     expect(database.select().from(schema.feeAgreements).where(eq(
       schema.feeAgreements.playerAccountId,
       playerId,
@@ -417,8 +451,9 @@ describe("onboarding finance issuance", () => {
       assignmentFrom: "2026-08-01",
       name: "After Sessions Player",
       occurrences: [{ date: "2026-08-04" }, { date: "2026-08-11" }],
+      trainingStartOn: "2026-08-18",
     })
-    const completed = finance.completePlayerOnboardingFinance({
+    const completed = completeFromPreview({
       academyPlan: "weekday-3-day",
       agreedMonthlyFeePaise: 350_000,
       batch: "Weekday",
@@ -430,9 +465,9 @@ describe("onboarding finance issuance", () => {
 
     expect(completed).toMatchObject({
       firstMonthlyChargeId: null,
-      firstMonthlyFeePaise: 0,
-      firstMonthlyRemainingSessions: 0,
-      firstMonthlyTotalSessions: 2,
+      firstMonthlyFeePaise: null,
+      firstMonthlyRemainingSessions: null,
+      firstMonthlyTotalSessions: null,
     })
     expect(database.select().from(schema.feeAgreements).where(eq(
       schema.feeAgreements.playerAccountId,
@@ -449,7 +484,7 @@ describe("onboarding finance issuance", () => {
       assignmentFrom: "2026-08-01",
       name: "Missing Calendar Player",
     })
-    expect(() => finance.completePlayerOnboardingFinance({
+    expect(() => completeFromPreview({
       academyPlan: "weekday-3-day",
       agreedMonthlyFeePaise: 350_000,
       batch: "Weekday",
@@ -458,7 +493,7 @@ describe("onboarding finance issuance", () => {
       level: "Beginner",
       playerId,
     }, { coachId, createFeeReference: references, createId: ids, database, now: onboardingNow }))
-      .toThrow(expect.objectContaining({ code: "SETUP_REQUIRED", field: "effectiveFrom" }))
+      .toThrow(expect.objectContaining({ code: "SETUP_REQUIRED", field: "playerId" }))
     expect(database.select().from(schema.feeAgreements).where(eq(
       schema.feeAgreements.playerAccountId,
       playerId,
@@ -477,5 +512,231 @@ describe("onboarding finance issuance", () => {
     expect(() => calculateProratedSessionFee(350_000, 13, 12)).toThrow(
       "Invalid session fee proration.",
     )
+  })
+
+  it("bills a cross-month replacement in its original eligibility month", () => {
+    const playerId = createAssessedPlayer({
+      assignmentFrom: "2026-08-01",
+      name: "Replacement Month Player",
+      occurrences: [
+        { date: "2026-08-30", status: "cancelled" },
+        { date: "2026-09-02", replacementForDate: "2026-08-30" },
+      ],
+      trainingStartOn: "2026-08-30",
+    })
+    const terms = {
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 350_000,
+      batch: "Weekday",
+      level: "Beginner",
+      playerId,
+    } as const
+    const preview = finance.previewPlayerOnboardingFinance(terms, {
+      coachId,
+      database,
+      now: new Date("2026-09-05T10:00:00+05:30"),
+    })
+    expect(preview.lines).toContainEqual(expect.objectContaining({
+      denominator: 1,
+      kind: "monthly_training",
+      numerator: 1,
+      period: "2026-08",
+    }))
+  })
+
+  it("records pre-tracking months without charges", () => {
+    const playerId = createAssessedPlayer({
+      assignmentFrom: "2026-06-01",
+      name: "Historical Tracking Player",
+      occurrences: [
+        { date: "2026-06-03" },
+        { date: "2026-07-01" },
+        { date: "2026-08-03" },
+      ],
+      trainingStartOn: "2026-06-03",
+    })
+    const terms = {
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 350_000,
+      batch: "Weekday",
+      level: "Beginner",
+      playerId,
+    } as const
+    const context = { coachId, createFeeReference: references, createId: ids, database, now: onboardingNow }
+    const preview = finance.previewPlayerOnboardingFinance(terms, context)
+    expect(preview.lines.filter(({ kind }) => kind === "before_tracking").map(({ period }) => period))
+      .toEqual(["2026-06", "2026-07"])
+    const completed = finance.completePlayerOnboardingFinance({
+      ...terms,
+      previewFingerprint: preview.fingerprint,
+    }, context)
+    expect(completed.createdMonthlyChargeIds).toHaveLength(1)
+    expect(database.select().from(schema.financialCharges).where(and(
+      eq(schema.financialCharges.playerAccountId, playerId),
+      eq(schema.financialCharges.type, "monthly_training"),
+    )).all().map(({ billingPeriod }) => billingPeriod)).toEqual(["2026-08"])
+    const event = database.select().from(schema.financialAuditEvents).where(and(
+      eq(schema.financialAuditEvents.entityId, playerId),
+      eq(schema.financialAuditEvents.eventType, "historical_reconciled"),
+    )).get()
+    expect(JSON.parse(event?.metadata ?? "{}")).toMatchObject({
+      beforeTrackingPeriods: ["2026-06", "2026-07"],
+      operation: "onboarding_completed",
+      trainingStartOn: "2026-06-03",
+    })
+  })
+
+  it("issues every applicable elapsed month as one continuous timeline", () => {
+    const playerId = createAssessedPlayer({
+      assignmentFrom: "2026-08-01",
+      name: "Elapsed Month Player",
+      occurrences: [
+        { date: "2026-08-03" },
+        { date: "2026-09-02" },
+        { date: "2026-10-02" },
+      ],
+      trainingStartOn: "2026-08-03",
+    })
+    const terms = {
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 350_000,
+      batch: "Weekday",
+      level: "Beginner",
+      playerId,
+    } as const
+    const context = {
+      coachId,
+      createFeeReference: references,
+      createId: ids,
+      database,
+      now: new Date("2026-10-04T10:00:00+05:30"),
+    }
+    const preview = finance.previewPlayerOnboardingFinance(terms, context)
+    expect(preview.lines.filter(({ kind }) => kind === "monthly_training").map(({ period }) => period))
+      .toEqual(["2026-08", "2026-09", "2026-10"])
+    expect(finance.completePlayerOnboardingFinance({
+      ...terms,
+      previewFingerprint: preview.fingerprint,
+    }, context).createdMonthlyChargeIds).toHaveLength(3)
+  })
+
+  it("blocks an already prepared or voided historical month", () => {
+    const issuedPlayerId = createAssessedPlayer({
+      assignmentFrom: "2026-08-01",
+      name: "Prepared Month Player",
+      occurrences: [{ date: "2026-08-18" }],
+      trainingStartOn: "2026-08-18",
+    })
+    database.insert(schema.financialCharges).values({
+      billingPeriod: "2026-08",
+      description: "Previously prepared monthly fee",
+      dueDate: "2026-08-21",
+      feeReference: "SMBA-HJKLMNPQ",
+      id: ids(),
+      issuedAt: onboardingNow,
+      issuedByAccountId: coachId,
+      originalAmountPaise: 350_000,
+      playerAccountId: issuedPlayerId,
+      type: "monthly_training",
+    }).run()
+    const issuedPreview = finance.previewPlayerOnboardingFinance({
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 350_000,
+      batch: "Weekday",
+      level: "Beginner",
+      playerId: issuedPlayerId,
+    }, { coachId, database, now: onboardingNow })
+    expect(issuedPreview.blockers).toContain(
+      "Existing issued or voided charges conflict with this onboarding timeline.",
+    )
+
+    const voidedPlayerId = createAssessedPlayer({
+      assignmentFrom: "2026-08-01",
+      name: "Voided Month Player",
+      occurrences: [{ date: "2026-08-18" }],
+      trainingStartOn: "2026-08-18",
+    })
+    database.insert(schema.financialCharges).values({
+      billingPeriod: "2026-08",
+      description: "Voided historical monthly fee",
+      dueDate: "2026-08-21",
+      feeReference: "SMBA-JKLMNPQR",
+      id: ids(),
+      issuedAt: onboardingNow,
+      issuedByAccountId: coachId,
+      lifecycle: "void",
+      originalAmountPaise: 350_000,
+      playerAccountId: voidedPlayerId,
+      recordRevision: 1,
+      type: "monthly_training",
+      voidedAt: onboardingNow,
+      voidedByAccountId: coachId,
+      voidReason: "Historical setup replaced offline",
+    }).run()
+    const voidedPreview = finance.previewPlayerOnboardingFinance({
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 350_000,
+      batch: "Weekday",
+      level: "Beginner",
+      playerId: voidedPlayerId,
+    }, { coachId, database, now: onboardingNow })
+    expect(voidedPreview.blockers).toContain(
+      "Existing issued or voided charges conflict with this onboarding timeline.",
+    )
+  })
+
+  it("rejects a preview when concessions or the academy date change before commit", () => {
+    const concessionPlayerId = createAssessedPlayer({
+      assignmentFrom: "2026-08-01",
+      name: "Stale Concession Player",
+      occurrences: [{ date: "2026-08-18" }, { date: "2026-08-25" }],
+      trainingStartOn: "2026-08-18",
+    })
+    const concessionTerms = {
+      academyPlan: "weekday-3-day",
+      agreedMonthlyFeePaise: 350_000,
+      batch: "Weekday",
+      level: "Beginner",
+      playerId: concessionPlayerId,
+    } as const
+    const concessionPreview = finance.previewPlayerOnboardingFinance(concessionTerms, {
+      coachId,
+      database,
+      now: onboardingNow,
+    })
+    finance.createConcession({
+      mode: "recurring",
+      mutationId: "00000000-0000-4000-8000-000000000099",
+      playerId: concessionPlayerId,
+      reason: "Offline academy agreement",
+      startsPeriod: "2026-08",
+      value: 10_000,
+      valueKind: "fixed",
+    }, { coachId, createId: ids, database, now: onboardingNow })
+    expect(() => finance.completePlayerOnboardingFinance({
+      ...concessionTerms,
+      previewFingerprint: concessionPreview.fingerprint,
+    }, { coachId, createFeeReference: references, createId: ids, database, now: onboardingNow }))
+      .toThrow(expect.objectContaining({ code: "CONFLICT" }))
+
+    const midnightPlayerId = createAssessedPlayer({
+      assignmentFrom: "2026-08-01",
+      name: "Midnight Preview Player",
+      occurrences: [{ date: "2026-08-31" }, { date: "2026-09-02" }],
+      trainingStartOn: "2026-08-31",
+    })
+    const midnightTerms = { ...concessionTerms, playerId: midnightPlayerId }
+    const beforeMidnight = new Date("2026-08-31T23:59:00+05:30")
+    const afterMidnight = new Date("2026-09-01T00:01:00+05:30")
+    const midnightPreview = finance.previewPlayerOnboardingFinance(midnightTerms, {
+      coachId,
+      database,
+      now: beforeMidnight,
+    })
+    expect(() => finance.completePlayerOnboardingFinance({
+      ...midnightTerms,
+      previewFingerprint: midnightPreview.fingerprint,
+    }, { coachId, createFeeReference: references, createId: ids, database, now: afterMidnight }))
+      .toThrow(expect.objectContaining({ code: "CONFLICT" }))
   })
 })
