@@ -425,7 +425,7 @@
 }
 
 .search input::placeholder {
-  color: color-mix(in srgb, var(--steel) 72%, transparent);
+  color: var(--steel);
 }
 
 .search button {

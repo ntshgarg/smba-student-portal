@@ -8998,7 +8998,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-published-reports-search input::placeholder {
-  color: rgba(97, 112, 131, 0.72);
+  color: var(--steel);
 }
 
 .coach-published-reports-search:focus-within > div {
