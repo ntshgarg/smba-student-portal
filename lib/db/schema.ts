@@ -958,6 +958,7 @@ export const financialAuditEvents = sqliteTable("financial_audit_events", {
       "adjustment_created",
       "adjustment_reversed",
       "historical_reconciled",
+      "training_start_redated",
     ],
   }).notNull(),
   entityType: text("entity_type", {

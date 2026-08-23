@@ -114,14 +114,6 @@ export function readActiveFeeAgreement(database: Executor, playerId: string) {
   )).get()
 }
 
-export function readFirstAssignmentDate(database: Executor, playerId: string) {
-  return database.select({ effectiveFrom: sessionAssignments.effectiveFrom })
-    .from(sessionAssignments)
-    .where(eq(sessionAssignments.accountId, playerId))
-    .orderBy(asc(sessionAssignments.effectiveFrom))
-    .get()?.effectiveFrom ?? null
-}
-
 export function hasAssignmentInPeriod(
   database: Executor,
   playerId: string,
@@ -944,6 +936,7 @@ export function listMonthlyPreparationCandidates(database: Executor, period: str
       academyPlan: playerEnrollments.academyPlan,
       level: playerEnrollments.level,
       batch: playerEnrollments.batch,
+      trainingStartOn: playerEnrollments.trainingStartOn,
     },
   }).from(feeAgreements)
     .innerJoin(accounts, eq(accounts.id, feeAgreements.playerAccountId))

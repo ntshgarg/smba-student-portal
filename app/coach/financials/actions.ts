@@ -20,6 +20,7 @@ import {
   recordPayment,
   recordRefund,
   reconcileRegistrationStatus,
+  redateConfirmedTrainingStart,
   reverseChargeAdjustment,
   reverseConcession,
   reverseConcessionApplication,
@@ -47,6 +48,7 @@ import type {
   RecordPaymentInput,
   RecordAllocatedPaymentInput,
   RecordRefundInput,
+  RedateConfirmedTrainingStartInput,
   RefundAllocationPreview,
   ReversePaymentInput,
   ReverseRefundInput,
@@ -180,6 +182,19 @@ export async function endFeeAgreementAction(
   return runFinanceAction((coachId) => {
     const result = endFeeAgreement(input, { coachId })
     return { message: result.reused ? "Fee plan already ended" : "Fee plan ended" }
+  })
+}
+
+export async function redateConfirmedTrainingStartAction(
+  input: RedateConfirmedTrainingStartInput,
+): Promise<FinanceActionResult> {
+  return runFinanceAction((coachId) => {
+    const result = redateConfirmedTrainingStart(input, { coachId })
+    return {
+      message: result.reused
+        ? "Training start date already corrected"
+        : `Training start date corrected to ${result.trainingStartOn}`,
+    }
   })
 }
 

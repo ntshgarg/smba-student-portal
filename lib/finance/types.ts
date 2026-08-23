@@ -335,6 +335,8 @@ export type PrepareMonthlyChargesInput = {
 export type PrepareMonthlyChargesResult = MonthlyPreparationPreview & {
   period: string
   createdChargeIds: string[]
+  /** Candidates whose first month prorates to nothing billable. */
+  deferred: number
   reused: boolean
 }
 
@@ -654,6 +656,7 @@ export type FinanceAuditEventType =
   | "adjustment_created"
   | "adjustment_reversed"
   | "historical_reconciled"
+  | "training_start_redated"
 
 export type FinanceActivityItem = {
   id: string
@@ -703,6 +706,26 @@ export type EndFeeAgreementResult = {
   reused: boolean
 }
 
+export type RedateConfirmedTrainingStartInput = {
+  playerId: string
+  trainingStartOn: string
+  reason: string
+  expectedRevision: number
+  idempotencyKey: string
+}
+
+export type RedateConfirmedTrainingStartResult = {
+  playerId: string
+  previousTrainingStartOn: string
+  trainingStartOn: string
+  recordRevision: number
+  agreementId: string | null
+  agreementEffectiveFrom: string | null
+  /** Months the correction opens for attendance and monthly fee preparation. */
+  reopenedPeriods: string[]
+  reused: boolean
+}
+
 export type ExistingPlayerFinanceSetupInput = CreateFeeAgreementInput & {
   registrationStatus: "pending" | "unresolved"
   idempotencyKey: string
@@ -742,6 +765,7 @@ export type FinanceField =
   | "agreedMonthlyFeePaise"
   | "effectiveFrom"
   | "monthlyDueDay"
+  | "trainingStartOn"
   | "period"
   | "chargeId"
   | "paymentId"

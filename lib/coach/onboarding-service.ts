@@ -18,11 +18,16 @@ import {
   sessionAssignmentWeekdays,
   sessionAttendanceRecords,
 } from "@/lib/db/schema"
+import { getAcademyDateKey } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanIsValid,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
+import {
+  IMPLAUSIBLE_TRAINING_START_MESSAGE,
+  trainingStartIsImplausiblyEarly,
+} from "@/lib/training/training-start"
 
 export type SaveOnboardingAssessmentInput = {
   academyPlan: AcademyPlan
@@ -50,6 +55,13 @@ export function saveOnboardingAssessment({
   }
   if (!isValidDateKey(input.trainingStartOn)) {
     operationalActionError("INVALID_INPUT", "Choose a valid training start date.", "trainingStartOn")
+  }
+  if (trainingStartIsImplausiblyEarly(input.trainingStartOn, getAcademyDateKey(now))) {
+    operationalActionError(
+      "INVALID_INPUT",
+      IMPLAUSIBLE_TRAINING_START_MESSAGE,
+      "trainingStartOn",
+    )
   }
   if (!academyPlanIsValid(input.academyPlan, input.level, input.batch)) {
     operationalActionError(

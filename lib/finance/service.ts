@@ -2,7 +2,9 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm"
+import {
+  and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql,
+} from "drizzle-orm"
 
 import { isValidDateKey, isValidMonthKey } from "@/lib/attendance/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
@@ -64,7 +66,6 @@ import {
   readAuditEventByIdempotencyKey,
   readCharge,
   readFinanceActivation,
-  readFirstAssignmentDate,
   readFirstMonthSessionProration,
   hasAssignmentInPeriod,
   hasCurrentOrFutureMatchingAssignment,
@@ -119,6 +120,8 @@ import {
   type RecordAllocatedPaymentResult,
   type RecordRefundInput,
   type RecordRefundResult,
+  type RedateConfirmedTrainingStartInput,
+  type RedateConfirmedTrainingStartResult,
   type ResolveExistingRegistrationFeeInput,
   type ReversePaymentInput,
   type ReverseRefundInput,
@@ -135,6 +138,10 @@ import {
 } from "@/lib/finance/types"
 import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 import { academyPlanIsValid } from "@/lib/training/academy-plans"
+import {
+  IMPLAUSIBLE_TRAINING_START_MESSAGE,
+  trainingStartIsImplausiblyEarly,
+} from "@/lib/training/training-start"
 
 const MAX_MONEY_PAISE = 1_000_000_000
 const MAX_NOTE_LENGTH = 500
@@ -175,6 +182,7 @@ const FINANCE_AUDIT_EVENT_TYPES: FinanceAuditEventType[] = [
   "adjustment_created",
   "adjustment_reversed",
   "historical_reconciled",
+  "training_start_redated",
 ]
 
 type FinanceDependencies = {
@@ -673,7 +681,6 @@ function monthlyPreparationCandidates(
   })
   return [...candidatesByPlayer.values()].map((candidate) => ({
     ...candidate,
-    firstAssignment: readFirstAssignmentDate(database, candidate.agreement.playerAccountId),
     hasAssignment: hasAssignmentInPeriod(
       database,
       candidate.agreement.playerAccountId,
@@ -904,6 +911,9 @@ function buildOnboardingFinancePreview(
   const blockers: string[] = []
   const warnings: string[] = []
   if (!enrollment.trainingStartConfirmedAt) blockers.push("Confirm the training start date in Assessment.")
+  if (trainingStartIsImplausiblyEarly(enrollment.trainingStartOn, academyDateKey)) {
+    blockers.push(IMPLAUSIBLE_TRAINING_START_MESSAGE)
+  }
   if (enrollment.onboardingCompletedAt) blockers.push("This player’s onboarding is already complete.")
   if (enrollment.trainingStartOn > academyDateKey) {
     blockers.push(`Fee completion opens on ${enrollment.trainingStartOn}.`)
@@ -992,6 +1002,7 @@ function buildOnboardingFinancePreview(
     numerator: null,
     period: null,
   }]
+  const pausedPeriods: string[] = []
   relevantPeriods.forEach((period, index) => {
     const covered = usableAssignments.some((assignment) => (
       assignment.effectiveFrom <= monthEnd(period)
@@ -999,7 +1010,16 @@ function buildOnboardingFinancePreview(
       && assignment.seriesStartsOn <= monthEnd(period)
       && (assignment.seriesEndsOn === null || assignment.seriesEndsOn >= monthStart(period))
     ))
-    if (!covered) blockers.push(`No matching session assignment covers ${period}.`)
+    // Pausing ends an assignment and resuming creates a new one, so a returning
+    // player has real gaps in their assignment history. Those months carry no
+    // training and so no fee, rather than blocking the whole timeline. The first
+    // fee month is the exception: it carries the partial-month session count, so
+    // an uncovered one means the timeline itself is inconsistent.
+    if (!covered) {
+      if (index === 0) blockers.push(`No matching session assignment covers ${period}.`)
+      else pausedPeriods.push(period)
+      return
+    }
     if (period < activation.trackingMonth) {
       lines.push({
         amountPaise: null,
@@ -1041,6 +1061,11 @@ function buildOnboardingFinancePreview(
   })
   if (lines.some((line) => line.kind === "before_tracking")) {
     warnings.push("Periods before financial tracking will be recorded as history without charges.")
+  }
+  if (pausedPeriods.length) {
+    warnings.push(
+      `No session assignment covers ${pausedPeriods.join(", ")}; no fee is due for those months.`,
+    )
   }
   if (feePlanPeriod > academyPeriod) {
     warnings.push(`No monthly charge is due now; the Fee Plan begins in ${feePlanPeriod}.`)
@@ -1393,6 +1418,192 @@ export function endFeeAgreement(
   }, { behavior: "immediate" })
 }
 
+/**
+ * Confirming a training start later than the player actually began is the one
+ * mistake immutability cannot absorb: the earlier months become unbillable and
+ * their attendance unrecordable, with no way back. This head-coach-only path
+ * corrects the date backwards, and only while doing so contradicts nothing that
+ * has already been recorded. Moving the date forward stays forbidden — that
+ * direction invalidates attendance already taken and is instead recoverable by
+ * voiding the charge that was issued too early.
+ */
+export function redateConfirmedTrainingStart(
+  input: RedateConfirmedTrainingStartInput,
+  {
+    coachId,
+    createId = randomUUID,
+    database = initializeDatabase(),
+    now = new Date(),
+  }: CoachContext,
+): RedateConfirmedTrainingStartResult {
+  if (!input?.playerId?.trim()) financeError("INVALID_INPUT", "Choose a player.", "playerId")
+  if (!isValidDateKey(input.trainingStartOn)) {
+    financeError("INVALID_INPUT", "Choose a valid training start date.", "trainingStartOn")
+  }
+  const reason = requireText(input.reason, "reason", "A reason for the corrected training start")
+  const expectedRevision = validateRevision(
+    input.expectedRevision,
+    "Review the onboarding record before correcting the training start date.",
+  )
+  const idempotencyKey = validateIdempotencyKey(input.idempotencyKey)
+  const fingerprint = financialPayloadFingerprint({
+    expectedRevision,
+    playerId: input.playerId,
+    reason,
+    trainingStartOn: input.trainingStartOn,
+  })
+
+  return database.transaction((tx) => {
+    requireCoach(tx, coachId)
+    const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
+    if (replay) {
+      const metadata = parseAuditMetadata<{
+        fingerprint?: string
+        result?: RedateConfirmedTrainingStartResult
+      }>(replay.metadata)
+      if (replay.eventType !== "training_start_redated"
+        || replay.entityId !== input.playerId
+        || metadata.fingerprint !== fingerprint
+        || !metadata.result) {
+        financeError("IDEMPOTENCY_CONFLICT", "This request identifier was already used differently.")
+      }
+      return { ...metadata.result, reused: true }
+    }
+
+    requireActiveFinanceTarget(tx, input.playerId)
+    const enrollment = tx.select({
+      onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
+      recordRevision: playerEnrollments.recordRevision,
+      trainingStartOn: playerEnrollments.trainingStartOn,
+    }).from(playerEnrollments)
+      .where(eq(playerEnrollments.accountId, input.playerId)).get()
+    if (!enrollment) financeError("NOT_FOUND", "Choose an approved active player.", "playerId")
+    if (!enrollment.onboardingCompletedAt) {
+      financeError(
+        "SETUP_REQUIRED",
+        "Correct the training start date in Assessment while onboarding is unfinished.",
+        "trainingStartOn",
+      )
+    }
+    if (enrollment.recordRevision !== expectedRevision) {
+      financeError("CONFLICT", "This onboarding record changed elsewhere. Review it and try again.")
+    }
+    if (input.trainingStartOn >= enrollment.trainingStartOn) {
+      financeError(
+        "INVALID_INPUT",
+        "A confirmed training start can only be corrected to an earlier date. "
+          + "Void the fees issued too early instead.",
+        "trainingStartOn",
+      )
+    }
+    if (trainingStartIsImplausiblyEarly(input.trainingStartOn, getAcademyDateKey(now))) {
+      financeError("INVALID_INPUT", IMPLAUSIBLE_TRAINING_START_MESSAGE, "trainingStartOn")
+    }
+
+    // Widening the window backwards cannot invalidate attendance or a later
+    // full-fee month, but it does re-base the first billed month. Refuse while
+    // any fee already stands in the months the correction re-bases.
+    const reopenedPeriods = monthsBetween(
+      input.trainingStartOn.slice(0, 7),
+      enrollment.trainingStartOn.slice(0, 7),
+    )
+    const contradicted = tx.select({
+      billingPeriod: financialCharges.billingPeriod,
+      id: financialCharges.id,
+    }).from(financialCharges).where(and(
+      eq(financialCharges.playerAccountId, input.playerId),
+      eq(financialCharges.type, "monthly_training"),
+      eq(financialCharges.lifecycle, "issued"),
+      inArray(financialCharges.billingPeriod, reopenedPeriods),
+    )).all()
+    if (contradicted.length) {
+      const chargeIds = contradicted.map(({ id }) => id)
+      const settled = Boolean(tx.select({ id: paymentAllocations.id }).from(paymentAllocations)
+        .where(inArray(paymentAllocations.chargeId, chargeIds)).get())
+      const adjusted = Boolean(tx.select({ id: chargeAdjustments.id }).from(chargeAdjustments)
+        .where(inArray(chargeAdjustments.chargeId, chargeIds)).get())
+      const periods = contradicted.map(({ billingPeriod }) => billingPeriod).join(", ")
+      financeError(
+        "CONFLICT",
+        settled
+          ? `Reverse the payments on the ${periods} monthly fee, then void it, before correcting the training start date.`
+          : adjusted
+            ? `Reverse the adjustments on the ${periods} monthly fee, then void it, before correcting the training start date.`
+            : `Void the ${periods} monthly fee before correcting the training start date.`,
+        "trainingStartOn",
+      )
+    }
+
+    const update = tx.update(playerEnrollments).set({
+      recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
+      trainingStartConfirmedAt: now,
+      trainingStartConfirmedByAccountId: coachId,
+      trainingStartOn: input.trainingStartOn,
+      updatedAt: now,
+    }).where(and(
+      eq(playerEnrollments.accountId, input.playerId),
+      eq(playerEnrollments.recordRevision, expectedRevision),
+      isNotNull(playerEnrollments.onboardingCompletedAt),
+    )).run()
+    if (update.changes !== 1) {
+      financeError("CONFLICT", "This onboarding record changed elsewhere. Review it and try again.")
+    }
+
+    // The earliest Fee Plan is extended back to the corrected month so the
+    // reopened months can be prepared. Later plans all start at or after it, so
+    // widening the earliest cannot overlap them.
+    const earliest = tx.select().from(feeAgreements)
+      .where(eq(feeAgreements.playerAccountId, input.playerId))
+      .orderBy(asc(feeAgreements.effectiveFrom), asc(feeAgreements.createdAt))
+      .get()
+    const reopenedFrom = monthStart(reopenedPeriods[0])
+    let agreementEffectiveFrom = earliest?.effectiveFrom ?? null
+    if (earliest && earliest.effectiveFrom > reopenedFrom) {
+      const planUpdate = tx.update(feeAgreements).set({
+        effectiveFrom: reopenedFrom,
+        recordRevision: sql`${feeAgreements.recordRevision} + 1`,
+        updatedByAccountId: coachId,
+        updatedAt: now,
+      }).where(and(
+        eq(feeAgreements.id, earliest.id),
+        eq(feeAgreements.recordRevision, earliest.recordRevision),
+      )).run()
+      if (planUpdate.changes !== 1) {
+        financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it and try again.")
+      }
+      agreementEffectiveFrom = reopenedFrom
+    }
+
+    const result: RedateConfirmedTrainingStartResult = {
+      agreementEffectiveFrom,
+      agreementId: earliest?.id ?? null,
+      playerId: input.playerId,
+      previousTrainingStartOn: enrollment.trainingStartOn,
+      recordRevision: expectedRevision + 1,
+      reopenedPeriods,
+      reused: false,
+      trainingStartOn: input.trainingStartOn,
+    }
+    insertAudit(tx, {
+      actorId: coachId,
+      createId,
+      entityId: input.playerId,
+      entityType: "player",
+      eventType: "training_start_redated",
+      idempotencyKey,
+      metadata: {
+        fingerprint,
+        operation: "training_start_redated",
+        playerId: input.playerId,
+        reason,
+        result,
+      },
+      now,
+    })
+    return result
+  }, { behavior: "immediate" })
+}
+
 export function issueRegistrationChargeForApprovedPlayer({
   approvedAt,
   coachId,
@@ -1514,6 +1725,68 @@ export function setupExistingPlayerFinance(
   }, { behavior: "immediate" })
 }
 
+/**
+ * A player's first billed month is prorated to the sessions that actually remain
+ * to them, using the same reading of the confirmed training start that the
+ * onboarding path uses, so a start still in the future when onboarding completed
+ * is charged exactly as a backdated one is.
+ *
+ * The month is identified from the ledger rather than from the training start
+ * alone: the first month a plan bills can fall later than the month the player
+ * started, and it is only that first billed month whose fee is partial. Every
+ * later month is the full agreed fee, and the training start remains the basis
+ * for the session count in either case.
+ */
+function monthlyChargeBasis(
+  database: SmbaDatabaseExecutor,
+  {
+    agreement,
+    isFirstBilledMonth,
+    period,
+    trainingStartOn,
+  }: {
+    agreement: typeof feeAgreements.$inferSelect
+    isFirstBilledMonth: boolean
+    period: string
+    trainingStartOn: string
+  },
+) {
+  // Only a start inside the billed month can move that month's due date; a
+  // start in an earlier month would otherwise date the fee before the period.
+  const dueDate = trainingStartOn.slice(0, 7) === period
+    && Number(trainingStartOn.slice(8, 10)) > agreement.monthlyDueDay
+    ? addCalendarDays(trainingStartOn, 3)
+    : dateInMonth(period, agreement.monthlyDueDay)
+  const ordinary = {
+    amountPaise: agreement.agreedMonthlyFeePaise,
+    description: `Monthly training fee · ${period}`,
+    dueDate,
+  }
+  if (!isFirstBilledMonth) return ordinary
+
+  const proration = readFirstMonthSessionProration(database, {
+    batch: agreement.batch,
+    period,
+    playerId: agreement.playerAccountId,
+    programme: agreement.level,
+    trainingStartOn,
+  })
+  if (proration.totalSessions === 0
+    || proration.remainingSessions === proration.totalSessions) {
+    return ordinary
+  }
+  return {
+    amountPaise: calculateProratedSessionFee(
+      agreement.agreedMonthlyFeePaise,
+      proration.remainingSessions,
+      proration.totalSessions,
+    ),
+    description: "First monthly training fee · "
+      + `${proration.remainingSessions}/${proration.totalSessions} sessions`,
+    dueDate,
+  }
+}
+
 export function prepareMonthlyCharges(
   input: PrepareMonthlyChargesInput,
   {
@@ -1543,11 +1816,13 @@ export function prepareMonthlyCharges(
       if (replay.eventType !== "monthly_fees_prepared") {
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was already used.")
       }
-      const result = parseAuditMetadata<PrepareMonthlyChargesResult>(replay.metadata)
+      const result = parseAuditMetadata<
+        Omit<PrepareMonthlyChargesResult, "deferred"> & { deferred?: number }
+      >(replay.metadata)
       if (result.period !== input.period) {
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was used for another month.")
       }
-      return { ...result, reused: true }
+      return { ...result, deferred: result.deferred ?? 0, reused: true }
     }
 
     const candidates = monthlyPreparationCandidates(tx, input.period, now)
@@ -1558,11 +1833,12 @@ export function prepareMonthlyCharges(
       ready: 0,
       alreadyPrepared: 0,
       awaitingAssignment: 0,
+      deferred: 0,
       setupRequired: approvedPlayerIds.filter((id) => !candidateIds.has(id)).length,
       createdChargeIds: [],
       reused: false,
     }
-    candidates.forEach(({ agreement, firstAssignment, hasAssignment }) => {
+    candidates.forEach(({ agreement, enrollment, hasAssignment }) => {
       if (!hasAssignment) {
         result.awaitingAssignment += 1
         return
@@ -1582,20 +1858,33 @@ export function prepareMonthlyCharges(
         })
         return
       }
-      const isFirstMonth = firstAssignment?.slice(0, 7) === input.period
-      const startDay = Number(firstAssignment?.slice(8, 10) ?? "01")
-      const dueDate = isFirstMonth && startDay > agreement.monthlyDueDay
-        ? addCalendarDays(firstAssignment as string, 3)
-        : dateInMonth(input.period, agreement.monthlyDueDay)
+      const billedEarlier = tx.select({ id: financialCharges.id })
+        .from(financialCharges).where(and(
+          eq(financialCharges.playerAccountId, agreement.playerAccountId),
+          eq(financialCharges.type, "monthly_training"),
+          eq(financialCharges.lifecycle, "issued"),
+          lt(financialCharges.billingPeriod, input.period),
+        )).get()
+      const basis = monthlyChargeBasis(tx, {
+        agreement,
+        isFirstBilledMonth: !billedEarlier
+          && input.period >= enrollment.trainingStartOn.slice(0, 7),
+        period: input.period,
+        trainingStartOn: enrollment.trainingStartOn,
+      })
+      if (basis.amountPaise === 0) {
+        result.deferred += 1
+        return
+      }
       const issued = issueCharge(tx, {
         actorId: coachId,
         agreementId: agreement.id,
-        amountPaise: agreement.agreedMonthlyFeePaise,
+        amountPaise: basis.amountPaise,
         billingPeriod: input.period,
         createFeeReference,
         createId,
-        description: `Monthly training fee · ${input.period}`,
-        dueDate,
+        description: basis.description,
+        dueDate: basis.dueDate,
         now,
         playerId: agreement.playerAccountId,
         type: "monthly_training",
