@@ -18,11 +18,13 @@ import {
   getFinancialActivity,
   listFinanceActivityCoaches,
 } from "@/lib/finance/service"
-import type {
-  FinanceAuditEventType,
-  FinancePlayerScope,
-  FinanceRegisterMode,
-  FinanceStatus,
+import {
+  FINANCE_AUDIT_EVENT_TYPES,
+  FINANCE_AUDIT_EVENTS,
+  isFinanceAuditEventType,
+  type FinancePlayerScope,
+  type FinanceRegisterMode,
+  type FinanceStatus,
 } from "@/lib/finance/types"
 import { getAcademyMonthKey } from "@/lib/format"
 
@@ -43,27 +45,10 @@ const FINANCE_STATUSES: FinanceStatus[] = [
   "void",
 ]
 
-const ACTIVITY_TYPES: Array<{ label: string; value: FinanceAuditEventType }> = [
-  { label: "Financials activated", value: "finance_activated" },
-  { label: "Fee plan created", value: "fee_agreement_created" },
-  { label: "Fee plan changed", value: "fee_agreement_replaced" },
-  { label: "Fee plan paused", value: "fee_agreement_paused" },
-  { label: "Fee plan ended", value: "fee_agreement_ended" },
-  { label: "Fee issued", value: "charge_issued" },
-  { label: "Fee voided", value: "charge_voided" },
-  { label: "Monthly fees issued", value: "monthly_fees_prepared" },
-  { label: "Payment recorded", value: "payment_recorded" },
-  { label: "Payment reversed", value: "payment_reversed" },
-  { label: "Refund recorded", value: "refund_recorded" },
-  { label: "Refund reversed", value: "refund_reversed" },
-  { label: "Concession created", value: "concession_created" },
-  { label: "Concession applied", value: "concession_applied" },
-  { label: "Concession application reversed", value: "concession_application_reversed" },
-  { label: "Concession reversed", value: "concession_reversed" },
-  { label: "Fee adjustment recorded", value: "adjustment_created" },
-  { label: "Fee adjustment reversed", value: "adjustment_reversed" },
-  { label: "Historical status recorded", value: "historical_reconciled" },
-]
+const ACTIVITY_TYPES = FINANCE_AUDIT_EVENT_TYPES.map((value) => ({
+  label: FINANCE_AUDIT_EVENTS[value].filterLabel,
+  value,
+}))
 
 type SearchParams = Record<string, string | string[] | undefined>
 
@@ -285,9 +270,7 @@ export default async function FinancialRecordsPage({
   const to = isValidDateKey(toValue) ? toValue : ""
   const validDates = !from || !to || from <= to
   const eventValue = queryValue(params, "eventType")
-  const eventType = ACTIVITY_TYPES.some((item) => item.value === eventValue)
-    ? eventValue as FinanceAuditEventType
-    : "all"
+  const eventType = isFinanceAuditEventType(eventValue) ? eventValue : "all"
   const coachValue = queryValue(params, "coachId")
   const coachOptions = listFinanceActivityCoaches({
     coachId: identity.subjectId,
