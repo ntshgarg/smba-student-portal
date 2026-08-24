@@ -19,7 +19,7 @@ import {
   HEAD_COACH_ONLY_NOTICE,
   requireCoachPage,
 } from "@/lib/auth/current-coach"
-import { listCoachAnnouncements } from "@/lib/announcements/queries"
+import { countActiveCoachAnnouncements } from "@/lib/announcements/queries"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   getCoachSessionSnapshot,
@@ -184,10 +184,10 @@ export default async function CoachDashboardPage({
         outstandingPaise: 0,
         preparation: { alreadyPrepared: 0, ready: 0 },
       }
-  const activeAnnouncementCount = listCoachAnnouncements(
-    { status: "active" },
-    { coachId: identity.subjectId, now },
-  ).length
+  const activeAnnouncementCount = countActiveCoachAnnouncements({
+    coachId: identity.subjectId,
+    now,
+  })
   const playerRecords = listOperationalPlayerRecords()
   const activePlayerIds = playerRecords.trainingProfiles
     .filter((profile) => profile.status === "active")

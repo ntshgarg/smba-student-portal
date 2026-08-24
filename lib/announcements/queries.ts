@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, desc, eq, gte, isNull, or } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm"
 
 import type {
   AnnouncementChannel,
@@ -68,13 +68,35 @@ type BaseRow = {
   withdrawnByAccountId: string | null
 }
 
-function listChannels(database: SmbaDatabaseExecutor, announcementId: string) {
-  return database.select({ channel: broadcastChannels.channel })
-    .from(broadcastChannels)
-    .where(eq(broadcastChannels.broadcastId, announcementId))
+/**
+ * Reads the channels behind a whole set of announcements in one query instead of
+ * one per announcement. An announcement without channel rows maps to an empty
+ * array, exactly as the per-announcement read returned. Both channel values are
+ * ASCII, so ordering on the column reproduces the `sort()` that read applied.
+ */
+function listChannelsByAnnouncement(
+  database: SmbaDatabaseExecutor,
+  announcementIds: string[],
+) {
+  const grouped = new Map<string, AnnouncementChannel[]>(
+    announcementIds.map((announcementId) => [announcementId, []]),
+  )
+  if (!grouped.size) return grouped
+  database.select({
+    announcementId: broadcastChannels.broadcastId,
+    channel: broadcastChannels.channel,
+  }).from(broadcastChannels)
+    .where(inArray(broadcastChannels.broadcastId, [...grouped.keys()]))
+    .orderBy(asc(broadcastChannels.channel))
     .all()
-    .map(({ channel }) => channel)
-    .sort() as AnnouncementChannel[]
+    .forEach(({ announcementId, channel }) => {
+      grouped.get(announcementId)?.push(channel)
+    })
+  return grouped
+}
+
+function listChannels(database: SmbaDatabaseExecutor, announcementId: string) {
+  return listChannelsByAnnouncement(database, [announcementId]).get(announcementId) ?? []
 }
 
 function coachAnnouncementFromRow(
@@ -218,9 +240,10 @@ export function listCoachAnnouncements(
     )
     .orderBy(desc(broadcasts.publishedAt), desc(broadcasts.id))
     .all()
+  const channels = listChannelsByAnnouncement(database, rows.map((row) => row.id))
 
   return rows.flatMap((row) => {
-    const announcement = coachAnnouncementFromRow(row, listChannels(database, row.id), now)
+    const announcement = coachAnnouncementFromRow(row, channels.get(row.id) ?? [], now)
     if (filters.month && getAcademyMonthKey(row.publishedAt) !== filters.month) return []
     if (filters.status && filters.status !== "all" && announcement.status !== filters.status) {
       return []
@@ -248,6 +271,60 @@ export function listCoachAnnouncements(
       withdrawal: announcement.withdrawal,
     }]
   })
+}
+
+/**
+ * Answers whether the academy has ever published an announcement. The archive
+ * asked this by reading every announcement unfiltered and comparing the length
+ * against zero; the filters only ever remove items, so existence is the whole
+ * question.
+ */
+export function hasCoachAnnouncements({
+  coachId,
+  database = initializeDatabase(),
+}: CoachAnnouncementQueryOptions): boolean {
+  requireHeadAdminAccess(coachId, { database })
+  return Boolean(database.select({ id: broadcasts.id }).from(broadcasts)
+    .innerJoin(
+      broadcastAudienceTargets,
+      and(
+        eq(broadcastAudienceTargets.broadcastId, broadcasts.id),
+        eq(broadcastAudienceTargets.audience, "everyone"),
+      ),
+    )
+    .get())
+}
+
+/**
+ * Counts the announcements `listCoachAnnouncements` reports with an `active`
+ * status. `getAnnouncementStatus` treats an announcement as active when it has
+ * not been withdrawn and has not passed its expiry date, which is the predicate
+ * expressed here.
+ */
+export function countActiveCoachAnnouncements({
+  coachId,
+  database = initializeDatabase(),
+  now = new Date(),
+}: CoachAnnouncementQueryOptions): number {
+  requireHeadAdminAccess(coachId, { database })
+  const academyDate = getAcademyDateKey(now)
+  return database.select({ total: sql<number>`count(*)` }).from(broadcasts)
+    .innerJoin(
+      broadcastAudienceTargets,
+      and(
+        eq(broadcastAudienceTargets.broadcastId, broadcasts.id),
+        eq(broadcastAudienceTargets.audience, "everyone"),
+      ),
+    )
+    .leftJoin(
+      broadcastWithdrawals,
+      eq(broadcastWithdrawals.broadcastId, broadcasts.id),
+    )
+    .where(and(
+      isNull(broadcastWithdrawals.broadcastId),
+      or(isNull(broadcasts.expiresOn), gte(broadcasts.expiresOn, academyDate)),
+    ))
+    .get()?.total ?? 0
 }
 
 export function listActiveHomepageAnnouncements(
