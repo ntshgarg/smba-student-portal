@@ -39,7 +39,10 @@ vi.mock("@/lib/finance/service", () => ({
   getCoachFinanceRapidDesk: mocks.getCoachFinanceRapidDesk,
   getFinanceActivation: mocks.getFinanceActivation,
 }))
-vi.mock("@/lib/format", () => ({
+/* Only the clock is pinned — `FinancialsCard` reads the real `formatInr`
+   from this module, and a bare factory would erase it. */
+vi.mock("@/lib/format", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/format")>()),
   getAcademyMonthKey: () => "2026-08",
 }))
 

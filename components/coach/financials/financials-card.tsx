@@ -4,21 +4,12 @@ import {
   CoachDashboardCard,
   CoachDashboardSummary,
 } from "@/components/coach/dashboard-card"
-
-const inrFormat = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-})
+import { formatInr } from "@/lib/format"
 
 const periodFormat = new Intl.DateTimeFormat("en-IN", {
   month: "long",
   timeZone: "UTC",
 })
-
-function formatInr(paise: number) {
-  return inrFormat.format(paise / 100)
-}
 
 function formatPeriod(period: string) {
   const [year, month] = period.split("-").map(Number)
