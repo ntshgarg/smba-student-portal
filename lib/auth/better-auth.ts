@@ -14,6 +14,18 @@ import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 
 const LOCAL_ONLY_AUTH_SECRET = "smba-local-only-auth-secret-change-before-deployment-2026"
 
+// `next build` and `next start` both set NODE_ENV=production for a purely local
+// artifact, so NODE_ENV alone cannot decide whether the published constant above
+// is acceptable. coachTotpRequired below resolves the same ambiguity by reading an
+// explicit variable before falling back to NODE_ENV; mirror that ordering here.
+// `npm run build` and the three fixture:start:* commands declare the opt-in
+// because they only ever serve a disposable local fixture.
+function localAuthSecretAllowed() {
+  if (process.env.SMBA_ALLOW_LOCAL_AUTH_SECRET === "true") return true
+  if (process.env.SMBA_ALLOW_LOCAL_AUTH_SECRET === "false") return false
+  return process.env.NODE_ENV !== "production"
+}
+
 function authSecret() {
   if (process.env.VERCEL === "1"
     && process.env.VERCEL_ENV === "production"
@@ -28,10 +40,20 @@ function authSecret() {
     return configured
   }
 
-  // `next build` uses NODE_ENV=production even for a local artifact. Vercel is
-  // the production boundary where a missing secret must stop deployment.
   if (process.env.VERCEL === "1") {
     throw new Error("BETTER_AUTH_SECRET is required for a Vercel deployment.")
+  }
+  // A self-hosted deployment has no VERCEL variable, and this secret signs
+  // sessions and encrypts TOTP material, so fail rather than silently use a
+  // value published in this repository. This throws on the first request that
+  // loads this module, not at boot -- Next.js evaluates route modules lazily and
+  // app/api/health/route.ts does not import it, so an unconfigured deployment
+  // still comes up and still reports healthy.
+  if (!localAuthSecretAllowed()) {
+    throw new Error(
+      "BETTER_AUTH_SECRET is required in production. Set SMBA_ALLOW_LOCAL_AUTH_SECRET=true"
+      + " only to serve a disposable local fixture from a production build.",
+    )
   }
   return LOCAL_ONLY_AUTH_SECRET
 }
