@@ -85,9 +85,15 @@ export function validateAllocationDraft({
   return { ok: true, allocations, totalPaise }
 }
 
+/**
+ * Whole percent only. The stored unit stays basis points, because the column
+ * and `calculateConcessionAmount` are both defined in them, but a fraction of a
+ * percent is no longer accepted: it is the one input that can put a part-rupee
+ * amount into a ledger otherwise denominated in whole rupees, and the academy
+ * grants discounts in whole percent. 12.5% of the Rs 6,500 plan is Rs 812.50.
+ */
 export function parsePercentageToBasisPoints(value: string) {
   const normalized = value.trim()
-  if (!/^(?:0|[1-9]\d?)(?:\.\d{1,2})?$|^100(?:\.0{1,2})?$/u.test(normalized)) return null
-  const basisPoints = Math.round(Number(normalized) * 100)
-  return basisPoints > 0 && basisPoints <= 10_000 ? basisPoints : null
+  if (!/^(?:[1-9]\d?|100)$/u.test(normalized)) return null
+  return Number(normalized) * 100
 }

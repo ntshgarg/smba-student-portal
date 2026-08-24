@@ -54,13 +54,21 @@ describe("Financials allocation drafts", () => {
     })
   })
 
-  it("formats suggested values and parses concession percentages precisely", () => {
+  it("formats suggested values and accepts only whole concession percentages", () => {
     expect(createAllocationDraft([
       { id: "registration", amountPaise: 50_050 },
       { id: "monthly", amountPaise: 350_000 },
     ])).toEqual({ registration: "500.50", monthly: "3500" })
-    expect(parsePercentageToBasisPoints("7.5")).toBe(750)
+    expect(parsePercentageToBasisPoints("7")).toBe(700)
     expect(parsePercentageToBasisPoints("100")).toBe(10_000)
+    // A fraction of a percent is the one coach input that can put a part-rupee
+    // amount into a ledger denominated in whole rupees: 12.5% of the Rs 6,500
+    // plan is Rs 812.50. Fees round to Rs 50 and refunds are the only other
+    // sub-rupee source, and that one is deliberate.
+    expect(parsePercentageToBasisPoints("7.5")).toBeNull()
+    expect(parsePercentageToBasisPoints("12.5")).toBeNull()
     expect(parsePercentageToBasisPoints("100.01")).toBeNull()
+    expect(parsePercentageToBasisPoints("0")).toBeNull()
+    expect(parsePercentageToBasisPoints("101")).toBeNull()
   })
 })

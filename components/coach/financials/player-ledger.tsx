@@ -856,7 +856,7 @@ function ConcessionCreationForm({
       setFeedback({
         message: valueKind === "fixed"
           ? "Enter a valid concession amount"
-          : "Enter a percentage from 0.01% to 100%",
+          : "Enter a whole percentage from 1% to 100%",
         tone: "error",
       })
       valueRef.current?.focus()
@@ -942,7 +942,7 @@ function ConcessionCreationForm({
             <input
               ref={valueRef}
               name="concessionValue"
-              inputMode="decimal"
+              inputMode={valueKind === "fixed" ? "decimal" : "numeric"}
               value={value}
               disabled={pending}
               placeholder={valueKind === "fixed" ? "500" : "10"}
@@ -952,7 +952,7 @@ function ConcessionCreationForm({
           <small>
             {valueKind === "fixed"
               ? "The concession cannot exceed the remaining fee."
-              : "The percentage is calculated from the original charge and capped by its remaining fee."}
+              : "A whole percentage of the original charge, capped by its remaining fee."}
           </small>
         </label>
 
