@@ -1587,8 +1587,18 @@ h3 {
   border-right: 0;
 }
 
+/* #eee8dc on the --ivory card was 1.12:1 — the whole selected state, on the one
+   screen every session starts from. Of the two idioms available, .segmented
+   button[aria-pressed="true"] inverts against the navy hero it sits on (ivory
+   fill, navy ink, --shadow-keyline-bottom under it); transposed onto an ivory
+   card the fill becomes a no-op and only that 3px keyline would be left to carry
+   the state. .player-attendance-year-selector button.is-active is already this
+   control on a light surface and makes the same editorial move — ink fills the
+   chosen segment — so the navy frame the switch already wears now closes around
+   the active half: 15.90:1 against --ivory, white ink at 17.33:1. */
 .login-method-switch button[aria-pressed="true"] {
-  background: #eee8dc;
+  background: var(--navy);
+  color: var(--white);
 }
 
 .login-method-switch + .login-form {
@@ -12162,22 +12172,45 @@ tr.is-expanded .coach-member-row-action button svg {
   border-left: 1px solid var(--line);
 }
 
+/* The pressed fill is what a coach reads down a roster at a glance on a phone
+   held courtside, so it carries the 3:1 WCAG 1.4.11 asks of state indication.
+   (The row also carries a "Marked" / "Not marked" caption, so the fill is the
+   fast channel rather than the only one.) The --green-soft / --red-soft washes these used to
+   carry measured 1.09:1 and 1.12:1 against the resting --paper fill, and 1.03:1
+   against each other. .coach-register-table td button.is-present and the roll
+   call's base .staff-roll-call-list article > [role="group"] button.is-present
+   already say "recorded" with the solid brand fill, so this recorder says it
+   the same way: 5.24:1 and 5.49:1 against --paper, white ink at 5.47:1 and
+   5.73:1 on the fill. Present and absent stay told apart by their labels, not
+   by hue. */
 .player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"] {
   box-shadow: none;
-  background: var(--green-soft);
-  color: var(--green);
+  background: var(--green);
+  color: var(--white);
 }
 
 .player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"] {
   box-shadow: none;
-  background: var(--red-soft);
-  color: var(--red-dark);
+  background: var(--red);
+  color: var(--white);
 }
 
 .player-attendance-recorder .attendance-roster-choices button:hover:not(:disabled),
 .player-attendance-recorder .attendance-roster-choices button:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: -2px;
+}
+
+/* The ring is inset, so it lands on whatever fill the button is wearing. Navy
+   on the resting --paper is 16.60:1, but navy on the pressed --green / --red is
+   3.17:1 and 3.02:1 — over 1.4.11's 3:1 floor by a hair, and only while those
+   two brand colours keep their exact lightness. White is already the ink on
+   these fills and gives 5.47:1 and 5.73:1, so the pressed state takes it. */
+.player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"]:hover:not(:disabled),
+.player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"]:focus-visible,
+.player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"]:hover:not(:disabled),
+.player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"]:focus-visible {
+  outline-color: var(--white);
 }
 
 .player-attendance-recorder .attendance-roster-choices button:disabled {
@@ -12620,16 +12653,23 @@ tr.is-expanded .coach-member-row-action button svg {
   border-left: 1px solid var(--line);
 }
 
+/* Matches the register grid's solid fill, for the same reason and the same
+   numbers as the recorder above: --green-soft / --red-soft measured 1.09:1 and
+   1.12:1 over the resting --paper fill, and solid restores 5.24:1 and 5.49:1.
+   Note this is the only roll-call skin that renders — staff-roll-call.tsx
+   hardcodes `staff-roll-call staff-roll-call-ledger`, so the
+   `.staff-roll-call-list article > [role="group"]` rules above are unreachable
+   and are not the precedent they look like. */
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button.is-present {
-  background: var(--green-soft);
-  color: var(--green);
+  background: var(--green);
+  color: var(--white);
 }
 
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button.is-absent {
-  background: var(--red-soft);
-  color: var(--red-dark);
+  background: var(--red);
+  color: var(--white);
 }
 
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
@@ -12638,6 +12678,19 @@ tr.is-expanded .coach-member-row-action button svg {
   > .staff-roll-call-choice-box button:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: -2px;
+}
+
+/* Same inset-ring problem as the recorder, same remedy: navy on the pressed
+   fill is 3.17:1 / 3.02:1, white is 5.47:1 / 5.73:1. */
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button.is-present:hover:not(:disabled),
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button.is-present:focus-visible,
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button.is-absent:hover:not(:disabled),
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button.is-absent:focus-visible {
+  outline-color: var(--white);
 }
 
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
