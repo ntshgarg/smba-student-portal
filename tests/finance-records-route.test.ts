@@ -273,6 +273,140 @@ describe("Financials Phase 3 record export routes", () => {
     consoleError.mockRestore()
   })
 
+  // F-17: only the first page is read inside the handler's `try`. A page that
+  // fails after that arrives once 200 and the filename are on the wire, so the
+  // coach ends up with a file that looks complete and is not. Both exports must
+  // say so in their own last row.
+  it("ends a fee-register export that stops mid-stream with a notice the coach can read", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mocks.getFeeRegister
+      .mockReturnValueOnce({ nextCursor: "player-42", rows: [registerRow], summary: {} })
+      .mockImplementationOnce(() => {
+        throw new Error("SQLITE_BUSY: database is locked")
+      })
+
+    const response = await downloadFeeRegister(new Request(
+      "https://academy.example/coach/financials/records/fees.csv?mode=registration",
+    ))
+    const rows = (await response.text()).split("\r\n").filter(Boolean)
+
+    expect(response.status).toBe(200)
+    expect(rows).toHaveLength(3)
+    expect(rows[1]).toContain("SMBA#0042")
+    expect(rows[2]).toContain("EXPORT INCOMPLETE")
+    expect(rows[2]).toContain("stopped after 1 row")
+    expect(consoleError).toHaveBeenCalledWith(
+      "Financial fee-register export stopped before its last row.",
+      expect.objectContaining({ mode: "registration", rowsWritten: 1 }),
+    )
+    expect(String(consoleError.mock.calls[0]?.[1]?.cause)).toContain("SQLITE_BUSY")
+
+    consoleError.mockRestore()
+  })
+
+  it("ends an activity export that stops mid-stream with the same notice", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mocks.getFinancialActivity
+      .mockReturnValueOnce({ items: [activityItem], nextCursor: "event-1" })
+      .mockImplementationOnce(() => {
+        throw new Error("Hrana stream expired")
+      })
+
+    const response = await downloadActivity(new Request(
+      "https://academy.example/coach/financials/records/activity.csv?from=2026-08-01&to=2026-08-31",
+    ))
+    const rows = (await response.text()).split("\r\n").filter(Boolean)
+
+    expect(response.status).toBe(200)
+    expect(rows[rows.length - 1]).toContain("EXPORT INCOMPLETE")
+    expect(consoleError).toHaveBeenCalledWith(
+      "Financial activity export stopped before its last row.",
+      expect.objectContaining({ from: "2026-08-01", rowsWritten: 1, to: "2026-08-31" }),
+    )
+    expect(String(consoleError.mock.calls[0]?.[1]?.cause)).toContain("Hrana stream expired")
+
+    consoleError.mockRestore()
+  })
+
+  // F-17: `getFeeRegister` re-runs `requireCoach`, `requireFinanceActive` and
+  // cursor validation on every page, so a decided refusal can land after the
+  // first one, once 200 is on the wire. The service already words those for a
+  // coach, and "run it again" is not the words: the same page would be refused
+  // the same way. This is the mid-stream half of `financeDownloadRejection`.
+  it("carries a mid-stream finance refusal into the file in its own words", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mocks.getFeeRegister
+      .mockReturnValueOnce({ nextCursor: "player-42", rows: [registerRow], summary: {} })
+      .mockImplementationOnce(() => {
+        throw new FinanceServiceError(
+          "INVALID_INPUT",
+          "The financial-records cursor is invalid.",
+        )
+      })
+
+    const response = await downloadFeeRegister(new Request(
+      "https://academy.example/coach/financials/records/fees.csv?mode=registration",
+    ))
+    const rows = (await response.text()).split("\r\n").filter(Boolean)
+
+    expect(rows[2]).toContain("EXPORT INCOMPLETE")
+    expect(rows[2]).toContain("The financial-records cursor is invalid.")
+    expect(rows[2]).not.toContain("Run the export again.")
+    expect(consoleError).toHaveBeenCalledWith(
+      "Financial fee-register export stopped before its last row.",
+      expect.objectContaining({ rowsWritten: 1 }),
+    )
+
+    consoleError.mockRestore()
+  })
+
+  // F-17: a reader that hands back a cursor it already returned used to end the
+  // drain exactly as a finished read ends it, so the export just stopped. The
+  // register is rebuilt per page (`paginateById`), so this is a register that
+  // changed mid-export, and a coach cannot tell the result from a short month.
+  it("ends an export a repeated cursor cuts short with the same notice", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mocks.getFeeRegister
+      .mockReturnValueOnce({ nextCursor: "player-42", rows: [registerRow], summary: {} })
+      .mockReturnValueOnce({ nextCursor: "player-42", rows: [registerRow], summary: {} })
+
+    const response = await downloadFeeRegister(new Request(
+      "https://academy.example/coach/financials/records/fees.csv?mode=registration",
+    ))
+    const rows = (await response.text()).split("\r\n").filter(Boolean)
+
+    expect(mocks.getFeeRegister).toHaveBeenCalledTimes(2)
+    expect(rows).toHaveLength(4)
+    expect(rows[3]).toContain("EXPORT INCOMPLETE")
+    expect(rows[3]).toContain("stopped after 2 rows")
+    expect(consoleError).toHaveBeenCalledWith(
+      "Financial fee-register export stopped before its last row.",
+      expect.objectContaining({ rowsWritten: 2 }),
+    )
+    expect(String(consoleError.mock.calls[0]?.[1]?.cause))
+      .toContain("returned a cursor it had already returned")
+
+    consoleError.mockRestore()
+  })
+
+  // The first page is still inside the `try`, so nothing has been written yet
+  // and the caller is entitled to a real 500 rather than a one-line CSV.
+  it("still answers a first-page failure with a 500 instead of a notice", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mocks.getFeeRegister.mockImplementationOnce(() => {
+      throw new Error("SQLITE_BUSY: database is locked")
+    })
+
+    const response = await downloadFeeRegister(new Request(
+      "https://academy.example/coach/financials/records/fees.csv?mode=monthly&period=2026-08",
+    ))
+
+    expect(response.status).toBe(500)
+    expect(await response.text()).not.toContain("EXPORT INCOMPLETE")
+
+    consoleError.mockRestore()
+  })
+
   it("rejects invalid export periods before reading the ledger", async () => {
     const feeResponse = await downloadFeeRegister(new Request(
       "https://academy.example/coach/financials/records/fees.csv?mode=monthly&period=August",

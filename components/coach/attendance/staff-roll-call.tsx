@@ -85,6 +85,21 @@ export function StaffRollCall({
     () => new Map(drafts.map((draft) => [draft.coachAccountId, draft.choice])),
     [drafts],
   )
+  const futureDate = selectedDate > referenceDate
+  // Carried on the save button as `aria-disabled` rather than `disabled`:
+  // disabling the element that currently holds focus hands focus to `<body>`,
+  // and it is the coach's own press that disables it — so every save, including
+  // the failure whose "Save staff attendance again" below is the way back, would
+  // send the next Tab to the top of the document. `saveRollCall` reads the same
+  // constant, so a press that still reaches the handler does nothing.
+  const cannotSave = !drafts.length || isSaving || futureDate
+  // `aria-disabled` on its own would leave the button a permanent tab stop
+  // whose press is a silent no-op, and the footer renders on a future date and
+  // with nothing marked yet. So only the in-flight save keeps it tabbable: that
+  // is the one state the coach is already standing on, and `tabindex="-1"` does
+  // not blur an element that already holds focus, so the save that just emptied
+  // `drafts` still hands the next Tab to the control after this one.
+  const saveOutOfReach = cannotSave && !isSaving
 
   // The roll call is one day of marks, so the stored copy is keyed by date and
   // can only ever return to the date it was made for — yesterday's marks cannot
@@ -152,7 +167,7 @@ export function StaffRollCall({
   }
 
   async function saveRollCall() {
-    if (!drafts.length || isSaving) return
+    if (cannotSave) return
     setIsSaving(true)
     setFeedback(null)
     try {
@@ -193,8 +208,6 @@ export function StaffRollCall({
       setIsSaving(false)
     }
   }
-
-  const futureDate = selectedDate > referenceDate
 
   return (
     <div className="coach-calendar coach-attendance-workspace page-shell">
@@ -268,13 +281,26 @@ export function StaffRollCall({
                     role="group"
                     aria-label={`Attendance for ${coach.fullName}`}
                   >
+                    {/* `unavailable` stays on `disabled`: it is a property of
+                        the date rather than of a press, and it would otherwise
+                        leave two dead tab stops per coach on every date they
+                        cannot be marked on. The in-flight save is carried on
+                        `aria-disabled` alone, for the reason the save button
+                        below is: macOS Safari and Firefox do not move focus to
+                        a button on click, so a coach who marks with the
+                        keyboard and then clicks Save is still standing on a
+                        choice button when the save disables it, and a disabled
+                        element hands focus to `<body>`. `chooseAttendance`
+                        re-checks `isSaving`, so a press that still lands does
+                        nothing. */}
                     {choices.map((choice) => (
                       <button
                         key={choice.value}
                         type="button"
                         className={currentChoice === choice.value ? `is-${choice.value}` : undefined}
                         aria-pressed={currentChoice === choice.value}
-                        disabled={unavailable || isSaving}
+                        disabled={unavailable}
+                        aria-disabled={unavailable || isSaving}
                         onClick={() => chooseAttendance(coach.accountId, choice.value)}
                       >
                         {choice.label}
@@ -296,7 +322,9 @@ export function StaffRollCall({
           />
           <button
             type="button"
-            disabled={!drafts.length || isSaving || futureDate}
+            aria-busy={isSaving}
+            aria-disabled={cannotSave}
+            tabIndex={saveOutOfReach ? -1 : undefined}
             onClick={saveRollCall}
           >
             {feedback?.offerRetry

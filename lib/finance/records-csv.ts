@@ -1,3 +1,8 @@
+import {
+  csvExportTruncationLine,
+  CsvExportValueError,
+  type ExportTruncation,
+} from "@/lib/finance/csv-truncation"
 import type { FinanceActivityItem, FinanceRegisterRow } from "@/lib/finance/types"
 import { formatAcademyTime, getAcademyDateKey } from "@/lib/format"
 
@@ -15,7 +20,7 @@ function csvCell(value: string) {
 function formatPaise(amountPaise: number | null) {
   if (amountPaise === null) return ""
   if (!Number.isSafeInteger(amountPaise)) {
-    throw new Error("Financial record export contains an invalid amount.")
+    throw new CsvExportValueError("Financial record export contains an invalid amount.")
   }
   const sign = amountPaise < 0 ? "-" : ""
   const absolute = Math.abs(amountPaise)
@@ -53,32 +58,54 @@ const REGISTER_HEADERS = [
   "Player record",
 ] as const
 
-export function feeRegisterCsvLines(rows: Iterable<FinanceRegisterRow>) {
+export function feeRegisterCsvLines(
+  rows: Iterable<FinanceRegisterRow>,
+  onTruncated: ExportTruncation,
+) {
   return (function* generateLines() {
     yield `${REGISTER_HEADERS.map(csvCell).join(",")}\r\n`
-    for (const row of rows) {
-      yield `${[
-        row.fullName,
-        row.academyId,
-        row.type === "registration" ? "Registration" : "Monthly training",
-        row.billingPeriod ?? "",
-        row.feeReference ?? "",
-        formatPaise(row.originalAmountPaise),
-        formatPaise(row.creditAdjustmentsPaise),
-        formatPaise(row.debitAdjustmentsPaise),
-        formatPaise(row.effectiveAmountPaise),
-        formatPaise(row.receivedPaise),
-        formatPaise(row.outstandingPaise),
-        row.dueDate ?? "",
-        row.status.replaceAll("_", " "),
-        row.archived ? "Archived" : "Active",
-      ].map(csvCell).join(",")}\r\n`
+    // `rows` is the route's cursor drain, so pulling the next one is a database
+    // read, and `formatPaise` throws on a charge the ledger should never hold.
+    // Both would otherwise escape into the ReadableStream that pulls this
+    // generator, which ends the response mid-file with the 200 already sent.
+    // `onTruncated` both records the fault and words the last line, since only
+    // the caller can tell a refusal from a moment that passed.
+    let written = 0
+    try {
+      for (const row of rows) {
+        yield `${[
+          row.fullName,
+          row.academyId,
+          row.type === "registration" ? "Registration" : "Monthly training",
+          row.billingPeriod ?? "",
+          row.feeReference ?? "",
+          formatPaise(row.originalAmountPaise),
+          formatPaise(row.creditAdjustmentsPaise),
+          formatPaise(row.debitAdjustmentsPaise),
+          formatPaise(row.effectiveAmountPaise),
+          formatPaise(row.receivedPaise),
+          formatPaise(row.outstandingPaise),
+          row.dueDate ?? "",
+          row.status.replaceAll("_", " "),
+          row.archived ? "Archived" : "Active",
+        ].map(csvCell).join(",")}\r\n`
+        written += 1
+      }
+    } catch (error) {
+      yield csvExportTruncationLine(
+        REGISTER_HEADERS.length,
+        written,
+        onTruncated(error, written),
+      )
     }
   })()
 }
 
-export function createFeeRegisterCsvStream(rows: Iterable<FinanceRegisterRow>) {
-  return createCsvStream(feeRegisterCsvLines(rows))
+export function createFeeRegisterCsvStream(
+  rows: Iterable<FinanceRegisterRow>,
+  onTruncated: ExportTruncation,
+) {
+  return createCsvStream(feeRegisterCsvLines(rows, onTruncated))
 }
 
 const ACTIVITY_HEADERS = [
@@ -92,24 +119,40 @@ const ACTIVITY_HEADERS = [
   "Reason",
 ] as const
 
-export function activityCsvLines(items: Iterable<FinanceActivityItem>) {
+export function activityCsvLines(
+  items: Iterable<FinanceActivityItem>,
+  onTruncated: ExportTruncation,
+) {
   return (function* generateLines() {
     yield `${ACTIVITY_HEADERS.map(csvCell).join(",")}\r\n`
-    for (const item of items) {
-      yield `${[
-        `${getAcademyDateKey(item.occurredAt)} ${formatAcademyTime(item.occurredAt)} IST`,
-        item.action,
-        item.actorName,
-        item.playerName ?? "",
-        item.academyId ?? "",
-        item.reference ?? "",
-        formatPaise(item.amountPaise),
-        item.reason ?? "",
-      ].map(csvCell).join(",")}\r\n`
+    let written = 0
+    try {
+      for (const item of items) {
+        yield `${[
+          `${getAcademyDateKey(item.occurredAt)} ${formatAcademyTime(item.occurredAt)} IST`,
+          item.action,
+          item.actorName,
+          item.playerName ?? "",
+          item.academyId ?? "",
+          item.reference ?? "",
+          formatPaise(item.amountPaise),
+          item.reason ?? "",
+        ].map(csvCell).join(",")}\r\n`
+        written += 1
+      }
+    } catch (error) {
+      yield csvExportTruncationLine(
+        ACTIVITY_HEADERS.length,
+        written,
+        onTruncated(error, written),
+      )
     }
   })()
 }
 
-export function createActivityCsvStream(items: Iterable<FinanceActivityItem>) {
-  return createCsvStream(activityCsvLines(items))
+export function createActivityCsvStream(
+  items: Iterable<FinanceActivityItem>,
+  onTruncated: ExportTruncation,
+) {
+  return createCsvStream(activityCsvLines(items, onTruncated))
 }

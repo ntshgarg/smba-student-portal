@@ -184,6 +184,21 @@ export function PlayerAttendanceRecorder({
   const selectedUnavailable = !selectedOccurrence
     || selectedOccurrence.status !== "scheduled"
     || occurrenceIsUpcoming(selectedOccurrence, referenceInstant)
+  // Carried on the save button as `aria-disabled` rather than `disabled`:
+  // disabling the element that currently holds focus hands focus to `<body>`,
+  // and it is the coach's own press that disables it — so every save, including
+  // the failure whose "Save attendance again" below is the way back, would send
+  // the next Tab to the top of the document. `saveAttendance` reads the same
+  // constant, so a press that still reaches the handler does nothing.
+  const cannotSave = !draftChanges.length || isSaving || selectedUnavailable
+  // `aria-disabled` on its own would leave the button a permanent tab stop
+  // whose press is a silent no-op, and the footer renders under "Attendance is
+  // not available." below and with nothing marked yet. So only the in-flight
+  // save keeps it tabbable: that is the one state the coach is already standing
+  // on, and `tabindex="-1"` does not blur an element that already holds focus,
+  // so the save that just emptied `draftChanges` still hands the next Tab to
+  // the control after this one.
+  const saveOutOfReach = cannotSave && !isSaving
 
   function resolvedChoice(playerId: string) {
     if (!selectedOccurrence) return undefined
@@ -257,7 +272,7 @@ export function PlayerAttendanceRecorder({
   }
 
   async function saveAttendance() {
-    if (!draftChanges.length || isSaving || !selectedOccurrence) return
+    if (cannotSave || !selectedOccurrence) return
     setIsSaving(true)
     setFeedback(null)
     try {
@@ -417,13 +432,21 @@ export function PlayerAttendanceRecorder({
                         role="group"
                         aria-label={`Attendance for ${player.member.fullName}`}
                       >
+                        {/* `aria-disabled`, not `disabled`, for the reason the
+                            save button below carries it: macOS Safari and
+                            Firefox do not move focus to a button on click, so a
+                            coach who marks with the keyboard and then clicks
+                            Save is still standing on a roster button when the
+                            save disables it, and a disabled element hands focus
+                            to `<body>`. `chooseAttendance` re-checks `isSaving`,
+                            so a press that still lands does nothing. */}
                         {attendanceChoices.map((option) => (
                           <button
                             key={option.value}
                             type="button"
                             className={`attendance-roster-choice is-${option.value}`}
                             aria-pressed={choice === option.value}
-                            disabled={isSaving}
+                            aria-disabled={isSaving}
                             onClick={() => chooseAttendance(player.member.id, option.value)}
                           >
                             {option.label}
@@ -447,7 +470,9 @@ export function PlayerAttendanceRecorder({
             />
             <button
               type="button"
-              disabled={!draftChanges.length || isSaving || selectedUnavailable}
+              aria-busy={isSaving}
+              aria-disabled={cannotSave}
+              tabIndex={saveOutOfReach ? -1 : undefined}
               onClick={saveAttendance}
             >
               {feedback?.offerRetry

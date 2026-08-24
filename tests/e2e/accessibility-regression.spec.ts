@@ -801,6 +801,23 @@ async function auditStressRecoveryStates(
   }
 }
 
+// Every profile/actor pair the branches inside the matrix test open a context for.
+// fa88c08 derived this from a `sessionProviders` registry and refused to start when
+// a pair was missing; dd0008c replaced the registry with those inline branches and
+// dropped the refusal, so a state written against an unwired pair is now filtered
+// out of every branch and audits nothing. Keep this in step with the branches.
+const dispatchedSessionPairs = new Set<string>([
+  "admin/guest",
+  "admin/platform-admin",
+  "clean/guest",
+  "clean/head-coach",
+  "stress/guest",
+  "stress/head-coach",
+  "stress/junior-coach",
+  "stress/platform-admin",
+  "stress/player",
+])
+
 test.describe("UI accessibility / WCAG 2.2 AA", () => {
   test("audits the representative role and state matrix", async ({ browser }, testInfo) => {
     // GitHub Actions owns the 25-minute wall-clock limit. Keep Playwright's
@@ -809,6 +826,19 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
     test.setTimeout(2 * 60 * 60_000)
     mkdirSync(outputRoot, { recursive: true })
     const results: AccessibilityResult[] = []
+
+    // Fail before the run, not after it: the full matrix takes most of the
+    // 25-minute CI limit, so an unwired pair discovered at the end costs a whole
+    // job to report what this loop can report in milliseconds.
+    const unwired = new Map<string, string[]>()
+    for (const state of selectedStatesForProfile(profile)) {
+      const pair = `${state.profile}/${state.actor}`
+      if (dispatchedSessionPairs.has(pair)) continue
+      unwired.set(pair, [...(unwired.get(pair) ?? []), state.id])
+    }
+    const unwiredPairs = [...unwired].map(([pair, ids]) => `${pair}: ${ids.join(", ")}`)
+    expect(unwiredPairs, `No session context is opened for ${unwiredPairs.join(" | ")}`)
+      .toEqual([])
 
     try {
       if (profile === "admin") {
@@ -971,6 +1001,16 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
         })
       }
     }
+
+    // dispatchedSessionPairs is hand-maintained, so it can call a pair wired that no
+    // branch actually reaches. auditMatrixState records a result even when a state
+    // throws, so an id absent here was never scanned at all rather than scanned and
+    // failed, and the failures assertion below would not have reported it.
+    const audited = new Set(results.map((result) => result.id))
+    const undispatched = selectedStatesForProfile(profile)
+      .filter((state) => !audited.has(state.id))
+      .map((state) => `${state.id} (${state.actor})`)
+    expect(undispatched, `No context audited: ${undispatched.join(", ")}`).toEqual([])
 
     const failures = formatAccessibilityFailures(results)
     expect(failures, failures.slice(0, 80).join("\n")).toEqual([])
