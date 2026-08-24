@@ -45,6 +45,7 @@ vi.mock("@/lib/finance/service", () => ({
 
 import { GET as downloadReceipt } from "@/app/coach/financials/receipts/[paymentId]/download/route"
 import { GET as downloadStatement } from "@/app/coach/financials/players/[playerId]/statement/download/route"
+import { FinanceServiceError } from "@/lib/finance/service"
 
 const coach: SessionIdentity = {
   academyId: "SMBA#0001",
@@ -131,6 +132,55 @@ describe("protected Financials document downloads", () => {
     expect(mocks.createFinanceReceiptPdf).not.toHaveBeenCalled()
   })
 
+  // The gate is now shared with six sibling routes, so each route has to be
+  // shown refusing on its own rather than inheriting a sibling's coverage.
+  it("rejects an authenticated junior coach before reading a fee statement", async () => {
+    mocks.requireHeadAdminAccess.mockImplementationOnce(() => {
+      throw new Error("Head coach access is required.")
+    })
+
+    const response = await statementRequest()
+
+    expect(response.status).toBe(403)
+    expect(await response.text()).toBe("Head coach access is required.")
+    expect(response.headers.get("cache-control")).toBe("private, no-store")
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff")
+    expect(mocks.getPlayerFeeStatement).not.toHaveBeenCalled()
+    expect(mocks.createPlayerFeeStatementPdf).not.toHaveBeenCalled()
+  })
+
+  // Access can be revoked between the route's own gate and the reader's second
+  // check. The reader raises that as a FinanceServiceError, and it is a refusal
+  // rather than a fault, so it must not be laundered into a 500.
+  it("answers a reader's own authorisation refusal with 403, not 500", async () => {
+    const refusal = () => {
+      throw new FinanceServiceError(
+        "AUTHORIZATION",
+        "Head coach access is required to generate financial records.",
+      )
+    }
+    mocks.getReceiptDocument.mockImplementationOnce(refusal)
+    mocks.getPlayerFeeStatement.mockImplementationOnce(refusal)
+
+    const receiptResponse = await receiptRequest()
+    const statementResponse = await statementRequest()
+
+    for (const response of [receiptResponse, statementResponse]) {
+      expect(response.status).toBe(403)
+      expect(await response.text())
+        .toBe("Head coach access is required to generate financial records.")
+      expect(response.headers.get("cache-control")).toBe("private, no-store")
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff")
+    }
+
+    // Both readers ran, which is what distinguishes this refusal from the one
+    // the route's own preamble makes before any read happens.
+    expect(mocks.getReceiptDocument).toHaveBeenCalled()
+    expect(mocks.getPlayerFeeStatement).toHaveBeenCalled()
+    expect(mocks.createFinanceReceiptPdf).not.toHaveBeenCalled()
+    expect(mocks.createPlayerFeeStatementPdf).not.toHaveBeenCalled()
+  })
+
   it("rejects guests and players before querying financial records", async () => {
     mocks.getCurrentIdentity.mockResolvedValueOnce(null)
     expect((await receiptRequest()).status).toBe(401)
@@ -186,6 +236,16 @@ describe("protected Financials document downloads", () => {
     expect(await response.text()).toBe("Unable to generate the financial record.")
     expect(response.headers.get("cache-control")).toBe("private, no-store")
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain(receipt.externalReference)
+
+    // IQ-3: the response stays opaque, but the log no longer is. Without this
+    // the 500 above is indistinguishable from every other cause of a 500 here.
+    expect(consoleError).toHaveBeenCalledWith(
+      "Financial receipt PDF generation failed.",
+      expect.objectContaining({ paymentId: receipt.paymentId }),
+    )
+    expect(String(consoleError.mock.calls[0]?.[1]?.cause))
+      .toContain("Private receipt failure")
+
     consoleError.mockRestore()
   })
 })

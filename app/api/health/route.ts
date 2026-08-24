@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm"
 
 import { initializeDatabase } from "@/lib/db/client"
+import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -19,8 +20,10 @@ export async function GET() {
       headers: responseHeaders,
       status: 200,
     })
-  } catch {
-    console.error("Health check database probe failed.")
+  } catch (error) {
+    console.error("Health check database probe failed.", {
+      cause: describeFailureCause(error),
+    })
     return Response.json({ status: "unavailable" }, {
       headers: responseHeaders,
       status: 503,
