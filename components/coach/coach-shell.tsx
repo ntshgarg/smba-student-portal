@@ -20,7 +20,7 @@ export function CoachShell({
       <header className="portal-header coach-portal-header">
         <Link className="portal-brand coach-portal-brand" href="/coach" aria-label="SMBA Coach Workspace home">
           <Image
-            src="/images/smba-logo.jpeg"
+            src="/images/smba-logo.png"
             alt="Sathiya Moorthy Badminton Academy"
             width={720}
             height={488}

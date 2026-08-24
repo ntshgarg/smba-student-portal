@@ -108,7 +108,7 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
       <header ref={headerRef} className="site-header">
         <a className="brand-link" href={homePath || "#top"}>
           <Image
-            src="/images/smba-logo.jpeg"
+            src="/images/smba-logo.png"
             alt="Sathiya Moorthy Badminton Academy"
             width={720}
             height={488}

@@ -1,3 +1,18 @@
+// Blast radius: this DELETEs every row of every table in the Turso database
+// named by TURSO_DATABASE_URL and re-inserts the contents of the local source
+// database. Pointed at production it destroys every account, enrollment,
+// attendance mark, fee, payment and refund the academy holds, and the backup
+// written to backupArgument is the only recovery, so give that a durable path.
+//
+// Four guards stand in front of that, all of them before the first DELETE:
+// SMBA_CONFIRM_REMOTE_EMPTY_RESET must equal CONFIRMATION, the source must
+// already be a zero-member academy, the two schemas must name exactly the same
+// tables, and the remote backup must pass an integrity check.
+//
+// Procedure and preconditions: docs/PRODUCTION-OPERATIONS.md, "Resetting the
+// academy to an empty state". prepare-admin-only-snapshot.mjs builds the source
+// this consumes, so that the platform owner's login survives the reset.
+
 import fs from "node:fs"
 import path from "node:path"
 

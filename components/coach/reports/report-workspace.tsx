@@ -180,7 +180,7 @@ function ReportPreview({
         </button>
         <div className="coach-report-letterhead">
           <Image
-            src="/images/smba-logo.jpeg"
+            src="/images/smba-logo.png"
             alt="Sathiya Moorthy Badminton Academy"
             width={720}
             height={488}
