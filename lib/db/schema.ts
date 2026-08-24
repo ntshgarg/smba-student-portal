@@ -958,6 +958,9 @@ export const concessionApplications = sqliteTable("concession_applications", {
     .on(table.concessionId, table.chargeId)
     .where(sql`${table.reversedAt} is null`),
   index("concession_applications_charge_idx").on(table.chargeId),
+  // The active-charge index above is partial, so it cannot serve the player fee
+  // record read, which deliberately also returns reversed applications.
+  index("concession_applications_concession_idx").on(table.concessionId),
   check("concession_applications_amount_positive_check", sql`${table.amountPaise} > 0`),
   check(
     "concession_applications_reversal_check",
