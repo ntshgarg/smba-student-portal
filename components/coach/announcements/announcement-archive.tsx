@@ -92,7 +92,7 @@ export function PublishedAnnouncementArchive({
         </div>
 
         {hasPublishedAnnouncements ? (
-          <div className={styles.monthControl} aria-label="Choose announcement month">
+          <div className={styles.monthControl} role="group" aria-label="Choose announcement month">
             <Link
               href={archiveHref(query, { month: shiftMonth(query.month, -1) })}
               aria-label={`Show ${formatMonth(shiftMonth(query.month, -1))}`}

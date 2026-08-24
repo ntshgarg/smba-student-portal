@@ -330,10 +330,11 @@ export function PlayerAttendanceCard({
             {calendar.schedules.length ? (
               <div
                 className="player-attendance-calendar-schedules"
+                role="list"
                 aria-label="Assigned sessions in the selected month"
               >
                 {calendar.schedules.map((schedule) => (
-                  <div className="player-attendance-calendar-schedule" key={schedule.id}>
+                  <div className="player-attendance-calendar-schedule" role="listitem" key={schedule.id}>
                     <div>
                       <span>Training group</span>
                       <strong>{schedule.groupLabel}</strong>
