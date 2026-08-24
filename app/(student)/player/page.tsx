@@ -16,10 +16,18 @@ import { listActivePlayerAnnouncements } from "@/lib/announcements/queries"
 import { getCurrentStudent } from "@/lib/student/current-student"
 import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 
-function loadFeeSummary(playerId: string) {
+async function loadFeeSummary(playerId: string) {
   try {
-    return getPlayerFinanceDashboardSummary(playerId)
-  } catch {
+    // The `await` is load-bearing: `getPlayerFinanceDashboardSummary` is async,
+    // so returning its promise un-awaited would carry a rejection past this
+    // `catch`, through the `Promise.all` below and out of the page -- replacing
+    // the whole dashboard with `app/(student)/error.tsx` when the intent is only
+    // to hide the fee card.
+    return await getPlayerFinanceDashboardSummary(playerId)
+  } catch (error) {
+    console.error("Player fee summary lookup failed.", {
+      cause: describeFailureCause(error),
+    })
     return null
   }
 }

@@ -120,7 +120,7 @@ describe("PlayerAnnouncementsCard", () => {
   })
 })
 
-describe("Player Dashboard announcement failure isolation", () => {
+describe("Player Dashboard read failure isolation", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getCurrentStudent.mockResolvedValue({
@@ -168,6 +168,36 @@ describe("Player Dashboard announcement failure isolation", () => {
       expect(log).toHaveBeenCalledWith(
         "Player announcement lookup failed.",
         { cause: expect.stringContaining("database unavailable") },
+      )
+    } finally {
+      log.mockRestore()
+    }
+  })
+
+  it("keeps the dashboard available when the fee summary read fails", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    // Rejects rather than throws, because `getPlayerFinanceDashboardSummary` is
+    // async. That is the failure shape that used to escape `loadFeeSummary` -- an
+    // un-awaited call left its `catch` reachable only by synchronous throws, so
+    // the rejection travelled through the page's `Promise.all` and replaced the
+    // whole dashboard with the student error boundary.
+    mocks.getPlayerFinanceDashboardSummary.mockRejectedValue(new Error("fee ledger unavailable"))
+    mocks.listActivePlayerAnnouncements.mockReturnValue([])
+
+    try {
+      const html = renderToStaticMarkup(await DashboardPage())
+
+      expect(html).toContain("Player welcome remains available")
+      expect(html).toContain("Attendance remains available")
+      expect(html).toContain("Monthly reports")
+      expect(html).toContain('href="/player/reports"')
+      expect(html).toContain("Fee record remains available")
+      expect(html).toContain("The notice board is clear.")
+      expect(html).not.toContain("fee ledger unavailable")
+      expect(log).toHaveBeenCalledOnce()
+      expect(log).toHaveBeenCalledWith(
+        "Player fee summary lookup failed.",
+        { cause: expect.stringContaining("fee ledger unavailable") },
       )
     } finally {
       log.mockRestore()
