@@ -6,6 +6,7 @@ import {
   formatAcademyDate,
   formatAcademyTime,
   formatDateKey,
+  numberFormatter,
 } from "@/lib/format"
 import type {
   FinanceReceiptDocument,
@@ -39,7 +40,8 @@ type FinancePdf = FinanceReceiptDocument | FinanceStatementDocument
 
 function money(amountPaise: number) {
   const amount = amountPaise / 100
-  return `INR ${new Intl.NumberFormat("en-IN", {
+  /* Fraction digits follow the amount, so this stays per call and shares by option key. */
+  return `INR ${numberFormatter("en-IN", {
     maximumFractionDigits: amountPaise % 100 ? 2 : 0,
     minimumFractionDigits: amountPaise % 100 ? 2 : 0,
   }).format(amount)}`

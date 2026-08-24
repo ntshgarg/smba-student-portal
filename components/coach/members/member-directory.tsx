@@ -90,22 +90,26 @@ function formatJoinedDate(value: string) {
   })
 }
 
+const timelineInstantFormat = new Intl.DateTimeFormat("en-IN", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Asia/Kolkata",
+})
+
+const outstandingBalanceFormat = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+})
+
 function formatTimelineInstant(value: string | null | undefined) {
   if (!value) return "Not completed"
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(value))
+  return timelineInstantFormat.format(new Date(value))
 }
 
 function formatOutstandingBalance(paise: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(paise / 100)
+  return outstandingBalanceFormat.format(paise / 100)
 }
 
 function financialCloseoutMessage(

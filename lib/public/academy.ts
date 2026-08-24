@@ -150,12 +150,13 @@ export const proofPoints = [
   },
 ] as const
 
-export const formatInr = (value: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value)
+const inrFormat = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+})
+
+export const formatInr = (value: number) => inrFormat.format(value)
 
 export function createTrialMessage(values: {
   name: string

@@ -111,14 +111,16 @@ function rowMeta(item: PlayerOnboardingCase) {
   ].filter(Boolean).join(" · ")
 }
 
+const timelineDateFormat = new Intl.DateTimeFormat("en-IN", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Asia/Kolkata",
+})
+
 function timelineDate(value: string | null | undefined, fallback = "Pending") {
   if (!value) return fallback
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(value))
+  return timelineDateFormat.format(new Date(value))
 }
 
 function OnboardingTimeline({ item }: { item: PlayerOnboardingCase }) {

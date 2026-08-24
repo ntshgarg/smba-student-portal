@@ -1,8 +1,9 @@
-import { ACADEMY_TIME_ZONE } from "@/lib/format"
+import { ACADEMY_TIME_ZONE, dateTimeFormatter } from "@/lib/format"
 
 export function currentGreeting(timeZone = ACADEMY_TIME_ZONE) {
+  /* The zone is a parameter, so this cannot be hoisted; the shared cache keys on it. */
   const hour = Number(
-    new Intl.DateTimeFormat("en-IN", {
+    dateTimeFormatter("en-IN", {
       hour: "2-digit",
       hourCycle: "h23",
       timeZone,
