@@ -552,6 +552,114 @@ export function saveSessionAttendanceRecords({
     )
     const occurrenceById = new Map(resolvedOccurrences.map((occurrence) => [occurrence.id, occurrence]))
 
+    /*
+     * Every read this loop needs, fetched once for the whole register rather
+     * than once per row. Production runs libSQL over the network with the
+     * synchronous driver, so each of these was a blocking round trip inside an
+     * `immediate` write lock: eight per changed player, which is roughly 180
+     * for a 22-player roster against the recorder's 20-second deadline, with
+     * every other writer in the academy queued behind them.
+     *
+     * Order of validation below is unchanged -- only the source of the data is.
+     * All six run before any insert, which is what the pre-insert reads
+     * (`stored`, `hadOrdinaryPresence`) relied on anyway: no change can observe
+     * another change's write, because (accountId, occurrenceId) is unique and
+     * `unique` already rejects a repeated pair.
+     */
+    const playerIds = [...new Set(changes.map((change) => change.playerId))]
+    const seriesIds = [...new Set(
+      changes.map((change) => occurrenceById.get(change.occurrenceId)?.seriesId).filter(Boolean),
+    )] as string[]
+    const occurrenceDates = [...new Set(
+      changes.map((change) => occurrenceById.get(change.occurrenceId)?.occurrenceDate).filter(Boolean),
+    )] as string[]
+
+    const enrollmentByPlayer = new Map(
+      tx.select({
+        accountId: playerEnrollments.accountId,
+        trainingStartOn: playerEnrollments.trainingStartOn,
+      })
+        .from(playerEnrollments)
+        .innerJoin(accounts, eq(accounts.id, playerEnrollments.accountId))
+        .where(and(
+          inArray(playerEnrollments.accountId, playerIds),
+          eq(accounts.role, "player"),
+          eq(accounts.approvalStatus, "approved"),
+          isNull(accounts.archivedAt),
+        )).all()
+        .map((row) => [row.accountId, row]),
+    )
+
+    const assignmentRows = seriesIds.length
+      ? tx.select().from(sessionAssignments).where(and(
+        inArray(sessionAssignments.accountId, playerIds),
+        inArray(sessionAssignments.seriesId, seriesIds),
+      )).all()
+      : []
+    const assignmentsByPlayerSeries = new Map<string, typeof assignmentRows>()
+    assignmentRows.forEach((assignment) => {
+      const key = `${assignment.accountId}:${assignment.seriesId}`
+      const bucket = assignmentsByPlayerSeries.get(key)
+      if (bucket) bucket.push(assignment)
+      else assignmentsByPlayerSeries.set(key, [assignment])
+    })
+
+    const allAssignmentIds = assignmentRows.map((assignment) => assignment.id)
+    const weekdaysByAssignment = new Map<string, number[]>()
+    if (allAssignmentIds.length) {
+      tx.select().from(sessionAssignmentWeekdays)
+        .where(inArray(sessionAssignmentWeekdays.assignmentId, allAssignmentIds)).all()
+        .forEach((weekday) => {
+          const bucket = weekdaysByAssignment.get(weekday.assignmentId)
+          if (bucket) bucket.push(weekday.weekday)
+          else weekdaysByAssignment.set(weekday.assignmentId, [weekday.weekday])
+        })
+    }
+
+    const storedByPlayerOccurrence = new Map(
+      tx.select({
+        accountId: sessionAttendanceRecords.accountId,
+        occurrenceId: sessionAttendanceRecords.occurrenceId,
+        choice: sessionAttendanceRecords.choice,
+      }).from(sessionAttendanceRecords).where(and(
+        inArray(sessionAttendanceRecords.accountId, playerIds),
+        inArray(sessionAttendanceRecords.occurrenceId, occurrenceIds),
+      )).all()
+        .map((row) => [`${row.accountId}:${row.occurrenceId}`, row.choice]),
+    )
+
+    const activeAdjustmentByPlayerSource = new Set(
+      tx.select({
+        playerId: attendanceAdjustments.playerId,
+        sourceOccurrenceId: attendanceAdjustments.sourceOccurrenceId,
+      }).from(attendanceAdjustments).where(and(
+        inArray(attendanceAdjustments.playerId, playerIds),
+        inArray(attendanceAdjustments.sourceOccurrenceId, occurrenceIds),
+        isNull(attendanceAdjustments.voidedAt),
+      )).all()
+        .map((row) => `${row.playerId}:${row.sourceOccurrenceId}`),
+    )
+
+    const ordinaryPresenceByPlayerDate = new Set(
+      occurrenceDates.length
+        ? tx.select({
+          accountId: sessionAttendanceRecords.accountId,
+          occurrenceDate: sessionOccurrences.occurrenceDate,
+        }).from(sessionAttendanceRecords)
+          .innerJoin(
+            sessionOccurrences,
+            eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
+          ).where(and(
+            inArray(sessionAttendanceRecords.accountId, playerIds),
+            eq(sessionAttendanceRecords.choice, "present"),
+            inArray(sessionOccurrences.occurrenceDate, occurrenceDates),
+          )).all()
+          .map((row) => `${row.accountId}:${row.occurrenceDate}`)
+        : [],
+    )
+
+    const pendingRecords: Array<typeof sessionAttendanceRecords.$inferInsert> = []
+
     changes.forEach((change) => {
       const key = `${change.playerId}:${change.occurrenceId}`
       if (unique.has(key)) {
@@ -595,15 +703,7 @@ export function saveSessionAttendanceRecords({
           "changes",
         )
       }
-      const enrollment = tx.select({ trainingStartOn: playerEnrollments.trainingStartOn })
-        .from(playerEnrollments)
-        .innerJoin(accounts, eq(accounts.id, playerEnrollments.accountId))
-        .where(and(
-          eq(playerEnrollments.accountId, change.playerId),
-          eq(accounts.role, "player"),
-          eq(accounts.approvalStatus, "approved"),
-          isNull(accounts.archivedAt),
-        )).get()
+      const enrollment = enrollmentByPlayer.get(change.playerId)
       if (!enrollment) {
         operationalActionError(
           "NOT_FOUND",
@@ -618,22 +718,10 @@ export function saveSessionAttendanceRecords({
           "changes",
         )
       }
-      const assignments = tx.select().from(sessionAssignments).where(and(
-        eq(sessionAssignments.accountId, change.playerId),
-        eq(sessionAssignments.seriesId, occurrence.seriesId),
-      )).all()
-      const assignmentIds = assignments.map((assignment) => assignment.id)
-      const assignedWeekdays = assignmentIds.length
-        ? tx.select().from(sessionAssignmentWeekdays).where(inArray(
-            sessionAssignmentWeekdays.assignmentId,
-            assignmentIds,
-          )).all()
-        : []
+      const assignments = assignmentsByPlayerSeries.get(`${change.playerId}:${occurrence.seriesId}`) ?? []
       const assignment = assignments.find((item) => assignmentCoversOccurrence({
         ...item,
-        weekdays: assignedWeekdays
-          .filter((weekday) => weekday.assignmentId === item.id)
-          .map((weekday) => weekday.weekday),
+        weekdays: weekdaysByAssignment.get(item.id) ?? [],
       }, occurrence))
       if (!assignment) {
         operationalActionError(
@@ -643,12 +731,8 @@ export function saveSessionAttendanceRecords({
         )
       }
 
-      const stored = tx.select({ choice: sessionAttendanceRecords.choice })
-        .from(sessionAttendanceRecords).where(and(
-          eq(sessionAttendanceRecords.accountId, change.playerId),
-          eq(sessionAttendanceRecords.occurrenceId, change.occurrenceId),
-        )).get()
-      const currentChoice: SessionAttendanceChange["choice"] = stored?.choice ?? "cleared"
+      const currentChoice: SessionAttendanceChange["choice"] =
+        storedByPlayerOccurrence.get(`${change.playerId}:${change.occurrenceId}`) ?? "cleared"
       if (currentChoice === change.choice) return
       if (currentChoice !== change.expectedChoice) {
         operationalActionError(
@@ -658,12 +742,8 @@ export function saveSessionAttendanceRecords({
         )
       }
 
-      const activeSourceAdjustment = tx.select({ id: attendanceAdjustments.id })
-        .from(attendanceAdjustments).where(and(
-          eq(attendanceAdjustments.playerId, change.playerId),
-          eq(attendanceAdjustments.sourceOccurrenceId, change.occurrenceId),
-          isNull(attendanceAdjustments.voidedAt),
-        )).get()
+      const activeSourceAdjustment = activeAdjustmentByPlayerSource
+        .has(`${change.playerId}:${change.occurrenceId}`)
       if (activeSourceAdjustment && change.choice !== "absent") {
         operationalActionError(
           "BUSINESS_RULE",
@@ -674,16 +754,8 @@ export function saveSessionAttendanceRecords({
 
       const affectedDateKey = `${change.playerId}:${occurrence.occurrenceDate}`
       if (!affectedDates.has(affectedDateKey)) {
-        const hadOrdinaryPresence = Boolean(tx.select({ id: sessionAttendanceRecords.id })
-          .from(sessionAttendanceRecords)
-          .innerJoin(
-            sessionOccurrences,
-            eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
-          ).where(and(
-            eq(sessionAttendanceRecords.accountId, change.playerId),
-            eq(sessionAttendanceRecords.choice, "present"),
-            eq(sessionOccurrences.occurrenceDate, occurrence.occurrenceDate),
-          )).get())
+        const hadOrdinaryPresence = ordinaryPresenceByPlayerDate
+          .has(`${change.playerId}:${occurrence.occurrenceDate}`)
         affectedDates.set(affectedDateKey, {
           completedOn: occurrence.occurrenceDate,
           hadOrdinaryPresence,
@@ -691,7 +763,7 @@ export function saveSessionAttendanceRecords({
         })
       }
 
-      tx.insert(sessionAttendanceRecords).values({
+      pendingRecords.push({
         id: randomUUID(),
         accountId: change.playerId,
         occurrenceId: change.occurrenceId,
@@ -699,12 +771,25 @@ export function saveSessionAttendanceRecords({
         markedByAccountId: coachId,
         createdAt: now,
         updatedAt: now,
-      }).onConflictDoUpdate({
-        target: [sessionAttendanceRecords.accountId, sessionAttendanceRecords.occurrenceId],
-        set: { choice: change.choice, markedByAccountId: coachId, updatedAt: now },
-      }).run()
+      })
       applied += 1
     })
+
+    /*
+     * One statement for the whole register. `set` has to read from `excluded`
+     * rather than a captured value, because a multi-row upsert shares one SET
+     * clause across rows that each carry their own choice.
+     */
+    if (pendingRecords.length) {
+      tx.insert(sessionAttendanceRecords).values(pendingRecords).onConflictDoUpdate({
+        target: [sessionAttendanceRecords.accountId, sessionAttendanceRecords.occurrenceId],
+        set: {
+          choice: sql`excluded.choice`,
+          markedByAccountId: sql`excluded.marked_by_account_id`,
+          updatedAt: sql`excluded.updated_at`,
+        },
+      }).run()
+    }
 
     affectedDates.forEach(({ completedOn, hadOrdinaryPresence, playerId }) => {
       reconcileAttendanceAdjustmentReviewState({
