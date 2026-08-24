@@ -20,3 +20,6 @@
 /audit-context
 /.supply-chain-risk-auditor
 .vercel
+
+# Agent worktrees and local settings live here; never commit them.
+/.claude

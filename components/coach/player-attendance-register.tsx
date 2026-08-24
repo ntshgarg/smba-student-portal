@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, CircleAlert, X } from "lucide-react"
+import { ArrowLeft, Check, CircleAlert, CircleMinus, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
@@ -241,8 +241,8 @@ export function PlayerAttendanceRegister({
               </div>
 
               <div className="player-attendance-legend staff-attendance-legend" role="group" aria-label="Attendance status legend">
-                <span><i className="is-present" aria-hidden="true" />Present</span>
-                <span><i className="is-absent" aria-hidden="true" />Absent</span>
+                <span><i className="is-present" aria-hidden="true"><Check /></i>Present</span>
+                <span><i className="is-absent" aria-hidden="true"><CircleMinus /></i>Absent</span>
                 <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
                 <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
               </div>
@@ -466,7 +466,12 @@ export function PlayerAttendanceRegister({
                                       aria-label={cellLabel}
                                       title={`${sessionLabel} · ${date.label}: ${state}`}
                                     >
-                                      {unavailable ? <X aria-hidden="true" /> : choice || completionCount ? null : <span aria-hidden="true">—</span>}
+                                      {/* --green and --red measure 1.047:1 against each other, so a set
+                                          choice used to be colour alone (WCAG 1.4.1). X is already the
+                                          "not available" mark in this cell and — is "not recorded", so
+                                          absent takes the ring of CircleMinus rather than a second cross
+                                          or a bare Minus. aria-label stays the accessible name. */}
+                                      {unavailable ? <X aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : completionCount ? null : <span aria-hidden="true">—</span>}
                                       {completionCount ? <span className="coach-register-makeup-count" aria-hidden="true">+{completionCount}</span> : null}
                                       {completionRequiresReview ? <CircleAlert aria-hidden="true" /> : null}
                                     </span>

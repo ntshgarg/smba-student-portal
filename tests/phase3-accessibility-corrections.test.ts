@@ -47,6 +47,30 @@ describe("Phase 3 accessibility corrections", () => {
     expect(register).not.toContain("<h3>{selectedProgramme} · {selectedBatch}</h3>")
   })
 
+  it("gives the annual registers a glyph per attendance state, not colour alone", () => {
+    const playerRegister = source("components/coach/player-attendance-register.tsx")
+    const staffRegister = source("components/coach/staff-attendance-register.tsx")
+    const styles = source("app/globals.css")
+    const green = styles.match(/--green:\s*(#[0-9a-f]{6})/iu)?.[1]
+    const red = styles.match(/--red:\s*(#[0-9a-f]{6})/iu)?.[1]
+
+    // The two fills the cells used to rely on are all but identical in
+    // greyscale, which is what a phone in courtside glare renders.
+    expect(contrastRatio(green ?? "#000000", red ?? "#ffffff")).toBeLessThan(1.5)
+
+    for (const register of [playerRegister, staffRegister]) {
+      expect(register).toContain('choice === "present" ? <Check aria-hidden="true" />')
+      expect(register).toContain('choice === "absent" ? <CircleMinus aria-hidden="true" />')
+      // X is already the "not available" mark in the same cell, so absent must
+      // not be a second cross.
+      expect(register).not.toContain('choice === "absent" ? <X aria-hidden="true" />')
+      expect(register).toContain('<i className="is-present" aria-hidden="true"><Check /></i>')
+      expect(register).toContain('<i className="is-absent" aria-hidden="true"><CircleMinus /></i>')
+    }
+
+    expect(styles).toContain(".staff-attendance-legend i > svg")
+  })
+
   it("keeps unavailable register labels muted while meeting text contrast", () => {
     const background = "#f0efec"
     const styles = source("app/globals.css")
