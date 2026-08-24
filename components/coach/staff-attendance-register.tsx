@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, X } from "lucide-react"
+import { ArrowLeft, Check, CircleMinus, X } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import type { CSSProperties } from "react"
@@ -132,8 +132,8 @@ export function StaffAttendanceRegister({
           </div>
 
           <div className="player-attendance-legend staff-attendance-legend" role="group" aria-label="Attendance status legend">
-            <span><i className="is-present" aria-hidden="true" />Present</span>
-            <span><i className="is-absent" aria-hidden="true" />Absent</span>
+            <span><i className="is-present" aria-hidden="true"><Check /></i>Present</span>
+            <span><i className="is-absent" aria-hidden="true"><CircleMinus /></i>Absent</span>
             <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
             <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
           </div>
@@ -258,7 +258,9 @@ export function StaffAttendanceRegister({
                               aria-label={`${coach.fullName}, ${date.label}: ${state}.`}
                               title={`${date.label}: ${state}`}
                             >
-                              {unavailable ? <X aria-hidden="true" /> : choice && choice !== "cleared" ? null : <span aria-hidden="true">—</span>}
+                              {/* Same pairing as the player register: --green and --red measure
+                                  1.047:1 against each other, and X is already "not available". */}
+                              {unavailable ? <X aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : <span aria-hidden="true">—</span>}
                             </span>
                           </td>
                         )

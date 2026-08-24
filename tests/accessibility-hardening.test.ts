@@ -43,6 +43,9 @@ describe("operational mobile controls", () => {
 
   it("uses 16px text for only the scoped visible inputs and selects", () => {
     expect(mediaStart).toBeGreaterThan(-1)
+    // The courtside date input only reached 16px under (max-width: 760px), so an
+    // iPad or a phone in landscape still zoomed the roll call on focus (F-13).
+    expect(antiZoomRule).toContain(".attendance-record-date-row input:not(")
     expect(antiZoomRule).toContain(".coach-series-form input:not(")
     expect(antiZoomRule).toContain(".coach-roster-assign input:not(")
     expect(antiZoomRule).toContain(".coach-registration-approved p input:not(")
