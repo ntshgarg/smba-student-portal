@@ -7,7 +7,7 @@ import type { SmbaDatabaseExecutor } from "@/lib/db/client"
 import { initializeDatabase } from "@/lib/db/client"
 import { financialCharges, payments } from "@/lib/db/schema"
 import {
-  loadChargeView,
+  loadChargeViews,
   loadPlayerFeeRecord,
 } from "@/lib/finance/repository"
 import { FinanceServiceError } from "@/lib/finance/service"
@@ -207,13 +207,16 @@ export function getPlayerFeeStatement(
   const record = loadPlayerFeeRecord(database, playerId, now, true)
   if (!record) return null
 
-  const charges = database.select({ id: financialCharges.id })
+  const chargeIds = database.select({ id: financialCharges.id })
     .from(financialCharges)
     .where(eq(financialCharges.playerAccountId, playerId))
     .orderBy(asc(financialCharges.dueDate), asc(financialCharges.issuedAt), asc(financialCharges.id))
     .all()
-    .flatMap(({ id }) => {
-      const charge = loadChargeView(database, id, now, true)
+    .map(({ id }) => id)
+  const chargeViews = loadChargeViews(database, chargeIds, now, true)
+  const charges = chargeIds
+    .flatMap((id) => {
+      const charge = chargeViews.get(id)
       if (!charge) return []
       return [{
         feeReference: charge.feeReference,
