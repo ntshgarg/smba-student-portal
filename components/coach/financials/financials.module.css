@@ -3551,6 +3551,22 @@
   }
 }
 
+/* The same anti-zoom guard app/globals.css carries: iOS Safari and Chrome zoom
+   the layout when a focused control computes below 16px and never zoom back
+   out. The blanket floor in globals.css stops at max-width: 430px, and these
+   fields are 13px (15px past 721px) and 14px, so a coach taking money on a
+   phone in landscape or on an iPad lost the form mid-payment. Only the fields
+   that sit under 16px are named — .balanceMoneyInput is deliberately 30px and
+   up, and clamping it here would flatten the amount the coach is reading. */
+@media (max-width: 720px), (pointer: coarse) {
+  .balanceField input,
+  .balanceField select,
+  .balanceField textarea,
+  .balanceAllocationInput input {
+    font-size: 16px;
+  }
+}
+
 @media (max-width: 360px) {
   .balanceMetadata {
     grid-template-columns: 1fr;
