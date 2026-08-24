@@ -599,6 +599,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 
                         <div
                           className="coach-adjustment-missed-calendar-grid"
+                          role="group"
                           aria-label={`Missed sessions in ${displayMonth(effectiveSourceMonth)}`}
                         >
                           {calendarWeekdays.map((weekday) => (
@@ -743,7 +744,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
             </div>
           ) : sourceOccurrence && selectedPlayer ? (
             <div className="coach-adjustment-review">
-              <div className="coach-adjustment-transfer" aria-label="Attendance adjustment summary">
+              <div className="coach-adjustment-transfer">
                 <div>
                   <span>Missed session</span>
                   <strong>{displayDate(sourceOccurrence.occurrenceDate)}</strong>

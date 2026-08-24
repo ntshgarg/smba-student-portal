@@ -575,7 +575,6 @@ export function PlayerFeeRecordView({
 
             return (
               <div
-                aria-label={`${formatBillingPeriod(period)}: ${state.detail || state.label}`}
                 className={styles.monthCell}
                 data-fee-month-cell={period}
                 data-fee-month-state={state.tone}

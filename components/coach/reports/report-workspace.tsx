@@ -699,7 +699,7 @@ export function ReportWritingWorkspace({
           <h1>Write reports</h1>
         </div>
 
-        <div className="coach-report-month-control" aria-label="Choose report month">
+        <div className="coach-report-month-control" role="group" aria-label="Choose report month">
           <button type="button" disabled={editorPendingAction !== null} onClick={() => chooseMonth(shiftReportMonth(month, -1))} aria-label="Previous month">
             <ChevronLeft aria-hidden="true" />
           </button>
@@ -745,7 +745,7 @@ export function ReportWritingWorkspace({
           </div>
 
           <div id="coach-report-player-picker" className="coach-report-queue-options">
-            <div className="coach-category-filter" aria-label="Filter players by programme category">
+            <div className="coach-category-filter" role="group" aria-label="Filter players by programme category">
               {categories.map((item) => (
                 <button
                   key={item}

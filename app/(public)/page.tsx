@@ -271,8 +271,8 @@ function Trial() {
             light
           />
 
-          <div className="next-steps" aria-labelledby="next-steps-title">
-            <p id="next-steps-title" className="public-eyebrow public-eyebrow-light">
+          <div className="next-steps">
+            <p className="public-eyebrow public-eyebrow-light">
               What happens next
             </p>
             {[

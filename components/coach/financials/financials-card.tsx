@@ -60,12 +60,7 @@ export function FinancialsCard({
     >
       {active ? (
         <>
-          <CoachDashboardSummary
-            ariaLabel={attentionCount > 0
-              ? `${attentionCount} ${attentionCount === 1 ? "record needs" : "records need"} attention, ${summary}. ${preparationState}.`
-              : `${summary}. ${preparationState}.`}
-            detail={preparationState}
-          >
+          <CoachDashboardSummary detail={preparationState}>
             {summary}
           </CoachDashboardSummary>
           <CoachDashboardActions ariaLabel="Financial actions">

@@ -101,7 +101,7 @@ describe("coach Financials entry points", () => {
     )
 
     expect(html).toContain(label)
-    expect(html).toContain("2 records need attention")
+    expect(html).toContain("2 attention")
     expect(html).toContain("₹7,000 outstanding")
     expect(html).toContain('href="/coach/financials/record"')
     expect(html).toContain("/coach/financials/records?view=fees&amp;mode=monthly&amp;period=2026-08")

@@ -129,7 +129,7 @@ export function LoginForm() {
   const [method, setMethod] = useState<"password" | "pin">("password")
   return (
     <>
-      <div className="login-method-switch" aria-label="Login method">
+      <div className="login-method-switch" role="group" aria-label="Login method">
         <button
           type="button"
           aria-pressed={method === "password"}

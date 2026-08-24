@@ -84,18 +84,16 @@ export function CoachDashboardCard({
 }
 
 export function CoachDashboardSummary({
-  ariaLabel,
   children,
   detail,
   icon,
 }: {
-  ariaLabel?: string
   children: ReactNode
   detail?: ReactNode
   icon?: ReactNode
 }) {
   return (
-    <div className={styles.summary} aria-label={ariaLabel}>
+    <div className={styles.summary}>
       <p>
         {icon ? <span className={styles.summaryIcon}>{icon}</span> : null}
         <span>{children}</span>

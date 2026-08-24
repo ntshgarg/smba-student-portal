@@ -45,7 +45,6 @@ export function ReportsCard({
       titleId="coach-reports-card-title"
     >
       <CoachDashboardSummary
-        ariaLabel={`${monthLabel}, ${completedCount} of ${activePlayerIds.length} reports published`}
         detail={`Player development record for ${monthLabel}.`}
         icon={isComplete ? <Check aria-hidden="true" /> : undefined}
       >
