@@ -1,6 +1,5 @@
 "use client"
 
-import { useActionState } from "react"
 import { ArrowRight, MailCheck } from "lucide-react"
 
 import {
@@ -9,12 +8,17 @@ import {
   type AuthenticatorRecoveryApprovalState,
   type AuthenticatorRecoveryRequestState,
 } from "@/app/auth/two-factor/recovery/actions"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialRequestState: AuthenticatorRecoveryRequestState = { error: null, sent: false }
 const initialApprovalState: AuthenticatorRecoveryApprovalState = { error: null }
 
 export function AuthenticatorRecoveryRequestForm() {
-  const [state, action, pending] = useActionState(requestAuthenticatorRecoveryAction, initialRequestState)
+  const [state, action, pending] = useResilientActionState(
+    requestAuthenticatorRecoveryAction,
+    initialRequestState,
+    { retained: "No verification email was sent", subject: "Your recovery request" },
+  )
   if (state.sent) {
     return (
       <div className="registration-confirmation" role="status">
@@ -57,9 +61,13 @@ export function AuthenticatorRecoveryRequestForm() {
 }
 
 export function AuthenticatorRecoveryApprovalForm({ academyId }: { academyId: string }) {
-  const [state, action, pending] = useActionState(
+  const [state, action, pending] = useResilientActionState(
     submitAuthenticatorRecoveryApprovalAction,
     initialApprovalState,
+    {
+      retained: "Nothing was submitted and no coach session was revoked",
+      subject: "Your reset request",
+    },
   )
   return (
     <form className="login-form" action={action} noValidate>

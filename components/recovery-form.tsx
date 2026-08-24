@@ -1,9 +1,10 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { ArrowRight, MailCheck } from "lucide-react"
 
 import { AuthField } from "@/components/auth-field"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 import {
   requestPasswordRecoveryAction,
@@ -14,7 +15,11 @@ const initialState: RecoveryRequestState = { error: null, sent: false }
 const recoveryRequestErrorId = "recovery-request-error"
 
 export function RecoveryForm() {
-  const [state, formAction, pending] = useActionState(requestPasswordRecoveryAction, initialState)
+  const [state, formAction, pending] = useResilientActionState(
+    requestPasswordRecoveryAction,
+    initialState,
+    { retained: "No reset email was sent", subject: "Your reset request" },
+  )
   const academyIdRef = useRef<HTMLInputElement>(null)
   const submissionStartedRef = useRef(false)
   useEffect(() => {

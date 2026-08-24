@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 
 import {
   completeHeadCoachSetupAction,
@@ -8,6 +8,7 @@ import {
 } from "@/app/setup/head-coach/actions"
 import { AuthField } from "@/components/auth-field"
 import { PasswordInput } from "@/components/password-input"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialState: HeadCoachSetupState = { error: null }
 const headCoachSetupErrorId = "head-coach-setup-error"
@@ -19,7 +20,14 @@ export function HeadCoachSetupForm({
   defaultName?: string
   recoveryEmail: string
 }) {
-  const [state, action, pending] = useActionState(completeHeadCoachSetupAction, initialState)
+  const [state, action, pending] = useResilientActionState(
+    completeHeadCoachSetupAction,
+    initialState,
+    {
+      retained: "No account was created and this one-time setup link still works",
+      subject: "Your head-coach account",
+    },
+  )
   const fullNameRef = useRef<HTMLInputElement>(null)
   const submissionStartedRef = useRef(false)
   useEffect(() => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { ArrowRight } from "lucide-react"
 
 import {
@@ -8,11 +8,21 @@ import {
   type TotpReconnectState,
 } from "@/app/auth/two-factor/actions"
 import { PasswordInput } from "@/components/password-input"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialState: TotpReconnectState = { error: null, errorField: null }
 
 export function TwoFactorReconnectForm() {
-  const [state, formAction, pending] = useActionState(beginAuthenticatorReconnect, initialState)
+  const [state, formAction, pending] = useResilientActionState(
+    beginAuthenticatorReconnect,
+    initialState,
+    {
+      // Neither credential was rejected, so neither field is marked invalid.
+      fold: (state, error) => ({ ...state, error, errorField: null }),
+      retained: "Your current authenticator and recovery codes still work",
+      subject: "Your authenticator reconnect",
+    },
+  )
   const passwordRef = useRef<HTMLInputElement>(null)
   const factorRef = useRef<HTMLInputElement>(null)
 
