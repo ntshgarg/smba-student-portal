@@ -12172,9 +12172,10 @@ tr.is-expanded .coach-member-row-action button svg {
   border-left: 1px solid var(--line);
 }
 
-/* The pressed fill is the only thing separating a marked player from an
-   unmarked one on a phone held courtside, so it carries the 3:1 WCAG 1.4.11
-   asks of state indication. The --green-soft / --red-soft washes these used to
+/* The pressed fill is what a coach reads down a roster at a glance on a phone
+   held courtside, so it carries the 3:1 WCAG 1.4.11 asks of state indication.
+   (The row also carries a "Marked" / "Not marked" caption, so the fill is the
+   fast channel rather than the only one.) The --green-soft / --red-soft washes these used to
    carry measured 1.09:1 and 1.12:1 against the resting --paper fill, and 1.03:1
    against each other. .coach-register-table td button.is-present and the roll
    call's base .staff-roll-call-list article > [role="group"] button.is-present
@@ -12198,6 +12199,18 @@ tr.is-expanded .coach-member-row-action button svg {
 .player-attendance-recorder .attendance-roster-choices button:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: -2px;
+}
+
+/* The ring is inset, so it lands on whatever fill the button is wearing. Navy
+   on the resting --paper is 16.60:1, but navy on the pressed --green / --red is
+   3.17:1 and 3.02:1 — over 1.4.11's 3:1 floor by a hair, and only while those
+   two brand colours keep their exact lightness. White is already the ink on
+   these fills and gives 5.47:1 and 5.73:1, so the pressed state takes it. */
+.player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"]:hover:not(:disabled),
+.player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"]:focus-visible,
+.player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"]:hover:not(:disabled),
+.player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"]:focus-visible {
+  outline-color: var(--white);
 }
 
 .player-attendance-recorder .attendance-roster-choices button:disabled {
@@ -12640,11 +12653,13 @@ tr.is-expanded .coach-member-row-action button svg {
   border-left: 1px solid var(--line);
 }
 
-/* Same solid fill as the base .staff-roll-call-list article > [role="group"]
-   rules. The ledger variant had washed them down to --green-soft / --red-soft,
-   which is 1.09:1 and 1.12:1 over the --paper resting fill: the same control,
-   the same recorded state, but only this skin failed WCAG 1.4.11. Solid puts it
-   back at 5.24:1 and 5.49:1. */
+/* Matches the register grid's solid fill, for the same reason and the same
+   numbers as the recorder above: --green-soft / --red-soft measured 1.09:1 and
+   1.12:1 over the resting --paper fill, and solid restores 5.24:1 and 5.49:1.
+   Note this is the only roll-call skin that renders — staff-roll-call.tsx
+   hardcodes `staff-roll-call staff-roll-call-ledger`, so the
+   `.staff-roll-call-list article > [role="group"]` rules above are unreachable
+   and are not the precedent they look like. */
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button.is-present {
   background: var(--green);
@@ -12663,6 +12678,19 @@ tr.is-expanded .coach-member-row-action button svg {
   > .staff-roll-call-choice-box button:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: -2px;
+}
+
+/* Same inset-ring problem as the recorder, same remedy: navy on the pressed
+   fill is 3.17:1 / 3.02:1, white is 5.47:1 / 5.73:1. */
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button.is-present:hover:not(:disabled),
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button.is-present:focus-visible,
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button.is-absent:hover:not(:disabled),
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button.is-absent:focus-visible {
+  outline-color: var(--white);
 }
 
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
