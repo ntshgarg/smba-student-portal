@@ -31,7 +31,7 @@ export default async function RegisterPage() {
       <section className="login-card" aria-labelledby="registration-title">
         <Link className="login-brand" href={publicSiteUrl} aria-label="SMBA homepage">
           <Image
-            src="/images/smba-logo.jpeg"
+            src="/images/smba-logo.png"
             alt="Sathiya Moorthy Badminton Academy"
             width={720}
             height={488}

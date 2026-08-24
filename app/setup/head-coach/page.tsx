@@ -45,7 +45,7 @@ export default async function HeadCoachSetupPage({
     <main className="login-page">
       <section className="login-card head-coach-setup-card" aria-labelledby="head-setup-title">
         <div className="login-brand">
-          <Image src="/images/smba-logo.jpeg" alt="Sathiya Moorthy Badminton Academy" width={720} height={488} priority />
+          <Image src="/images/smba-logo.png" alt="Sathiya Moorthy Badminton Academy" width={720} height={488} priority />
           <span>Coach <em>Workspace</em></span>
         </div>
         <div className="login-copy">

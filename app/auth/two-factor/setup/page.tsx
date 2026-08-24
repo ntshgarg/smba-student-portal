@@ -50,7 +50,7 @@ export default async function TwoFactorSetupPage({
     <main className="login-page">
       <section className="login-card totp-card" aria-labelledby="totp-setup-title">
         <Link className="login-brand" href={publicSiteUrl} aria-label="SMBA homepage">
-          <Image src="/images/smba-logo.jpeg" alt="Sathiya Moorthy Badminton Academy" width={720} height={488} priority />
+          <Image src="/images/smba-logo.png" alt="Sathiya Moorthy Badminton Academy" width={720} height={488} priority />
           <span>SMBA <em>Secure access</em></span>
         </Link>
         <div className="login-copy">

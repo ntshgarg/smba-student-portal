@@ -76,7 +76,7 @@ export default async function AdminPage() {
       <header className="portal-header">
         <Link className="portal-brand" href="/admin" aria-label="SMBA platform owner home">
           <Image
-            src="/images/smba-logo.jpeg"
+            src="/images/smba-logo.png"
             alt="Sathiya Moorthy Badminton Academy"
             width={720}
             height={488}

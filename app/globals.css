@@ -1360,7 +1360,6 @@ h3 {
   width: 78px;
   height: 52px;
   object-fit: contain;
-  mix-blend-mode: multiply;
 }
 
 .portal-brand > span {
@@ -1517,7 +1516,6 @@ h3 {
   width: 78px;
   height: 52px;
   object-fit: contain;
-  mix-blend-mode: multiply;
 }
 
 .login-brand > span {
@@ -5435,7 +5433,6 @@ tr.is-expanded .coach-member-row-action button svg {
   width: 116px;
   height: 78px;
   object-fit: contain;
-  mix-blend-mode: multiply;
 }
 
 .coach-report-letterhead-mark {
