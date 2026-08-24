@@ -4,6 +4,7 @@ import {
   ACADEMY_TIME_ZONE,
   academyTimeInputValue,
   formatDateKey,
+  formatInr,
   formatSessionLabel,
   formatSessionLabelFromInstant,
   formatSessionTimeRange,
@@ -28,6 +29,16 @@ describe("academy presentation helpers", () => {
       weekday: undefined,
       year: "numeric",
     })).toBe("02/08/2026")
+  })
+
+  it("prints whole rupees bare and part-rupee amounts to the paisa", () => {
+    expect(formatInr(100_000)).toBe("₹1,000")
+    expect(formatInr(123_456)).toBe("₹1,234.56")
+    /* Half-rupee amounts are where a `maximumFractionDigits: 0` formatter
+       rounds half-expand and overstates what a parent owes: this was `₹1`. */
+    expect(formatInr(50)).toBe("₹0.50")
+    expect(formatInr(0)).toBe("₹0")
+    expect(formatInr(-12_345)).toBe("-₹123.45")
   })
 
   it("formats human session labels without changing stored session names", () => {
