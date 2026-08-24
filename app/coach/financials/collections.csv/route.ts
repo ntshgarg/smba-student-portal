@@ -9,7 +9,10 @@ import {
   drainCursorPages,
   privateAttachmentResponse,
 } from "@/lib/http/download-route"
-import { financeDownloadRejection } from "@/lib/http/finance-download-route"
+import {
+  financeDownloadRejection,
+  financeExportTruncation,
+} from "@/lib/http/finance-download-route"
 
 export const runtime = "nodejs"
 
@@ -60,10 +63,16 @@ export async function GET(request: Request) {
       }
     })()
 
-    return privateAttachmentResponse(createCollectionCsvStream(rows), {
-      contentType: "text/csv; charset=utf-8",
-      fileName: `smba-collections-${from}-to-${to}.csv`,
-    })
+    return privateAttachmentResponse(
+      createCollectionCsvStream(rows, financeExportTruncation({
+        context: { from, to },
+        label: "Financial collections export stopped before its last row.",
+      })),
+      {
+        contentType: "text/csv; charset=utf-8",
+        fileName: `smba-collections-${from}-to-${to}.csv`,
+      },
+    )
   } catch (error) {
     return financeDownloadRejection(error) ?? downloadFailureResponse(error, {
       context: { from, to },
