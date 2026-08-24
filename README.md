@@ -14,15 +14,29 @@ Open `http://localhost:3000`.
 
 ## Application routes
 
-- `/` — public academy website
-- `/login` and `/register` — shared portal access
-- `/player`, `/player/reports` and `/player/financials` — authenticated Player Journal
+- `/` and `/announcements/[announcementId]` — public academy website
+- `/login`, `/register`, `/activate`, `/recover` and `/recover/reset` — shared portal
+  access, registration and password recovery
+- `/auth/two-factor`, `/auth/two-factor/setup`, `/auth/two-factor/reconnect`,
+  `/auth/two-factor/recovery` and `/auth/pin/setup` — step-up authentication and
+  credential enrolment
+- `/account/security` and `/account/recovery-email/setup` — self-service account security
+- `/admin` — audited, read-only platform-owner dashboard
+- `/setup/head-coach` — the one-time first head-coach setup, opened from `/admin`
+- `/player`, `/player/reports`, `/player/financials`, `/player/announcements` and
+  `/player/announcements/[announcementId]` — authenticated Player Journal
 - `/coach`, `/coach/calendar`, `/coach/schedules`, `/coach/schedules/new`,
+  `/coach/onboarding`, `/coach/members`,
   `/coach/attendance/players/register`, `/coach/attendance/players/record`,
   `/coach/attendance/staff/register`, `/coach/attendance/staff/record`,
-  `/coach/attendance/adjustments`, `/coach/reports`, `/coach/financials`,
-  `/coach/financials/record`, `/coach/financials/records`, focused player fee records,
-  and `/coach/members` — coach-only workspace
+  `/coach/attendance/coaches`, `/coach/attendance/adjustments`,
+  `/coach/reports`, `/coach/reports/write`,
+  `/coach/reports/publications/[publicationId]`, `/coach/financials`,
+  `/coach/financials/record`, `/coach/financials/records`,
+  `/coach/financials/players/[playerId]`, `/coach/announcements`,
+  `/coach/announcements/new` and `/coach/announcements/[id]` — coach-only workspace
+- `/progress`, `/reports` and `/coach/attendance` are redirects kept for older links;
+  they resolve to `/player`, `/player/reports` and `/coach/attendance/players/record`
 
 The former public `site` project remains in the parent workspace as a temporary rollback copy,
 but this application is now the canonical local server.
@@ -35,15 +49,23 @@ The implemented finance contracts are recorded in
 Copy `.env.example` to `.env.local` for a new environment. Local development uses:
 
 ```env
-DB_FILE_NAME=.data/academy-empty.db
 NEXT_PUBLIC_SMBA_SITE_ORIGIN=http://localhost:3000
 SMBA_REQUIRE_COACH_TOTP=true
 ```
 
+`npm run dev` and `npm run db:provision:admin` both pin `DB_FILE_NAME=.data/academy-empty.db`
+in `package.json`, so the two agree on one database whatever `.env.local` says. The
+`DB_FILE_NAME` in `.env.local` applies only to commands that pin nothing, such as
+`npm run db:migrate`.
+
 The empty local academy contains only the separately provisioned platform owner
-`SMBA-ADMIN-0001`; it has no head coach, junior coaches, or players. Provision
-the owner once with `npm run db:provision:admin`, then connect an authenticator
-on first login. The owner can then open the one-time first head-coach setup from
+`SMBA-ADMIN-0001`; it has no head coach, junior coaches, or players. Put
+`SMBA_INITIAL_ADMIN_PASSWORD` and `SMBA_INITIAL_ADMIN_PIN` in `.env.local`, run
+`npm run dev` once so that database exists, then provision the owner from a second
+terminal with `npm run db:provision:admin` and connect an authenticator on first
+login. That script reads `.env.local` itself; a remote Turso target still wins,
+because the remote connection never reads `DB_FILE_NAME`. The owner can then open
+the one-time first head-coach setup from
 `/admin`. Loaded regression profiles use
 `SMBA fixture access 2026!`, overridable with `SMBA_FIXTURE_PASSWORD`.
 
@@ -175,6 +197,16 @@ own name, password and PIN. Players and junior coaches verify their recovery ema
 in the browser that submitted registration. Shared parent email addresses are supported.
 Keep `BETTER_AUTH_SECRET` stable and store it in the deployment secret manager;
 rotating or losing it invalidates encrypted TOTP material and signed sessions.
+Any Vercel deployment, and any self-hosted `NODE_ENV=production` boot, now fails
+without it instead of falling back to the local-only secret committed here. The
+failure is a thrown error on the first request that touches authentication, not a
+refusal to bind the port: Next.js evaluates route modules lazily, and
+`/api/health` does not import the auth module, so an unconfigured deployment will
+come up and report healthy before `/login` returns 500. Check a real sign-in, not
+the health endpoint, after changing this. `npm run build` and the
+`fixture:start:*` commands set
+`SMBA_ALLOW_LOCAL_AUTH_SECRET=true` to keep that fallback, because they serve a
+disposable local fixture; no deployment should set it, and Vercel ignores it.
 Losing access to the verified email, authenticator and all backup codes has no
 self-service bypass; a separately designed support workflow is required.
 
@@ -307,6 +339,7 @@ npm run regression:capture
 ```
 
 See [`tests/e2e/README.md`](tests/e2e/README.md) for viewport selection, evidence files, strict checks,
-and storage-state options. Normal local `npm run dev` uses the Clean database.
+and storage-state options. Normal local `npm run dev` uses the zero-member
+`.data/academy-empty.db`, which is the database its own script pins.
 The clean `.data/smba.db` remains the fixture source, while `npm run regression:start` selects the
 Stress database explicitly.

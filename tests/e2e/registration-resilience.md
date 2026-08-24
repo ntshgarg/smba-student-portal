@@ -27,6 +27,7 @@ sqlite3 -readonly .data/academy-clean.db \
 ```sh
 SMBA_REQUIRE_COACH_TOTP=false \
 BETTER_AUTH_SECURE_COOKIES=false \
+SMBA_ALLOW_LOCAL_AUTH_SECRET=true \
 DB_FILE_NAME=/private/tmp/smba-registration-resilience/clean.db \
 NEXT_PUBLIC_SMBA_SITE_ORIGIN=https://smba.example.test \
 ./node_modules/.bin/next start -p 3141

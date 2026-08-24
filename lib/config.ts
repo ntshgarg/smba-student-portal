@@ -1,5 +1,8 @@
+// `||` rather than `??`: an operator who leaves the key present but empty gets
+// the empty string, not undefined, and "" would silently point every brand link
+// at the current URL instead of the public site.
 export const publicSiteUrl =
-  process.env.NEXT_PUBLIC_SMBA_PUBLIC_SITE_URL ?? "/"
+  process.env.NEXT_PUBLIC_SMBA_PUBLIC_SITE_URL || "/"
 
 const SITE_ORIGIN_ENV_VAR = "NEXT_PUBLIC_SMBA_SITE_ORIGIN"
 const LOCAL_SITE_ORIGIN = "http://localhost:3000"
