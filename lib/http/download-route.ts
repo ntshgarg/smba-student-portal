@@ -2,7 +2,10 @@ import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 
 // The shared mechanics of SMBA's private download and export routes: the
 // response headers, the authorisation preamble, the attachment filename, the
-// cursor drain that builds a streamed export, and the terminal failure.
+// cursor drain that builds a streamed export, the terminal failure, and the log
+// a streamed export leaves when it stops short. The words that failure puts in
+// the file itself belong to the encoder writing it
+// (`lib/finance/csv-truncation.ts`).
 //
 // Authorisation is deliberately *not* decided here. These routes guard a
 // player's own report, a head coach's publication archive and the academy's
@@ -94,8 +97,29 @@ export function authorizeDownload<I extends { role: string }>(
 }
 
 /**
+ * Raised when a cursor-paged read hands back a cursor it has already returned.
+ *
+ * Reachable because the finance readers rebuild the whole result set on every
+ * page and recompute the cursor from it (`paginateById` in
+ * `lib/finance/records.ts`), so rows that move between two reads can put a
+ * page's last id back on one already handed out.
+ */
+export class RepeatedCursorError extends Error {
+  constructor() {
+    super("The paged read returned a cursor it had already returned.")
+    this.name = "RepeatedCursorError"
+  }
+}
+
+/**
  * Yields every item across a cursor-paged read. `seen` stops a service that
  * returns a cursor it already returned from streaming an export forever.
+ *
+ * That stop throws rather than returns. Returning ends the drain exactly as a
+ * complete read ends it, so the export would close with no trailer and no row
+ * count and the coach would hold a file that stops mid-register saying nothing
+ * -- the silence F-17 exists to remove. Throwing puts it on the same path as a
+ * failed page read, which the encoder answers in the file.
  */
 export function* drainCursorPages<P extends { nextCursor: string | null }, T>(
   first: P,
@@ -107,7 +131,8 @@ export function* drainCursorPages<P extends { nextCursor: string | null }, T>(
 
   while (true) {
     yield* itemsOf(page)
-    if (!page.nextCursor || seen.has(page.nextCursor)) return
+    if (!page.nextCursor) return
+    if (seen.has(page.nextCursor)) throw new RepeatedCursorError()
     seen.add(page.nextCursor)
     page = pageAfter(page.nextCursor)
   }
@@ -129,4 +154,39 @@ export function downloadFailureResponse(error: unknown, failure: {
     cause: describeFailureCause(error),
   })
   return privateDownloadResponse(failure.message, 500)
+}
+
+/**
+ * The mid-stream counterpart of `downloadFailureResponse`.
+ *
+ * A streamed export's pages are pulled after the handler has returned, so by
+ * the time one of them fails there is no response left to change: 200 and
+ * `Content-Disposition` are on the wire and the route's `catch` has been out of
+ * scope for some time. All that remains is the log, so it gets the same cause
+ * and the same route context a 500 would have carried, plus how far the export
+ * got before it stopped. What the coach holding the file is told is decided
+ * separately, by whoever knows the domain the failure came from
+ * (`financeExportTruncation` in `lib/http/finance-download-route.ts`).
+ *
+ * Draining every page inside the handler's `try` instead would put the read
+ * failures back where a 500 could answer them, and it is not what these routes
+ * do, for two reasons. The register and activity readers each rebuild their
+ * whole result set per page (`lib/finance/records.ts`), so buffering adds a
+ * second full copy the function must hold while it waits, on the two exports
+ * with no date filter to bound them. And it would only move the read failures:
+ * the CSV encoders reject an unrepresentable amount as they write, so the file
+ * could still end mid-row with a 200 already sent. The notice the encoders
+ * write covers both.
+ */
+export function exportTruncationLog(failure: {
+  context?: Record<string, unknown>
+  label: string
+}) {
+  return (error: unknown, rowsWritten: number) => {
+    console.error(failure.label, {
+      ...failure.context,
+      cause: describeFailureCause(error),
+      rowsWritten,
+    })
+  }
 }
