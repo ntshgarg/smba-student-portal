@@ -390,10 +390,11 @@ function validateConcessionDefinition(input: CreateConcessionInput) {
   const value = input.valueKind === "fixed"
     ? validateMoney(input.value)
     : Number.isInteger(input.value) && input.value > 0 && input.value <= 10_000
+      && input.value % 100 === 0
       ? input.value
       : financeError(
         "INVALID_INPUT",
-        "Enter a percentage from 0.01% to 100%.",
+        "Enter a whole percentage from 1% to 100%.",
         "amountPaise",
       )
   const startsPeriod = input.startsPeriod?.trim() || null
