@@ -8481,9 +8481,20 @@ tr.is-expanded .coach-member-row-action button svg {
   font-weight: 780;
 }
 
-.attendance-record-footer > button:disabled {
+.attendance-record-footer > button[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+/* `opacity` composites the element's own outline, so the dim above also dims
+   the global `:focus-visible` ring (`outline: 2px solid var(--red)`). Over the
+   roll call ledger's --white footer that drops --red from 5.73:1 to 2.02:1,
+   under the 3:1 WCAG 1.4.11 asks of a focus indicator — and this button is
+   reachable while dimmed only because it carries `aria-disabled` rather than
+   `disabled`. So the ring wins over the dim while it is showing; the cursor
+   above and the ARIA state still say the press will not land. */
+.attendance-record-footer > button[aria-disabled="true"]:focus-visible {
+  opacity: 1;
 }
 
 .attendance-record-footer > button svg {
@@ -12219,7 +12230,7 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--white);
 }
 
-.player-attendance-recorder .attendance-roster-choices button:hover:not(:disabled),
+.player-attendance-recorder .attendance-roster-choices button:hover:not([aria-disabled="true"]),
 .player-attendance-recorder .attendance-roster-choices button:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: -2px;
@@ -12230,16 +12241,25 @@ tr.is-expanded .coach-member-row-action button svg {
    3.17:1 and 3.02:1 — over 1.4.11's 3:1 floor by a hair, and only while those
    two brand colours keep their exact lightness. White is already the ink on
    these fills and gives 5.47:1 and 5.73:1, so the pressed state takes it. */
-.player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"]:hover:not(:disabled),
+.player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"]:hover:not([aria-disabled="true"]),
 .player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"]:focus-visible,
-.player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"]:hover:not(:disabled),
+.player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"]:hover:not([aria-disabled="true"]),
 .player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"]:focus-visible {
   outline-color: var(--white);
 }
 
-.player-attendance-recorder .attendance-roster-choices button:disabled {
+/* Keyed on `aria-disabled` because the roster stays focusable through a save,
+   for the reason player-attendance-recorder.tsx gives at the choice buttons. */
+.player-attendance-recorder .attendance-roster-choices button[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* And so a focused choice button keeps its ring: dimmed at 0.5 the pressed
+   state's white ring reads 2.13:1 on --green and 2.46:1 on --red, against
+   5.47:1 and 5.73:1 undimmed and 1.4.11's 3:1 floor. */
+.player-attendance-recorder .attendance-roster-choices button[aria-disabled="true"]:focus-visible {
+  opacity: 1;
 }
 
 .player-attendance-recorder .attendance-roster-adjustment {
@@ -12308,9 +12328,16 @@ tr.is-expanded .coach-member-row-action button svg {
   text-transform: uppercase;
 }
 
-.player-attendance-recorder .attendance-record-footer > button:disabled {
+.player-attendance-recorder .attendance-record-footer > button[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* Same outline-under-opacity trap as the roll call footer above, with this
+   register's numbers: --red on the --paper the roster recorder paints reads
+   5.49:1 undimmed and 2.41:1 at 0.5. */
+.player-attendance-recorder .attendance-record-footer > button[aria-disabled="true"]:focus-visible {
+  opacity: 1;
 }
 
 /* The way back from an expired session, ranked between the notice that explains
@@ -12727,7 +12754,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
-  > .staff-roll-call-choice-box button:hover:not(:disabled),
+  > .staff-roll-call-choice-box button:hover:not([aria-disabled="true"]),
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button:focus-visible {
   outline: 2px solid var(--navy);
@@ -12737,20 +12764,31 @@ tr.is-expanded .coach-member-row-action button svg {
 /* Same inset-ring problem as the recorder, same remedy: navy on the pressed
    fill is 3.17:1 / 3.02:1, white is 5.47:1 / 5.73:1. */
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
-  > .staff-roll-call-choice-box button.is-present:hover:not(:disabled),
+  > .staff-roll-call-choice-box button.is-present:hover:not([aria-disabled="true"]),
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button.is-present:focus-visible,
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
-  > .staff-roll-call-choice-box button.is-absent:hover:not(:disabled),
+  > .staff-roll-call-choice-box button.is-absent:hover:not([aria-disabled="true"]),
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button.is-absent:focus-visible {
   outline-color: var(--white);
 }
 
+/* `aria-disabled` rather than `:disabled`: staff-roll-call.tsx keeps `disabled`
+   for the dates a coach cannot be marked on, but carries an in-flight save on
+   `aria-disabled` alone, and both wear the same dim. */
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
-  > .staff-roll-call-choice-box button:disabled {
+  > .staff-roll-call-choice-box button[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* Only the save case is ever focused while dimmed, and dimmed at 0.5 the
+   pressed state's white ring reads 2.13:1 on --green and 2.46:1 on --red,
+   against 5.47:1 and 5.73:1 undimmed and 1.4.11's 3:1 floor. */
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button[aria-disabled="true"]:focus-visible {
+  opacity: 1;
 }
 
 .staff-roll-call-ledger > .attendance-record-footer {
