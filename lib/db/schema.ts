@@ -10,6 +10,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core"
 
+import { FINANCE_AUDIT_EVENT_TYPES } from "@/lib/finance/types"
+
 export const accounts = sqliteTable("accounts", {
   id: text("id").primaryKey(),
   fullName: text("full_name").notNull(),
@@ -983,30 +985,9 @@ export const financeReferenceSequences = sqliteTable("finance_reference_sequence
 export const financialAuditEvents = sqliteTable("financial_audit_events", {
   id: text("id").primaryKey(),
   actorAccountId: text("actor_account_id").notNull().references(() => accounts.id),
-  eventType: text("event_type", {
-    enum: [
-      "finance_activated",
-      "fee_agreement_created",
-      "fee_agreement_replaced",
-      "fee_agreement_paused",
-      "fee_agreement_ended",
-      "charge_issued",
-      "charge_voided",
-      "monthly_fees_prepared",
-      "payment_recorded",
-      "payment_reversed",
-      "refund_recorded",
-      "refund_reversed",
-      "concession_created",
-      "concession_applied",
-      "concession_application_reversed",
-      "concession_reversed",
-      "adjustment_created",
-      "adjustment_reversed",
-      "historical_reconciled",
-      "training_start_redated",
-    ],
-  }).notNull(),
+  // SQLite has no enum type, so this narrows the column in TypeScript only and emits
+  // plain `text`. Deriving it keeps the set identical to FinanceAuditEventType.
+  eventType: text("event_type", { enum: FINANCE_AUDIT_EVENT_TYPES }).notNull(),
   entityType: text("entity_type", {
     enum: [
       "academy", "fee_agreement", "charge", "payment", "adjustment", "player",
