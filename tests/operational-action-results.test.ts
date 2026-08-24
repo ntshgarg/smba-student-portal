@@ -72,15 +72,29 @@ import {
   approveRegistrationAction,
   createSessionSeriesAction,
   replaceSessionOccurrenceAction,
+  saveAttendanceRegisterAction,
 } from "@/app/coach/actions"
 import { publishAttendanceAdjustmentAction } from "@/app/coach/attendance/adjustments/actions"
-import { OperationalActionError } from "@/lib/actions/operational-result"
+import {
+  OperationalActionError,
+  SessionExpiredError,
+} from "@/lib/actions/operational-result"
+import type { SessionAttendanceChange } from "@/lib/sessions/types"
 
 const snapshot = {
   sessionAssignments: [],
   sessionOccurrences: [],
   sessionSeries: [],
 }
+
+const registerMarks: SessionAttendanceChange[] = [
+  {
+    choice: "present",
+    expectedChoice: "cleared",
+    occurrenceId: "occurrence-1",
+    playerId: "player-1",
+  },
+]
 
 describe("production-safe operational action results", () => {
   beforeEach(() => {
@@ -159,6 +173,32 @@ describe("production-safe operational action results", () => {
     await expect(approveRegistrationAction("registration-1", "player"))
       .rejects.toThrow("Head coach access is required.")
     expect(mocks.approveRegistration).not.toHaveBeenCalled()
+  })
+
+  it("hands an expired session to the register as data, not as a throw", async () => {
+    mocks.requireHeadAdminAction.mockRejectedValueOnce(new SessionExpiredError())
+
+    await expect(saveAttendanceRegisterAction({ changes: registerMarks })).resolves.toEqual({
+      ok: false,
+      code: "SESSION_EXPIRED",
+      field: undefined,
+      message: "Your sign-in expired. Sign in again to continue.",
+    })
+    // The guard threw before the wrapper caught it, so the marks were never
+    // written and nothing was revalidated -- the conversion is at the boundary,
+    // not inside the mutation.
+    expect(mocks.saveSessionAttendanceRecords).not.toHaveBeenCalled()
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("still throws a head-coach refusal out of the same wrapped action", async () => {
+    mocks.requireHeadAdminAction.mockRejectedValueOnce(
+      new Error("Head coach access is required."),
+    )
+
+    await expect(saveAttendanceRegisterAction({ changes: registerMarks }))
+      .rejects.toThrow("Head coach access is required.")
+    expect(mocks.saveSessionAttendanceRecords).not.toHaveBeenCalled()
   })
 
   it("returns only the source calendar month after a successful replacement", async () => {
