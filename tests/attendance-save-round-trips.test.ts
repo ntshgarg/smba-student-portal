@@ -91,13 +91,12 @@ describe("attendance save round trips", () => {
       }).run()
       database.insert(schema.playerEnrollments).values({
         accountId: playerId,
-        programme: "Beginner",
+        level: "Beginner",
         batch: "Weekday",
         academyPlan: "weekday-3-day",
+        status: "active",
         trainingStartOn: "2026-08-01",
         trainingStartConfirmedAt: now,
-        joinedAt: "2026-08-01",
-        createdAt: now,
         updatedAt: now,
       }).run()
       const assignmentId = `round-trip-assignment-${index}`
