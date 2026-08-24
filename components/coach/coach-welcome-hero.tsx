@@ -1,7 +1,4 @@
-"use client"
-
 import { ArrowDown } from "lucide-react"
-import { motion, useReducedMotion } from "motion/react"
 
 export function CoachWelcomeHero({
   coachName,
@@ -24,12 +21,6 @@ export function CoachWelcomeHero({
   sessionCount: number
   sessionPosition: "first" | "next"
 }) {
-  const reduceMotion = useReducedMotion()
-  const initial = reduceMotion
-    ? false
-    : { opacity: 0, transform: "translateY(16px)" }
-  const animate = { opacity: 1, transform: "translateY(0px)" }
-
   return (
     <section
       className="welcome-hero welcome-scoreboard coach-welcome-hero coach-welcome-scoreboard"
@@ -48,12 +39,7 @@ export function CoachWelcomeHero({
       </svg>
 
       <div className="welcome-inner">
-        <motion.div
-          className="welcome-copy coach-welcome-copy"
-          initial={initial}
-          animate={animate}
-          transition={{ duration: reduceMotion ? 0 : 0.38, ease: "easeOut" }}
-        >
+        <div className="welcome-copy coach-welcome-copy">
           <h1 id="coach-welcome-title">
             {greeting},
             <br />
@@ -62,20 +48,13 @@ export function CoachWelcomeHero({
           <p className="welcome-line coach-welcome-line">
             Ready to set the tone?
           </p>
-        </motion.div>
+        </div>
 
-        <motion.aside
+        <aside
           className={`coach-message-card coach-welcome-card welcome-scoreboard-ribbon coach-scoreboard-ribbon ${
             upcomingSession ? "has-session" : "is-empty"
           }`}
           aria-label="Today’s training overview"
-          initial={initial}
-          animate={animate}
-          transition={{
-            duration: reduceMotion ? 0 : 0.38,
-            delay: reduceMotion ? 0 : 0.1,
-            ease: "easeOut",
-          }}
         >
           <div className="welcome-scoreboard-date coach-ribbon-date">
             <span>Today’s training</span>
@@ -104,7 +83,7 @@ export function CoachWelcomeHero({
               {sessionCount ? "No more sessions today." : "No sessions scheduled today."}
             </p>
           )}
-        </motion.aside>
+        </aside>
 
         <a className="scroll-cue" href="#attendance">
           <span>Today’s attendance</span>

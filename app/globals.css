@@ -2505,6 +2505,36 @@ h3 {
   padding: clamp(72px, 10vh, 118px) 0 34px;
 }
 
+/* The hero copy and its ribbon animate *from* hidden, so the resting style is
+   the visible one: the greeting is on screen even if hydration never runs. The
+   ribbon trails the copy by 100ms, and `backwards` holds it hidden until then. */
+.welcome-copy {
+  animation: welcome-hero-rise 380ms ease-out backwards;
+}
+
+.welcome-scoreboard-ribbon {
+  animation: welcome-hero-rise 380ms ease-out 100ms backwards;
+}
+
+@keyframes welcome-hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-copy,
+  .welcome-scoreboard-ribbon {
+    animation: none;
+  }
+}
+
 .welcome-copy h1 {
   max-width: 820px;
   margin-top: 22px;
@@ -3238,6 +3268,33 @@ h3 {
 
 .report-accordion-content {
   padding-bottom: 0;
+}
+
+/* Opening a chapter mounts its panel, so a CSS animation covers the open
+   transition. Closing unmounts it, and CSS cannot animate an element that is
+   being removed — the close is therefore immediate rather than a fade. */
+.report-year-panel,
+.report-accordion-content {
+  animation: report-panel-enter 180ms ease-out backwards;
+}
+
+@keyframes report-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-year-panel,
+  .report-accordion-content {
+    animation: none;
+  }
 }
 
 .expanded-report-panel {
