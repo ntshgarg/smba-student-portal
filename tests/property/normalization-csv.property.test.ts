@@ -12,12 +12,21 @@ import {
   collectionCsvLines,
   type CollectionCsvRow,
 } from "@/lib/finance/collections-csv"
+import type { ExportTruncation } from "@/lib/finance/csv-truncation"
 import { feeRegisterCsvLines } from "@/lib/finance/records-csv"
 import type {
   FinanceRegisterRow,
   FinanceStatus,
   PaymentMethod,
 } from "@/lib/finance/types"
+
+// Both encoders stop at a row they cannot write and end the file with a notice
+// instead of throwing, which would turn a generated row this property rejects
+// into an extra record rather than a failure. Rethrowing puts the property back
+// in charge of deciding what counts as a pass.
+const failOnTruncation: ExportTruncation = (error) => {
+  throw error
+}
 
 const PROPERTY_RUNS = 200
 const MAX_MONEY_PAISE = 1_000_000_000
@@ -170,7 +179,7 @@ describe("normalization and CSV properties", () => {
     fc.assert(fc.property(
       fc.array(collectionRowArbitrary, { maxLength: 20 }),
       (rows) => {
-        const records = [...collectionCsvLines(rows)]
+        const records = [...collectionCsvLines(rows, failOnTruncation)]
         expect(records).toHaveLength(rows.length + 1)
         expect(parseCsvRecord(records[0])).toHaveLength(9)
 
@@ -191,7 +200,7 @@ describe("normalization and CSV properties", () => {
     fc.assert(fc.property(
       fc.array(feeRegisterRowArbitrary, { maxLength: 20 }),
       (rows) => {
-        const records = [...feeRegisterCsvLines(rows)]
+        const records = [...feeRegisterCsvLines(rows, failOnTruncation)]
         expect(records).toHaveLength(rows.length + 1)
         expect(parseCsvRecord(records[0])).toHaveLength(14)
 
@@ -221,7 +230,7 @@ describe("normalization and CSV properties", () => {
           method: null,
           playerName: dangerousText,
           reference: dangerousText,
-        }])][1])
+        }], failOnTruncation)][1])
         expect(collectionFields[2]).toBe(`'${dangerousText}`)
         expect(collectionFields[3]).toBe(`'${dangerousText}`)
         expect(collectionFields[7]).toBe(`'${dangerousText}`)
@@ -243,7 +252,7 @@ describe("normalization and CSV properties", () => {
           receivedPaise: 0,
           status: "pending",
           type: "monthly_training",
-        }])][1])
+        }], failOnTruncation)][1])
         expect(feeFields[0]).toBe(`'${dangerousText}`)
         expect(feeFields[1]).toBe(`'${dangerousText}`)
         expect(feeFields[4]).toBe(`'${dangerousText}`)

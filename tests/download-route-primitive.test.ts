@@ -4,6 +4,8 @@ import {
   authorizeDownload,
   downloadFailureResponse,
   drainCursorPages,
+  exportTruncationLog,
+  RepeatedCursorError,
   safeFileName,
 } from "@/lib/http/download-route"
 import { describeFailureCause } from "@/lib/telemetry/failure-cause"
@@ -129,16 +131,21 @@ describe("the shared cursor drain", () => {
     expect(drained).toEqual([1, 2, 3, 4, 5])
   })
 
-  // An export that streams forever is worse than one that ends short.
-  it("stops rather than looping when a service repeats a cursor", () => {
+  // An export that streams forever is worse than one that ends short -- but an
+  // export that ends short without saying so is worse than both, so the stop is
+  // a throw the caller's failure path can see rather than a quiet return.
+  it("throws rather than looping when a service repeats a cursor", () => {
     const first: CursorPage = { items: [1], nextCursor: "same" }
-
-    const drained = [...drainCursorPages(
+    const drain = drainCursorPages(
       first,
       (page) => page.items,
       () => ({ items: [2], nextCursor: "same" }),
-    )]
+    )
 
+    const drained: number[] = []
+    expect(() => {
+      for (const item of drain) drained.push(item)
+    }).toThrow(RepeatedCursorError)
     expect(drained).toEqual([1, 2])
   })
 })
@@ -216,6 +223,30 @@ describe("the logged cause of a download failure", () => {
     expect(await response.text()).toBe("Unable to generate the financial record.")
     expect(response.headers.get("cache-control")).toBe("private, no-store")
     expect(response.headers.get("x-content-type-options")).toBe("nosniff")
+
+    consoleError.mockRestore()
+  })
+})
+
+// F-17: a streamed export's pages are pulled after the handler has returned, so
+// its `catch` and its 500 are already unreachable when a page fails. All that is
+// left on the operator's side is the log, which therefore has to carry what the
+// 500 would have carried. What the coach is told is a separate job, done by
+// `lib/finance/csv-truncation.ts`.
+describe("the log a streamed export leaves when it stops short", () => {
+  it("logs the cause and route context a 500 would have carried", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+    exportTruncationLog({
+      context: { mode: "registration", period: undefined },
+      label: "Financial fee-register export stopped before its last row.",
+    })(new Error("SQLITE_BUSY: database is locked"), 200)
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "Financial fee-register export stopped before its last row.",
+      expect.objectContaining({ mode: "registration", rowsWritten: 200 }),
+    )
+    expect(String(consoleError.mock.calls[0]?.[1]?.cause)).toContain("SQLITE_BUSY")
 
     consoleError.mockRestore()
   })

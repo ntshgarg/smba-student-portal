@@ -15,7 +15,10 @@ import {
   privateAttachmentResponse,
   privateDownloadResponse,
 } from "@/lib/http/download-route"
-import { financeDownloadRejection } from "@/lib/http/finance-download-route"
+import {
+  financeDownloadRejection,
+  financeExportTruncation,
+} from "@/lib/http/finance-download-route"
 
 export const runtime = "nodejs"
 
@@ -78,10 +81,20 @@ export async function GET(request: Request) {
     )
     const suffix = mode === "monthly" ? period : "registration"
 
-    return privateAttachmentResponse(createFeeRegisterCsvStream(rows), {
-      contentType: "text/csv; charset=utf-8",
-      fileName: `smba-fee-register-${suffix}.csv`,
-    })
+    // `rows` is drained by the stream, so every page after the first fails
+    // outside this `try`. `financeExportTruncation` is that `catch`'s mid-stream
+    // twin: the same context reaches the log, and the same reading of a refusal
+    // against a fault reaches the coach, in the file's own last line.
+    return privateAttachmentResponse(
+      createFeeRegisterCsvStream(rows, financeExportTruncation({
+        context: { mode, period },
+        label: "Financial fee-register export stopped before its last row.",
+      })),
+      {
+        contentType: "text/csv; charset=utf-8",
+        fileName: `smba-fee-register-${suffix}.csv`,
+      },
+    )
   } catch (error) {
     return financeDownloadRejection(error) ?? downloadFailureResponse(error, {
       context: { mode, period },

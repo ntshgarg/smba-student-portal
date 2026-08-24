@@ -14,7 +14,10 @@ import {
   privateAttachmentResponse,
   privateDownloadResponse,
 } from "@/lib/http/download-route"
-import { financeDownloadRejection } from "@/lib/http/finance-download-route"
+import {
+  financeDownloadRejection,
+  financeExportTruncation,
+} from "@/lib/http/finance-download-route"
 
 export const runtime = "nodejs"
 
@@ -62,10 +65,16 @@ export async function GET(request: Request) {
       ),
     )
 
-    return privateAttachmentResponse(createActivityCsvStream(items), {
-      contentType: "text/csv; charset=utf-8",
-      fileName: "smba-financial-activity.csv",
-    })
+    return privateAttachmentResponse(
+      createActivityCsvStream(items, financeExportTruncation({
+        context: { from, to },
+        label: "Financial activity export stopped before its last row.",
+      })),
+      {
+        contentType: "text/csv; charset=utf-8",
+        fileName: "smba-financial-activity.csv",
+      },
+    )
   } catch (error) {
     return financeDownloadRejection(error) ?? downloadFailureResponse(error, {
       context: { from, to },

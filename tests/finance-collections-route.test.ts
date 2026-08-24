@@ -100,4 +100,51 @@ describe("financial collections export route", () => {
       { coachId: "coach-1" },
     )
   })
+
+  // F-17: the day book is drained as the stream is pulled, so a page that fails
+  // after the first one lands with 200 and the filename already sent. A coach
+  // reconciling the day's cash must be able to tell a short file from a quiet
+  // day, and the only place left to say so is the file.
+  it("ends a collections export that stops mid-stream with a notice the coach can read", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    getCollectionsDayBook
+      .mockReturnValueOnce({
+        events: [{
+          id: "payment-42",
+          academyId: "SMBA#0042",
+          amountPaise: 350_000,
+          coveredFeeReferences: ["SMBA-A1"],
+          eventDate: "2026-08-08",
+          eventType: "payment",
+          lifecycle: "recorded",
+          method: "upi",
+          playerId: "player-42",
+          playerFullName: "Aarav Bhat",
+          recordedAt: "2026-08-08T04:30:00.000Z",
+          reference: "SMBA-R-2026-00042",
+        }],
+        summary: {},
+        nextCursor: "payment-42",
+      })
+      .mockImplementationOnce(() => {
+        throw new Error("SQLITE_BUSY: database is locked")
+      })
+
+    const response = await GET(new Request(
+      "http://localhost/coach/financials/collections.csv?from=2026-08-01&to=2026-08-31",
+    ))
+    const rows = (await response.text()).split("\r\n").filter(Boolean)
+
+    expect(response.status).toBe(200)
+    expect(rows).toHaveLength(3)
+    expect(rows[1]).toContain("SMBA-R-2026-00042")
+    expect(rows[2]).toContain("EXPORT INCOMPLETE")
+    expect(consoleError).toHaveBeenCalledWith(
+      "Financial collections export stopped before its last row.",
+      expect.objectContaining({ from: "2026-08-01", rowsWritten: 1, to: "2026-08-31" }),
+    )
+    expect(String(consoleError.mock.calls[0]?.[1]?.cause)).toContain("SQLITE_BUSY")
+
+    consoleError.mockRestore()
+  })
 })

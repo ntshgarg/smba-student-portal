@@ -4,6 +4,7 @@ import {
   MAX_CLIENT_ERROR_REPORT_BYTES,
   parseClientErrorReport,
 } from "@/lib/telemetry/error-report"
+import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 import { recordClientErrorReport } from "@/lib/telemetry/record-client-error"
 
 export const dynamic = "force-dynamic"
@@ -98,10 +99,18 @@ export async function POST(request: Request) {
     recordClientErrorReport({ accountId: await currentAccountId(), report })
 
     return reply(204)
-  } catch {
+  } catch (error) {
     // The user is already looking at an error boundary. Never answer a failed
     // report with a failure the browser might act on.
-    console.error("SMBA could not persist a sanitized client error report.")
+    //
+    // The cause is safe to carry even though the body is untrusted: everything
+    // that reaches the write has been reduced to a fixed vocabulary, a masked
+    // route pattern or a hash by `parseClientErrorReport`, so what fails here
+    // is the server, not the report. Losing it would leave the portal's only
+    // client-fault channel failing without saying why.
+    console.error("SMBA could not persist a sanitized client error report.", {
+      cause: describeFailureCause(error),
+    })
     return reply(204)
   }
 }
