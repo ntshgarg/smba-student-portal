@@ -1,7 +1,4 @@
-"use client"
-
 import { ArrowDown } from "lucide-react"
-import { motion, useReducedMotion } from "motion/react"
 
 import type { StudentIdentity } from "@/lib/auth/identity"
 import type { CoachMessage } from "@/lib/types"
@@ -17,13 +14,6 @@ export function WelcomeHero({
   greeting: string
   scrollLabel: string
 }) {
-  const reduceMotion = useReducedMotion()
-
-  const initial = reduceMotion
-    ? false
-    : { opacity: 0, transform: "translateY(16px)" }
-  const animate = { opacity: 1, transform: "translateY(0px)" }
-
   return (
     <section
       className="welcome-hero welcome-scoreboard coach-welcome-scoreboard player-welcome-scoreboard"
@@ -42,36 +32,24 @@ export function WelcomeHero({
       </svg>
 
       <div className="welcome-inner">
-        <motion.div
-          className="welcome-copy coach-welcome-copy player-welcome-copy"
-          initial={initial}
-          animate={animate}
-          transition={{ duration: reduceMotion ? 0 : 0.38, ease: "easeOut" }}
-        >
+        <div className="welcome-copy coach-welcome-copy player-welcome-copy">
           <h1 id="welcome-title">
             {greeting},
             <br />
             <em>{student.firstName}.</em>
           </h1>
           <p className="welcome-line coach-welcome-line">Ready for your next point?</p>
-        </motion.div>
+        </div>
 
-        <motion.aside
+        <aside
           className="coach-message-card coach-welcome-card welcome-scoreboard-ribbon coach-scoreboard-ribbon player-scoreboard-ribbon is-empty"
           aria-label={`Message from ${coachMessage.coachName}`}
-          initial={initial}
-          animate={animate}
-          transition={{
-            duration: reduceMotion ? 0 : 0.38,
-            delay: reduceMotion ? 0 : 0.1,
-            ease: "easeOut",
-          }}
         >
           <div className="player-scoreboard-message">
             <span>From {coachMessage.coachName}</span>
             <blockquote>“{coachMessage.message}”</blockquote>
           </div>
-        </motion.aside>
+        </aside>
 
         <a className="scroll-cue" href="#training-week">
           <span>{scrollLabel}</span>
