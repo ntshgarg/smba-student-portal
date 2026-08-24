@@ -30,7 +30,7 @@ export default async function PinSetupPage() {
       <section className="login-card" aria-labelledby="pin-setup-title">
         <Link className="login-brand" href={publicSiteUrl} aria-label="SMBA homepage">
           <Image
-            src="/images/smba-logo.jpeg"
+            src="/images/smba-logo.png"
             alt="Sathiya Moorthy Badminton Academy"
             width={720}
             height={488}

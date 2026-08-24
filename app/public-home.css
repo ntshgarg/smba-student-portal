@@ -29,7 +29,6 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  mix-blend-mode: darken;
 }
 
 .desktop-nav {
@@ -1614,6 +1613,10 @@
   padding-block: clamp(76px, 9vw, 128px);
 }
 
+/* 72% of the mark's opaque pixels are its dark navy and this band is #041424,
+   so the white plate is load-bearing rather than a leftover of the old opaque
+   JPEG: without it the wordmark falls to roughly 1:1 against the footer. Every
+   other logo surface sits on ivory or white and carries no plate. */
 .footer-logo {
   width: 214px;
   overflow: hidden;
@@ -1624,7 +1627,6 @@
   display: block;
   width: 100%;
   height: auto;
-  mix-blend-mode: normal;
 }
 
 .footer-brand p {

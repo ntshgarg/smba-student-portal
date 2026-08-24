@@ -382,7 +382,7 @@ function Footer() {
         <div className="footer-brand">
           <div className="footer-logo">
             <Image
-              src="/images/smba-logo.jpeg"
+              src="/images/smba-logo.png"
               alt="Sathiya Moorthy Badminton Academy"
               width={720}
               height={488}
