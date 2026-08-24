@@ -35,6 +35,85 @@ describe("authentication error focus", () => {
   })
 })
 
+describe("courtside save focus", () => {
+  // The save button is the element the coach's own press would disable, and a
+  // disabled element hands focus to `<body>`, so the next Tab would restart at
+  // the skip link. Both registers keep it focusable and re-check the condition
+  // in the handler instead, which is what leaves the retry one keystroke away.
+  // The roster's own choice buttons go the same way, because Safari and Firefox
+  // do not move focus to a button on click and so leave the coach standing
+  // there while the save disables the roster.
+  const footerButton = (contents: string) => contents
+    .slice(contents.indexOf('className="attendance-record-footer"'))
+    .match(/<button[\s\S]*?<\/button>/u)?.[0] ?? ""
+  const styles = source("app/globals.css")
+
+  it("keeps the player register's save button focusable across a save", () => {
+    const recorder = source("components/coach/attendance/player-attendance-recorder.tsx")
+    const button = footerButton(recorder)
+
+    expect(recorder).toContain(
+      "const cannotSave = !draftChanges.length || isSaving || selectedUnavailable",
+    )
+    expect(recorder).toContain("if (cannotSave || !selectedOccurrence) return")
+    expect(button).not.toMatch(/\sdisabled=/u)
+    expect(button).toContain("aria-busy={isSaving}")
+    expect(button).toContain("aria-disabled={cannotSave}")
+    expect(button).toContain('feedback?.offerRetry ? "Save attendance again"')
+    // Out of the tab order whenever no press could ever help, so the always-
+    // rendered footer is not a silent no-op on a cancelled or unmarked session.
+    expect(recorder).toContain("const saveOutOfReach = cannotSave && !isSaving")
+    expect(button).toContain("tabIndex={saveOutOfReach ? -1 : undefined}")
+    expect(recorder).toContain("aria-disabled={isSaving}")
+    expect(recorder).not.toMatch(/\sdisabled=\{isSaving\}/u)
+    expect(styles).toContain(
+      '.player-attendance-recorder .attendance-record-footer > button[aria-disabled="true"]',
+    )
+    expect(styles).toContain(
+      '.player-attendance-recorder .attendance-roster-choices button[aria-disabled="true"]',
+    )
+    // `opacity` composites the outline, so the dim would take the focus ring
+    // under 1.4.11's 3:1 with it on the states this now makes reachable.
+    expect(styles).toContain(
+      '.player-attendance-recorder .attendance-record-footer > button[aria-disabled="true"]:focus-visible',
+    )
+    expect(styles).toContain(
+      '.player-attendance-recorder .attendance-roster-choices button[aria-disabled="true"]:focus-visible',
+    )
+  })
+
+  it("keeps the staff roll call's save button focusable across a save", () => {
+    const rollCall = source("components/coach/attendance/staff-roll-call.tsx")
+    const button = footerButton(rollCall)
+
+    expect(rollCall).toContain("const cannotSave = !drafts.length || isSaving || futureDate")
+    expect(rollCall).toContain("if (cannotSave) return")
+    expect(button).not.toMatch(/\sdisabled=/u)
+    expect(button).toContain("aria-busy={isSaving}")
+    expect(button).toContain("aria-disabled={cannotSave}")
+    expect(button).toContain('feedback?.offerRetry ? "Save staff attendance again"')
+    expect(rollCall).toContain("const saveOutOfReach = cannotSave && !isSaving")
+    expect(button).toContain("tabIndex={saveOutOfReach ? -1 : undefined}")
+    // `unavailable` is a property of the date, so it keeps `disabled` and stays
+    // out of the tab order; only the in-flight save moves to `aria-disabled`.
+    expect(rollCall).toContain("disabled={unavailable}")
+    expect(rollCall).toContain("aria-disabled={unavailable || isSaving}")
+    expect(rollCall).not.toMatch(/\sdisabled=\{unavailable \|\| isSaving\}/u)
+    expect(styles).toContain(
+      '.attendance-record-footer > button[aria-disabled="true"]',
+    )
+    expect(styles).toContain(
+      '> .staff-roll-call-choice-box button[aria-disabled="true"]',
+    )
+    expect(styles).toContain(
+      '.attendance-record-footer > button[aria-disabled="true"]:focus-visible',
+    )
+    expect(styles).toContain(
+      '> .staff-roll-call-choice-box button[aria-disabled="true"]:focus-visible',
+    )
+  })
+})
+
 describe("operational mobile controls", () => {
   const styles = source("app/globals.css")
   const mediaStart = styles.indexOf('@media (max-width: 720px), (pointer: coarse) {')
