@@ -4,7 +4,7 @@ import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   listJuniorCoachAttendanceRegisterProfiles,
-  listStaffAttendanceRecords,
+  listStaffAttendanceRecordsByCoach,
 } from "@/lib/coach/staff-attendance"
 
 export const metadata = {
@@ -23,12 +23,13 @@ export default async function StaffAttendanceRegisterPage() {
   })
   const from = `${yearOptions[0]}-01-01`
   const to = `${yearOptions.at(-1)}-12-31`
-  const records = juniorCoaches.flatMap((coach) => listStaffAttendanceRecords({
+  const recordsByCoach = listStaffAttendanceRecordsByCoach({
     requesterAccountId: identity.subjectId,
-    coachAccountId: coach.accountId,
+    coachAccountIds: juniorCoaches.map((coach) => coach.accountId),
     from,
     to,
-  }))
+  })
+  const records = juniorCoaches.flatMap((coach) => recordsByCoach.get(coach.accountId) ?? [])
 
   return (
     <StaffAttendanceRegister
