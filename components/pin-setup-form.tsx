@@ -1,9 +1,10 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { ArrowRight } from "lucide-react"
 
 import { AuthField } from "@/components/auth-field"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 import {
   setupPinAction,
@@ -15,7 +16,12 @@ const initialState: PinSetupState = { error: null, errorField: null }
 const pinSetupErrorId = "pin-setup-error"
 
 export function PinSetupForm({ allowSkip = true }: { allowSkip?: boolean }) {
-  const [state, formAction, pending] = useActionState(setupPinAction, initialState)
+  const [state, formAction, pending] = useResilientActionState(setupPinAction, initialState, {
+    // Neither PIN field is at fault, so the message stays at form level.
+    fold: (state, error) => ({ ...state, error, errorField: null }),
+    retained: "Nothing was changed and your password still signs you in",
+    subject: "Your PIN",
+  })
   const pinRef = useRef<HTMLInputElement>(null)
   const confirmPinRef = useRef<HTMLInputElement>(null)
   useEffect(() => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useState } from "react"
+import { useState } from "react"
 import { MailCheck, ShieldCheck } from "lucide-react"
 
 import {
@@ -9,6 +9,7 @@ import {
   type RecoveryEmailEnrollmentState,
 } from "@/app/account/recovery-email/actions"
 import { PasswordInput } from "@/components/password-input"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialRecoveryEmailEnrollmentState: RecoveryEmailEnrollmentState = {
   email: "",
@@ -23,13 +24,21 @@ export function RecoveryEmailSecurityPanel({
   maskedEmail: string
   requiresSecondFactor: boolean
 }) {
-  const [requestState, requestAction, requesting] = useActionState(
+  const [requestState, requestAction, requesting] = useResilientActionState(
     requestRecoveryEmailChange,
     initialRecoveryEmailEnrollmentState,
+    {
+      retained: "Your current recovery address is unchanged",
+      subject: "Your recovery email change",
+    },
   )
-  const [confirmState, confirmAction, confirming] = useActionState(
+  const [confirmState, confirmAction, confirming] = useResilientActionState(
     confirmRecoveryEmailChange,
     initialRecoveryEmailEnrollmentState,
+    {
+      retained: "The code was not used and your current address is unchanged",
+      subject: "Your verification code",
+    },
   )
   const [requestValidationTarget, setRequestValidationTarget] = useState<string | null>(null)
   const [confirmValidationTarget, setConfirmValidationTarget] = useState<string | null>(null)
