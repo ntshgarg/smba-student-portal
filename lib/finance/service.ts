@@ -60,6 +60,7 @@ import {
   listMonthlyPreparationCandidates,
   listPreparedPlayerIds,
   loadChargeView,
+  loadChargeViews,
   loadPeriodAssignmentIndex,
   loadPlayerFeeRecord,
   readActiveFeeAgreement,
@@ -1963,8 +1964,13 @@ function recordAllocatedPaymentCommand(
       const record = loadPlayerFeeRecord(tx, replay.playerAccountId, now)
       const receipt = record?.receipts.find((item) => item.id === replay.id)
       if (!receipt) throw new Error("The idempotent receipt is unavailable.")
+      const replayViews = loadChargeViews(
+        tx,
+        allocations.map((allocation) => allocation.chargeId),
+        now,
+      )
       const charges = allocations.flatMap((allocation) => {
-        const charge = loadChargeView(tx, allocation.chargeId, now)
+        const charge = replayViews.get(allocation.chargeId)
         return charge ? [charge] : []
       })
       return { receipt, charges, reused: true }
@@ -1973,6 +1979,11 @@ function recordAllocatedPaymentCommand(
 
     requireActiveFinanceTarget(tx, input.playerId)
     const currentPeriod = getAcademyDateKey(now).slice(0, 7)
+    const chargeLedgers = loadChargeViews(
+      tx,
+      allocations.map((allocation) => allocation.chargeId),
+      now,
+    )
     let monthlyFeePlanChecked = false
     allocations.forEach((allocation) => {
       const charge = readCharge(tx, allocation.chargeId)
@@ -1984,7 +1995,7 @@ function recordAllocatedPaymentCommand(
         requirePaymentFeePlanHistory(tx, input.playerId)
         monthlyFeePlanChecked = true
       }
-      const current = loadChargeView(tx, charge.id, now)
+      const current = chargeLedgers.get(charge.id)
       if (!current) throw new Error("The Charge ledger is unavailable.")
       if (charge.recordRevision !== allocation.expectedChargeRevision) {
         financeError("BALANCE_CHANGED", "Balance changed. Review the payment allocations.")
@@ -2051,7 +2062,12 @@ function recordAllocatedPaymentCommand(
     const record = loadPlayerFeeRecord(tx, input.playerId, now)
     const receipt = record?.receipts.find((item) => item.id === paymentId)
     if (!receipt) throw new Error("The recorded receipt is unavailable.")
-    const charges = allocations.map((allocation) => loadChargeView(tx, allocation.chargeId, now))
+    const recordedViews = loadChargeViews(
+      tx,
+      allocations.map((allocation) => allocation.chargeId),
+      now,
+    )
+    const charges = allocations.map((allocation) => recordedViews.get(allocation.chargeId))
       .filter((charge): charge is ChargeView => Boolean(charge))
     return { receipt, charges, reused: false }
   }, { behavior: "immediate" })
@@ -2104,8 +2120,9 @@ export function previewPaymentAllocations(
     asc(financialCharges.issuedAt),
     asc(financialCharges.id),
   ).all()
+  const chargeViews = loadChargeViews(database, chargeRows.map((charge) => charge.id), now)
   const available = chargeRows.flatMap((charge) => {
-    const view = loadChargeView(database, charge.id, now)
+    const view = chargeViews.get(charge.id)
     return view && view.outstandingPaise > 0 ? [{ charge, view }] : []
   })
   let allocations: PaymentAllocationInput[]
@@ -2644,7 +2661,8 @@ export function recordRefund(
           .where(eq(paymentAllocations.id, allocation.paymentAllocationId)).get()
         return paymentAllocation ? [paymentAllocation.chargeId] : []
       }))
-      const charges = [...chargeIds].map((chargeId) => loadChargeView(tx, chargeId, now))
+      const chargeViews = loadChargeViews(tx, [...chargeIds], now)
+      const charges = [...chargeIds].map((chargeId) => chargeViews.get(chargeId))
         .filter((charge): charge is ChargeView => Boolean(charge))
       return { refund, charges, reused: true }
     }, { behavior: "immediate" })
@@ -2700,12 +2718,14 @@ export function recordRefund(
       const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
         .find((item) => item.id === replay.id)
       if (!refund) throw new Error("The idempotent Refund is unavailable.")
-      const charges = allocations.flatMap((allocation) => {
+      const allocatedChargeIds = allocations.flatMap((allocation) => {
         const paymentAllocation = tx.select().from(paymentAllocations)
           .where(eq(paymentAllocations.id, allocation.paymentAllocationId)).get()
-        const charge = paymentAllocation
-          ? loadChargeView(tx, paymentAllocation.chargeId, now)
-          : null
+        return paymentAllocation ? [paymentAllocation.chargeId] : []
+      })
+      const chargeViews = loadChargeViews(tx, allocatedChargeIds, now)
+      const charges = allocatedChargeIds.flatMap((chargeId) => {
+        const charge = chargeViews.get(chargeId)
         return charge ? [charge] : []
       })
       return { refund, charges, reused: true }
@@ -2923,8 +2943,10 @@ export function reverseRefund(
       const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
         .find((item) => item.id === row.id)
       if (!refund) throw new Error("The reversed Refund is unavailable.")
-      const charges = (metadata.chargeIds ?? [])
-        .map((chargeId) => loadChargeView(tx, chargeId, now))
+      const replayChargeIds = metadata.chargeIds ?? []
+      const chargeViews = loadChargeViews(tx, replayChargeIds, now)
+      const charges = replayChargeIds
+        .map((chargeId) => chargeViews.get(chargeId))
         .filter((charge): charge is ChargeView => Boolean(charge))
       return { refund, charges, reused: true }
     }
@@ -3030,7 +3052,8 @@ export function reverseRefund(
     const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
       .find((item) => item.id === refundRow.id)
     if (!refund) throw new Error("The reversed Refund is unavailable.")
-    const charges = chargeIds.map((chargeId) => loadChargeView(tx, chargeId, now))
+    const chargeViews = loadChargeViews(tx, chargeIds, now)
+    const charges = chargeIds.map((chargeId) => chargeViews.get(chargeId))
       .filter((charge): charge is ChargeView => Boolean(charge))
     return { refund, charges, reused: false }
   }, { behavior: "immediate" })
