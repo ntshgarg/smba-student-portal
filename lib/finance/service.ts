@@ -75,6 +75,7 @@ import {
 } from "@/lib/finance/repository"
 import {
   FINANCE_CURRENCY,
+  isFinanceAuditEventType,
   type ApplyAdjustmentInput,
   type ApplyConcessionInput,
   type ChargeView,
@@ -92,7 +93,6 @@ import {
   type FinanceActivityInput,
   type FinanceActivityCoachOption,
   type FinanceActivityResult,
-  type FinanceAuditEventType,
   type FinanceDayBookInput,
   type FinanceDayBookResult,
   type FinanceField,
@@ -162,28 +162,6 @@ const FINANCE_STATUSES: FinanceStatus[] = [
   "paid",
   "not_prepared",
   "void",
-]
-const FINANCE_AUDIT_EVENT_TYPES: FinanceAuditEventType[] = [
-  "finance_activated",
-  "fee_agreement_created",
-  "fee_agreement_replaced",
-  "fee_agreement_paused",
-  "fee_agreement_ended",
-  "charge_issued",
-  "charge_voided",
-  "monthly_fees_prepared",
-  "payment_recorded",
-  "payment_reversed",
-  "refund_recorded",
-  "refund_reversed",
-  "concession_created",
-  "concession_applied",
-  "concession_application_reversed",
-  "concession_reversed",
-  "adjustment_created",
-  "adjustment_reversed",
-  "historical_reconciled",
-  "training_start_redated",
 ]
 
 type FinanceDependencies = {
@@ -4351,7 +4329,7 @@ export function getFinancialActivity(
     financeError("INVALID_INPUT", "Choose a valid activity date range.", "period")
   }
   if (input.eventTypes && (!Array.isArray(input.eventTypes)
-    || input.eventTypes.some((eventType) => !FINANCE_AUDIT_EVENT_TYPES.includes(eventType)))) {
+    || !input.eventTypes.every(isFinanceAuditEventType))) {
     financeError("INVALID_INPUT", "Choose valid financial activity types.")
   }
   if (input.coachId !== undefined
