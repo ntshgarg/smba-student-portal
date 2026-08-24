@@ -188,7 +188,9 @@ This is well beyond a plain axe wrapper, and several of these checks reach crite
 
 ### What it collects and then discards
 
-```46:58:tests/e2e/support/accessibility-audit.ts
+As audited, the field said so itself:
+
+```ts
 export type AccessibilityResult = {
   actor: AccessibilityActor
   // Reported and never asserted on. The gate fails on findings alone.
@@ -206,6 +208,28 @@ correctly names `region`, `landmark-one-main`, `landmark-unique` and `aria-allow
 best-practice-only. It also compensates for part of that loss with its own DOM checks for `main`
 count, `h1` count and heading order. The design is deliberate. It is still the largest hole, and
 the sections below quantify what falls through it.
+
+**Since F-38, the hole is smaller and the rest of it is measured.** All three categories are still
+collected, but they are no longer simply discarded:
+
+```76:85:tests/e2e/support/accessibility-audit.ts
+  // What is left after BLOCKING_ADVISORY_RULES has taken its share. These do not
+  // fail on their own. accessibilityAdvisoryRegressions holds each rule id to its
+  // own ceiling from the checked-in baseline: a rule may not exceed the count
+  // recorded for it, and a rule the baseline has never seen has a ceiling of 0.
+  // That is a per-rule ceiling, not a monotone total — a rule sitting under its
+  // ceiling is free to rise inside it, so the sum of advisories can go up while
+  // every ceiling holds. A ceiling only comes down when an operator re-records,
+  // and update-accessibility-advisory-baseline.ts refuses to record an increase
+  // unless it is passed --allow-increase.
+  advisories?: AccessibilityAdvisory[]
+```
+
+Note what the ratchet is and is not. It is a **per-rule ceiling**, not a monotone on the total: a
+rule sitting under its recorded number may still rise inside it, so the advisory total can go up
+while every ceiling holds. The one thing it guarantees is that no single rule id gets worse without
+either failing the gate or an operator explicitly passing `--allow-increase` to re-record it. The
+sections below still quantify what falls through, and remain the reason to keep shrinking the list.
 
 ### Rule-tag filtering, verified against axe source
 
@@ -302,7 +326,7 @@ gate.
 
 ### Blind spots that follow
 
-1. **Everything marked `incomplete` is invisible.** Including all of the above.
+1. ~~**Everything marked `incomplete` is invisible.** Including all of the above.~~ **Closed in part by F-38.** `BLOCKING_ADVISORY_RULES` (`accessibility-audit.ts:36-44`) now promotes seven rule ids to blocking wherever they surface, `incomplete` included: `aria-hidden-focus`, `aria-prohibited-attr`, `color-contrast`, `landmark-one-main`, `landmark-unique`, `link-in-text-block`, `region`. Everything *else* axe marks `incomplete` is still non-blocking, but it is no longer invisible: it is counted per rule id and ratcheted against a checked-in baseline, so its number cannot rise. The `::placeholder` gap below is untouched — promotion cannot reach a rule that never runs.
 2. **`::placeholder` contrast is unreachable by any rule.** `colorContrastMatches` returns `true`
    for form elements, then `colorContrastEvaluate` reads the element's own computed `color`. There
    is no reference to `::placeholder` anywhere in axe's contrast logic — `findPseudoElement` checks
@@ -329,8 +353,13 @@ gate.
 8. **Layout checks run only at document scroll position 0.** `auditCurrentPage` calls
    `window.scrollTo(0, 0)` before auditing (`:302`), so 2.4.11 Focus Not Obscured — which is by
    definition about what happens after scrolling under a sticky header — cannot be detected.
-9. **`target-size` runs only at 24px minimum and the harness's own touch check runs only at
-   ≤ 820px viewports** (`accessibility-audit.ts:358`). 2.5.8 applies at every viewport (RESP-1).
+9. ~~**`target-size` runs only at 24px minimum and the harness's own touch check runs only at
+   ≤ 820px viewports** (`accessibility-audit.ts:358`). 2.5.8 applies at every viewport (RESP-1).~~
+   **Closed by F-40.** The width guard is gone (`accessibility-audit.ts:450`); the 24px collection
+   now runs at 1440, 820, 390 and 320, and only the 44px comfort floor stays touch-only. Two gaps
+   remain and are deliberate: `target-size`'s own minimum is still axe's 24px, and the harness check
+   still evaluates none of 2.5.8's Inline, Spacing or Essential exceptions, so a target it names may
+   yet conform — its message says so rather than asserting a verdict.
 10. **Reduced motion is emulated for every audit** (`reducedMotion: "reduce"`, `:254`), so the
     default-motion state is never audited; and the animation check itself only runs at ≤ 430px and
     only inspects `animationName`/`animationDuration`, never `transition`.
@@ -341,7 +370,7 @@ gate.
 |---|---|
 | 2.4.11 Focus Not Obscured (Min) | **None** — no axe rule; harness audits only at scroll 0 |
 | 2.5.7 Dragging Movements | **None** — no axe rule (not applicable here; see A11Y-11) |
-| 2.5.8 Target Size (Min) | Partial — `target-size` runs, but non-tabbable failures are incomplete; harness check is ≤ 820px only |
+| 2.5.8 Target Size (Min) | Partial — `target-size` runs, and non-tabbable failures land in `incomplete`, which is now ratcheted rather than discarded; the harness's own 24px check runs at every viewport since F-40, but evaluates none of 2.5.8's Inline, Spacing or Essential exceptions, so it over-reports rather than under-reports |
 | 3.2.6 Consistent Help | **None** |
 | 3.3.7 Redundant Entry | **None** |
 | 3.3.8 Accessible Authentication (Min) | **None** |
@@ -406,16 +435,30 @@ gate.
 - **Classification:** Gate coverage
 - **Type:** Objective defect
 - **Severity:** Medium
-- **Location:** `tests/e2e/support/accessibility-audit.ts:48-49`, `:652-655`, `:609-615`
-- **Evidence:**
+- **Location:** `tests/e2e/support/accessibility-audit.ts:745-751` (was `:650-655` when this was
+  written), `:702-712`
+- **Evidence:** as written, every `incomplete` went straight into `advisories`:
 
-```650:655:tests/e2e/support/accessibility-audit.ts
+```ts
   // Both advisory sets are collected before the checks below move focus and
   // scroll the page, so they describe the same state the blocking pass saw.
   const advisories = [
     ...axeAdvisories("needs-review", axe.incomplete),
     ...await bestPracticeAdvisories(page),
   ]
+```
+
+  F-38 put a filter in front of it. Seven rule ids are promoted to blocking findings; the rest stay
+  advisory and are ratcheted:
+
+```745:751:tests/e2e/support/accessibility-audit.ts
+  // Both advisory sets are collected before the checks below move focus and
+  // scroll the page, so they describe the same state the blocking pass saw.
+  const { blocking, remaining: advisories } = promoteBlockingAdvisories([
+    ...axeAdvisories("needs-review", axe.incomplete),
+    ...await bestPracticeAdvisories(page),
+  ])
+  findings.push(...blocking)
 ```
 
   `advisories` is never asserted; the spec's only content assertion is
@@ -507,7 +550,7 @@ export function viewportsForState(state: AccessibilityState): readonly Accessibi
 - **Location:** `tests/e2e/support/accessibility-audit.ts:475`, `:509-516`
 - **Evidence:**
 
-```509:516:tests/e2e/support/accessibility-audit.ts
+```602:609:tests/e2e/support/accessibility-audit.ts
     } else if (await opener.count() && !await opener.evaluate((element) => element === document.activeElement)) {
       findings.push(finding({
         id: "dialog-focus-restoration",
@@ -879,15 +922,48 @@ $ rg -n "data-accessibility-dialog-opener|accessibilityDialogOpener" app compone
   `.coach-member-search input` has no such base floor; its wrapper is 68px but the input's own box
   is intrinsic.
 
-  The gate cannot catch it: its touch-target check is gated on viewport width.
+  The gate could not catch it: its touch-target check was gated on viewport width, at the same 820px
+  boundary `capture-runtime.ts:163` uses for touch emulation (`hasTouch: viewport.width <= 820`).
 
-```357:359:tests/e2e/support/accessibility-audit.ts
+```ts
     const touchTargets: DomAudit["touchTargets"] = []
     if (viewportWidth <= 820) {
       for (const control of controls) {
 ```
 
-  So the 24px floor exists exactly where the gate looks, and is absent exactly where it does not.
+  So the 24px floor existed exactly where the gate looked, and was absent exactly where it did not.
+
+  **F-40 removed that guard.** The 24px collection now runs at every viewport, and only the 44px
+  comfort floor keeps the 820px boundary:
+
+```450:451:tests/e2e/support/accessibility-audit.ts
+    const comfortFloorApplies = viewportWidth <= 820
+    for (const control of controls) {
+```
+
+```462:463:tests/e2e/support/accessibility-audit.ts
+      const comfort = comfortFloorApplies && (primary || iconOnly)
+      const minimum = comfort ? 44 : 24
+```
+
+  **What that newly measures, counted rather than assumed.** Scanning `app/**/*.css` and
+  `components/**/*.css` for `min-height`/`height` declarations, **50 selectors have their only height
+  floor inside a `max-width: ≤ 820px` media block** and therefore have no floor at 1440 — 16 of them
+  name an interactive element. Both of RESP-1's controls are in that set, and
+  `.coach-member-filter select` is correctly *not*, because of its unconditional floor at
+  `app/globals.css:4271`. That is the surface the desktop pass newly walks; it is a static bound on
+  where a floor is missing, not a prediction of how many findings each state emits, which needs a
+  run. The list is dominated by report, member-directory and roll-call chrome:
+  `.coach-report-resume-action`, `.coach-report-field textarea`, `.coach-member-filter-toggle`,
+  `.report-month-toggle`, `.staff-roll-call-choice-box button`, `.dashboardLink`,
+  `.registrationAction .rowAction`.
+
+  Against that, the check evaluates none of 2.5.8's Inline, Spacing or Essential exceptions, and
+  `a[href]` is in its selector list, so inline links inside prose can be named at desktop where WCAG
+  exempts them. axe's own `target-size` does apply the Inline exception
+  (`widget-not-inline-matches`, `node_modules/axe-core/axe.js:28305`), so the two checks are layered
+  rather than duplicated — but the harness half is the stricter, un-excepted one, and its finding
+  message says so instead of asserting a 2.5.8 verdict.
   axe's `target-size` does run at 1440, but `.coach-slot-day` is a `<label>`, not a widget, so
   `widget-not-inline-matches` selects the inner 18×18 checkbox — which *is* in the tab order and
   would return `false` (a violation) rather than incomplete. Whether the wrapping label's box is
@@ -1039,7 +1115,7 @@ body {
 
   The gate measures overflow at the document element:
 
-```413:414:tests/e2e/support/accessibility-audit.ts
+```506:507:tests/e2e/support/accessibility-audit.ts
     const clientWidth = document.documentElement.clientWidth
     const scrollWidth = document.documentElement.scrollWidth
 ```
@@ -1053,7 +1129,7 @@ body {
   What I *can* prove is the backstop's scope. The compensating check filters to interactive
   elements only:
 
-```341:343:tests/e2e/support/accessibility-audit.ts
+```414:416:tests/e2e/support/accessibility-audit.ts
       if (!insideHorizontalScroller(control) && (rect.left < -1 || rect.right > viewportWidth + 1)) {
         clippedControls.push(selectorFor(control))
       }
@@ -1289,6 +1365,30 @@ Ordered by value per unit of risk. File overlaps between my own PRs are called o
 - **Overlap:** `components/coach/reports/report-workspace.tsx` with PR-2 — PR-2 edits lines 702 and
   748, PR-5 edits the dialog trigger near line 152, so they will merge cleanly but should not be
   developed on the same branch
+
+> **Part (b) shipped without the env flag — recorded here because it overrides this plan.**
+> The same defect is F-38 in `docs/PORTAL-AUDIT-7fac52d.md`, whose Wave 2 row 17 prescribes a
+> different staging device for it: *"Medium — land behind a baseline."* The two campaigns were
+> reconciled in Wave 0, and the `F-` roadmap is the one being executed, so the baseline is what
+> shipped: seven rule ids promoted hot, everything else counted per rule id and ratcheted against
+> `tests/e2e/support/accessibility-advisory-baseline.json`. The ratchet does the reading this plan
+> asked the env flag to buy time for — it prints the per-rule counts and refuses to pass until an
+> operator has recorded them — but it does it in CI rather than before it, and that difference has
+> a cost worth stating plainly:
+>
+> - **The first run after merge is red, twice over.** The shipped baseline is `null` for all three
+>   profiles, which fails by design (a missing entry must not silently pass). Clearing that is a
+>   one-time cycle: download `output/accessibility/**/results.sanitized.json` from the failed job's
+>   artifact — the workflow already uploads it — extract it under `output/accessibility/`, run
+>   `npx tsx scripts/regression/update-accessibility-advisory-baseline.ts`, commit the result.
+> - **The promoted findings are not clearable that way.** They are blocking findings, not
+>   advisories, so no recording silences them; they stay red until the underlying defects are
+>   fixed. That is the backlog this plan's Dependencies line predicts, and its advice still holds:
+>   **PR-1 and PR-2 should land first.** They are one CSS line and thirteen `role` attributes.
+> - **What was not overridden:** parts (a) and (c) of this PR are untouched, and
+>   `link-in-text-block` aside, the promoted list is F-38's own — `color-contrast`,
+>   `aria-prohibited-attr`, `aria-hidden-focus` and the landmark rules — a superset of the
+>   `aria-prohibited-attr` + `color-contrast` starting set proposed here.
 
 ### PR-6 — Widen the focus floor and remove the two invisible halos
 - **Scope:** Extend the floor's selector to

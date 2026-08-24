@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 import AxeBuilder from "@axe-core/playwright"
@@ -25,6 +25,34 @@ const WCAG_TAGS = [
 // above never evaluate them.
 const BEST_PRACTICE_TAGS = ["best-practice"] as const
 
+// Rule ids that block the gate wherever they surface, including the incomplete
+// bucket and the best-practice pass above. Incomplete is where axe files the
+// checks it could not decide on its own, which is where contrast over gradients
+// and images lands, so leaving it advisory made the one contrast class axe
+// cannot auto-resolve the one class the gate could not fail on. The three
+// landmark rules are here because BEST_PRACTICE_TAGS is the only pass that
+// evaluates them; main-landmark-count in domFindings already recovers
+// landmark-one-main from the DOM side, and this covers the other two.
+const BLOCKING_ADVISORY_RULES: ReadonlySet<string> = new Set([
+  "aria-hidden-focus",
+  "aria-prohibited-attr",
+  "color-contrast",
+  "landmark-one-main",
+  "landmark-unique",
+  "link-in-text-block",
+  "region",
+])
+
+// Resolved from the repository root, the way playwright.accessibility.config.ts
+// resolves its own output root: playwright test, vitest and the tsx scripts all
+// run from there.
+export const accessibilityAdvisoryBaselinePath = path.resolve(
+  "tests/e2e/support/accessibility-advisory-baseline.json",
+)
+
+const RECORD_BASELINE_COMMAND =
+  "npx tsx scripts/regression/update-accessibility-advisory-baseline.ts"
+
 export type AccessibilityFinding = {
   helpUrl?: string
   id: string
@@ -45,7 +73,15 @@ export type AccessibilityAdvisory = AccessibilityFinding & {
 
 export type AccessibilityResult = {
   actor: AccessibilityActor
-  // Reported and never asserted on. The gate fails on findings alone.
+  // What is left after BLOCKING_ADVISORY_RULES has taken its share. These do not
+  // fail on their own. accessibilityAdvisoryRegressions holds each rule id to its
+  // own ceiling from the checked-in baseline: a rule may not exceed the count
+  // recorded for it, and a rule the baseline has never seen has a ceiling of 0.
+  // That is a per-rule ceiling, not a monotone total — a rule sitting under its
+  // ceiling is free to rise inside it, so the sum of advisories can go up while
+  // every ceiling holds. A ceiling only comes down when an operator re-records,
+  // and update-accessibility-advisory-baseline.ts refuses to record an increase
+  // unless it is passed --allow-increase.
   advisories?: AccessibilityAdvisory[]
   description: string
   findings: AccessibilityFinding[]
@@ -72,7 +108,16 @@ type DomAudit = {
   pageOverflow: { clientWidth: number; scrollWidth: number } | null
   reducedMotionAnimations: Array<{ animation: string; target: string }>
   title: string
-  touchTargets: Array<{ height: number; minimum: number; target: string; width: number }>
+  // `floor` names which of the two minimums the target missed, so the message can
+  // say whether it failed WCAG 2.5.8's 24px or this repo's stricter 44px comfort
+  // convention without re-deriving it from the number.
+  touchTargets: Array<{
+    floor: "comfort" | "wcag-2.5.8"
+    height: number
+    minimum: number
+    target: string
+    width: number
+  }>
 }
 
 function severity(value: string | null | undefined): AccessibilityFinding["impact"] {
@@ -114,6 +159,25 @@ function axeAdvisories(
   results: readonly AxeRuleResult[],
 ): AccessibilityAdvisory[] {
   return axeFindings(results).map((item) => ({ ...item, category }))
+}
+
+export function promoteBlockingAdvisories(advisories: readonly AccessibilityAdvisory[]) {
+  const blocking: AccessibilityFinding[] = []
+  const remaining: AccessibilityAdvisory[] = []
+  for (const advisory of advisories) {
+    if (!BLOCKING_ADVISORY_RULES.has(advisory.id)) {
+      remaining.push(advisory)
+      continue
+    }
+    const { category, ...promoted } = advisory
+    blocking.push({
+      ...promoted,
+      // The category survives in the message because it is the whole difference
+      // between "axe proved this fails" and "axe could not decide, look at it".
+      message: `${category}: ${promoted.message}`,
+    })
+  }
+  return { blocking, remaining }
 }
 
 function domFindings(audit: DomAudit, viewport: AccessibilityViewport) {
@@ -210,7 +274,16 @@ function domFindings(audit: DomAudit, viewport: AccessibilityViewport) {
     findings.push(finding({
       id: "touch-target-size",
       impact: "serious",
-      message: `Interactive target is ${Math.round(target.width)}×${Math.round(target.height)}px; expected at least ${target.minimum}×${target.minimum}px.`,
+      // Two different floors, so two different claims. The 24px one is measured
+      // against WCAG 2.5.8 but is not a verdict on it — 2.5.8's Inline, Spacing
+      // and Essential exceptions are not evaluated here (collectDomAudit), so the
+      // message says which floor was missed and stops there.
+      message: target.floor === "comfort"
+        ? `Interactive target is ${Math.round(target.width)}×${Math.round(target.height)}px, under this repo's`
+          + ` ${target.minimum}×${target.minimum}px comfort floor for primary and icon-only controls at touch widths.`
+        : `Interactive target is ${Math.round(target.width)}×${Math.round(target.height)}px, under the`
+          + ` ${target.minimum}×${target.minimum}px WCAG 2.5.8 minimum. The Inline, Spacing and Essential`
+          + " exceptions are not evaluated here, so confirm one does not apply before treating this as a failure.",
       source: "layout",
       targets: [target.target],
     }))
@@ -355,27 +428,47 @@ async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Pro
     }
 
     const touchTargets: DomAudit["touchTargets"] = []
-    if (viewportWidth <= 820) {
-      for (const control of controls) {
-        const label = control instanceof HTMLInputElement
-          && ["checkbox", "radio"].includes(control.type)
-          ? control.closest("label")
-            ?? (control.id ? document.querySelector(`label[for=${JSON.stringify(control.id)}]`) : null)
-          : null
-        const rect = (label && visible(label) ? label : control).getBoundingClientRect()
-        const text = control.textContent?.trim() ?? ""
-        const iconOnly = Boolean(control.getAttribute("aria-label")) && text.length === 0
-        const primary = control.matches("button[type=submit], input[type=submit], .login-submit")
-          || [...control.classList].some((className) => /primary|submit|openButton/u.test(className))
-        const minimum = primary || iconOnly ? 44 : 24
-        if (rect.width + 0.5 < minimum || rect.height + 0.5 < minimum) {
-          touchTargets.push({
-            height: rect.height,
-            minimum,
-            target: selectorFor(control),
-            width: rect.width,
-          })
-        }
+    // 2.5.8 Target Size (Minimum) is viewport-independent — 24x24 CSS px binds a
+    // trackpad at 1440 exactly as it binds a thumb at 390 — so the collection
+    // runs at every width. The width the old guard used was not arbitrary: 820 is
+    // this repo's touch-emulation boundary (capture-runtime.ts:163 sets
+    // `hasTouch: viewport.width <= 820`), which is the right boundary for a
+    // comfort floor and the wrong one for a minimum that has no touch precondition.
+    // So only the 44px comfort floor keeps it: that floor is this repo's own
+    // convention for primary and icon-only controls under a finger, not a WCAG AA
+    // requirement, and it would fail desktop chrome that 2.5.8 permits.
+    //
+    // This is a floor measurement, not a 2.5.8 verdict: 2.5.8's Inline, Spacing
+    // and Essential exceptions are not evaluated here, so a target this names may
+    // still conform. axe's own `target-size` does apply the Inline exception
+    // (`widget-not-inline-matches`, node_modules/axe-core/axe.js:28305) and runs
+    // at every width already, so the two checks are layered rather than duplicated
+    // — this one exists for the targets axe files as incomplete or skips, such as
+    // RESP-1's `<label>`-wrapped weekday checkbox. The finding message says which
+    // of the two it is, and the exception gap is recorded in
+    // docs/audit/accessibility-responsiveness.md.
+    const comfortFloorApplies = viewportWidth <= 820
+    for (const control of controls) {
+      const label = control instanceof HTMLInputElement
+        && ["checkbox", "radio"].includes(control.type)
+        ? control.closest("label")
+          ?? (control.id ? document.querySelector(`label[for=${JSON.stringify(control.id)}]`) : null)
+        : null
+      const rect = (label && visible(label) ? label : control).getBoundingClientRect()
+      const text = control.textContent?.trim() ?? ""
+      const iconOnly = Boolean(control.getAttribute("aria-label")) && text.length === 0
+      const primary = control.matches("button[type=submit], input[type=submit], .login-submit")
+        || [...control.classList].some((className) => /primary|submit|openButton/u.test(className))
+      const comfort = comfortFloorApplies && (primary || iconOnly)
+      const minimum = comfort ? 44 : 24
+      if (rect.width + 0.5 < minimum || rect.height + 0.5 < minimum) {
+        touchTargets.push({
+          floor: comfort ? "comfort" : "wcag-2.5.8",
+          height: rect.height,
+          minimum,
+          target: selectorFor(control),
+          width: rect.width,
+        })
       }
     }
 
@@ -614,8 +707,10 @@ async function bestPracticeAdvisories(page: Page): Promise<AccessibilityAdvisory
       ...axeAdvisories("best-practice-needs-review", audit.incomplete),
     ]
   } catch (error) {
-    // The caller turns a thrown error into a critical blocking finding, and
-    // nothing here is allowed to fail the gate.
+    // The caller turns a thrown error into a critical blocking finding, so this
+    // pass must not throw and lose the results the blocking pass already has.
+    // It no longer disappears either: this id is emitted only when the pass
+    // breaks, so the ratchet fails on a rule the baseline has never recorded.
     return [{
       category: "best-practice",
       id: "best-practice-audit",
@@ -649,10 +744,11 @@ export async function auditAccessibilityState({
   const findings = axeFindings(axe.violations)
   // Both advisory sets are collected before the checks below move focus and
   // scroll the page, so they describe the same state the blocking pass saw.
-  const advisories = [
+  const { blocking, remaining: advisories } = promoteBlockingAdvisories([
     ...axeAdvisories("needs-review", axe.incomplete),
     ...await bestPracticeAdvisories(page),
-  ]
+  ])
+  findings.push(...blocking)
   findings.push(...domFindings(await collectDomAudit(page, viewport), viewport))
   findings.push(...await interactionFindings(page))
   findings.push(...await keyboardFindings(page))
@@ -696,6 +792,145 @@ export function countAccessibilityAdvisories(results: readonly AccessibilityResu
   return counts
 }
 
+export function accessibilityAdvisoryCountsByRule(results: readonly AccessibilityResult[]) {
+  const counts: Record<string, number> = {}
+  for (const result of results) {
+    for (const item of result.advisories ?? []) {
+      counts[item.id] = (counts[item.id] ?? 0) + 1
+    }
+  }
+  // Sorted so the checked-in baseline this feeds stays diffable run to run.
+  return Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)))
+}
+
+export type AccessibilityAdvisoryBaseline = {
+  // null means "never recorded", which is deliberately not the same as {}: an
+  // empty object is a claim that the profile has no advisories, and an absent
+  // one has to fail rather than pass on no evidence.
+  profiles: Record<string, Record<string, number> | null>
+}
+
+// Exported so update-accessibility-advisory-baseline.ts reads the file through
+// the same validator the gate does: the writer and the reader cannot disagree
+// about what a malformed entry means, and the writer can refuse to overwrite a
+// file it could not parse instead of silently replacing recorded ceilings.
+export function readAccessibilityAdvisoryBaseline(): {
+  baseline: AccessibilityAdvisoryBaseline
+  problem: string | null
+} {
+  const empty: AccessibilityAdvisoryBaseline = { profiles: {} }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(accessibilityAdvisoryBaselinePath, "utf8"))
+  } catch (error) {
+    return { baseline: empty, problem: error instanceof Error ? error.message : String(error) }
+  }
+  const profiles = parsed && typeof parsed === "object"
+    ? (parsed as { profiles?: unknown }).profiles
+    : undefined
+  if (!profiles || typeof profiles !== "object") {
+    return { baseline: empty, problem: 'the file has no "profiles" object' }
+  }
+  const recorded: AccessibilityAdvisoryBaseline["profiles"] = {}
+  for (const [profile, rules] of Object.entries(profiles as Record<string, unknown>)) {
+    if (rules === null) {
+      recorded[profile] = null
+      continue
+    }
+    if (!rules || typeof rules !== "object") {
+      return { baseline: empty, problem: `profile "${profile}" is neither null nor a rule map` }
+    }
+    const counts: Record<string, number> = {}
+    for (const [rule, count] of Object.entries(rules as Record<string, unknown>)) {
+      if (typeof count !== "number" || !Number.isInteger(count) || count < 0) {
+        return { baseline: empty, problem: `profile "${profile}" rule "${rule}" is not a count` }
+      }
+      counts[rule] = count
+    }
+    recorded[profile] = counts
+  }
+  return { baseline: { profiles: recorded }, problem: null }
+}
+
+// The writer's half of the ratchet. accessibilityAdvisoryRegressions below asks
+// "did this run exceed the recorded ceiling?"; this asks the same question of the
+// counts that are about to *become* the recorded ceiling, so
+// update-accessibility-advisory-baseline.ts cannot quietly record a number the
+// gate would have failed on. Without it the recorded ceiling only ever went where
+// the last run put it, up or down, and "the number can only go down" was a claim
+// with nothing behind it but a human reading the JSON diff.
+export function accessibilityAdvisoryIncreases(
+  previous: AccessibilityAdvisoryBaseline["profiles"],
+  next: AccessibilityAdvisoryBaseline["profiles"],
+): string[] {
+  const increases: string[] = []
+  for (const [profile, counts] of Object.entries(next)) {
+    const recorded = previous[profile]
+    // A profile recorded as null, or absent, has no ceiling to raise: its first
+    // recording is the ceiling, not a rise above one.
+    if (!counts || !recorded) continue
+    for (const [rule, count] of Object.entries(counts)) {
+      // `?? 0` is the same default the gate uses, so a rule the baseline has
+      // never seen counts as a rise the first time it appears.
+      const limit = recorded[rule] ?? 0
+      if (count > limit) increases.push(`${profile} · ${rule}: ${limit} → ${count}`)
+    }
+  }
+  return increases
+}
+
+// The ratchet. Every failure path here is a failure of the gate, never a silent
+// pass: an unreadable file, a profile that was never recorded, and a rule the
+// baseline has never seen all report. A rule that comes in under its ceiling does
+// not, so the recorded number moves only when an operator re-records — and
+// accessibilityAdvisoryIncreases above stops that recording moving upward unless
+// the operator passes --allow-increase.
+export function accessibilityAdvisoryRegressions(
+  results: readonly AccessibilityResult[],
+  recorded?: AccessibilityAdvisoryBaseline,
+): string[] {
+  // Every profile that produced a result, not only the ones that produced an
+  // advisory. Filtering on `advisories.length` here would let a profile whose run
+  // came back clean skip the baseline lookup entirely, so a profile recorded as
+  // null — never recorded — would pass on no evidence, which is the one outcome a
+  // ratchet must never have. A genuinely clean profile still passes: its observed
+  // map is empty, so the per-rule loop below has nothing to compare.
+  const audited = [...new Set(results.map((result) => result.profile))].sort()
+  // No results at all is not this function's failure to report: summarize-
+  // accessibility.ts already exits 1 on an empty run, and the spec cannot reach
+  // here without having audited something.
+  if (!audited.length) return []
+  const { baseline, problem } = recorded
+    ? { baseline: recorded, problem: null }
+    : readAccessibilityAdvisoryBaseline()
+  if (problem) {
+    return [`advisory baseline unreadable (${accessibilityAdvisoryBaselinePath}): ${problem}.`
+      + ` Record it with: ${RECORD_BASELINE_COMMAND}`]
+  }
+  const regressions: string[] = []
+  for (const profile of audited) {
+    const observed = accessibilityAdvisoryCountsByRule(
+      results.filter((result) => result.profile === profile),
+    )
+    const allowed = baseline.profiles[profile]
+    if (!allowed) {
+      const occurrences = Object.values(observed).reduce((total, count) => total + count, 0)
+      regressions.push(`${profile} · advisory baseline never recorded, so there is no ceiling to`
+        + ` ratchet this run's ${Object.keys(observed).length} rules / ${occurrences} advisories`
+        + ` against. A null entry fails rather than passing on no evidence.`
+        + ` Record it with: ${RECORD_BASELINE_COMMAND}`)
+      continue
+    }
+    for (const [rule, count] of Object.entries(observed)) {
+      const limit = allowed[rule] ?? 0
+      if (count > limit) {
+        regressions.push(`${profile} · ${rule}: ${count} advisories exceed the recorded baseline of ${limit}`)
+      }
+    }
+  }
+  return regressions
+}
+
 function advisorySummaryLines(results: readonly AccessibilityResult[]) {
   const total = formatAccessibilityAdvisories(results).length
   if (!total) return []
@@ -720,9 +955,12 @@ function advisorySummaryLines(results: readonly AccessibilityResult[]) {
     "",
     "### Non-blocking advisories",
     "",
-    "Reported for triage; these do not fail the gate. Needs-review items are axe"
-      + " checks that could not decide without a human. Best-practice items come from"
-      + " rules outside the WCAG tags, which is where every landmark rule lives.",
+    "What is left once the blocking rule ids have been promoted to findings:"
+      + ` ${[...BLOCKING_ADVISORY_RULES].sort().join(", ")}.`
+      + " Needs-review items are axe checks that could not decide without a human."
+      + " Best-practice items come from rules outside the WCAG tags, which is where"
+      + " every landmark rule lives. None of these fails on its own; the ratchet"
+      + " section fails when a rule rises above the ceiling recorded for it.",
     "",
     `- Needs review: ${counts["needs-review"]}`,
     `- Best practice: ${counts["best-practice"]}`,
@@ -743,7 +981,29 @@ function advisorySummaryLines(results: readonly AccessibilityResult[]) {
   return lines
 }
 
-export function buildAccessibilitySummary(results: readonly AccessibilityResult[]) {
+// Separate from advisorySummaryLines because that function returns early when the
+// run produced no advisories at all, and the ratchet's loudest failure — a
+// profile that was never recorded, or a baseline file that will not parse — is
+// exactly the case that can arrive with zero advisories to report.
+function advisoryRatchetLines(regressions: readonly string[]) {
+  if (!regressions.length) return []
+  return [
+    "",
+    "### Advisory ratchet",
+    "",
+    "❌ Each line below fails the gate:",
+    "",
+    ...regressions.map((regression) => `- ${regression}`),
+  ]
+}
+
+export function buildAccessibilitySummary(
+  results: readonly AccessibilityResult[],
+  // Passed in by callers that also need the regressions for an exit code, so the
+  // summary and the exit code cannot be computed from two different reads of the
+  // baseline file. Defaults to reading it, for callers that only want the text.
+  regressions: readonly string[] = accessibilityAdvisoryRegressions(results),
+) {
   const findings = formatAccessibilityFailures(results)
   const viewports = new Set(results.map((result) => result.viewport.label))
   const states = new Set(results.map((result) => result.id))
@@ -759,7 +1019,11 @@ export function buildAccessibilitySummary(results: readonly AccessibilityResult[
     "",
   ]
   if (!findings.length) {
-    lines.push("✅ All audited states passed.")
+    // The ratchet fails the same gate, so the tick has to account for it or this
+    // summary reads greener than the job outcome it is attached to.
+    lines.push(regressions.length
+      ? "❌ No findings, but the advisory ratchet below failed."
+      : "✅ All audited states passed.")
   } else {
     lines.push("| State | Viewport | Impact | Rule | Evidence |", "|---|---|---|---|---|")
     for (const result of results) {
@@ -768,7 +1032,7 @@ export function buildAccessibilitySummary(results: readonly AccessibilityResult[
       }
     }
   }
-  lines.push(...advisorySummaryLines(results))
+  lines.push(...advisorySummaryLines(results), ...advisoryRatchetLines(regressions))
   return `${lines.join("\n")}\n`
 }
 
