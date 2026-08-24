@@ -16,7 +16,7 @@ import {
   formatAcademyDate,
   formatAcademyTime,
   formatDateKey,
-  numberFormatter,
+  formatInr,
 } from "@/lib/format"
 import type {
   FinanceActivityItem,
@@ -137,15 +137,6 @@ function recordsHref(
     if (value) search.set(key, value)
   }
   return `/coach/financials/records?${search.toString()}`
-}
-
-export function formatFinancialRecordsAmount(paise: number) {
-  /* Fraction digits follow the amount, so this stays per call and shares by option key. */
-  return numberFormatter("en-IN", {
-    currency: "INR",
-    maximumFractionDigits: paise % 100 ? 2 : 0,
-    style: "currency",
-  }).format(paise / 100)
 }
 
 export function formatFinancialPaymentMethod(method: PaymentMethod) {
@@ -277,9 +268,9 @@ function FeeTruthRail({
   summary: FeeRegisterView["summary"]
 }) {
   const isRegistration = mode === "registration"
-  const effective = formatFinancialRecordsAmount(summary.effectiveAmountPaise)
-  const received = formatFinancialRecordsAmount(summary.receivedPaise)
-  const outstanding = formatFinancialRecordsAmount(summary.outstandingPaise)
+  const effective = formatInr(summary.effectiveAmountPaise)
+  const received = formatInr(summary.receivedPaise)
+  const outstanding = formatInr(summary.outstandingPaise)
   const feeLabel = isRegistration ? "Net registration fees" : "Net monthly fees"
 
   return (
@@ -345,10 +336,10 @@ function FeeRegisterTable({
           {register.rows.map((row, index) => {
             const adjustments = [
               row.creditAdjustmentsPaise
-                ? `${formatFinancialRecordsAmount(row.creditAdjustmentsPaise)} credit`
+                ? `${formatInr(row.creditAdjustmentsPaise)} credit`
                 : null,
               row.debitAdjustmentsPaise
-                ? `${formatFinancialRecordsAmount(row.debitAdjustmentsPaise)} debit`
+                ? `${formatInr(row.debitAdjustmentsPaise)} debit`
                 : null,
             ].filter(Boolean).join(" · ")
             const dueLabel = row.dueDate
@@ -370,9 +361,9 @@ function FeeRegisterTable({
                 </td>
                 <td className={recordsStyles.registrationAmounts} data-label="Amounts">
                   <dl>
-                    <div><dt>{isRegistration ? "Charged" : "Billed"}</dt><dd>{formatFinancialRecordsAmount(row.originalAmountPaise)}</dd></div>
-                    <div><dt>Received</dt><dd>{formatFinancialRecordsAmount(row.receivedPaise)}</dd></div>
-                    <div><dt>Balance</dt><dd>{formatFinancialRecordsAmount(row.outstandingPaise)}</dd></div>
+                    <div><dt>{isRegistration ? "Charged" : "Billed"}</dt><dd>{formatInr(row.originalAmountPaise)}</dd></div>
+                    <div><dt>Received</dt><dd>{formatInr(row.receivedPaise)}</dd></div>
+                    <div><dt>Balance</dt><dd>{formatInr(row.outstandingPaise)}</dd></div>
                   </dl>
                 </td>
                 <td className={recordsStyles.registrationStatus} data-label="Status">
@@ -532,16 +523,16 @@ function CollectionsSummary({ summary }: { summary: CollectionsDayBookView["summ
   return (
     <>
       <dl className={recordsStyles.summaryGrid}>
-        <div><dt>Gross received</dt><dd>{formatFinancialRecordsAmount(summary.grossReceivedPaise)}</dd></div>
-        <div><dt>Refunds</dt><dd>{formatFinancialRecordsAmount(summary.refundsPaise)}</dd></div>
-        <div className={recordsStyles.summaryWide}><dt>Net collections</dt><dd>{formatFinancialRecordsAmount(summary.netCollectionsPaise)}</dd></div>
+        <div><dt>Gross received</dt><dd>{formatInr(summary.grossReceivedPaise)}</dd></div>
+        <div><dt>Refunds</dt><dd>{formatInr(summary.refundsPaise)}</dd></div>
+        <div className={recordsStyles.summaryWide}><dt>Net collections</dt><dd>{formatInr(summary.netCollectionsPaise)}</dd></div>
       </dl>
       {methodTotals.length ? (
         <dl className={recordsStyles.methodSummary} aria-label="Collections by payment method">
           {methodTotals.map((item) => (
             <div key={item.method}>
               <dt>{formatFinancialPaymentMethod(item.method)}</dt>
-              <dd>{formatFinancialRecordsAmount(item.amountPaise)}</dd>
+              <dd>{formatInr(item.amountPaise)}</dd>
             </div>
           ))}
         </dl>
@@ -609,7 +600,7 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
                   <td data-label="Player"><strong>{event.playerFullName}</strong><small>{event.academyId}</small></td>
                   <td data-label="Method">{formatFinancialPaymentMethod(event.method)}</td>
                   <td data-label="Fees" className={recordsStyles.feeReferences}>{event.coveredFeeReferences.join(" · ")}</td>
-                  <td data-label="Amount"><strong className={event.eventType === "refund" ? recordsStyles.refundAmount : undefined}>{event.eventType === "refund" ? "−" : ""}{formatFinancialRecordsAmount(event.amountPaise)}</strong></td>
+                  <td data-label="Amount"><strong className={event.eventType === "refund" ? recordsStyles.refundAmount : undefined}>{event.eventType === "refund" ? "−" : ""}{formatInr(event.amountPaise)}</strong></td>
                   <td data-label="State">
                     <span className={`${recordsStyles.status} ${event.lifecycle === "reversed" ? recordsStyles.statusAttention : recordsStyles.statusPositive}`}>
                       {event.lifecycle === "reversed" ? "Reversed" : "Recorded"}
@@ -714,7 +705,7 @@ function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
                 {item.reason ? <blockquote>{item.reason}</blockquote> : null}
               </div>
               {item.amountPaise === null ? null : (
-                <strong className={recordsStyles.activityAmount}>{formatFinancialRecordsAmount(item.amountPaise)}</strong>
+                <strong className={recordsStyles.activityAmount}>{formatInr(item.amountPaise)}</strong>
               )}
             </li>
           ))}

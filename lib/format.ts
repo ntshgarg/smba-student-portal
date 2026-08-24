@@ -86,6 +86,37 @@ export function numberFormatter(
   return formatter
 }
 
+/**
+ * The app's only ₹-symbol presentation of an amount: whole rupees print
+ * without decimals, part-rupee amounts print exactly two. Every caller passes
+ * paise, because that is the unit every amount is stored and computed in.
+ *
+ * Four other spellings of an amount survive elsewhere. Three have a reason the
+ * ₹ symbol or the grouped digits cannot satisfy; the fourth is a holdout this
+ * consolidation left alone. Add a fifth only under one of the first three:
+ *   - `money` in `lib/finance/pdf.ts` prints `INR ` because Helvetica has no
+ *     U+20B9 — read the note above it before formatting money in a PDF.
+ *   - `formatPaise` in `lib/finance/collections-csv.ts` and
+ *     `lib/finance/records-csv.ts` emits bare, ungrouped, always-2dp decimals,
+ *     because a spreadsheet has to parse the cell back as a number.
+ *   - `paiseToRupeesInput` in `components/coach/financials/allocation-draft.ts`
+ *     — and the `String(paise / 100)` seeds in `player-ledger.tsx` and
+ *     `financials-rapid-desk.tsx` — fills editable amount fields, so what it
+ *     writes must survive a round trip through `parseRupeesToPaise`.
+ *   - the refund-limit message in `lib/finance/service.ts` hand-builds
+ *     `INR <n>.<nn>` and is shown to the coach verbatim by `financeError`. It
+ *     has no encoding or parsing excuse — it was left out because folding it in
+ *     means re-reading that sentence, not just swapping the call.
+ */
+export function formatInr(amountPaise: number) {
+  /* Fraction digits follow the amount, so this stays per call and shares by option key. */
+  return numberFormatter(ACADEMY_LOCALE, {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: amountPaise % 100 ? 2 : 0,
+  }).format(amountPaise / 100)
+}
+
 export function formatAcademyDate(
   value: DateInput,
   options?: Intl.DateTimeFormatOptions,
