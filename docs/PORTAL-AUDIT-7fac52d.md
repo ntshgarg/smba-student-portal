@@ -496,21 +496,36 @@ One defect the auto-merge introduced and the gate caught: a duplicated `describe
 
 **Findings closed by this PR:** F-1 (Critical — attendance drafts now persist), F-3 (both placeholder failures now `var(--steel)`), F-4 (`tsconfig.check.json` makes the gate deterministic), F-6 (all 13 auth forms resilient), most of F-7, F-16's download-route primitive, F-23 (`motion` gone), and part of F-29 (origin had already deleted the five `dashboard*` selectors this audit independently identified as dead).
 
-### Wave 1 — near-free, independent, review first
+### Wave 1 — near-free, independent ✅ **complete, 6 PRs merged**
 
-| # | PR | Findings | Files | Effort | Risk |
+| # | PR | Findings | Effort | Risk | Status |
 |---|---|---|---|---|---|
-| 2 | Await the player-dashboard finance read | F-2 | `app/(student)/player/page.tsx` (1 line) | S | Very low |
-| 3 | Give the courtside recorder the register's state vocabulary | F-9, F-10 | `globals.css:12245,12705,3986`, 2 recorders | S | Low — screenshot 3 widths |
-| 4 | Name the 13 roleless labelled elements | F-11 | 9 components | S | Low — re-run the gate |
-| 5 | Strengthen the login method switch's selected state | F-12 | `globals.css:1544` | S | Very low |
-| 6 | Optimise `og.png`; use the transparent logo PNG | F-24, F-36 | `public/`, 18 call sites | S | Low |
-| 7 | Document the 10 env vars and the 26 missing routes; fix the README's database contradiction | F-28, F-28b | `.env.example`, `README.md` | S | None |
-| 7a | Fix `db:provision:admin`'s env and database mismatch | F-27 | `package.json`, provisioning script | S | Low — ⚠️ `--env-file` cannot go in `NODE_OPTIONS` |
-| 7b | Close the `BETTER_AUTH_SECRET` fallback for non-Vercel production | F-27b | `better-auth.ts`, `.env.example` | S | Medium — ⚠️ must not break the three `fixture:start:*` commands |
-| 7c | Document-or-delete the 4 orphan scripts, incl. the production-wiping one | F-30b | `scripts/`, `docs/` | S | Low — ⚠️ never `.vercelignore` all of `scripts` |
-| 7d | Delete the 3 uncalled money-path server actions | F-30c | `app/coach/financials/actions.ts` | S | Low — they are reachable endpoints |
-| 8 | Delete the 233 lines of dead module CSS and 2 orphan modules | F-29, F-30, F-31 | 3 modules, 2 `lib/` files | S | Low — delete from the **per-selector list**, never a line range |
+| 2 | Await the player-dashboard finance read | F-2 | S | Very low | ✅ [#86](https://github.com/ntshgarg/smba-student-portal/pull/86) |
+| 3 | Give three selected states a visible delta | F-9, F-12 | S | Low | ✅ [#83](https://github.com/ntshgarg/smba-student-portal/pull/83) |
+| 4 | ~~Name the 13 roleless labelled elements~~ | F-11 | — | — | **dropped — already fixed by Wave 0** |
+| 6 | Shrink the social card; undo the logo blend-mode workaround | F-24, F-36 | S | Low | ✅ [#87](https://github.com/ntshgarg/smba-student-portal/pull/87) |
+| 7 | Make a fresh deployment possible and honest | F-27, F-27b, F-28, F-28b | S–M | Medium | ✅ [#85](https://github.com/ntshgarg/smba-student-portal/pull/85) |
+| 7c/d | Remove three uncalled money actions and two orphan scripts | F-30b, F-30c | S | Low | ✅ [#88](https://github.com/ntshgarg/smba-student-portal/pull/88) |
+| 8 | Delete 12 dead CSS selectors and one orphan module | F-29, F-30 | S | Low | ✅ [#84](https://github.com/ntshgarg/smba-student-portal/pull/84) |
+
+All seven merged with **10 of 10 CI checks green**, including the browser regression and the 12-minute WCAG 2.2 AA matrix. Suite on settled `main`: **820 tests passing**, up from 816 at the start of the wave.
+
+**F-10 moved to Wave 2.** Real, but not near-free: the read-only register cell renders no glyph at all when a choice is set, so present versus absent is `--green` against `--red` at **1.047:1** — and `X` is already taken by "not available" in that same file, so it needs a glyph vocabulary, a legend change and two components.
+
+#### What the adversarial reviewers and CI caught, that desk review had not
+
+This is the part worth keeping. Four defects were caught *after* implementation and *before* merge, and none of them was the defect the finding described.
+
+1. **A documentation PR that broke every fresh install.** Adding a bare `NEXT_PUBLIC_SMBA_PUBLIC_SITE_URL=` to `.env.example` yields the empty string, and `lib/config.ts` read it with `?? "/"` — which falls back for `undefined` but not for `""`. Every operator following the README's "copy this file" instruction would have pointed **32 brand links** at `""`. The read is now `||`.
+2. **CI proved a defect the reviewer had predicted.** A pinned `DB_FILE_NAME` in `db:provision:admin` was an *override*, not a default, so the accessibility workflow's own target was ignored and provisioning hit an unmigrated database: `SqliteError: no such table: accounts`. Removing the pin exposed the actual F-27 — `.env.example` shipped `.data/smba.db` while `npm run dev` and the README both use `.data/academy-empty.db`, so the documented path provisioned the platform owner into a *third* database.
+3. **A focus-ring regression the implementer explicitly claimed had not happened.** Both attendance controls draw their ring with `outline-offset: -2px`, so it lands on the button's own fill. Going solid dropped it from ~15:1 to **3.17:1 and 3.02:1** — clearing 1.4.11's floor by 0.02. Now white, at 5.47:1 and 5.73:1, scoped to the pressed state so the resting state keeps its navy ring.
+4. **A least-privilege error in a new runbook.** It told operators to hand a **write-capable Turso token** to `prepare-admin-only-snapshot.mjs`, two lines after correctly stating that script is read-only against the remote. Verified: it only ever `SELECT`s from the remote. On a production database holding minors' data, that is the opposite of what a runbook is for.
+
+#### Three of this report's own findings were wrong, and the corrections are the useful part
+
+- **F-2 was understated.** `getPlayerFinanceDashboardSummary` is declared `async` but contains no `await`, so `async` converts even a synchronous throw into a rejection. The old `catch` was therefore **dead code that could never fire** — not a guard that leaked intermittently. Worse, the "tell" this report offered (that the neighbouring `loadAnnouncements` shows the author got it right next door) is false: `listActivePlayerAnnouncements` is **synchronous**, so that `catch` works because the throw is synchronous, not because of the `await`. The neighbour is accidentally safe. The conclusion survives on better evidence — it is the only async read among the page's loaders.
+- **F-36's premise was false.** It claimed the opaque JPEG showed "a white box on the navy footer". There is no footer logo, and **no dark surface carries the logo anywhere** — all 18 screen surfaces sit on ivory or white, where the compensating `mix-blend-mode: multiply` maps white onto the backdrop exactly. The plate was already invisible. What was actually wrong is a hidden coupling: four no-op declarations silently depending on every logo backdrop staying light. The fix costs ~12 KB for no visible change, and [#87](https://github.com/ntshgarg/smba-student-portal/pull/87) says so plainly rather than claiming a defect it did not fix.
+- **F-29's count was stale.** 17 selectors / 233 lines was measured *before* the Wave 0 merge, which had already removed four. The real remainder was **12 selectors / 57 lines**, all of them inside media queries — which is why the earlier top-level scan missed them.
 
 ### Wave 2 — the abstractions, and the gate
 
