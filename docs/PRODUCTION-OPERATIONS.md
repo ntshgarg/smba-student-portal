@@ -166,6 +166,54 @@ Record completed exercises in `docs/RESTORE-DRILL-LOG.md`.
 6. Delete the disposable database only after the result has been recorded and the production
    database URL has been double-checked.
 
+## Resetting the academy to an empty state
+
+Two `scripts/deployment` commands cover the one operation with no self-service equivalent: returning
+the live academy to zero members while keeping the platform owner able to log in. They are manual by
+design, wired into no npm script and no workflow, and neither starts without its own confirmation
+variable. `reset-empty-academy.mjs` needs a write-capable Turso token, so that step is the one procedure
+that cannot run on the read-only backup credentials. `prepare-admin-only-snapshot.mjs` only reads
+from the remote and should be given a read token.
+
+`prepare-admin-only-snapshot.mjs` is read-only against the remote database. It clones the schema and
+rows into a new mode-0600 local SQLite file, deletes everything except the single active
+`platform_admin` account and the material that account logs in with — PIN, recovery email, verified
+authenticator, academy ID allocation — plus the batch catalogue, verifies the result holds exactly one
+account and zero coaches and zero players, checks integrity and foreign keys, and deletes the file
+again if any of that fails.
+
+```bash
+TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<read token> \
+  SMBA_CONFIRM_ADMIN_ONLY_SNAPSHOT=PREPARE-ADMIN-ONLY-SNAPSHOT \
+  node scripts/deployment/prepare-admin-only-snapshot.mjs .data/backups/smba-admin-only-YYYY-MM-DD.db
+```
+
+`reset-empty-academy.mjs` is the destructive half. It DELETEs every row of every table in the database
+`TURSO_DATABASE_URL` names and re-inserts the source, so against production it destroys every account,
+enrollment, attendance mark, fee, payment and refund the academy holds. Before the first delete it
+requires the source to already be a zero-member academy, requires the two schemas to name exactly the
+same tables, and writes and integrity-checks a complete local backup of the remote. That backup is the
+only recovery path from a mistake here; give it a durable location and handle it as a snapshot.
+
+```bash
+TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<write token> \
+  SMBA_CONFIRM_REMOTE_EMPTY_RESET=RESET-TO-EMPTY-ACADEMY \
+  node scripts/deployment/reset-empty-academy.mjs \
+    .data/backups/smba-admin-only-YYYY-MM-DD.db .data/backups/smba-pre-reset-YYYY-MM-DD.db
+```
+
+1. Confirm the latest automated daily backup is green and take a fresh `npm run db:snapshot:create`
+   snapshot as well. The script's own backup is an undo, not the record of what the academy held.
+2. Build the source with `prepare-admin-only-snapshot.mjs` against the same database you are about to
+   reset. Building it elsewhere replaces the owner's credentials, and a schema that differs by one
+   table aborts the reset.
+3. Run the reset and keep its JSON output — backup path, rows backed up, rows restored and the
+   re-read remote counts — with the change record.
+4. Log in as the platform owner, confirm the academy is empty, and only then delete either file.
+
+Both files contain authentication material. They must never be committed, emailed or stored
+unencrypted, and the same vault rules as `npm run db:snapshot:create` apply.
+
 ## Incident order
 
 1. Stop making data changes and record the time the problem was first observed.
