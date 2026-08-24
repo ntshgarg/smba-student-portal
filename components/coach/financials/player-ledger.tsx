@@ -24,6 +24,7 @@ import {
 } from "@/app/coach/financials/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import { formatAcademyDate, getAcademyDateKey } from "@/lib/format"
 import type {
   CoachConcessionApplicationView,
@@ -56,6 +57,12 @@ import {
 import styles from "./financials.module.css"
 import type { FinancialChargeView, PlayerFinancialLedgerView } from "./types"
 
+/**
+ * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
+ * withdraws the retry prompt.
+ */
+type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
+
 function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   const router = useRouter()
   const [amount, setAmount] = useState("")
@@ -69,7 +76,7 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   const [reviewedAmountPaise, setReviewedAmountPaise] = useState<number | null>(null)
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState<"preview" | "record" | null>(null)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const requestKey = useIdempotencyKey()
   const allocationFeedbackId = `refund-allocation-feedback-${receipt.id}`
@@ -142,8 +149,15 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
       setFeedback(null)
       setDirty(true)
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The refund could not be reviewed",
+        retained: "Your refund details are still on screen",
+        subject: "The refund review",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The refund could not be reviewed",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -192,8 +206,15 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
         router.refresh()
       }
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The refund could not be recorded",
+        retained: "Your refund details are still on screen",
+        subject: "The refund",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The refund could not be recorded",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -280,7 +301,9 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
           <div className={styles.paymentFooter}>
             <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
             <button className={styles.quietButton} type="button" disabled={Boolean(pending)} onClick={() => void review()}>
-              {pending === "preview" ? "Reviewing…" : "Review refund"}
+              {pending === "preview"
+                ? "Reviewing…"
+                : feedback?.offerRetry ? "Review refund again" : "Review refund"}
             </button>
           </div>
         ) : (
@@ -326,7 +349,9 @@ function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
                 tone={feedback?.tone ?? (allocationValidation && !allocationValidation.ok ? "error" : undefined)}
               />
               <button className={styles.correctionButton} type="submit" disabled={Boolean(pending) || !allocationValidation?.ok}>
-                {pending === "record" ? "Recording…" : "Record refund"}
+                {pending === "record"
+                  ? "Recording…"
+                  : feedback?.offerRetry ? "Record refund again" : "Record refund"}
               </button>
             </div>
           </div>
@@ -341,7 +366,7 @@ function RefundReversal({ refund }: { refund: CoachRefundView }) {
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const requestKey = useIdempotencyKey()
 
@@ -376,7 +401,17 @@ function RefundReversal({ refund }: { refund: CoachRefundView }) {
         router.refresh()
       }
     } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : "The refund could not be reversed", tone: "error" })
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The refund could not be reversed",
+        retained: "Your reason is still on screen",
+        subject: "The refund reversal",
+      })
+      setFeedback({
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        tone: "error",
+      })
     } finally {
       setPending(false)
     }
@@ -393,7 +428,7 @@ function RefundReversal({ refund }: { refund: CoachRefundView }) {
       </label>
       <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.correctionButton} type="button" disabled={pending} onClick={() => void reverse()}>
-        {pending ? "Reversing…" : "Reverse refund"}
+        {pending ? "Reversing…" : feedback?.offerRetry ? "Reverse refund again" : "Reverse refund"}
       </button>
     </details>
   )
@@ -516,7 +551,7 @@ function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView }) {
   const [effectiveMonth, setEffectiveMonth] = useState(getAcademyDateKey().slice(0, 7))
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const requestKey = useIdempotencyKey()
 
@@ -557,8 +592,15 @@ function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView }) {
         amountRef.current?.focus()
       }
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The fee plan could not be updated",
+        retained: "Your fee and effective month are still on screen",
+        subject: "The fee plan change",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The fee plan could not be updated",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -618,7 +660,7 @@ function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView }) {
           <div className={styles.paymentFooter}>
             <InlineNotice className={styles.notice} message={feedback?.message} reserveSpace={false} tone={feedback?.tone} />
             <button className={styles.primaryButton} type="submit" disabled={pending}>
-              {pending ? "Updating…" : "Update fee plan"}
+              {pending ? "Updating…" : feedback?.offerRetry ? "Update fee plan again" : "Update fee plan"}
             </button>
           </div>
         </form>
@@ -658,7 +700,7 @@ function FeePlanEnder({
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const requestKey = useIdempotencyKey()
 
@@ -696,8 +738,15 @@ function FeePlanEnder({
         reasonRef.current?.focus()
       }
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The fee plan could not be ended",
+        retained: "Your final month and reason are still on screen",
+        subject: "The fee plan ending",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The fee plan could not be ended",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -749,7 +798,7 @@ function FeePlanEnder({
           <div className={styles.paymentFooter}>
             <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
             <button className={styles.correctionButton} type="submit" disabled={pending}>
-              {pending ? "Ending…" : "End fee plan"}
+              {pending ? "Ending…" : feedback?.offerRetry ? "End fee plan again" : "End fee plan"}
             </button>
           </div>
         </form>
@@ -781,7 +830,7 @@ function ConcessionCreationForm({
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const valueRef = useRef<HTMLInputElement>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const requestKey = useIdempotencyKey()
@@ -850,8 +899,15 @@ function ConcessionCreationForm({
         reasonRef.current?.focus()
       }
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The concession could not be created",
+        retained: "Your concession details are still on screen",
+        subject: "The concession",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The concession could not be created",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -927,7 +983,7 @@ function ConcessionCreationForm({
         <div className={styles.paymentFooter}>
           <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
           <button className={styles.primaryButton} type="submit" disabled={pending}>
-            {pending ? "Creating…" : "Create concession"}
+            {pending ? "Creating…" : feedback?.offerRetry ? "Create concession again" : "Create concession"}
           </button>
         </div>
       </form>
@@ -958,7 +1014,7 @@ function ApplyConcessionForm({
   })
   const [chargeId, setChargeId] = useState(eligibleCharges[0]?.id ?? "")
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const requestKey = useIdempotencyKey()
 
   if (concession.lifecycle !== "active"
@@ -984,7 +1040,17 @@ function ApplyConcessionForm({
         router.refresh()
       }
     } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : "The concession could not be applied", tone: "error" })
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The concession could not be applied",
+        retained: "The selected fee is still on screen",
+        subject: "The concession application",
+      })
+      setFeedback({
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        tone: "error",
+      })
     } finally {
       setPending(false)
     }
@@ -1010,7 +1076,7 @@ function ApplyConcessionForm({
       </label>
       <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.quietButton} type="submit" disabled={pending}>
-        {pending ? "Applying…" : "Apply concession"}
+        {pending ? "Applying…" : feedback?.offerRetry ? "Apply concession again" : "Apply concession"}
       </button>
     </form>
   )
@@ -1025,7 +1091,7 @@ function ConcessionApplicationReversal({
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const requestKey = useIdempotencyKey()
 
@@ -1059,7 +1125,17 @@ function ConcessionApplicationReversal({
         router.refresh()
       }
     } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : "The concession application could not be reversed", tone: "error" })
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The concession application could not be reversed",
+        retained: "Your reason is still on screen",
+        subject: "The concession reversal",
+      })
+      setFeedback({
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        tone: "error",
+      })
     } finally {
       setPending(false)
     }
@@ -1074,7 +1150,7 @@ function ConcessionApplicationReversal({
       </label>
       <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.correctionButton} type="button" disabled={pending} onClick={() => void reverse()}>
-        {pending ? "Reversing…" : "Reverse application"}
+        {pending ? "Reversing…" : feedback?.offerRetry ? "Reverse application again" : "Reverse application"}
       </button>
     </details>
   )
@@ -1085,7 +1161,7 @@ function ConcessionReversal({ concession }: { concession: CoachConcessionView })
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const requestKey = useIdempotencyKey()
 
@@ -1120,7 +1196,17 @@ function ConcessionReversal({ concession }: { concession: CoachConcessionView })
         router.refresh()
       }
     } catch (error) {
-      setFeedback({ message: error instanceof Error ? error.message : "The concession could not be ended", tone: "error" })
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The concession could not be ended",
+        retained: "Your reason is still on screen",
+        subject: "The concession ending",
+      })
+      setFeedback({
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        tone: "error",
+      })
     } finally {
       setPending(false)
     }
@@ -1136,7 +1222,7 @@ function ConcessionReversal({ concession }: { concession: CoachConcessionView })
       </label>
       <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.correctionButton} type="button" disabled={pending} onClick={() => void reverse()}>
-        {pending ? "Ending…" : "End concession"}
+        {pending ? "Ending…" : feedback?.offerRetry ? "End concession again" : "End concession"}
       </button>
     </details>
   )
@@ -1235,7 +1321,7 @@ type CorrectionMode =
   | "manual_debit"
   | "void_charge"
 
-type CorrectionFeedback = ActionFeedback & {
+type CorrectionFeedback = SaveFeedback & {
   field?: "amount" | "reason"
 }
 
@@ -1357,8 +1443,15 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
         router.refresh()
       }
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The correction could not be saved",
+        retained: "Your correction details are still on screen",
+        subject: "The correction",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The correction could not be saved",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -1448,7 +1541,7 @@ function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
           <div className={styles.paymentFooter}>
             <InlineNotice className={styles.notice} id={feedbackId} message={feedback?.message} tone={feedback?.tone} />
             <button className={styles.correctionButton} type="submit" disabled={pending || (mode === "reverse_payment" && !paymentId) || (mode === "reverse_adjustment" && !adjustmentId) || (mode === "void_charge" && !chargeId)}>
-              {pending ? "Saving…" : "Apply correction"}
+              {pending ? "Saving…" : feedback?.offerRetry ? "Apply correction again" : "Apply correction"}
             </button>
           </div>
         </form>
