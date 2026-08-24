@@ -20,22 +20,22 @@ import {
 } from "@/lib/db/schema"
 import { monthEnd, monthStart } from "@/lib/finance/domain"
 import { loadChargeViews } from "@/lib/finance/repository"
-import type {
-  ChargeView,
-  FinanceActivityInput,
-  FinanceActivityItem,
-  FinanceActivityResult,
-  FinanceActivityCoachOption,
-  FinanceAuditEventType,
-  FinanceDayBookEvent,
-  FinanceDayBookInput,
-  FinanceDayBookResult,
-  FinanceDayBookSummary,
-  FinanceRegisterInput,
-  FinanceRegisterResult,
-  FinanceRegisterRow,
-  FinanceStatus,
-  PaymentMethod,
+import {
+  FINANCE_AUDIT_EVENTS,
+  type ChargeView,
+  type FinanceActivityInput,
+  type FinanceActivityItem,
+  type FinanceActivityResult,
+  type FinanceActivityCoachOption,
+  type FinanceDayBookEvent,
+  type FinanceDayBookInput,
+  type FinanceDayBookResult,
+  type FinanceDayBookSummary,
+  type FinanceRegisterInput,
+  type FinanceRegisterResult,
+  type FinanceRegisterRow,
+  type FinanceStatus,
+  type PaymentMethod,
 } from "@/lib/finance/types"
 import { getAcademyDateKey } from "@/lib/format"
 
@@ -377,28 +377,6 @@ export function loadCollectionsDayBook(
   return { events: paged.rows, summary, nextCursor: paged.nextCursor }
 }
 
-const ACTIVITY_ACTIONS: Record<FinanceAuditEventType, string> = {
-  finance_activated: "Financial tracking activated",
-  fee_agreement_created: "Fee plan created",
-  fee_agreement_replaced: "Fee plan replaced",
-  fee_agreement_paused: "Fee plan paused",
-  fee_agreement_ended: "Fee plan ended",
-  charge_issued: "Fee issued",
-  charge_voided: "Fee voided",
-  monthly_fees_prepared: "Monthly fees issued",
-  payment_recorded: "Payment recorded",
-  payment_reversed: "Payment reversed",
-  refund_recorded: "Refund recorded",
-  refund_reversed: "Refund reversed",
-  concession_created: "Concession created",
-  concession_applied: "Concession applied",
-  concession_application_reversed: "Concession application reversed",
-  concession_reversed: "Concession ended",
-  adjustment_created: "Fee adjustment recorded",
-  adjustment_reversed: "Fee adjustment reversed",
-  historical_reconciled: "Historical fee status recorded",
-}
-
 function parseMetadata(value: string) {
   try {
     const parsed: unknown = JSON.parse(value)
@@ -510,7 +488,7 @@ export function loadFinancialActivity(
         id: event.id,
         occurredAt: event.occurredAt.toISOString(),
         eventType: event.eventType,
-        action: ACTIVITY_ACTIONS[event.eventType],
+        action: FINANCE_AUDIT_EVENTS[event.eventType].action,
         actorId: event.actorAccountId,
         actorName: actor?.fullName ?? "Unknown coach",
         playerId,

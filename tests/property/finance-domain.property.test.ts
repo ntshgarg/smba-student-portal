@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 import {
   calculateChargeLedger,
   calculateConcessionAmount,
+  calculateProratedSessionFee,
   financialPayloadFingerprint,
   formatFinancialSequenceReference,
   type LedgerAdjustmentFact,
@@ -215,6 +216,29 @@ describe("finance domain properties", () => {
         valueKind: "percentage",
       })).toBe(Math.min(input.originalAmountPaise, higherOutstanding))
     }), { numRuns: PROPERTY_RUNS })
+  })
+
+  it("keeps rounded session proration monotonic and preserves the full monthly fee", () => {
+    fc.assert(fc.property(
+      fc.integer({ min: 5_000, max: MAX_MONEY_PAISE }),
+      fc.integer({ min: 1, max: 62 }),
+      fc.integer({ min: 0, max: 62 }),
+      fc.integer({ min: 0, max: 62 }),
+      (monthlyFeePaise, totalSessions, firstRaw, secondRaw) => {
+        const first = Math.min(firstRaw, totalSessions)
+        const second = Math.min(secondRaw, totalSessions)
+        const lower = Math.min(first, second)
+        const higher = Math.max(first, second)
+        const lowerFee = calculateProratedSessionFee(monthlyFeePaise, lower, totalSessions)
+        const higherFee = calculateProratedSessionFee(monthlyFeePaise, higher, totalSessions)
+
+        expect(lowerFee).toBeGreaterThanOrEqual(0)
+        expect(higherFee).toBeGreaterThanOrEqual(lowerFee)
+        expect(higherFee).toBeLessThanOrEqual(monthlyFeePaise)
+        expect(calculateProratedSessionFee(monthlyFeePaise, totalSessions, totalSessions))
+          .toBe(monthlyFeePaise)
+      },
+    ), { numRuns: PROPERTY_RUNS })
   })
 
   it("fingerprints JSON facts independently of object insertion order", () => {

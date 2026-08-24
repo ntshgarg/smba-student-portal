@@ -188,7 +188,7 @@ describe("Financials V1 service", () => {
       level: "Beginner",
       batch: "Weekday",
       status: "active",
-      joinedAt: approvedAt,
+      trainingStartOn: approvedAt.toISOString().slice(0, 10),
       updatedAt: approvedAt,
     }).run()
 
@@ -377,6 +377,9 @@ describe("Financials V1 service", () => {
       academyPlan: "weekday-3-day",
       level: "Beginner",
       batch: "Weekday",
+      trainingStartConfirmedAt: now,
+      trainingStartConfirmedByAccountId: coachId,
+      trainingStartOn: "2026-08-08",
     }).where(eq(schema.playerEnrollments.accountId, unresolvedPlayerId)).run()
     addMatchingAssignment({
       batch: "Weekday",
@@ -408,6 +411,9 @@ describe("Financials V1 service", () => {
       academyPlan: "weekday-3-day",
       level: "Beginner",
       batch: "Weekday",
+      trainingStartConfirmedAt: now,
+      trainingStartConfirmedByAccountId: coachId,
+      trainingStartOn: "2026-08-08",
     }).where(eq(schema.playerEnrollments.accountId, activePlayerId)).run()
     addMatchingAssignment({
       batch: "Weekday",
@@ -429,14 +435,20 @@ describe("Financials V1 service", () => {
       code: "INVALID_INPUT",
       field: "effectiveFrom",
     }))
-    const completion = finance.completePlayerOnboardingFinance({
+    const onboardingTerms = {
       playerId: activePlayerId,
       academyPlan: "weekday-3-day",
       level: "Beginner",
       batch: "Weekday",
       agreedMonthlyFeePaise: 350_000,
-      effectiveFrom: "2026-08-01",
-      idempotencyKey: "agreement-active-player",
+    } as const
+    const onboardingPreview = finance.previewPlayerOnboardingFinance(
+      onboardingTerms,
+      { coachId, database, now },
+    )
+    const completion = finance.completePlayerOnboardingFinance({
+      ...onboardingTerms,
+      previewFingerprint: onboardingPreview.fingerprint,
     }, { coachId, createFeeReference: references, createId: ids, database, now })
     expect(completion).toMatchObject({
       reused: false,
@@ -444,23 +456,14 @@ describe("Financials V1 service", () => {
       registrationChargeId: expect.any(String),
     })
     expect(finance.completePlayerOnboardingFinance({
-      playerId: activePlayerId,
-      academyPlan: "weekday-3-day",
-      level: "Beginner",
-      batch: "Weekday",
-      agreedMonthlyFeePaise: 350_000,
-      effectiveFrom: "2026-08-01",
-      idempotencyKey: "agreement-active-player",
+      ...onboardingTerms,
+      previewFingerprint: onboardingPreview.fingerprint,
     }, { coachId, createFeeReference: references, createId: ids, database, now }))
       .toMatchObject({ reused: true })
     expect(() => finance.completePlayerOnboardingFinance({
-      playerId: activePlayerId,
-      academyPlan: "weekday-3-day",
-      level: "Beginner",
-      batch: "Weekday",
+      ...onboardingTerms,
       agreedMonthlyFeePaise: 351_000,
-      effectiveFrom: "2026-08-01",
-      idempotencyKey: "agreement-active-player",
+      previewFingerprint: onboardingPreview.fingerprint,
     }, { coachId, createFeeReference: references, createId: ids, database, now })).toThrow(expect.objectContaining({
       code: "IDEMPOTENCY_CONFLICT",
     }))
@@ -963,7 +966,7 @@ describe("Financials V1 service", () => {
     database.insert(schema.playerEnrollments).values({
       accountId: playerId,
       status: "unassigned",
-      joinedAt: now,
+      trainingStartOn: now.toISOString().slice(0, 10),
       updatedAt: now,
     }).run()
 
@@ -976,7 +979,7 @@ describe("Financials V1 service", () => {
         expectedRevision: 0,
         profile: {
           fullName: "Programme Transition Player",
-          joinedAt: "2026-08-08",
+          trainingStartOn: "2026-08-08",
           primaryContact: { name: "", relationship: "", phone: "" },
         },
         training: {
@@ -1051,7 +1054,7 @@ describe("Financials V1 service", () => {
         expectedRevision: transitionRevision,
         profile: {
           fullName: "Programme Transition Player",
-          joinedAt: "2026-08-08",
+          trainingStartOn: "2026-08-08",
           primaryContact: { name: "", relationship: "", phone: "" },
         },
         training: {

@@ -36,7 +36,10 @@ describe("public health endpoint", () => {
 
     expect(response.status).toBe(503)
     expect(await response.json()).toEqual({ status: "unavailable" })
-    expect(consoleError).toHaveBeenCalledWith("Health check database probe failed.")
+    expect(consoleError).toHaveBeenCalledWith(
+      "Health check database probe failed.",
+      { cause: expect.stringContaining("connection unavailable") },
+    )
     consoleError.mockRestore()
   })
 })

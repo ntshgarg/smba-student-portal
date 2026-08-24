@@ -477,13 +477,24 @@ Several of these are load-bearing and a careless refactor would undo them silent
 
 Fresh `F-` IDs throughout. **Wave 0 gates everything** — it is a prerequisite, not a parallel option.
 
-### Wave 0 — reconcile the branches
+### Wave 0 — reconcile the branches ✅ **merged**
 
-| # | PR | Findings | Files | Effort | Risk | Depends on |
+| # | PR | Findings | Files | Effort | Risk | Status |
 |---|---|---|---|---|---|---|
-| 1 | **Merge `origin/main` into `main`** | F-1, F-3, F-4, F-6, F-7(part), F-16(part), F-23 | 25 real conflicts of 216 changed; `globals.css`, `finance/service.ts`, 5 modules, auth forms | L | **High** — but unavoidable, and it shrinks every later PR | — |
+| 1 | **Merge `origin/main` into `main`** | F-1, F-3, F-4, F-6, F-7(part), F-16(part), F-23, F-29(part) | 17 conflicting files / 33 hunks of 216 changed | L | High | ✅ |
 
-Merge guidance: 31 of the 56 both-touched files are already identical, so resolve those trivially. Take **origin's** side for `lib/client/*`, `lib/telemetry/*`, `lib/http/*`, the auth forms and `tsconfig`. Take **local's** side for the dead-CSS deletions and the `:root` token layer. `app/globals.css` and `lib/finance/service.ts` need line-by-line attention. Run the full suite plus `regression:accessibility` before merging.
+**What it actually took.** 33 conflict hunks across 17 files. The resolution split cleanly along the lines the report predicted, with two exceptions worth recording because they are the kind of thing that invalidates a plan:
+
+- **Local's batched `readFirstAssignmentDates` had to be dropped, not merged.** It optimised assignment-date inference — a mechanism `origin/main` *deleted* in `#53`, replacing it with a confirmed, immutable `trainingStartOn` column (migration `0027`) precisely because "a paused player legitimately has months no assignment covers". Keeping the batched helper would have resurrected dead code and reintroduced inference that was deliberately removed. The symptom local fixed was real; the code path stopped existing.
+- **`.21st/DESIGN.md` proved the duplicated-work thesis outright.** Both branches independently removed the same dead CSS — local in `7fcbba4`, origin in `#56`/`#62`. Local's design record still described the pre-removal state; origin's said "Resolved". Origin's text is the one that is true of the merged tree.
+
+Both branches' distinct work survived, verified after resolution: **5 `AuthField` adopters** (local's A11Y-3) and **13 `useResilientActionState` adopters** (origin's F-6) coexist; local's accessibility-matrix extension is intact with all 8 of its helpers resolving.
+
+One defect the auto-merge introduced and the gate caught: a duplicated `describeSaveFailure`/`withSaveDeadline` import in `player-attendance-recorder.tsx`, because both branches added the same line in different positions.
+
+**Gates after the merge:** lint clean · `tsc -p tsconfig.check.json` clean · **155 test files / 816 tests passing** (up from 142/644, since the merge brings origin's 13 test files) · `drizzle-kit check` clean.
+
+**Findings closed by this PR:** F-1 (Critical — attendance drafts now persist), F-3 (both placeholder failures now `var(--steel)`), F-4 (`tsconfig.check.json` makes the gate deterministic), F-6 (all 13 auth forms resilient), most of F-7, F-16's download-route primitive, F-23 (`motion` gone), and part of F-29 (origin had already deleted the five `dashboard*` selectors this audit independently identified as dead).
 
 ### Wave 1 — near-free, independent, review first
 

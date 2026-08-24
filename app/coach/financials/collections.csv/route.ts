@@ -1,48 +1,29 @@
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { sessionProvider } from "@/lib/data"
 import { createCollectionCsvStream } from "@/lib/finance/collections-csv"
+import { getCollectionsDayBook } from "@/lib/finance/service"
+import type { FinanceDayBookInput } from "@/lib/finance/types"
 import {
-  FinanceServiceError,
-  getCollectionsDayBook,
-} from "@/lib/finance/service"
-import type { FinanceDayBookInput, FinanceDayBookResult } from "@/lib/finance/types"
+  authorizeDownload,
+  downloadFailureResponse,
+  drainCursorPages,
+  privateAttachmentResponse,
+} from "@/lib/http/download-route"
+import { financeDownloadRejection } from "@/lib/http/finance-download-route"
 
 export const runtime = "nodejs"
 
-const privateHeaders = {
-  "Cache-Control": "private, no-store",
-  "X-Content-Type-Options": "nosniff",
-} as const
-
-function allEvents(first: FinanceDayBookResult, input: FinanceDayBookInput, coachId: string) {
-  return (function* generateEvents() {
-    let page = first
-    const seen = new Set<string>()
-    while (true) {
-      yield* page.events
-      if (!page.nextCursor || seen.has(page.nextCursor)) return
-      seen.add(page.nextCursor)
-      page = getCollectionsDayBook({ ...input, cursor: page.nextCursor, limit: 100 }, { coachId })
-    }
-  })()
-}
-
 export async function GET(request: Request) {
-  const identity = await sessionProvider.getCurrentIdentity()
-  if (!identity || identity.role !== "coach") {
-    return new Response("Authentication required.", {
-      headers: privateHeaders,
-      status: 401,
-    })
-  }
-  try {
-    requireHeadAdminAccess(identity.subjectId)
-  } catch {
-    return new Response("Head coach access is required.", {
-      headers: privateHeaders,
-      status: 403,
-    })
-  }
+  const access = authorizeDownload(
+    await sessionProvider.getCurrentIdentity(),
+    "coach",
+    {
+      check: (coach) => requireHeadAdminAccess(coach.subjectId),
+      deniedMessage: "Head coach access is required.",
+    },
+  )
+  if (!access.allowed) return access.rejection
+  const { identity } = access
 
   const url = new URL(request.url)
   const from = url.searchParams.get("from") ?? ""
@@ -57,41 +38,37 @@ export async function GET(request: Request) {
       { ...input, limit: 100 },
       { coachId: identity.subjectId },
     )
+    const events = drainCursorPages(
+      first,
+      (page) => page.events,
+      (cursor) => getCollectionsDayBook(
+        { ...input, cursor, limit: 100 },
+        { coachId: identity.subjectId },
+      ),
+    )
     const rows = (function* collectionRows() {
-      for (const event of allEvents(first, input, identity.subjectId)) yield {
-      academyId: event.academyId,
-      amountPaise: event.amountPaise,
-      coveredFeeReferences: event.coveredFeeReferences,
-      eventDate: event.eventDate,
-      eventType: event.eventType,
-      lifecycle: event.lifecycle,
-      method: event.method,
-      playerName: event.playerFullName,
-      reference: event.reference,
+      for (const event of events) yield {
+        academyId: event.academyId,
+        amountPaise: event.amountPaise,
+        coveredFeeReferences: event.coveredFeeReferences,
+        eventDate: event.eventDate,
+        eventType: event.eventType,
+        lifecycle: event.lifecycle,
+        method: event.method,
+        playerName: event.playerFullName,
+        reference: event.reference,
       }
     })()
 
-    return new Response(createCollectionCsvStream(rows), {
-      headers: {
-        ...privateHeaders,
-        "Content-Disposition": `attachment; filename="smba-collections-${from}-to-${to}.csv"`,
-        "Content-Type": "text/csv; charset=utf-8",
-      },
+    return privateAttachmentResponse(createCollectionCsvStream(rows), {
+      contentType: "text/csv; charset=utf-8",
+      fileName: `smba-collections-${from}-to-${to}.csv`,
     })
   } catch (error) {
-    if (error instanceof FinanceServiceError) {
-      return new Response(error.message, {
-        headers: privateHeaders,
-        status: error.code === "AUTHORIZATION" ? 403 : 400,
-      })
-    }
-    console.error("Financial collections export failed.", {
-      from,
-      to,
-    })
-    return new Response("Unable to generate the collections export.", {
-      headers: privateHeaders,
-      status: 500,
+    return financeDownloadRejection(error) ?? downloadFailureResponse(error, {
+      context: { from, to },
+      label: "Financial collections export failed.",
+      message: "Unable to generate the collections export.",
     })
   }
 }

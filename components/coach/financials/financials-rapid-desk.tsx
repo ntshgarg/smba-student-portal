@@ -12,6 +12,7 @@ import {
 } from "@/app/coach/financials/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import { getAcademyDateKey } from "@/lib/format"
 import type { FinanceRapidScope, PaymentMethod } from "@/lib/finance/types"
 
@@ -33,6 +34,12 @@ import type {
   PlayerFinancialLedgerView,
   RapidFinancialWorkspaceView,
 } from "./types"
+
+/**
+ * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
+ * withdraws the retry prompt.
+ */
+type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
 
 function rapidDeskHref({
   query,
@@ -75,7 +82,7 @@ function PaymentForm({
   const [reviewedAmountPaise, setReviewedAmountPaise] = useState<number | null>(null)
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState<"preview" | "record" | null>(null)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const requestKey = useIdempotencyKey()
 
@@ -149,8 +156,15 @@ function PaymentForm({
       setFeedback(null)
       setDirty(true)
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The allocation could not be reviewed",
+        retained: "The amount you entered is still on screen",
+        subject: "The allocation review",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The allocation could not be reviewed",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -202,8 +216,15 @@ function PaymentForm({
       setReviewedAmountPaise(null)
       onRecorded(result.message)
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The payment could not be recorded",
+        retained: "The payment details are still on screen",
+        subject: "The payment",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The payment could not be recorded",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -338,7 +359,9 @@ function PaymentForm({
               disabled={Boolean(pending)}
               onClick={() => void reviewAllocation()}
             >
-              {pending === "preview" ? "Reviewing…" : "Review allocation"}
+              {pending === "preview"
+                ? "Reviewing…"
+                : feedback?.offerRetry ? "Review allocation again" : "Review allocation"}
             </button>
           </div>
         ) : (
@@ -406,7 +429,9 @@ function PaymentForm({
                 type="submit"
                 disabled={Boolean(pending) || !allocationValidation?.ok}
               >
-                {pending === "record" ? "Recording…" : "Record payment"}
+                {pending === "record"
+                  ? "Recording…"
+                  : feedback?.offerRetry ? "Record payment again" : "Record payment"}
               </button>
             </div>
           </div>

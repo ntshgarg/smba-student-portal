@@ -165,7 +165,10 @@ describe("Player Dashboard announcement failure isolation", () => {
       expect(html).toContain("Fee record remains available")
       expect(html).not.toContain("database unavailable")
       expect(log).toHaveBeenCalledOnce()
-      expect(log).toHaveBeenCalledWith("Player announcement lookup failed.")
+      expect(log).toHaveBeenCalledWith(
+        "Player announcement lookup failed.",
+        { cause: expect.stringContaining("database unavailable") },
+      )
     } finally {
       log.mockRestore()
     }

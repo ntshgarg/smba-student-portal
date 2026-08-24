@@ -115,9 +115,9 @@ function assertPlayerEligibleForOccurrence({
     )
   }
 
-  const enrollment = database.select({ joinedAt: playerEnrollments.joinedAt })
+  const enrollment = database.select({ trainingStartOn: playerEnrollments.trainingStartOn })
     .from(playerEnrollments).where(eq(playerEnrollments.accountId, playerId)).get()
-  const joinedOn = enrollment ? getIndiaDateKey(enrollment.joinedAt) : null
+  const joinedOn = enrollment?.trainingStartOn ?? null
   if (!joinedOn || !playerWasEnrolledForOccurrence(joinedOn, source)) {
     operationalActionError(
       "BUSINESS_RULE",

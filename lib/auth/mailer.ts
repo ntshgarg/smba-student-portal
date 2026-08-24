@@ -182,15 +182,3 @@ export function createAuthMailer(): AuthMailer {
   }
   return new ResendAuthMailer(configuration)
 }
-
-/** Test-only transport inspection. Never expose this through a production route. */
-export function readCapturedAuthEmails() {
-  if (!memoryAuthMailerAllowed()) {
-    throw new Error("The authentication email outbox is unavailable.")
-  }
-  return [...memoryOutbox]
-}
-
-export function clearCapturedAuthEmails() {
-  memoryOutbox.length = 0
-}

@@ -1,6 +1,5 @@
 "use client"
 
-import { useActionState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 
 import {
@@ -10,13 +9,28 @@ import {
   type TotpVerificationState,
 } from "@/app/auth/two-factor/actions"
 import { PasswordInput } from "@/components/password-input"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialSetup: TotpSetupState = { error: null, setup: null }
 const initialVerification: TotpVerificationState = { error: null }
 
 export function TwoFactorSetupForm() {
-  const [setupState, setupAction, setupPending] = useActionState(startTotpSetup, initialSetup)
-  const [verifyState, verifyAction, verifyPending] = useActionState(confirmTotpSetup, initialVerification)
+  const [setupState, setupAction, setupPending] = useResilientActionState(
+    startTotpSetup,
+    initialSetup,
+    { retained: "No authenticator was connected", subject: "Your authenticator setup" },
+  )
+  const [verifyState, verifyAction, verifyPending] = useResilientActionState(
+    confirmTotpSetup,
+    initialVerification,
+    {
+      // The recovery codes are shown once and live only in `setupState`. Keeping
+      // this form mounted is the only thing standing between a dropped request
+      // and losing them permanently.
+      retained: "The recovery codes above are still on screen",
+      subject: "Your six-digit code",
+    },
+  )
 
   if (!setupState.setup) {
     return (

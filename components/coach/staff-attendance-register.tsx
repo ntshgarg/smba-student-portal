@@ -105,7 +105,7 @@ export function StaffAttendanceRegister({
       <article className="coach-attendance-card is-workspace">
         <div className="coach-attendance-register staff-attendance-register">
           <div className="coach-register-controls">
-            <div className="coach-year-selector" aria-label="Choose attendance year">
+            <div className="coach-year-selector" role="group" aria-label="Choose attendance year">
               {yearOptions.map((year) => (
                 <button
                   key={year}
@@ -149,6 +149,7 @@ export function StaffAttendanceRegister({
               ref={registerScrollRef}
               onScroll={handleRegisterScroll}
               tabIndex={0}
+              role="region"
               aria-label={`Scrollable junior coach attendance register for ${activeYear}`}
             >
               <table

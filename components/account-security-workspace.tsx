@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { Check, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
 
@@ -14,6 +14,7 @@ import {
   type PinManagementState,
 } from "@/app/account/security/actions"
 import { PasswordInput } from "@/components/password-input"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 type SecuritySession = {
   createdAt: string
@@ -63,12 +64,31 @@ export function AccountSecurityWorkspace({
   pinRequired: boolean
   sessions: SecuritySession[]
 }) {
-  const [passwordState, passwordAction, passwordPending] = useActionState(
+  const [passwordState, passwordAction, passwordPending] = useResilientActionState(
     changePasswordAction,
     initialPasswordState,
+    {
+      // No field was rejected and nothing succeeded, so clear both verdicts
+      // rather than leave a stale one beside the failure.
+      fold: (state, error) => ({ ...state, error, errorField: null, success: null }),
+      retained: "Your current password still works",
+      subject: "Your new password",
+    },
   )
-  const [pinState, pinAction, pinPending] = useActionState(savePinAction, initialPinState)
-  const [removeState, removeAction, removePending] = useActionState(removePinAction, initialPinState)
+  const [pinState, pinAction, pinPending] = useResilientActionState(savePinAction, initialPinState, {
+    fold: (state, error) => ({ ...state, error, success: null }),
+    retained: "Your current sign-in options are unchanged",
+    subject: "Your PIN",
+  })
+  const [removeState, removeAction, removePending] = useResilientActionState(
+    removePinAction,
+    initialPinState,
+    {
+      fold: (state, error) => ({ ...state, error, success: null }),
+      retained: "Your PIN still works",
+      subject: "Your PIN removal",
+    },
+  )
   const [pinValidationTarget, setPinValidationTarget] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null)

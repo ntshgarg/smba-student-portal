@@ -15,8 +15,8 @@ import {
   coachProfiles,
 } from "@/lib/db/schema"
 
-export const LEGACY_SESSION_COOKIE = "smba_session"
-export const LEGACY_PROTOTYPE_SESSION_COOKIE = "smba_prototype_student"
+const LEGACY_SESSION_COOKIE = "smba_session"
+const LEGACY_PROTOTYPE_SESSION_COOKIE = "smba_prototype_student"
 
 export interface SessionProvider {
   getCurrentIdentity(): Promise<SessionIdentity | null>

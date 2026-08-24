@@ -55,7 +55,7 @@ function addAccount(input: {
   if (input.role === "player") {
     database.insert(schema.playerEnrollments).values({
       accountId: input.id,
-      joinedAt: instant,
+      trainingStartOn: instant.toISOString().slice(0, 10),
       status: "active",
       updatedAt: instant,
     }).run()

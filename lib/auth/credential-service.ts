@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, createHmac, randomBytes, randomUUID, scryptSync } from "node:crypto"
 
-import { and, eq, gt, isNull, lt } from "drizzle-orm"
+import { and, eq, gt, isNull } from "drizzle-orm"
 import { hashPassword, verifyPassword } from "better-auth/crypto"
 
 import {
@@ -27,9 +27,9 @@ import {
 } from "@/lib/db/schema"
 import { authSubjectHash, writeAuthSecurityEvent } from "@/lib/auth/security-context"
 
-export const MIN_PASSWORD_LENGTH = 12
-export const MAX_PASSWORD_LENGTH = 128
-export const LOCAL_DEVELOPMENT_PASSWORD = "SMBA local access 2026!"
+const MIN_PASSWORD_LENGTH = 12
+const MAX_PASSWORD_LENGTH = 128
+const LOCAL_DEVELOPMENT_PASSWORD = "SMBA local access 2026!"
 export const FIXTURE_PASSWORD = "SMBA fixture access 2026!"
 export const PLATFORM_ADMIN_ACCOUNT_ID = "00000000-0000-4000-8000-0000000000a1"
 export const ACTIVATION_CLAIM_COOKIE = "smba_activation_claim"
@@ -53,7 +53,7 @@ export function createActivationClaimToken() {
   return randomBytes(32).toString("base64url")
 }
 
-export function activationClaimHash(value: string) {
+function activationClaimHash(value: string) {
   return credentialHash("activation-claim", value.trim())
 }
 
@@ -669,19 +669,6 @@ export function recordLoginSuccess(subjectHash: string, {
   database.delete(authLoginAttempts)
     .where(eq(authLoginAttempts.key, `subject:${subjectHash}`))
     .run()
-}
-
-export function removeExpiredAccessCodes({
-  database = initializeDatabase(),
-  now = new Date(),
-}: {
-  database?: SmbaDatabaseExecutor
-  now?: Date
-} = {}) {
-  database.update(authAccessCodes).set({ consumedAt: now }).where(and(
-    isNull(authAccessCodes.consumedAt),
-    lt(authAccessCodes.expiresAt, now),
-  )).run()
 }
 
 export function ensureBootstrapCredential({

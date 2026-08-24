@@ -9,6 +9,14 @@ updates:
       time: "09:00"
       timezone: Asia/Kolkata
     open-pull-requests-limit: 5
+    # @types/node describes the Node runtime this project actually executes on,
+    # which the workflows pin to 22. A major bump would let code typecheck
+    # against APIs that do not exist at runtime, so the types move with a
+    # deliberate runtime upgrade rather than on their own schedule.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
     groups:
       production-minor-and-patch:
         dependency-type: production

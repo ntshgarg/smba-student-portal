@@ -19,7 +19,9 @@
   // Real source roots only. A repo-wide "**/*.ts" also swept extracted worktrees
   // under output/, so the gate's meaning depended on what happened to be lying
   // around. next build re-adds both .next globs to include whenever they are
-  // missing, so the opt-out for the dev copy has to live in exclude below.
+  // missing, and it validates routes by type-checking the file list this config
+  // resolves to, so they stay here. npm run typecheck reads tsconfig.check.json
+  // instead, which excludes .next so the gate does not depend on build output.
   "include": [
     "next-env.d.ts",
     "*.ts",
@@ -34,6 +36,6 @@
   ],
   // .next/dev/types is written by next dev and keeps validators for routes that
   // have since been deleted; next build filters the same directory out of its own
-  // type check for that reason, and a bare tsc has no such filter.
+  // type check for that reason, and the editor's language service does not.
   "exclude": ["node_modules", "output", "coverage", ".next/dev"]
 }

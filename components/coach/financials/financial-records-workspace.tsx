@@ -12,7 +12,12 @@ import {
 import Link from "next/link"
 import type { ReactNode } from "react"
 
-import { formatAcademyDate, formatAcademyTime, formatDateKey } from "@/lib/format"
+import {
+  formatAcademyDate,
+  formatAcademyTime,
+  formatDateKey,
+  numberFormatter,
+} from "@/lib/format"
 import type {
   FinanceActivityItem,
   FinanceDayBookEvent,
@@ -135,7 +140,8 @@ function recordsHref(
 }
 
 export function formatFinancialRecordsAmount(paise: number) {
-  return new Intl.NumberFormat("en-IN", {
+  /* Fraction digits follow the amount, so this stays per call and shares by option key. */
+  return numberFormatter("en-IN", {
     currency: "INR",
     maximumFractionDigits: paise % 100 ? 2 : 0,
     style: "currency",
@@ -155,14 +161,16 @@ export function formatFinancialActivityTime(value: string) {
   })} · ${formatAcademyTime(value)}`
 }
 
+const periodFormat = new Intl.DateTimeFormat("en-IN", {
+  month: "long",
+  timeZone: "UTC",
+  year: "numeric",
+})
+
 function formatPeriod(period: string) {
   const [year, month] = period.split("-").map(Number)
   if (!year || !month) return period
-  return new Intl.DateTimeFormat("en-IN", {
-    month: "long",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(Date.UTC(year, month - 1, 1)))
+  return periodFormat.format(new Date(Date.UTC(year, month - 1, 1)))
 }
 
 function statusClass(status: FinanceStatus) {

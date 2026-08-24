@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, randomInt, randomUUID } from "node:crypto"
 
-import { and, asc, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 
 import {
   ACADEMY_ID_SERIAL_RANGES,
@@ -15,7 +15,6 @@ import {
 } from "@/lib/auth/identity"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { operationalActionError } from "@/lib/actions/operational-result"
-import type { PendingRegistration } from "@/lib/coach/types"
 import {
   initializeDatabase,
   type SmbaDatabase,
@@ -178,29 +177,6 @@ export function findApprovedAccountByAcademyId(value: string) {
     .get()
 }
 
-export function listPendingRegistrations(): PendingRegistration[] {
-  const registrations = initializeDatabase().select({
-    id: accounts.id,
-    fullName: accounts.fullName,
-    requestedRole: accounts.requestedRole,
-    createdAt: accounts.createdAt,
-  })
-    .from(accounts)
-    .where(and(eq(accounts.approvalStatus, "pending"), isNull(accounts.archivedAt)))
-    .orderBy(asc(accounts.createdAt))
-    .all()
-  return registrations.flatMap((registration) => (
-    registration.requestedRole === "player" || registration.requestedRole === "coach"
-      ? [{
-        id: registration.id,
-        fullName: registration.fullName,
-        requestedRole: registration.requestedRole,
-        createdAt: registration.createdAt.toISOString(),
-      }]
-      : []
-  ))
-}
-
 function assertApprovingCoach(coachAccountId: string) {
   requireHeadAdminAccess(coachAccountId)
 }
@@ -326,7 +302,7 @@ export function approveRegistration(
       tx.insert(playerEnrollments).values({
         accountId: registration.id,
         status: "unassigned",
-        joinedAt: now,
+        trainingStartOn: getAcademyDateKey(now),
         updatedAt: now,
       }).run()
     } else {

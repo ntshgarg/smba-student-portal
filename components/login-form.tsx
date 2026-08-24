@@ -1,10 +1,11 @@
 "use client"
 
-import { useActionState, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 
 import { PasswordInput } from "@/components/password-input"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 import {
   loginWithAcademyId,
@@ -13,6 +14,11 @@ import {
 } from "@/app/login/actions"
 
 const initialState: LoginFormState = { error: null }
+
+const signInFailureCopy = {
+  retained: "Nothing was sent and you are still signed out",
+  subject: "Your sign-in",
+}
 
 function AcademyIdField({
   academyIdRef,
@@ -47,7 +53,11 @@ function AcademyIdField({
 }
 
 function PasswordLoginForm() {
-  const [state, formAction, pending] = useActionState(loginWithAcademyId, initialState)
+  const [state, formAction, pending] = useResilientActionState(
+    loginWithAcademyId,
+    initialState,
+    signInFailureCopy,
+  )
   const academyIdRef = useRef<HTMLInputElement>(null)
   const submissionStartedRef = useRef(false)
   useEffect(() => {
@@ -84,7 +94,11 @@ function PasswordLoginForm() {
 }
 
 function PinLoginForm() {
-  const [state, formAction, pending] = useActionState(loginWithPin, initialState)
+  const [state, formAction, pending] = useResilientActionState(
+    loginWithPin,
+    initialState,
+    signInFailureCopy,
+  )
   const academyIdRef = useRef<HTMLInputElement>(null)
   const submissionStartedRef = useRef(false)
   useEffect(() => {
@@ -129,7 +143,7 @@ export function LoginForm() {
   const [method, setMethod] = useState<"password" | "pin">("password")
   return (
     <>
-      <div className="login-method-switch" aria-label="Login method">
+      <div className="login-method-switch" role="group" aria-label="Login method">
         <button
           type="button"
           aria-pressed={method === "password"}

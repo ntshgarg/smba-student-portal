@@ -19,13 +19,6 @@ export type CurrentCoachContext = {
   identity: SessionIdentity
 }
 
-export async function getCurrentCoachContext(): Promise<CurrentCoachContext | null> {
-  const identity = await getRequestIdentity()
-  if (!identity || identity.role !== "coach") return null
-  const access = getRequestCoachAccess(identity.subjectId)
-  return access ? { access, identity } : null
-}
-
 export async function requireHeadAdminAction() {
   const identity = await sessionProvider.getCurrentIdentity()
   if (!identity || identity.role !== "coach") throw new Error("Head coach access is required.")

@@ -1,4 +1,3 @@
-.panelHeading > span,
 .archiveToolbar > div > span,
 .withdrawDialog > span {
   color: var(--red);
@@ -383,12 +382,6 @@
   height: 15px;
 }
 
-.workspaceHeader {
-  max-width: 760px;
-  margin-top: clamp(42px, 6vw, 76px);
-}
-
-.workspaceHeader h1,
 .archiveHeader h1,
 .detailHeader h1 {
   margin-top: 16px;
@@ -399,7 +392,6 @@
   line-height: 0.9;
 }
 
-.workspaceHeader p,
 .archiveHeader > div > p {
   max-width: 650px;
   margin-top: 22px;
@@ -410,7 +402,6 @@
   line-height: 1.45;
 }
 
-.composerPanel,
 .archivePanel,
 .detailPanel {
   margin-top: clamp(42px, 6vw, 72px);
@@ -418,12 +409,6 @@
   background: color-mix(in srgb, var(--white) 58%, transparent);
 }
 
-.panelHeading {
-  padding: clamp(26px, 4vw, 42px);
-  border-bottom: 1px solid var(--line);
-}
-
-.panelHeading h2,
 .archiveToolbar h2 {
   margin-top: 9px;
   color: var(--navy);
@@ -433,20 +418,13 @@
   line-height: 0.98;
 }
 
-.composerFields {
-  display: grid;
-  gap: 30px;
-  padding: clamp(26px, 4vw, 42px);
-}
-
 .field {
   display: grid;
   gap: 8px;
   min-width: 0;
 }
 
-.field > span,
-.locationFieldset > legend {
+.field > span {
   color: var(--navy);
   font-size: 10px;
   font-weight: 790;
@@ -503,94 +481,6 @@
   color: var(--red);
 }
 
-.locationFieldset {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.locationFieldset > div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid var(--line);
-}
-
-.locationFieldset > div > label,
-.checkOption {
-  display: grid;
-  min-width: 0;
-  min-height: 76px;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--white) 68%, transparent);
-  cursor: pointer;
-}
-
-.locationFieldset > div > label + label {
-  border-left: 1px solid var(--line);
-}
-
-.locationFieldset input,
-.checkOption input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--navy);
-}
-
-.locationFieldset label > span,
-.checkOption > span {
-  display: grid;
-  gap: 4px;
-}
-
-.locationFieldset strong,
-.checkOption strong {
-  color: var(--navy);
-  font-size: 12px;
-  font-weight: 760;
-}
-
-.locationFieldset small,
-.checkOption small {
-  color: var(--steel);
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.optionsGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.72fr);
-  align-items: start;
-  gap: 22px;
-}
-
-.checkOption {
-  border: 1px solid var(--line);
-}
-
-.composerActions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 22px clamp(26px, 4vw, 42px);
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--ivory) 62%, var(--white));
-}
-
-.composerActions p {
-  color: var(--steel);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.composerActions button,
 .dialogActions button,
 .detailActions button {
   display: inline-flex;
@@ -606,7 +496,6 @@
   font-weight: 760;
 }
 
-.composerActions svg,
 .dialogActions svg,
 .detailActions svg {
   width: 16px;
@@ -734,7 +623,6 @@
 }
 
 .dialogActions button:disabled,
-.composerActions button:disabled,
 .detailActions button:disabled,
 .dialogClose:disabled {
   cursor: wait;

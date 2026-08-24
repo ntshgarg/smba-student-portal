@@ -43,9 +43,9 @@ export const AUTHENTICATOR_RECOVERY_COOKIE = "smba_authenticator_recovery"
 export const HEAD_SETUP_EMAIL_COOKIE = "smba_head_setup_email"
 export const EMAIL_VERIFICATION_LIFETIME_MS = 10 * 60 * 1000
 export const PASSWORD_RECOVERY_LIFETIME_MS = 20 * 60 * 1000
-export const AUTHENTICATOR_RESET_REQUEST_LIFETIME_MS = 24 * 60 * 60 * 1000
+const AUTHENTICATOR_RESET_REQUEST_LIFETIME_MS = 24 * 60 * 60 * 1000
 export const EMAIL_RESEND_COOLDOWN_MS = 60 * 1000
-export const EMAIL_VERIFICATION_MAX_ATTEMPTS = 5
+const EMAIL_VERIFICATION_MAX_ATTEMPTS = 5
 
 const EMAIL_REQUEST_WINDOW_MS = 15 * 60 * 1000
 const EMAIL_REQUEST_LIMIT = 3
@@ -74,7 +74,7 @@ function equalDigest(left: string, right: string) {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer)
 }
 
-export function normalizeRecoveryEmail(value: string) {
+function normalizeRecoveryEmail(value: string) {
   const normalized = value.trim().toLocaleLowerCase("en-US")
   if (normalized.length < 3 || normalized.length > 254) return null
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized)) return null

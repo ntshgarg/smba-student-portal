@@ -69,7 +69,7 @@ describe("Financials document read models", () => {
       level: "Adult",
       batch: "Weekday",
       status: "active",
-      joinedAt: createdAt,
+      trainingStartOn: createdAt.toISOString().slice(0, 10),
       updatedAt: createdAt,
     }).run()
     database.insert(schema.financialCharges).values([{

@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 
 import {
@@ -9,13 +9,28 @@ import {
   type TotpVerificationState,
 } from "@/app/auth/two-factor/actions"
 import { AuthField } from "@/components/auth-field"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialState: TotpVerificationState = { error: null }
 
 export function TwoFactorVerificationForm() {
   const [useRecovery, setUseRecovery] = useState(false)
-  const [totpState, totpAction, totpPending] = useActionState(verifyTotpSignIn, initialState)
-  const [backupState, backupAction, backupPending] = useActionState(verifyBackupCodeSignIn, initialState)
+  const [totpState, totpAction, totpPending] = useResilientActionState(
+    verifyTotpSignIn,
+    initialState,
+    {
+      retained: "The code was not used and you are still signed out",
+      subject: "Your six-digit code",
+    },
+  )
+  const [backupState, backupAction, backupPending] = useResilientActionState(
+    verifyBackupCodeSignIn,
+    initialState,
+    {
+      retained: "The code was not used and is still valid",
+      subject: "Your recovery code",
+    },
+  )
   const codeRef = useRef<HTMLInputElement>(null)
   const backupCodeRef = useRef<HTMLInputElement>(null)
   const totpSubmissionRef = useRef(false)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { ArrowRight } from "lucide-react"
 
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/app/recover/actions"
 import { AuthField } from "@/components/auth-field"
 import { PasswordInput } from "@/components/password-input"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialFactorState: RecoverySecondFactorState = { error: null }
 const initialPasswordState: RecoveryPasswordState = { error: null, errorField: null }
@@ -18,7 +19,14 @@ const factorErrorId = "recovery-factor-error"
 const passwordErrorId = "recovery-password-error"
 
 export function RecoverySecondFactorForm() {
-  const [state, action, pending] = useActionState(verifyRecoverySecondFactorAction, initialFactorState)
+  const [state, action, pending] = useResilientActionState(
+    verifyRecoverySecondFactorAction,
+    initialFactorState,
+    {
+      retained: "The code was not used and your reset link still works",
+      subject: "Your code",
+    },
+  )
   const credentialRef = useRef<HTMLInputElement>(null)
   const submissionStartedRef = useRef(false)
   useEffect(() => {
@@ -60,7 +68,16 @@ export function RecoverySecondFactorForm() {
 }
 
 export function RecoveryPasswordForm() {
-  const [state, action, pending] = useActionState(completePasswordRecoveryAction, initialPasswordState)
+  const [state, action, pending] = useResilientActionState(
+    completePasswordRecoveryAction,
+    initialPasswordState,
+    {
+      // Neither password field is at fault, so focus stays where it is.
+      fold: (state, error) => ({ ...state, error, errorField: null }),
+      retained: "Your old password still works and the reset link is still valid",
+      subject: "Your new password",
+    },
+  )
   const passwordRef = useRef<HTMLInputElement>(null)
   const confirmRef = useRef<HTMLInputElement>(null)
   useEffect(() => {

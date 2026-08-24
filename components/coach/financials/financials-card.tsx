@@ -5,20 +5,24 @@ import {
   CoachDashboardSummary,
 } from "@/components/coach/dashboard-card"
 
+const inrFormat = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+})
+
+const periodFormat = new Intl.DateTimeFormat("en-IN", {
+  month: "long",
+  timeZone: "UTC",
+})
+
 function formatInr(paise: number) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(paise / 100)
+  return inrFormat.format(paise / 100)
 }
 
 function formatPeriod(period: string) {
   const [year, month] = period.split("-").map(Number)
-  return new Intl.DateTimeFormat("en-IN", {
-    month: "long",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month - 1, 1)))
+  return periodFormat.format(new Date(Date.UTC(year, month - 1, 1)))
 }
 
 export function FinancialsCard({
@@ -60,12 +64,7 @@ export function FinancialsCard({
     >
       {active ? (
         <>
-          <CoachDashboardSummary
-            ariaLabel={attentionCount > 0
-              ? `${attentionCount} ${attentionCount === 1 ? "record needs" : "records need"} attention, ${summary}. ${preparationState}.`
-              : `${summary}. ${preparationState}.`}
-            detail={preparationState}
-          >
+          <CoachDashboardSummary detail={preparationState}>
             {summary}
           </CoachDashboardSummary>
           <CoachDashboardActions ariaLabel="Financial actions">

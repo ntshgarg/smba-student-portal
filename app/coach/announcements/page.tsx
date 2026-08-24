@@ -3,7 +3,10 @@ import type {
   AnnouncementChannel,
   AnnouncementStatus,
 } from "@/lib/announcements/contracts"
-import { listCoachAnnouncements } from "@/lib/announcements/queries"
+import {
+  hasCoachAnnouncements,
+  listCoachAnnouncements,
+} from "@/lib/announcements/queries"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { getAcademyMonthKey } from "@/lib/format"
 
@@ -59,7 +62,9 @@ export default async function PublishedAnnouncementsPage({
     search,
     status,
   }, context)
-  const hasPublishedAnnouncements = listCoachAnnouncements({}, context).length > 0
+  // The filtered page is a subset of every announcement, so a non-empty one
+  // already proves the archive is not empty and needs no further read.
+  const hasPublishedAnnouncements = announcements.length > 0 || hasCoachAnnouncements(context)
 
   return (
     <PublishedAnnouncementArchive

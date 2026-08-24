@@ -24,6 +24,7 @@ import {
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import {
   assignmentCoversOccurrence,
   calendarWindowForMonth,
@@ -83,9 +84,15 @@ type ReplacementDraft = {
   venue: string
 }
 
+/**
+ * Cancel and replace share one notice, so `retryAction` names which of the two
+ * controls should offer the retry.
+ */
 type CalendarFeedback = ActionFeedback & {
   field?: string
   occurrenceId: string
+  offerRetry?: boolean
+  retryAction?: CalendarPendingAction["type"]
 }
 type CalendarPendingAction = {
   occurrenceId: string
@@ -168,7 +175,7 @@ export function SessionCalendar({
 
   function occurrenceRoster(occurrence: TrainingSessionOccurrence) {
     return players.filter((player) => (
-      playerWasEnrolledForOccurrence(player.member.joinedAt, occurrence)
+      playerWasEnrolledForOccurrence(player.member.trainingStartOn, occurrence)
       && sessionAssignments.some((assignment) => (
         assignment.playerId === player.member.id
         && assignmentCoversOccurrence(assignment, occurrence)
@@ -349,9 +356,17 @@ export function SessionCalendar({
                             setReplacementBaseline(originalReplacement)
                             setFeedback({ message: "Session cancelled", occurrenceId: occurrence.id, tone: "success" })
                           } catch (error) {
+                            const failure = describeSaveFailure({
+                              error,
+                              fallbackMessage: "Session could not be cancelled",
+                              retained: "The session is still scheduled",
+                              subject: "The cancellation",
+                            })
                             setFeedback({
-                              message: error instanceof Error ? error.message : "Session could not be cancelled",
+                              message: failure.message,
                               occurrenceId: occurrence.id,
+                              offerRetry: failure.offerRetry,
+                              retryAction: "cancel",
                               tone: "error",
                             })
                           } finally {
@@ -390,9 +405,17 @@ export function SessionCalendar({
                             setReplacementBaseline(replacement)
                             setFeedback({ message: "Replacement session created", occurrenceId: occurrence.id, tone: "success" })
                           } catch (error) {
+                            const failure = describeSaveFailure({
+                              error,
+                              fallbackMessage: "Session could not be replaced",
+                              retained: "Your replacement details are still on screen",
+                              subject: "The replacement session",
+                            })
                             setFeedback({
-                              message: error instanceof Error ? error.message : "Session could not be replaced",
+                              message: failure.message,
                               occurrenceId: occurrence.id,
+                              offerRetry: failure.offerRetry,
+                              retryAction: "replace",
                               tone: "error",
                             })
                           } finally {
@@ -443,6 +466,7 @@ function OccurrenceDetails({
   const durationInputRef = useRef<HTMLInputElement>(null)
   const venueInputRef = useRef<HTMLInputElement>(null)
   const feedbackId = `occurrence-feedback-${occurrence.id}`
+  const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
 
   useEffect(() => {
     if (feedback?.tone !== "error") return
@@ -488,7 +512,9 @@ function OccurrenceDetails({
       {!isFuture || occurrence.status === "cancelled" ? null : (
         <div className="coach-occurrence-actions">
           <button type="button" disabled={pendingAction !== null} onClick={onCancel}>
-            <X aria-hidden="true" /> {pendingAction === "cancel" ? "Cancelling…" : "Cancel session"}
+            <X aria-hidden="true" /> {pendingAction === "cancel"
+              ? "Cancelling…"
+              : retryAction === "cancel" ? "Cancel session again" : "Cancel session"}
           </button>
           <details>
             <summary
@@ -508,7 +534,9 @@ function OccurrenceDetails({
               <label><span>Duration</span><input ref={durationInputRef} name="replacementDurationMinutes" type="number" disabled={pendingAction !== null} min={30} max={300} step={15} value={replacement.durationMinutes} aria-invalid={feedback?.field === "durationMinutes" || undefined} aria-describedby={feedback?.field === "durationMinutes" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, durationMinutes: event.target.value })} /></label>
               <label><span>Venue</span><input ref={venueInputRef} name="replacementVenue" required maxLength={120} disabled={pendingAction !== null} value={replacement.venue} aria-invalid={feedback?.field === "venue" || undefined} aria-describedby={feedback?.field === "venue" ? feedbackId : undefined} onChange={(event) => setReplacement({ ...replacement, venue: event.target.value })} /></label>
               <button type="submit" disabled={pendingAction !== null}>
-                {pendingAction === "replace" ? "Creating…" : "Create replacement"}
+                {pendingAction === "replace"
+                  ? "Creating…"
+                  : retryAction === "replace" ? "Create replacement again" : "Create replacement"}
               </button>
             </form>
           </details>

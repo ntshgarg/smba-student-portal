@@ -10,6 +10,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core"
 
+import { FINANCE_AUDIT_EVENT_TYPES } from "@/lib/finance/types"
+
 export const accounts = sqliteTable("accounts", {
   id: text("id").primaryKey(),
   fullName: text("full_name").notNull(),
@@ -381,6 +383,49 @@ export const operationalEvents = sqliteTable("operational_events", {
   index("operational_events_fingerprint_idx").on(table.fingerprint, table.occurredAt),
 ])
 
+// The browser-side counterpart to operational_events, which instrumentation.ts
+// already fills for server request errors. It holds the same class of record:
+// a sanitized fingerprint and a route template, never exception text, a stack,
+// a resolved URL or a query string. The occurred_at index exists so the 90-day
+// retention baseline for sanitized application-error events can be applied as a
+// single indexed range delete.
+export const clientErrorReports = sqliteTable("client_error_reports", {
+  id: text("id").primaryKey(),
+  eventType: text("event_type", {
+    enum: ["client_error", "unhandled_rejection"],
+  }).notNull(),
+  boundary: text("boundary", {
+    enum: [
+      "root",
+      "global",
+      "student",
+      "coach",
+      "coach_financials",
+      "player_financials",
+      "window",
+    ],
+  }).notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  routePath: text("route_path").notNull(),
+  errorName: text("error_name").notNull(),
+  digest: text("digest"),
+  accountId: text("account_id").references(() => accounts.id),
+  occurredAt: integer("occurred_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("client_error_reports_type_occurred_idx").on(table.eventType, table.occurredAt),
+  index("client_error_reports_fingerprint_idx").on(table.fingerprint, table.occurredAt),
+  index("client_error_reports_occurred_idx").on(table.occurredAt),
+  index("client_error_reports_account_idx").on(table.accountId),
+  check(
+    "client_error_reports_event_type_check",
+    sql`${table.eventType} in ('client_error', 'unhandled_rejection')`,
+  ),
+  check(
+    "client_error_reports_boundary_check",
+    sql`${table.boundary} in ('root', 'global', 'student', 'coach', 'coach_financials', 'player_financials', 'window')`,
+  ),
+])
+
 export const coachProfiles = sqliteTable("coach_profiles", {
   accountId: text("account_id").primaryKey().references(() => accounts.id),
   accessLevel: text("access_level", {
@@ -431,13 +476,24 @@ export const playerEnrollments = sqliteTable("player_enrollments", {
     enum: ["weekday-3-day", "weekday-4-day", "weekday-5-day", "weekend-standard"],
   }),
   status: text("status", { enum: ["unassigned", "active", "paused"] }).notNull().default("unassigned"),
-  joinedAt: integer("joined_at", { mode: "timestamp_ms" }).notNull(),
+  trainingStartOn: text("training_start_on").notNull(),
+  trainingStartConfirmedAt: integer("training_start_confirmed_at", { mode: "timestamp_ms" }),
+  trainingStartConfirmedByAccountId: text("training_start_confirmed_by_account_id")
+    .references(() => accounts.id),
+  onboardingCompletedAt: integer("onboarding_completed_at", { mode: "timestamp_ms" }),
+  onboardingCompletedByAccountId: text("onboarding_completed_by_account_id")
+    .references(() => accounts.id),
   primaryContactName: text("primary_contact_name"),
   primaryContactRelationship: text("primary_contact_relationship"),
   primaryContactPhone: text("primary_contact_phone"),
   recordRevision: integer("record_revision").notNull().default(0),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
-})
+}, (table) => [
+  check(
+    "player_enrollments_training_start_on_check",
+    sql`${table.trainingStartOn} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' and date(${table.trainingStartOn}) = ${table.trainingStartOn}`,
+  ),
+])
 
 export const batches = sqliteTable("batches", {
   id: text("id").primaryKey(),
@@ -904,6 +960,9 @@ export const concessionApplications = sqliteTable("concession_applications", {
     .on(table.concessionId, table.chargeId)
     .where(sql`${table.reversedAt} is null`),
   index("concession_applications_charge_idx").on(table.chargeId),
+  // The active-charge index above is partial, so it cannot serve the player fee
+  // record read, which deliberately also returns reversed applications.
+  index("concession_applications_concession_idx").on(table.concessionId),
   check("concession_applications_amount_positive_check", sql`${table.amountPaise} > 0`),
   check(
     "concession_applications_reversal_check",
@@ -926,29 +985,9 @@ export const financeReferenceSequences = sqliteTable("finance_reference_sequence
 export const financialAuditEvents = sqliteTable("financial_audit_events", {
   id: text("id").primaryKey(),
   actorAccountId: text("actor_account_id").notNull().references(() => accounts.id),
-  eventType: text("event_type", {
-    enum: [
-      "finance_activated",
-      "fee_agreement_created",
-      "fee_agreement_replaced",
-      "fee_agreement_paused",
-      "fee_agreement_ended",
-      "charge_issued",
-      "charge_voided",
-      "monthly_fees_prepared",
-      "payment_recorded",
-      "payment_reversed",
-      "refund_recorded",
-      "refund_reversed",
-      "concession_created",
-      "concession_applied",
-      "concession_application_reversed",
-      "concession_reversed",
-      "adjustment_created",
-      "adjustment_reversed",
-      "historical_reconciled",
-    ],
-  }).notNull(),
+  // SQLite has no enum type, so this narrows the column in TypeScript only and emits
+  // plain `text`. Deriving it keeps the set identical to FinanceAuditEventType.
+  eventType: text("event_type", { enum: FINANCE_AUDIT_EVENT_TYPES }).notNull(),
   entityType: text("entity_type", {
     enum: [
       "academy", "fee_agreement", "charge", "payment", "adjustment", "player",

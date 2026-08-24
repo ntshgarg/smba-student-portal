@@ -14,6 +14,7 @@ import { formatSessionDate } from "@/lib/format"
 import { currentGreeting } from "@/lib/greeting"
 import { listActivePlayerAnnouncements } from "@/lib/announcements/queries"
 import { getCurrentStudent } from "@/lib/student/current-student"
+import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 
 function loadFeeSummary(playerId: string) {
   try {
@@ -26,8 +27,10 @@ function loadFeeSummary(playerId: string) {
 async function loadAnnouncements(playerId: string) {
   try {
     return await listActivePlayerAnnouncements(playerId)
-  } catch {
-    console.error("Player announcement lookup failed.")
+  } catch (error) {
+    console.error("Player announcement lookup failed.", {
+      cause: describeFailureCause(error),
+    })
     return null
   }
 }

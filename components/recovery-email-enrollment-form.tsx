@@ -1,11 +1,11 @@
 "use client"
 
-import { useActionState } from "react"
 import { ArrowRight, MailCheck } from "lucide-react"
 
 import {
   type RecoveryEmailEnrollmentState,
 } from "@/app/account/recovery-email/actions"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialRecoveryEmailEnrollmentState: RecoveryEmailEnrollmentState = {
   email: "",
@@ -29,13 +29,18 @@ export function RecoveryEmailEnrollmentForm({
   defaultName?: string
   requestAction: EnrollmentAction
 }) {
-  const [requestState, send, sending] = useActionState(
+  const [requestState, send, sending] = useResilientActionState(
     requestAction,
     { ...initialRecoveryEmailEnrollmentState, fullName: defaultName },
+    { retained: "No verification code was sent", subject: "Your recovery email" },
   )
-  const [confirmState, confirm, confirming] = useActionState(
+  const [confirmState, confirm, confirming] = useResilientActionState(
     confirmAction,
     initialRecoveryEmailEnrollmentState,
+    {
+      retained: "The code was not used and is still valid",
+      subject: "Your verification code",
+    },
   )
   const sent = requestState.sent || confirmState.sent
   const email = confirmState.email || requestState.email

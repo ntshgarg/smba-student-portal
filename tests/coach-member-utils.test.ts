@@ -14,7 +14,7 @@ const member: AcademyMember = {
   academyId: "SMBA#0002",
   fullName: "Aarav Kulkarni",
   initials: "AK",
-  joinedAt: "2025-05-21",
+  trainingStartOn: "2025-05-21",
   primaryContact: {
     name: "Shreya Kulkarni",
     relationship: "Parent",

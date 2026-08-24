@@ -62,6 +62,7 @@ const REQUIRED_CURRENT_TABLES = [
   "auth_users",
   "auth_verifications",
   "operational_events",
+  "client_error_reports",
   "broadcasts",
   "broadcast_audience_targets",
   "broadcast_channels",
@@ -102,6 +103,7 @@ const CLEAN_OPERATIONAL_TABLES = [
   "broadcast_withdrawals",
   "auth_setup_claims",
   "operational_events",
+  "client_error_reports",
 ] as const
 const selectedProfile = resolveFixtureProfile((() => {
   const args = process.argv.slice(2)
@@ -728,12 +730,13 @@ async function seedEnrollments(target: string) {
   `).all() as Array<{ id: string; serial: number }>
   const update = db.prepare(`
     update player_enrollments
-    set level = ?, batch = ?, academy_plan = ?, status = 'unassigned', joined_at = ?,
+    set level = ?, batch = ?, academy_plan = ?, status = 'unassigned', training_start_on = ?,
+        training_start_confirmed_at = ?, training_start_confirmed_by_account_id = ?,
         primary_contact_name = ?, primary_contact_relationship = 'Parent',
         primary_contact_phone = ?, updated_at = ?
     where account_id = ?
   `)
-  const joinedAt = Date.parse(`${SCHEDULE_START}T00:00:00.000Z`)
+  const trainingStartOn = SCHEDULE_START
   const updatedAt = Date.parse(`${CANONICAL_DATE}T00:00:00.000Z`)
   db.transaction(() => {
     approved.forEach((account, index) => {
@@ -742,7 +745,9 @@ async function seedEnrollments(target: string) {
         player.level,
         player.batch,
         player.academyPlan,
-        joinedAt,
+        trainingStartOn,
+        updatedAt,
+        COACH_ID,
         `${lastNames[index % lastNames.length]} Family`,
         `+91 00000 ${String(index + 1).padStart(5, "0")}`,
         updatedAt,
@@ -1344,6 +1349,10 @@ async function seedFinancials(target: string) {
         registrationStatus: "pending",
         idempotencyKey: `${prefix}.setup.${account.serial}`,
       }, context)
+      database.update(dbSchema.playerEnrollments).set({
+        onboardingCompletedAt: now,
+        onboardingCompletedByAccountId: COACH_ID,
+      }).where(eq(dbSchema.playerEnrollments.accountId, account.id)).run()
       return
     }
 
@@ -1401,6 +1410,12 @@ async function seedFinancials(target: string) {
         issuedByAccountId: COACH_ID,
         issuedAt: now,
       }).run()
+    }
+    if (player.finalState === "paused") {
+      database.update(dbSchema.playerEnrollments).set({
+        onboardingCompletedAt: now,
+        onboardingCompletedByAccountId: COACH_ID,
+      }).where(eq(dbSchema.playerEnrollments.accountId, account.id)).run()
     }
   })
 

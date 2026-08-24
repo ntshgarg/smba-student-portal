@@ -60,6 +60,10 @@ describe("member directory service", () => {
     const initial = coachDatabase.listApprovedPlayerRecords()
       .trainingProfiles.find((profile) => profile.memberId === playerId)
     expect(initial?.recordRevision).toBe(0)
+    const initialTrainingStart = database.select({ value: schema.playerEnrollments.trainingStartOn })
+      .from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get()?.value
+    if (!initialTrainingStart) throw new Error("The player training start date is unavailable.")
     expect(memberService.updateMemberRecord({
       coachId: coach.accountId,
       database,
@@ -76,7 +80,7 @@ describe("member directory service", () => {
       expectedRevision: 0,
       profile: {
         fullName: "  Mira   Rao ",
-        joinedAt: "2026-07-15",
+        trainingStartOn: "2026-07-15",
         primaryContact: {
           name: "  Asha   Rao ",
           relationship: "Parent",
@@ -105,6 +109,10 @@ describe("member directory service", () => {
         training: { recordRevision: 1, status: "unassigned" },
       },
     })
+    expect(database.select({ value: schema.playerEnrollments.trainingStartOn })
+      .from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get()?.value)
+      .toBe(initialTrainingStart)
 
     expect(memberService.updateMemberRecord({
       coachId: coach.accountId,
@@ -124,19 +132,6 @@ describe("member directory service", () => {
         training: null as never,
       },
     })).toMatchObject({ ok: false, code: "VALIDATION" })
-    expect(memberService.updateMemberRecord({
-      coachId: coach.accountId,
-      database,
-      input: {
-        ...validInput,
-        expectedRevision: 1,
-        profile: { ...validInput.profile, joinedAt: "2026-02-31" },
-      },
-    })).toMatchObject({
-      ok: false,
-      code: "VALIDATION",
-      fieldErrors: { joinedAt: expect.any(String) },
-    })
     expect(memberService.updateMemberRecord({
       coachId: coach.accountId,
       database,
@@ -166,7 +161,7 @@ describe("member directory service", () => {
         programme: "Beginner",
         batch: "Weekday",
         venue: "SMBA Court",
-        startsOn: "2026-07-15",
+        startsOn: initialTrainingStart,
         endsOn: "2026-09-30",
         weekdays: [1, 3, 5],
         startTime: "06:00",
@@ -176,7 +171,7 @@ describe("member directory service", () => {
     sessionService.assignSessionRecords({
       coachId: coach.accountId,
       database,
-      effectiveFrom: "2026-07-15",
+      effectiveFrom: initialTrainingStart,
       now,
       playerId,
       seriesId,
@@ -200,19 +195,10 @@ describe("member directory service", () => {
         training: { ...validInput.training, level: "Intermediate" },
       },
     })).toMatchObject({ ok: false, code: "ACTIVE_ASSIGNMENTS" })
-    expect(memberService.updateMemberRecord({
-      coachId: coach.accountId,
-      database,
-      input: {
-        ...validInput,
-        expectedRevision: 2,
-        profile: { ...validInput.profile, joinedAt: "2026-07-16" },
-      },
-    })).toMatchObject({
-      ok: false,
-      code: "VALIDATION",
-      fieldErrors: { joinedAt: expect.any(String) },
-    })
+    expect(database.select({ value: schema.playerEnrollments.trainingStartOn })
+      .from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get()?.value)
+      .toBe(initialTrainingStart)
     expect(memberService.archiveMemberRecord({
       coachId: coach.accountId,
       database,

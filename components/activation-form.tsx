@@ -1,15 +1,22 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { ArrowRight } from "lucide-react"
 
 import { activateAccount, type ActivationFormState } from "@/app/login/actions"
 import { PasswordInput } from "@/components/password-input"
+import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialState: ActivationFormState = { error: null, errorField: null }
 
 export function ActivationForm({ academyId }: { academyId: string }) {
-  const [state, formAction, pending] = useActionState(activateAccount, initialState)
+  const [state, formAction, pending] = useResilientActionState(activateAccount, initialState, {
+    // A dropped request blames neither password field, so it must not inherit a
+    // previous field verdict and send focus to a control that is not at fault.
+    fold: (state, error) => ({ ...state, error, errorField: null }),
+    retained: "Nothing was changed and your account is not activated yet",
+    subject: "Your new password",
+  })
   const passwordRef = useRef<HTMLInputElement>(null)
   const confirmPasswordRef = useRef<HTMLInputElement>(null)
 

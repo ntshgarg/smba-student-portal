@@ -193,11 +193,11 @@ Reconciling any of these would change rendered output, so they are documented, n
 - Transition durations `140ms`, `150ms` and `160ms` coexist for the same kind of background
   and colour change.
 - `border-radius: 3px` on `.submit-button` against `4px` on the other public buttons.
-- Two dead rules reference custom properties that are defined nowhere:
-  `.player-attendance-register-table` (`--player-register-width`,
-  `--player-register-mobile-width`). No element carries that class since the player register
-  became a focused-month calendar. Removing the dead rules is the correct fix and belongs to a
-  dead-selector pass, not to token work.
+- ~~Two dead rules reference custom properties that are defined nowhere.~~ **Resolved:** the
+  `.player-attendance-register-table` block and its two undeclared custom properties were removed
+  in the dead-selector pass, along with 23 unreachable class keys in
+  components/coach/financials/financials.module.css left over from the financials-to-modules
+  migration — 693 net lines. The token test no longer needs its allowlist for them.
 - A third visually-hidden implementation still exists as a scoped rule rather than a utility:
   `.personal-attendance-calendar .player-attendance-month-nav span` in app/globals.css. It is
   the only one that already carries both `clip` and `clip-path`. Folding it into `.sr-only`
