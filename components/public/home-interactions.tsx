@@ -8,10 +8,10 @@ import {
   MessageCircle,
 } from "lucide-react"
 
+import { formatInr } from "@/lib/format"
 import {
   createTrialMessage,
   enrollmentTerms,
-  formatInr,
   weekdayPrograms,
   weekendPrograms,
 } from "@/lib/public/academy"
@@ -319,7 +319,8 @@ export function FeeExplorer() {
               </small>
             </div>
             <strong>
-              {formatInr(price)}
+              {/* The published guide is in whole rupees; `formatInr` takes paise. */}
+              {formatInr(price * 100)}
               <small>/month</small>
             </strong>
           </div>
@@ -333,7 +334,7 @@ export function FeeExplorer() {
         </div>
 
         <p className="fee-note">
-          One-time academy registration fee: {formatInr(enrollmentTerms.registrationFee)}, payable
+          One-time academy registration fee: {formatInr(enrollmentTerms.registrationFee * 100)}, payable
           when you register{enrollmentTerms.registrationIsNonRefundable ? " and non-refundable." : "."}{" "}
           Includes {enrollmentTerms.registrationIncludes.join(" and ")}.
         </p>

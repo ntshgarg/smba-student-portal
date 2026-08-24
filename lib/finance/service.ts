@@ -390,10 +390,11 @@ function validateConcessionDefinition(input: CreateConcessionInput) {
   const value = input.valueKind === "fixed"
     ? validateMoney(input.value)
     : Number.isInteger(input.value) && input.value > 0 && input.value <= 10_000
+      && input.value % 100 === 0
       ? input.value
       : financeError(
         "INVALID_INPUT",
-        "Enter a percentage from 0.01% to 100%.",
+        "Enter a whole percentage from 1% to 100%.",
         "amountPaise",
       )
   const startsPeriod = input.startsPeriod?.trim() || null
@@ -1815,33 +1816,81 @@ export function prepareMonthlyCharges(
       createdChargeIds: [],
       reused: false,
     }
+    /*
+     * Three reads that used to run once per candidate, hoisted to one statement
+     * each for the whole roster. Preparing a month is the path most likely to
+     * hard-fail rather than merely run slowly: production speaks to libSQL over
+     * the network with the synchronous driver, and all of this sits inside one
+     * `immediate` transaction holding the academy's only write lock.
+     *
+     * Only reads move. Every write below -- the charge, its fee reference, its
+     * audit row, and any concession application -- still runs per charge and in
+     * the same order, because those carry idempotency keys and audit metadata
+     * that a batch would have to reproduce exactly.
+     */
+    const candidatePlayerIds = [...new Set(
+      candidates.filter((candidate) => candidate.hasAssignment)
+        .map((candidate) => candidate.agreement.playerAccountId),
+    )]
+
+    const existingByPlayer = new Map(
+      candidatePlayerIds.length
+        ? tx.select().from(financialCharges).where(and(
+          inArray(financialCharges.playerAccountId, candidatePlayerIds),
+          eq(financialCharges.type, "monthly_training"),
+          eq(financialCharges.billingPeriod, input.period),
+          eq(financialCharges.lifecycle, "issued"),
+        )).all().map((charge) => [charge.playerAccountId, charge])
+        : [],
+    )
+
+    const billedEarlierPlayers = new Set(
+      candidatePlayerIds.length
+        ? tx.select({ playerAccountId: financialCharges.playerAccountId })
+          .from(financialCharges).where(and(
+            inArray(financialCharges.playerAccountId, candidatePlayerIds),
+            eq(financialCharges.type, "monthly_training"),
+            eq(financialCharges.lifecycle, "issued"),
+            lt(financialCharges.billingPeriod, input.period),
+          )).all().map((row) => row.playerAccountId)
+        : [],
+    )
+
+    // Same ordering the per-charge lookup used, so the same concession wins
+    // when a player has more than one covering the period: first row per player
+    // after sorting by createdAt then id.
+    const recurringConcessionByPlayer = new Map<string, typeof concessions.$inferSelect>()
+    if (candidatePlayerIds.length) {
+      tx.select().from(concessions).where(and(
+        inArray(concessions.playerAccountId, candidatePlayerIds),
+        eq(concessions.mode, "recurring"),
+        eq(concessions.lifecycle, "active"),
+        lte(concessions.startsPeriod, input.period),
+        or(isNull(concessions.endsPeriod), gte(concessions.endsPeriod, input.period)),
+      )).orderBy(asc(concessions.createdAt), asc(concessions.id)).all()
+        .forEach((concession) => {
+          if (!recurringConcessionByPlayer.has(concession.playerAccountId)) {
+            recurringConcessionByPlayer.set(concession.playerAccountId, concession)
+          }
+        })
+    }
+
     candidates.forEach(({ agreement, enrollment, hasAssignment }) => {
       if (!hasAssignment) {
         result.awaitingAssignment += 1
         return
       }
-      const existing = tx.select().from(financialCharges).where(and(
-        eq(financialCharges.playerAccountId, agreement.playerAccountId),
-        eq(financialCharges.type, "monthly_training"),
-        eq(financialCharges.billingPeriod, input.period),
-        eq(financialCharges.lifecycle, "issued"),
-      )).get()
+      const existing = existingByPlayer.get(agreement.playerAccountId)
       if (existing) {
         result.alreadyPrepared += 1
         applyRecurringConcessionForCharge(tx, existing, input.period, {
           actorId: coachId,
           createId,
           now,
-        })
+        }, recurringConcessionByPlayer)
         return
       }
-      const billedEarlier = tx.select({ id: financialCharges.id })
-        .from(financialCharges).where(and(
-          eq(financialCharges.playerAccountId, agreement.playerAccountId),
-          eq(financialCharges.type, "monthly_training"),
-          eq(financialCharges.lifecycle, "issued"),
-          lt(financialCharges.billingPeriod, input.period),
-        )).get()
+      const billedEarlier = billedEarlierPlayers.has(agreement.playerAccountId)
       const basis = monthlyChargeBasis(tx, {
         agreement,
         isFirstBilledMonth: !billedEarlier
@@ -1872,7 +1921,7 @@ export function prepareMonthlyCharges(
         actorId: coachId,
         createId,
         now,
-      })
+      }, recurringConcessionByPlayer)
     })
     insertAudit(tx, {
       actorId: coachId,
@@ -3497,19 +3546,30 @@ export function reverseConcession(
   }, { behavior: "immediate" })
 }
 
+/**
+ * `recurringByPlayer`, when supplied, replaces this function's own lookup with
+ * an entry from a caller that already read every player's recurring concession
+ * in one statement. It must be built with the same ordering used below --
+ * earliest `createdAt`, then `id` -- because that is which concession applies
+ * when a player has more than one covering the period. Omitting it keeps the
+ * per-charge read, which is what a single-charge caller wants.
+ */
 function applyRecurringConcessionForCharge(
   database: SmbaDatabaseExecutor,
   charge: typeof financialCharges.$inferSelect,
   period: string,
   { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
+  recurringByPlayer?: Map<string, typeof concessions.$inferSelect>,
 ) {
-  const concession = database.select().from(concessions).where(and(
-    eq(concessions.playerAccountId, charge.playerAccountId),
-    eq(concessions.mode, "recurring"),
-    eq(concessions.lifecycle, "active"),
-    lte(concessions.startsPeriod, period),
-    or(isNull(concessions.endsPeriod), gte(concessions.endsPeriod, period)),
-  )).orderBy(asc(concessions.createdAt), asc(concessions.id)).get()
+  const concession = recurringByPlayer
+    ? recurringByPlayer.get(charge.playerAccountId) ?? null
+    : database.select().from(concessions).where(and(
+      eq(concessions.playerAccountId, charge.playerAccountId),
+      eq(concessions.mode, "recurring"),
+      eq(concessions.lifecycle, "active"),
+      lte(concessions.startsPeriod, period),
+      or(isNull(concessions.endsPeriod), gte(concessions.endsPeriod, period)),
+    )).orderBy(asc(concessions.createdAt), asc(concessions.id)).get() ?? null
   if (!concession) return null
   const mutationId = `recurring:${concession.id}:${charge.id}`
   const fingerprint = financialPayloadFingerprint({

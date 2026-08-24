@@ -150,14 +150,6 @@ export const proofPoints = [
   },
 ] as const
 
-const inrFormat = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-})
-
-export const formatInr = (value: number) => inrFormat.format(value)
-
 export function createTrialMessage(values: {
   name: string
   level: string

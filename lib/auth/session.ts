@@ -20,6 +20,7 @@ const LEGACY_PROTOTYPE_SESSION_COOKIE = "smba_prototype_student"
 
 export interface SessionProvider {
   getCurrentIdentity(): Promise<SessionIdentity | null>
+  hasActiveSession(): Promise<boolean>
 }
 
 export async function getRawAuthSession() {
@@ -27,6 +28,18 @@ export async function getRawAuthSession() {
 }
 
 export class DatabaseSessionProvider implements SessionProvider {
+  /**
+   * Whether the browser still holds a session Better Auth accepts, before any
+   * of the account conditions `getCurrentIdentity` layers on top. Signed out
+   * and refused are indistinguishable there -- an expired cookie, an archived
+   * account and a head coach without a second factor all return the same `null`
+   * below -- and only the first is answered by signing in again. Read on the
+   * refusal path alone, so an ordinary request still costs one session read.
+   */
+  async hasActiveSession() {
+    return Boolean(await getRawAuthSession())
+  }
+
   async getCurrentIdentity() {
     const rawSession = await getRawAuthSession()
     if (!rawSession?.user?.id) return null
