@@ -70,9 +70,12 @@ describe("accessibility regression matrix", () => {
       "admin-authenticator-reconnect",
       "admin-authenticator-recovery-approval",
       "admin-recovery-email-setup",
+      "authenticator-verification",
+      "head-coach-setup-unavailable",
       "junior-coach-personal-attendance",
       "player-announcement-detail",
       "player-attendance",
+      "player-pin-setup",
     ]) {
       expect(ids.has(id), `${id} is missing from the accessibility matrix`).toBe(true)
     }

@@ -167,6 +167,29 @@ export const accessibilityStates: readonly AccessibilityState[] = [
   },
   {
     actor: "guest",
+    compact: true,
+    // The page redirects only when getCurrentIdentity() returns an identity
+    // (app/auth/two-factor/page.tsx:17-24), so a signed-out visit renders the very
+    // form a coach meets mid-sign-in. TwoFactorVerificationForm takes no server
+    // props, so no half-authenticated session has to be held open to audit it.
+    description: "Authenticator verification challenge",
+    id: "authenticator-verification",
+    profile: "admin",
+    route: "/auth/two-factor",
+  },
+  {
+    actor: "guest",
+    compact: true,
+    // Without the one-time setup cookie the page renders its unavailable notice
+    // rather than redirecting (app/setup/head-coach/page.tsx:58), so the branch a
+    // stale or already-completed setup link lands on is reachable as a guest.
+    description: "Unavailable head-coach setup session",
+    id: "head-coach-setup-unavailable",
+    profile: "admin",
+    route: "/setup/head-coach",
+  },
+  {
+    actor: "guest",
     description: "Unknown address",
     id: "not-found",
     profile: "admin",
@@ -571,6 +594,22 @@ export const accessibilityStates: readonly AccessibilityState[] = [
     id: "player-account-security",
     profile: "stress",
     route: "/account/security",
+  },
+  {
+    actor: "player",
+    compact: true,
+    // Keep this last among the stress/player states. The page redirects to /player
+    // the moment hasPinCredential is true (app/auth/pin/setup/page.tsx:22-26), so a
+    // player state scanned before it must never enrol a PIN; none does today.
+    // postAuthenticationDestination sends players straight to /player
+    // (lib/auth/post-auth-destination.ts:45), and although activation does end here
+    // (app/login/actions.ts:251) the clean walkthrough stops at
+    // activation-approved-password without submitting it, so this deep link is what
+    // audits the allowSkip variant of the form today.
+    description: "Optional player PIN enrolment",
+    id: "player-pin-setup",
+    profile: "stress",
+    route: "/auth/pin/setup",
   },
 ] as const
 
