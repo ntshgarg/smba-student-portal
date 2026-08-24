@@ -5,7 +5,6 @@ import { PlayerFeeRecordView } from "@/components/financials/player-fee-record"
 import {
   dashboardFeeRecordCopy,
   formatBillingPeriod,
-  formatFinanceAmount,
   formatFinanceDate,
   groupMonthlyChargesByYear,
 } from "@/components/financials/player-finance-presentation"
@@ -14,6 +13,7 @@ import type {
   PlayerFeeRecord,
   PlayerReceiptView,
 } from "@/lib/finance/types"
+import { formatInr } from "@/lib/format"
 
 function charge(overrides: Partial<ChargeView> = {}): ChargeView {
   return {
@@ -184,8 +184,8 @@ function occurrenceCount(value: string, search: string) {
 
 describe("player financial presentation", () => {
   it("formats integer paise, date keys and billing periods for the player ledger", () => {
-    expect(formatFinanceAmount(100_000)).toBe("₹1,000")
-    expect(formatFinanceAmount(100_050)).toBe("₹1,000.50")
+    expect(formatInr(100_000)).toBe("₹1,000")
+    expect(formatInr(100_050)).toBe("₹1,000.50")
     expect(formatFinanceDate("2026-08-05")).toBe("5 August 2026")
     expect(formatBillingPeriod("2026-08")).toBe("August")
   })

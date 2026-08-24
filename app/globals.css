@@ -12340,6 +12340,30 @@ tr.is-expanded .coach-member-row-action button svg {
   opacity: 1;
 }
 
+/* The way back from an expired session, ranked between the notice that explains
+   it and the save button it unblocks, so the footer reads in the order the
+   coach has to act. Outlined rather than filled: the save is still the primary
+   action, and this one only precedes it. */
+.player-attendance-recorder .attendance-record-signin {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--navy);
+  background: var(--white);
+  color: var(--navy);
+  font-size: var(--type-operational-action);
+  font-weight: 780;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.player-attendance-recorder .attendance-record-signin svg {
+  width: 15px;
+}
+
 @media (max-width: 900px) {
   .player-attendance-recorder .attendance-occurrence-picker {
     display: block;
@@ -12565,6 +12589,12 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .player-attendance-recorder .attendance-record-footer > button {
+    min-height: 48px;
+    border-right: 0;
+    border-left: 0;
+  }
+
+  .player-attendance-recorder .attendance-record-signin {
     min-height: 48px;
     border-right: 0;
     border-left: 0;

@@ -32,7 +32,6 @@ import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import {
   formatBillingPeriod,
-  formatFinanceAmount,
   formatFinanceDate,
 } from "@/components/financials/player-finance-presentation"
 import { describeSaveFailure } from "@/lib/client/network-failure"
@@ -41,7 +40,7 @@ import type {
   PlayerOnboardingStage,
   PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
-import { formatDateKey, formatSessionTimeRange } from "@/lib/format"
+import { formatDateKey, formatInr, formatSessionTimeRange } from "@/lib/format"
 import type { OnboardingFinancePreview } from "@/lib/finance/types"
 import type {
   TrainingBatch,
@@ -1060,7 +1059,7 @@ function FeePlanStep({
             </div>
             <div>
               <span>Issued now</span>
-              <strong>{formatFinanceAmount(preview.totalIssuedPaise)}</strong>
+              <strong>{formatInr(preview.totalIssuedPaise)}</strong>
             </div>
           </header>
           <div className={styles.previewLines}>
@@ -1072,7 +1071,7 @@ function FeePlanStep({
                 </div>
                 <div>
                   <span>{line.kind === "before_tracking" ? "Record only" : line.dueDate ? `Due ${formatFinanceDate(line.dueDate)}` : "No charge due"}</span>
-                  <strong>{line.amountPaise === null ? "Before tracking" : formatFinanceAmount(line.amountPaise)}</strong>
+                  <strong>{line.amountPaise === null ? "Before tracking" : formatInr(line.amountPaise)}</strong>
                   {line.numerator !== null && line.denominator !== null ? (
                     <small>{line.numerator} of {line.denominator} eligible sessions</small>
                   ) : null}
