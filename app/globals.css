@@ -1587,8 +1587,18 @@ h3 {
   border-right: 0;
 }
 
+/* #eee8dc on the --ivory card was 1.12:1 — the whole selected state, on the one
+   screen every session starts from. Of the two idioms available, .segmented
+   button[aria-pressed="true"] inverts against the navy hero it sits on (ivory
+   fill, navy ink, --shadow-keyline-bottom under it); transposed onto an ivory
+   card the fill becomes a no-op and only that 3px keyline would be left to carry
+   the state. .player-attendance-year-selector button.is-active is already this
+   control on a light surface and makes the same editorial move — ink fills the
+   chosen segment — so the navy frame the switch already wears now closes around
+   the active half: 15.90:1 against --ivory, white ink at 17.33:1. */
 .login-method-switch button[aria-pressed="true"] {
-  background: #eee8dc;
+  background: var(--navy);
+  color: var(--white);
 }
 
 .login-method-switch + .login-form {
@@ -12162,16 +12172,26 @@ tr.is-expanded .coach-member-row-action button svg {
   border-left: 1px solid var(--line);
 }
 
+/* The pressed fill is the only thing separating a marked player from an
+   unmarked one on a phone held courtside, so it carries the 3:1 WCAG 1.4.11
+   asks of state indication. The --green-soft / --red-soft washes these used to
+   carry measured 1.09:1 and 1.12:1 against the resting --paper fill, and 1.03:1
+   against each other. .coach-register-table td button.is-present and the roll
+   call's base .staff-roll-call-list article > [role="group"] button.is-present
+   already say "recorded" with the solid brand fill, so this recorder says it
+   the same way: 5.24:1 and 5.49:1 against --paper, white ink at 5.47:1 and
+   5.73:1 on the fill. Present and absent stay told apart by their labels, not
+   by hue. */
 .player-attendance-recorder .attendance-roster-choices button.is-present[aria-pressed="true"] {
   box-shadow: none;
-  background: var(--green-soft);
-  color: var(--green);
+  background: var(--green);
+  color: var(--white);
 }
 
 .player-attendance-recorder .attendance-roster-choices button.is-absent[aria-pressed="true"] {
   box-shadow: none;
-  background: var(--red-soft);
-  color: var(--red-dark);
+  background: var(--red);
+  color: var(--white);
 }
 
 .player-attendance-recorder .attendance-roster-choices button:hover:not(:disabled),
@@ -12620,16 +12640,21 @@ tr.is-expanded .coach-member-row-action button svg {
   border-left: 1px solid var(--line);
 }
 
+/* Same solid fill as the base .staff-roll-call-list article > [role="group"]
+   rules. The ledger variant had washed them down to --green-soft / --red-soft,
+   which is 1.09:1 and 1.12:1 over the --paper resting fill: the same control,
+   the same recorded state, but only this skin failed WCAG 1.4.11. Solid puts it
+   back at 5.24:1 and 5.49:1. */
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button.is-present {
-  background: var(--green-soft);
-  color: var(--green);
+  background: var(--green);
+  color: var(--white);
 }
 
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
   > .staff-roll-call-choice-box button.is-absent {
-  background: var(--red-soft);
-  color: var(--red-dark);
+  background: var(--red);
+  color: var(--white);
 }
 
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
