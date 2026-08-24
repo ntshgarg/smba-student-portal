@@ -12,11 +12,10 @@ import {
   financeStatusLabel,
   financeStatusTone,
   formatBillingPeriod,
-  formatFinanceAmount,
   formatFinanceDate,
   paymentMethodLabel,
 } from "@/components/financials/player-finance-presentation"
-import { getAcademyMonthKey } from "@/lib/format"
+import { formatInr, getAcademyMonthKey } from "@/lib/format"
 import styles from "@/components/financials/player-financials.module.css"
 
 const MONTHS = [
@@ -184,7 +183,7 @@ function monthState(
 
   if (charge.status === "paid") {
     return {
-      detail: formatFinanceAmount(charge.effectiveAmountPaise),
+      detail: formatInr(charge.effectiveAmountPaise),
       label: "Paid",
       tone: "paid" as const,
     }
@@ -192,7 +191,7 @@ function monthState(
 
   if (charge.status === "partially_paid") {
     return {
-      detail: `${formatFinanceAmount(charge.outstandingPaise)} due`,
+      detail: `${formatInr(charge.outstandingPaise)} due`,
       label: "Partially paid",
       tone: "due" as const,
     }
@@ -200,7 +199,7 @@ function monthState(
 
   if (charge.status === "pending" || charge.status === "overdue") {
     return {
-      detail: `${formatFinanceAmount(charge.outstandingPaise)} due`,
+      detail: `${formatInr(charge.outstandingPaise)} due`,
       label: charge.status === "overdue" ? "Payment due" : "Pending",
       tone: "due" as const,
     }
@@ -271,7 +270,7 @@ function RegistrationBand({ record }: { record: PlayerFeeRecord }) {
       </div>
 
       <div className={styles.registrationOutcome} data-tone={state.tone}>
-        <span>{formatFinanceAmount(displayAmountPaise)}</span>
+        <span>{formatInr(displayAmountPaise)}</span>
         <strong>{state.label}</strong>
       </div>
     </section>
@@ -337,35 +336,35 @@ function MonthDetail({
           <dl className={styles.monthFacts}>
             <div>
               <dt>Fee charged</dt>
-              <dd>{formatFinanceAmount(charge.originalAmountPaise)}</dd>
+              <dd>{formatInr(charge.originalAmountPaise)}</dd>
             </div>
             {activeConcessionPaise > 0 ? (
               <div>
                 <dt>Fee concession</dt>
-                <dd>{formatFinanceAmount(activeConcessionPaise)}</dd>
+                <dd>{formatInr(activeConcessionPaise)}</dd>
               </div>
             ) : null}
             {withdrawal ? (
               <div>
                 <dt>Offline paid</dt>
-                <dd>{formatFinanceAmount(grossReceivedPaise)}</dd>
+                <dd>{formatInr(grossReceivedPaise)}</dd>
               </div>
             ) : (
               <div>
                 <dt>Monthly fee received</dt>
-                <dd>{formatFinanceAmount(charge.receivedPaise)}</dd>
+                <dd>{formatInr(charge.receivedPaise)}</dd>
               </div>
             )}
             {activeWithdrawal ? (
               <div>
                 <dt>Unused-training credit</dt>
-                <dd>{formatFinanceAmount(activeWithdrawal.refund.amountPaise)}</dd>
+                <dd>{formatInr(activeWithdrawal.refund.amountPaise)}</dd>
               </div>
             ) : null}
             {charge.outstandingPaise > 0 ? (
               <div data-tone="due">
                 <dt>Remaining</dt>
-                <dd>{formatFinanceAmount(charge.outstandingPaise)}</dd>
+                <dd>{formatInr(charge.outstandingPaise)}</dd>
               </div>
             ) : null}
             <div>
@@ -394,7 +393,7 @@ function MonthDetail({
             >
               <div className={styles.historyLead}>
                 <span>{receiptKindLabel(receipt)} · {formatFinanceDate(receipt.receivedOn)}</span>
-                <strong>{formatFinanceAmount(receipt.amountPaise)}</strong>
+                <strong>{formatInr(receipt.amountPaise)}</strong>
               </div>
               <div className={styles.receiptMetadata}>
                 <ul className={styles.receiptMetaList} aria-label="Receipt details">
@@ -403,7 +402,7 @@ function MonthDetail({
                 <ul className={styles.receiptAllocations} aria-label="Receipt allocations">
                   {receipt.allocations.map((allocation) => (
                     <li key={allocation.id}>
-                      {receiptAllocationLabel(allocation)} — {formatFinanceAmount(allocation.amountPaise)}
+                      {receiptAllocationLabel(allocation)} — {formatInr(allocation.amountPaise)}
                     </li>
                   ))}
                 </ul>
@@ -415,7 +414,7 @@ function MonthDetail({
             <section className={styles.historyEntry} data-tone={entry.lifecycle === "reversed" ? "quiet" : "credit"} key={entry.id}>
               <div className={styles.historyLead}>
                 <span>{entry.label} · {formatFinanceDate(entry.appliedOn)}</span>
-                <strong>{formatFinanceAmount(entry.amountPaise)}</strong>
+                <strong>{formatInr(entry.amountPaise)}</strong>
               </div>
               <p>{entry.lifecycle === "reversed" ? "Concession reversed" : "Applied to this monthly fee"}</p>
             </section>
@@ -428,7 +427,7 @@ function MonthDetail({
                   {withdrawal.refund.lifecycle === "recorded" ? "Refund issued" : "Refund reversed"}
                   {withdrawal.refund.withdrawalEffectiveOn ? ` · Withdrawal ${formatFinanceDate(withdrawal.refund.withdrawalEffectiveOn)}` : ""}
                 </span>
-                <strong>{formatFinanceAmount(withdrawal.refund.amountPaise)}</strong>
+                <strong>{formatInr(withdrawal.refund.amountPaise)}</strong>
               </div>
               <p>
                 {withdrawal.refund.refundReference} · {formatFinanceDate(withdrawal.refund.refundedOn)}
@@ -516,7 +515,7 @@ export function PlayerFeeRecordView({
         <dl className={styles.currentSummary}>
           <div data-tone={record.currentBalancePaise > 0 ? "due" : undefined}>
             <dt>Current balance</dt>
-            <dd>{formatFinanceAmount(record.currentBalancePaise)}</dd>
+            <dd>{formatInr(record.currentBalancePaise)}</dd>
           </div>
           <div data-tone={summaryStatusTone(record.status)}>
             <dt>Overall status</dt>

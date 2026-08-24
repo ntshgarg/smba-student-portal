@@ -13,7 +13,7 @@ import {
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { getAcademyDateKey } from "@/lib/format"
+import { formatInr, getAcademyDateKey } from "@/lib/format"
 import type { FinanceRapidScope, PaymentMethod } from "@/lib/finance/types"
 
 import {
@@ -22,7 +22,6 @@ import {
   validateAllocationDraft,
 } from "./allocation-draft"
 import {
-  formatInr,
   paymentMethods,
   resultFeedback,
   statusLabels,
