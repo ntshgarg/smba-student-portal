@@ -17,16 +17,13 @@ import {
   previewRefundAllocations,
   prepareMonthlyCharges,
   recordAllocatedPayment,
-  recordPayment,
   recordRefund,
-  reconcileRegistrationStatus,
   redateConfirmedTrainingStart,
   reverseChargeAdjustment,
   reverseConcession,
   reverseConcessionApplication,
   reversePayment,
   reverseRefund,
-  setupExistingPlayerFinance,
   voidCharge,
 } from "@/lib/finance/service"
 import type {
@@ -35,7 +32,6 @@ import type {
   CommitOnboardingFinanceInput,
   CreateFeeAgreementInput,
   CreateConcessionInput,
-  ExistingPlayerFinanceSetupInput,
   EndFeeAgreementInput,
   FinanceField,
   FinanceServiceErrorCode,
@@ -45,14 +41,12 @@ import type {
   PaymentAllocationPreview,
   OnboardingFinancePreview,
   OnboardingFinanceTerms,
-  RecordPaymentInput,
   RecordAllocatedPaymentInput,
   RecordRefundInput,
   RedateConfirmedTrainingStartInput,
   RefundAllocationPreview,
   ReversePaymentInput,
   ReverseRefundInput,
-  ReconcileRegistrationStatusInput,
   ReverseAdjustmentInput,
   ReverseConcessionApplicationInput,
   ReverseConcessionInput,
@@ -137,15 +131,6 @@ export async function activateFinanceAction(input: {
   })
 }
 
-export async function setupExistingPlayerFinanceAction(
-  input: ExistingPlayerFinanceSetupInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    setupExistingPlayerFinance(input, { coachId })
-    return { message: "Fee plan created" }
-  })
-}
-
 export async function replaceFeeAgreementAction(
   input: CreateFeeAgreementInput,
 ): Promise<FinanceActionResult> {
@@ -198,15 +183,6 @@ export async function redateConfirmedTrainingStartAction(
   })
 }
 
-export async function reconcileRegistrationFeeAction(
-  input: ReconcileRegistrationStatusInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    reconcileRegistrationStatus(input, { coachId })
-    return { message: "Registration fee issued" }
-  })
-}
-
 export async function prepareMonthlyChargesAction(
   input: PrepareMonthlyChargesInput,
 ): Promise<FinanceActionResult> {
@@ -218,15 +194,6 @@ export async function prepareMonthlyChargesAction(
         ? "Monthly fees were already issued"
         : `${count} ${count === 1 ? "monthly fee" : "monthly fees"} issued`,
     }
-  })
-}
-
-export async function recordPaymentAction(
-  input: RecordPaymentInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    const result = recordPayment(input, { coachId })
-    return { message: result.reused ? "Payment already recorded" : "Payment recorded" }
   })
 }
 
