@@ -1,3 +1,9 @@
+import {
+  csvExportTruncationLine,
+  CsvExportValueError,
+  type ExportTruncation,
+} from "@/lib/finance/csv-truncation"
+
 export type CollectionCsvRow = {
   academyId: string
   amountPaise: number
@@ -44,33 +50,55 @@ function csvCell(value: string) {
 
 function formatPaise(amountPaise: number) {
   if (!Number.isSafeInteger(amountPaise) || amountPaise < 0) {
-    throw new Error("Collection export contains an invalid amount.")
+    throw new CsvExportValueError("Collection export contains an invalid amount.")
   }
   return `${Math.floor(amountPaise / 100)}.${String(amountPaise % 100).padStart(2, "0")}`
 }
 
-export function collectionCsvLines(rows: Iterable<CollectionCsvRow>) {
+export function collectionCsvLines(
+  rows: Iterable<CollectionCsvRow>,
+  onTruncated: ExportTruncation,
+) {
   return (function* generateLines() {
     yield `${COLLECTION_HEADERS.map(csvCell).join(",")}\r\n`
-    for (const row of rows) {
-      yield `${[
-        row.eventDate,
-        row.eventType === "payment" ? "Payment" : "Refund",
-        row.reference,
-        row.playerName,
-        row.academyId,
-        row.method ? (METHOD_LABELS[row.method] ?? row.method) : "",
-        formatPaise(row.amountPaise),
-        row.coveredFeeReferences.join("; "),
-        row.lifecycle === "reversed" ? "Reversed" : "Recorded",
-      ].map(csvCell).join(",")}\r\n`
+    // The day book is drained page by page as this generator is pulled, which
+    // happens after the route handler has returned. A failed page read, or a
+    // `formatPaise` refusal on a ledger amount, would otherwise error the
+    // stream and end the file with the 200 already sent and nothing to read.
+    // `onTruncated` both records the fault and words the last line, since only
+    // the caller can tell a refusal from a moment that passed.
+    let written = 0
+    try {
+      for (const row of rows) {
+        yield `${[
+          row.eventDate,
+          row.eventType === "payment" ? "Payment" : "Refund",
+          row.reference,
+          row.playerName,
+          row.academyId,
+          row.method ? (METHOD_LABELS[row.method] ?? row.method) : "",
+          formatPaise(row.amountPaise),
+          row.coveredFeeReferences.join("; "),
+          row.lifecycle === "reversed" ? "Reversed" : "Recorded",
+        ].map(csvCell).join(",")}\r\n`
+        written += 1
+      }
+    } catch (error) {
+      yield csvExportTruncationLine(
+        COLLECTION_HEADERS.length,
+        written,
+        onTruncated(error, written),
+      )
     }
   })()
 }
 
-export function createCollectionCsvStream(rows: Iterable<CollectionCsvRow>) {
+export function createCollectionCsvStream(
+  rows: Iterable<CollectionCsvRow>,
+  onTruncated: ExportTruncation,
+) {
   const encoder = new TextEncoder()
-  const lines = collectionCsvLines(rows)
+  const lines = collectionCsvLines(rows, onTruncated)
 
   return new ReadableStream<Uint8Array>({
     pull(controller) {

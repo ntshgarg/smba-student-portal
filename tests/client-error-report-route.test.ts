@@ -169,12 +169,18 @@ describe("client error report endpoint", () => {
   })
 
   it("never answers a failed write with a status the browser might retry", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
     mocks.recordClientErrorReport.mockImplementation(() => {
       throw new Error("database unavailable")
     })
 
     expect((await POST(report(validReport))).status).toBe(204)
+    // F-18: this is the portal's only client-fault channel. Answering 204 hides
+    // the failure from the browser on purpose, so the log is the one place left
+    // that can say the channel itself is down.
+    expect(String(consoleError.mock.calls[0]?.[1]?.cause)).toContain("database unavailable")
+
+    consoleError.mockRestore()
   })
 
   it("records the report even when the session lookup fails", async () => {
