@@ -9,9 +9,11 @@ import {
 import {
   OperationalActionError,
   operationalActionFailure,
+  SessionExpiredError,
   type OperationalActionResult,
 } from "@/lib/actions/operational-result"
 import { requireHeadAdminAction } from "@/lib/auth/current-coach"
+import type { SessionIdentity } from "@/lib/auth/identity"
 import { listCoachMonthlyReports } from "@/lib/coach/database"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
@@ -73,6 +75,29 @@ function runOperationalAction<T>(operation: () => T): OperationalActionResult<T>
     }
     throw error
   }
+}
+
+/**
+ * `requireCoach` still throws, so `operation` cannot reach a mutation without a
+ * coach: it only runs on the branch where the guard returned one. The single
+ * refusal turned back into a value is the expired session, and it has to become
+ * a value to reach the browser at all -- see `SessionExpiredError`.
+ *
+ * Only `saveAttendanceRegisterAction` is wrapped so far. Every other action in
+ * this file keeps the bare `await requireCoach()` and therefore still surfaces
+ * an expiry as an unrecoverable save failure.
+ */
+async function runCoachAction<T>(
+  operation: (coach: SessionIdentity) => OperationalActionResult<T>,
+): Promise<OperationalActionResult<T>> {
+  let coach: SessionIdentity
+  try {
+    coach = await requireCoach()
+  } catch (error) {
+    if (error instanceof SessionExpiredError) return operationalActionFailure(error)
+    throw error
+  }
+  return operation(coach)
 }
 
 function revalidateAcademyData() {
@@ -168,8 +193,7 @@ export async function archiveMemberAction(
 export async function saveAttendanceRegisterAction(input: {
   changes: SessionAttendanceChange[]
 }) {
-  const coach = await requireCoach()
-  return runOperationalAction(() => {
+  return runCoachAction((coach) => runOperationalAction(() => {
     if (!Array.isArray(input?.changes) || !input.changes.length) return { applied: 0 }
     const db = initializeDatabase()
     const now = new Date()
@@ -182,7 +206,7 @@ export async function saveAttendanceRegisterAction(input: {
     })
     revalidateAcademyData()
     return result
-  })
+  }))
 }
 
 export async function saveStaffAttendanceAction(input: {

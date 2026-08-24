@@ -129,6 +129,24 @@ describe("coach dashboard Court Operations Board", () => {
     },
   )
 
+  it("shows the exact outstanding balance rather than rounding it up", () => {
+    /* The card carried its own `maximumFractionDigits: 0` formatter, so this
+       balance read `₹1,235` on the dashboard and `₹1,234.56` one tap deeper —
+       the first money figure the coach sees, overstating what a parent owes. */
+    const html = renderToStaticMarkup(
+      <FinancialsCard
+        active
+        attentionCount={1}
+        outstandingPaise={123_456}
+        period="2026-08"
+        preparation={{ alreadyPrepared: 1, ready: 0 }}
+      />,
+    )
+
+    expect(html).toContain("₹1,234.56 outstanding")
+    expect(html).not.toContain("₹1,235")
+  })
+
   it("keeps the Financials inactive state single-purpose", () => {
     const html = renderToStaticMarkup(
       <FinancialsCard

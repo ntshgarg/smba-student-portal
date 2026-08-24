@@ -4,7 +4,7 @@ import { useRef } from "react"
 
 import type { FinanceActionResult } from "@/app/coach/financials/actions"
 import type { ActionFeedback } from "@/components/inline-notice"
-import { formatDateKey, numberFormatter } from "@/lib/format"
+import { formatDateKey } from "@/lib/format"
 import type { PaymentMethod } from "@/lib/finance/types"
 
 import type { FinanceStatus } from "./types"
@@ -39,15 +39,6 @@ export function useIdempotencyKey() {
       keyRef.current = null
     },
   }
-}
-
-export function formatInr(paise: number) {
-  /* Fraction digits follow the amount, so this stays per call and shares by option key. */
-  return numberFormatter("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: paise % 100 ? 2 : 0,
-  }).format(paise / 100)
 }
 
 export function paymentMethodLabel(method: PaymentMethod | string) {

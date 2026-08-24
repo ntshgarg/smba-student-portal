@@ -25,7 +25,7 @@ import {
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { formatAcademyDate, getAcademyDateKey } from "@/lib/format"
+import { formatAcademyDate, formatInr, getAcademyDateKey } from "@/lib/format"
 import type {
   CoachConcessionApplicationView,
   CoachConcessionView,
@@ -45,7 +45,6 @@ import {
 } from "./allocation-draft"
 import {
   formatDueDate,
-  formatInr,
   paymentMethodLabel,
   paymentMethods,
   periodLabel,
