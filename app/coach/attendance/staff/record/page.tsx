@@ -6,7 +6,7 @@ import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   listJuniorCoachProfiles,
-  listStaffAttendanceRecords,
+  listStaffAttendanceRecordsByCoach,
 } from "@/lib/coach/staff-attendance"
 
 export const metadata = {
@@ -37,12 +37,13 @@ export default async function StaffRollCallPage({
   const juniorCoaches = listJuniorCoachProfiles({
     requesterAccountId: identity.subjectId,
   })
-  const records = juniorCoaches.flatMap((coach) => listStaffAttendanceRecords({
+  const recordsByCoach = listStaffAttendanceRecordsByCoach({
     requesterAccountId: identity.subjectId,
-    coachAccountId: coach.accountId,
+    coachAccountIds: juniorCoaches.map((coach) => coach.accountId),
     from: selectedDate,
     to: selectedDate,
-  }))
+  })
+  const records = juniorCoaches.flatMap((coach) => recordsByCoach.get(coach.accountId) ?? [])
 
   return (
     <StaffRollCall
