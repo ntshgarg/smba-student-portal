@@ -395,10 +395,15 @@ function loadChargeRelations(database: Executor, chargeIds: string[]) {
   return relations
 }
 
+/*
+ * Takes the academy date key rather than the instant it derives from. Deriving
+ * it here recomputed one identical string per charge, and the key was the only
+ * thing the instant was used for; callers derive it once for the whole batch.
+ */
 function chargeView(
   charge: typeof financialCharges.$inferSelect,
   relations: ChargeRelations,
-  now: Date,
+  todayKey: string,
   includeInternal = false,
 ) {
   const allocationRows = relations.payments
@@ -440,7 +445,7 @@ function chargeView(
     currency: FINANCE_CURRENCY,
     dueDate: charge.dueDate,
     lifecycle: charge.lifecycle,
-    status: deriveFinanceStatus(ledgerInput, getAcademyDateKey(now)),
+    status: deriveFinanceStatus(ledgerInput, todayKey),
     recordRevision: charge.recordRevision,
     canVoid: !allocationRows.some(({ payment }) => payment.lifecycle === "recorded"),
     payments: allocationRows.map(({ allocation, payment }) => ({
@@ -490,13 +495,14 @@ export function loadChargeViews(
     .where(inArray(financialCharges.id, ids)).all()
     .map((charge) => [charge.id, charge]))
   const relations = loadChargeRelations(database, [...charges.keys()])
+  const todayKey = getAcademyDateKey(now)
   ids.forEach((chargeId) => {
     const charge = charges.get(chargeId)
     if (!charge) return
     views.set(chargeId, chargeView(
       charge,
       relations.get(chargeId) ?? emptyChargeRelations(),
-      now,
+      todayKey,
       includeInternal,
     ))
   })
@@ -725,7 +731,7 @@ function loadPlayerPhaseTwoHistory(
   database: Executor,
   playerId: string,
   includeInternal: boolean,
-  now: Date,
+  todayKey: string,
 ) {
   const paymentRows = database.select().from(payments)
     .where(eq(payments.playerAccountId, playerId))
@@ -786,7 +792,7 @@ function loadPlayerPhaseTwoHistory(
       const chargeLedger = chargeView(
         charge,
         coachContext.chargeRelations.get(charge.id) ?? emptyChargeRelations(),
-        now,
+        todayKey,
       )
       const agreement = charge.feeAgreementId
         ? coachContext.agreements.get(charge.feeAgreementId) ?? null
@@ -941,10 +947,11 @@ export function loadPlayerFeeRecord(
     .orderBy(asc(financialCharges.dueDate), asc(financialCharges.issuedAt))
     .all()
   const chargeRelations = loadChargeRelations(database, chargeRows.map((charge) => charge.id))
+  const todayKey = getAcademyDateKey(now)
   const charges = chargeRows.map((charge) => chargeView(
     charge,
     chargeRelations.get(charge.id) ?? emptyChargeRelations(),
-    now,
+    todayKey,
     includeInternal,
   ))
   const activeCharges = charges.filter((charge) => charge.lifecycle === "issued")
@@ -974,13 +981,13 @@ export function loadPlayerFeeRecord(
   const feePlanSetupReady = Boolean(enrollmentDefaults && hasCurrentOrFutureMatchingAssignment(
     database,
     playerId,
-    getAcademyDateKey(now),
+    todayKey,
     {
       programme: enrollmentDefaults.level,
       batch: enrollmentDefaults.batch,
     },
   ))
-  const phaseTwoHistory = loadPlayerPhaseTwoHistory(database, playerId, includeInternal, now)
+  const phaseTwoHistory = loadPlayerPhaseTwoHistory(database, playerId, includeInternal, todayKey)
 
   return {
     playerId,
@@ -1149,6 +1156,7 @@ export function listFinancePlayers(
     .all()
   const grouped = new Map<string, typeof rows>()
   rows.forEach((row) => grouped.set(row.playerId, [...(grouped.get(row.playerId) ?? []), row]))
+  const todayKey = getAcademyDateKey(now)
   const items = [...grouped.values()].map((playerRows) => {
     const player = playerRows[0]
     const chargeRows = playerRows.flatMap((row) => {
@@ -1164,7 +1172,7 @@ export function listFinancePlayers(
         ? "paid" as const
         : received > 0
           ? "partially_paid" as const
-          : dueDate < getAcademyDateKey(now)
+          : dueDate < todayKey
             ? "overdue" as const
             : "pending" as const
       return [{ ...row, dueDate, outstanding, status }]

@@ -4,7 +4,7 @@ import { useRef } from "react"
 
 import type { FinanceActionResult } from "@/app/coach/financials/actions"
 import type { ActionFeedback } from "@/components/inline-notice"
-import { formatDateKey } from "@/lib/format"
+import { formatDateKey, numberFormatter } from "@/lib/format"
 import type { PaymentMethod } from "@/lib/finance/types"
 
 import type { FinanceStatus } from "./types"
@@ -42,7 +42,8 @@ export function useIdempotencyKey() {
 }
 
 export function formatInr(paise: number) {
-  return new Intl.NumberFormat("en-IN", {
+  /* Fraction digits follow the amount, so this stays per call and shares by option key. */
+  return numberFormatter("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: paise % 100 ? 2 : 0,
@@ -54,14 +55,16 @@ export function paymentMethodLabel(method: PaymentMethod | string) {
   return method.replaceAll("_", " ").replace(/^./u, (letter) => letter.toUpperCase())
 }
 
+const periodFormat = new Intl.DateTimeFormat("en-IN", {
+  month: "long",
+  timeZone: "UTC",
+  year: "numeric",
+})
+
 export function periodLabel(period: string) {
   const [year, month] = period.split("-").map(Number)
   if (!year || !month) return period
-  return new Intl.DateTimeFormat("en-IN", {
-    month: "long",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(Date.UTC(year, month - 1, 1)))
+  return periodFormat.format(new Date(Date.UTC(year, month - 1, 1)))
 }
 
 export function formatDueDate(value: string | null) {

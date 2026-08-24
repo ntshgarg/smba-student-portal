@@ -34,13 +34,15 @@ function shiftMonth(month: string, offset: number) {
   return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}`
 }
 
+const monthFormat = new Intl.DateTimeFormat("en-IN", {
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+})
+
 function formatMonth(month: string) {
   const [year, monthIndex] = month.split("-").map(Number)
-  return new Intl.DateTimeFormat("en-IN", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, monthIndex - 1, 1)))
+  return monthFormat.format(new Date(Date.UTC(year, monthIndex - 1, 1)))
 }
 
 function archiveHref(

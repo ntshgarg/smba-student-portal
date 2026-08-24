@@ -10,11 +10,87 @@ function toDate(value: DateInput) {
   return value instanceof Date ? value : new Date(value)
 }
 
+/*
+ * Constructing an Intl formatter resolves locale data and costs tens of
+ * microseconds — measured here at 26 µs for a date formatter — which the
+ * helpers below were paying on every call, once per row wherever a list or
+ * table renders. `format` and `formatToParts` do not mutate the instance, so
+ * calls that would have built identical formatters can share one.
+ *
+ * The key is the locale followed by every option whose value is defined, sorted
+ * by option name. Sorting is what makes it canonical rather than merely
+ * convenient. ECMA-402 reads each option by name and never observes the
+ * object's enumeration order, so the formatter it builds is a function of the
+ * *set* of name/value pairs; sorting turns two spellings of the same set into
+ * one key. Discarding undefined values matches `GetOption`, which treats an
+ * explicitly undefined option as absent — `formatSessionDate` depends on that,
+ * passing `day: undefined` to suppress an inherited default.
+ *
+ * The property that has to hold is one-directional: equal key must imply equal
+ * output. It holds because the key names every input the constructor reads —
+ * the locale, and every option that survives to it — with one exception. A
+ * formatter built without an explicit `timeZone` binds the host zone at
+ * construction, and Node re-resolves that when `process.env.TZ` is reassigned,
+ * so a cached instance could outlive the zone it captured. Those are built
+ * fresh. Splitting one behaviour across two keys is harmless; merging two
+ * behaviours under one key is not, and cannot happen here.
+ */
+const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>()
+const numberFormatters = new Map<string, Intl.NumberFormat>()
+
+function formatterKey(locale: string, options: object) {
+  const values = options as Record<string, unknown>
+  let key = locale
+  for (const name of Object.keys(options).sort()) {
+    const value = values[name]
+    if (value === undefined) continue
+    /*
+     * Tagged with the type because the constructor does not coerce uniformly:
+     * it reads hour12 with ToBoolean, where the string "false" is true and the
+     * boolean false is not. Untagged, those two would share a key and one
+     * formatter would answer for both.
+     */
+    key += `\u0001${name}\u0002${typeof value}\u0003${String(value)}`
+  }
+
+  return key
+}
+
+/** Shared `Intl.DateTimeFormat` for callers whose options are decided per call. */
+export function dateTimeFormatter(
+  locale: string,
+  options: Intl.DateTimeFormatOptions,
+) {
+  if (options.timeZone === undefined) return new Intl.DateTimeFormat(locale, options)
+
+  const key = formatterKey(locale, options)
+  const cached = dateTimeFormatters.get(key)
+  if (cached) return cached
+
+  const formatter = new Intl.DateTimeFormat(locale, options)
+  dateTimeFormatters.set(key, formatter)
+  return formatter
+}
+
+/** Shared `Intl.NumberFormat` for callers whose options are decided per call. */
+export function numberFormatter(
+  locale: string,
+  options: Intl.NumberFormatOptions,
+) {
+  const key = formatterKey(locale, options)
+  const cached = numberFormatters.get(key)
+  if (cached) return cached
+
+  const formatter = new Intl.NumberFormat(locale, options)
+  numberFormatters.set(key, formatter)
+  return formatter
+}
+
 export function formatAcademyDate(
   value: DateInput,
   options?: Intl.DateTimeFormatOptions,
 ) {
-  return new Intl.DateTimeFormat(ACADEMY_LOCALE, {
+  return dateTimeFormatter(ACADEMY_LOCALE, {
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -28,7 +104,7 @@ export function formatDateKey(
   value: string,
   options?: Intl.DateTimeFormatOptions,
 ) {
-  return new Intl.DateTimeFormat(DATE_KEY_LOCALE, {
+  return dateTimeFormatter(DATE_KEY_LOCALE, {
     day: "numeric",
     month: "long",
     weekday: "long",
@@ -41,7 +117,7 @@ export function formatAcademyTime(
   value: DateInput,
   options?: Intl.DateTimeFormatOptions,
 ) {
-  return new Intl.DateTimeFormat(ACADEMY_LOCALE, {
+  return dateTimeFormatter(ACADEMY_LOCALE, {
     hour: "numeric",
     minute: "2-digit",
     ...options,
@@ -49,13 +125,16 @@ export function formatAcademyTime(
   }).format(toDate(value))
 }
 
+/* Options are wholly constant, so one instance beats even a cache lookup. */
+const academyDateKeyFormat = new Intl.DateTimeFormat("en-CA", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: ACADEMY_TIME_ZONE,
+  year: "numeric",
+})
+
 export function getAcademyDateKey(value: DateInput = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: ACADEMY_TIME_ZONE,
-    year: "numeric",
-  }).formatToParts(toDate(value))
+  const parts = academyDateKeyFormat.formatToParts(toDate(value))
   const part = (type: Intl.DateTimeFormatPartTypes) => (
     parts.find((item) => item.type === type)?.value ?? ""
   )
@@ -67,13 +146,15 @@ export function getAcademyMonthKey(value: DateInput = new Date()) {
   return getAcademyDateKey(value).slice(0, 7)
 }
 
+const academyTimeInputFormat = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  hourCycle: "h23",
+  minute: "2-digit",
+  timeZone: ACADEMY_TIME_ZONE,
+})
+
 export function academyTimeInputValue(value: DateInput) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    hourCycle: "h23",
-    minute: "2-digit",
-    timeZone: ACADEMY_TIME_ZONE,
-  }).formatToParts(toDate(value))
+  const parts = academyTimeInputFormat.formatToParts(toDate(value))
   const part = (type: Intl.DateTimeFormatPartTypes) => (
     parts.find((item) => item.type === type)?.value ?? "00"
   )
