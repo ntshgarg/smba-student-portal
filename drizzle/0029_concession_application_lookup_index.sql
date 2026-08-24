@@ -1,0 +1,1 @@
+CREATE INDEX `concession_applications_concession_idx` ON `concession_applications` (`concession_id`);

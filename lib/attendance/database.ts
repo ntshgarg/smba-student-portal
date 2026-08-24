@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, eq, inArray, isNull, like } from "drizzle-orm"
+import { and, eq, gte, inArray, isNull, lt } from "drizzle-orm"
 
 import {
   calculateMonthlyAttendance,
@@ -18,6 +18,26 @@ import {
 } from "@/lib/db/schema"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 
+// SQLite only applies its LIKE-to-range optimisation when the indexed column is
+// NOCASE-collated. `occurrence_date` is BINARY, so `like(date, '2026-08%')`
+// scans every occurrence ever scheduled; the half-open range below covers the
+// same YYYY-MM-DD keys and seeks `session_occurrences_date_idx` instead.
+function monthDateBounds(month: string) {
+  const monthIndex = Number(month.slice(5, 7))
+  const rollsIntoNextYear = monthIndex === 12
+  const nextYear = Number(month.slice(0, 4)) + (rollsIntoNextYear ? 1 : 0)
+  const nextMonthIndex = rollsIntoNextYear ? 1 : monthIndex + 1
+
+  return {
+    start: `${month}-01`,
+    endExclusive: [
+      String(nextYear).padStart(4, "0"),
+      String(nextMonthIndex).padStart(2, "0"),
+      "01",
+    ].join("-"),
+  }
+}
+
 export function getPlayerAttendanceInput(
   accountId: string,
   month: string,
@@ -26,6 +46,11 @@ export function getPlayerAttendanceInput(
   database?: SmbaDatabaseExecutor,
 ): MonthlyAttendanceInput | null {
   const db = database ?? initializeDatabase()
+  const bounds = monthDateBounds(month)
+  const occurredInMonth = and(
+    gte(sessionOccurrences.occurrenceDate, bounds.start),
+    lt(sessionOccurrences.occurrenceDate, bounds.endExclusive),
+  )
   const enrollment = db.select({ trainingStartOn: playerEnrollments.trainingStartOn })
     .from(playerEnrollments)
     .where(eq(playerEnrollments.accountId, accountId))
@@ -53,7 +78,7 @@ export function getPlayerAttendanceInput(
     startsAt: sessionOccurrences.startsAt,
     status: sessionOccurrences.status,
     replacementForOccurrenceId: sessionOccurrences.replacementForOccurrenceId,
-  }).from(sessionOccurrences).where(like(sessionOccurrences.occurrenceDate, `${month}%`)).all()
+  }).from(sessionOccurrences).where(occurredInMonth).all()
   const occurrences = resolveOccurrenceEligibilityDates(db, occurrenceRows)
 
   const records: AttendanceDomainRecord[] = db.select({
@@ -64,7 +89,7 @@ export function getPlayerAttendanceInput(
     .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
     .where(and(
       eq(sessionAttendanceRecords.accountId, accountId),
-      like(sessionOccurrences.occurrenceDate, `${month}%`),
+      occurredInMonth,
     ))
     .all()
 
@@ -77,7 +102,7 @@ export function getPlayerAttendanceInput(
     .where(and(
       eq(attendanceAdjustments.playerId, accountId),
       isNull(attendanceAdjustments.voidedAt),
-      like(sessionOccurrences.occurrenceDate, `${month}%`),
+      occurredInMonth,
     ))
     .all()
 
