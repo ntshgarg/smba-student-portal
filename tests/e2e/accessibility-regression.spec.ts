@@ -466,6 +466,9 @@ async function completeAuthenticatorSetup({
   await page.setViewportSize(accessibilityViewports[0])
   const secret = new TextDecoder().decode(base32.decode(manualSecret))
   await page.getByLabel("Confirm six-digit code").fill(await createOTP(secret).totp())
+  // The submit is gated on the recovery-code acknowledgement, which is the only
+  // thing between a coach and losing those codes to this redirect.
+  await page.getByLabel(/I have saved these recovery codes/u).check()
   await page.getByRole("button", { name: "Verify and enter workspace" }).click()
   await page.waitForURL((url) => url.pathname !== "/auth/two-factor/setup", { timeout: 20_000 })
   return secret
