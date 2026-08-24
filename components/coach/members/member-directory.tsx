@@ -44,7 +44,7 @@ import type {
   MemberField,
   PlayerMemberRecord,
 } from "@/lib/coach/types"
-import { formatDateKey } from "@/lib/format"
+import { formatDateKey, formatInr } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanIsValid,
@@ -105,31 +105,21 @@ const timelineInstantFormat = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
 })
 
-const outstandingBalanceFormat = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-})
-
 function formatTimelineInstant(value: string | null | undefined) {
   if (!value) return "Not completed"
   return timelineInstantFormat.format(new Date(value))
-}
-
-function formatOutstandingBalance(paise: number) {
-  return outstandingBalanceFormat.format(paise / 100)
 }
 
 function financialCloseoutMessage(
   result: Extract<ArchiveMemberResult, { code: "FINANCIAL_CLOSEOUT_REQUIRED" }>,
 ) {
   if (result.hasOpenFeePlan && result.hasOutstandingBalance) {
-    return `Resolve ${formatOutstandingBalance(result.outstandingPaise)} outstanding and end the player’s Fee Plan before archiving`
+    return `Resolve ${formatInr(result.outstandingPaise)} outstanding and end the player’s Fee Plan before archiving`
   }
   if (result.hasOpenFeePlan) {
     return "End the player’s Fee Plan before archiving"
   }
-  return `Resolve ${formatOutstandingBalance(result.outstandingPaise)} outstanding before archiving`
+  return `Resolve ${formatInr(result.outstandingPaise)} outstanding before archiving`
 }
 
 function validateDraft(draft: MemberDraft) {

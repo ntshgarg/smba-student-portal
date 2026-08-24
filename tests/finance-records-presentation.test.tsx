@@ -6,11 +6,11 @@ import {
   FinancialRecordsWorkspace,
   formatFinancialActivityTime,
   formatFinancialPaymentMethod,
-  formatFinancialRecordsAmount,
   type CollectionsDayBookView,
   type FeeRegisterView,
   type FinancialActivityView,
 } from "@/components/coach/financials/financial-records-workspace"
+import { formatInr } from "@/lib/format"
 
 const pagination = {
   label: "1–1 of 1",
@@ -139,8 +139,8 @@ const activity: FinancialActivityView = {
 
 describe("Financial Records presentation", () => {
   it("formats monetary, method and academy-time labels deterministically", () => {
-    expect(formatFinancialRecordsAmount(100_000)).toBe("₹1,000")
-    expect(formatFinancialRecordsAmount(100_050)).toBe("₹1,000.50")
+    expect(formatInr(100_000)).toBe("₹1,000")
+    expect(formatInr(100_050)).toBe("₹1,000.50")
     expect(formatFinancialPaymentMethod("upi")).toBe("UPI")
     expect(formatFinancialPaymentMethod("bank_transfer")).toBe("Bank transfer")
     expect(formatFinancialActivityTime("2026-08-08T06:00:00.000Z")).toContain("11:30 am")

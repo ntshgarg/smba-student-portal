@@ -38,6 +38,14 @@ const CONTENT_BOTTOM = 758
 
 type FinancePdf = FinanceReceiptDocument | FinanceStatementDocument
 
+/*
+ * Deliberately not `formatInr` from `@/lib/format`, and it must stay that way.
+ * Every `.font()` call in this file names Helvetica, a WinAnsi standard-14 font
+ * whose encoding has no U+20B9 — PDFKit would emit the fallback box into every
+ * receipt and fee statement a parent receives. The `INR ` prefix is the price of
+ * the standard-14 fonts; embedding a rupee-bearing font is the only alternative.
+ * The digits themselves follow the same rule as the shared helper.
+ */
 function money(amountPaise: number) {
   const amount = amountPaise / 100
   /* Fraction digits follow the amount, so this stays per call and shares by option key. */

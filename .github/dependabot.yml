@@ -17,6 +17,13 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - version-update:semver-major
+      # vitest is the test runner for 156 files and 823 tests, and it ships to
+      # nobody. A major is a deliberate migration with real regression surface
+      # and no operational payoff on its own schedule, so it moves when someone
+      # chooses to do that work rather than every time upstream releases.
+      - dependency-name: "vitest"
+        update-types:
+          - version-update:semver-major
     groups:
       production-minor-and-patch:
         dependency-type: production

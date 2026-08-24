@@ -1,4 +1,4 @@
-import { formatDateKey, numberFormatter } from "@/lib/format"
+import { formatDateKey, formatInr } from "@/lib/format"
 import type {
   FinanceStatus,
   PlayerFinanceDashboardSummary,
@@ -23,17 +23,6 @@ const PAYMENT_METHOD_LABELS: Record<PaymentView["method"], string> = {
   card: "Card",
   cheque: "Cheque",
   other: "Other",
-}
-
-export function formatFinanceAmount(amountPaise: number) {
-  const hasPaise = amountPaise % 100 !== 0
-  /* Fraction digits follow the amount, so this stays per call and shares by option key. */
-  return numberFormatter("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: hasPaise ? 2 : 0,
-    maximumFractionDigits: 2,
-  }).format(amountPaise / 100)
 }
 
 export function formatFinanceDate(dateKey: string) {
@@ -126,7 +115,7 @@ export function dashboardFeeRecordCopy(
     }
   }
 
-  const amount = formatFinanceAmount(summary.currentBalancePaise)
+  const amount = formatInr(summary.currentBalancePaise)
   const dueDate = summary.nextDueDate ? formatFinanceDate(summary.nextDueDate) : null
 
   if (summary.status === "partially_paid") {
