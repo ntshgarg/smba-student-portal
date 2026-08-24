@@ -636,27 +636,103 @@ export type FinanceDayBookInput = {
   limit?: number
 }
 
-export type FinanceAuditEventType =
-  | "finance_activated"
-  | "fee_agreement_created"
-  | "fee_agreement_replaced"
-  | "fee_agreement_paused"
-  | "fee_agreement_ended"
-  | "charge_issued"
-  | "charge_voided"
-  | "monthly_fees_prepared"
-  | "payment_recorded"
-  | "payment_reversed"
-  | "refund_recorded"
-  | "refund_reversed"
-  | "concession_created"
-  | "concession_applied"
-  | "concession_application_reversed"
-  | "concession_reversed"
-  | "adjustment_created"
-  | "adjustment_reversed"
-  | "historical_reconciled"
-  | "training_start_redated"
+/**
+ * The finance audit event set. Every consumer of the list derives from this array —
+ * the `financial_audit_events.event_type` column type, the service input validator,
+ * the activity log's action text, the activity filter dropdown and the activity CSV
+ * allow-list — so none of them can hold a copy that has fallen behind.
+ *
+ * The order is the order the activity filter offers, and it follows the billing
+ * workflow (activation, then fee plans, charges, payments, refunds, concessions,
+ * adjustments, corrections) rather than the alphabet.
+ */
+export const FINANCE_AUDIT_EVENT_TYPES = [
+  "finance_activated",
+  "fee_agreement_created",
+  "fee_agreement_replaced",
+  "fee_agreement_paused",
+  "fee_agreement_ended",
+  "charge_issued",
+  "charge_voided",
+  "monthly_fees_prepared",
+  "payment_recorded",
+  "payment_reversed",
+  "refund_recorded",
+  "refund_reversed",
+  "concession_created",
+  "concession_applied",
+  "concession_application_reversed",
+  "concession_reversed",
+  "adjustment_created",
+  "adjustment_reversed",
+  "historical_reconciled",
+  "training_start_redated",
+] as const
+
+export type FinanceAuditEventType = (typeof FINANCE_AUDIT_EVENT_TYPES)[number]
+
+type FinanceAuditEventDescriptor = {
+  /** What happened, past tense, for an activity row and the activity CSV. */
+  action: string
+  /** The same event named as a filter category, for the activity filter dropdown. */
+  filterLabel: string
+}
+
+/**
+ * Both labels for each event. The two are different vocabularies and four events read
+ * differently in each: the log says "Concession ended", the filter that selects those
+ * rows says "Concession reversed".
+ *
+ * The `Record` is what makes the list above the only place to edit — adding an event
+ * type does not compile until it has both of its labels here.
+ */
+export const FINANCE_AUDIT_EVENTS: Record<FinanceAuditEventType, FinanceAuditEventDescriptor> = {
+  finance_activated: {
+    action: "Financial tracking activated",
+    filterLabel: "Financials activated",
+  },
+  fee_agreement_created: { action: "Fee plan created", filterLabel: "Fee plan created" },
+  fee_agreement_replaced: { action: "Fee plan replaced", filterLabel: "Fee plan changed" },
+  fee_agreement_paused: { action: "Fee plan paused", filterLabel: "Fee plan paused" },
+  fee_agreement_ended: { action: "Fee plan ended", filterLabel: "Fee plan ended" },
+  charge_issued: { action: "Fee issued", filterLabel: "Fee issued" },
+  charge_voided: { action: "Fee voided", filterLabel: "Fee voided" },
+  monthly_fees_prepared: { action: "Monthly fees issued", filterLabel: "Monthly fees issued" },
+  payment_recorded: { action: "Payment recorded", filterLabel: "Payment recorded" },
+  payment_reversed: { action: "Payment reversed", filterLabel: "Payment reversed" },
+  refund_recorded: { action: "Refund recorded", filterLabel: "Refund recorded" },
+  refund_reversed: { action: "Refund reversed", filterLabel: "Refund reversed" },
+  concession_created: { action: "Concession created", filterLabel: "Concession created" },
+  concession_applied: { action: "Concession applied", filterLabel: "Concession applied" },
+  concession_application_reversed: {
+    action: "Concession application reversed",
+    filterLabel: "Concession application reversed",
+  },
+  concession_reversed: { action: "Concession ended", filterLabel: "Concession reversed" },
+  adjustment_created: {
+    action: "Fee adjustment recorded",
+    filterLabel: "Fee adjustment recorded",
+  },
+  adjustment_reversed: {
+    action: "Fee adjustment reversed",
+    filterLabel: "Fee adjustment reversed",
+  },
+  historical_reconciled: {
+    action: "Historical fee status recorded",
+    filterLabel: "Historical status recorded",
+  },
+  training_start_redated: {
+    action: "Training start date corrected",
+    filterLabel: "Training start date corrected",
+  },
+}
+
+const FINANCE_AUDIT_EVENT_TYPE_SET: ReadonlySet<string> = new Set(FINANCE_AUDIT_EVENT_TYPES)
+
+/** Narrows an untrusted query parameter, so callers never have to assert the type. */
+export function isFinanceAuditEventType(value: unknown): value is FinanceAuditEventType {
+  return typeof value === "string" && FINANCE_AUDIT_EVENT_TYPE_SET.has(value)
+}
 
 export type FinanceActivityItem = {
   id: string

@@ -2,7 +2,6 @@
 
 import { useMemo } from "react"
 import { ChevronDown } from "lucide-react"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { ReportExportButton } from "@/components/report-export-button"
@@ -38,7 +37,6 @@ export function ReportAccordion({
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const reduceMotion = useReducedMotion()
   const yearGroups = useMemo(() => groupReportsByYear(reports), [reports])
   const reportById = useMemo(
     () => new Map(reports.map((report) => [report.id, report])),
@@ -107,114 +105,96 @@ export function ReportAccordion({
               </button>
             </h2>
 
-            <AnimatePresence initial={false}>
-              {isYearOpen && (
-                <motion.div
-                  animate={{ opacity: 1, transform: "translateY(0px)" }}
-                  aria-labelledby={yearTriggerId}
-                  className="report-year-panel"
-                  exit={{ opacity: 0, transform: "translateY(-4px)" }}
-                  id={yearPanelId}
-                  initial={reduceMotion ? false : { opacity: 0, transform: "translateY(-4px)" }}
-                  role="region"
-                  transition={{
-                    duration: reduceMotion ? 0 : 0.18,
-                    ease: "easeOut",
-                  }}
-                >
-                  <div className="report-year-months">
-                    {yearGroup.reports.map((report, reportIndex) => {
-                      const isReportOpen = openReportId === report.id
-                      const reportTriggerId = `${report.id}-trigger`
-                      const reportPanelId = `${report.id}-panel`
-                      const publishedLabel = formatDate(report.publishedAt)
-                      const folio = String(
-                        yearGroup.reports.length - reportIndex,
-                      ).padStart(2, "0")
+            {isYearOpen && (
+              <div
+                aria-labelledby={yearTriggerId}
+                className="report-year-panel"
+                id={yearPanelId}
+                role="region"
+              >
+                <div className="report-year-months">
+                  {yearGroup.reports.map((report, reportIndex) => {
+                    const isReportOpen = openReportId === report.id
+                    const reportTriggerId = `${report.id}-trigger`
+                    const reportPanelId = `${report.id}-panel`
+                    const publishedLabel = formatDate(report.publishedAt)
+                    const folio = String(
+                      yearGroup.reports.length - reportIndex,
+                    ).padStart(2, "0")
 
-                      return (
-                        <article
-                          className={`report-month-item${isReportOpen ? " is-open" : ""}`}
-                          key={report.id}
-                        >
-                          <h3>
-                            <button
-                              aria-controls={isReportOpen ? reportPanelId : undefined}
-                              aria-expanded={isReportOpen}
-                              className="report-month-trigger"
-                              id={reportTriggerId}
-                              onClick={() => updateArchive(
-                                yearGroup.year,
-                                isReportOpen ? undefined : report.id,
-                              )}
-                              type="button"
+                    return (
+                      <article
+                        className={`report-month-item${isReportOpen ? " is-open" : ""}`}
+                        key={report.id}
+                      >
+                        <h3>
+                          <button
+                            aria-controls={isReportOpen ? reportPanelId : undefined}
+                            aria-expanded={isReportOpen}
+                            className="report-month-trigger"
+                            id={reportTriggerId}
+                            onClick={() => updateArchive(
+                              yearGroup.year,
+                              isReportOpen ? undefined : report.id,
+                            )}
+                            type="button"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="report-month-folio"
                             >
-                              <span
-                                aria-hidden="true"
-                                className="report-month-folio"
-                              >
-                                {folio}
-                              </span>
-                              <span className="report-month-title">
-                                <strong>{reportMonthName(report)}</strong>
-                              </span>
-                              <time
-                                aria-label={`Published ${publishedLabel}`}
-                                className="report-month-published"
-                                dateTime={report.publishedAt}
-                              >
-                                {publishedLabel}
-                              </time>
-                              <span className="report-archive-toggle report-month-toggle" aria-hidden="true">
-                                <ChevronDown />
-                              </span>
-                            </button>
-                          </h3>
+                              {folio}
+                            </span>
+                            <span className="report-month-title">
+                              <strong>{reportMonthName(report)}</strong>
+                            </span>
+                            <time
+                              aria-label={`Published ${publishedLabel}`}
+                              className="report-month-published"
+                              dateTime={report.publishedAt}
+                            >
+                              {publishedLabel}
+                            </time>
+                            <span className="report-archive-toggle report-month-toggle" aria-hidden="true">
+                              <ChevronDown />
+                            </span>
+                          </button>
+                        </h3>
 
-                          <AnimatePresence initial={false}>
-                            {isReportOpen && (
-                              <motion.div
-                                animate={{ opacity: 1, transform: "translateY(0px)" }}
-                                aria-labelledby={reportTriggerId}
-                                exit={{ opacity: 0, transform: "translateY(-4px)" }}
-                                id={reportPanelId}
-                                initial={reduceMotion ? false : { opacity: 0, transform: "translateY(-4px)" }}
-                                role="region"
-                                transition={{
-                                  duration: reduceMotion ? 0 : 0.18,
-                                  ease: "easeOut",
-                                }}
-                              >
-                                <div className="report-accordion-content">
-                                  <div className="expanded-report-panel">
-                                    <div className="expanded-report-heading">
-                                      <p className="expanded-report-label">Coach’s report</p>
-                                      <p className="expanded-report-period">{report.monthLabel}</p>
-                                    </div>
-                                    <div className="expanded-report-copy">
-                                      {report.reportText.split(/\n\s*\n/).map((paragraph, paragraphIndex) => (
-                                        <p key={`${report.id}-paragraph-${paragraphIndex}`}>{paragraph}</p>
-                                      ))}
-                                      <div className="expanded-report-download">
-                                        <ReportExportButton
-                                          monthLabel={report.monthLabel}
-                                          playerName={playerName}
-                                          reportId={report.id}
-                                        />
-                                      </div>
-                                    </div>
+                        {isReportOpen && (
+                          <div
+                            aria-labelledby={reportTriggerId}
+                            id={reportPanelId}
+                            role="region"
+                          >
+                            <div className="report-accordion-content">
+                              <div className="expanded-report-panel">
+                                <div className="expanded-report-heading">
+                                  <p className="expanded-report-label">Coach’s report</p>
+                                  <p className="expanded-report-period">{report.monthLabel}</p>
+                                </div>
+                                <div className="expanded-report-copy">
+                                  {report.reportText.split(/\n\s*\n/).map((paragraph, paragraphIndex) => (
+                                    <p key={`${report.id}-paragraph-${paragraphIndex}`}>{paragraph}</p>
+                                  ))}
+                                  <div className="expanded-report-download">
+                                    <ReportExportButton
+                                      monthLabel={report.monthLabel}
+                                      playerName={playerName}
+                                      reportId={report.id}
+                                    />
                                   </div>
                                 </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </article>
-                      )
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </section>
         )
       })}

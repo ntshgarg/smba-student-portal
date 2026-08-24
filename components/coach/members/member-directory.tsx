@@ -38,6 +38,7 @@ import {
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import type {
   ArchiveMemberResult,
   MemberField,
@@ -63,9 +64,16 @@ type MemberDraft = {
 }
 
 type DraftErrors = Partial<Record<keyof MemberDraft, string>>
+/**
+ * Saving edits and archiving share one notice, so `retryAction` names which of
+ * the two controls should offer the retry: cancelling an edit leaves the notice
+ * in place while swapping which control is on screen.
+ */
 type MemberFeedback = ActionFeedback & {
   memberId: string
+  offerRetry?: boolean
   recoveryHref?: string
+  retryAction?: "archive" | "save"
 }
 const relationships = ["Parent", "Guardian", "Self", "Other"]
 
@@ -493,9 +501,17 @@ export function MemberDirectory() {
       })
       restoreEditFocus(player.member.id)
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The member could not be saved",
+        retained: "Your edits are still on screen",
+        subject: "The member details",
+      })
       setMemberFeedback({
         memberId: player.member.id,
-        message: error instanceof Error ? error.message : "The member could not be saved",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "save",
         tone: "error",
       })
     } finally {
@@ -546,9 +562,17 @@ export function MemberDirectory() {
       })
       focusAfterRender(() => directorySummaryRef.current)
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The member could not be archived",
+        retained: "The member is still active",
+        subject: "The member archive",
+      })
       setMemberFeedback({
         memberId: player.member.id,
-        message: error instanceof Error ? error.message : "The member could not be archived",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "archive",
         tone: "error",
       })
     } finally {
@@ -672,6 +696,9 @@ export function MemberDirectory() {
                   const currentMemberFeedback = memberFeedback?.memberId === memberId
                     ? memberFeedback
                     : null
+                  const retryAction = currentMemberFeedback?.offerRetry
+                    ? currentMemberFeedback.retryAction
+                    : undefined
 
                   return (
                     <Fragment key={memberId}>
@@ -916,7 +943,9 @@ export function MemberDirectory() {
                                     <div className="coach-member-editor-actions">
                                       <button type="button" disabled={isSaving} onClick={cancelEditing}>Cancel</button>
                                       <button className="is-primary" type="submit" disabled={isSaving}>
-                                        {isSaving ? "Saving…" : "Save member"}
+                                        {isSaving
+                                          ? "Saving…"
+                                          : retryAction === "save" ? "Save member again" : "Save member"}
                                       </button>
                                     </div>
                                   </div>
@@ -1028,7 +1057,9 @@ export function MemberDirectory() {
                                     >
                                       <Archive aria-hidden="true" /> {archivingMemberId === memberId
                                         ? "Archiving…"
-                                        : "Archive member"}
+                                        : retryAction === "archive"
+                                          ? "Archive member again"
+                                          : "Archive member"}
                                     </button>
                                   )}
                                 </div>

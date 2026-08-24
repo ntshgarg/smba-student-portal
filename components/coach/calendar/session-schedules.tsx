@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   MapPin,
+  RotateCcw,
   UserPlus,
   Users,
 } from "lucide-react"
@@ -28,6 +29,7 @@ import {
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { formatSessionLabel } from "@/lib/format"
 import { assignmentCoversOccurrence, distinctAssignmentWeekdays } from "@/lib/sessions/domain"
@@ -53,12 +55,23 @@ const weekdays = [
   { value: 0, short: "Sun", label: "Sunday" },
 ]
 
+/**
+ * `offerRetry` rides on the feedback so every existing `setRosterFeedback(null)`
+ * also withdraws the retry prompt.
+ */
 type RosterFeedback = ActionFeedback & {
   field?: string
+  offerRetry?: boolean
   seriesId: string
 }
 
+/**
+ * Ending one player's assignment and ending the whole schedule share this
+ * notice, so `assignmentId` names which control should offer the retry.
+ */
 type EndingFeedback = ActionFeedback & {
+  assignmentId?: string
+  offerRetry?: boolean
   seriesId: string
 }
 
@@ -419,8 +432,15 @@ export function SessionSchedules({
         tone: "success",
       })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The player could not be assigned",
+        retained: "Your chosen player and days are still on screen",
+        subject: "The assignment",
+      })
       setRosterFeedback({
-        message: error instanceof Error ? error.message : "The player could not be assigned",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         seriesId: series.id,
         tone: "error",
       })
@@ -538,6 +558,13 @@ export function SessionSchedules({
             series.slots.some((slot) => slot.weekday === day.value)
           ))
           const assignmentFeedbackId = `assignment-feedback-${series.id}`
+          const seriesEndingFeedback = endingFeedback?.seriesId === series.id && endingFeedback.offerRetry
+            ? endingFeedback
+            : null
+          const endingRetryAssignmentId = seriesEndingFeedback?.assignmentId ?? null
+          const endingRetryIsSeries = Boolean(seriesEndingFeedback && !seriesEndingFeedback.assignmentId)
+          const assignmentRetry = rosterFeedback?.seriesId === series.id
+            && Boolean(rosterFeedback.offerRetry)
           return (
             <article className="coach-series-roster-card" key={series.id}>
               <button type="button" disabled={hasPendingMutation} aria-expanded={isExpanded} onClick={() => {
@@ -606,8 +633,16 @@ export function SessionSchedules({
                                 tone: "success",
                               })
                             } catch (error) {
+                              const failure = describeSaveFailure({
+                                error,
+                                fallbackMessage: "Assignment could not be ended",
+                                retained: "The player is still on this roster",
+                                subject: "The assignment ending",
+                              })
                               setEndingFeedback({
-                                message: error instanceof Error ? error.message : "Assignment could not be ended",
+                                assignmentId: assignment.id,
+                                message: failure.message,
+                                offerRetry: failure.offerRetry,
                                 seriesId: series.id,
                                 tone: "error",
                               })
@@ -615,7 +650,9 @@ export function SessionSchedules({
                               setEndingAssignmentId(null)
                             }
                           }} disabled={hasPendingMutation}>
-                            {endingAssignmentId === assignment?.id ? "Ending…" : "End"}
+                            {endingAssignmentId === assignment?.id
+                              ? "Ending…"
+                              : endingRetryAssignmentId === assignment?.id ? "End again" : "End"}
                           </button>
                         </div>
                       )
@@ -715,7 +752,12 @@ export function SessionSchedules({
                       || !assignWeekdays.length
                       || !assignmentCoverageComplete
                       || hasPendingMutation} onClick={() => assignPlayer(series)}>
-                      <Check aria-hidden="true" /> {isAssigning ? "Assigning…" : "Confirm assignment"}
+                      {assignmentRetry
+                        ? <RotateCcw aria-hidden="true" />
+                        : <Check aria-hidden="true" />}
+                      {isAssigning
+                        ? "Assigning…"
+                        : assignmentRetry ? "Confirm assignment again" : "Confirm assignment"}
                     </button>
                     {!availablePlayers.length ? <p className="coach-roster-eligibility-note">No additional players currently match this level and batch.</p> : null}
                   </div>
@@ -746,8 +788,15 @@ export function SessionSchedules({
                           })
                         }
                       } catch (error) {
+                        const failure = describeSaveFailure({
+                          error,
+                          fallbackMessage: "Schedule could not be ended",
+                          retained: "The schedule is still active",
+                          subject: "The schedule ending",
+                        })
                         setEndingFeedback({
-                          message: error instanceof Error ? error.message : "Schedule could not be ended",
+                          message: failure.message,
+                          offerRetry: failure.offerRetry,
                           seriesId: series.id,
                           tone: "error",
                         })
@@ -756,7 +805,9 @@ export function SessionSchedules({
                       }
                     }}
                   >
-                    <CalendarX2 aria-hidden="true" /> {endingSeriesId === series.id ? "Ending schedule…" : "End schedule"}
+                    <CalendarX2 aria-hidden="true" /> {endingSeriesId === series.id
+                      ? "Ending schedule…"
+                      : endingRetryIsSeries ? "End schedule again" : "End schedule"}
                   </button>
                 </div>
               ) : null}

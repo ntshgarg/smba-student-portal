@@ -1,7 +1,4 @@
-"use client"
-
 import { ArrowDown } from "lucide-react"
-import { motion, useReducedMotion } from "motion/react"
 
 import styles from "./junior-coach-dashboard.module.css"
 
@@ -12,11 +9,6 @@ export function JuniorCoachWelcomeHero({
   coachName: string
   greeting: string
 }) {
-  const reduceMotion = useReducedMotion()
-  const initial = reduceMotion
-    ? false
-    : { opacity: 0, transform: "translateY(16px)" }
-
   return (
     <section
       className={`welcome-hero welcome-scoreboard coach-welcome-hero coach-welcome-scoreboard junior-coach-welcome-hero ${styles.hero}`}
@@ -35,12 +27,7 @@ export function JuniorCoachWelcomeHero({
       </svg>
 
       <div className={`welcome-inner ${styles.heroInner}`}>
-        <motion.div
-          className={`welcome-copy coach-welcome-copy ${styles.heroCopy}`}
-          initial={initial}
-          animate={{ opacity: 1, transform: "translateY(0px)" }}
-          transition={{ duration: reduceMotion ? 0 : 0.38, ease: "easeOut" }}
-        >
+        <div className={`welcome-copy coach-welcome-copy ${styles.heroCopy}`}>
           <h1 id="junior-coach-welcome-title">
             {greeting},
             <br />
@@ -49,7 +36,7 @@ export function JuniorCoachWelcomeHero({
           <p className="welcome-line coach-welcome-line">
             Your attendance record stays quietly in view.
           </p>
-        </motion.div>
+        </div>
 
         <a className="scroll-cue" href="#coach-attendance">
           <span>Your attendance</span>

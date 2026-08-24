@@ -3,10 +3,10 @@ import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { sessionProvider } from "@/lib/data"
 import { createActivityCsvStream } from "@/lib/finance/records-csv"
 import { FinanceServiceError, getFinancialActivity } from "@/lib/finance/service"
-import type {
-  FinanceActivityInput,
-  FinanceActivityResult,
-  FinanceAuditEventType,
+import {
+  isFinanceAuditEventType,
+  type FinanceActivityInput,
+  type FinanceActivityResult,
 } from "@/lib/finance/types"
 
 export const runtime = "nodejs"
@@ -15,28 +15,6 @@ const privateHeaders = {
   "Cache-Control": "private, no-store",
   "X-Content-Type-Options": "nosniff",
 } as const
-
-const EVENT_TYPES: FinanceAuditEventType[] = [
-  "finance_activated",
-  "fee_agreement_created",
-  "fee_agreement_replaced",
-  "fee_agreement_paused",
-  "fee_agreement_ended",
-  "charge_issued",
-  "charge_voided",
-  "monthly_fees_prepared",
-  "payment_recorded",
-  "payment_reversed",
-  "refund_recorded",
-  "refund_reversed",
-  "concession_created",
-  "concession_applied",
-  "concession_application_reversed",
-  "concession_reversed",
-  "adjustment_created",
-  "adjustment_reversed",
-  "historical_reconciled",
-]
 
 function allItems(
   first: FinanceActivityResult,
@@ -81,9 +59,7 @@ export async function GET(request: Request) {
     })
   }
   const eventValue = url.searchParams.get("eventType")
-  const eventTypes = EVENT_TYPES.includes(eventValue as FinanceAuditEventType)
-    ? [eventValue as FinanceAuditEventType]
-    : undefined
+  const eventTypes = isFinanceAuditEventType(eventValue) ? [eventValue] : undefined
   const coachValue = url.searchParams.get("coachId")
   const input: FinanceActivityInput = {
     coachId: coachValue && coachValue !== "all" ? coachValue : undefined,
