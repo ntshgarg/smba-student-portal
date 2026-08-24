@@ -35,6 +35,7 @@ import {
   formatFinanceAmount,
   formatFinanceDate,
 } from "@/components/financials/player-finance-presentation"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import type {
   PlayerOnboardingCase,
   PlayerOnboardingStage,
@@ -56,6 +57,12 @@ import {
 } from "@/lib/training/academy-plans"
 
 import styles from "./player-onboarding-register.module.css"
+
+/**
+ * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
+ * withdraws the retry prompt.
+ */
+type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
 
 const STAGES: Array<{
   key: PlayerOnboardingStage
@@ -241,6 +248,14 @@ function StepRail({ current }: { current: PlayerOnboardingStage }) {
   )
 }
 
+/**
+ * Approve and reject share one notice, so the retry prompt names which of the
+ * two the coach should repeat.
+ */
+type RequestStepFeedback = SaveFeedback & {
+  retryAction?: "approve" | "reject"
+}
+
 function RequestStep({
   item,
   onSuccess,
@@ -252,7 +267,7 @@ function RequestStep({
   }) => void
 }) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<RequestStepFeedback | null>(null)
 
   async function approve() {
     if (busy) return
@@ -262,8 +277,16 @@ function RequestStep({
     try {
       result = await approveRegistrationAction(item.id, item.requestedRole)
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "Approval could not be saved",
+        retained: "The request is still on screen",
+        subject: "The approval",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "Approval could not be saved",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "approve",
         tone: "error",
       })
       return
@@ -290,8 +313,16 @@ function RequestStep({
     try {
       result = await rejectRegistrationAction(item.id)
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The rejection could not be saved",
+        retained: "The request is still on screen",
+        subject: "The rejection",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The rejection could not be saved",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "reject",
         tone: "error",
       })
       return
@@ -305,6 +336,8 @@ function RequestStep({
     onSuccess({ message: `${item.fullName}’s request was rejected.`, remove: true })
   }
 
+  const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
+
   return (
     <div className={styles.requestStep} aria-busy={Boolean(busy)}>
       <dl className={styles.requestFacts}>
@@ -315,10 +348,16 @@ function RequestStep({
       <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <button type="button" disabled={Boolean(busy)} onClick={() => void reject()}>
-          <X aria-hidden="true" /> {busy === "reject" ? "Rejecting…" : "Reject request"}
+          <X aria-hidden="true" /> {busy === "reject"
+            ? "Rejecting…"
+            : retryAction === "reject" ? "Reject request again" : "Reject request"}
         </button>
         <button className={styles.primaryButton} type="button" disabled={Boolean(busy)} onClick={() => void approve()}>
-          {busy === "approve" ? "Approving…" : item.requestedRole === "coach" ? "Approve staff access" : "Approve & continue"} <ArrowRight aria-hidden="true" />
+          {busy === "approve"
+            ? "Approving…"
+            : retryAction === "approve"
+              ? "Approve again"
+              : item.requestedRole === "coach" ? "Approve staff access" : "Approve & continue"} <ArrowRight aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -337,7 +376,7 @@ function AssessmentStep({
   const [trainingPlan, setTrainingPlan] = useState<AcademyPlan | "">(item.academyPlan ?? "")
   const [trainingStartOn, setTrainingStartOn] = useState(item.trainingStartOn ?? "")
   const [errors, setErrors] = useState<Partial<Record<"trainingStartOn" | "level" | "batch" | "academyPlan", string>>>({})
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const [busy, setBusy] = useState(false)
   const levelRef = useRef<HTMLSelectElement>(null)
   const trainingStartRef = useRef<HTMLInputElement>(null)
@@ -402,8 +441,15 @@ function AssessmentStep({
         level: level as TrainingProgramme,
       })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The assessment could not be saved",
+        retained: "Your assessment details are still on screen",
+        subject: "The assessment",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The assessment could not be saved",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
       return
@@ -509,14 +555,18 @@ function AssessmentStep({
       <div className={styles.formActions}>
         <Link href={`/coach/members?player=${encodeURIComponent(item.id)}`}>View member record</Link>
         <button className={styles.primaryButton} type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Save assessment & continue"} <ArrowRight aria-hidden="true" />
+          {busy
+            ? "Saving…"
+            : feedback?.offerRetry
+              ? "Save assessment again"
+              : "Save assessment & continue"} <ArrowRight aria-hidden="true" />
         </button>
       </div>
     </form>
   )
 }
 
-type SessionStepFeedback = ActionFeedback & {
+type SessionStepFeedback = SaveFeedback & {
   field?: "weekdays"
 }
 
@@ -606,8 +656,15 @@ function SessionStep({
         weekdays,
       })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The session could not be assigned",
+        retained: "Your chosen session and days are still on screen",
+        subject: "The session assignment",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The session could not be assigned",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
       return
@@ -709,15 +766,24 @@ function SessionStep({
       <div className={styles.formActions}>
         <Link href="/coach/schedules">Review schedules</Link>
         <button className={styles.primaryButton} type="submit" disabled={busy}>
-          {busy ? "Assigning…" : "Assign session & continue"} <ArrowRight aria-hidden="true" />
+          {busy
+            ? "Assigning…"
+            : feedback?.offerRetry
+              ? "Assign session again"
+              : "Assign session & continue"} <ArrowRight aria-hidden="true" />
         </button>
       </div>
     </form>
   )
 }
 
-type FeePlanStepFeedback = ActionFeedback & {
+/**
+ * Reset and the fee submit share one notice, so the retry prompt names which of
+ * the two the coach should repeat.
+ */
+type FeePlanStepFeedback = SaveFeedback & {
   field?: "confirmation" | "monthlyFee"
+  retryAction?: "reset" | "submit"
 }
 
 function FeePlanStep({
@@ -755,8 +821,16 @@ function FeePlanStep({
     try {
       result = await resetOnboardingSessionAssignmentAction(item.id)
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The session assignment could not be reset",
+        retained: "Nothing has changed on this player",
+        subject: "The session assignment reset",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The session assignment could not be reset",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "reset",
         tone: "error",
       })
       return
@@ -774,6 +848,8 @@ function FeePlanStep({
       remove: false,
     }))
   }
+
+  const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
 
   if (!financeActive) {
     return (
@@ -812,7 +888,9 @@ function FeePlanStep({
         <p>The future training date is saved. Assessment and session setup can be prepared now, but fees and the permanent date lock wait until training begins.</p>
         <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
-          {busy ? "Resetting…" : "Reset session assignment"}
+          {busy
+            ? "Resetting…"
+            : retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
         </button>
       </div>
     )
@@ -846,8 +924,16 @@ function FeePlanStep({
       try {
         previewResult = await previewOnboardingFinanceAction(terms)
       } catch (error) {
+        const failure = describeSaveFailure({
+          error,
+          fallbackMessage: "The Fee Plan could not be saved",
+          retained: "The agreed monthly fee is still on screen",
+          subject: "The fee timeline",
+        })
         setFeedback({
-          message: error instanceof Error ? error.message : "The Fee Plan could not be saved",
+          message: failure.message,
+          offerRetry: failure.offerRetry,
+          retryAction: "submit",
           tone: "error",
         })
         return
@@ -890,8 +976,16 @@ function FeePlanStep({
         previewFingerprint: preview.fingerprint,
       })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The Fee Plan could not be saved",
+        retained: "The fee timeline is still on screen",
+        subject: "The Fee Plan",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The Fee Plan could not be saved",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "submit",
         tone: "error",
       })
       return
@@ -1023,16 +1117,18 @@ function FeePlanStep({
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
-          Reset session assignment
+          {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
         </button>
         <button className={styles.primaryButton} type="submit" disabled={busy}>
           {busy
             ? preview ? "Completing…" : "Building timeline…"
-            : !preview
-              ? "Review fee timeline"
-              : preview.blockers.length
-                ? "Resolve blockers"
-                : "Complete onboarding & issue fees"} <ArrowRight aria-hidden="true" />
+            : retryAction === "submit"
+              ? preview ? "Complete onboarding again" : "Review fee timeline again"
+              : !preview
+                ? "Review fee timeline"
+                : preview.blockers.length
+                  ? "Resolve blockers"
+                  : "Complete onboarding & issue fees"} <ArrowRight aria-hidden="true" />
         </button>
       </div>
     </form>

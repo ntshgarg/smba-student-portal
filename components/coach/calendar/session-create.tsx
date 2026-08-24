@@ -11,6 +11,7 @@ import {
 } from "@/components/coach/coach-portal-provider"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { formatSessionLabel } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
@@ -38,8 +39,13 @@ type SeriesForm = {
   durationMinutes: string
 }
 
+/**
+ * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
+ * withdraws the retry prompt.
+ */
 type SeriesFeedback = ActionFeedback & {
   field?: string
+  offerRetry?: boolean
 }
 
 function defaultSelectedDays(batch: TrainingBatch) {
@@ -172,8 +178,15 @@ export function SessionScheduleCreate({
         router.push(`/coach/schedules?${params.toString()}`)
       }
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The schedule could not be created",
+        retained: "Your schedule details are still on screen",
+        subject: "The schedule",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The schedule could not be created",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -292,7 +305,9 @@ export function SessionScheduleCreate({
           tone={feedback?.tone}
         />
         <button className="coach-series-submit" type="submit" disabled={isCreating}>
-          <CalendarDays aria-hidden="true" /> {isCreating ? "Creating…" : "Create schedule"}
+          <CalendarDays aria-hidden="true" /> {isCreating
+            ? "Creating…"
+            : feedback?.offerRetry ? "Create schedule again" : "Create schedule"}
         </button>
         {rosterHref ? (
           <Link className="coach-schedule-roster-link" href={rosterHref}>

@@ -8,16 +8,23 @@ import type { FormEvent } from "react"
 
 import { activateFinanceAction } from "@/app/coach/financials/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 
 import { resultFeedback, useIdempotencyKey } from "./financials-client-utils"
 import styles from "./financials.module.css"
+
+/**
+ * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
+ * withdraws the retry prompt.
+ */
+type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
 
 export function FinancialsActivation({ initialPeriod }: { initialPeriod: string }) {
   const router = useRouter()
   const [trackingMonth, setTrackingMonth] = useState(initialPeriod)
   const [confirmed, setConfirmed] = useState(false)
   const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const requestKey = useIdempotencyKey()
 
   async function activate(event: FormEvent<HTMLFormElement>) {
@@ -35,8 +42,15 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
         router.refresh()
       }
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "Financial tracking could not be activated",
+        retained: "Your tracking month is still on screen",
+        subject: "Financial tracking",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "Financial tracking could not be activated",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
         tone: "error",
       })
     } finally {
@@ -94,7 +108,9 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
 
           <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
           <button className={styles.primaryButton} type="submit" disabled={!confirmed || pending}>
-            {pending ? "Starting…" : "Start financial tracking"}
+            {pending
+              ? "Starting…"
+              : feedback?.offerRetry ? "Start financial tracking again" : "Start financial tracking"}
           </button>
         </form>
       </section>

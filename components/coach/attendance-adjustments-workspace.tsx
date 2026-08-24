@@ -33,6 +33,7 @@ import {
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   formatAcademyDate,
@@ -96,8 +97,14 @@ type AttendanceAdjustmentsWorkspaceProps = {
   labelledBy?: string
 }
 
+/**
+ * Publishing a reschedule and voiding any history row share one notice, so
+ * `retryAction` mirrors `pendingAction` to name which control offers the retry.
+ */
 type AdjustmentFeedback = ActionFeedback & {
   field?: string
+  offerRetry?: boolean
+  retryAction?: string
 }
 
 export const AttendanceAdjustmentsWorkspace = forwardRef<
@@ -152,6 +159,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const completionChoiceRef = useRef<HTMLFieldSetElement>(null)
   const reasonRef = useRef<HTMLInputElement>(null)
   const feedbackId = "attendance-adjustment-feedback"
+  const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
   const [todayKey] = useState(() => getIndiaDateKey())
   const [referenceInstant] = useState(() => Date.now())
   const draftIsDirty = Boolean(sourceOccurrenceId || completionOccurrenceId || reason.trim())
@@ -481,8 +489,16 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
       replaceHistoryUrl(true, published.id)
       setFeedback({ message: "Attendance rescheduled", tone: "success" })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The adjustment could not be published",
+        retained: "Your adjustment draft is still on screen",
+        subject: "The reschedule",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The adjustment could not be published",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "publish",
         tone: "error",
       })
     } finally {
@@ -507,8 +523,16 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
       }
       setFeedback({ message: "Adjustment voided and original absence restored", tone: "success" })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The adjustment could not be voided",
+        retained: "The adjustment is still published",
+        subject: "The adjustment",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The adjustment could not be voided",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: adjustment.id,
         tone: "error",
       })
     } finally {
@@ -777,7 +801,12 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   <ArrowLeft aria-hidden="true" /> Edit draft
                 </button>
                 <button className="is-primary" type="button" disabled={pendingAction !== null} onClick={() => void publishAdjustment()}>
-                  <Check aria-hidden="true" /> {pendingAction === "publish" ? "Publishing…" : "Publish reschedule"}
+                  {retryAction === "publish"
+                    ? <RotateCcw aria-hidden="true" />
+                    : <Check aria-hidden="true" />}
+                  {pendingAction === "publish"
+                    ? "Publishing…"
+                    : retryAction === "publish" ? "Publish reschedule again" : "Publish reschedule"}
                 </button>
               </div>
             </div>
@@ -893,7 +922,11 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                               onClick={() => void voidAdjustment(adjustment)}
                             >
                               <RotateCcw aria-hidden="true" />
-                              {pendingAction === adjustment.id ? "Voiding…" : "Void adjustment"}
+                              {pendingAction === adjustment.id
+                                ? "Voiding…"
+                                : retryAction === adjustment.id
+                                  ? "Void adjustment again"
+                                  : "Void adjustment"}
                             </button>
                           ) : (
                             <p className="coach-adjustment-voided-note">

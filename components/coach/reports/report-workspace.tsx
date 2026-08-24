@@ -33,6 +33,7 @@ import {
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   formatReportMonth,
@@ -217,8 +218,14 @@ function ReportPreview({
   )
 }
 
+/**
+ * Save draft and publish share one notice, so `retryAction` names which of the
+ * two controls should offer the retry.
+ */
 type ReportEditorFeedback = ActionFeedback & {
   field?: "reportText"
+  offerRetry?: boolean
+  retryAction?: "draft" | "publish"
 }
 
 function ReportEditor({
@@ -257,6 +264,7 @@ function ReportEditor({
   const feedbackId = `${fieldId}-feedback`
   const helperId = `${fieldId}-helper`
   const reportTextInvalid = feedback?.tone === "error" && feedback.field === "reportText"
+  const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
   const published = report?.published
   const isPublished = Boolean(published)
   const adjustmentReviewMessage = "Attendance includes a make-up adjustment that requires review. Publish this report with the current attendance record?"
@@ -301,8 +309,16 @@ function ReportEditor({
       onResume()
       setFeedback({ message: "Draft saved", tone: "success" })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The draft could not be saved",
+        retained: "Your report text is still on screen",
+        subject: "The draft",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The draft could not be saved",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "draft",
         tone: "error",
       })
     } finally {
@@ -365,8 +381,16 @@ function ReportEditor({
         tone: "success",
       })
     } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The report could not be published",
+        retained: "Your report text is still on screen",
+        subject: "The report",
+      })
       setFeedback({
-        message: error instanceof Error ? error.message : "The report could not be published",
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: "publish",
         tone: "error",
       })
     } finally {
@@ -432,7 +456,9 @@ function ReportEditor({
           />
           <div className="coach-report-editor-actions">
             <button className="coach-report-action is-quiet" type="button" disabled={pendingAction !== null} onClick={() => void saveDraft()}>
-              <Save aria-hidden="true" /> {pendingAction === "draft" ? "Saving…" : "Save draft"}
+              <Save aria-hidden="true" /> {pendingAction === "draft"
+                ? "Saving…"
+                : retryAction === "draft" ? "Save draft again" : "Save draft"}
             </button>
             <button className="coach-report-action is-quiet" type="button" disabled={pendingAction !== null} onClick={() => setIsPreviewOpen(true)}>
               <Eye aria-hidden="true" /> Preview
@@ -440,7 +466,9 @@ function ReportEditor({
             <button className="coach-report-action is-primary" type="button" disabled={pendingAction !== null} onClick={() => void publish()}>
               <Send aria-hidden="true" /> {pendingAction === "publish"
                 ? isPublished ? "Updating…" : "Publishing…"
-                : isPublished ? "Update report" : "Publish report"}
+                : retryAction === "publish"
+                  ? isPublished ? "Update report again" : "Publish report again"
+                  : isPublished ? "Update report" : "Publish report"}
             </button>
           </div>
         </div>
