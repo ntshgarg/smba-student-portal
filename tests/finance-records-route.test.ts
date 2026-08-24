@@ -34,6 +34,7 @@ vi.mock("@/lib/finance/service", () => ({
 
 import { GET as downloadActivity } from "@/app/coach/financials/records/activity.csv/route"
 import { GET as downloadFeeRegister } from "@/app/coach/financials/records/fees.csv/route"
+import { FinanceServiceError } from "@/lib/finance/service"
 
 const coach = {
   subjectId: "coach-1",
@@ -219,6 +220,57 @@ describe("Financials Phase 3 record export routes", () => {
       query: "Aarav",
       to: "2026-08-31",
     }, { coachId: coach.subjectId })
+  })
+
+  // The finance service's refusals are conclusions, not faults, and the shared
+  // handler must keep answering them with the service's own status and wording.
+  it("passes a finance refusal through with its own status and message", async () => {
+    mocks.getFeeRegister.mockImplementationOnce(() => {
+      throw new FinanceServiceError("AUTHORIZATION", "Head coach access is required.")
+    })
+    mocks.getFinancialActivity.mockImplementationOnce(() => {
+      throw new FinanceServiceError("FINANCE_NOT_ACTIVE", "Financial tracking has not been activated.")
+    })
+
+    const feeResponse = await downloadFeeRegister(new Request(
+      "https://academy.example/coach/financials/records/fees.csv?mode=monthly&period=2026-08",
+    ))
+    const activityResponse = await downloadActivity(new Request(
+      "https://academy.example/coach/financials/records/activity.csv",
+    ))
+
+    expect(feeResponse.status).toBe(403)
+    expect(await feeResponse.text()).toBe("Head coach access is required.")
+    expect(activityResponse.status).toBe(400)
+    expect(await activityResponse.text()).toBe("Financial tracking has not been activated.")
+    for (const response of [feeResponse, activityResponse]) {
+      expect(response.headers.get("cache-control")).toBe("private, no-store")
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff")
+    }
+  })
+
+  // IQ-3: an unexpected fault stays opaque to the caller and is now diagnosable
+  // in the log, which is the whole point of the shared failure handler.
+  it("answers an unexpected fault with a private 500 that logs its cause", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mocks.getFeeRegister.mockImplementationOnce(() => {
+      throw new Error("SQLITE_BUSY: database is locked")
+    })
+
+    const response = await downloadFeeRegister(new Request(
+      "https://academy.example/coach/financials/records/fees.csv?mode=monthly&period=2026-08",
+    ))
+
+    expect(response.status).toBe(500)
+    expect(await response.text()).toBe("Unable to generate the fee-register export.")
+    expect(response.headers.get("cache-control")).toBe("private, no-store")
+    expect(consoleError).toHaveBeenCalledWith(
+      "Financial fee-register export failed.",
+      expect.objectContaining({ mode: "monthly", period: "2026-08" }),
+    )
+    expect(String(consoleError.mock.calls[0]?.[1]?.cause)).toContain("SQLITE_BUSY")
+
+    consoleError.mockRestore()
   })
 
   it("rejects invalid export periods before reading the ledger", async () => {

@@ -1,5 +1,6 @@
 import type { SessionSummaryResponse } from "@/lib/auth/session-summary"
 import { sessionProvider } from "@/lib/data"
+import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 
 export const runtime = "nodejs"
 
@@ -29,8 +30,10 @@ export async function GET() {
         role: identity.role,
       },
     })
-  } catch {
-    console.error("Session summary lookup failed.")
+  } catch (error) {
+    console.error("Session summary lookup failed.", {
+      cause: describeFailureCause(error),
+    })
     return summaryResponse({ status: "unavailable" }, 503)
   }
 }

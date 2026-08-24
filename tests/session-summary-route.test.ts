@@ -77,7 +77,13 @@ describe("public session summary", () => {
     expect(JSON.parse(body)).toEqual({ status: "unavailable" })
     expect(body).not.toContain("SQLITE_CANTOPEN")
     expect(body).not.toContain("token=secret")
-    expect(consoleError).toHaveBeenCalledWith("Session summary lookup failed.")
+    // The cause reaches the log so the failure is diagnosable, but the token in
+    // it does not.
+    expect(consoleError).toHaveBeenCalledWith(
+      "Session summary lookup failed.",
+      { cause: expect.stringContaining("SQLITE_CANTOPEN") },
+    )
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("token=secret")
     expectPrivateResponse(response)
     consoleError.mockRestore()
   })

@@ -1,4 +1,5 @@
 import { listActiveHomepageAnnouncements } from "@/lib/announcements/queries"
+import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,8 +14,10 @@ export async function GET() {
     return Response.json({
       announcements: listActiveHomepageAnnouncements(),
     }, { headers: publicResponseHeaders })
-  } catch {
-    console.error("Public announcement lookup failed.")
+  } catch (error) {
+    console.error("Public announcement lookup failed.", {
+      cause: describeFailureCause(error),
+    })
     return Response.json({ announcements: [] }, { headers: publicResponseHeaders })
   }
 }
