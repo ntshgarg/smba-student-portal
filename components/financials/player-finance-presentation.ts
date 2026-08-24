@@ -1,4 +1,4 @@
-import { formatDateKey } from "@/lib/format"
+import { formatDateKey, numberFormatter } from "@/lib/format"
 import type {
   FinanceStatus,
   PlayerFinanceDashboardSummary,
@@ -27,7 +27,8 @@ const PAYMENT_METHOD_LABELS: Record<PaymentView["method"], string> = {
 
 export function formatFinanceAmount(amountPaise: number) {
   const hasPaise = amountPaise % 100 !== 0
-  return new Intl.NumberFormat("en-IN", {
+  /* Fraction digits follow the amount, so this stays per call and shares by option key. */
+  return numberFormatter("en-IN", {
     style: "currency",
     currency: "INR",
     minimumFractionDigits: hasPaise ? 2 : 0,

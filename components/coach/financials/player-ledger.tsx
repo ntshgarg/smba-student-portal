@@ -758,9 +758,11 @@ function FeePlanEnder({
   )
 }
 
+const concessionPercentFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 })
+
 function concessionValueLabel(concession: CoachConcessionView) {
   if (concession.valueKind === "fixed") return formatInr(concession.value)
-  return `${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(concession.value / 100)}%`
+  return `${concessionPercentFormat.format(concession.value / 100)}%`
 }
 
 function ConcessionCreationForm({
