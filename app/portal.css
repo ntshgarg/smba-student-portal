@@ -831,7 +831,7 @@
 .coach-series-name-preview > span,
 .coach-series-name-preview small {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 760;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1588,7 +1588,7 @@
 
 .coach-series-roster-card button small {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1640,7 +1640,7 @@
 
 .coach-roster-list small {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
 }
 
 .coach-roster-list button {
@@ -1712,7 +1712,7 @@
 
 .coach-roster-assign > div:first-child small {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
 }
 
 .coach-roster-assign label > span {
@@ -1980,6 +1980,9 @@
     padding: 8px 6px;
   }
 
+  /* Held below the floor: this is the mobile Month View cell caption, and
+     mobile-calendar-attendance-freeze freezes the Month View's typography and
+     touch targets. Raising it needs its own milestone. */
   .coach-month-grid button small {
     font-size: 8px;
     line-height: 1.25;
@@ -2848,7 +2851,7 @@
   max-width: 900px;
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;
@@ -2906,7 +2909,7 @@
 .coach-published-report-version > span,
 .coach-published-report-updated > span {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -3016,7 +3019,7 @@
   min-height: 44px;
   border-bottom: 1px solid var(--line);
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3133,7 +3136,7 @@
   border: 1px solid rgba(97, 112, 131, 0.28);
   border-radius: var(--radius-pill);
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 760;
   letter-spacing: 0.06em;
@@ -3364,7 +3367,7 @@
 
 .coach-published-report-facts dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -3451,7 +3454,7 @@
 
   .coach-published-report-column-revision::after {
     content: "Revision / updated";
-    font-size: 9px;
+    font-size: var(--type-operational-floor);
   }
 
   .coach-published-report-column-updated {
@@ -4262,11 +4265,7 @@
   padding: 6px 9px;
   border: 1px solid var(--line);
   color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.1em;
   line-height: 1;
-  text-transform: uppercase;
 }
 
 .player-ticket-dashboard .player-ticket-context[data-tone="attention"] {
@@ -6239,6 +6238,10 @@
   border: 1px solid var(--line);
 }
 
+/* The joined Present/Absent control stays at 9px because the design record pins
+   it: coach-staff-roll-call-daily-ledger says to match this recorder "using the
+   same 9px desktop/tablet and 8px mobile uppercase typography". The rest of the
+   recorder / roll-call ledger pair is held at that size for the same reason. */
 .player-attendance-recorder .attendance-roster-choices button {
   min-height: 44px;
   padding: 0 8px;
@@ -6946,6 +6949,10 @@
     justify-self: stretch;
   }
 
+  /* Held below the floor: coach-staff-roll-call-daily-ledger pins the joined
+     Present/Absent control to "the same 9px desktop/tablet and 8px mobile
+     uppercase typography" as the player attendance recorder. This is that
+     mobile step. */
   .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
     > .staff-roll-call-choice-box button,
   .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
@@ -7210,7 +7217,7 @@
   border: 1px solid var(--red);
   padding: 7px 10px;
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 850;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -7253,7 +7260,7 @@
 
 .admin-support-list small {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 820;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -7354,7 +7361,7 @@
 
 .admin-directory-tools > label {
   color: var(--navy);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -7453,7 +7460,7 @@
 .admin-preview-group-header span {
   flex: 0 0 auto;
   color: #667387;
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -7526,7 +7533,7 @@
 
 .admin-preview-list small {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;

@@ -281,6 +281,12 @@
   pointer-events: none;
 }
 
+/* Held below the floor: .group > p is rendered only by attendance-card.tsx, as
+   the Players and Staff group labels of the Attendance dashboard card.
+   mobile-calendar-attendance-freeze names that card and freezes its
+   "typography ... and desktop presentation", and coach-dashboard-attendance-entry
+   repeats "Preserve the established card typography". Raising it needs its own
+   milestone. */
 .group > p {
   color: var(--steel);
   font-size: 9px;

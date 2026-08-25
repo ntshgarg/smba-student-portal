@@ -102,7 +102,7 @@
 .primaryMetric span {
   margin-top: 13px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -125,7 +125,7 @@
 
 .ledgerRows dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
