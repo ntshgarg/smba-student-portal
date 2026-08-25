@@ -8,7 +8,7 @@
     "stress": {
       "aria-allowed-role": 7,
       "aria-prohibited-attr": 24,
-      "color-contrast": 1015
+      "color-contrast": 1021
     }
   }
 }

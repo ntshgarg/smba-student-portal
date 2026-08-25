@@ -229,7 +229,29 @@ describe("role-aware login actions", () => {
     expect(mocks.redirect).toHaveBeenCalledWith("/auth/two-factor/setup")
   })
 
-  it("records incorrect PIN attempts and honors the shared account/IP lockout", async () => {
+  // The account/IP budget for PIN sign-in is spent inside the endpoint, because
+  // POST /api/auth/sign-in/pin reaches it without passing through this action at
+  // all. What is left here is translation, and that is what these assert: this
+  // action must not spend the budget a second time, and it must tell someone who
+  // is locked out to wait rather than that their PIN was wrong. The guard itself
+  // is covered against the real endpoint in tests/better-auth-runtime.test.ts.
+  it("reports a spent PIN budget as a wait, not as a bad credential", async () => {
+    mocks.findApprovedAccountByAcademyId.mockReturnValue({
+      accessLevel: null,
+      accountId: "player-account",
+      credentialStatus: "active",
+      role: "player",
+    })
+    mocks.signInPin.mockRejectedValue(Object.assign(new Error("rate limited"), {
+      status: "TOO_MANY_REQUESTS",
+    }))
+
+    await expect(loginWithPin({ error: null }, loginData("pin", "123456"))).resolves.toEqual({
+      error: "We couldn\u2019t sign you in. Wait a few minutes before trying again.",
+    })
+  })
+
+  it("reports any other PIN refusal generically and spends no budget of its own", async () => {
     mocks.findApprovedAccountByAcademyId.mockReturnValue({
       accessLevel: null,
       accountId: "player-account",
@@ -241,12 +263,10 @@ describe("role-aware login actions", () => {
     await expect(loginWithPin({ error: null }, loginData("pin", "123456"))).resolves.toEqual({
       error: "SMBA username or PIN is incorrect. Use your password if PIN login is unavailable.",
     })
-    expect(mocks.recordLoginFailure).toHaveBeenCalledOnce()
-
-    mocks.loginIsBlocked.mockReturnValue(true)
-    await expect(loginWithPin({ error: null }, loginData("pin", "123456"))).resolves.toEqual({
-      error: "We couldn’t sign you in. Wait a few minutes before trying again.",
-    })
     expect(mocks.signInPin).toHaveBeenCalledOnce()
+    // Counting here as well as in the endpoint would halve the real budget and
+    // write every audit row twice.
+    expect(mocks.recordLoginFailure).not.toHaveBeenCalled()
+    expect(mocks.loginIsBlocked).not.toHaveBeenCalled()
   })
 })
