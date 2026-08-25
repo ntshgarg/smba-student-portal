@@ -1245,6 +1245,34 @@ html {
 body {
   min-width: 320px;
   margin: 0;
+  /* No rule targeting the root element declares overflow — not `html` above,
+     not `:root` — so per CSS Overflow this propagates to the viewport instead
+     of clipping the body box: no route can be panned sideways. The test in
+     tests/accessibility-hardening.test.ts holds that precondition.
+
+     It does not blind the accessibility gate. Measured in Chrome for Testing
+     151.0.7922.34, a 320px viewport over 800px of content leaves
+     documentElement.scrollWidth at 800 both with this clip and with it lifted
+     — and 800 vs clientWidth is exactly what
+     tests/e2e/support/accessibility-audit.ts:428 compares, :182-189 raises as a
+     `serious` document-horizontal-overflow, and
+     tests/e2e/accessibility-regression.spec.ts:1016 asserts to be empty. A
+     green .github/workflows/ui-accessibility.yml is therefore already proof
+     that the page fits WITHOUT this declaration: all 67 states in
+     tests/e2e/support/accessibility-matrix.ts at 1440/820/390, plus the 35
+     `compact: true` ones at 320 as well. The other 32 states are unmeasured at
+     320. That gap is the whole of what is still unknown behind this line.
+
+     Do not move or copy it onto `html`. That stops the propagation and makes
+     `body` its own scroll container: with the clip on `body` alone a sticky
+     `top: 0` header held top: 0 after a 400px scroll, and with overflow-x on
+     `html` too the same header measured top: -400px. That was measured on a
+     synthetic sticky header; `.portal-header` is `position: sticky; top: 0`,
+     so the same thing would happen to it.
+
+     Neither measurement bears on the audit's actual proposal, which is
+     per-container `overflow-x` wrappers on the containers that need one.
+     Deleting this line and reading the gate names those containers. */
   overflow-x: hidden;
   background: var(--ivory);
   color: var(--ink);
