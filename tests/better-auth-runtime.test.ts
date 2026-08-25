@@ -303,6 +303,63 @@ describe("Better Auth runtime adapter", () => {
     })).rejects.toThrow()
   })
 
+  // The regression test for the PIN endpoint bypass. POST /api/auth/sign-in/pin
+  // is served publicly by app/api/auth/[...all]/route.ts, so it must spend the
+  // same account/IP budget the login form does. When the guard lived only in
+  // `loginWithPin`, this endpoint recorded nothing: fifty wrong PINs left
+  // auth_login_attempts empty and the account unlocked, which left a six-digit
+  // PIN on a minor's account open to unlimited guessing with nothing written for
+  // check-security-signals.mjs to alert on. Driven through the real auth
+  // instance, not a mock, because a mock is exactly what hid this.
+  it("spends the shared account lockout on direct PIN sign-in attempts", async () => {
+    const { auth } = await import("@/lib/auth/better-auth").then(async (module) => ({
+      auth: module.getAuth(),
+    }))
+    const { setPinCredential } = await import("@/lib/auth/credential-service")
+    await setPinCredential({
+      accountId: "00000000-0000-4000-8000-000000000001",
+      pin: "246810",
+    })
+
+    const attemptHeaders = new Headers({ "x-forwarded-for": "203.0.113.77" })
+    const refusals: string[] = []
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      try {
+        await auth.api.signInPin({
+          body: { pin: "999999", username: "SMBA#0001" },
+          headers: attemptHeaders,
+        })
+        refusals.push("accepted")
+      } catch (error) {
+        refusals.push(String((error as { status?: unknown }).status ?? "unknown"))
+      }
+    }
+
+    // No wrong PIN may ever be accepted, and the budget must run out rather than
+    // refusing identically for ever: the fifth failure locks the account, so the
+    // sixth is refused as rate limiting rather than as a bad credential.
+    expect(refusals).not.toContain("accepted")
+    expect(refusals.at(-1)).toBe("TOO_MANY_REQUESTS")
+    expect(refusals.filter((status) => status === "UNAUTHORIZED").length).toBe(5)
+
+    // The attempts have to be durable, or check-security-signals.mjs stays blind.
+    const attemptsDatabase = new Database(databasePath, { readonly: true })
+    const attempts = attemptsDatabase
+      .prepare("select count(*) as count from auth_login_attempts").get() as { count: number }
+    const events = attemptsDatabase
+      .prepare("select count(*) as count from auth_security_events where event_type = ?")
+      .get("login_rate_limited") as { count: number }
+    attemptsDatabase.close()
+    expect(attempts.count).toBeGreaterThan(0)
+    expect(events.count).toBeGreaterThan(0)
+
+    // A correct PIN must not slip through the lock either.
+    await expect(auth.api.signInPin({
+      body: { pin: "246810", username: "SMBA#0001" },
+      headers: attemptHeaders,
+    })).rejects.toThrow()
+  })
+
   it("requires production authenticator setup only for the head coach", () => {
     process.env.VERCEL = "1"
     process.env.VERCEL_ENV = "production"
