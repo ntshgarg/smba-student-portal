@@ -26,6 +26,9 @@ Every finding carries a classification, an objective/subjective marker, a severi
 
 ## 2. Headline verdict
 
+> **Status as of 25 August 2026 — all four waves are merged.** Waves 0–3 shipped as PRs #82–#107. Of the 57 findings this report opened, the four Critical and all but one of the High severities are closed; F-25 is deliberately withheld pending a product decision (§12b), and five Wave 3 rows were not attempted and form the natural content of a Wave 4. Two new findings — F-42 and F-43 — were opened by the remediation itself and are recorded in §12b. The verdict below is preserved as written on 24 August, before any of that work landed; read it as the starting state, not the current one.
+
+
 **This is a well-built product with unusually strong engineering discipline, one severe data-loss exposure on its most important workflow, and a design system that stopped at the colour layer.**
 
 The fundamentals hold up under scrutiny: zero `any`, zero `@ts-ignore`, zero `@ts-expect-error`, zero `eslint-disable` in source, and exactly two non-null assertions. Lint is clean. The unit suite is 142 files and 644 tests, all passing. Security posture is genuinely good. `prefers-reduced-motion` is handled in all ten stylesheets with zero `transition: all`. Every `<Image>` has an `alt` and there is not one raw `<img>`. The design decision record is better than most teams ever produce.
@@ -527,7 +530,7 @@ This is the part worth keeping. Four defects were caught *after* implementation 
 - **F-36's premise was false.** It claimed the opaque JPEG showed "a white box on the navy footer". There is no footer logo, and **no dark surface carries the logo anywhere** — all 18 screen surfaces sit on ivory or white, where the compensating `mix-blend-mode: multiply` maps white onto the backdrop exactly. The plate was already invisible. What was actually wrong is a hidden coupling: four no-op declarations silently depending on every logo backdrop staying light. The fix costs ~12 KB for no visible change, and [#87](https://github.com/ntshgarg/smba-student-portal/pull/87) says so plainly rather than claiming a defect it did not fix.
 - **F-29's count was stale.** 17 selectors / 233 lines was measured *before* the Wave 0 merge, which had already removed four. The real remainder was **12 selectors / 57 lines**, all of them inside media queries — which is why the earlier top-level scan missed them.
 
-### Wave 2 — the abstractions, and the gate
+### Wave 2 — the abstractions, and the gate ✅ **complete, merged as [#105](https://github.com/ntshgarg/smba-student-portal/pull/105) plus five earlier PRs**
 
 | # | PR | Findings | Files | Effort | Risk |
 |---|---|---|---|---|---|
@@ -552,7 +555,7 @@ This is the part worth keeping. Four defects were caught *after* implementation 
 | 22 | Wire up or delete the 5 unrun specs (20 cases, 1,186 lines) | F-25 | `package.json`, `.github/` | M | Medium — ⚠️ the responsive config pulls in 4 specs, not 1 |
 | 22a | Make `db:check` and the CI-diagnostics test capable of failing | F-25b, F-25c | `drizzle/meta/`, `tests/ci-diagnostics-controls.test.ts` | M | Low |
 
-### Wave 3 — design system and structure
+### Wave 3 — design system and structure ✅ **complete, merged as [#106](https://github.com/ntshgarg/smba-student-portal/pull/106) and [#107](https://github.com/ntshgarg/smba-student-portal/pull/107)**
 
 | # | PR | Findings | Effort | Risk |
 |---|---|---|---|---|
@@ -571,6 +574,30 @@ This is the part worth keeping. Four defects were caught *after* implementation 
 | 35 | `px` → `rem` | F-14 | L | Medium |
 | 36 | Read-level caching for the portal read models | F-22b | S–M | Low |
 
+**Shipped in Wave 3:** rows 23, 24, 27, 28, 29, 30, 31, 32, 33 (nine of fourteen). **Not attempted:** rows 25 and 26 (the remaining token tiers), 34 (`member-directory.tsx`, a real refactor rather than a move), 35 (`px` → `rem`), and 36 (read-level caching). Row 35 alone is **3,391 `px` occurrences in `app/globals.css`**; folding it into the same PR would have produced a diff past 15,000 lines with no visual-regression suite behind it. These five are the natural content of a Wave 4.
+
+#### What Waves 2 and 3 cost, and what they corrected
+
+Every finding was implemented by one agent, adversarially reviewed by a second, revised against that review, then re-reviewed by a third who had not seen the earlier rounds. **13 of 13 revised findings carried a SHIP or SHIP_WITH_NOTE verdict with zero blocking defects** at the end of that loop. Three findings failed their first review outright, and in each case the reviewer was right:
+
+- **F-35 raised type on a frozen surface.** `.group > p` is rendered only by `components/coach/attendance-card.tsx`, and `mobile-calendar-attendance-freeze` in `.21st/design.json` freezes the Attendance dashboard card's typography by name. The same review also caught that the re-derivation matched the literal string `9px` and so never counted the 8px tier — `.balanceAllocationRow small` — inside the very file the report called "the single largest cluster".
+- **F-26 dropped three load-bearing assertions.** The report justified removing them with "any divergent copy fails the markup assertions"; the reviewer disproved that with two mutations that pass the new file 13/13 and fail the deleted one.
+- **F-15's remedy was already disproved by this repo's own gate.** The accessibility suite proves the layout fits without `body { overflow-x: hidden }` across 67 states at 1440/820/390 plus the 35 `compact: true` states at 320. The shipped commit therefore documents the measurement and guards the precondition with a test, and changes no declaration — recording honestly that the other 32 states remain unmeasured at 320px.
+
+**Two findings turned out to rest on false premises**, and correcting them was worth more than executing them:
+
+- **F-32 asked for a class that already exists.** `.eyebrow` is declared at `app/globals.css:1323` and worn by 46 elements across 40 files. Retyping it to the plurality recipe would have moved every page-header eyebrow from 12px/0.13em to 10px/0.1em. What shipped instead is `.operational-eyebrow` for the genuinely unclassed smaller scale, with all seven affected selectors proven to compute byte-identically after token resolution.
+- **F-33's token substitution is dead code, and that is why it is safe.** `.coach-members-directory-header h1` is a frozen surface, but a later unlayered block at `app/globals.css:11426` re-declares `font-size` at identical 0-1-1 specificity, so it wins. The frozen mobile directory does not move.
+
+#### Four defects that only CI could find
+
+Local gates passed on all three PRs before they were opened. CI still found four things, and each is a lesson about where the local gate is blind:
+
+1. **`npm run test:ci` excludes `tests/regression-fixture.test.ts` by design**, and CI runs it as a separate step. F-20e adds migration `0030`, the test pinned `0029`, and the local suite stayed green while the pipeline failed. *Any wave that adds a migration must run that file explicitly.*
+2. **`experimental.cssChunking: "strict"` is webpack-only.** Next 16.3.1 hard-errors on it under Turbopack, which is what this project builds with. It was also unnecessary: on a real production build the root layout's stylesheet is emitted before the child layout's, verified by `/login` linking globals (the chunk carrying Preflight and `:root`) ahead of portal (the chunk carrying `.coach-slot-day`). Local `node_modules` held Next 16.2.12 against a `package.json` pinning 16.3.1, which is why the local build passed — *run `npm ci` before trusting a build result.*
+3. **A `revalidate` export turns a static route into an ISR one, and the client router then re-prefetches it without settling.** See F-42 below.
+4. **The accessibility advisory baseline drifts with wall-clock time.** See F-43 below.
+
 **① `lib/finance/service.ts`** is touched by PRs 9a, 10, 10a and 16. Take them as 10 → 16 → 9a → 10a; PR 9a is the largest and should not share a review window with any of the others.
 **② `app/globals.css`** is touched by PRs 3, 5, 21, 23, 24, 25, 26, 27, 29. Line numbers churn — re-derive rather than trusting any recorded here.
 
@@ -581,6 +608,56 @@ This is the part worth keeping. Four defects were caught *after* implementation 
 Wave 0 first, because everything downstream is smaller and unambiguous once it lands. Wave 1 is seven genuinely independent small PRs that between them fix a whole-dashboard outage, a WCAG 1.4.1 failure and the product's worst state treatment — a good warm-up that also removes noise from later diffs. PR 9 gets the review bench to itself. Wave 2 is broad and mostly independent. Wave 3 can be deferred indefinitely without the product degrading, with one exception: PR 31 must precede 32–34.
 
 **Where to spend review attention.** Not on merge conflicts — on whether each finding's stated *mechanism* is real. The verifiers corrected 90 of 152 findings, and the corrections clustered in claims about mechanism ("which error reaches this catch", "are these two functions identical", "what does this config edit cause") and in counts that had gone stale. Symptoms held up almost perfectly. Six PRs above carry an explicit ⚠️ because the obvious remedy would ship a regression; those are the rows to read twice.
+
+---
+
+## 12b. Findings opened by the remediation itself
+
+Two defects were introduced or exposed while shipping Waves 2 and 3. Both are recorded here because neither is visible from a code read alone — each needed a build or a pipeline run to surface.
+
+### F-42 — a `revalidate` export on `/` stalls the client router app-wide (High, fixed in [#105](https://github.com/ntshgarg/smba-student-portal/pull/105))
+
+**Classification:** objective defect · **Severity:** High · **Confidence:** certain (bisected) · **Effort:** S
+
+F-22c correctly removed `revalidatePath("/")` from `revalidateAcademyData`, and its reviewer correctly objected that nothing else invalidates the homepage, whose footer renders `new Date().getFullYear()` — so the copyright line would read a year behind from every 1 January. The remedy chosen for *that* — giving `app/(public)/page.tsx` its own `export const revalidate = 86400` — was wrong, and it broke the application.
+
+`revalidate` turns `/` from a fully static route into an ISR one. The client router then re-prefetches it without ever settling, so `networkidle` never fires. There are **13 `<Link href={publicSiteUrl}>`** in the tree, including in `components/app-shell.tsx` and `components/coach/coach-shell.tsx`, which render on essentially every page — so the effect is not confined to the marketing surface. Bisected against the stress fixture with nothing else changed between builds:
+
+| build | `page.goto("/login", { waitUntil: "networkidle" })` |
+|---|---|
+| with `export const revalidate = 86400` | timed out at 60,000 ms |
+| without it | passed in 3.5 s |
+
+**Why it matters.** It presented as two responsive-authentication E2E timeouts, which reads like flake. It is not flake: any page-load path that waits for network quiescence stalls, and that includes real user agents doing prefetch-heavy navigation.
+
+**Resolution.** `/` goes back into `revalidateAcademyData` (19 paths → 18) and the export comes out. `/reports` stays removed — a bare `redirect("/player/reports")` whose target is already covered, which was always the sound half of the finding. One `revalidatePath` on a route holding no coach-written data is the price of a correct copyright year, and it is far cheaper than the alternative.
+
+### F-43 — the accessibility advisory baseline drifts with wall-clock time (Medium, open)
+
+**Classification:** objective defect · **Severity:** Medium · **Confidence:** certain · **Effort:** M
+
+The gate compares each axe rule against a recorded per-rule ceiling. `stress · color-contrast` was recorded at 1013 and began failing at 1015 on every open branch simultaneously — including the Wave 2 branch, which changes no CSS at all:
+
+| run | code | time (UTC) | `color-contrast` | result |
+|---|---|---|---|---|
+| `main` | `3fff763` | 07:43 | ≤ 1013 | pass |
+| Wave 2 (no CSS) | `3fff763`+7 | 14:04 | **1015** | fail |
+| Wave 3 | `3fff763`+7 | 14:04 | **1015** | fail |
+| portal CSS split | `3fff763`+2 | 14:13 | **1015** | fail |
+
+Three different code states over one base commit, identical delta. None of the 1015 advisories targets a selector any branch edited, and every one carries the same message — axe declining to judge an element over a background gradient, which is `needs-review`, not a failure.
+
+**Mechanism.** The stress fixture is pinned to `FIXTURE_ANCHOR_DATE = "2026-08-03"` (`scripts/regression/profiles.ts:3`) but the application renders against the real clock, so sessions slide out of the future as real time advances and the rendered DOM drifts with them. The two states carrying most of this rule's advisories are attendance views (`junior-coach-personal-attendance` at 371, `player-attendance` at 271). 1013 was recorded on a knife edge and the clock walked past it.
+
+**Why it matters.** A gate that fails for reasons unrelated to the diff trains reviewers to dismiss it. That is expensive here, because this gate is the only automated check standing between a CSS change and a WCAG regression across 67 states.
+
+**Interim action taken.** The ceiling was re-recorded at 1015 via `update-accessibility-advisory-baseline.ts --allow-increase`, from the CI artifact of run `32857232147`; only that ceiling moved. **This raises a ceiling rather than removing the drift, so the number will move again.**
+
+**Proposed fix.** Pin the application's clock for the accessibility run so the fixture's frozen dates and the rendered output agree — Playwright's `page.clock` API, or an env-injected "now" the server honours in test builds. Until then, expect this gate to fail spuriously on a cadence set by the gap between today's date and the anchor.
+
+### An unrelated flake worth naming
+
+`tests/design-tokens.test.ts › never reads a custom property that nothing declares` runs ~3.5 s idle against a **5,000 ms** timeout, so it fails under parallel load rather than from any change. It surfaced repeatedly during this work alongside `p3-interface-hardening` and `backup-restore`, all of which pass in isolation. Raising that one timeout would remove a recurring false signal.
 
 ---
 
