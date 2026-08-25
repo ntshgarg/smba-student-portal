@@ -7,6 +7,16 @@ function source(relativePath: string) {
   return readFileSync(path.join(process.cwd(), relativePath), "utf8")
 }
 
+// The portal rules these assertions pin live in app/portal.css since the F-22
+// split; app/globals.css keeps only what the marketing homepage and the root
+// error boundaries can reach. Both stylesheets load on every authenticated
+// route, globals first, so concatenating them in that order is what the browser
+// actually resolves and keeps the assertions indifferent to which side a rule
+// sits on.
+function portalStyles() {
+  return source("app/globals.css") + source("app/portal.css")
+}
+
 describe("authentication error focus", () => {
   it("returns focus after every failed login response", () => {
     const login = source("components/login-form.tsx")
@@ -46,7 +56,7 @@ describe("courtside save focus", () => {
   const footerButton = (contents: string) => contents
     .slice(contents.indexOf('className="attendance-record-footer"'))
     .match(/<button[\s\S]*?<\/button>/u)?.[0] ?? ""
-  const styles = source("app/globals.css")
+  const styles = portalStyles()
 
   it("keeps the player register's save button focusable across a save", () => {
     const recorder = source("components/coach/attendance/player-attendance-recorder.tsx")
@@ -115,9 +125,12 @@ describe("courtside save focus", () => {
 })
 
 describe("operational mobile controls", () => {
-  const styles = source("app/globals.css")
+  const styles = portalStyles()
   const mediaStart = styles.indexOf('@media (max-width: 720px), (pointer: coarse) {')
-  const mediaEnd = styles.indexOf("@media (prefers-reduced-motion: reduce)", mediaStart)
+  // The reduced-motion floor used to open right after this query and marked its
+  // end; the F-22 split held that floor back in globals.css, so bound the slice
+  // on the query's own unindented closing brace instead.
+  const mediaEnd = styles.indexOf("\n}\n", mediaStart)
   const antiZoomRule = styles.slice(mediaStart, mediaEnd)
 
   it("uses 16px text for only the scoped visible inputs and selects", () => {

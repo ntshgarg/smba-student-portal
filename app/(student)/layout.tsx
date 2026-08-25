@@ -6,6 +6,8 @@ import { AdminPreviewBanner } from "@/components/admin-preview-banner"
 import { getCurrentStudent } from "@/lib/student/current-student"
 import { recoveryEmailEnrollmentRequired } from "@/lib/auth/recovery-service"
 
+import "../portal.css"
+
 export const metadata: Metadata = {
   title: {
     default: "SMBA Player Journal",
