@@ -105,12 +105,15 @@ export function ReportAccordion({
               </button>
             </h2>
 
+            {/* The panel is deliberately not a landmark. The <section> above is
+                already the labelled region for this year, and giving the panel
+                the same role and the same aria-labelledby left two landmarks
+                indistinguishable to anyone navigating by landmark. The button's
+                aria-controls still points here, which is what a disclosure needs. */}
             {isYearOpen && (
               <div
-                aria-labelledby={yearTriggerId}
                 className="report-year-panel"
                 id={yearPanelId}
-                role="region"
               >
                 <div className="report-year-months">
                   {yearGroup.reports.map((report, reportIndex) => {

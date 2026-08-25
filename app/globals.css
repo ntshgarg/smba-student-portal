@@ -4255,6 +4255,10 @@ h3 {
 
 .coach-member-search input {
   width: 100%;
+  /* 2.5.8 asks 24x24 of the target itself. This input carried a 24px floor only
+     inside (max-width: 820px), so the desktop register -- where a head coach
+     actually works -- got a 22px one. The floor belongs here, unconditionally. */
+  min-height: 24px;
   min-width: 0;
   border: 0;
   outline: 0;
@@ -6927,8 +6931,11 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-slot-day input {
-  width: 18px;
-  min-height: 18px;
+  /* The label is generous, but 2.5.8 measures the target, and for a checkbox
+     that is the box. 18px failed it on every weekday in the schedule creator. */
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
   accent-color: var(--red);
 }
 
