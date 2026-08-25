@@ -8,6 +8,7 @@ import {
   formatDateKey,
   numberFormatter,
 } from "@/lib/format"
+import { IVORY, NAVY, RED, STEEL, WHITE } from "@/lib/pdf-palette"
 import type {
   FinanceReceiptDocument,
   FinanceStatementCharge,
@@ -20,12 +21,12 @@ import type {
   PaymentMethod,
 } from "@/lib/finance/types"
 
-const NAVY = "#081c42"
-const RED = "#c91f2b"
-const IVORY = "#f6f3ec"
-const STEEL = "#617083"
+/* The three tones only the fee documents use, so they stay local rather than
+   joining `@/lib/pdf-palette`. GREEN and AMBER have no `:root` counterpart at
+   all — the nearest are `--green` (CIE76 ΔE 4.83) and `--makeup-dark` (13.63).
+   PALE is ΔE 0.86 from `--ivory-deep`, close enough to be the same colour, but
+   no decision says the statement's record fill is that token. */
 const PALE = "#ece9e1"
-const WHITE = "#ffffff"
 const GREEN = "#176b4d"
 const AMBER = "#8a5a00"
 

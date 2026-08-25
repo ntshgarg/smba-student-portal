@@ -3,6 +3,8 @@ import path from "node:path"
 
 import { describe, expect, it } from "vitest"
 
+import { IVORY, NAVY, RED, STEEL, WHITE } from "@/lib/pdf-palette"
+
 function projectFiles(directory: string, extension: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(directory, entry.name)
@@ -58,6 +60,74 @@ describe("design color tokens", () => {
     expect(globals).toContain("--rose: #f2a0a5;")
     expect(globals.match(/--rose-strong:\s*#f18b92;/giu)).toHaveLength(1)
     expect(strongRoseLiterals).toHaveLength(1)
+  })
+
+  it("keeps the generated PDFs on the screen palette", () => {
+    const globals = readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8")
+    const tokens = new Map<string, string>()
+
+    for (const match of rootBlock(globals).matchAll(/(--[\w-]+):\s*(#[0-9a-f]{6});/giu)) {
+      tokens.set(match[1], match[2].toLowerCase())
+    }
+
+    /* A PDF page carries DeviceRGB values, so `lib/pdf-palette.ts` restates
+       these five as literals and nothing at runtime re-reads `:root` to notice
+       when they part company. Both generators once held their own copy; navy
+       had drifted CIE76 ΔE 11.27 and steel ΔE 5.37 off the tokens. */
+    expect({
+      "--ivory": IVORY,
+      "--navy": NAVY,
+      "--red": RED,
+      "--steel": STEEL,
+      "--white": WHITE,
+    }).toEqual({
+      "--ivory": tokens.get("--ivory"),
+      "--navy": tokens.get("--navy"),
+      "--red": tokens.get("--red"),
+      "--steel": tokens.get("--steel"),
+      "--white": tokens.get("--white"),
+    })
+  })
+
+  it("keeps both PDF generators reading that palette", () => {
+    /* The guard above only checks the five exports; it stays green if a
+       generator stops importing them. TypeScript blocks a second `const NAVY`,
+       but `const BRAND_NAVY = "#081c42"` or an inline `.fillColor("#081c42")`
+       reintroduces the drift F-37 removed — and both files already spell some
+       colours out, so an inline literal is the habit there, not a hypothetical.
+       Every hex a generator is still allowed to own is therefore listed here:
+       adding another is a decision someone takes on purpose. */
+    const documentOwn: Record<string, string[]> = {
+      "lib/reports/pdf.ts": [
+        "#d9d8d3", // footer rule
+        "#b9c9e5", // the report label sitting on the navy panel
+      ],
+      "lib/finance/pdf.ts": [
+        "#ece9e1", // PALE
+        "#176b4d", // GREEN
+        "#8a5a00", // AMBER
+        "#d2d0c9", // section and footer rules
+        "#b9c9e5", // the quiet half of the totals panel
+      ],
+    }
+
+    const strays = Object.entries(documentOwn).flatMap(([file, own]) => {
+      const contents = readFileSync(path.join(process.cwd(), file), "utf8")
+      const missingImport = /from "@\/lib\/pdf-palette"/u.test(contents)
+        ? []
+        : [`${file} no longer imports @/lib/pdf-palette`]
+
+      return [
+        ...missingImport,
+        ...contents.split("\n").flatMap((line, index) => (
+          [...line.matchAll(/#[0-9a-f]{3,8}\b/giu)]
+            .filter((match) => !own.includes(match[0].toLowerCase()))
+            .map((match) => `${file}:${index + 1} ${match[0]} belongs in @/lib/pdf-palette`)
+        )),
+      ]
+    })
+
+    expect(strays).toEqual([])
   })
 
   it("keeps quiet player fee states at readable body-text contrast", () => {
