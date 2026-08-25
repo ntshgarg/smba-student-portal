@@ -22,6 +22,20 @@ function sessionCookie(headers: Headers) {
     ?.split(";")[0] ?? ""
 }
 
+/**
+ * auth_login_attempts is one budget shared by every factor and every case in
+ * this file, and the two lockout cases below both count refusals of the same
+ * seeded coach exactly. Any earlier case that spends a failure against
+ * SMBA#0001 -- "rejects an incorrect password through the same adapter" spends
+ * one -- would otherwise shift where the fifth failure lands and lock the
+ * account an attempt early.
+ */
+function clearLoginAttempts() {
+  const database = new Database(databasePath)
+  database.prepare("delete from auth_login_attempts").run()
+  database.close()
+}
+
 describe("Better Auth runtime adapter", () => {
   let auth: typeof import("@/lib/auth/better-auth")["auth"]
   let coachTotpRequired: typeof import("@/lib/auth/better-auth")["coachTotpRequired"]
@@ -312,6 +326,7 @@ describe("Better Auth runtime adapter", () => {
   // check-security-signals.mjs to alert on. Driven through the real auth
   // instance, not a mock, because a mock is exactly what hid this.
   it("spends the shared account lockout on direct PIN sign-in attempts", async () => {
+    clearLoginAttempts()
     const { auth } = await import("@/lib/auth/better-auth").then(async (module) => ({
       auth: module.getAuth(),
     }))
@@ -358,6 +373,101 @@ describe("Better Auth runtime adapter", () => {
       body: { pin: "246810", username: "SMBA#0001" },
       headers: attemptHeaders,
     })).rejects.toThrow()
+  })
+
+  // The regression test for the password endpoint bypass, the twin of the PIN
+  // one above. POST /api/auth/sign-in/username is served publicly by
+  // app/api/auth/[...all]/route.ts, so it must spend the same account/IP budget
+  // the login form does. When the guard lived only in `loginWithAcademyId`,
+  // the six wrong passwords below answered UNAUTHORIZED six times and left both
+  // auth_login_attempts and auth_security_events empty, so nothing locked and
+  // check-security-signals.mjs -- which alerts on `login_rate_limited` -- never
+  // saw the run. Driven through the real auth
+  // instance rather than a mock, because a mock is what hid the PIN twin.
+  it("spends the shared account lockout on direct username sign-in attempts", async () => {
+    clearLoginAttempts()
+    const { requestSecurityContext } = await import("@/lib/auth/security-context")
+    const attemptHeaders = new Headers({ "x-forwarded-for": "198.51.100.42" })
+    const { ipHash } = requestSecurityContext(attemptHeaders)
+
+    const refusals: string[] = []
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      try {
+        await auth.api.signInUsername({
+          body: { password: "this is not the password", username: "SMBA#0001" },
+          headers: attemptHeaders,
+        })
+        refusals.push("accepted")
+      } catch (error) {
+        refusals.push(String((error as { status?: unknown }).status ?? "unknown"))
+      }
+    }
+
+    // No wrong password may ever be accepted, and the budget must run out rather
+    // than refusing identically for ever: the fifth failure locks the account,
+    // so the sixth is refused as rate limiting rather than as a bad credential.
+    expect(refusals).not.toContain("accepted")
+    expect(refusals.filter((status) => status === "UNAUTHORIZED").length).toBe(5)
+    expect(refusals.at(-1)).toBe("TOO_MANY_REQUESTS")
+
+    // The attempts and the events have to be durable, or check-security-signals.mjs
+    // stays blind. Both are read back by the source address this case owns, so
+    // neither the PIN case above nor the earlier sign-ins can supply them.
+    const attemptsDatabase = new Database(databasePath, { readonly: true })
+    const attempts = attemptsDatabase
+      .prepare("select failed_count as failedCount from auth_login_attempts where key = ?")
+      .get(`ip:${ipHash}`) as { failedCount: number } | undefined
+    const eventCounts = attemptsDatabase.prepare(
+      "select event_type as eventType, count(*) as count from auth_security_events"
+      + " where ip_hash = ? group by event_type",
+    ).all(ipHash) as { count: number, eventType: string }[]
+    attemptsDatabase.close()
+    expect(attempts?.failedCount).toBe(5)
+    expect(Object.fromEntries(eventCounts.map((row) => [row.eventType, row.count])))
+      .toEqual({ login_failed: 5, login_rate_limited: 1 })
+
+    // The correct password must not slip through the lock either. This account
+    // carries an authenticator by now, so without the lock it would answer
+    // `twoFactorRedirect` instead of throwing.
+    await expect(auth.api.signInUsername({
+      body: { password: "SMBA local access 2026!", username: "SMBA#0001" },
+      headers: attemptHeaders,
+    })).rejects.toThrow()
+  })
+
+  // Activation and first-run head-coach setup present a password this process
+  // wrote a moment earlier, so there is no guess for the lockout to slow -- and
+  // refusing them would leave a brand-new player unable to reach their first
+  // session because twenty unrelated failures came from the same carrier
+  // address. Driven through the real hooks, because that is where the exemption
+  // lives and a mocked endpoint cannot show it.
+  it("lets a password this server just wrote through a spent lockout", async () => {
+    clearLoginAttempts()
+    const { signInWithJustWrittenPassword } = await import("@/lib/auth/username-login-guard")
+    const attemptHeaders = new Headers({ "x-forwarded-for": "198.51.100.77" })
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await auth.api.signInUsername({
+        body: { password: "this is not the password", username: "SMBA#0001" },
+        headers: attemptHeaders,
+      }).catch(() => undefined)
+    }
+
+    // The door is shut, even for the right password.
+    await expect(auth.api.signInUsername({
+      body: { password: "SMBA local access 2026!", username: "SMBA#0001" },
+      headers: attemptHeaders,
+    })).rejects.toMatchObject({ status: "TOO_MANY_REQUESTS" })
+
+    // Not shut for the sign-in that follows a password just written. This
+    // account carries an authenticator by now, so the answer is a second-factor
+    // hand-off rather than a session; either way it is an answer and not a
+    // throw, which is what the block would have produced.
+    const activated = await signInWithJustWrittenPassword(() => auth.api.signInUsername({
+      body: { password: "SMBA local access 2026!", username: "SMBA#0001" },
+      headers: attemptHeaders,
+    }))
+    expect(activated).toMatchObject({ twoFactorRedirect: true })
   })
 
   it("requires production authenticator setup only for the head coach", () => {

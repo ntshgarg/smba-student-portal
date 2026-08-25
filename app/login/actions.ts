@@ -21,9 +21,9 @@ import {
   createActivationClaimToken,
   loginIsBlocked,
   recordLoginFailure,
-  recordLoginSuccess,
   validateNewPassword,
 } from "@/lib/auth/credential-service"
+import { signInWithJustWrittenPassword } from "@/lib/auth/username-login-guard"
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
 import {
@@ -37,12 +37,13 @@ import { publicSiteUrl } from "@/lib/config"
 const GENERIC_LOGIN_ERROR = "SMBA username or password is incorrect. If this is your first visit, activate your account."
 const GENERIC_PIN_ERROR = "SMBA username or PIN is incorrect. Use your password if PIN login is unavailable."
 const RATE_LIMITED_LOGIN_ERROR = "We couldn\u2019t sign you in. Wait a few minutes before trying again."
+const ACTIVATED_WITHOUT_SESSION_ERROR = "Your account is ready, but we couldn\u2019t sign you in. Open the sign-in page and use your new password."
 
 // Better Auth surfaces an endpoint refusal as an APIError carrying the status it
-// was thrown with. The PIN endpoint throws TOO_MANY_REQUESTS once the shared
-// account/IP budget is spent and UNAUTHORIZED otherwise, and only the first
-// should tell the person to wait -- saying "wait a few minutes" to someone who
-// simply mistyped their PIN sends them away from a screen they could have used.
+// was thrown with. Both sign-in endpoints throw TOO_MANY_REQUESTS once the
+// shared account/IP budget is spent and UNAUTHORIZED otherwise, and only the
+// first should tell the person to wait -- saying "wait a few minutes" to someone
+// who simply mistyped sends them away from a screen they could have used.
 function isRateLimitedAuthError(error: unknown) {
   if (typeof error !== "object" || error === null) return false
   const status = (error as { status?: unknown }).status
@@ -76,35 +77,57 @@ export async function loginWithAcademyId(
   }
   if (!password) return { error: GENERIC_LOGIN_ERROR }
 
+  // The account/IP lockout and the audit rows for a guess that reaches the
+  // endpoint live in its hooks (lib/auth/username-login-guard.ts), not here: it
+  // is reachable both through `auth.api.signInUsername` below and directly at
+  // POST /api/auth/sign-in/username, so a guard that only sat in this action
+  // covered one caller and left the other open.
+  //
+  // The block is still read here, and read first, because this action answers
+  // two ways. An Academy ID that exists and is active reaches the endpoint and
+  // is refused there; one that does not exist never gets that far. Without this
+  // check the two answers diverge the moment the budget is spent -- wait copy
+  // for a real ID, "incorrect" for an unknown one -- which is one request per
+  // candidate, no password needed, and the branch below never blocks, so the
+  // probing never stops. Returning here keeps both answers identical and keeps
+  // this action off the endpoint entirely, so nothing is counted or audited
+  // twice.
   const requestHeaders = await headers()
   const security = requestSecurityContext(requestHeaders)
   const subjectHash = authSubjectHash(academyId)
-  const auditBase = {
-    ipHash: security.ipHash,
-    subjectHash,
-    userAgent: security.userAgent,
-  }
-
   if (loginIsBlocked({ ipHash: security.ipHash, subjectHash })) {
     writeAuthSecurityEvent({
-      ...auditBase,
       eventType: "login_rate_limited",
+      ipHash: security.ipHash,
+      metadata: { factor: "password" },
       outcome: "blocked",
+      subjectHash,
+      userAgent: security.userAgent,
     })
-    return { error: "We couldn’t sign you in. Wait a few minutes before trying again." }
+    return { error: RATE_LIMITED_LOGIN_ERROR }
   }
 
   const account = findApprovedAccountByAcademyId(academyId)
   if (!account?.role || account.credentialStatus !== "active") {
-    // Match the expensive path used for a real credential to reduce account
-    // discovery through response timing.
+    // This branch answers without ever reaching the endpoint, so the attempt is
+    // still counted here or it is counted nowhere: dropping it would leave the
+    // form an unmetered oracle for probing which Academy IDs exist, cheaper than
+    // the endpoint the hooks now meter. Hashing first matches the expensive path
+    // used for a real credential, to reduce that same discovery through response
+    // timing -- and it is the reason the block above has to come first, because
+    // one scrypt measured 74-83 ms idle on this machine and more under load, so
+    // a dozen requests a second from one address would otherwise pin a core on
+    // an unauthenticated path that no proxy rule meters.
     await hashPassword(password)
     recordLoginFailure({ ipHash: security.ipHash, subjectHash })
     writeAuthSecurityEvent({
-      ...auditBase,
       accountId: account?.accountId,
       eventType: "login_failed",
+      ipHash: security.ipHash,
+      metadata: { factor: "password" },
       outcome: "failure",
+      subjectHash,
+      userAgent: security.userAgent,
     })
     return { error: GENERIC_LOGIN_ERROR }
   }
@@ -116,25 +139,9 @@ export async function loginWithAcademyId(
       body: { password, username: academyId },
       headers: requestHeaders,
     })
-  } catch {
-    recordLoginFailure({ ipHash: security.ipHash, subjectHash })
-    writeAuthSecurityEvent({
-      ...auditBase,
-      accountId: account.accountId,
-      eventType: "login_failed",
-      outcome: "failure",
-    })
-    return { error: GENERIC_LOGIN_ERROR }
+  } catch (error) {
+    return { error: isRateLimitedAuthError(error) ? RATE_LIMITED_LOGIN_ERROR : GENERIC_LOGIN_ERROR }
   }
-
-  recordLoginSuccess(subjectHash)
-  writeAuthSecurityEvent({
-    ...auditBase,
-    accountId: account.accountId,
-    eventType: "login_succeeded",
-    metadata: { factor: "password" },
-    outcome: "success",
-  })
 
   if ("twoFactorRedirect" in response && response.twoFactorRedirect) {
     redirect("/auth/two-factor")
@@ -221,11 +228,25 @@ export async function activateAccount(
     }
   }
 
+  // `completeAccountActivation` has written the password and consumed the claim,
+  // so the account is live whatever happens next. The sign-in is exempt from the
+  // login lockout because the password it presents is the one just written --
+  // without that, twenty unrelated failures from the same address would refuse a
+  // brand-new player their first session. Anything else that refuses it still
+  // must not surface as an unhandled action: the claim is spent, so a throw here
+  // would strand somebody whose account is already usable.
   const requestHeaders = await headers()
-  const response = await getAuth().api.signInUsername({
-    body: { password, username: activated.academyId },
-    headers: requestHeaders,
-  })
+  const requestAuth = getAuth()
+  let response: Awaited<ReturnType<typeof requestAuth.api.signInUsername>>
+  try {
+    response = await signInWithJustWrittenPassword(() => requestAuth.api.signInUsername({
+      body: { password, username: activated.academyId },
+      headers: requestHeaders,
+    }))
+  } catch {
+    cookieStore.delete(ACTIVATION_CLAIM_COOKIE)
+    return { error: ACTIVATED_WITHOUT_SESSION_ERROR, errorField: null }
+  }
   cookieStore.delete(ACTIVATION_CLAIM_COOKIE)
   if ("twoFactorRedirect" in response && response.twoFactorRedirect) redirect("/auth/two-factor")
   redirect("/auth/pin/setup")
