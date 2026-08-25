@@ -84,6 +84,11 @@
   --type-operational-body: 13px;
   --type-operational-action: 12px;
   --type-operational-floor: 10px;
+  /* The coach workspace page title. 5 of the 27 hand-authored base H1 recipes
+     declare this exact clamp, every one of them beside the same 545 / -0.075em
+     / 0.9. It is *not* the `.page-intro h1` size: the shared PageIntro
+     component runs a larger clamp(56px, 8vw, 112px) and stays on it. */
+  --type-page-title: clamp(58px, 7.5vw, 102px);
   --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-pill: 999px;
@@ -216,14 +221,9 @@
   background: transparent;
 }
 
-.coach-adjustment-review-heading,
 .coach-adjustment-transfer span,
-.coach-adjustment-review-reason > span{
+.coach-adjustment-review-reason > span {
   color: var(--red);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 .coach-adjustment-form {
@@ -232,6 +232,7 @@
 
 .coach-adjustment-review-heading {
   margin-bottom: 10px;
+  color: var(--red);
 }
 
 .coach-adjustment-field,
@@ -797,7 +798,7 @@
 .coach-adjustment-history-disclosure small {
   margin-top: 1px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 650;
 }
 
@@ -922,6 +923,13 @@
   padding: 7px 14px 7px 0;
 }
 
+/* .coach-adjustment-history-status is held below the floor: it sits in
+   .coach-adjustment-history-row-actions, a hard grid-template-columns: 128px,
+   which leaves a 104px content box after its own 12px padding. "Requires
+   review" is 15 uppercase characters at 0.07em tracking and already fills that
+   at 9px, so 10px would break it onto a second line. The shared 9px below is
+   for that chip only; .coach-adjustment-history-void renders full width inside
+   .coach-adjustment-history-details and takes the floor in its own rule. */
 .coach-adjustment-history-status,
 .coach-adjustment-history-void {
   display: inline-flex;
@@ -964,6 +972,7 @@
   border-color: var(--red);
   background: transparent;
   color: var(--red);
+  font-size: var(--type-operational-floor);
 }
 
 .coach-adjustment-history-void:hover:not(:disabled) {
@@ -998,7 +1007,7 @@
 
 .coach-adjustment-history-details dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1098,7 +1107,6 @@
 
   .coach-adjustment-missed-calendar-grid > .is-weekday {
     height: 26px;
-    font-size: 9px;
   }
 
   .coach-adjustment-missed-calendar-grid > i,
@@ -1132,7 +1140,6 @@
   }
 
   .coach-adjustment-transfer small {
-    font-size: 9px;
     line-height: 1.35;
   }
 
@@ -1226,6 +1233,9 @@
     gap: 7px;
   }
 
+  /* This 340px-and-below step exists to fit the two draft actions on one row at
+     padding-inline: 4px. Raising it back to the 10px floor is the thing the
+     media query was written to undo. */
   .coach-adjustment-draft-actions button {
     gap: 6px;
     padding-inline: 4px;
@@ -1245,6 +1255,34 @@ html {
 body {
   min-width: 320px;
   margin: 0;
+  /* No rule targeting the root element declares overflow — not `html` above,
+     not `:root` — so per CSS Overflow this propagates to the viewport instead
+     of clipping the body box: no route can be panned sideways. The test in
+     tests/accessibility-hardening.test.ts holds that precondition.
+
+     It does not blind the accessibility gate. Measured in Chrome for Testing
+     151.0.7922.34, a 320px viewport over 800px of content leaves
+     documentElement.scrollWidth at 800 both with this clip and with it lifted
+     — and 800 vs clientWidth is exactly what
+     tests/e2e/support/accessibility-audit.ts:428 compares, :182-189 raises as a
+     `serious` document-horizontal-overflow, and
+     tests/e2e/accessibility-regression.spec.ts:1016 asserts to be empty. A
+     green .github/workflows/ui-accessibility.yml is therefore already proof
+     that the page fits WITHOUT this declaration: all 67 states in
+     tests/e2e/support/accessibility-matrix.ts at 1440/820/390, plus the 35
+     `compact: true` ones at 320 as well. The other 32 states are unmeasured at
+     320. That gap is the whole of what is still unknown behind this line.
+
+     Do not move or copy it onto `html`. That stops the propagation and makes
+     `body` its own scroll container: with the clip on `body` alone a sticky
+     `top: 0` header held top: 0 after a 400px scroll, and with overflow-x on
+     `html` too the same header measured top: -400px. That was measured on a
+     synthetic sticky header; `.portal-header` is `position: sticky; top: 0`,
+     so the same thing would happen to it.
+
+     Neither measurement bears on the audit's actual proposal, which is
+     per-container `overflow-x` wrappers on the containers that need one.
+     Deleting this line and reading the gate names those containers. */
   overflow-x: hidden;
   background: var(--ivory);
   color: var(--ink);
@@ -1334,6 +1372,69 @@ h3 {
 
 .eyebrow-light {
   color: var(--rose-strong);
+}
+
+/* The second eyebrow scale. `.eyebrow` above is the page-header one — 12px /
+   0.13em, worn by 46 elements across 40 files; this is the smaller one that
+   labels a panel, a ticket or a heading inside a card. The two scales are 2px
+   and 0.03em apart, which is a legible hierarchy rather than drift, so they
+   stay two classes and not one.
+
+   Census — predicate stated, because the numbers move as the fold proceeds.
+   Over the 12 authored stylesheets, count leaf rule blocks (comments stripped,
+   at-rule wrappers not counted as blocks) that declare `text-transform:
+   uppercase`, and read their (font-size, font-weight, letter-spacing) with the
+   five `--type-*` tokens resolved to their :root values. Before this change:
+   167 blocks, 70 distinct recipes among the 165 that declare at least one of
+   the three, this recipe the plurality at 16 blocks — 10 of them in this file.
+   After: 164 blocks, the same 70 recipes, this recipe at 13 blocks — 7 of them
+   here. The recipe count is unchanged on purpose: this stage folds duplicate
+   *sites* of one recipe and merges no two recipes into one.
+
+   New markup wears `.operational-eyebrow`. Existing sites join by selector and
+   keep their own class as well, so no element depends on a second token being
+   remembered: a selector list cascades as one rule per selector, which means
+   `.coach-adjustment-review-heading` and `.coach-report-queue-heading span`
+   still weigh (0,1,0) and (0,1,1) respectively here, and no specificity
+   changes. Only source position moves. app/globals.css holds 2,216 balanced
+   brace pairs — 49 at-rule wrappers, 4 keyframe steps, 3 at-rule leaves and
+   2,160 style rule blocks — and across all 12 stylesheets no block other than
+   this one sets any of these four properties on any of these elements, so
+   every computed value is unchanged.
+
+   What this stage deliberately leaves alone. The threshold is "computed values
+   are already identical"; folding recipes that merely look alike needs a
+   screenshot harness this repo does not have, so the four nearby groups —
+   10px/0.08em (12 blocks) and 9px at 0.09em, 0.08em and 0.1em (12, 11 and 10)
+   — stay put, 45 blocks in total. Six sites carry this exact recipe and still
+   stay put too. `.account-menu > p span`, `.coach-day-view-heading span` and
+   `.coach-member-edit-form legend` sit inside frozen surfaces
+   (mobile-account-menu-freeze, mobile-calendar-attendance-freeze and
+   mobile-member-directory-freeze respectively); the legend is in any case
+   re-declared at var(--type-utility-label) later in this file at equal
+   specificity, so it does not render at this recipe.
+   `.player-attendance-register-heading > div:first-child > span` and
+   `.personal-attendance-calendar .player-attendance-month-current > span` are
+   the personal player and junior-coach registers that
+   attendance-sessions-workflow-separation asks us to preserve; the latter is
+   governed by junior-coach-personal-attendance-calendar, which is a recorded
+   decision and not a freeze, so it is stage-2 work rather than off limits.
+   `.coach-report-month span` has no markup consumer at all and belongs to the
+   dead-selector sweep, not here. The remaining six sites live in CSS modules
+   and cannot join a global selector list without `:global`, which this repo
+   does not use anywhere. */
+.operational-eyebrow,
+.coach-adjustment-review-heading,
+.coach-adjustment-transfer span,
+.coach-adjustment-review-reason > span,
+.report-season-label,
+.coach-report-queue-heading span,
+.coach-report-editor-heading > div:first-child > span,
+.player-ticket-dashboard .player-ticket-context {
+  font-size: var(--type-operational-floor);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .portal-header {
@@ -3201,10 +3302,6 @@ h3 {
 
 .report-season-label {
   color: var(--red);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 .report-year-title strong {
@@ -4184,10 +4281,17 @@ h3 {
   margin-top: clamp(42px, 6vw, 76px);
 }
 
+/* Only `color` from this block survives: the Concept 01 Court Roster Register
+   section below re-declares `.coach-members-directory-header h1` unlayered, at
+   the same 0-1-1 specificity and later in the file, so its margin-top,
+   font-size, letter-spacing and line-height all win at every width. The token
+   here is therefore a byte-identical substitution into a declaration that
+   never reaches the page — it leaves the frozen mobile directory composition
+   untouched, and keeps the value from surviving as the tree's last copy. */
 .coach-members-directory-header h1 {
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;
@@ -4279,6 +4383,10 @@ h3 {
   border-left: 1px solid var(--line);
 }
 
+/* The Member Directory rules below stay at 9px. mobile-member-directory-freeze
+   treats its filters, member cards, details and edit form as frozen and limits
+   changes to functional or accessibility defects, and .coach-member-table thead
+   th is a fixed height: 54px row. Raising them needs its own milestone. */
 .coach-member-filter > span {
   color: var(--steel);
   font-size: 9px;
@@ -4928,6 +5036,9 @@ tr.is-expanded .coach-member-row-action button svg {
   max-width: 720px;
 }
 
+/* One term off --type-page-title: 8vw against the token's 7.5vw. The two agree
+   below 725px and above 1360px and differ only in between, by up to 6.375px at
+   a 1275px viewport — so folding this in is a visible change, not a rename. */
 .coach-reports-empty-state h1 {
   margin-top: 18px;
   color: var(--navy);
@@ -4983,7 +5094,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-reports-workspace-header h1 {
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;
@@ -5033,7 +5144,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-report-month-control > div > span {
   display: block;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -5078,10 +5189,6 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-report-queue-heading span,
 .coach-report-editor-heading > div:first-child > span {
   color: var(--red);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 .coach-report-queue-heading h2 {
@@ -5198,7 +5305,7 @@ tr.is-expanded .coach-member-row-action button svg {
   place-items: center;
   border: 1px solid var(--line);
   border-radius: var(--radius-circle);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.05em;
 }
@@ -5227,7 +5334,7 @@ tr.is-expanded .coach-member-row-action button svg {
   align-items: center;
   gap: 5px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -5321,7 +5428,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-report-attendance-summary dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -5575,7 +5682,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-report-preview-heading dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -6839,7 +6946,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-series-name-preview > span,
 .coach-series-name-preview small {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 760;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -7596,7 +7703,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-series-roster-card button small {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -7648,7 +7755,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-roster-list small {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
 }
 
 .coach-roster-list button {
@@ -7720,7 +7827,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-roster-assign > div:first-child small {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
 }
 
 .coach-roster-assign label > span {
@@ -7988,6 +8095,9 @@ tr.is-expanded .coach-member-row-action button svg {
     padding: 8px 6px;
   }
 
+  /* Held below the floor: this is the mobile Month View cell caption, and
+     mobile-calendar-attendance-freeze freezes the Month View's typography and
+     touch targets. Raising it needs its own milestone. */
   .coach-month-grid button small {
     font-size: 8px;
     line-height: 1.25;
@@ -8856,7 +8966,7 @@ tr.is-expanded .coach-member-row-action button svg {
   max-width: 900px;
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;
@@ -8914,7 +9024,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-published-report-version > span,
 .coach-published-report-updated > span {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -9024,7 +9134,7 @@ tr.is-expanded .coach-member-row-action button svg {
   min-height: 44px;
   border-bottom: 1px solid var(--line);
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -9141,7 +9251,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 1px solid rgba(97, 112, 131, 0.28);
   border-radius: var(--radius-pill);
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 760;
   letter-spacing: 0.06em;
@@ -9372,7 +9482,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-published-report-facts dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -9459,7 +9569,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .coach-published-report-column-revision::after {
     content: "Revision / updated";
-    font-size: 9px;
+    font-size: var(--type-operational-floor);
   }
 
   .coach-published-report-column-updated {
@@ -10270,11 +10380,7 @@ tr.is-expanded .coach-member-row-action button svg {
   padding: 6px 9px;
   border: 1px solid var(--line);
   color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.1em;
   line-height: 1;
-  text-transform: uppercase;
 }
 
 .player-ticket-dashboard .player-ticket-context[data-tone="attention"] {
@@ -12247,6 +12353,10 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 1px solid var(--line);
 }
 
+/* The joined Present/Absent control stays at 9px because the design record pins
+   it: coach-staff-roll-call-daily-ledger says to match this recorder "using the
+   same 9px desktop/tablet and 8px mobile uppercase typography". The rest of the
+   recorder / roll-call ledger pair is held at that size for the same reason. */
 .player-attendance-recorder .attendance-roster-choices button {
   min-height: 44px;
   padding: 0 8px;
@@ -12954,6 +13064,10 @@ tr.is-expanded .coach-member-row-action button svg {
     justify-self: stretch;
   }
 
+  /* Held below the floor: coach-staff-roll-call-daily-ledger pins the joined
+     Present/Absent control to "the same 9px desktop/tablet and 8px mobile
+     uppercase typography" as the player attendance recorder. This is that
+     mobile step. */
   .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
     > .staff-roll-call-choice-box button,
   .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
@@ -13233,7 +13347,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 1px solid var(--red);
   padding: 7px 10px;
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 850;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -13276,7 +13390,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-support-list small {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 820;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -13377,7 +13491,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-directory-tools > label {
   color: var(--navy);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -13476,7 +13590,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .admin-preview-group-header span {
   flex: 0 0 auto;
   color: #667387;
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -13549,7 +13663,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-preview-list small {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;

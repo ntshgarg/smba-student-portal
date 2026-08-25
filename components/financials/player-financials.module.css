@@ -823,6 +823,10 @@ a.monthCell:focus-visible {
     font-size: 18px;
   }
 
+  /* Held below the 10px base: player-fee-record-annual-ledger locks a "compact
+     horizontal registration truth band", and at 380px this cell is only 116px
+     wide beside an 18px tabular amount. "Covered by concession" is 21 uppercase
+     characters at 0.075em tracking and already wraps here at 9px. */
   .registrationOutcome strong {
     font-size: 9px;
   }

@@ -25,7 +25,7 @@
 .activationHeader h1 {
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;
@@ -507,7 +507,7 @@
 .playerList > li > :is(button, .staticPlayer) > span:nth-child(2) small {
   overflow: hidden;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -524,7 +524,7 @@
 .playerAmount small,
 .ledgerBalance em,
 .chargeHeading em {
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 800;
   line-height: 1.25;
@@ -591,7 +591,7 @@
 
 .ledgerBalance > span {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -630,7 +630,7 @@
 .feePlan dt,
 .chargeAmounts dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -691,7 +691,7 @@
 
 .setupDefaults dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -784,7 +784,7 @@
 
 .chargeHeading > div > span {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -873,7 +873,7 @@
 .paymentHistory span,
 .paymentHistory small {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   text-transform: capitalize;
 }
 
@@ -904,7 +904,7 @@
 .allocationHeading > div > span {
   display: block;
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -965,7 +965,7 @@
 .allocationRow small {
   overflow: hidden;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1066,7 +1066,7 @@
 
 .receipt > summary small {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   line-height: 1.35;
   text-transform: capitalize;
 }
@@ -1123,7 +1123,7 @@
 .receiptAllocations > span,
 .refundHistory > span {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1178,7 +1178,7 @@
 
 .receiptAllocations li small {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   overflow-wrap: anywhere;
 }
 
@@ -1205,7 +1205,7 @@
 .refundHistory article small,
 .refundHistory article p {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   line-height: 1.45;
 }
 
@@ -1231,7 +1231,7 @@
   justify-content: space-between;
   gap: 14px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
 }
 
 .refundAllocations li + li {
@@ -1494,7 +1494,7 @@
 
 .concessions > summary > small {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 700;
 }
 
@@ -1554,7 +1554,7 @@
 .concession > header span,
 .concessionApplications > span {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1568,7 +1568,7 @@
 
 .concession > header em {
   color: var(--green);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 800;
   text-transform: uppercase;
@@ -1589,7 +1589,7 @@
   display: block;
   margin-top: 6px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
 }
 
 .concessionApply {
@@ -1638,7 +1638,7 @@
 
 .concessionApplications small {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
 }
 
 .concessionApplications .concessionReversal {
@@ -1806,7 +1806,7 @@
 
 .rapidResults > span {
   padding-bottom: 12px;
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1857,7 +1857,7 @@
   align-items: center;
   gap: 8px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1946,7 +1946,7 @@
 
 .balancePlayerLabel {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.1em;
   line-height: 1.35;
@@ -1974,7 +1974,7 @@
 .balancePlayerOutstanding span {
   margin-top: 5px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   line-height: 1.35;
 }
 
@@ -2010,7 +2010,7 @@
   background: transparent;
   color: var(--navy);
   font: inherit;
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -2053,7 +2053,7 @@
 .balanceAllocationHeading span,
 .balanceAllocationTotal > span {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.09em;
   line-height: 1.35;
@@ -2072,7 +2072,7 @@
 
 .balanceMetric > small {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   line-height: 1.45;
 }
 
@@ -2259,7 +2259,7 @@
   background: transparent;
   color: var(--red);
   font: inherit;
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -2307,7 +2307,7 @@
 
 .balanceAllocationRow small {
   color: var(--steel);
-  font-size: 8px;
+  font-size: var(--type-operational-floor);
 }
 
 .balanceAllocationInput {

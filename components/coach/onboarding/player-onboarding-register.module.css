@@ -78,7 +78,7 @@
 
 .dateTimeline dt {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 820;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -280,7 +280,7 @@
   padding: 6px 9px;
   border: 1px solid var(--steel);
   color: var(--navy);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 830;
   letter-spacing: 0.08em;
   line-height: 1;
@@ -380,7 +380,7 @@
 }
 
 .stepRail li strong {
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 820;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -407,7 +407,7 @@
 
 .editorHeading > span {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 830;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -468,7 +468,7 @@
 .feePreview header span,
 .previewLines span {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 820;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -499,7 +499,7 @@
 .seriesChoices legend,
 .sessionDetails legend {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 820;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -595,7 +595,7 @@
 .requestFacts dt,
 .trainingFacts dt {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 820;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -666,7 +666,7 @@
 .seriesChoices label small,
 .seriesChoices label em {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 620;
 }

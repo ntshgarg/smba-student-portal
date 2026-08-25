@@ -1,10 +1,24 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 
 import { describe, expect, it } from "vitest"
 
 function source(relativePath: string) {
   return readFileSync(path.join(process.cwd(), relativePath), "utf8")
+}
+
+/**
+ * The focused player record is one composition root plus the 13 modules under
+ * `ledger/`. The `not.toContain` assertions below only mean anything against the
+ * whole surface, so read the directory rather than naming the root file.
+ */
+function ledgerSource() {
+  const directory = "components/coach/financials/ledger"
+  return [
+    source("components/coach/financials/player-ledger.tsx"),
+    ...readdirSync(path.join(process.cwd(), directory))
+      .map((file) => source(`${directory}/${file}`)),
+  ].join("\n")
 }
 
 describe("coach Fee Records navigation", () => {
@@ -44,7 +58,7 @@ describe("coach Fee Records navigation", () => {
 
   it("keeps the ledger administrative and links eligible payments to Rapid Desk", () => {
     const records = source("components/coach/financials/financial-player-record-workspace.tsx")
-    const ledger = source("components/coach/financials/player-ledger.tsx")
+    const ledger = ledgerSource()
     const route = source("app/coach/financials/players/[playerId]/page.tsx")
 
     expect(records).not.toContain("showPaymentEntry")
@@ -79,7 +93,7 @@ describe("coach Fee Records navigation", () => {
   })
 
   it("keeps archived concession history visible without archived mutation controls", () => {
-    const ledger = source("components/coach/financials/player-ledger.tsx")
+    const ledger = ledgerSource()
 
     expect(ledger).toContain("ledger.archived && ledger.management.concessions.length > 0")
     expect(ledger).toContain("Concessions previously recorded for this player.")

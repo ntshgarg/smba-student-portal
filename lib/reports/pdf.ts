@@ -3,13 +3,8 @@ import path from "node:path"
 import PDFDocument from "pdfkit"
 
 import { formatAcademyDate } from "@/lib/format"
+import { IVORY, NAVY, RED, STEEL, WHITE } from "@/lib/pdf-palette"
 import type { MonthlyReport } from "@/lib/types"
-
-const NAVY = "#081c42"
-const RED = "#c91f2b"
-const IVORY = "#f6f3ec"
-const STEEL = "#617083"
-const WHITE = "#ffffff"
 
 /* The JPEG has no alpha, so its white plate showed as a rectangle on the
    ivory page. The PNG carries the same artwork with a transparent surround. */
