@@ -621,3 +621,144 @@ Eight blind lens agents at `7fac52d`, each with strict scope rules forbidding an
 Gate status at this commit, measured: **lint clean; 142 test files / 644 tests passing; `typecheck` failing** for the reason in F-4.
 
 **The most important limit.** Two prior remediation campaigns produced ten corrections between them on contact with the code, and this audit's verifiers corrected 90 of 152 findings. The pattern is stable enough to state as a rule: **trust a finding's description of the symptom; re-derive its explanation of the cause; re-count anything numeric before quoting it.** Desk re-verification does not catch these — only implementation does.
+
+---
+
+# Part II — Fresh audit after Waves 0–3
+
+**Commit audited:** `dcaa872` on `main` · **Date:** 25 August 2026
+**Findings carry a `G-` prefix** to keep them distinct from Part I's `F-` numbers. A `G-` finding is a statement about the tree *after* remediation; where one restates an `F-` finding, that means the earlier fix did not close it, and the entry says so.
+
+## 15. Method, and two caveats that bound Part II
+
+Eight lens agents ran blind against `dcaa872` — visual design, UX flows and states, accessibility, responsiveness, implementation quality, performance, technical debt, security and data handling. Each was explicitly **forbidden from reading Part I**, so nothing below is an echo of the earlier report; where the two agree, two independent passes reached the same place. Each lens was then handed to an adversarial verifier briefed to *refute* it: re-derive every count with its own command, re-read every cited line, interrogate every stated mechanism, and mentally apply every recommendation to find what it would break. A completeness critic and a strengths-only counterweight followed. **18 of 18 agents completed with zero errors.**
+
+**Caveat 1 — provenance.** The working tree during the run had the `fix/f25-wire-unrun-specs` branch checked out rather than clean `dcaa872`. That is how the technical-debt lens came to audit an in-flight commit of mine, and it was right to: it found that `361a3ca` claimed to unpin `channel: "chrome"` in *both* orphan Playwright configs and had unpinned one. That is recorded as **G-27** rather than quietly fixed. The other 97 findings concern source files that branch does not touch.
+
+**Caveat 2 — no browser, again.** As in Part I, nothing ran against a dev server, a build or Playwright: eight agents sharing one checkout would have produced unreliable timings. Contrast ratios were computed with the WCAG formula, byte counts measured, statement counts derived from code paths and stated as formulae, and several agents instrumented `BetterSqlite3.prototype.prepare` against seeded fixture databases to count real round trips. Rendered geometry, live focus order and the actual accessibility tree were still not observed.
+
+One agent's safety-classifier review timed out (`lens:responsiveness`); its findings were read against the source before being carried here, and the verifier corrected eight of its nine findings on arithmetic — see §19.
+
+## 16. Headline verdict
+
+**The waves worked on what they aimed at, and the audit that follows them is harder to dismiss than the one before it: 98 findings, of which the verifiers upheld 40 as written, corrected 57, and refuted 2.** That correction rate — 58% — is almost exactly Part I's (90 of 152, 59%), from a completely different agent population against a different tree. It is the most reliable single number in either report, and it is a statement about how audits fail, not about this codebase.
+
+**One Critical, and it is not a regression from the waves — it predates them and nobody had looked.** `POST /api/auth/sign-in/pin` bypassed the account lockout and the security audit log entirely. Detail in §17; fixed in [#109](https://github.com/ntshgarg/smba-student-portal/pull/109).
+
+**The three structural themes:**
+
+1. **Courtside correctness is still the weak surface**, and it is now weak in subtler ways than before. The waves made attendance drafts persist; this audit finds that a *restored* draft carries a frozen concurrency token, so a register that conflicts can never be saved and the on-screen recovery instruction is provably wrong (**G-11**). Four of the ten Highs land on attendance.
+2. **The design system's colour layer is finished and its type and spacing layers still do not exist.** Colour reaches **84.2% token adoption**; font-weight, letter-spacing and line-height reach **0%** across 1,160 declarations. This is Part I's §8 result reproduced by an agent that never read it.
+3. **The delivery gates have holes that only a hostile read finds.** Nothing guards migration ordering — Drizzle's SQLite migrator never reads back the hash it writes, and `drizzle-kit check` exits 0 on every realistic corruption (**G-25**). 19 Playwright tests still run in no pipeline (**G-27**).
+
+**What the waves demonstrably fixed** shows up as absence: no lens re-found the attendance data-loss defect, the dead `catch`, the unawaited fee read, the colour-alone register marks, or the CSV truncation silence. Those are closed.
+
+## 17. G-1 — the Critical
+
+### G-1 · `POST /api/auth/sign-in/pin` bypassed the account lockout and the audit log
+
+**objective defect · Critical · confidence: high (proved by execution) · effort: S · fixed in [#109](https://github.com/ntshgarg/smba-student-portal/pull/109)**
+
+`lib/auth/pin-plugin.ts:23` registers the endpoint and `app/api/auth/[...all]/route.ts` serves the whole Better Auth handler publicly, so it is reachable by anyone. It called `verifyPinLogin` directly, and that function reads a row and compares a hash — no `loginIsBlocked`, no `recordLoginFailure`, no `writeAuthSecurityEvent`. The five-per-account and twenty-per-IP budgets lived in `loginWithPin` (`app/login/actions.ts`), which is one of the endpoint's **two** callers.
+
+What remained on the public path was Better Auth's own `"/sign-in/pin": { max: 6, window: 60 }`, keyed on `ip|path` — **8,640 attempts/day from one address, and no per-account counter at all**, so rotating addresses removed it. The factor is a six-digit PIN, and `principalTotpRequired` returns `false` for players and junior coaches, so a correct PIN alone minted a full session **for a minor's account**. Nothing was written to `auth_login_attempts` or `auth_security_events`, so `scripts/operations/check-security-signals.mjs` — which alerts on `login_rate_limited` — stayed blind for the whole attempt.
+
+**Measured, not inferred.** 50 wrong PINs through the HTTP path produced **0 attempt rows** and left the account unlocked; the server action blocked at attempt 5.
+
+**Why no test caught it.** `tests/registration-actions.test.ts` asserted the lockout against a **mocked `signInPin`** — it could never reach the endpoint it was named for. The fix moves the guard into the endpoint so both callers share one budget, removes the now-duplicate guard from the action, and adds a regression test driven through the real auth instance. That test was verified to fail without the fix.
+
+**`/sign-in/username` has the same shape** and was deliberately left out of #109 to keep the Critical reviewable. It is **G-2**, and it is the first thing to fix next.
+
+## 18. High findings
+
+Ordered by the product's own weighting: attendance first, then money and auth, then delivery, then design system.
+
+### Courtside and attendance
+
+| ID | Finding | Location | Effort |
+|---|---|---|---|
+| **G-11** | A restored attendance draft carries a **frozen `expectedChoice`**, so a register that conflicted since the draft was written can never be saved — and the on-screen recovery instruction ("refresh and try again") provably cannot work, because refreshing restores the same stale token | `lib/client/attendance-draft-storage.ts:211,231`; `player-attendance-recorder.tsx:133` | M |
+| **G-12** | Changing the date in the player attendance recorder renders a **false "No sessions on this date."** for the whole round trip — the list is derived from provider state holding only the *initial* date's occurrences, so it empties on the same tick | `player-attendance-recorder.tsx:152-155,227-233` | M |
+| **G-13** | The reschedule workspace has **no save deadline** and locks permanently on a request that never settles; `pendingAction` clears only on promise settlement, and Next's `callServer` fetch carries no `AbortSignal` | `attendance-adjustments-workspace.tsx:147,505,539` | M |
+| **G-14** | **Session-expiry recovery reaches 1 of 42 guarded coach actions.** The other 41 let `SessionExpiredError` cross the server-action boundary, where React replaces it with a fixed sentence and a digest. Sessions run a fixed 7-day clock with `disableSessionRefresh: true`, so coaches cross expiry *on a schedule* | `app/coach/actions.ts:65-97`; `lib/auth/current-coach.ts:31` | M |
+| **G-15** | Both announcement dialogs become **fully inescapable** while a publish or withdraw is in flight — every exit is gated on `!pending`, and the only escape destroys up to 5,000 characters | `announcement-composer.tsx:130-145` | S |
+| **G-16** | Recovery-email enrollment is a **one-way gate**: a mistyped address freezes into a hidden input, and the page it blocks every portal route behind has no back link and no sign-out | `recovery-email-enrollment-form.tsx:45,49,59` | S |
+| **G-17** | The annual attendance register **scrolls "today" off-screen at 320px** and half-off at 360px: `getAttendanceRegisterScrollLeft` is never given the container width | `use-attendance-register-window.ts:14,67-86` | S |
+
+**G-11 is the one to fix first.** It is the direct successor to Part I's F-1: the waves made drafts survive, and this is the defect that survival exposed. It lands courtside, mid-session, on a register the coach has already filled in.
+
+### Security, money and data
+
+| ID | Finding | Location | Effort |
+|---|---|---|---|
+| **G-2** | `/sign-in/username` shares G-1's shape — the guard is in the action, not the endpoint | `lib/auth/better-auth.ts` | S |
+| **G-18** | **Unauthenticated registration flood is unthrottled** and lands on the courtside coach dashboard read. `submitRegistration` is the only one of 8 ungated server actions with no rate limiter; the dedupe key is minted **in the browser**. Measured: 0 rows ≈0.0 ms, 5,000 rows 7.89 ms, 50,000 rows 91.36 ms | `app/login/actions.ts:254-296`; `lib/auth/account-service.ts:59-140` | M |
+| **G-19** | **Monthly fee preparation issues 5.34 statements per charge** in one write transaction, 37% redundant — the wave's hoisting covered the loop body but not `issueCharge`, which re-SELECTs a charge the caller already batched and re-reads the row it just wrote. 486 serial round trips with the write lock held | `lib/finance/service.ts:1901,515-522,542` | M |
+| **G-20** | Attendance save costs **one extra blocking round trip per changed player**, inside `BEGIN IMMEDIATE` — `reconcileAttendanceAdjustmentReviewState` is called per `(playerId, date)` pair and opens with an unbatched SELECT | `lib/sessions/service.ts:810`; `lib/attendance/adjustments.ts:486-529` | S |
+
+### Delivery and test integrity
+
+| ID | Finding | Location | Effort |
+|---|---|---|---|
+| **G-25** | **Nothing guards migration ordering or content.** Drizzle's SQLite migrator applies on `folderMillis > (newest applied row)` — a high-water mark, not a set difference — and never reads back the hash it stores. A journal entry with a lower `when` is skipped forever on any database that has run past it, while applying normally on a fresh one, so **CI, which builds every fixture from empty, is structurally incapable of reproducing production's state**. `drizzle-kit check` exits 0 on every realistic corruption | `lib/db/setup.ts:41-47`; `drizzle/meta/_journal.json` | M |
+| **G-26** | **~330 lines of money, attendance and auth code are reachable only from tests.** The call sites moved during earlier refactors; the old functions and their tests stayed, so the suite stays green while asserting against paths the product replaced | `lib/finance/service.ts:4102,4204`; `lib/auth/account-service.ts` | M |
+| **G-27** | **19 Playwright tests in 4 specs run in no pipeline**, and commit `361a3ca` — which claimed to make both configs CI-capable — unpinned `channel: "chrome"` in only one of them | `playwright.phase8-followup.config.ts:42`; `playwright.responsive-overflow.config.ts:15-20` | M |
+
+### Design system
+
+| ID | Finding | Location | Effort |
+|---|---|---|---|
+| **G-3** | **After F-22, 94% of `app/globals.css` is still portal-only.** 829 of 881 rules — 115.4 KB of 127.3 KB, 90.7% of the file — cannot match anything the public route tree renders. The split cut at the Member Directory, not at the marketing/portal line, so every homepage visitor still downloads the coach adjustments workspace, member directory, reports workspace and attendance register | `app/globals.css:1-6205`; `app/layout.tsx:4` | L |
+
+**G-3 is the finding that most directly qualifies a wave result.** PR #107 was verified rule-for-rule — 2,167 rules in, 2,167 out, zero cascade inversions — and that verification was sound as far as it went. It proved the split was *faithful*. It never asked whether the split was *useful*, and on that measure it moved 8,038 lines while leaving 94% of the problem in place.
+
+## 19. What the verifiers refuted and corrected — the useful part
+
+**2 refuted, 57 corrected, 40 upheld as written.** The corrections cluster exactly where Part I predicted: in mechanism and in arithmetic, not in symptom.
+
+### Refuted outright
+
+**The attendance register's "five cell states in a 1.19:1 band."** The contrast arithmetic reproduces to three decimals, and the headline is still false: `.coach-register-table td button:disabled` and `td button:hover` **never paint**, because both registers render `<span className="coach-register-cell-status" role="img">` inside the `<td>`, not `<button>` (`player-attendance-register.tsx:464`, `staff-attendance-register.tsx:255`). The four `<button>`s in the player register are the year selector, two pickers and "Jump to today" — all outside the table. So "five cell states" is three, and the headline "disabled vs unavailable = 1.008:1" compares a live colour against one that never renders. *(The `td button` rules being dead is itself a real finding — filed as dead CSS, not as a contrast defect.)*
+
+**The admin directory's empty state rendering `No accounts match "".`** Unreachable, and the finding's own evidence proves it: `app/admin/page.tsx:133-135` never mounts the component with zero targets, and the fallback can only render with a non-empty query — which is exactly the case its copy is written for.
+
+### Corrections worth reading
+
+- **G-20's stated law was wrong and the defect is real.** The auditor gave `statements = 8 + P`, which does not fit its own data. Re-running the same instrumentation measured **10 / 12 / 14 / 18 / 21** statements at P = 1…: the per-player cost is real, the formula was not.
+- **G-13's third lock leg is dead code.** `requestClose()` is reached through a `forwardRef` + `useImperativeHandle` handle that **nothing calls**. Two of the three legs are real.
+- **G-18's proposed fix breaks the feature.** `derivePlayerOnboardingWorkspace` counts the rows it is handed, so capping the read silently corrupts the count.
+- **G-17's arithmetic is 2px generous throughout** — `.coach-register-scroll` keeps `border: 1px solid var(--line)`, which the mobile override does not remove.
+- **A `expectedChoice` conflict cannot be triggered by the coach's own timed-out save landing**, because `lib/sessions/service.ts:752` short-circuits on `currentChoice === change.choice` *before* the expectation check. One of G-11's two stated triggers is disproved; the other stands.
+- **The a11y live-region denominator was wrong**: `grep -rc "<InlineNotice"` returns 38 because one hit is the component's own type line. 37 call sites, not 38.
+
+## 20. What is working well — measured, not impressions
+
+The strengths counterweight verified each of these by command. They are the reason the findings above are worth acting on: this is a codebase where fixes stay fixed.
+
+**Colour, borders, elevation, radius and motion are a real design system.** 1,419 of 1,686 colour declarations (**84.2%**) resolve through a token; **57** opaque hex literals exist outside `:root` in 13,038 declarations (0.44%). 573 of 592 complete borders (96.8%) are exactly 1px. **Seven** true drop shadows in 16,604 lines of CSS. Radius: 58 declarations, 8 values, 65.5% tokenised, exactly one drift. Motion: 71 of 85 duration terms (83.5%) read a token.
+
+**Authorization is enforced twice, independently.** 70 of 78 exported server actions carry an identity gate, and beneath them **32 separate `requireHeadAdminAccess` calls across 13 service modules**. **No IDOR in the player surface** — every player page reads `student.identity.playerId` from the session, never from a URL parameter. Junior-coach ownership is a real, non-obvious check at `lib/coach/staff-attendance.ts:117-119`.
+
+**Promise hygiene is excellent.** A type-checker-backed AST scan of every `.ts`/`.tsx` found exactly **3** promise-valued expression statements in the tree; two are `.catch()`-terminated scripts. Both client fetch effects are textbook `AbortController` usage.
+
+**Dead code is genuinely rare.** Of **1,234 exported symbols across 320 modules**, only 14 non-route-convention exports are unreferenced.
+
+**The unit suite has no filler.** Across 169 files and 840 static cases: **zero** cases without an assertion, and exactly 2 `.skip` calls.
+
+**No CI gate passes unconditionally by structure.** `quality.yml`'s verify job runs `if: always()` then asserts `test "$RESULT" = success` for all three upstream jobs, so a skipped or cancelled job fails the gate.
+
+**Index coverage is thorough.** 127 user indexes; `EXPLAIN QUERY PLAN` over all 59 distinct statements in the attendance and finance read paths found only 3 with a bad access path.
+
+**Touch-target discipline is strong.** Of 183 rules sizing an interactive element, 64 declare exactly `min-height: 44px`. The register's marking cells are **54×52px** on mobile — 2.25× the WCAG floor.
+
+**Focus visibility has a floor that cannot be defeated**, and the focus-indicator contrast on the courtside register is computed, documented in the CSS, and correct — independently re-derived.
+
+## 21. Roadmap — Wave 4 and beyond
+
+**Now (days).** G-2 (`/sign-in/username`, the Critical's twin) · G-11 (frozen draft token) · G-12 (false empty state) · G-15 (inescapable dialogs) · G-16 (one-way recovery gate). Five small, independent, high-impact fixes; four of them courtside.
+
+**Next (weeks).** G-14 (session expiry across 42 actions — one shared helper, not 41 edits) · G-13 (save deadline on the reschedule workspace) · G-18 (throttle registration) · G-25 (migration ordering guard) · G-27 (wire the 19 specs) · G-19/G-20 (the two remaining N+1s).
+
+**Later (quarter).** G-3 (redraw the CSS split at the real boundary, with a test asserting every class in `globals.css` is referenced by the public import closure) · the type and spacing scales, which remain the largest single piece of design-system debt in the product · the five Part I Wave 3 rows never attempted (`member-directory.tsx`, `px` → `rem`, remaining token tiers, on-dark tier, read-level caching).
+
+**One process change is worth more than any single fix.** Part I corrected 90 of 152 findings; Part II corrected 57 of 98. Two independent agent populations, two different trees, the same ~58% rate. **Treat every finding's symptom as probably real and its stated cause as probably wrong until re-derived.** Both audits also show the corollary: the defects that reach production are the ones whose tests were pointed at the wrong layer — G-1 was mocked at the endpoint it was named for, and G-26 is 330 lines of retired code whose tests still pass.
