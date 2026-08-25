@@ -552,7 +552,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
           <h2 className="sr-only" id="makeup-editor-title">Attendance adjustment editor</h2>
 
           {isReviewing ? (
-            <p className="coach-adjustment-review-heading">Review adjustment</p>
+            <p className="operational-eyebrow coach-adjustment-review-heading">Review adjustment</p>
           ) : null}
 
           {feedback ? (
