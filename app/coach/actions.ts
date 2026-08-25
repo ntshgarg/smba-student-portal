@@ -100,6 +100,31 @@ async function runCoachAction<T>(
   return operation(coach)
 }
 
+/**
+ * `/` and `/reports` are deliberately absent, and neither omission strands a read
+ * that a coach action can invalidate.
+ *
+ * `app/(public)/page.tsx` reads no academy data on the server: its fee table is the
+ * compile-time `monthlyFeePaise` table in `lib/finance/config.ts`, and its
+ * announcements are fetched in the browser from `/api/public/announcements`. That
+ * endpoint is `force-dynamic`, so it is never written to the incremental cache and
+ * carries no cache tag; its freshness comes solely from the
+ * `s-maxage=60, stale-while-revalidate=300` header it sets on every response. The
+ * `revalidatePath("/api/public/announcements")` in `app/coach/announcements/actions.ts`
+ * is inert for the same reason -- do not delete that `Cache-Control` header believing
+ * a revalidation covers it.
+ *
+ * The homepage does render one server value that changes over time, the footer's
+ * copyright year, and it now owns a `revalidate = 86400` for exactly that. It does
+ * not need to ride on coach actions.
+ *
+ * The `/reports` page is a bare `redirect("/player/reports")`, and that target is
+ * already in this list.
+ *
+ * Dropping both keeps a courtside attendance save from invalidating the one route
+ * that has to be fast for search and first impressions, and which holds none of the
+ * data that save wrote.
+ */
 function revalidateAcademyData() {
   revalidatePath("/coach")
   revalidatePath("/coach/attendance/players/register")
@@ -118,8 +143,6 @@ function revalidateAcademyData() {
   revalidatePath("/player")
   revalidatePath("/player/financials")
   revalidatePath("/player/reports")
-  revalidatePath("/")
-  revalidatePath("/reports")
 }
 
 export async function approveRegistrationAction(
