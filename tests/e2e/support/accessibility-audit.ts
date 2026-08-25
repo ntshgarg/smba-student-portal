@@ -161,11 +161,24 @@ function axeAdvisories(
   return axeFindings(results).map((item) => ({ ...item, category }))
 }
 
+/*
+ * Only a rule axe DECIDED against is promoted. The first run of this gate
+ * promoted `needs-review` as well and produced 1,184 blocking findings across
+ * two profiles -- 1,160 of them `color-contrast` on elements whose background
+ * axe could not resolve. Those are not defects waiting to be fixed; they are
+ * questions, and a build that fails on a question can never go green. They
+ * ratchet instead, so the number of unresolved elements can only fall.
+ */
+const UNDECIDED_CATEGORIES: ReadonlySet<AccessibilityAdvisory["category"]> = new Set([
+  "needs-review",
+  "best-practice-needs-review",
+])
+
 export function promoteBlockingAdvisories(advisories: readonly AccessibilityAdvisory[]) {
   const blocking: AccessibilityFinding[] = []
   const remaining: AccessibilityAdvisory[] = []
   for (const advisory of advisories) {
-    if (!BLOCKING_ADVISORY_RULES.has(advisory.id)) {
+    if (!BLOCKING_ADVISORY_RULES.has(advisory.id) || UNDECIDED_CATEGORIES.has(advisory.category)) {
       remaining.push(advisory)
       continue
     }

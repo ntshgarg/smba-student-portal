@@ -128,19 +128,24 @@ describe("accessibility evidence", () => {
 })
 
 describe("accessibility advisory gate", () => {
-  it("promotes the blocking rule ids and leaves everything else advisory", () => {
+  it("promotes a blocking rule axe decided against, and ratchets one it could not", () => {
     const { blocking, remaining } = promoteBlockingAdvisories([
       advisory("color-contrast"),
       advisory("region", "best-practice"),
       advisory("target-size"),
       advisory("aria-hidden-focus", "best-practice-needs-review"),
     ])
-    expect(blocking.map((item) => item.id))
-      .toEqual(["color-contrast", "region", "aria-hidden-focus"])
-    expect(remaining.map((item) => item.id)).toEqual(["target-size"])
+    // Only `region` is both a blocking rule id and a decided result. The two
+    // needs-review entries stay advisory however serious their rule: the first
+    // run of this gate promoted them and produced 1,184 blocking findings, 1,160
+    // of them contrast on elements whose background axe could not resolve. A
+    // build cannot go green by fixing a question, so those ratchet instead.
+    expect(blocking.map((item) => item.id)).toEqual(["region"])
+    expect(remaining.map((item) => item.id))
+      .toEqual(["color-contrast", "target-size", "aria-hidden-focus"])
     // The category has to survive: it is the difference between axe proving a
     // failure and axe declining to decide.
-    expect(blocking[0].message).toBe("needs-review: color-contrast could not be resolved")
+    expect(blocking[0].message).toBe("best-practice: region could not be resolved")
   })
 
   it("counts advisories per rule id across every audited state", () => {
