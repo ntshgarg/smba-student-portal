@@ -193,7 +193,10 @@ export default async function CoachDashboardPage({
     .filter((profile) => profile.status === "active")
     .map((profile) => profile.memberId)
   const reportMonth = getLatestCompletedReportMonth()
-  const reports = listCoachMonthlyReports()
+  // The card counts one month, and every other month's row was being read only
+  // to be dropped by the `report.month === reportMonth` test below -- with its
+  // 5,000-character draft and its published body attached.
+  const reports = listCoachMonthlyReports(reportMonth)
   const completedReportCount = activePlayerIds.filter((playerId) => (
     getCoachReportState(reports.find((report) => (
       report.playerId === playerId && report.month === reportMonth

@@ -345,8 +345,14 @@ function reportMutationFailure(error: ReportServiceError): ReportMutationResult 
   }
 }
 
-function reportMutationSuccess(reportId: string): ReportMutationResult {
-  const report = listCoachMonthlyReports().find((item) => item.id === reportId)
+/**
+ * `upsertDraft` keys the row on `(accountId, month)` and returns that row's id
+ * (`lib/reports/service.ts:125`), so the saved report is always in the month
+ * the caller submitted -- reloading it does not need the archive of every month
+ * the academy has ever written.
+ */
+function reportMutationSuccess(reportId: string, month: string): ReportMutationResult {
+  const report = listCoachMonthlyReports(month).find((item) => item.id === reportId)
   if (!report) throw new Error("The saved report could not be reloaded.")
   return { ok: true, report }
 }
@@ -358,7 +364,7 @@ export async function saveReportDraftAction(
   try {
     const { reportId } = saveMonthlyReportDraft(input, { coachId: coach.subjectId })
     revalidatePath("/coach/reports/write")
-    return reportMutationSuccess(reportId)
+    return reportMutationSuccess(reportId, input.month)
   } catch (error) {
     if (error instanceof ReportServiceError) return reportMutationFailure(error)
     throw error
@@ -372,7 +378,7 @@ export async function publishReportAction(
   try {
     const { reportId } = publishMonthlyReport(input, { coachId: coach.subjectId })
     revalidateAcademyData()
-    return reportMutationSuccess(reportId)
+    return reportMutationSuccess(reportId, input.month)
   } catch (error) {
     if (error instanceof ReportServiceError) return reportMutationFailure(error)
     throw error
