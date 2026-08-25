@@ -376,6 +376,9 @@ async function loginAsHeadCoach(browser: Browser) {
     await page.getByLabel("Confirm six-digit code").fill(
       await createOTP(authenticatorSecret).totp(),
     )
+    // The submit is gated on the recovery-code acknowledgement, which is the
+    // only thing between a coach and losing those codes to this redirect.
+    await page.getByLabel(/I have saved these recovery codes/u).check()
     await page.getByRole("button", { name: "Verify and enter workspace" }).click()
     await page.waitForURL((url) => (
       url.pathname === "/auth/pin/setup" || url.pathname.startsWith("/coach")
