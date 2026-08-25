@@ -36,6 +36,18 @@ import { publicSiteUrl } from "@/lib/config"
 
 const GENERIC_LOGIN_ERROR = "SMBA username or password is incorrect. If this is your first visit, activate your account."
 const GENERIC_PIN_ERROR = "SMBA username or PIN is incorrect. Use your password if PIN login is unavailable."
+const RATE_LIMITED_LOGIN_ERROR = "We couldn\u2019t sign you in. Wait a few minutes before trying again."
+
+// Better Auth surfaces an endpoint refusal as an APIError carrying the status it
+// was thrown with. The PIN endpoint throws TOO_MANY_REQUESTS once the shared
+// account/IP budget is spent and UNAUTHORIZED otherwise, and only the first
+// should tell the person to wait -- saying "wait a few minutes" to someone who
+// simply mistyped their PIN sends them away from a screen they could have used.
+function isRateLimitedAuthError(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+  const status = (error as { status?: unknown }).status
+  return status === "TOO_MANY_REQUESTS" || status === 429
+}
 
 export type LoginFormState = {
   error: string | null
@@ -127,6 +139,7 @@ export async function loginWithAcademyId(
   if ("twoFactorRedirect" in response && response.twoFactorRedirect) {
     redirect("/auth/two-factor")
   }
+
   const twoFactorEnabled = "twoFactorEnabled" in response.user
     && response.user.twoFactorEnabled === true
   redirect(postAuthenticationDestination({
@@ -147,38 +160,14 @@ export async function loginWithPin(
     return { error: GENERIC_PIN_ERROR }
   }
 
+  // The account/IP lockout and the audit rows for this factor live in the
+  // endpoint itself (lib/auth/pin-plugin.ts), not here. It is reachable both
+  // through `auth.api.signInPin` below and directly at POST
+  // /api/auth/sign-in/pin, so a guard in this action would have covered one
+  // caller and left the other open. Duplicating it here as well would double
+  // every failure against the five-attempt budget and write each audit row
+  // twice, so this action now only translates the endpoint's refusal into copy.
   const requestHeaders = await headers()
-  const security = requestSecurityContext(requestHeaders)
-  const subjectHash = authSubjectHash(academyId)
-  const auditBase = {
-    ipHash: security.ipHash,
-    subjectHash,
-    userAgent: security.userAgent,
-  }
-  if (loginIsBlocked({ ipHash: security.ipHash, subjectHash })) {
-    writeAuthSecurityEvent({
-      ...auditBase,
-      eventType: "login_rate_limited",
-      outcome: "blocked",
-      metadata: { factor: "pin" },
-    })
-    return { error: "We couldn’t sign you in. Wait a few minutes before trying again." }
-  }
-
-  const account = findApprovedAccountByAcademyId(academyId)
-  if (!account?.role || account.credentialStatus !== "active") {
-    await hashPassword(pin)
-    recordLoginFailure({ ipHash: security.ipHash, subjectHash })
-    writeAuthSecurityEvent({
-      ...auditBase,
-      accountId: account?.accountId,
-      eventType: "login_failed",
-      metadata: { factor: "pin" },
-      outcome: "failure",
-    })
-    return { error: GENERIC_PIN_ERROR }
-  }
-
   const requestAuth = getAuth()
   let response: Awaited<ReturnType<typeof requestAuth.api.signInPin>>
   try {
@@ -186,29 +175,20 @@ export async function loginWithPin(
       body: { pin, username: academyId },
       headers: requestHeaders,
     })
-  } catch {
-    recordLoginFailure({ ipHash: security.ipHash, subjectHash })
-    writeAuthSecurityEvent({
-      ...auditBase,
-      accountId: account.accountId,
-      eventType: "login_failed",
-      metadata: { factor: "pin" },
-      outcome: "failure",
-    })
-    return { error: GENERIC_PIN_ERROR }
+  } catch (error) {
+    return { error: isRateLimitedAuthError(error) ? RATE_LIMITED_LOGIN_ERROR : GENERIC_PIN_ERROR }
   }
 
-  recordLoginSuccess(subjectHash)
-  writeAuthSecurityEvent({
-    ...auditBase,
-    accountId: account.accountId,
-    eventType: "login_succeeded",
-    metadata: { factor: "pin" },
-    outcome: "success",
-  })
   if ("twoFactorRedirect" in response && response.twoFactorRedirect) {
     redirect("/auth/two-factor")
   }
+
+  // Read after the endpoint has authenticated, purely to route the person to the
+  // right landing surface. The endpoint has already decided that the credential
+  // is good, so an absent row here is a data fault rather than a failed sign-in
+  // and must not be reported as one.
+  const account = findApprovedAccountByAcademyId(academyId)
+  if (!account?.role) return { error: GENERIC_PIN_ERROR }
   const twoFactorEnabled = "twoFactorEnabled" in response.user
     && response.user.twoFactorEnabled === true
   redirect(postAuthenticationDestination({
