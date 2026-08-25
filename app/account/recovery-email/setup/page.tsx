@@ -7,6 +7,7 @@ import {
   confirmCurrentRecoveryEmail,
   requestCurrentRecoveryEmail,
 } from "@/app/account/recovery-email/actions"
+import { InterstitialSignOut } from "@/components/interstitial-sign-out"
 import { RecoveryEmailEnrollmentForm } from "@/components/recovery-email-enrollment-form"
 import { getRecoveryEmail } from "@/lib/auth/recovery-service"
 import { publicSiteUrl } from "@/lib/config"
@@ -39,6 +40,7 @@ export default async function RecoveryEmailSetupPage() {
           requestAction={requestCurrentRecoveryEmail}
           confirmAction={confirmCurrentRecoveryEmail}
         />
+        <InterstitialSignOut />
       </section>
     </main>
   )

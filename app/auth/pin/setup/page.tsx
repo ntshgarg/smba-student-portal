@@ -3,6 +3,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import { InterstitialSignOut } from "@/components/interstitial-sign-out"
 import { PinSetupForm } from "@/components/pin-setup-form"
 import { hasPinCredential } from "@/lib/auth/credential-service"
 import { sessionProvider } from "@/lib/data"
@@ -46,6 +47,7 @@ export default async function PinSetupPage() {
             : "Use it for faster sign-in. Your password will always continue to work."}</p>
         </div>
         <PinSetupForm allowSkip={!mandatory} />
+        <InterstitialSignOut />
       </section>
     </main>
   )
