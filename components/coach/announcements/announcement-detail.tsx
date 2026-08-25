@@ -11,6 +11,7 @@ import {
 } from "@/app/coach/announcements/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { announcementParagraphs } from "@/components/announcements/announcement-presentation"
+import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import { formatAcademyDate, formatDateKey } from "@/lib/format"
 
 import {
@@ -20,20 +21,44 @@ import {
 } from "./contracts"
 import styles from "./announcements.module.css"
 
+/**
+ * A withdrawal is one insert, but the action revalidates nine paths before it
+ * answers — every coach, player and public surface the notice was reachable
+ * from — and then re-reads the announcement. Matches the composer's publish
+ * deadline for the same reason: courtside connections stall rather than fail,
+ * and this only has to beat an indefinite hang. It is a deadline, not a
+ * cancellation — see `withSaveDeadline`.
+ */
+const withdrawDeadlineMs = 20_000
+
 function WithdrawDialog({
   announcementId,
   onClose,
+  onFailureAfterExit,
+  onReasonChange,
   onWithdrawn,
+  reason,
 }: {
   announcementId: string
   onClose: () => void
+  onFailureAfterExit: (message: string) => void
+  onReasonChange: (reason: string) => void
   onWithdrawn: (message: string) => void
+  reason: string
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
-  const [reason, setReason] = useState("")
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  /**
+   * Set once this dialog has left the screen, for the reason given over the
+   * composer's review dialog: a failure that arrives afterwards has no notice
+   * here left to render it, so it is handed to the detail page's notice instead.
+   * A success needs no such treatment — `onWithdrawn` already writes to that
+   * same notice and moves no focus. Cleared on every mount because an effect
+   * cleanup also runs between Strict Mode's paired development mounts.
+   */
+  const dismissed = useRef(false)
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -41,10 +66,12 @@ function WithdrawDialog({
       ? document.activeElement
       : null
     const previousOverflow = document.body.style.overflow
+    dismissed.current = false
     if (dialog && !dialog.open) dialog.showModal()
     document.body.style.overflow = "hidden"
     reasonRef.current?.focus()
     return () => {
+      dismissed.current = true
       document.body.style.overflow = previousOverflow
       if (dialog?.open) dialog.close()
       previouslyFocused?.focus()
@@ -62,24 +89,51 @@ function WithdrawDialog({
     setPending(true)
     setFeedback(null)
     try {
-      const result = await withdrawAnnouncementAction({
-        announcementId,
-        reason: normalizedReason,
-      })
+      const result = await withSaveDeadline(
+        withdrawAnnouncementAction({ announcementId, reason: normalizedReason }),
+        withdrawDeadlineMs,
+      )
       if (!result.ok) {
+        if (dismissed.current) {
+          onFailureAfterExit(result.message)
+          return
+        }
         setFeedback({ message: result.message, tone: "error" })
         reasonRef.current?.focus()
         return
       }
       onWithdrawn(result.message)
-    } catch {
-      setFeedback({ message: "The announcement could not be withdrawn.", tone: "error" })
+    } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The announcement could not be withdrawn",
+        retained: "Your reason is still here",
+        subject: "The withdrawal",
+      })
+      if (dismissed.current) {
+        onFailureAfterExit(failure.message)
+        return
+      }
+      setFeedback({ message: failure.message, tone: "error" })
       reasonRef.current?.focus()
     } finally {
       setPending(false)
     }
   }
 
+  /**
+   * Every exit below stays live while a withdrawal is in flight, for the reason
+   * given over the composer's review dialog: the server action's fetch carries
+   * no `AbortSignal` (lib/client/network-failure.ts:28-40), so a stalled
+   * connection neither resolves nor rejects and a `pending` gate here is a lock
+   * with no key. Leaving is safe because the reason the retry sends is the
+   * reason still on screen: `broadcast_withdrawals` is uniquely indexed per
+   * announcement and `withdrawAnnouncement` reports a repeat of the same reason
+   * as already done rather than withdrawing twice. The withdraw button is held
+   * for the length of one attempt; a coach who closes this dialog and reopens it
+   * gets a fresh one that can start a second, and that reason dedupe is what
+   * makes the second land on the first withdrawal instead of failing beside it.
+   */
   return (
     <dialog
       ref={dialogRef}
@@ -87,10 +141,10 @@ function WithdrawDialog({
       aria-labelledby="withdraw-announcement-title"
       onCancel={(event) => {
         event.preventDefault()
-        if (!pending) onClose()
+        onClose()
       }}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !pending) onClose()
+        if (event.target === event.currentTarget) onClose()
       }}
     >
       <section className={styles.withdrawDialog} onMouseDown={(event) => event.stopPropagation()}>
@@ -98,7 +152,6 @@ function WithdrawDialog({
           className={styles.dialogClose}
           type="button"
           onClick={onClose}
-          disabled={pending}
           aria-label="Close withdrawal dialog"
         >
           <X aria-hidden="true" />
@@ -114,7 +167,7 @@ function WithdrawDialog({
             aria-describedby="withdraw-reason-help"
             maxLength={250}
             onChange={(event) => {
-              setReason(event.target.value)
+              onReasonChange(event.target.value)
               setFeedback(null)
             }}
             placeholder="Event cancelled, timing changed…"
@@ -127,7 +180,7 @@ function WithdrawDialog({
         </label>
         <InlineNotice message={feedback?.message} tone={feedback?.tone} />
         <div className={styles.dialogActions}>
-          <button type="button" onClick={onClose} disabled={pending}>Keep announcement</button>
+          <button type="button" onClick={onClose}>Keep announcement</button>
           <button
             className={styles.dangerButton}
             type="button"
@@ -154,6 +207,10 @@ export function PublishedAnnouncementDetail({
   const router = useRouter()
   const [pinPending, setPinPending] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
+  // Outlives the dialog so closing one mid-withdrawal keeps the typed reason:
+  // it is both what the coach would have to retype and the value the service
+  // dedupes a repeated withdrawal on.
+  const [withdrawalReason, setWithdrawalReason] = useState("")
   const [feedback, setFeedback] = useState<ActionFeedback | null>(
     publishedNow ? { message: "Announcement published", tone: "success" } : null,
   )
@@ -289,7 +346,10 @@ export function PublishedAnnouncementDetail({
         <WithdrawDialog
           announcementId={announcement.id}
           onClose={() => setWithdrawOpen(false)}
+          onFailureAfterExit={(message) => setFeedback({ message, tone: "error" })}
+          onReasonChange={setWithdrawalReason}
           onWithdrawn={handleWithdrawn}
+          reason={withdrawalReason}
         />
       ) : null}
     </div>
