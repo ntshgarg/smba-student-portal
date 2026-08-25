@@ -7,6 +7,8 @@ import { requireCoachPage } from "@/lib/auth/current-coach"
 import { recoveryEmailEnrollmentRequired } from "@/lib/auth/recovery-service"
 import { redirect } from "next/navigation"
 
+import "../portal.css"
+
 export const metadata: Metadata = {
   title: {
     default: "SMBA Coach Workspace",
