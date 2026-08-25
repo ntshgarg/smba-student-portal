@@ -13,7 +13,13 @@ audit-context
 static_analysis_codeql_1
 static_analysis_semgrep_1
 tests
+# These two live under scripts/ -- which the build keeps, because vercel-build
+# runs scripts/database/prepare.ts -- but they import from tests/, which the
+# line above strips. next build type-checks everything tsconfig.json includes,
+# so leaving one in fails the deploy with an unresolved import. Any future
+# script that reaches into tests/ belongs here too.
 scripts/regression/summarize-accessibility.ts
+scripts/regression/update-accessibility-advisory-baseline.ts
 docs
 *.log
 *.tsbuildinfo

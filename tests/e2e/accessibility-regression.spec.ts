@@ -10,6 +10,7 @@ import Database from "better-sqlite3"
 import { expect, test } from "./support/failure-evidence"
 
 import {
+  accessibilityAdvisoryRegressions,
   auditAccessibilityState,
   captureMaskedFailure,
   formatAccessibilityFailures,
@@ -994,7 +995,7 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
       }
     } finally {
       const { jsonPath } = writeAccessibilityResults(outputRoot, results)
-      if (formatAccessibilityFailures(results).length) {
+      if (formatAccessibilityFailures(results).length || accessibilityAdvisoryRegressions(results).length) {
         await testInfo.attach(`${profile}-accessibility-results`, {
           contentType: "application/json",
           path: jsonPath,
@@ -1014,5 +1015,10 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
 
     const failures = formatAccessibilityFailures(results)
     expect(failures, failures.slice(0, 80).join("\n")).toEqual([])
+    // Second assertion rather than one merged list: a ratchet breach is a count
+    // that rose, not a defect at a state, and it needs the advisory JSON above
+    // to triage rather than the finding's own evidence line.
+    const advisoryRegressions = accessibilityAdvisoryRegressions(results)
+    expect(advisoryRegressions, advisoryRegressions.join("\n")).toEqual([])
   })
 })
