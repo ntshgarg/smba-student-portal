@@ -82,6 +82,7 @@ vi.mock("@/app/account/recovery-email/actions", () => ({
 }))
 vi.mock("@/app/account/security/actions", () => ({
   changePasswordAction: droppedRequest,
+  reissueRecoveryCodesAction: droppedRequest,
   removePinAction: droppedRequest,
   revokeOtherSessionsAction: droppedRequest,
   revokeSessionAction: droppedRequest,
@@ -283,7 +284,13 @@ const surfaces: Surface[] = [
     visible: [0],
   },
   {
-    intact: ['name="newPassword"', 'name="confirmPin"', 'id="pin-remove-current-password"'],
+    intact: [
+      'name="newPassword"',
+      'name="confirmPin"',
+      'id="pin-remove-current-password"',
+      'id="security-recovery-codes-password"',
+      'id="security-recovery-codes-second-factor"',
+    ],
     name: "/account/security credentials",
     render: () => (
       <AccountSecurityWorkspace
@@ -300,12 +307,17 @@ const surfaces: Surface[] = [
           ipAddress: null,
           userAgent: "Macintosh",
         }]}
+        unusedRecoveryCodeCount={9}
       />
     ),
     sites: [
       { retained: "Your current password still works", subject: "Your new password" },
       { retained: "Your current sign-in options are unchanged", subject: "Your PIN" },
       { retained: "Your PIN still works", subject: "Your PIN removal" },
+      {
+        retained: "No device was signed out and your authenticator app is unchanged",
+        subject: "Your new recovery codes",
+      },
     ],
   },
 ]
@@ -357,8 +369,8 @@ describe("a dropped request leaves an authentication form standing", () => {
     expect(reportClientError).not.toHaveBeenCalled()
   })
 
-  it("covers all 22 call sites across the thirteen authentication components", () => {
-    expect(surfaces.reduce((total, surface) => total + surface.sites.length, 0)).toBe(22)
+  it("covers all 23 call sites across the thirteen authentication components", () => {
+    expect(surfaces.reduce((total, surface) => total + surface.sites.length, 0)).toBe(23)
   })
 })
 

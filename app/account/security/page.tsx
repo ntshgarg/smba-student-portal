@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 
 import { AccountSecurityWorkspace } from "@/components/account-security-workspace"
 import { RecoveryEmailSecurityPanel } from "@/components/recovery-email-security-panel"
+import { getAuth } from "@/lib/auth/better-auth"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
@@ -16,6 +17,24 @@ import { getRecoveryEmail, maskRecoveryEmail } from "@/lib/auth/recovery-service
 export const metadata: Metadata = {
   title: "Account security",
   robots: { follow: false, index: false },
+}
+
+/**
+ * How many recovery codes the account can still spend.
+ *
+ * The count is Better Auth's own arithmetic rather than ours: `verifyBackupCode`
+ * rewrites the stored set without the code it just consumed, so the length of
+ * what `viewBackupCodes` decrypts is exactly what is left. `null` when the read
+ * fails, because the reissue panel would rather say nothing than name a number
+ * a coach might plan around.
+ */
+async function countUnusedRecoveryCodes(userId: string) {
+  try {
+    const { backupCodes } = await getAuth().api.viewBackupCodes({ body: { userId } })
+    return backupCodes.length
+  } catch {
+    return null
+  }
 }
 
 export default async function AccountSecurityPage() {
@@ -43,6 +62,7 @@ export default async function AccountSecurityPage() {
   const allowPin = identity.role === "player"
     || identity.role === "coach"
     || identity.role === "platform_admin"
+  const authenticatorEnabled = rawSession.user.twoFactorEnabled === true
   const recoveryEmail = getRecoveryEmail(identity.subjectId, { database })
   const recoverySecondFactorRequired = identity.role === "platform_admin"
     || access?.accessLevel === "head_admin"
@@ -61,12 +81,15 @@ export default async function AccountSecurityPage() {
       <div className="security-page-body">
         <AccountSecurityWorkspace
           allowPin={allowPin}
-          authenticatorEnabled={rawSession.user.twoFactorEnabled === true}
+          authenticatorEnabled={authenticatorEnabled}
           authenticatorRequired={Boolean(access?.accessLevel === "head_admin"
             || identity.role === "platform_admin")}
           pinEnabled={allowPin && hasPinCredential(identity.subjectId, { database })}
           pinRequired={identity.role === "platform_admin" || access?.accessLevel === "head_admin"}
           sessions={sessions}
+          unusedRecoveryCodeCount={authenticatorEnabled
+            ? await countUnusedRecoveryCodes(rawSession.user.id)
+            : null}
         />
         {recoveryEmail ? (
           <RecoveryEmailSecurityPanel

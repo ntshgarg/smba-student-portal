@@ -83,6 +83,37 @@ export function listSessionOccurrencesForSeries(
   return occurrenceRecords(from, to, seriesIds)
 }
 
+/**
+ * The two keys a backfill confirmation counts, for occurrences that are still
+ * scheduled and have already begun. The window has to reach back to the
+ * academy's first session -- an assignment may be backdated to the player's
+ * training start -- so what is narrowed instead is everything the caller would
+ * have discarded anyway: the cancelled rows, the sessions still ahead, and the
+ * five columns a count never reads. Lineage is resolved for the rest, since the
+ * eligible date of a replacement is its source's.
+ */
+export function listStartedScheduledOccurrenceKeys(
+  from: string,
+  to: string,
+  startedBy: Date,
+): Array<Pick<TrainingSessionOccurrence, "eligibilityDate" | "seriesId">> {
+  const db = initializeDatabase()
+  const occurrences = db.select({
+    id: sessionOccurrences.id,
+    seriesId: sessionOccurrences.seriesId,
+    occurrenceDate: sessionOccurrences.occurrenceDate,
+    replacementForOccurrenceId: sessionOccurrences.replacementForOccurrenceId,
+  }).from(sessionOccurrences).where(and(
+    gte(sessionOccurrences.occurrenceDate, from),
+    lte(sessionOccurrences.occurrenceDate, to),
+    lte(sessionOccurrences.startsAt, startedBy),
+    eq(sessionOccurrences.status, "scheduled"),
+  )).orderBy(asc(sessionOccurrences.startsAt), asc(sessionOccurrences.id)).all()
+
+  return resolveOccurrenceEligibilityDates(db, occurrences)
+    .map(({ eligibilityDate, seriesId }) => ({ eligibilityDate, seriesId }))
+}
+
 function assignmentRecords({
   playerIds,
   seriesIds,

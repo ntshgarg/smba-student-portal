@@ -100,7 +100,38 @@ async function runCoachAction<T>(
   return operation(coach)
 }
 
+/**
+ * `/reports` is deliberately absent: the page is a bare
+ * `redirect("/player/reports")`, and that target is already in this list.
+ *
+ * `/` stays, and the reason is worth recording because the obvious reading says it
+ * should not. The homepage reads no academy data on the server -- its fee table is
+ * the compile-time `monthlyFeePaise` table in `lib/finance/config.ts`, and its
+ * announcements are fetched in the browser from `/api/public/announcements`, which
+ * is `force-dynamic` and so never written to the incremental cache. (That endpoint's
+ * freshness comes solely from the `s-maxage=60, stale-while-revalidate=300` header
+ * it sets on every response; the `revalidatePath("/api/public/announcements")` in
+ * `app/coach/announcements/actions.ts` is inert. Do not delete that header believing
+ * a revalidation covers it.)
+ *
+ * But the footer renders `new Date().getFullYear()`, evaluated once at static
+ * generation, so something has to expire the page or the copyright line reads a year
+ * behind from every 1 January. The first attempt gave the page its own
+ * `export const revalidate = 86400` and dropped it from this list. That works for the
+ * year and breaks the application: it turns `/` from a fully static route into an ISR
+ * one, and the client router then re-prefetches it without settling. Every
+ * `<Link href={publicSiteUrl}>` becomes a request that never stops -- there are 13 of
+ * them, including in `components/app-shell.tsx` and `components/coach/coach-shell.tsx`,
+ * so essentially every page is affected. Measured against the stress fixture:
+ * `page.goto("/login", { waitUntil: "networkidle" })` timed out at 60s with the
+ * `revalidate` export and passed in 3.5s without it.
+ *
+ * So the cheap-looking win is not available. One `revalidatePath` on a route that
+ * holds no coach-written data is the price of a correct copyright year, and it is far
+ * cheaper than the alternative.
+ */
 function revalidateAcademyData() {
+  revalidatePath("/")
   revalidatePath("/coach")
   revalidatePath("/coach/attendance/players/register")
   revalidatePath("/coach/attendance/players/record")
@@ -118,8 +149,6 @@ function revalidateAcademyData() {
   revalidatePath("/player")
   revalidatePath("/player/financials")
   revalidatePath("/player/reports")
-  revalidatePath("/")
-  revalidatePath("/reports")
 }
 
 export async function approveRegistrationAction(
@@ -345,8 +374,14 @@ function reportMutationFailure(error: ReportServiceError): ReportMutationResult 
   }
 }
 
-function reportMutationSuccess(reportId: string): ReportMutationResult {
-  const report = listCoachMonthlyReports().find((item) => item.id === reportId)
+/**
+ * `upsertDraft` keys the row on `(accountId, month)` and returns that row's id
+ * (`lib/reports/service.ts:125`), so the saved report is always in the month
+ * the caller submitted -- reloading it does not need the archive of every month
+ * the academy has ever written.
+ */
+function reportMutationSuccess(reportId: string, month: string): ReportMutationResult {
+  const report = listCoachMonthlyReports(month).find((item) => item.id === reportId)
   if (!report) throw new Error("The saved report could not be reloaded.")
   return { ok: true, report }
 }
@@ -358,7 +393,7 @@ export async function saveReportDraftAction(
   try {
     const { reportId } = saveMonthlyReportDraft(input, { coachId: coach.subjectId })
     revalidatePath("/coach/reports/write")
-    return reportMutationSuccess(reportId)
+    return reportMutationSuccess(reportId, input.month)
   } catch (error) {
     if (error instanceof ReportServiceError) return reportMutationFailure(error)
     throw error
@@ -372,7 +407,7 @@ export async function publishReportAction(
   try {
     const { reportId } = publishMonthlyReport(input, { coachId: coach.subjectId })
     revalidateAcademyData()
-    return reportMutationSuccess(reportId)
+    return reportMutationSuccess(reportId, input.month)
   } catch (error) {
     if (error instanceof ReportServiceError) return reportMutationFailure(error)
     throw error

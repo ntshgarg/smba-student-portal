@@ -32,8 +32,8 @@ import {
   listSessionOccurrencesByIds,
   listSessionOccurrencesForSeries,
   listSessionSeries,
+  listStartedScheduledOccurrenceKeys,
 } from "@/lib/sessions/database"
-import { occurrenceHasStarted } from "@/lib/sessions/occurrence-time"
 import type {
   SessionAssignment,
   SessionAttendanceRecords,
@@ -236,12 +236,7 @@ export function getCoachScheduleRosterSnapshot(
     null,
   )
   const backfillOccurrences = earliestStart
-    ? listSessionOccurrences(earliestStart, referenceDate)
-        .filter((occurrence) => (
-          occurrence.status === "scheduled"
-          && occurrenceHasStarted(occurrence, referenceInstant)
-        ))
-        .map(({ eligibilityDate, seriesId }) => ({ eligibilityDate, seriesId }))
+    ? listStartedScheduledOccurrenceKeys(earliestStart, referenceDate, referenceInstant)
     : []
 
   return {

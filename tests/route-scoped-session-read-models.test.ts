@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   listSessionOccurrencesByIds: vi.fn(),
   listSessionOccurrencesForSeries: vi.fn(),
   listSessionSeries: vi.fn(),
+  listStartedScheduledOccurrenceKeys: vi.fn(),
 }))
 
 vi.mock("@/lib/attendance/adjustments", () => ({
@@ -38,6 +39,7 @@ vi.mock("@/lib/sessions/database", () => ({
   listSessionOccurrencesByIds: mocks.listSessionOccurrencesByIds,
   listSessionOccurrencesForSeries: mocks.listSessionOccurrencesForSeries,
   listSessionSeries: mocks.listSessionSeries,
+  listStartedScheduledOccurrenceKeys: mocks.listStartedScheduledOccurrenceKeys,
 }))
 
 import {
@@ -128,6 +130,10 @@ describe("route-scoped coach session read models", () => {
     mocks.listSessionAttendanceRecordsForOccurrences.mockReturnValue({})
     mocks.listSessionAttendanceRecordsForPlayer.mockReturnValue({})
     mocks.listSessionOccurrencesByIds.mockReturnValue([occurrence])
+    mocks.listStartedScheduledOccurrenceKeys.mockReturnValue([{
+      eligibilityDate: occurrence.eligibilityDate,
+      seriesId: occurrence.seriesId,
+    }])
     mocks.listAttendanceAdjustments.mockReturnValue([])
     mocks.listCoachMonthlyReports.mockReturnValue([])
     mocks.listOperationalPlayerRecords.mockReturnValue({
@@ -194,7 +200,12 @@ describe("route-scoped coach session read models", () => {
       new Date("2026-08-03T00:31:00.000Z"),
     )
 
-    expect(mocks.listSessionOccurrences).toHaveBeenCalledWith("2026-01-01", "2026-08-03")
+    expect(mocks.listStartedScheduledOccurrenceKeys).toHaveBeenCalledWith(
+      "2026-01-01",
+      "2026-08-03",
+      new Date("2026-08-03T00:31:00.000Z"),
+    )
+    expect(mocks.listSessionOccurrences).not.toHaveBeenCalled()
     expect(snapshot.backfillOccurrences).toEqual([{
       eligibilityDate: "2026-08-03",
       seriesId: "beginner-weekday",

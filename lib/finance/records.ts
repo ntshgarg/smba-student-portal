@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, type SQL } from "drizzle-orm"
 
 import { formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -386,134 +386,259 @@ function parseMetadata(value: string) {
   }
 }
 
+type ActivityAuditEvent = {
+  event: typeof financialAuditEvents.$inferSelect
+  metadata: Record<string, unknown>
+}
+
+/**
+ * One bound parameter per id, and a free-text activity search has no mandatory
+ * date filter, so the id list one lookup carries is bounded only by how much
+ * history the academy has written. SQLite has capped
+ * `SQLITE_MAX_VARIABLE_NUMBER` at 32,766 since 3.32 and the bundled driver
+ * rejects the 32,767th parameter, so the chunk is half of that: headroom for
+ * whatever else a future predicate binds alongside the ids, and still a single
+ * round trip for any list this academy will produce. The 500 at
+ * `lib/sessions/occurrence-lineage.ts:15` is sized for a walk that re-queries
+ * once per generation of ancestors; nothing here recurses.
+ */
+const ACTIVITY_LOOKUP_CHUNK = 16_383
+
+function distinctIds(values: readonly (string | null | undefined)[]) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string"))]
+}
+
+function lookupById<T extends { id: string }>(
+  ids: readonly string[],
+  selectRows: (ids: string[]) => T[],
+) {
+  const rows: T[] = []
+  for (let start = 0; start < ids.length; start += ACTIVITY_LOOKUP_CHUNK) {
+    rows.push(...selectRows(ids.slice(start, start + ACTIVITY_LOOKUP_CHUNK)))
+  }
+  return new Map(rows.map((row) => [row.id, row]))
+}
+
+function entityIds(
+  events: readonly ActivityAuditEvent[],
+  entityType: ActivityAuditEvent["event"]["entityType"],
+) {
+  return distinctIds(events.map(({ event }) => (
+    event.entityType === entityType ? event.entityId : null
+  )))
+}
+
+/**
+ * The position `paginateById` used to reach by scanning the whole list: the
+ * rows that sort after the cursor under `occurredAt desc, id desc`. A cursor
+ * naming an event the current filters exclude is as invalid here as it was
+ * there, and fails the same way.
+ */
+function activityCursorBound(
+  database: Executor,
+  scope: SQL | undefined,
+  cursor: string | undefined,
+) {
+  if (!cursor) return undefined
+  const [anchor] = database.select({
+    id: financialAuditEvents.id,
+    occurredAt: financialAuditEvents.occurredAt,
+  }).from(financialAuditEvents)
+    .where(and(scope, eq(financialAuditEvents.id, cursor)))
+    .limit(1).all()
+  if (!anchor) throw new FinanceRecordsCursorError()
+  return or(
+    lt(financialAuditEvents.occurredAt, anchor.occurredAt),
+    and(
+      eq(financialAuditEvents.occurredAt, anchor.occurredAt),
+      lt(financialAuditEvents.id, anchor.id),
+    ),
+  )
+}
+
 export function loadFinancialActivity(
   database: Executor,
   input: FinanceActivityInput & { limit: number },
 ): FinanceActivityResult {
-  const accountRows = database.select({
-    academyIdSerial: academyIdAllocations.serial,
-    fullName: accounts.fullName,
-    id: accounts.id,
-    role: accounts.role,
-  }).from(accounts).leftJoin(
-    academyIdAllocations,
-    eq(academyIdAllocations.accountId, accounts.id),
-  ).all()
-  const accountMap = new Map(accountRows.map((row) => [row.id, row]))
-  const chargeMap = new Map(database.select().from(financialCharges).all()
-    .map((row) => [row.id, row]))
-  const paymentMap = new Map(database.select().from(payments).all().map((row) => [row.id, row]))
-  const refundMap = new Map(database.select().from(refunds).all().map((row) => [row.id, row]))
-  const agreementMap = new Map(database.select().from(feeAgreements).all()
-    .map((row) => [row.id, row]))
-  const adjustmentMap = new Map(database.select().from(chargeAdjustments).all()
-    .map((row) => [row.id, row]))
-  const concessionMap = new Map(database.select().from(concessions).all()
-    .map((row) => [row.id, row]))
-  const applicationMap = new Map(database.select().from(concessionApplications).all()
-    .map((row) => [row.id, row]))
-
   const fromInstant = input.from ? new Date(`${input.from}T00:00:00+05:30`) : null
   const toInstant = input.to ? new Date(`${input.to}T23:59:59.999+05:30`) : null
-  const items = database.select().from(financialAuditEvents).where(and(
+  const scope = and(
     fromInstant ? gte(financialAuditEvents.occurredAt, fromInstant) : undefined,
     toInstant ? lte(financialAuditEvents.occurredAt, toInstant) : undefined,
     input.coachId ? eq(financialAuditEvents.actorAccountId, input.coachId) : undefined,
     input.eventTypes?.length
       ? inArray(financialAuditEvents.eventType, input.eventTypes)
       : undefined,
-  )).orderBy(desc(financialAuditEvents.occurredAt), desc(financialAuditEvents.id)).all()
-    .map((event): FinanceActivityItem => {
-      const metadata = parseMetadata(event.metadata)
-      const charge = event.entityType === "charge"
-        ? chargeMap.get(event.entityId)
-        : typeof metadata.chargeId === "string" ? chargeMap.get(metadata.chargeId) : undefined
-      const payment = event.entityType === "payment" ? paymentMap.get(event.entityId) : undefined
-      const refund = event.entityType === "refund" ? refundMap.get(event.entityId) : undefined
-      const agreement = event.entityType === "fee_agreement"
-        ? agreementMap.get(event.entityId)
-        : undefined
-      const adjustment = event.entityType === "adjustment"
-        ? adjustmentMap.get(event.entityId)
-        : undefined
-      const concession = event.entityType === "concession"
-        ? concessionMap.get(event.entityId)
-        : undefined
-      const application = event.entityType === "concession_application"
-        ? applicationMap.get(event.entityId)
-        : undefined
-      const applicationCharge = application ? chargeMap.get(application.chargeId) : undefined
-      const adjustmentCharge = adjustment ? chargeMap.get(adjustment.chargeId) : undefined
-      const playerId = typeof metadata.playerId === "string"
-        ? metadata.playerId
-        : event.entityType === "player"
-          ? event.entityId
-          : payment?.playerAccountId
-            ?? refund?.playerAccountId
-            ?? charge?.playerAccountId
-            ?? agreement?.playerAccountId
-            ?? concession?.playerAccountId
-            ?? applicationCharge?.playerAccountId
-            ?? adjustmentCharge?.playerAccountId
-            ?? null
-      const player = playerId ? accountMap.get(playerId) : undefined
-      const actor = accountMap.get(event.actorAccountId)
-      const amount = typeof metadata.amountPaise === "number" && Number.isSafeInteger(metadata.amountPaise)
-        ? metadata.amountPaise
-        : payment?.amountPaise
-          ?? refund?.amountPaise
-          ?? adjustment?.amountPaise
-          ?? application?.amountPaise
-          ?? charge?.originalAmountPaise
-          ?? null
-      let reason: string | null = null
-      if (adjustment?.kind === "legacy_settlement") {
-        reason = "Historical credit adjustment"
-      } else if (typeof metadata.reason === "string") {
-        reason = metadata.reason
-      } else if (event.eventType === "payment_reversed") {
-        reason = payment?.reversalReason ?? null
-      } else if (event.eventType === "refund_reversed") {
-        reason = refund?.reversalReason ?? null
-      } else if (event.eventType === "charge_voided") {
-        reason = charge?.voidReason ?? null
-      } else if (event.eventType === "adjustment_created") {
-        reason = adjustment?.reason ?? null
-      } else if (event.eventType === "adjustment_reversed") {
-        reason = adjustment?.reversalReason ?? null
-      } else if (event.eventType === "concession_created") {
-        reason = concession?.reason ?? null
-      }
-      return {
-        id: event.id,
-        occurredAt: event.occurredAt.toISOString(),
-        eventType: event.eventType,
-        action: FINANCE_AUDIT_EVENTS[event.eventType].action,
-        actorId: event.actorAccountId,
-        actorName: actor?.fullName ?? "Unknown coach",
-        playerId,
-        playerName: player?.fullName ?? null,
-        academyId: player?.academyIdSerial ? formatAcademyId(player.academyIdSerial) : null,
-        reference: payment?.receiptReference
-          ?? refund?.refundReference
-          ?? charge?.feeReference
-          ?? applicationCharge?.feeReference
-          ?? adjustmentCharge?.feeReference
-          ?? (typeof metadata.receiptReference === "string" ? metadata.receiptReference : null)
-          ?? (typeof metadata.refundReference === "string" ? metadata.refundReference : null),
-        amountPaise: amount,
-        reason,
-      }
-    })
-
+  )
   const query = normalizeSearch(input.query)
+
+  // A free-text search reads the names and references that the ledger rows
+  // below carry, so it cannot join the `where` clause and the whole window has
+  // to be built before the page can be cut. Without one -- the default, and the
+  // only shape the CSV export drains unless a coach typed a search -- the page
+  // is decided here, by the database, and neither the date window nor anything
+  // else is required to bound the read.
+  const ordered = database.select().from(financialAuditEvents)
+    .where(query ? scope : and(scope, activityCursorBound(database, scope, input.cursor)))
+    .orderBy(desc(financialAuditEvents.occurredAt), desc(financialAuditEvents.id))
+  const eventRows = query ? ordered.all() : ordered.limit(input.limit + 1).all()
+  const hasMore = !query && eventRows.length > input.limit
+  const events = (hasMore ? eventRows.slice(0, input.limit) : eventRows)
+    .map((event): ActivityAuditEvent => ({ event, metadata: parseMetadata(event.metadata) }))
+
+  // Every ledger row an event can name, it names by id, so the lookups below
+  // are bound to those ids instead of reading the table -- one page's worth of
+  // them on the paged path, and on the search path only what the window holds.
+  const paymentMap = lookupById(entityIds(events, "payment"), (ids) => (
+    database.select().from(payments).where(inArray(payments.id, ids)).all()
+  ))
+  const refundMap = lookupById(entityIds(events, "refund"), (ids) => (
+    database.select().from(refunds).where(inArray(refunds.id, ids)).all()
+  ))
+  const agreementMap = lookupById(entityIds(events, "fee_agreement"), (ids) => (
+    database.select().from(feeAgreements).where(inArray(feeAgreements.id, ids)).all()
+  ))
+  const adjustmentMap = lookupById(entityIds(events, "adjustment"), (ids) => (
+    database.select().from(chargeAdjustments).where(inArray(chargeAdjustments.id, ids)).all()
+  ))
+  const concessionMap = lookupById(entityIds(events, "concession"), (ids) => (
+    database.select().from(concessions).where(inArray(concessions.id, ids)).all()
+  ))
+  const applicationMap = lookupById(entityIds(events, "concession_application"), (ids) => (
+    database.select().from(concessionApplications)
+      .where(inArray(concessionApplications.id, ids)).all()
+  ))
+  // An adjustment and a concession application each carry the charge whose fee
+  // reference the row shows, so those two reads have to land before the charges
+  // can be asked for.
+  const chargeMap = lookupById(distinctIds([
+    ...entityIds(events, "charge"),
+    ...events.map(({ event, metadata }) => (
+      event.entityType !== "charge" && typeof metadata.chargeId === "string"
+        ? metadata.chargeId
+        : null
+    )),
+    ...[...adjustmentMap.values()].map((adjustment) => adjustment.chargeId),
+    ...[...applicationMap.values()].map((application) => application.chargeId),
+  ]), (ids) => (
+    database.select().from(financialCharges).where(inArray(financialCharges.id, ids)).all()
+  ))
+
+  const rows = events.map(({ event, metadata }) => {
+    const charge = event.entityType === "charge"
+      ? chargeMap.get(event.entityId)
+      : typeof metadata.chargeId === "string" ? chargeMap.get(metadata.chargeId) : undefined
+    const payment = event.entityType === "payment" ? paymentMap.get(event.entityId) : undefined
+    const refund = event.entityType === "refund" ? refundMap.get(event.entityId) : undefined
+    const agreement = event.entityType === "fee_agreement"
+      ? agreementMap.get(event.entityId)
+      : undefined
+    const adjustment = event.entityType === "adjustment"
+      ? adjustmentMap.get(event.entityId)
+      : undefined
+    const concession = event.entityType === "concession"
+      ? concessionMap.get(event.entityId)
+      : undefined
+    const application = event.entityType === "concession_application"
+      ? applicationMap.get(event.entityId)
+      : undefined
+    const applicationCharge = application ? chargeMap.get(application.chargeId) : undefined
+    const adjustmentCharge = adjustment ? chargeMap.get(adjustment.chargeId) : undefined
+    const playerId = typeof metadata.playerId === "string"
+      ? metadata.playerId
+      : event.entityType === "player"
+        ? event.entityId
+        : payment?.playerAccountId
+          ?? refund?.playerAccountId
+          ?? charge?.playerAccountId
+          ?? agreement?.playerAccountId
+          ?? concession?.playerAccountId
+          ?? applicationCharge?.playerAccountId
+          ?? adjustmentCharge?.playerAccountId
+          ?? null
+    const amount = typeof metadata.amountPaise === "number" && Number.isSafeInteger(metadata.amountPaise)
+      ? metadata.amountPaise
+      : payment?.amountPaise
+        ?? refund?.amountPaise
+        ?? adjustment?.amountPaise
+        ?? application?.amountPaise
+        ?? charge?.originalAmountPaise
+        ?? null
+    let reason: string | null = null
+    if (adjustment?.kind === "legacy_settlement") {
+      reason = "Historical credit adjustment"
+    } else if (typeof metadata.reason === "string") {
+      reason = metadata.reason
+    } else if (event.eventType === "payment_reversed") {
+      reason = payment?.reversalReason ?? null
+    } else if (event.eventType === "refund_reversed") {
+      reason = refund?.reversalReason ?? null
+    } else if (event.eventType === "charge_voided") {
+      reason = charge?.voidReason ?? null
+    } else if (event.eventType === "adjustment_created") {
+      reason = adjustment?.reason ?? null
+    } else if (event.eventType === "adjustment_reversed") {
+      reason = adjustment?.reversalReason ?? null
+    } else if (event.eventType === "concession_created") {
+      reason = concession?.reason ?? null
+    }
+    return {
+      id: event.id,
+      occurredAt: event.occurredAt.toISOString(),
+      eventType: event.eventType,
+      action: FINANCE_AUDIT_EVENTS[event.eventType].action,
+      actorId: event.actorAccountId,
+      playerId,
+      reference: payment?.receiptReference
+        ?? refund?.refundReference
+        ?? charge?.feeReference
+        ?? applicationCharge?.feeReference
+        ?? adjustmentCharge?.feeReference
+        ?? (typeof metadata.receiptReference === "string" ? metadata.receiptReference : null)
+        ?? (typeof metadata.refundReference === "string" ? metadata.refundReference : null),
+      amountPaise: amount,
+      reason,
+    }
+  })
+
+  // The names come last: a row's player is reached through whichever of the
+  // ledger rows above the event happened to name, so the account ids are not
+  // known until every one of those lookups has resolved.
+  const accountMap = lookupById(distinctIds([
+    ...rows.map((row) => row.actorId),
+    ...rows.map((row) => row.playerId),
+  ]), (ids) => database.select({
+    academyIdSerial: academyIdAllocations.serial,
+    fullName: accounts.fullName,
+    id: accounts.id,
+  }).from(accounts).leftJoin(
+    academyIdAllocations,
+    eq(academyIdAllocations.accountId, accounts.id),
+  ).where(inArray(accounts.id, ids)).all())
+
+  const items = rows.map((row): FinanceActivityItem => {
+    const player = row.playerId ? accountMap.get(row.playerId) : undefined
+    return {
+      ...row,
+      actorName: accountMap.get(row.actorId)?.fullName ?? "Unknown coach",
+      playerName: player?.fullName ?? null,
+      academyId: player?.academyIdSerial ? formatAcademyId(player.academyIdSerial) : null,
+    }
+  })
+
+  if (!query) {
+    return {
+      items,
+      nextCursor: hasMore && items.length ? items[items.length - 1].id : null,
+    }
+  }
+
   const filtered = items.filter((item) => {
     const date = getAcademyDateKey(new Date(item.occurredAt))
     if (input.from && date < input.from) return false
     if (input.to && date > input.to) return false
     if (input.coachId && item.actorId !== input.coachId) return false
     if (input.eventTypes?.length && !input.eventTypes.includes(item.eventType)) return false
-    if (!query) return true
     return [
       item.action,
       item.actorName,

@@ -1827,6 +1827,14 @@ export function prepareMonthlyCharges(
      * audit row, and any concession application -- still runs per charge and in
      * the same order, because those carry idempotency keys and audit metadata
      * that a batch would have to reproduce exactly.
+     *
+     * The recurring concession applied to an already-prepared Charge is a
+     * fourth read that used to run per candidate, and on a re-run it was the
+     * dominant one: `applyConcessionInTransaction` loaded that Charge's whole
+     * ledger -- four statements -- only to hand back a result this loop throws
+     * away. Those Charges all exist before the loop starts, so their views are
+     * read in one batch below and passed down. Charges issued *inside* the loop
+     * are deliberately absent from the map, and fall back to their own read.
      */
     const candidatePlayerIds = [...new Set(
       candidates.filter((candidate) => candidate.hasAssignment)
@@ -1875,6 +1883,21 @@ export function prepareMonthlyCharges(
         })
     }
 
+    /*
+     * Only the already-prepared Charges of players who actually hold a
+     * recurring concession are worth reading: every other candidate either
+     * returns before `applyConcessionInTransaction` or has no Charge yet. An
+     * academy with no recurring concessions therefore pays nothing for this --
+     * `loadChargeViews` issues no statement for an empty set.
+     */
+    const preparedChargeViews = loadChargeViews(
+      tx,
+      [...existingByPlayer].flatMap(([playerId, charge]) => (
+        recurringConcessionByPlayer.has(playerId) ? [charge.id] : []
+      )),
+      now,
+    )
+
     candidates.forEach(({ agreement, enrollment, hasAssignment }) => {
       if (!hasAssignment) {
         result.awaitingAssignment += 1
@@ -1887,7 +1910,7 @@ export function prepareMonthlyCharges(
           actorId: coachId,
           createId,
           now,
-        }, recurringConcessionByPlayer)
+        }, recurringConcessionByPlayer, preparedChargeViews)
         return
       }
       const billedEarlier = billedEarlierPlayers.has(agreement.playerAccountId)
@@ -3175,6 +3198,19 @@ type ApplyConcessionCommand = {
   skipIfSettled?: boolean
 }
 
+/**
+ * `preloadedCharges`, when supplied, answers the three ledger reads this
+ * function makes *before* it writes anything: the replay return, the reused
+ * recurring application return, and the view the Concession amount is derived
+ * from. It must have been built inside this same transaction, from charges the
+ * caller does not itself write to between building it and calling here --
+ * `prepareMonthlyCharges` reads every already-prepared Charge once before its
+ * loop, and each iteration touches only its own player's Charge. The read after
+ * the writes is deliberately left un-preloaded: it has to see them.
+ *
+ * The optimistic-concurrency check still reads `chargeRow` fresh, so a stale
+ * entry could never be written through; it would fail `BALANCE_CHANGED` first.
+ */
 function applyConcessionInTransaction(
   database: SmbaDatabaseExecutor,
   input: ApplyConcessionCommand,
@@ -3183,7 +3219,11 @@ function applyConcessionInTransaction(
     createId,
     now,
   }: { actorId: string; createId: () => string; now: Date },
+  preloadedCharges?: Map<string, ChargeView>,
 ): ConcessionApplicationResult | null {
+  const readChargeView = (chargeId: string) => (
+    preloadedCharges?.get(chargeId) ?? loadChargeView(database, chargeId, now)
+  )
   const replay = database.select().from(concessionApplications)
     .where(eq(concessionApplications.idempotencyKey, input.mutationId)).get()
   if (replay) {
@@ -3194,7 +3234,7 @@ function applyConcessionInTransaction(
     }
     const concession = database.select().from(concessions)
       .where(eq(concessions.id, replay.concessionId)).get()
-    const charge = loadChargeView(database, replay.chargeId, now)
+    const charge = readChargeView(replay.chargeId)
     if (!concession || !charge) throw new Error("The Concession application is unavailable.")
     return {
       applicationId: replay.id,
@@ -3233,7 +3273,7 @@ function applyConcessionInTransaction(
         eq(concessionApplications.chargeId, chargeRow.id),
       )).orderBy(desc(concessionApplications.createdAt), desc(concessionApplications.id)).get()
       if (priorApplication) {
-        const charge = loadChargeView(database, chargeRow.id, now)
+        const charge = readChargeView(chargeRow.id)
         if (!charge) throw new Error("The Concession Charge is unavailable.")
         return {
           applicationId: priorApplication.id,
@@ -3259,7 +3299,7 @@ function applyConcessionInTransaction(
       financeError("CONFLICT", "This one-off Concession has already been applied.")
     }
   }
-  const charge = loadChargeView(database, chargeRow.id, now)
+  const charge = readChargeView(chargeRow.id)
   if (!charge) throw new Error("The Concession Charge is unavailable.")
   const amountPaise = calculateConcessionAmount({
     originalAmountPaise: charge.originalAmountPaise,
@@ -3553,6 +3593,10 @@ export function reverseConcession(
  * earliest `createdAt`, then `id` -- because that is which concession applies
  * when a player has more than one covering the period. Omitting it keeps the
  * per-charge read, which is what a single-charge caller wants.
+ *
+ * `preloadedCharges` does the same for the ledger views the application reads
+ * before it writes; see `applyConcessionInTransaction` for what a caller has to
+ * guarantee about it.
  */
 function applyRecurringConcessionForCharge(
   database: SmbaDatabaseExecutor,
@@ -3560,6 +3604,7 @@ function applyRecurringConcessionForCharge(
   period: string,
   { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
   recurringByPlayer?: Map<string, typeof concessions.$inferSelect>,
+  preloadedCharges?: Map<string, ChargeView>,
 ) {
   const concession = recurringByPlayer
     ? recurringByPlayer.get(charge.playerAccountId) ?? null
@@ -3586,7 +3631,7 @@ function applyRecurringConcessionForCharge(
     mutationId,
     reusePriorApplication: true,
     skipIfSettled: true,
-  }, { actorId, createId, now })
+  }, { actorId, createId, now }, preloadedCharges)
 }
 
 export function applyChargeAdjustment(

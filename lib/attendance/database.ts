@@ -7,6 +7,7 @@ import {
   type AttendanceDomainRecord,
   type MonthlyAttendanceInput,
 } from "@/lib/attendance/domain"
+import { monthDateBounds } from "@/lib/date-keys"
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   attendanceAdjustments,
@@ -17,26 +18,6 @@ import {
   sessionOccurrences,
 } from "@/lib/db/schema"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
-
-// SQLite only applies its LIKE-to-range optimisation when the indexed column is
-// NOCASE-collated. `occurrence_date` is BINARY, so `like(date, '2026-08%')`
-// scans every occurrence ever scheduled; the half-open range below covers the
-// same YYYY-MM-DD keys and seeks `session_occurrences_date_idx` instead.
-function monthDateBounds(month: string) {
-  const monthIndex = Number(month.slice(5, 7))
-  const rollsIntoNextYear = monthIndex === 12
-  const nextYear = Number(month.slice(0, 4)) + (rollsIntoNextYear ? 1 : 0)
-  const nextMonthIndex = rollsIntoNextYear ? 1 : monthIndex + 1
-
-  return {
-    start: `${month}-01`,
-    endExclusive: [
-      String(nextYear).padStart(4, "0"),
-      String(nextMonthIndex).padStart(2, "0"),
-      "01",
-    ].join("-"),
-  }
-}
 
 export function getPlayerAttendanceInput(
   accountId: string,
@@ -71,14 +52,34 @@ export function getPlayerAttendanceInput(
       )).all()
     : []
 
-  const occurrenceRows = db.select({
-    id: sessionOccurrences.id,
-    seriesId: sessionOccurrences.seriesId,
-    occurrenceDate: sessionOccurrences.occurrenceDate,
-    startsAt: sessionOccurrences.startsAt,
-    status: sessionOccurrences.status,
-    replacementForOccurrenceId: sessionOccurrences.replacementForOccurrenceId,
-  }).from(sessionOccurrences).where(occurredInMonth).all()
+  // An over-fetch cut, not a correctness fix: `assignmentCoversOccurrence`
+  // (lib/sessions/domain.ts) already requires `assignment.seriesId ===
+  // occurrence.seriesId`, so a foreign batch's sessions never reached anyone's
+  // report - the old read just carried the whole academy's month in memory to
+  // throw most of it away. The assignments query above is not date-filtered
+  // (`effectiveFrom`/`effectiveTo` are read for the domain, not applied here),
+  // so its series set already covers every occurrence that could survive that
+  // filter.
+  //
+  // This predicate needs `session_occurrences_series_date_lookup_idx`. The older
+  // `session_occurrences_series_date_idx` is partial on `status = 'scheduled'`
+  // and this read wants cancelled occurrences too, so without the unfiltered
+  // twin SQLite seeks `series_id` alone and re-checks the month across each
+  // series' whole history - slower than the unscoped range it replaced.
+  const assignedSeriesIds = [...new Set(assignments.map((assignment) => assignment.seriesId))]
+  const occurrenceRows = assignedSeriesIds.length
+    ? db.select({
+        id: sessionOccurrences.id,
+        seriesId: sessionOccurrences.seriesId,
+        occurrenceDate: sessionOccurrences.occurrenceDate,
+        startsAt: sessionOccurrences.startsAt,
+        status: sessionOccurrences.status,
+        replacementForOccurrenceId: sessionOccurrences.replacementForOccurrenceId,
+      }).from(sessionOccurrences).where(and(
+        inArray(sessionOccurrences.seriesId, assignedSeriesIds),
+        occurredInMonth,
+      )).all()
+    : []
   const occurrences = resolveOccurrenceEligibilityDates(db, occurrenceRows)
 
   const records: AttendanceDomainRecord[] = db.select({

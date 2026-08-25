@@ -57,6 +57,31 @@ function scheduleCounts() {
   }
 }
 
+/*
+ * The occurrence write is the reason this service batches, so the tests below
+ * measure it at the driver rather than trusting the row count: drizzle's
+ * better-sqlite3 session calls `client.prepare(sql)` once per statement it
+ * executes, so recording every `prepare` gives the exact statement list the
+ * transaction sent. A per-row loop shows up as one prepared insert per
+ * occurrence; a single multi-row insert shows up as one, carrying every bind.
+ */
+function recordStatements() {
+  const statements: string[] = []
+  const prepare = sqlite.prepare.bind(sqlite)
+  sqlite.prepare = ((source: string) => {
+    statements.push(source)
+    return prepare(source)
+  }) as typeof sqlite.prepare
+  return {
+    occurrenceInserts: () => statements.filter(
+      (sql) => sql.startsWith('insert into "session_occurrences"'),
+    ),
+    restore: () => {
+      Reflect.deleteProperty(sqlite, "prepare")
+    },
+  }
+}
+
 function insertExistingSeries({
   endsOn,
   id,
@@ -272,6 +297,61 @@ describe("recurring schedule terms", () => {
       endsOn: "2029-01-01",
       weekdays: [1],
     })).toThrow("at most 366 days")
+  })
+
+  it("materialises the widest legal term in one insert", () => {
+    // 2026-01-01..2027-01-01 is the 366-day cap; five weekdays over it is the
+    // most occurrences any input can reach, and the one multi-row insert has to
+    // carry all of them without tripping SQLite's bind-parameter limit.
+    const recorder = recordStatements()
+    let seriesId: string
+    try {
+      seriesId = createSchedule({
+        startsOn: "2026-01-01",
+        endsOn: "2027-01-01",
+        weekdays: [1, 2, 3, 4, 5],
+      })
+    } finally {
+      recorder.restore()
+    }
+    const occurrenceInserts = recorder.occurrenceInserts()
+    const occurrences = database.select().from(schema.sessionOccurrences)
+      .where(eq(schema.sessionOccurrences.seriesId, seriesId)).all()
+
+    // One statement, not 262: reverting to a per-row loop fails here first.
+    expect(occurrenceInserts).toHaveLength(1)
+    // 262 rows x 9 columns of binds in that one statement, so the assertion
+    // also pins the batch against SQLITE_MAX_VARIABLE_NUMBER rather than
+    // passing on a statement that quietly re-prepares per row.
+    expect((occurrenceInserts[0]?.match(/\?/g) ?? []).length).toBe(262 * 9)
+    expect(occurrences).toHaveLength(262)
+    expect(new Set(occurrences.map((occurrence) => occurrence.id)).size).toBe(262)
+    expect(occurrences.every((occurrence) => occurrence.status === "scheduled")).toBe(true)
+    const dates = occurrences.map((occurrence) => occurrence.occurrenceDate).sort()
+    expect(dates.at(0)).toBe("2026-01-01")
+    expect(dates.at(-1)).toBe("2027-01-01")
+  })
+
+  it("creates a term whose weekdays never fall inside its date range", () => {
+    // Saturday to Sunday with a Monday slot generates no occurrence at all, so
+    // the batched insert must be skipped rather than sent with no rows.
+    const recorder = recordStatements()
+    let seriesId: string
+    try {
+      seriesId = createSchedule({
+        startsOn: "2026-08-08",
+        endsOn: "2026-08-09",
+        weekdays: [1],
+      })
+    } finally {
+      recorder.restore()
+    }
+
+    expect(recorder.occurrenceInserts()).toEqual([])
+    expect(database.select().from(schema.sessionOccurrences)
+      .where(eq(schema.sessionOccurrences.seriesId, seriesId)).all()).toEqual([])
+    expect(database.select().from(schema.sessionRecurrenceRules)
+      .where(eq(schema.sessionRecurrenceRules.seriesId, seriesId)).all()).toHaveLength(1)
   })
 
   it("allows an otherwise identical successor on the day after a bounded term", () => {

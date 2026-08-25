@@ -12,6 +12,8 @@ vi.mock("server-only", () => ({}))
 
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "smba-auth-runtime-"))
 const databasePath = path.join(temporaryDirectory, "auth.db")
+/** The seeded head coach every case here signs in as. */
+const coachAccountId = "00000000-0000-4000-8000-000000000001"
 
 function sessionCookie(headers: Headers) {
   return headers.getSetCookie()
@@ -208,6 +210,87 @@ describe("Better Auth runtime adapter", () => {
       user: { id: "00000000-0000-4000-8000-000000000001" },
     })
     expect(sessionCookie(verified.headers)).toContain("smba.session_token=")
+  })
+
+  /**
+   * F-8. /account/security reissues recovery codes through
+   * `generateBackupCodes` and states the unused count from `viewBackupCodes`.
+   * Both claims are the plugin's behaviour rather than ours, so they are held
+   * here: that spending a code shortens the stored set, and that reissuing
+   * disturbs neither the enrolled secret nor another device's session -- which
+   * is exactly what reusing `beginAuthenticatorReconnect` would have done.
+   */
+  it("reissues the recovery codes without disturbing the factor or other devices", async () => {
+    const beforeDatabase = new Database(databasePath, { readonly: true })
+    const encrypted = beforeDatabase
+      .prepare("select secret from auth_two_factors limit 1").get() as { secret: string }
+    beforeDatabase.close()
+    const storedSecret = await symmetricDecrypt({
+      data: encrypted.secret,
+      key: process.env.BETTER_AUTH_SECRET!,
+    })
+
+    async function signedInDevice() {
+      const signIn = await auth.api.signInUsername({
+        body: { password: "SMBA local access 2026!", username: "SMBA#0001" },
+        headers: new Headers(),
+        returnHeaders: true,
+      })
+      const challenge = signIn.headers.getSetCookie()
+        .find((cookie) => cookie.startsWith("smba.two_factor="))
+        ?.split(";")[0] ?? ""
+      const verified = await auth.api.verifyTOTP({
+        body: { code: await createOTP(storedSecret).totp(), trustDevice: false },
+        headers: new Headers({ cookie: challenge }),
+        returnHeaders: true,
+      })
+      return new Headers({ cookie: sessionCookie(verified.headers) })
+    }
+
+    const thisDevice = await signedInDevice()
+    const courtsideTablet = await signedInDevice()
+
+    const before = await auth.api.viewBackupCodes({ body: { userId: coachAccountId } })
+    await auth.api.verifyBackupCode({
+      body: { code: before.backupCodes[0], disableSession: false, trustDevice: false },
+      headers: thisDevice,
+    })
+    const afterOneUse = await auth.api.viewBackupCodes({ body: { userId: coachAccountId } })
+    expect(afterOneUse.backupCodes).toHaveLength(before.backupCodes.length - 1)
+
+    // The reissue gate re-checks a second factor against this signed-in
+    // session before it mints anything. The plugin hands back the session it
+    // was given rather than creating one, so the check cannot sign a device
+    // out or rotate the cookie underneath the coach.
+    const reverified = await auth.api.verifyTOTP({
+      body: { code: await createOTP(storedSecret).totp(), trustDevice: false },
+      headers: thisDevice,
+      returnHeaders: true,
+    })
+    expect(reverified.headers.getSetCookie()).toEqual([])
+
+    const reissued = await auth.api.generateBackupCodes({
+      body: { password: "SMBA local access 2026!" },
+      headers: thisDevice,
+      returnHeaders: true,
+    })
+
+    // No Set-Cookie at all, so no session was rotated or dropped.
+    expect(reissued.headers.getSetCookie()).toEqual([])
+    await expect(auth.api.getSession({ headers: courtsideTablet }))
+      .resolves.toMatchObject({ user: { twoFactorEnabled: true } })
+    const afterDatabase = new Database(databasePath, { readonly: true })
+    const afterSecret = afterDatabase
+      .prepare("select secret from auth_two_factors limit 1").get() as { secret: string }
+    afterDatabase.close()
+    expect(afterSecret.secret).toBe(encrypted.secret)
+
+    await expect(auth.api.viewBackupCodes({ body: { userId: coachAccountId } }))
+      .resolves.toMatchObject({ backupCodes: reissued.response.backupCodes })
+    await expect(auth.api.verifyBackupCode({
+      body: { code: before.backupCodes[1], disableSession: false, trustDevice: false },
+      headers: thisDevice,
+    })).rejects.toThrow()
   })
 
   it("rejects an incorrect password through the same adapter", async () => {
