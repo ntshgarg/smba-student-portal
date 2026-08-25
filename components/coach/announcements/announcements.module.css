@@ -102,7 +102,7 @@
 .slipField > span,
 .slipExpiryField > span {
   color: var(--navy);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -285,7 +285,7 @@
   justify-self: end;
   padding: 4px clamp(12px, 2vw, 20px);
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   line-height: 1.45;
   text-align: right;
 }
@@ -307,7 +307,7 @@
 
 .slipExpiryError {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   line-height: 1.35;
 }
 
@@ -600,7 +600,7 @@
   padding: 5px 9px;
   border: 1px solid var(--line);
   color: var(--navy);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 760;
   letter-spacing: 0.035em;
 }
@@ -745,7 +745,7 @@
 
 .archiveSearch > label {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -830,7 +830,7 @@
 
 .archiveFilters label > span {
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -1107,7 +1107,7 @@
 
 .withdrawalRecord > span {
   color: var(--red);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1124,7 +1124,7 @@
   display: block;
   margin-top: 6px;
   color: var(--steel);
-  font-size: 9px;
+  font-size: var(--type-operational-floor);
 }
 
 .detailActions {
