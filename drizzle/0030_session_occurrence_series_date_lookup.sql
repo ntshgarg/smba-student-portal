@@ -1,0 +1,1 @@
+CREATE INDEX `session_occurrences_series_date_lookup_idx` ON `session_occurrences` (`series_id`,`occurrence_date`);

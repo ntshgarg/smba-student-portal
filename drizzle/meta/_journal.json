@@ -211,6 +211,13 @@
       "when": 1787550493410,
       "tag": "0029_concession_application_lookup_index",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1787648522016,
+      "tag": "0030_session_occurrence_series_date_lookup",
+      "breakpoints": true
     }
   ]
 }
