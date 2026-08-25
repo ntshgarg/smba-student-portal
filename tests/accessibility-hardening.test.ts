@@ -152,3 +152,63 @@ describe("operational mobile controls", () => {
     expect(registerButtonRule).toContain("background: transparent")
   })
 })
+
+describe("viewport horizontal overflow guard", () => {
+  // `body { overflow-x: hidden }` reaches the viewport only while the root
+  // element declares no overflow of its own, and that propagation is the whole
+  // behaviour: it clips the page rather than the body box. Measured in Chrome
+  // for Testing 151.0.7922.34 with a sticky `top: 0` header over 3000px of
+  // content — the clip on `body` alone leaves the header at top: 0 after a
+  // 400px scroll; adding overflow-x to the root stops the propagation, makes
+  // `body` its own scroll container, and the header measured top: -400px
+  // because it now sticks to a scrollport that never scrolls.
+  //
+  // So this guards the root, not the clip. `html` is not the only way to
+  // select the root element: `:root` and `html.something` reach it too, and
+  // app/globals.css already declares `:root` twice, so a selector-literal
+  // check would miss the likeliest way to break this by accident. Whether the
+  // clip itself should be replaced by per-container `overflow-x` wrappers is a
+  // separate question this test takes no position on; see the note at the
+  // declaration in app/globals.css.
+
+  // Innermost `selectors { body }` pairs, comments stripped first so prose can
+  // contain braces. At-rule wrappers are not matched, so a rule nested in
+  // `@media` is still reached by its own selector.
+  const rulesIn = (contents: string) => [
+    ...contents.replace(/\/\*[\s\S]*?\*\//gu, "").matchAll(/([^{}]+)\{([^{}]*)\}/gu),
+  ].map((match) => ({
+    body: match[2],
+    selectors: match[1].split(",").map((selector) => selector.trim()),
+  }))
+
+  // The subject of a complex selector is its last compound, so `html .card`
+  // styles the card and is not a root rule. `overflow-anchor` and
+  // `overflow-wrap` do not affect propagation; the shorthand and its four axis
+  // longhands, which do, are the ones matched.
+  const rootOverflowSelectors = (contents: string) => rulesIn(contents)
+    .filter((rule) => /(?:^|[;\s])overflow(?:-x|-y|-block|-inline)?\s*:/u.test(rule.body))
+    .flatMap((rule) => rule.selectors)
+    .filter((selector) => /^(?:html|:root)(?![\w-])/u.test(selector.split(/[\s>+~]+/u).at(-1) ?? ""))
+
+  it("recognises every way of putting overflow on the root element", () => {
+    expect(rootOverflowSelectors("html { overflow: hidden }")).toEqual(["html"])
+    expect(rootOverflowSelectors(":root { overflow-x: hidden }")).toEqual([":root"])
+    expect(rootOverflowSelectors("html.compact { overflow-x: clip }")).toEqual(["html.compact"])
+    expect(rootOverflowSelectors("html { overflow-y: auto }")).toEqual(["html"])
+    expect(rootOverflowSelectors("@media (width < 430px) { :root { overflow-x: clip } }")).toEqual([":root"])
+
+    expect(rootOverflowSelectors("html .card { overflow-x: auto }")).toEqual([])
+    expect(rootOverflowSelectors("html { overflow-anchor: none }")).toEqual([])
+    expect(rootOverflowSelectors(".html-shell { overflow-x: hidden }")).toEqual([])
+  })
+
+  it("leaves overflow unset on the root element so the body clip propagates to the viewport", () => {
+    for (const stylesheet of ["app/globals.css", "app/public-home.css"]) {
+      expect(rootOverflowSelectors(source(stylesheet)), stylesheet).toEqual([])
+    }
+
+    const body = rulesIn(source("app/globals.css"))
+      .find((rule) => rule.selectors.includes("body"))
+    expect(body?.body).toContain("overflow-x: hidden")
+  })
+})

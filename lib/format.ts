@@ -100,7 +100,7 @@ export function numberFormatter(
  *     `lib/finance/records-csv.ts` emits bare, ungrouped, always-2dp decimals,
  *     because a spreadsheet has to parse the cell back as a number.
  *   - `paiseToRupeesInput` in `components/coach/financials/allocation-draft.ts`
- *     — and the `String(paise / 100)` seeds in `player-ledger.tsx` and
+ *     — and the `String(paise / 100)` seeds in `ledger/fee-plan-editor.tsx` and
  *     `financials-rapid-desk.tsx` — fills editable amount fields, so what it
  *     writes must survive a round trip through `parseRupeesToPaise`.
  *   - the refund-limit message in `lib/finance/service.ts` hand-builds

@@ -37,18 +37,20 @@ describe("coach Financials Phase 2 workflows", () => {
   })
 
   it("uses full receipt records for reversals and constrains refund dates", () => {
-    const workspace = source("components/coach/financials/player-ledger.tsx")
+    const corrections = source("components/coach/financials/ledger/corrections-panel.tsx")
+    const refundForm = source("components/coach/financials/ledger/refund-form.tsx")
 
-    expect(workspace).toContain("const receipts = ledger.management.receipts.filter")
-    expect(workspace).toContain('receipt.lifecycle === "recorded"')
-    expect(workspace).toContain('refund.lifecycle === "recorded"')
-    expect(workspace).toContain("min={receipt.receivedOn}")
-    expect(workspace).toContain("receipt.receiptReference")
+    expect(corrections).toContain("const receipts = ledger.management.receipts.filter")
+    expect(corrections).toContain('receipt.lifecycle === "recorded"')
+    expect(corrections).toContain('refund.lifecycle === "recorded"')
+    expect(refundForm).toContain("min={receipt.receivedOn}")
+    expect(refundForm).toContain("receipt.receiptReference")
   })
 
   it("exposes concession commands through coach-only server actions", () => {
     const actions = source("app/coach/financials/actions.ts")
     const workspace = source("components/coach/financials/player-ledger.tsx")
+    const applyForm = source("components/coach/financials/ledger/apply-concession-form.tsx")
 
     expect(actions).toContain("export async function createConcessionAction")
     expect(actions).toContain("export async function applyConcessionAction")
@@ -56,8 +58,8 @@ describe("coach Financials Phase 2 workflows", () => {
     expect(actions).toContain("export async function reverseConcessionAction")
     expect(actions).toContain('revalidatePath("/coach/financials/record")')
     expect(workspace).toContain("<ConcessionManagement ledger={ledger} period={period} />")
-    expect(workspace).toContain('charge.type !== "monthly_training"')
-    expect(workspace).toContain("charge.billingPeriod >= concession.startsPeriod")
-    expect(workspace).toContain("Apply to existing fee")
+    expect(applyForm).toContain('charge.type !== "monthly_training"')
+    expect(applyForm).toContain("charge.billingPeriod >= concession.startsPeriod")
+    expect(applyForm).toContain("Apply to existing fee")
   })
 })
