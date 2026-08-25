@@ -8,6 +8,7 @@ import { publishAnnouncementAction } from "@/app/coach/announcements/actions"
 import { announcementParagraphs } from "@/components/announcements/announcement-presentation"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import { formatDateKey } from "@/lib/format"
 
 import {
@@ -34,8 +35,48 @@ const EMPTY_VALUES: ComposerValues = {
   expiresOn: "",
 }
 
+/**
+ * A publication is one small insert set, but the action revalidates nine paths
+ * before it answers — every coach, player and public surface a notice can reach
+ * — and then re-reads the announcement, so the response outlives the write. Set
+ * alongside the player register's 20s rather than tuned under it: courtside
+ * connections stall rather than fail, and this only has to beat an indefinite
+ * hang. It is a deadline, not a cancellation — see `withSaveDeadline`.
+ */
+const publishDeadlineMs = 20_000
+
+/**
+ * Said on the composer, not in the dialog: by the time this is true the dialog
+ * has gone and the coach is back in the editor with the message still in it.
+ * The second sentence is the one that matters — the notice is already on every
+ * channel it was addressed to, so publishing again is work, not insurance.
+ */
+const publishedAfterExitMessage = "Announcement published. The publish you left in"
+  + " the review finished on its own, so the notice is live and does not need sending again."
+
 function createMutationKey() {
   return globalThis.crypto.randomUUID()
+}
+
+/**
+ * The announcement a publication key was minted for, canonicalised exactly the
+ * way the server fingerprints it (lib/announcements/service.ts:90-99, sha256
+ * over title, content, channels, pinned and expiresOn after the same
+ * normalisation). Reference equality on `values` is not a substitute:
+ * `updateValues` allocates a new object on every keystroke, so typing a
+ * character and deleting it again would have reminted a key whose payload the
+ * server would have recognised as the one already published — and a second key
+ * for identical content is a second live notice that only a permanently audited
+ * withdrawal can take down.
+ */
+function publicationPayload(values: ComposerValues) {
+  return JSON.stringify({
+    channels: [...new Set(values.channels)].sort(),
+    content: values.content.replace(/\r\n?/gu, "\n").trim(),
+    expiresOn: values.expiresOn.trim() || null,
+    pinned: values.pinned,
+    title: values.title.replace(/\s+/gu, " ").trim(),
+  })
 }
 
 function firstInvalidField(values: ComposerValues, academyToday: string): FieldName | null {
@@ -48,13 +89,17 @@ function firstInvalidField(values: ComposerValues, academyToday: string): FieldN
 
 function ReviewDialog({
   onBack,
+  onOutcomeAfterExit,
   onPublished,
   onValidationFailure,
+  publicationKey,
   values,
 }: {
   onBack: () => void
+  onOutcomeAfterExit: (outcome: { feedback: ActionFeedback; published: boolean }) => void
   onPublished: (announcementId: string) => void
   onValidationFailure: (field: FieldName, message: string) => void
+  publicationKey: string
   values: ComposerValues
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -62,7 +107,16 @@ function ReviewDialog({
   const publishButtonRef = useRef<HTMLButtonElement>(null)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
-  const [publicationKey] = useState(createMutationKey)
+  /**
+   * Set once this dialog has left the screen. A publish that settles afterwards
+   * must not navigate the page or pull focus back out of the editor the coach
+   * has returned to, but it must still be reported: it is reported through
+   * `onOutcomeAfterExit`, onto the composer's own notice, because this dialog's
+   * notice no longer exists to be read. Cleared on every mount because an effect
+   * cleanup also runs between Strict Mode's paired development mounts, which
+   * would otherwise retire the dialog before its first publish ever ran.
+   */
+  const dismissed = useRef(false)
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -71,11 +125,13 @@ function ReviewDialog({
       : null
     const previousOverflow = document.body.style.overflow
 
+    dismissed.current = false
     if (dialog && !dialog.open) dialog.showModal()
     document.body.style.overflow = "hidden"
     closeButtonRef.current?.focus()
 
     return () => {
+      dismissed.current = true
       document.body.style.overflow = previousOverflow
       if (dialog?.open) dialog.close()
       previouslyFocused?.focus()
@@ -87,15 +143,27 @@ function ReviewDialog({
     setPending(true)
     setFeedback(null)
     try {
-      const result = await publishAnnouncementAction({
-        channels: values.channels,
-        content: values.content.trim(),
-        expiresOn: values.expiresOn || null,
-        pinned: values.pinned,
-        publicationKey,
-        title: values.title.trim(),
-      })
+      const result = await withSaveDeadline(
+        publishAnnouncementAction({
+          channels: values.channels,
+          content: values.content.trim(),
+          expiresOn: values.expiresOn || null,
+          pinned: values.pinned,
+          publicationKey,
+          title: values.title.trim(),
+        }),
+        publishDeadlineMs,
+      )
       if (!result.ok) {
+        if (dismissed.current) {
+          // Not routed through `onValidationFailure`: that focuses the field it
+          // names, and the coach is already typing somewhere in the editor.
+          onOutcomeAfterExit({
+            feedback: { message: result.message, tone: "error" },
+            published: false,
+          })
+          return
+        }
         if (
           result.field === "title"
           || result.field === "content"
@@ -110,18 +178,53 @@ function ReviewDialog({
         return
       }
 
+      if (dismissed.current) {
+        onOutcomeAfterExit({
+          feedback: { message: publishedAfterExitMessage, tone: "success" },
+          published: true,
+        })
+        return
+      }
       onPublished(result.announcement.id)
-    } catch {
-      setFeedback({
-        message: "The announcement could not be published. Your message is still here.",
-        tone: "error",
+    } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The announcement could not be published",
+        retained: "Your message is still here",
+        subject: "The announcement",
       })
+      if (dismissed.current) {
+        onOutcomeAfterExit({
+          feedback: { message: failure.message, tone: "error" },
+          published: false,
+        })
+        return
+      }
+      setFeedback({ message: failure.message, tone: "error" })
       publishButtonRef.current?.focus()
     } finally {
       setPending(false)
     }
   }
 
+  /**
+   * Every exit below stays live while a publish is in flight. Next invokes a
+   * server action through React's `callServer`, whose fetch carries no
+   * `AbortSignal` (lib/client/network-failure.ts:28-40), so a connection that is
+   * established but stalled — the courtside phone on one bar — neither resolves
+   * nor rejects; gating Escape, the backdrop, the close button and "Back to
+   * edit" on `pending` sealed the coach in with up to 5,000 characters, behind
+   * an `isDirty` beforeunload guard that leaves reload no way out either.
+   * Leaving is safe because the attempt keeps its `publicationKey`:
+   * `publication_key` is uniquely indexed and `publishAnnouncement` returns the
+   * row an earlier request created while the payload fingerprint still matches,
+   * so reviewing an untouched message and publishing again resolves to that same
+   * row rather than posting a second notice — which is why the key is reminted
+   * by canonical payload rather than by object identity. The publish button is
+   * held for the length of one attempt; a coach who dismisses this dialog and
+   * re-enters gets a fresh one that can start a second, and the shared key is
+   * what makes that land on the first publication instead of beside it.
+   */
   return (
     <dialog
       ref={dialogRef}
@@ -129,10 +232,10 @@ function ReviewDialog({
       aria-labelledby="announcement-review-title"
       onCancel={(event) => {
         event.preventDefault()
-        if (!pending) onBack()
+        onBack()
       }}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !pending) onBack()
+        if (event.target === event.currentTarget) onBack()
       }}
     >
       <section className={styles.reviewDialog} onMouseDown={(event) => event.stopPropagation()}>
@@ -142,7 +245,6 @@ function ReviewDialog({
           className={styles.dialogClose}
           type="button"
           onClick={onBack}
-          disabled={pending}
           aria-label="Back to announcement editor"
         >
           <X aria-hidden="true" />
@@ -182,7 +284,7 @@ function ReviewDialog({
         />
 
         <div className={styles.dialogActions}>
-          <button type="button" onClick={onBack} disabled={pending}>Back to edit</button>
+          <button type="button" onClick={onBack}>Back to edit</button>
           <button
             ref={publishButtonRef}
             className={styles.primaryButton}
@@ -204,6 +306,22 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
   const [reviewing, setReviewing] = useState(false)
   const [published, setPublished] = useState(false)
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({})
+  /**
+   * The publication key and the canonical payload it was minted for. It is held
+   * here rather than inside the dialog so that dismissing a stalled publish and
+   * reviewing again retries the same key. `publishAnnouncement` treats a reused
+   * key as the same publication only while the payload fingerprint matches and
+   * rejects it outright once it does not, so the key has to be reminted exactly
+   * when that fingerprint would change and no sooner — hence `publicationPayload`
+   * rather than a reference check.
+   */
+  const [publication, setPublication] = useState(() => ({
+    key: createMutationKey(),
+    payload: publicationPayload(EMPTY_VALUES),
+  }))
+  // Reports a publish that settled after the review dialog had gone. Nothing
+  // else writes here: while the dialog is up it carries its own notice.
+  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
   const channelGroupRef = useRef<HTMLFieldSetElement>(null)
@@ -263,6 +381,10 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
       focusField(invalid)
       return
     }
+    const payload = publicationPayload(values)
+    if (publication.payload !== payload) {
+      setPublication({ key: createMutationKey(), payload })
+    }
     setReviewing(true)
   }
 
@@ -274,6 +396,19 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
         `/coach/announcements/${encodeURIComponent(announcementId)}?published=1`,
       )
     })
+  }
+
+  function reportOutcomeAfterExit(
+    { feedback: outcome, published: didPublish }: {
+      feedback: ActionFeedback
+      published: boolean
+    },
+  ) {
+    // A published notice is no longer unsaved work, whichever screen the coach
+    // was on when it landed: leaving the guard armed would ask them to discard
+    // an announcement the academy can already read.
+    if (didPublish) setPublished(true)
+    setFeedback(outcome)
   }
 
   function handleServerValidation(field: FieldName, message: string) {
@@ -294,6 +429,13 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
       <header className={styles.composerHeader}>
         <h1>New announcement</h1>
       </header>
+
+      <InlineNotice
+        className={styles.composerNotice}
+        message={feedback?.message}
+        reserveSpace={false}
+        tone={feedback?.tone}
+      />
 
       <section className={styles.noticeSlip} aria-labelledby="announcement-editor-title">
         <div className={styles.slipMasthead}>
@@ -459,8 +601,10 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
       {reviewing ? (
         <ReviewDialog
           onBack={() => setReviewing(false)}
+          onOutcomeAfterExit={reportOutcomeAfterExit}
           onPublished={completePublication}
           onValidationFailure={handleServerValidation}
+          publicationKey={publication.key}
           values={values}
         />
       ) : null}

@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { getAuth } from "@/lib/auth/better-auth"
+import { signInWithJustWrittenPassword } from "@/lib/auth/username-login-guard"
 import {
   completeInitialHeadCoachSetup,
   HEAD_COACH_SETUP_COOKIE,
@@ -42,17 +43,34 @@ export async function completeHeadCoachSetupAction(
   const validationError = validateInitialHeadCoachSetup(input)
   if (validationError) return { error: validationError }
 
+  let account: Awaited<ReturnType<typeof completeInitialHeadCoachSetup>>
   try {
-    const account = await completeInitialHeadCoachSetup(input)
-    await getAuth().api.signInUsername({
-      body: { password: input.password, username: account.academyId },
-      headers: await headers(),
-    })
-    cookieStore.delete(HEAD_COACH_SETUP_COOKIE)
-    cookieStore.delete(HEAD_SETUP_EMAIL_COOKIE)
+    account = await completeInitialHeadCoachSetup(input)
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "The head-coach account could not be created.",
+    }
+  }
+
+  // The academy exists from here on and `headCoachSetupAvailable()` is false, so
+  // both one-time cookies are spent whatever the sign-in does; keeping them only
+  // leaves a dead token in the browser and a second attempt that can only answer
+  // "already used". The sign-in itself is exempt from the login lockout because
+  // the password it presents is the one just written (lib/auth/username-login-guard.ts),
+  // and a refusal for any other reason is reported as a missing session rather
+  // than as a failed setup, which is what it is.
+  cookieStore.delete(HEAD_COACH_SETUP_COOKIE)
+  cookieStore.delete(HEAD_SETUP_EMAIL_COOKIE)
+  const requestHeaders = await headers()
+  try {
+    await signInWithJustWrittenPassword(() => getAuth().api.signInUsername({
+      body: { password: input.password, username: account.academyId },
+      headers: requestHeaders,
+    }))
+  } catch {
+    return {
+      error: "The head-coach account is ready, but we couldn\u2019t sign you in."
+        + " Open the sign-in page and use your new password.",
     }
   }
   redirect("/auth/two-factor/setup")

@@ -70,6 +70,21 @@
   line-height: 0.96;
 }
 
+/* Where a publish that settled after the review dialog closed is reported. The
+   Notice Slip composition has no reserved notice band, and an empty inline
+   notice still occupies its line box, so the slot is out of the flow entirely
+   until it has something to say. Slip width so the message starts on the same
+   left edge as the announcement it belongs to. */
+.composerNotice {
+  display: none;
+}
+
+.composerNotice:not([data-empty="true"]) {
+  display: block;
+  width: min(100%, 940px);
+  margin: clamp(14px, 2vw, 18px) auto 0;
+}
+
 .noticeSlip {
   position: relative;
   width: min(100%, 940px);

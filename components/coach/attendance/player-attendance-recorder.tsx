@@ -14,7 +14,7 @@ import {
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import type { CSSProperties } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 
 import {
   useAttendancePortal,
@@ -32,6 +32,7 @@ import {
   discardPlayerAttendanceDraft,
   persistPlayerAttendanceDraft,
   readPlayerAttendanceDraft,
+  rebaseRestoredAttendanceDraft,
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
@@ -111,6 +112,12 @@ export function PlayerAttendanceRecorder({
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
+  // The day's occurrences come from the server one date at a time
+  // (`getCoachAttendanceRecorderSnapshot` fetches `from: dateKey, to: dateKey`),
+  // so between the tap and the round trip the provider still holds the previous
+  // date and this date's list is empty for reasons that have nothing to do with
+  // the coach's schedule. The transition is what tells those two empties apart.
+  const [isChangingDate, startDateChange] = useTransition()
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: draftChanges.length > 0,
     message: "Leave this session and discard the unsaved attendance changes?",
@@ -130,20 +137,51 @@ export function PlayerAttendanceRecorder({
   // Read after the mounting render rather than during it, as the report resume
   // hint is (`components/coach/reports/report-resume.ts`), so the server-rendered
   // register is what hydrates.
+  //
+  // What comes back is rebased onto that hydrated register before any of it is
+  // shown. The expectation each mark carries is the one part of a draft that
+  // does not merely age: a week is long enough for the register to be written
+  // elsewhere, and a mark expecting what the cell held that evening is then
+  // unsaveable — see `rebaseRestoredAttendanceDraft`. The rebase stays in memory
+  // and storage keeps the draft as it was marked: rebasing again on the next
+  // read costs nothing, while overwriting the stored expectation would erase
+  // what the warning below is counted from. This component is keyed on the
+  // selection, so the navigation `chooseOccurrence` fires remounts it and reads
+  // the draft a second time within the same tap.
+  //
+  // `attendanceRecords` is a dependency because the rebase reads it, not because
+  // a new one should restore the draft again: the provider hands down a fresh
+  // object on every revalidation, and a second restore would re-announce, as
+  // recovered from an earlier visit, marks the coach is in the middle of making.
+  // The ref holds the restore to once per selected occurrence, against whatever
+  // the register has hydrated by the time the timer runs.
+  const restoredOccurrenceIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!selectedOccurrenceId) return
     const timer = window.setTimeout(() => {
+      if (restoredOccurrenceIdRef.current === selectedOccurrenceId) return
+      restoredOccurrenceIdRef.current = selectedOccurrenceId
       const restored = readPlayerAttendanceDraft(selectedOccurrenceId)
       if (!restored.length) return
-      setDraftChanges(restored)
+      const recorded = attendanceRecords[selectedOccurrenceId] ?? {}
+      const rebased = rebaseRestoredAttendanceDraft(
+        restored,
+        (change) => recorded[change.playerId] ?? "cleared",
+      )
+      if (!rebased.changes.length) return
+      setDraftChanges(rebased.changes)
       setFeedback({
-        message: restoredAttendanceDraftNotice(restored.length, "save attendance"),
+        message: restoredAttendanceDraftNotice(
+          rebased.changes.length,
+          "save attendance",
+          rebased.changedUnderneath,
+        ),
         tone: "info",
       })
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [selectedOccurrenceId])
+  }, [attendanceRecords, selectedOccurrenceId])
 
   const seriesById = useMemo(
     () => new Map(sessionSeries.map((series) => [series.id, series])),
@@ -226,10 +264,23 @@ export function PlayerAttendanceRecorder({
 
   function chooseDate(dateKey: string) {
     if (!dateKey || dateKey === selectedDate || !discardDraftForSelectionChange()) return
+    // The chosen date is shown at once — it is the coach's own input, and the
+    // date row must not lag behind the picker. Only the navigation that fetches
+    // it is deferred, so `isChangingDate` is raised for the round trip in which
+    // the occurrence list on screen still belongs to the date the coach has
+    // left. It does not cover the whole of that mismatch: the commit remounts
+    // this component (`app/coach/attendance/players/record/page.tsx` keys it on
+    // the selection) with a fresh, unset transition, while the provider re-seeds
+    // `sessionOccurrences` from props a tick later, so the previous date's list
+    // is still in place for that one frame. A frame rather than a venue
+    // connection is the whole of what this buys. The input keeps no `disabled`,
+    // for the reason the save button below does not: it is the element the coach
+    // is standing on, and disabling it here would hand focus to `<body>` on a
+    // slow venue connection.
     setSelectedDate(dateKey)
     setSelectedOccurrenceId(null)
     setFeedback(null)
-    replaceSelection(dateKey, null)
+    startDateChange(() => replaceSelection(dateKey, null))
   }
 
   function chooseOccurrence(occurrence: TrainingSessionOccurrence) {
@@ -526,10 +577,25 @@ export function PlayerAttendanceRecorder({
                   <span>Scheduled sessions</span>
                   <h2 id="attendance-session-picker-title">Choose one session</h2>
                 </div>
-                <strong>{dayOccurrences.length}</strong>
+                {/* The count is the same claim the empty state below makes, so
+                    it waits on the same flag rather than reporting the previous
+                    date's list as this one's. */}
+                <strong>{isChangingDate ? "—" : dayOccurrences.length}</strong>
               </div>
 
-              {!dayOccurrences.length ? (
+              {isChangingDate ? (
+                // "No sessions on this date." is a statement about the coach's
+                // own schedule, and until the round trip lands the register has
+                // no basis for it — the provider is holding the previous date's
+                // sessions, not this date's absence of any. This branch withholds
+                // it for that round trip; see `chooseDate` for the single frame
+                // after the commit that it does not cover.
+                <div className="attendance-record-empty" role="status">
+                  <CalendarDays aria-hidden="true" />
+                  <h3>Loading sessions…</h3>
+                  <p>Checking the schedule for this date.</p>
+                </div>
+              ) : !dayOccurrences.length ? (
                 <div className="attendance-record-empty">
                   <CalendarDays aria-hidden="true" />
                   <h3>No sessions on this date.</h3>

@@ -10,6 +10,7 @@ import { siteOrigin } from "@/lib/config"
 import { initializeDatabase, shouldUseTurso } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
 import { smbaPinLogin } from "@/lib/auth/pin-plugin"
+import { usernameLoginHooks } from "@/lib/auth/username-login-guard"
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 
 const LOCAL_ONLY_AUTH_SECRET = "smba-local-only-auth-secret-change-before-deployment-2026"
@@ -110,6 +111,10 @@ function createAuth() {
     modelName: "authVerifications",
     storeIdentifier: "hashed",
   },
+  // The password door's per-account lockout and audit rows. Better Auth owns
+  // the `/sign-in/username` handler, so this is the only place the guard can sit
+  // and still cover both the login form and the public route.
+  hooks: usernameLoginHooks,
   rateLimit: {
     enabled: true,
     max: 100,

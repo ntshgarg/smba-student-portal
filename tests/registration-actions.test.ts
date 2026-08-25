@@ -7,8 +7,12 @@ vi.mock("server-only", () => ({}))
 const mocks = vi.hoisted(() => ({
   clearDatabaseSession: vi.fn(),
   coachTotpRequired: vi.fn(() => false),
+  completeAccountActivation: vi.fn(),
+  cookieDelete: vi.fn(),
+  cookieGet: vi.fn(),
   cookieSet: vi.fn(),
   findApprovedAccountByAcademyId: vi.fn(),
+  hashPassword: vi.fn(async () => "hashed"),
   loginIsBlocked: vi.fn(() => false),
   postAuthenticationDestination: vi.fn((input: {
     accountId: string
@@ -27,13 +31,22 @@ const mocks = vi.hoisted(() => ({
   registerPublicAccountRequest: vi.fn(),
   signInPin: vi.fn(),
   signInUsername: vi.fn(),
+  writeAuthSecurityEvent: vi.fn(),
 }))
 
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
 vi.mock("next/headers", () => ({
-  cookies: vi.fn(async () => ({ delete: vi.fn(), get: vi.fn(), set: mocks.cookieSet })),
+  cookies: vi.fn(async () => ({
+    delete: mocks.cookieDelete,
+    get: mocks.cookieGet,
+    set: mocks.cookieSet,
+  })),
   headers: vi.fn(async () => new Headers()),
 }))
+
+// Stubbed so the cases below can watch the one deliberately expensive call in
+// the action: a blocked attempt must never reach scrypt.
+vi.mock("better-auth/crypto", () => ({ hashPassword: mocks.hashPassword }))
 
 vi.mock("@/lib/auth/account-service", () => ({
   findApprovedAccountByAcademyId: mocks.findApprovedAccountByAcademyId,
@@ -58,7 +71,7 @@ vi.mock("@/lib/auth/better-auth", () => ({
 
 vi.mock("@/lib/auth/credential-service", () => ({
   ACTIVATION_CLAIM_COOKIE: "smba_activation_claim",
-  completeAccountActivation: vi.fn(),
+  completeAccountActivation: mocks.completeAccountActivation,
   createActivationClaimToken: vi.fn(() => "test-activation-token-value-with-more-than-forty-characters"),
   loginIsBlocked: mocks.loginIsBlocked,
   recordLoginFailure: mocks.recordLoginFailure,
@@ -69,7 +82,7 @@ vi.mock("@/lib/auth/credential-service", () => ({
 vi.mock("@/lib/auth/security-context", () => ({
   authSubjectHash: vi.fn(() => "subject"),
   requestSecurityContext: vi.fn(() => ({ ipHash: "ip", userAgent: "test" })),
-  writeAuthSecurityEvent: vi.fn(),
+  writeAuthSecurityEvent: mocks.writeAuthSecurityEvent,
 }))
 
 vi.mock("@/lib/auth/post-auth-destination", () => ({
@@ -77,6 +90,7 @@ vi.mock("@/lib/auth/post-auth-destination", () => ({
 }))
 
 import {
+  activateAccount,
   loginWithAcademyId,
   loginWithPin,
   submitRegistration,
@@ -101,6 +115,13 @@ function registrationData(
   formData.set("fullName", fullName)
   formData.set("registrationRequestKey", registrationRequestKey)
   if (requestedRole) formData.set("requestedRole", requestedRole)
+  return formData
+}
+
+function activationData(password: string) {
+  const formData = new FormData()
+  formData.set("password", password)
+  formData.set("confirmPassword", password)
   return formData
 }
 
@@ -229,6 +250,112 @@ describe("role-aware login actions", () => {
     expect(mocks.redirect).toHaveBeenCalledWith("/auth/two-factor/setup")
   })
 
+  // The same split now holds for the password door: POST /sign-in/username
+  // reaches its endpoint without passing through this action, so the budget is
+  // spent in the endpoint's hooks and what is left here is translation. The
+  // guard itself is covered against the real endpoint in
+  // tests/better-auth-runtime.test.ts.
+  it("reports a spent password budget as a wait, not as a bad credential", async () => {
+    mocks.findApprovedAccountByAcademyId.mockReturnValue({
+      accessLevel: null,
+      accountId: "player-account",
+      credentialStatus: "active",
+      role: "player",
+    })
+    mocks.signInUsername.mockRejectedValue(Object.assign(new Error("rate limited"), {
+      status: "TOO_MANY_REQUESTS",
+    }))
+
+    await expect(
+      loginWithAcademyId({ error: null }, loginData("password", "A secure password")),
+    ).resolves.toEqual({
+      error: "We couldn’t sign you in. Wait a few minutes before trying again.",
+    })
+  })
+
+  it("reports any other password refusal generically and spends no budget of its own", async () => {
+    mocks.findApprovedAccountByAcademyId.mockReturnValue({
+      accessLevel: null,
+      accountId: "player-account",
+      credentialStatus: "active",
+      role: "player",
+    })
+    mocks.signInUsername.mockRejectedValue(new Error("invalid password"))
+
+    await expect(
+      loginWithAcademyId({ error: null }, loginData("password", "A secure password")),
+    ).resolves.toEqual({
+      error: "SMBA username or password is incorrect. If this is your first visit, activate your account.",
+    })
+    expect(mocks.signInUsername).toHaveBeenCalledOnce()
+    // The block is read here, but a failure is only ever counted by the hooks:
+    // counting it here as well would halve the real budget and write every
+    // audit row twice.
+    expect(mocks.loginIsBlocked).toHaveBeenCalledOnce()
+    expect(mocks.recordLoginFailure).not.toHaveBeenCalled()
+  })
+
+  it("still spends the budget for an Academy ID that never reaches the endpoint", async () => {
+    mocks.findApprovedAccountByAcademyId.mockReturnValue(undefined)
+
+    await expect(
+      loginWithAcademyId({ error: null }, loginData("password", "A secure password")),
+    ).resolves.toEqual({
+      error: "SMBA username or password is incorrect. If this is your first visit, activate your account.",
+    })
+    // The hooks never see this attempt, so leaving it uncounted would make the
+    // form a cheaper way to probe which Academy IDs exist than the endpoint.
+    expect(mocks.signInUsername).not.toHaveBeenCalled()
+    expect(mocks.recordLoginFailure).toHaveBeenCalledOnce()
+    expect(mocks.hashPassword).toHaveBeenCalledOnce()
+  })
+
+  // The two answers above are different strings, so they may only ever be
+  // reachable together. Once the budget is spent the action stops answering
+  // from the account row at all: without that, one request per candidate
+  // Academy ID -- no password needed -- separates the real ones from the rest,
+  // and the unknown-ID branch never blocks, so the probing never stops.
+  it("answers a spent budget the same way whether the Academy ID exists or not", async () => {
+    mocks.loginIsBlocked.mockReturnValue(true)
+    // What the endpoint's hooks do to a real Academy ID when the budget is
+    // spent; the guard itself is driven for real in tests/better-auth-runtime.test.ts.
+    mocks.signInUsername.mockRejectedValue(Object.assign(new Error("rate limited"), {
+      status: "TOO_MANY_REQUESTS",
+    }))
+
+    mocks.findApprovedAccountByAcademyId.mockReturnValue({
+      accessLevel: null,
+      accountId: "player-account",
+      credentialStatus: "active",
+      role: "player",
+    })
+    const existing = await loginWithAcademyId(
+      { error: null },
+      loginData("password", "A secure password"),
+    )
+    mocks.findApprovedAccountByAcademyId.mockReturnValue(undefined)
+    const unknown = await loginWithAcademyId(
+      { error: null },
+      loginData("password", "A secure password"),
+    )
+
+    expect(existing).toEqual({
+      error: "We couldn\u2019t sign you in. Wait a few minutes before trying again.",
+    })
+    expect(unknown).toEqual(existing)
+    // Blocked has to mean blocked: no scrypt burned on an unauthenticated path,
+    // no further budget spent, and the endpoint never dispatched, so the hooks
+    // cannot audit the same attempt a second time.
+    expect(mocks.hashPassword).not.toHaveBeenCalled()
+    expect(mocks.recordLoginFailure).not.toHaveBeenCalled()
+    expect(mocks.signInUsername).not.toHaveBeenCalled()
+    expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledTimes(2)
+    expect(mocks.writeAuthSecurityEvent).toHaveBeenLastCalledWith(expect.objectContaining({
+      eventType: "login_rate_limited",
+      outcome: "blocked",
+    }))
+  })
+
   // The account/IP budget for PIN sign-in is spent inside the endpoint, because
   // POST /api/auth/sign-in/pin reaches it without passing through this action at
   // all. What is left here is translation, and that is what these assert: this
@@ -268,5 +395,46 @@ describe("role-aware login actions", () => {
     // write every audit row twice.
     expect(mocks.recordLoginFailure).not.toHaveBeenCalled()
     expect(mocks.loginIsBlocked).not.toHaveBeenCalled()
+  })
+})
+
+describe("account activation action", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.loginIsBlocked.mockReturnValue(false)
+    mocks.cookieGet.mockReturnValue({ value: "an-activation-claim-token" })
+    mocks.completeAccountActivation.mockResolvedValue({
+      academyId: "SMBA#0042",
+      accountId: "player-account",
+    })
+  })
+
+  it("sends a newly activated player on to PIN setup", async () => {
+    mocks.signInUsername.mockResolvedValue({ user: { twoFactorEnabled: false } })
+
+    await activateAccount({ error: null, errorField: null }, activationData("A secure password"))
+
+    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_activation_claim")
+    expect(mocks.redirect).toHaveBeenCalledWith("/auth/pin/setup")
+  })
+
+  // By this point the password is written and the claim is consumed, so the
+  // account is live no matter what the sign-in answers. A refusal has to be
+  // reported as a missing session -- somebody whose account already works must
+  // not be shown a crashed form and left with a claim they cannot reuse.
+  it("keeps a completed activation usable when the session is refused", async () => {
+    mocks.signInUsername.mockRejectedValue(Object.assign(new Error("rate limited"), {
+      status: "TOO_MANY_REQUESTS",
+    }))
+
+    await expect(
+      activateAccount({ error: null, errorField: null }, activationData("A secure password")),
+    ).resolves.toEqual({
+      error: "Your account is ready, but we couldn\u2019t sign you in."
+        + " Open the sign-in page and use your new password.",
+      errorField: null,
+    })
+    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_activation_claim")
+    expect(mocks.redirect).not.toHaveBeenCalled()
   })
 })

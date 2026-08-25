@@ -4,6 +4,7 @@ import Link from "next/link"
 import { and, eq, isNull } from "drizzle-orm"
 import { redirect } from "next/navigation"
 
+import { InterstitialSignOut } from "@/components/interstitial-sign-out"
 import { TwoFactorSetupForm } from "@/components/two-factor-setup-form"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { getRawAuthSession } from "@/lib/auth/session"
@@ -61,6 +62,7 @@ export default async function TwoFactorSetupPage({
             : "Add a free authenticator app before opening protected records."}</p>
         </div>
         <TwoFactorSetupForm />
+        <InterstitialSignOut />
       </section>
     </main>
   )
