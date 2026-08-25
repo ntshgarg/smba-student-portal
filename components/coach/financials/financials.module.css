@@ -25,7 +25,7 @@
 .activationHeader h1 {
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;

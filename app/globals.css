@@ -84,6 +84,11 @@
   --type-operational-body: 13px;
   --type-operational-action: 12px;
   --type-operational-floor: 10px;
+  /* The coach workspace page title. 5 of the 27 hand-authored base H1 recipes
+     declare this exact clamp, every one of them beside the same 545 / -0.075em
+     / 0.9. It is *not* the `.page-intro h1` size: the shared PageIntro
+     component runs a larger clamp(56px, 8vw, 112px) and stays on it. */
+  --type-page-title: clamp(58px, 7.5vw, 102px);
   --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-pill: 999px;
@@ -4267,10 +4272,17 @@ h3 {
   margin-top: clamp(42px, 6vw, 76px);
 }
 
+/* Only `color` from this block survives: the Concept 01 Court Roster Register
+   section below re-declares `.coach-members-directory-header h1` unlayered, at
+   the same 0-1-1 specificity and later in the file, so its margin-top,
+   font-size, letter-spacing and line-height all win at every width. The token
+   here is therefore a byte-identical substitution into a declaration that
+   never reaches the page — it leaves the frozen mobile directory composition
+   untouched, and keeps the value from surviving as the tree's last copy. */
 .coach-members-directory-header h1 {
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;
@@ -5011,6 +5023,9 @@ tr.is-expanded .coach-member-row-action button svg {
   max-width: 720px;
 }
 
+/* One term off --type-page-title: 8vw against the token's 7.5vw. The two agree
+   below 725px and above 1360px and differ only in between, by up to 6.375px at
+   a 1275px viewport — so folding this in is a visible change, not a rename. */
 .coach-reports-empty-state h1 {
   margin-top: 18px;
   color: var(--navy);
@@ -5066,7 +5081,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-reports-workspace-header h1 {
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;
@@ -8935,7 +8950,7 @@ tr.is-expanded .coach-member-row-action button svg {
   max-width: 900px;
   margin-top: 16px;
   color: var(--navy);
-  font-size: clamp(58px, 7.5vw, 102px);
+  font-size: var(--type-page-title);
   font-weight: 545;
   letter-spacing: -0.075em;
   line-height: 0.9;

@@ -28,6 +28,20 @@ function rootBlock(globals: string): string {
   return globals.slice(start, globals.indexOf("}", start))
 }
 
+// Blanks every comment while keeping the file's length and line breaks, so a comment that
+// documents a token's value cannot be mistaken for a declaration of it.
+function withoutComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//gu, (comment) => comment.replace(/[^\n]/gu, " "))
+}
+
+// CSS treats whitespace inside a value as insignificant, so `clamp(58px,7.5vw,102px)` and
+// `clamp(58px, 7.5vw, 102px)` are the same duplicate. Match on a pattern that tolerates any
+// spacing rather than on the exact bytes, so a reformatted copy cannot slip through.
+function spacingTolerantPattern(value: string): RegExp {
+  const characters = [...value.replace(/\s+/gu, "")]
+  return new RegExp(characters.map((character) => character.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("\\s*"), "giu")
+}
+
 // `next/font` injects these on <html> through the generated font stylesheet, so they are
 // never declared in a hand-written stylesheet.
 const FONT_VARIABLES = new Set(["--font-manrope", "--font-newsreader"])
@@ -119,6 +133,35 @@ describe("design token layer integrity", () => {
             `${path.relative(projectRoot, sheet)}:${index + 1} ${hit.literal} should be var(${hit.token})`
           ))
       })
+    })
+
+    expect(untokenized).toEqual([])
+  })
+
+  // Hex colors are not the only value that drifts. A `clamp()` is a multi-part expression, so an
+  // exact repeat of one is always a copy rather than a coincidence the way a bare `8px` would be
+  // — which makes it safe to fail the build on, and it is the class of value F-33 found duplicated
+  // across six hand-authored H1 recipes.
+  it("never repeats a clamp token's value as a raw literal outside :root", () => {
+    const projectRoot = process.cwd()
+    const globals = withoutComments(readFileSync(path.join(projectRoot, "app/globals.css"), "utf8"))
+    const tokens = [...rootBlock(globals).matchAll(/(--[\w-]+):\s*(clamp\([^;]*\))\s*;/gu)]
+      .map((match) => ({ token: match[1], value: match[2].replace(/\s+/gu, " ") }))
+    expect(tokens.length).toBeGreaterThan(0)
+
+    const untokenized = stylesheets().flatMap((sheet) => {
+      const contents = withoutComments(readFileSync(sheet, "utf8"))
+      const rootStart = contents.indexOf(":root {")
+      const rootEnd = rootStart < 0 ? -1 : contents.indexOf("}", rootStart)
+
+      return tokens.flatMap(({ token, value }) => (
+        [...contents.matchAll(spacingTolerantPattern(value))]
+          .filter((match) => rootStart < 0 || match.index < rootStart || match.index > rootEnd)
+          .map((match) => {
+            const line = contents.slice(0, match.index).split("\n").length
+            return `${path.relative(projectRoot, sheet)}:${line} ${value} should be var(${token})`
+          })
+      ))
     })
 
     expect(untokenized).toEqual([])
