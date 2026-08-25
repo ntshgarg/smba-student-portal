@@ -101,31 +101,37 @@ async function runCoachAction<T>(
 }
 
 /**
- * `/` and `/reports` are deliberately absent, and neither omission strands a read
- * that a coach action can invalidate.
+ * `/reports` is deliberately absent: the page is a bare
+ * `redirect("/player/reports")`, and that target is already in this list.
  *
- * `app/(public)/page.tsx` reads no academy data on the server: its fee table is the
- * compile-time `monthlyFeePaise` table in `lib/finance/config.ts`, and its
- * announcements are fetched in the browser from `/api/public/announcements`. That
- * endpoint is `force-dynamic`, so it is never written to the incremental cache and
- * carries no cache tag; its freshness comes solely from the
- * `s-maxage=60, stale-while-revalidate=300` header it sets on every response. The
- * `revalidatePath("/api/public/announcements")` in `app/coach/announcements/actions.ts`
- * is inert for the same reason -- do not delete that `Cache-Control` header believing
- * a revalidation covers it.
+ * `/` stays, and the reason is worth recording because the obvious reading says it
+ * should not. The homepage reads no academy data on the server -- its fee table is
+ * the compile-time `monthlyFeePaise` table in `lib/finance/config.ts`, and its
+ * announcements are fetched in the browser from `/api/public/announcements`, which
+ * is `force-dynamic` and so never written to the incremental cache. (That endpoint's
+ * freshness comes solely from the `s-maxage=60, stale-while-revalidate=300` header
+ * it sets on every response; the `revalidatePath("/api/public/announcements")` in
+ * `app/coach/announcements/actions.ts` is inert. Do not delete that header believing
+ * a revalidation covers it.)
  *
- * The homepage does render one server value that changes over time, the footer's
- * copyright year, and it now owns a `revalidate = 86400` for exactly that. It does
- * not need to ride on coach actions.
+ * But the footer renders `new Date().getFullYear()`, evaluated once at static
+ * generation, so something has to expire the page or the copyright line reads a year
+ * behind from every 1 January. The first attempt gave the page its own
+ * `export const revalidate = 86400` and dropped it from this list. That works for the
+ * year and breaks the application: it turns `/` from a fully static route into an ISR
+ * one, and the client router then re-prefetches it without settling. Every
+ * `<Link href={publicSiteUrl}>` becomes a request that never stops -- there are 13 of
+ * them, including in `components/app-shell.tsx` and `components/coach/coach-shell.tsx`,
+ * so essentially every page is affected. Measured against the stress fixture:
+ * `page.goto("/login", { waitUntil: "networkidle" })` timed out at 60s with the
+ * `revalidate` export and passed in 3.5s without it.
  *
- * The `/reports` page is a bare `redirect("/player/reports")`, and that target is
- * already in this list.
- *
- * Dropping both keeps a courtside attendance save from invalidating the one route
- * that has to be fast for search and first impressions, and which holds none of the
- * data that save wrote.
+ * So the cheap-looking win is not available. One `revalidatePath` on a route that
+ * holds no coach-written data is the price of a correct copyright year, and it is far
+ * cheaper than the alternative.
  */
 function revalidateAcademyData() {
+  revalidatePath("/")
   revalidatePath("/coach")
   revalidatePath("/coach/attendance/players/register")
   revalidatePath("/coach/attendance/players/record")

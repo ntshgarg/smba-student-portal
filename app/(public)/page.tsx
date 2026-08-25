@@ -36,19 +36,6 @@ export const metadata: Metadata = {
 
 export const dynamic = "error"
 
-/**
- * The footer renders `new Date().getFullYear()`, which is evaluated once during
- * static generation. `dynamic = "error"` does not make that a build error --
- * `new Date()` is not one of the dynamic APIs it rejects -- so without an
- * expiry this page would keep serving the build year until the next deploy, and
- * the copyright line would read a year behind from every 1 January.
- *
- * No coach action revalidates `/` (see `revalidateAcademyData` in
- * `app/coach/actions.ts`), and that is deliberate: the homepage carries none of
- * the data those actions write. Owning a daily expiry here keeps the year
- * correct without coupling the marketing page to courtside attendance saves.
- */
-export const revalidate = 86400
 
 const structuredData = {
   "@context": "https://schema.org",
