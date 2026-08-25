@@ -184,15 +184,31 @@ export function createSessionSeriesRecords({
     slots.forEach((slot) => {
       tx.insert(sessionRecurrenceRules).values(slot).run()
     })
-    occurrenceDrafts.forEach((draft) => {
-      tx.insert(sessionOccurrences).values({
+    /*
+     * One statement for the whole term. Production runs libSQL over the network
+     * with the synchronous driver, so each of these was a blocking round trip
+     * inside the `immediate` write lock, with every other writer in the academy
+     * queued behind them: `validateSeriesInput` caps a term at
+     * MAX_SCHEDULE_TERM_DAYS days, which is 262 occurrences for a Weekday batch
+     * training all five weekdays.
+     *
+     * No conflict clause, unlike `saveSessionAttendanceRecords`: `seriesId` is
+     * minted a few lines above, so nothing can already hold
+     * (seriesId, occurrenceDate), and `buildOccurrenceDrafts` walks each date in
+     * the range once. A unique violation here is a real defect and must keep
+     * failing the transaction rather than being folded into an update.
+     */
+    const occurrenceRows: Array<typeof sessionOccurrences.$inferInsert> = occurrenceDrafts
+      .map((draft) => ({
         id: randomUUID(),
         ...draft,
         status: "scheduled",
         replacementForOccurrenceId: null,
         createdAt: now,
-      }).run()
-    })
+      }))
+    // A term can select a weekday its date range never reaches, and drizzle
+    // rejects an empty `values()`.
+    if (occurrenceRows.length) tx.insert(sessionOccurrences).values(occurrenceRows).run()
   }, { behavior: "immediate" })
   return seriesId
 }

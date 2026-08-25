@@ -204,6 +204,27 @@ describe("cross-weekday replacement eligibility", () => {
     expect(eligiblePlayerIds).toEqual([sourcePlayerId, endedPlayerId])
   })
 
+  it("keys the schedule backfill by root date, dropping cancelled and unstarted sessions", () => {
+    const keys = sessionDatabase.listStartedScheduledOccurrenceKeys(
+      "2026-07-01",
+      "2026-08-20",
+      new Date("2026-08-10T06:00:00+05:30"),
+    ).filter((key) => (
+      key.seriesId === seriesId || key.seriesId === "replacement-completion-series"
+    ))
+
+    // The cancelled root and middle links are excluded by the query yet still
+    // fetched as lineage, so the surviving replacement counts against the date
+    // its root occupied. The 15 August session has not started by the reference
+    // instant, so it is not backfillable yet.
+    expect(keys).toEqual([{ eligibilityDate: "2026-07-25", seriesId }])
+    // The projection that keeps the coach dashboard's serialized payload small
+    // lives here now, so it is guarded here: two keys per occurrence and no
+    // `startsAt`, `status` or occurrence id riding along.
+    expect(keys.map((key) => Object.keys(key).sort()))
+      .toEqual([["eligibilityDate", "seriesId"]])
+  })
+
   it("enforces root eligibility atomically when saving replacement attendance", () => {
     expect(() => sessionService.saveSessionAttendanceRecords({
       database,

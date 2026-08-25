@@ -345,6 +345,7 @@ export const authSecurityEvents = sqliteTable("auth_security_events", {
       "totp_verified",
       "totp_failed",
       "totp_reconnect_started",
+      "totp_recovery_codes_reissued",
       "totp_recovery_email_sent",
       "totp_reset_requested",
       "totp_reset_approved",
@@ -578,6 +579,12 @@ export const sessionOccurrences = sqliteTable("session_occurrences", {
     .where(sql`${table.replacementForOccurrenceId} is not null and ${table.status} = 'scheduled'`),
   index("session_occurrences_date_idx").on(table.occurrenceDate),
   index("session_occurrences_series_idx").on(table.seriesId),
+  // `session_occurrences_series_date_idx` above is partial (`status = 'scheduled'`),
+  // so a reader that wants cancelled occurrences too cannot use it. Without this
+  // unfiltered twin, a "these series, this month" read seeks
+  // `session_occurrences_series_idx` on series_id alone and re-checks the month
+  // over the series' whole history.
+  index("session_occurrences_series_date_lookup_idx").on(table.seriesId, table.occurrenceDate),
 ])
 
 export const sessionAssignments = sqliteTable("session_assignments", {

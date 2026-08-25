@@ -2,11 +2,12 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, eq, isNotNull, isNull, like, max } from "drizzle-orm"
+import { and, eq, gte, isNotNull, isNull, lt, max } from "drizzle-orm"
 
 import { getPlayerAttendanceInput } from "@/lib/attendance/database"
 import { createAttendanceSnapshotV4 } from "@/lib/attendance/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
+import { monthDateBounds } from "@/lib/date-keys"
 import type { SmbaDatabase } from "@/lib/db/client"
 import { initializeDatabase } from "@/lib/db/client"
 import {
@@ -207,6 +208,11 @@ export function publishMonthlyReport(
     }
 
     requireActivePlayer(tx, input.playerId)
+    // The attendance snapshot published below bounds the month with
+    // `monthDateBounds`, so this gate has to bound it the same way: two
+    // encodings of "in this month" in one transaction can drift apart and let a
+    // review-required make-up be counted by the snapshot but missed by the gate.
+    const publishedMonth = monthDateBounds(input.month)
     const requiresAdjustmentReview = Boolean(tx.select({ id: attendanceAdjustments.id })
       .from(attendanceAdjustments)
       .innerJoin(
@@ -217,7 +223,8 @@ export function publishMonthlyReport(
         eq(attendanceAdjustments.playerId, input.playerId),
         isNull(attendanceAdjustments.voidedAt),
         isNotNull(attendanceAdjustments.reviewRequiredAt),
-        like(sessionOccurrences.occurrenceDate, `${input.month}-%`),
+        gte(sessionOccurrences.occurrenceDate, publishedMonth.start),
+        lt(sessionOccurrences.occurrenceDate, publishedMonth.endExclusive),
       ))
       .get())
     if (requiresAdjustmentReview && !input.confirmAdjustmentReview) {

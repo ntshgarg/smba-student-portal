@@ -1950,8 +1950,11 @@ h3 {
   align-content: center;
 }
 
+/* The reissue panel on /account/security hands out the same block one heading
+   level down, under the panel's own h2. */
 .totp-instructions h2,
-.totp-backup-codes h2 {
+.totp-backup-codes h2,
+.totp-backup-codes h3 {
   color: var(--navy);
   font-size: 22px;
   font-weight: 650;
@@ -2410,6 +2413,16 @@ h3 {
   margin-top: 0;
   background: transparent;
   color: var(--navy);
+}
+
+/* This panel stacks two paragraphs where the others carry one, and the reset at
+   :1288 leaves a p with no margin of its own. */
+.security-recovery-codes > p {
+  margin-top: 14px;
+}
+
+.security-recovery-codes > .totp-backup-codes {
+  margin-top: 18px;
 }
 
 .security-mfa-callout {

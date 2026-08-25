@@ -2,18 +2,26 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
-import { Check, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
+import { Check, ClipboardCopy, FileDown, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
 
 import {
   changePasswordAction,
+  reissueRecoveryCodesAction,
   removePinAction,
   revokeOtherSessionsAction,
   revokeSessionAction,
   savePinAction,
   type PasswordChangeState,
   type PinManagementState,
+  type RecoveryCodeReissueState,
 } from "@/app/account/security/actions"
+import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { PasswordInput } from "@/components/password-input"
+import {
+  browserDownloadPort,
+  copyRecoveryCodes,
+  downloadRecoveryCodes,
+} from "@/lib/client/recovery-codes"
 import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 type SecuritySession = {
@@ -27,8 +35,15 @@ type SecuritySession = {
 
 const initialPasswordState: PasswordChangeState = { error: null, success: null }
 const initialPinState: PinManagementState = { error: null, success: null }
+const initialReissueState: RecoveryCodeReissueState = {
+  codes: null,
+  error: null,
+  errorField: null,
+}
 
 const PASSWORD_ERROR_ID = "security-password-error"
+const RECOVERY_CODES_ERROR_ID = "security-recovery-codes-error"
+const RECOVERY_CODES_FACTOR_HINT_ID = "security-recovery-codes-factor-hint"
 
 /** Input ids for the change-password form, keyed by the field the action reports. */
 const passwordFieldIds = {
@@ -56,6 +71,7 @@ export function AccountSecurityWorkspace({
   pinEnabled,
   pinRequired,
   sessions,
+  unusedRecoveryCodeCount,
 }: {
   allowPin: boolean
   authenticatorEnabled: boolean
@@ -63,6 +79,8 @@ export function AccountSecurityWorkspace({
   pinEnabled: boolean
   pinRequired: boolean
   sessions: SecuritySession[]
+  /** `null` when Better Auth could not be asked; the panel then states no count. */
+  unusedRecoveryCodeCount: number | null
 }) {
   const [passwordState, passwordAction, passwordPending] = useResilientActionState(
     changePasswordAction,
@@ -89,6 +107,28 @@ export function AccountSecurityWorkspace({
       subject: "Your PIN removal",
     },
   )
+  const [reissueState, reissueAction, reissuePending] = useResilientActionState(
+    reissueRecoveryCodesAction,
+    initialReissueState,
+    {
+      // Codes from an earlier press may have been superseded by the press that
+      // failed, and a dead code presented as live is what locks a coach out, so
+      // they go with the failure. Neither credential was rejected, so neither
+      // field is flagged. What the sentence keeps is the invariant of this
+      // action, which holds whether or not the request reached the server.
+      fold: (state, error) => ({ ...state, codes: null, error, errorField: null }),
+      retained: "No device was signed out and your authenticator app is unchanged",
+      subject: "Your new recovery codes",
+    },
+  )
+  // The notice names a set -- "All 10 recovery codes are on the clipboard" --
+  // so it is held against the set it named. A second reissue voids that
+  // clipboard write, and pairing drops the sentence with the codes rather than
+  // leaving a superseded set described as saved.
+  const [codesFeedback, setCodesFeedback] = useState<{
+    codes: string[]
+    feedback: ActionFeedback
+  } | null>(null)
   const [pinValidationTarget, setPinValidationTarget] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null)
@@ -110,10 +150,21 @@ export function AccountSecurityWorkspace({
     ? orderedSessions
     : orderedSessions.slice(0, sessionPreviewCount)
   const hiddenSessionCount = orderedSessions.length - visibleSessions.length
+  // Read into a const so the click handlers below keep the narrowing; a property
+  // access loses it inside a callback.
+  const reissuedCodes = reissueState.codes
 
   function passwordFieldProps(field: keyof typeof passwordFieldIds) {
     if (passwordState.errorField !== field) return {}
     return { "aria-describedby": PASSWORD_ERROR_ID, "aria-invalid": true } as const
+  }
+
+  const shownCodesFeedback = codesFeedback?.codes === reissuedCodes
+    ? codesFeedback.feedback
+    : null
+
+  async function copyReissuedCodes(codes: string[]) {
+    setCodesFeedback({ codes, feedback: await copyRecoveryCodes(codes, navigator.clipboard) })
   }
 
   return (
@@ -139,6 +190,100 @@ export function AccountSecurityWorkspace({
               {authenticatorEnabled ? "Reconnect authenticator" : "Set up authenticator"}
             </Link>
           </div>
+        </section>
+      ) : null}
+
+      {authenticatorEnabled ? (
+        <section
+          className="security-panel security-recovery-codes"
+          aria-labelledby="recovery-codes-title"
+        >
+          <header>
+            <KeyRound aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Recovery codes</p>
+              <h2 id="recovery-codes-title">Reissue recovery codes</h2>
+            </div>
+          </header>
+          <p>{unusedRecoveryCodeCount === null
+            ? "Each recovery code signs this account in once, for the days the authenticator app is not to hand."
+            : `${unusedRecoveryCodeCount} unused recovery ${unusedRecoveryCodeCount === 1 ? "code remains" : "codes remain"}. Each one signs this account in once, for the days the authenticator app is not to hand.`}</p>
+          {/* The consequence belongs above the button, not in the receipt. */}
+          <p>Reissuing replaces the whole set: every code you hold now, printed or
+            downloaded, stops working the moment a new set is issued. Your authenticator
+            app keeps working and no signed-in device is logged out.</p>
+          <form className="security-form" action={reissueAction} noValidate>
+            <div className="security-password-field">
+              <label htmlFor="security-recovery-codes-password"><span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
+              <PasswordInput
+                id="security-recovery-codes-password"
+                name="currentPassword"
+                autoComplete="current-password"
+                required
+                aria-describedby={reissueState.errorField === "currentPassword" ? RECOVERY_CODES_ERROR_ID : undefined}
+                aria-invalid={reissueState.errorField === "currentPassword" ? true : undefined}
+              />
+            </div>
+            {/* The second factor is the gate `beginAuthenticatorReconnect` puts
+                on the other operation that touches this credential, and this
+                one mints ten permanent bypasses of it. */}
+            <div className="security-password-field">
+              <label htmlFor="security-recovery-codes-second-factor"><span>Authenticator or recovery code <span className="security-required-marker" aria-hidden="true">*</span></span></label>
+              <input
+                id="security-recovery-codes-second-factor"
+                name="secondFactor"
+                type="text"
+                autoComplete="one-time-code"
+                required
+                aria-describedby={reissueState.errorField === "secondFactor"
+                  ? `${RECOVERY_CODES_ERROR_ID} ${RECOVERY_CODES_FACTOR_HINT_ID}`
+                  : RECOVERY_CODES_FACTOR_HINT_ID}
+                aria-invalid={reissueState.errorField === "secondFactor" ? true : undefined}
+              />
+              <p className="login-helper" id={RECOVERY_CODES_FACTOR_HINT_ID}>
+                Six digits from your authenticator app, or one of the recovery codes you
+                still hold. A recovery code used here is replaced with the rest.
+              </p>
+            </div>
+            {reissueState.error ? <p className="login-error" id={RECOVERY_CODES_ERROR_ID} role="alert">{reissueState.error}</p> : null}
+            <button type="submit" disabled={reissuePending}>{reissuePending ? "Reissuing…" : "Reissue recovery codes"}</button>
+          </form>
+          {reissuedCodes ? (
+            /* The block enrolment shows, one heading level down, and the same two
+               exits: `copyRecoveryCodes` and `downloadRecoveryCodes` both write
+               `recoveryCodesDocument`, so the clipboard, the file and this list
+               cannot come to say different things. */
+            <div className="totp-backup-codes">
+              <h3>Your new recovery codes</h3>
+              <p role="status">{`${reissuedCodes.length} new codes replaced the old set. Save them before you leave this page; they are not shown again.`}</p>
+              <ul>{reissuedCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul>
+              <div className="totp-backup-actions">
+                <button
+                  className="login-secondary"
+                  type="button"
+                  onClick={() => void copyReissuedCodes(reissuedCodes)}
+                >
+                  <ClipboardCopy aria-hidden="true" />
+                  Copy all codes
+                </button>
+                <button
+                  className="login-secondary"
+                  type="button"
+                  onClick={() => setCodesFeedback({
+                    codes: reissuedCodes,
+                    feedback: downloadRecoveryCodes(reissuedCodes, browserDownloadPort),
+                  })}
+                >
+                  <FileDown aria-hidden="true" />
+                  Download as a file
+                </button>
+              </div>
+              <InlineNotice
+                message={shownCodesFeedback?.message}
+                tone={shownCodesFeedback?.tone}
+              />
+            </div>
+          ) : null}
         </section>
       ) : null}
 

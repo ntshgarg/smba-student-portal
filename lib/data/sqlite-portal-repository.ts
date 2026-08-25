@@ -33,8 +33,8 @@ import type {
   PlayerReportArchiveItem,
 } from "@/lib/types"
 import {
-  listSessionAssignments,
-  listSessionOccurrences,
+  listSessionAssignmentsForPlayers,
+  listSessionOccurrencesForSeries,
 } from "@/lib/sessions/database"
 import { resolveNextAssignedOccurrence } from "@/lib/sessions/domain"
 import { academyPlanSummary } from "@/lib/training/academy-plans"
@@ -144,16 +144,22 @@ function toPlayerProfile(accountId: string): PlayerProfile | null {
 
 function nextPlayerSession(accountId: string) {
   const db = initializeDatabase()
-  const assignments = listSessionAssignments().filter((assignment) => (
-    assignment.playerId === accountId
-  ))
+  const assignments = listSessionAssignmentsForPlayers([accountId])
   if (!assignments.length) return null
   const today = getIndiaDateKey()
   const year = Number(today.slice(0, 4))
   const now = new Date()
+  // `resolveNextAssignedOccurrence` keeps only occurrences an assignment
+  // covers, and `assignmentCoversOccurrence` requires the same `seriesId`
+  // (`lib/sessions/domain.ts:274`), so every occurrence outside this player's
+  // series was already being discarded after it crossed the network.
   const occurrence = resolveNextAssignedOccurrence({
     assignments,
-    occurrences: listSessionOccurrences(today, `${year + 1}-12-31`),
+    occurrences: listSessionOccurrencesForSeries(
+      today,
+      `${year + 1}-12-31`,
+      [...new Set(assignments.map((assignment) => assignment.seriesId))],
+    ),
     referenceInstant: now,
   })
   if (!occurrence) return null
