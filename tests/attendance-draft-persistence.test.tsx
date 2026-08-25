@@ -293,15 +293,35 @@ describe("restored attendance draft notice", () => {
       + " Nothing is recorded until you save staff attendance",
     )
   })
+
+  it("names the marks whose stored value moved while the draft waited", () => {
+    expect(restoredAttendanceDraftNotice(2, "save attendance", 1)).toBe(
+      "2 unsaved changes restored from an earlier visit."
+      + " 1 was marked differently elsewhere since."
+      + " Nothing is recorded until you save attendance",
+    )
+    expect(restoredAttendanceDraftNotice(2, "save attendance", 2)).toBe(
+      "2 unsaved changes restored from an earlier visit."
+      + " 2 were marked differently elsewhere since."
+      + " Nothing is recorded until you save attendance",
+    )
+  })
 })
 
 // The suite has no DOM, so a restored register cannot be observed in the markup:
 // the restore runs from a mount effect, and `renderToStaticMarkup` renders once.
-// What is verifiable, and what the defect turned on, is that each register reads
-// the draft belonging to the selection it is showing — and not another date's.
-const { mountEffects, recorderFixture } = vi.hoisted(() => ({
+// What a register does with a restored draft is two state updates — the marks it
+// puts back on screen and the notice it shows above them — so the mocked
+// `useState` records every update and `mount` below hands back the ones the
+// restore made. That is the second render this suite cannot do.
+const { mountEffects, recorderFixture, stateUpdates } = vi.hoisted(() => ({
   mountEffects: [] as Array<() => void>,
+  stateUpdates: [] as unknown[],
   recorderFixture: {
+    // The saved register the recorder hydrates with, which a restored draft is
+    // rebased onto. Mutable so a test can put the occurrence's cells where the
+    // days between marking and restoring would have left them.
+    attendanceRecords: {} as Record<string, Record<string, "absent" | "present">>,
     occurrence: {
       durationMinutes: 90,
       eligibilityDate: "2026-08-21",
@@ -334,6 +354,16 @@ vi.mock("react", async () => {
     useEffect: (effect: () => void) => {
       mountEffects.push(effect)
     },
+    // The real setter is still called, so nothing about the component changes;
+    // on the server it is a no-op after the render that created it, which is why
+    // the recorded value is the only way back to what the restore decided.
+    useState: (initial: unknown) => {
+      const [value, set] = actual.useState(initial)
+      return [value, (next: unknown) => {
+        stateUpdates.push(next)
+        set(next)
+      }]
+    },
   }
 })
 
@@ -356,7 +386,7 @@ vi.mock("@/components/unsaved-work-guard", () => ({
 vi.mock("@/components/coach/coach-portal-provider", () => ({
   useAttendancePortal: () => ({
     attendanceAdjustments: [],
-    attendanceRecords: {},
+    attendanceRecords: recorderFixture.attendanceRecords,
     saveAttendanceRegister: vi.fn(),
   }),
   useMemberPortal: () => ({ players: [] }),
@@ -391,17 +421,49 @@ function stubBrowser(storage: Storage) {
   })
 
   return {
+    /**
+     * Each register holds exactly one array-valued state — the marks it is
+     * showing — and one feedback state shaped `{ message, tone }`, so the two
+     * updates a restore makes are identifiable by shape and this stays
+     * independent of hook order.
+     */
     mount(element: React.ReactElement) {
+      stateUpdates.length = 0
       renderToStaticMarkup(element)
       for (const effect of mountEffects.splice(0)) effect()
       while (timers.length) timers.shift()?.()
+
+      const marks = stateUpdates.find((update) => Array.isArray(update))
+      const feedback = stateUpdates.find((update) => (
+        !!update && typeof update === "object" && "message" in update
+      )) as { message: string } | undefined
+
+      return {
+        marks: (marks ?? []) as Array<{ choice: string; expectedChoice: string }>,
+        notice: feedback?.message,
+      }
     },
   }
+}
+
+/**
+ * The service's write guard, replayed over what a register would send after a
+ * restore: `lib/sessions/service.ts` skips a mark the stored value already
+ * agrees with, writes one whose expectation matches that value, and raises
+ * CONFLICT for everything else. `lib/coach/staff-attendance.ts` repeats it.
+ */
+function serverVerdict(
+  change: { choice: string; expectedChoice: string },
+  currentChoice: string,
+) {
+  if (currentChoice === change.choice) return "skipped"
+  return currentChoice === change.expectedChoice ? "written" : "conflict"
 }
 
 describe("attendance registers restore their own drafts", () => {
   afterEach(() => {
     mountEffects.length = 0
+    recorderFixture.attendanceRecords = {}
     vi.unstubAllGlobals()
   })
 
@@ -439,5 +501,132 @@ describe("attendance registers restore their own drafts", () => {
 
     expect(reads).toContain("smba-attendance-draft-v1:staff-date:2026-08-21")
     expect(reads).not.toContain("smba-attendance-draft-v1:staff-date:2026-08-23")
+  })
+
+  // Four days is well inside the seven-day lifetime and long enough for the
+  // register to have been written elsewhere — the same head coach finishing it
+  // on a laptop. Measured against the real clock because both registers read
+  // their draft without options, so `now` defaults to `Date.now()`.
+  const markedFourDaysAgo = () => Date.now() - 4 * 24 * 60 * 60 * 1_000
+
+  // A restore is watched through what the register does with it rather than
+  // through storage, because the restore deliberately leaves the stored draft as
+  // the coach marked it: the stored expectation is what "marked differently
+  // elsewhere" is counted from, and both readers rebase, so correcting storage
+  // would buy nothing and cost the warning.
+  function seedMovedPlayerDraft(storage: Storage) {
+    persistPlayerAttendanceDraft("occurrence-1", [
+      { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
+      { choice: "present", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-2" },
+    ], { now: markedFourDaysAgo(), storage })
+    // Both cells were written elsewhere while the draft waited.
+    recorderFixture.attendanceRecords = {
+      "occurrence-1": { "player-1": "present", "player-2": "present" },
+    }
+  }
+
+  function mountRecorder(storage: Storage) {
+    return stubBrowser(storage).mount(
+      <PlayerAttendanceRecorder
+        initialDate="2026-08-21"
+        initialFromCalendar={false}
+        initialOccurrenceId="occurrence-1"
+        initialReferenceInstant={Date.parse("2026-08-21T12:00:00.000Z")}
+      />,
+    )
+  }
+
+  function seedMovedStaffDraft(storage: Storage) {
+    persistStaffAttendanceDraft("2026-08-21", [
+      { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "cleared" },
+    ], { now: markedFourDaysAgo(), storage })
+  }
+
+  function mountRollCall(storage: Storage) {
+    return stubBrowser(storage).mount(
+      <StaffRollCall
+        initialDate="2026-08-21"
+        initialRecords={[{ choice: "present", coachAccountId: "coach-1" }]}
+        juniorCoaches={[{
+          accountId: "coach-1",
+          fullName: "Ishaan Rao",
+          initials: "IR",
+          joinedOn: "2026-01-05",
+        }]}
+        referenceDate="2026-08-23"
+      />,
+    )
+  }
+
+  const movedPlayerNotice = "1 unsaved change restored from an earlier visit."
+    + " 1 was marked differently elsewhere since."
+    + " Nothing is recorded until you save attendance"
+
+  const movedStaffNotice = "1 unsaved change restored from an earlier visit."
+    + " 1 was marked differently elsewhere since."
+    + " Nothing is recorded until you save staff attendance"
+
+  it("restores a player draft the register it comes back to can still save", () => {
+    const { storage } = fakeStorage()
+    seedMovedPlayerDraft(storage)
+
+    const restore = mountRecorder(storage)
+
+    // player-2 is already present on the register, so that mark is not unsaved
+    // work and is dropped; player-1 keeps the coach's absence and now expects
+    // what is stored, which is the difference between a write and a CONFLICT the
+    // coach cannot clear.
+    expect(restore.marks).toEqual([
+      { choice: "absent", expectedChoice: "present", occurrenceId: "occurrence-1", playerId: "player-1" },
+    ])
+    expect(restore.marks.map((change) => serverVerdict(change, "present"))).toEqual(["written"])
+    expect(restore.notice).toBe(movedPlayerNotice)
+  })
+
+  // `chooseOccurrence` navigates and the page keys the recorder on the selection
+  // (`app/coach/attendance/players/record/page.tsx`), so the tap that restores a
+  // draft also remounts the register that restored it — and the refresh the
+  // CONFLICT copy asks for does the same. The second restore is the one the
+  // coach reads, so it has to carry the same warning: a draft whose stored
+  // expectation had been rewritten comes back looking like it was marked against
+  // the register in front of it, one tap from overwriting a colleague's fresher
+  // mark unwarned.
+  it("still warns about the moved marks when the register is remounted", () => {
+    const { storage } = fakeStorage()
+    seedMovedPlayerDraft(storage)
+
+    mountRecorder(storage)
+    const reopened = mountRecorder(storage)
+
+    expect(reopened.marks).toEqual([
+      { choice: "absent", expectedChoice: "present", occurrenceId: "occurrence-1", playerId: "player-1" },
+    ])
+    expect(reopened.notice).toBe(movedPlayerNotice)
+  })
+
+  it("restores a staff draft the day it comes back to can still save", () => {
+    const { storage } = fakeStorage()
+    seedMovedStaffDraft(storage)
+
+    const restore = mountRollCall(storage)
+
+    expect(restore.marks).toEqual([
+      { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "present" },
+    ])
+    expect(restore.marks.map((change) => serverVerdict(change, "present"))).toEqual(["written"])
+    expect(restore.notice).toBe(movedStaffNotice)
+  })
+
+  it("still warns about the moved staff marks when the roll call is remounted", () => {
+    const { storage } = fakeStorage()
+    seedMovedStaffDraft(storage)
+
+    mountRollCall(storage)
+    const reopened = mountRollCall(storage)
+
+    expect(reopened.marks).toEqual([
+      { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "present" },
+    ])
+    expect(reopened.notice).toBe(movedStaffNotice)
   })
 })

@@ -12,6 +12,7 @@ import {
   discardStaffAttendanceDraft,
   persistStaffAttendanceDraft,
   readStaffAttendanceDraft,
+  rebaseRestoredAttendanceDraft,
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
@@ -109,19 +110,40 @@ export function StaffRollCall({
   // Read after the mounting render rather than during it, as the report resume
   // hint is (`components/coach/reports/report-resume.ts`), so the server-rendered
   // roll call is what hydrates.
+  //
+  // What comes back is rebased onto that hydrated day before any of it is shown,
+  // for the reason the player recorder does it: the value a mark expects is the
+  // one part of a draft that goes stale rather than merely aging, and a mark
+  // expecting what the cell held a week ago is unsaveable once anything else has
+  // written the day — see `rebaseRestoredAttendanceDraft`. As there, the rebase
+  // stays in memory: storage keeps the expectation the coach marked against,
+  // which is the only thing the "marked differently elsewhere" count can be
+  // measured from, and every read rebases anyway. `storedByCoach` is a
+  // dependency because the rebase reads it and needs no guard against restoring
+  // twice: it only changes when this register's own save succeeds, and that
+  // discards the draft before the effect can run again.
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const restored = readStaffAttendanceDraft(selectedDate)
       if (!restored.length) return
-      setDrafts(restored)
+      const rebased = rebaseRestoredAttendanceDraft(
+        restored,
+        (change) => storedByCoach.get(change.coachAccountId) ?? "cleared",
+      )
+      if (!rebased.changes.length) return
+      setDrafts(rebased.changes)
       setFeedback({
-        message: restoredAttendanceDraftNotice(restored.length, "save staff attendance"),
+        message: restoredAttendanceDraftNotice(
+          rebased.changes.length,
+          "save staff attendance",
+          rebased.changedUnderneath,
+        ),
         tone: "info",
       })
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [selectedDate])
+  }, [selectedDate, storedByCoach])
 
   function resolvedChoice(coachAccountId: string) {
     return draftByCoach.get(coachAccountId)

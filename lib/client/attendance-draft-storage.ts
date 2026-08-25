@@ -284,11 +284,84 @@ export function discardStaffAttendanceDraft(
 }
 
 /**
+ * A mark carries the value its cell held when the coach tapped it, and the
+ * server compares that value before it writes: `currentChoice !==
+ * change.expectedChoice` raises CONFLICT in `lib/sessions/service.ts` and in the
+ * matching guard in `lib/coach/staff-attendance.ts`. That expectation is honest
+ * for marks made minutes ago and wrong for a draft, which outlives the page that
+ * made it by up to a week. Anything that writes the register in between — the
+ * same head coach finishing it on a laptop, a draft reopened days later — moves
+ * the stored value, and an expectation frozen at mark time can then never be
+ * satisfied. Reopening the page does not clear it either, because the restore
+ * brings the same stored expectation back, so the "Refresh and try again." the
+ * coach is shown is advice that cannot work.
+ *
+ * Rebasing on restore makes a draft the set of intentions it always was rather
+ * than a frozen transaction. Each mark is re-expressed against what the register
+ * holds now: one the register already agrees with is dropped, because the
+ * service skips it as a no-op anyway and presenting it as unsaved work asks the
+ * coach to save something that is already true; every other mark keeps the
+ * coach's choice and expects the current value, so the guard goes back to
+ * protecting against writes that land after this restore.
+ *
+ * `changedUnderneath` counts the marks whose ground moved while the draft sat in
+ * storage. Those are restored rather than dropped — the coach's mark is still a
+ * deliberate statement about who was on court — but they are the ones worth
+ * naming, because the register beneath them is no longer the one they were made
+ * against.
+ *
+ * The rebased set is deliberately not written back. Both readers rebase before
+ * they use what they read, so storage never has to be corrected for the marks to
+ * save; what it does have to keep is the expectation the coach marked against,
+ * because that is the only thing `changedUnderneath` can be measured from. Store
+ * the rebased expectation instead and every restore after the first counts zero
+ * — and the first is the one the coach usually never sees, because the recorder
+ * is keyed on the selection and the navigation that follows the tap remounts it.
+ */
+export type RebasedAttendanceDraft<Change> = {
+  changedUnderneath: number
+  changes: Change[]
+}
+
+export function rebaseRestoredAttendanceDraft<Change extends {
+  choice: AttendanceDraftChoice
+  expectedChoice: AttendanceDraftChoice
+}>(
+  restored: Change[],
+  storedChoice: (change: Change) => AttendanceDraftChoice,
+): RebasedAttendanceDraft<Change> {
+  let changedUnderneath = 0
+  const changes: Change[] = []
+
+  for (const change of restored) {
+    const stored = storedChoice(change)
+    if (stored === change.choice) continue
+    if (stored !== change.expectedChoice) changedUnderneath += 1
+    changes.push({ ...change, expectedChoice: stored })
+  }
+
+  return { changedUnderneath, changes }
+}
+
+/**
  * A silent restore is its own hazard: marks that look saved but are not. The
  * count reuses the wording the register already shows for unsaved work, and the
  * closing clause names the button the coach has to press.
+ *
+ * `changedUnderneath` is the rebase's count of marks whose stored value moved
+ * while the draft waited. It sits between the two so the closing clause stays
+ * last: what is on screen, then what changed beneath it, then that none of it is
+ * recorded yet.
  */
-export function restoredAttendanceDraftNotice(count: number, saveAction: string) {
+export function restoredAttendanceDraftNotice(
+  count: number,
+  saveAction: string,
+  changedUnderneath = 0,
+) {
   return `${count} unsaved ${count === 1 ? "change" : "changes"} restored from an`
-    + ` earlier visit. Nothing is recorded until you ${saveAction}`
+    + ` earlier visit.${changedUnderneath
+      ? ` ${changedUnderneath} ${changedUnderneath === 1 ? "was" : "were"} marked`
+        + " differently elsewhere since."
+      : ""}`
+    + ` Nothing is recorded until you ${saveAction}`
 }

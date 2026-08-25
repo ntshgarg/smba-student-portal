@@ -14,7 +14,7 @@ import {
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import type { CSSProperties } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import {
   useAttendancePortal,
@@ -32,6 +32,7 @@ import {
   discardPlayerAttendanceDraft,
   persistPlayerAttendanceDraft,
   readPlayerAttendanceDraft,
+  rebaseRestoredAttendanceDraft,
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
@@ -130,20 +131,51 @@ export function PlayerAttendanceRecorder({
   // Read after the mounting render rather than during it, as the report resume
   // hint is (`components/coach/reports/report-resume.ts`), so the server-rendered
   // register is what hydrates.
+  //
+  // What comes back is rebased onto that hydrated register before any of it is
+  // shown. The expectation each mark carries is the one part of a draft that
+  // does not merely age: a week is long enough for the register to be written
+  // elsewhere, and a mark expecting what the cell held that evening is then
+  // unsaveable — see `rebaseRestoredAttendanceDraft`. The rebase stays in memory
+  // and storage keeps the draft as it was marked: rebasing again on the next
+  // read costs nothing, while overwriting the stored expectation would erase
+  // what the warning below is counted from. This component is keyed on the
+  // selection, so the navigation `chooseOccurrence` fires remounts it and reads
+  // the draft a second time within the same tap.
+  //
+  // `attendanceRecords` is a dependency because the rebase reads it, not because
+  // a new one should restore the draft again: the provider hands down a fresh
+  // object on every revalidation, and a second restore would re-announce, as
+  // recovered from an earlier visit, marks the coach is in the middle of making.
+  // The ref holds the restore to once per selected occurrence, against whatever
+  // the register has hydrated by the time the timer runs.
+  const restoredOccurrenceIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!selectedOccurrenceId) return
     const timer = window.setTimeout(() => {
+      if (restoredOccurrenceIdRef.current === selectedOccurrenceId) return
+      restoredOccurrenceIdRef.current = selectedOccurrenceId
       const restored = readPlayerAttendanceDraft(selectedOccurrenceId)
       if (!restored.length) return
-      setDraftChanges(restored)
+      const recorded = attendanceRecords[selectedOccurrenceId] ?? {}
+      const rebased = rebaseRestoredAttendanceDraft(
+        restored,
+        (change) => recorded[change.playerId] ?? "cleared",
+      )
+      if (!rebased.changes.length) return
+      setDraftChanges(rebased.changes)
       setFeedback({
-        message: restoredAttendanceDraftNotice(restored.length, "save attendance"),
+        message: restoredAttendanceDraftNotice(
+          rebased.changes.length,
+          "save attendance",
+          rebased.changedUnderneath,
+        ),
         tone: "info",
       })
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [selectedOccurrenceId])
+  }, [attendanceRecords, selectedOccurrenceId])
 
   const seriesById = useMemo(
     () => new Map(sessionSeries.map((series) => [series.id, series])),
