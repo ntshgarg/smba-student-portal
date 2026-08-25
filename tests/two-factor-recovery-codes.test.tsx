@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
  * F-8. The ten recovery codes are minted once, live only in the action state
  * this component holds, and stop being obtainable the moment confirmTotpSetup
  * succeeds -- it sets two_factor_enabled, after which the page guard and
- * startTotpSetup both redirect away and nothing anywhere reissues them.
+ * startTotpSetup both redirect away. /account/security can mint a replacement
+ * set from there, but never show this one again.
  *
  * The suite has no DOM, so the controls cannot be pressed here. Two things can
  * still be checked. The state each render commits to: that the submit which
@@ -49,12 +50,15 @@ vi.mock("@/app/auth/two-factor/actions", () => ({
   startTotpSetup: unusedAction,
 }))
 
+const { TwoFactorSetupForm } = await import("@/components/two-factor-setup-form")
+// The copy and download helpers moved out of the enrolment form so that the
+// reissue panel on /account/security can reuse them without dragging
+// `qrcode.react` into its client chunk.
 const {
-  TwoFactorSetupForm,
   copyRecoveryCodes,
   downloadRecoveryCodes,
   recoveryCodesDocument,
-} = await import("@/components/two-factor-setup-form")
+} = await import("@/lib/client/recovery-codes")
 
 const backupCodes = ["AAAA-1111", "BBBB-2222", "CCCC-3333"]
 

@@ -345,6 +345,7 @@ export const authSecurityEvents = sqliteTable("auth_security_events", {
       "totp_verified",
       "totp_failed",
       "totp_reconnect_started",
+      "totp_recovery_codes_reissued",
       "totp_recovery_email_sent",
       "totp_reset_requested",
       "totp_reset_approved",
