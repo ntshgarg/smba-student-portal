@@ -24,16 +24,62 @@ const landscapeViewports = [
   { height: 430, width: 932 },
 ] as const
 
+/*
+ * Each register carries the width at or below which it stacks and what its
+ * wrapper does above that width, because the two registers reached from this
+ * route do not share a breakpoint: one expectation applied to both was wrong for
+ * the fee register at every width at or below 980px.
+ *
+ * Both numbers are read out of
+ * components/coach/financials/financial-records.module.css. The day book renders
+ * the plain `.recordsTable`, which keeps `min-width: 980px` (:498-502) inside a
+ * wrapper with `overflow-x: auto` (:490-496) until the `max-width: 720px` block
+ * stacks it and turns that wrapper off (:1054, :1221-1223). The fee register
+ * carries `.registrationTable` as well, and the `max-width: 980px` block stacks
+ * that one a whole breakpoint earlier -- `.registrationTableWrap { overflow:
+ * visible }` beside `.registrationTable { display: block; min-width: 0 }`
+ * (:913, :953-966). The two landscape widths below, 844 and 932, sit between the
+ * two breakpoints, so one viewport has to expect a stacked fee register beside a
+ * horizontally scrolling day book.
+ *
+ * `aboveBreakpoint` differs for the same reason. Above 720px the day book's
+ * 980px-wide table genuinely overflows its wrapper at every width this suite
+ * uses. The fee register's `min-width` above 980px is 930px (:551-553) inside a
+ * `.page-shell` of `min(100% - 48px, 1240px)` (app/globals.css:296-298), so it
+ * only really overflows between about 981px and 995px -- a band whose existence
+ * depends on whether the runner's Chromium reserves a classic scrollbar, which
+ * is not something a merge gate should turn on. What holds at every width above
+ * that breakpoint is that its wrapper, and not the document, owns whatever
+ * horizontal scrolling there is, so that is what is asserted there.
+ */
 const feeRecordRoutes = [
   {
+    aboveBreakpoint: "wrapper-owns-overflow",
     route: "/coach/financials/records?view=fees&mode=monthly&period=2026-08&scope=active&status=all",
-    tableName: "Player fee records",
+    stacksAtOrBelow: 980,
+    // financial-records-workspace.tsx:322-324 renders this caption as
+    // `${formatPeriod(register.filters.period)} monthly fee records`, and
+    // app/coach/financials/records/page.tsx:157 takes that period straight from
+    // the query string above, falling back to academyCurrentMonth() only when no
+    // valid month key is in it. The route pins period=2026-08, so the caption is
+    // fixed by the route rather than by the day the suite runs; move one and move
+    // the other.
+    tableName: "August 2026 monthly fee records",
   },
   {
+    aboveBreakpoint: "wrapper-scrolls",
     route: "/coach/financials/records?view=collections&from=2026-08-01&to=2026-08-31",
+    stacksAtOrBelow: 720,
     tableName: "Payment and refund records",
   },
 ] as const
+
+type FeeRecordRoute = typeof feeRecordRoutes[number]
+type RecordsTableGeometry = FeeRecordRoute["aboveBreakpoint"] | "stacked"
+
+function geometryAt(recordView: FeeRecordRoute, viewportWidth: number): RecordsTableGeometry {
+  return viewportWidth > recordView.stacksAtOrBelow ? recordView.aboveBreakpoint : "stacked"
+}
 
 async function loginAsCoach(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
@@ -126,12 +172,12 @@ async function expectTextFragmentUnbroken(
 }
 
 async function expectContainedScrollableTable({
-  expectLocalScroll,
+  geometry,
   page,
   tableName,
   testContext,
 }: {
-  expectLocalScroll: boolean
+  geometry: RecordsTableGeometry
   page: Page
   tableName: string
   testContext: string
@@ -149,6 +195,7 @@ async function expectContainedScrollableTable({
       overflowX: window.getComputedStyle(wrapper).overflowX,
       right: bounds.right,
       scrollWidth: wrapper.scrollWidth,
+      tableDisplay: window.getComputedStyle(element).display,
       viewportWidth: document.documentElement.clientWidth,
     }
   })
@@ -158,14 +205,43 @@ async function expectContainedScrollableTable({
   expect(dimensions.right, `${testContext}: table wrapper crossed the viewport's right edge`)
     .toBeLessThanOrEqual(dimensions.viewportWidth + WIDTH_TOLERANCE_PX)
 
-  if (expectLocalScroll) {
-    expect(dimensions.overflowX, `${testContext}: table wrapper must own horizontal scrolling`)
-      .toMatch(/^(auto|scroll)$/u)
-    expect(dimensions.scrollWidth, `${testContext}: desktop table should overflow only its wrapper`)
-      .toBeGreaterThan(dimensions.clientWidth + WIDTH_TOLERANCE_PX)
-  } else {
+  /*
+   * The table's own `display` is the measurement that actually moves with the
+   * breakpoint, and it is here because the wrapper measurements around it do not
+   * move with the fee register's.
+   *
+   * At 981px that wrapper is about 931px wide -- `.page-shell` is
+   * `min(100% - 48px, 1240px)` (app/globals.css:296-298) -- and
+   * `.registrationTable`'s desktop `min-width` is 930px
+   * (financial-records.module.css:551-553), so its scrollWidth equals its
+   * clientWidth on the desktop side of 980 as well as on the stacked side.
+   * "Fits its wrapper" is therefore true at both 980 and 981 and cannot tell them
+   * apart; `.tableWrap` declares `overflow-x: auto` unconditionally (:490-496), so
+   * the wrapper's overflow only speaks for the side above the breakpoint. Move the
+   * `max-width: 980px` block down to 900px and both of that pair's probes still
+   * pass.
+   *
+   * Stacking itself is `display: block` on the table -- :957-963 inside the 980px
+   * block for the fee register, :1225-1229 inside the 720px block for the day book
+   * -- against the UA's `table` above it. That flips on exactly the pixel each
+   * register's pair names, for both registers, which is what these cases claim to
+   * measure.
+   */
+  if (geometry === "stacked") {
+    expect(dimensions.tableDisplay, `${testContext}: stacked table should lay out as blocks`)
+      .toBe("block")
     expect(dimensions.scrollWidth, `${testContext}: stacked table should fit its wrapper`)
       .toBeLessThanOrEqual(dimensions.clientWidth + WIDTH_TOLERANCE_PX)
+    return
+  }
+
+  expect(dimensions.tableDisplay, `${testContext}: table above its breakpoint should stay a table`)
+    .toBe("table")
+  expect(dimensions.overflowX, `${testContext}: table wrapper must own horizontal scrolling`)
+    .toMatch(/^(auto|scroll)$/u)
+  if (geometry === "wrapper-scrolls") {
+    expect(dimensions.scrollWidth, `${testContext}: desktop table should overflow only its wrapper`)
+      .toBeGreaterThan(dimensions.clientWidth + WIDTH_TOLERANCE_PX)
   }
 }
 
@@ -479,19 +555,23 @@ test("Published report detail contains revision history at every supported portr
 })
 
 /*
- * Quarantined by G-27 when this suite was wired into CI, not skipped for
- * convenience. Both Fee Records cases resolve the register through
- * getByRole("table", { name: "Player fee records" }). That caption was replaced
- * in f3ca2e1 by `${formatPeriod(period)} monthly fee records` -- see
- * components/coach/financials/financial-records-workspace.tsx:323 -- and the
- * spec was not updated with it, so the locator has matched nothing since and
- * both cases fail at their first assertion. Substituting "monthly fee records"
- * looks like the whole repair, because getByRole matches the accessible name as
- * a substring, but the geometry that follows it has never run against the
- * current tree and this change had no way to run Playwright to find out.
+ * Un-quarantined from G-27, and the caption was only the first of two things
+ * wrong with it. Both cases resolved the register through getByRole("table", {
+ * name: "Player fee records" }), a caption f3ca2e1 replaced with
+ * `${formatPeriod(period)} monthly fee records`, so the locator had matched
+ * nothing since and both failed on their first assertion. Substituting the
+ * current caption looks like the whole repair and is not: neither case had ever
+ * run against this tree, and the geometry underneath asked both registers for
+ * horizontal scrolling at 844px and 932px when the fee register has stacked at
+ * every width at or below 980px since the same commit. The expectation now comes
+ * from `geometryAt`, against the per-register breakpoints recorded beside the
+ * routes above.
+ *
+ * Still unproven, and it is the reason this comment stays: none of the numbers
+ * below have been measured in a browser. What is checked is that each assertion
+ * matches the media queries and the shell width the tree actually declares.
  */
 test("Fee Records tables own landscape overflow without widening the page", async ({ page }) => {
-  test.fixme(true, "G-27: table caption renamed in f3ca2e1; locator matches nothing.")
   await loginAsCoach(page)
 
   for (const viewport of landscapeViewports) {
@@ -502,7 +582,7 @@ test("Fee Records tables own landscape overflow without widening the page", asyn
       await settleResponsiveLayout(page)
 
       await expectContainedScrollableTable({
-        expectLocalScroll: true,
+        geometry: geometryAt(recordView, viewport.width),
         page,
         tableName: recordView.tableName,
         testContext,
@@ -512,36 +592,37 @@ test("Fee Records tables own landscape overflow without widening the page", asyn
   }
 })
 
-// Quarantined by G-27 for the reason given above: feeRecordRoutes[0].tableName
-// no longer names any table in the tree.
-test("Fee Records preserves its 720px table breakpoint and desktop layout", async ({ page }) => {
-  test.fixme(true, "G-27: table caption renamed in f3ca2e1; locator matches nothing.")
+/*
+ * Un-quarantined with the case above and renamed with it. "720px" named the
+ * generic records table's breakpoint and was applied to the fee register, which
+ * stacks at 980px instead; asserting local scrolling at 721px asked the fee
+ * register for a shape it has not had since f3ca2e1. Each register is now walked
+ * across its own breakpoint -- 720/721 for the day book, 980/981 for the fee
+ * register -- so the pair that was measured against the wrong table becomes two
+ * pairs, each measured against the table whose breakpoint it names.
+ */
+test("Fee Records preserves each register's stacking breakpoint and desktop layout", async ({ page }) => {
   await loginAsCoach(page)
-  const feeRegister = feeRecordRoutes[0]
 
-  for (const breakpointCase of [
-    { expectLocalScroll: false, height: 900, width: 720 },
-    { expectLocalScroll: true, height: 900, width: 721 },
-  ]) {
-    const testContext = `Fee Register at ${breakpointCase.width}px`
-    await page.setViewportSize({
-      height: breakpointCase.height,
-      width: breakpointCase.width,
-    })
-    await page.goto(feeRegister.route, { waitUntil: "domcontentloaded" })
+  for (const recordView of feeRecordRoutes) {
+    for (const width of [recordView.stacksAtOrBelow, recordView.stacksAtOrBelow + 1]) {
+      const testContext = `${recordView.tableName} at ${width}px`
+      await page.setViewportSize({ height: 900, width })
+      await page.goto(recordView.route, { waitUntil: "domcontentloaded" })
+      await settleResponsiveLayout(page)
+      await expectContainedScrollableTable({
+        geometry: geometryAt(recordView, width),
+        page,
+        tableName: recordView.tableName,
+        testContext,
+      })
+      await expectNoDocumentOverflow(page, testContext)
+    }
+
+    await page.setViewportSize({ height: 900, width: 1440 })
+    await page.goto(recordView.route, { waitUntil: "domcontentloaded" })
     await settleResponsiveLayout(page)
-    await expectContainedScrollableTable({
-      expectLocalScroll: breakpointCase.expectLocalScroll,
-      page,
-      tableName: feeRegister.tableName,
-      testContext,
-    })
-    await expectNoDocumentOverflow(page, testContext)
+    await expect(page.getByRole("table", { name: recordView.tableName })).toBeVisible()
+    await expectNoDocumentOverflow(page, `${recordView.tableName} at 1440px`)
   }
-
-  await page.setViewportSize({ height: 900, width: 1440 })
-  await page.goto(feeRegister.route, { waitUntil: "domcontentloaded" })
-  await settleResponsiveLayout(page)
-  await expect(page.getByRole("table", { name: feeRegister.tableName })).toBeVisible()
-  await expectNoDocumentOverflow(page, "Fee Register at 1440px")
 })

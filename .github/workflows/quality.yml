@@ -244,7 +244,11 @@ jobs:
       # Last against this workspace because of what it publishes, not because it
       # is the only writer here: attendance-workspaces.spec.ts, two steps up,
       # commits two saves against the 2026-07-31 player register and has a third
-      # rejected as stale. phase8-followup.spec.ts adds an announcement, and the
+      # rejected as stale, and the responsive overflow step directly above submits
+      # one replacement session that lib/sessions/service.ts:949-955 refuses for
+      # crossing midnight -- rejected before the transaction opens, so it adds no
+      # row, and that step's own card count either side of the submit is what says
+      # so. phase8-followup.spec.ts adds an announcement, and the
       # dashboard and the archive the responsive suite measures would see that
       # arrive underneath them, so it has to run after that suite. The order it inherits
       # is not free: its 379,350-byte budget reads
