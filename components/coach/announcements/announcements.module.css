@@ -2,7 +2,7 @@
 .withdrawDialog > span {
   color: var(--red);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -19,7 +19,7 @@
   border: 1px solid var(--navy);
   color: var(--navy);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
 
@@ -108,7 +108,7 @@
 
 .slipMasthead {
   min-height: 38px;
-  padding: 12px 34px 8px;
+  padding: 12px 34px var(--space-tight);
   text-align: right;
 }
 
@@ -118,15 +118,15 @@
 .slipExpiryField > span {
   color: var(--navy);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
 .slipBody {
   display: grid;
   gap: 0;
-  padding: 6px clamp(20px, 3.1vw, 32px) 0;
+  padding: 6px clamp(20px, 3.1vw, var(--space-block)) 0;
 }
 
 .slipField {
@@ -137,7 +137,7 @@
 }
 
 .slipField + .slipField {
-  padding-top: 16px;
+  padding-top: var(--space-copy);
   border-top: 1px solid var(--line);
 }
 
@@ -165,7 +165,7 @@
   padding: 13px 14px;
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: clamp(17px, 1.6vw, 18px);
-  line-height: 1.55;
+  line-height: var(--leading-body);
   resize: vertical;
 }
 
@@ -224,7 +224,7 @@
   grid-column: 1;
   grid-row: 1;
   align-items: center;
-  padding: 0 clamp(20px, 3.1vw, 32px);
+  padding: 0 clamp(20px, 3.1vw, var(--space-block));
 }
 
 .slipChannelChoices {
@@ -244,7 +244,7 @@
   grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  padding: 8px 14px;
+  padding: var(--space-tight) 14px;
   cursor: pointer;
 }
 
@@ -289,7 +289,7 @@
 .slipChannelChoices label > span {
   color: var(--navy);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
   line-height: 1.35;
 }
 
@@ -360,7 +360,7 @@
   background: var(--navy);
   color: var(--white);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .slipReviewButton svg {
@@ -403,7 +403,7 @@
    ceiling. The other five declarations here still reach both headers. */
 .archiveHeader h1,
 .detailHeader h1 {
-  margin-top: 16px;
+  margin-top: var(--space-copy);
   color: var(--navy);
   font-size: var(--type-page-title);
   font-weight: 545;
@@ -434,12 +434,12 @@
   font-size: clamp(31px, 4vw, 48px);
   font-weight: 590;
   letter-spacing: -0.06em;
-  line-height: 0.98;
+  line-height: var(--leading-display);
 }
 
 .field {
   display: grid;
-  gap: 8px;
+  gap: var(--space-tight);
   min-width: 0;
 }
 
@@ -455,7 +455,7 @@
   margin-left: 5px;
   color: var(--steel);
   font-style: normal;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .field input,
@@ -493,7 +493,7 @@
   min-height: 17px;
   color: var(--steel);
   font-size: 10px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 [aria-invalid="true"] + .fieldMessage {
@@ -512,7 +512,7 @@
   background: var(--navy);
   color: var(--white);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .dialogActions svg,
@@ -541,7 +541,7 @@
 .withdrawDialog {
   position: relative;
   max-height: min(780px, calc(100dvh - 32px));
-  padding: clamp(28px, 5vw, 48px);
+  padding: clamp(28px, 5vw, var(--space-content));
   border: 1px solid color-mix(in srgb, var(--white) 30%, var(--line));
   background: var(--ivory);
   overflow-y: auto;
@@ -616,7 +616,7 @@
   border: 1px solid var(--line);
   color: var(--navy);
   font-size: var(--type-operational-floor);
-  font-weight: 760;
+  font-weight: var(--weight-control);
   letter-spacing: 0.035em;
 }
 
@@ -710,7 +710,7 @@
   display: grid;
   place-content: center;
   gap: 4px;
-  padding: 8px 14px;
+  padding: var(--space-tight) 14px;
   text-align: center;
 }
 
@@ -718,14 +718,14 @@
   color: var(--steel);
   font-size: var(--type-operational-floor);
   font-weight: 780;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
 .monthControl > div strong {
   color: var(--navy);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .monthControl svg {
@@ -742,7 +742,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 28px;
-  padding: clamp(24px, 3vw, 36px);
+  padding: clamp(var(--space-group), 3vw, 36px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -752,7 +752,7 @@
 
 .archiveSearch {
   display: grid;
-  gap: 8px;
+  gap: var(--space-tight);
   padding: 20px clamp(20px, 3vw, 34px);
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--ivory) 58%, var(--white));
@@ -801,7 +801,7 @@
   background: var(--navy);
   color: var(--white);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .archiveFilters {
@@ -812,11 +812,11 @@
   display: inline-flex;
   min-height: 46px;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-tight);
   margin-left: clamp(20px, 3vw, 34px);
   color: var(--navy);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   cursor: pointer;
   list-style: none;
 }
@@ -863,7 +863,7 @@
   padding: 0 12px;
   color: var(--steel);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .resultBar {
@@ -871,8 +871,8 @@
   min-height: 44px;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 8px clamp(20px, 3vw, 34px);
+  gap: var(--space-copy);
+  padding: var(--space-tight) clamp(20px, 3vw, 34px);
   border-bottom: 1px solid var(--line);
   color: var(--steel);
   font-size: 10px;
@@ -900,7 +900,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr) auto;
   align-items: center;
   gap: 28px;
-  padding: 24px clamp(20px, 3vw, 34px);
+  padding: var(--space-group) clamp(20px, 3vw, 34px);
 }
 
 .announcementIdentity {
@@ -933,10 +933,10 @@
 
 .announcementIdentity > p {
   max-width: 660px;
-  margin-top: 8px;
+  margin-top: var(--space-tight);
   color: var(--steel);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .announcementIdentity .channelPills {
@@ -988,12 +988,12 @@
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-tight);
   padding: 0 13px;
   border: 1px solid var(--navy);
   color: var(--navy);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .rowAction svg {
@@ -1006,7 +1006,7 @@
   min-height: 330px;
   place-items: center;
   align-content: center;
-  padding: 52px 24px;
+  padding: 52px var(--space-group);
   text-align: center;
 }
 
@@ -1030,7 +1030,7 @@
   margin-top: 9px;
   color: var(--steel);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .emptyState a {
@@ -1039,11 +1039,11 @@
   align-items: center;
   justify-content: center;
   margin-top: 20px;
-  padding: 14px 16px;
+  padding: 14px var(--space-copy);
   border: 1px solid var(--navy);
   color: var(--navy);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .compactEmptyState {
@@ -1069,8 +1069,8 @@
   padding-bottom: 7px;
   color: var(--steel);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -1089,23 +1089,23 @@
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: clamp(19px, 2vw, 24px);
-  line-height: 1.55;
+  line-height: var(--leading-body);
   white-space: pre-wrap;
 }
 
 .detailMeta {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+  gap: var(--space-group);
   margin: clamp(38px, 6vw, 66px) 0 0;
-  padding-top: 24px;
+  padding-top: var(--space-group);
   border-top: 1px solid var(--line);
 }
 
 .detailMeta > div {
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: var(--space-tight);
   min-width: 0;
 }
 
@@ -1123,16 +1123,16 @@
 .withdrawalRecord > span {
   color: var(--red);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
 .withdrawalRecord p {
-  margin-top: 8px;
+  margin-top: var(--space-tight);
   color: var(--navy);
   font-size: 12px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .withdrawalRecord time {
@@ -1220,7 +1220,7 @@
 
   .slipMasthead {
     min-height: 28px;
-    padding: 8px 28px 4px 12px;
+    padding: var(--space-tight) 28px 4px 12px;
   }
 
   .slipBody {
@@ -1304,7 +1304,7 @@
     grid-column: 2;
     grid-row: 2;
     gap: 4px;
-    padding: 8px 12px;
+    padding: var(--space-tight) 12px;
     border: 1px solid var(--line);
     border-top: 0;
     border-left: 0;
@@ -1319,7 +1319,7 @@
     min-height: 48px;
     grid-column: 1 / -1;
     grid-row: 3;
-    margin-top: 8px;
+    margin-top: var(--space-tight);
     margin-right: 0;
     margin-bottom: 0;
     margin-left: 0;
@@ -1343,14 +1343,14 @@
 
   .workspaceHeader p,
   .archiveHeader > div > p {
-    margin-top: 16px;
+    margin-top: var(--space-copy);
     font-size: 17px;
   }
 
   .composerPanel,
   .archivePanel,
   .detailPanel {
-    margin-top: 32px;
+    margin-top: var(--space-block);
   }
 
   .composerPanel > .panelHeading {
@@ -1509,7 +1509,7 @@
   .slipChannelChoices label,
   .slipPinOption {
     gap: 7px;
-    padding-inline: 8px;
+    padding-inline: var(--space-tight);
   }
 
   .slipChannelChoices label > span,
@@ -1518,7 +1518,7 @@
   }
 
   .slipExpiryField {
-    padding-inline: 8px;
+    padding-inline: var(--space-tight);
   }
 
   .slipExpiryField input {

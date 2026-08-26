@@ -13,7 +13,7 @@
   gap: 9px;
   color: var(--steel);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   text-decoration: none;
 }
 
@@ -27,7 +27,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(280px, 0.52fr);
   align-items: end;
   gap: clamp(36px, 8vw, 120px);
-  margin-top: clamp(26px, 3.8vw, 48px);
+  margin-top: clamp(26px, 3.8vw, var(--space-content));
   padding-bottom: clamp(22px, 2.8vw, 34px);
   border-bottom: 1px solid var(--line);
 }
@@ -56,7 +56,7 @@
 }
 
 .assessmentDateField {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-copy);
 }
 
 .dateTimeline {
@@ -80,7 +80,7 @@
   color: var(--red);
   font-size: var(--type-operational-floor);
   font-weight: 820;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -116,7 +116,7 @@
 .stageSummary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: clamp(24px, 3vw, 38px);
+  margin-top: clamp(var(--space-group), 3vw, 38px);
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--white) 64%, transparent);
 }
@@ -129,7 +129,7 @@
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 13px;
-  padding: 16px 20px;
+  padding: var(--space-copy) 20px;
   border-right: 1px solid var(--line);
 }
 
@@ -162,14 +162,14 @@
   font-style: italic;
   font-weight: 500;
   letter-spacing: -0.04em;
-  line-height: 1;
+  line-height: var(--leading-display-light);
 }
 
 .stageSummary p {
   color: var(--navy);
   font-size: 10px;
   font-weight: 820;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-label);
   line-height: 1.25;
   text-transform: uppercase;
 }
@@ -201,12 +201,12 @@
 .registerHeading p {
   color: var(--steel);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .registerHeading p strong {
   color: var(--navy);
-  font-weight: 800;
+  font-weight: var(--weight-label);
 }
 
 .rows {
@@ -225,7 +225,7 @@
   grid-template-columns: 44px minmax(180px, 1.15fr) minmax(96px, 0.58fr) minmax(190px, 1fr) 132px;
   align-items: center;
   gap: clamp(12px, 1.6vw, 26px);
-  padding: 12px 16px;
+  padding: 12px var(--space-copy);
   transition: background-color 150ms ease;
 }
 
@@ -244,7 +244,7 @@
   font-size: 27px;
   font-style: italic;
   font-weight: 500;
-  line-height: 1;
+  line-height: var(--leading-display-light);
 }
 
 .identity,
@@ -282,8 +282,8 @@
   color: var(--navy);
   font-size: var(--type-operational-floor);
   font-weight: 830;
-  letter-spacing: 0.08em;
-  line-height: 1;
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-display-light);
   text-transform: uppercase;
 }
 
@@ -337,7 +337,7 @@
 .editor {
   display: grid;
   grid-template-columns: minmax(135px, 0.22fr) minmax(0, 1fr);
-  gap: clamp(24px, 3vw, 46px);
+  gap: clamp(var(--space-group), 3vw, 46px);
   padding: clamp(22px, 3vw, 38px) clamp(18px, 3vw, 42px);
   border-top: 1px solid var(--line);
   background: var(--paper);
@@ -371,7 +371,7 @@
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 11px;
   font-style: italic;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .stepRail li > span svg {
@@ -451,7 +451,7 @@
 .feeFields > label {
   display: grid;
   min-width: 0;
-  gap: 8px;
+  gap: var(--space-tight);
   padding: 13px;
   border-right: 1px solid var(--line);
 }
@@ -470,7 +470,7 @@
   color: var(--steel);
   font-size: var(--type-operational-floor);
   font-weight: 820;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -501,7 +501,7 @@
   color: var(--steel);
   font-size: var(--type-operational-floor);
   font-weight: 820;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -517,7 +517,7 @@
   color: var(--navy);
   font-family: inherit;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .threeFieldGrid select:focus,
@@ -597,7 +597,7 @@
   color: var(--steel);
   font-size: var(--type-operational-floor);
   font-weight: 820;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -684,12 +684,12 @@
 }
 
 .sessionDetails fieldset > legend {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-tight);
 }
 
 .sessionDetails > label {
   display: grid;
-  gap: 8px;
+  gap: var(--space-tight);
 }
 
 .weekdayChoices {
@@ -901,7 +901,7 @@
   background: var(--makeup-soft);
   color: var(--makeup-dark);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
   line-height: 1.4;
 }
 
@@ -918,7 +918,7 @@
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 20px;
   font-style: italic;
-  font-weight: 570;
+  font-weight: var(--weight-display);
 }
 
 .recoveryPanel p {
@@ -946,7 +946,7 @@
   width: 34px;
   height: 34px;
   margin-bottom: 13px;
-  padding: 8px;
+  padding: var(--space-tight);
   border: 1px solid var(--green);
   border-radius: var(--radius-circle);
   color: var(--green);
@@ -957,7 +957,7 @@
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 27px;
   font-style: italic;
-  font-weight: 570;
+  font-weight: var(--weight-display);
 }
 
 .emptyState p {
@@ -1021,7 +1021,7 @@
   .pageHeader h1 {
     margin-top: 9px;
     font-size: clamp(38px, 12vw, 48px);
-    line-height: 0.98;
+    line-height: var(--leading-display);
   }
 
   .pageHeader > p {

@@ -13,10 +13,10 @@
   align-items: center;
   justify-content: center;
   gap: 9px;
-  padding: 10px 16px;
+  padding: 10px var(--space-copy);
   color: var(--steel);
   font-size: 13px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   text-align: center;
   transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
 }
@@ -53,14 +53,14 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-group);
   padding: clamp(20px, 2.2vw, 28px);
 }
 
 .panelHeader > div > span {
   color: var(--red);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -71,11 +71,11 @@
   font-size: clamp(31px, 3.5vw, 42px);
   font-weight: 590;
   letter-spacing: -0.06em;
-  line-height: 0.98;
+  line-height: var(--leading-display);
 }
 
 .panelHeader p {
-  margin-top: 8px;
+  margin-top: var(--space-tight);
   color: var(--steel);
   font-size: 13px;
   line-height: 1.5;
@@ -87,11 +87,11 @@
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-tight);
   border: 1px solid var(--navy);
   color: var(--navy);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   white-space: nowrap;
 }
 
@@ -129,7 +129,7 @@
   padding: 9px 14px;
   color: var(--steel);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   text-align: center;
 }
 
@@ -158,7 +158,7 @@
 .registrationPanelHeader > div:first-child {
   min-width: 0;
   flex: 1 1 auto;
-  padding: clamp(16px, 1.6vw, 20px);
+  padding: clamp(var(--space-copy), 1.6vw, 20px);
 }
 
 .registrationPanelHeader h2 {
@@ -205,7 +205,7 @@
   min-height: 64px;
   align-content: center;
   gap: 5px;
-  padding: 10px clamp(16px, 2vw, 22px);
+  padding: 10px clamp(var(--space-copy), 2vw, 22px);
   border-right: 1px solid var(--line);
 }
 
@@ -234,7 +234,7 @@
   grid-template-columns: repeat(2, minmax(140px, 1fr) auto) minmax(140px, 1fr);
   align-items: center;
   gap: clamp(12px, 2vw, 28px);
-  padding: 8px clamp(16px, 2vw, 22px);
+  padding: var(--space-tight) clamp(var(--space-copy), 2vw, 22px);
 }
 
 .registrationEquation > div {
@@ -294,7 +294,7 @@
   grid-template-columns: minmax(230px, 1.5fr) repeat(3, minmax(140px, 0.72fr)) auto;
   align-items: end;
   gap: 9px;
-  padding: 10px clamp(16px, 2vw, 22px);
+  padding: 10px clamp(var(--space-copy), 2vw, 22px);
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--ivory) 58%, var(--white));
 }
@@ -359,7 +359,7 @@
   background: var(--navy);
   color: var(--white);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   white-space: nowrap;
 }
 
@@ -452,7 +452,7 @@
   color: var(--navy);
   font-size: clamp(21px, 2vw, 26px);
   font-weight: 600;
-  letter-spacing: -0.045em;
+  letter-spacing: var(--tracking-display);
   overflow-wrap: anywhere;
 }
 
@@ -464,7 +464,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0;
-  padding: 0 clamp(16px, 2vw, 22px);
+  padding: 0 clamp(var(--space-copy), 2vw, 22px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -484,7 +484,7 @@
 .methodSummary dd {
   color: var(--navy);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .tableWrap {
@@ -558,7 +558,7 @@
 }
 
 .registrationTable td {
-  padding-block: 8px;
+  padding-block: var(--space-tight);
   font-size: 12px;
 }
 
@@ -648,7 +648,7 @@
 
 .registrationPanel .pagination {
   min-height: 56px;
-  padding-block: 8px;
+  padding-block: var(--space-tight);
 }
 
 .registrationPanel .pagination > span,
@@ -671,10 +671,10 @@
   display: inline-flex;
   min-height: 27px;
   align-items: center;
-  padding: 4px 8px;
+  padding: 4px var(--space-tight);
   border: 1px solid currentColor;
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.06em;
   line-height: 1.2;
   text-transform: uppercase;
@@ -703,7 +703,7 @@
   min-height: 250px;
   place-content: center;
   justify-items: center;
-  padding: 44px 24px;
+  padding: 44px var(--space-group);
   text-align: center;
 }
 
@@ -715,7 +715,7 @@
 }
 
 .emptyState strong {
-  margin-top: 16px;
+  margin-top: var(--space-copy);
   color: var(--navy);
   font-size: 20px;
   font-weight: 620;
@@ -724,10 +724,10 @@
 
 .emptyState p {
   max-width: 420px;
-  margin-top: 8px;
+  margin-top: var(--space-tight);
   color: var(--steel);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .pagination {
@@ -736,7 +736,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 8px clamp(16px, 2vw, 22px);
+  padding: var(--space-tight) clamp(var(--space-copy), 2vw, 22px);
 }
 
 .pagination > span {
@@ -746,7 +746,7 @@
 
 .pagination > div {
   display: flex;
-  gap: 8px;
+  gap: var(--space-tight);
 }
 
 .pagination a,
@@ -785,7 +785,7 @@
   grid-template-columns: minmax(155px, 0.48fr) minmax(0, 1.5fr) auto;
   align-items: start;
   gap: 18px;
-  padding: 16px clamp(16px, 2vw, 22px);
+  padding: var(--space-copy) clamp(var(--space-copy), 2vw, 22px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -808,8 +808,8 @@
 .activityBody > span {
   color: var(--red);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -868,13 +868,13 @@
   margin-top: 12px;
   color: var(--steel);
   font-size: 14px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .playerRecordActions {
   display: grid;
   min-width: 232px;
-  gap: 8px;
+  gap: var(--space-tight);
 }
 
 .playerRecordActions a {
@@ -886,7 +886,7 @@
   border: 1px solid var(--line);
   color: var(--navy);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .playerRecordActions a:first-child {
@@ -987,7 +987,7 @@
   .registrationTable td:first-child,
   .registrationTable td:last-child {
     min-height: 0;
-    padding: 8px 14px;
+    padding: var(--space-tight) 14px;
     border: 0;
     text-align: left;
   }
@@ -1001,7 +1001,7 @@
     display: grid !important;
     width: 48px !important;
     place-items: start center;
-    padding: 14px 8px !important;
+    padding: 14px var(--space-tight) !important;
     border-right: 1px solid var(--line) !important;
   }
 
@@ -1053,7 +1053,7 @@
 
 @media (max-width: 720px) {
   .viewNavigation {
-    margin-top: 16px;
+    margin-top: var(--space-copy);
   }
 
   .viewNavigation a {
@@ -1072,7 +1072,7 @@
     align-items: stretch;
     flex-direction: column;
     gap: 12px;
-    padding: 18px 16px;
+    padding: 18px var(--space-copy);
   }
 
   .registrationPanelHeader {
@@ -1081,7 +1081,7 @@
   }
 
   .registrationPanelHeader > div:first-child {
-    padding: 16px;
+    padding: var(--space-copy);
   }
 
   .registrationHeaderActions {
@@ -1104,7 +1104,7 @@
 
   .registrationRecordCount {
     min-height: 56px;
-    padding: 9px 16px;
+    padding: 9px var(--space-copy);
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
@@ -1112,7 +1112,7 @@
   .registrationEquation {
     grid-template-columns: repeat(2, minmax(0, 1fr) auto) minmax(0, 1fr);
     gap: 7px;
-    padding: 10px 8px;
+    padding: 10px var(--space-tight);
   }
 
   .registrationEquation span {
@@ -1138,12 +1138,12 @@
   .dayBookFilters {
     grid-template-columns: 1fr;
     gap: 10px;
-    padding: 12px 16px 14px;
+    padding: 12px var(--space-copy) 14px;
   }
 
   .filters.registrationFilters {
     gap: 9px;
-    padding: 12px 16px 14px;
+    padding: 12px var(--space-copy) 14px;
   }
 
   .filters.monthlyFilters {
@@ -1197,12 +1197,12 @@
   .methodSummary {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 0 16px;
+    padding: 0 var(--space-copy);
   }
 
   .methodSummary > div {
     min-width: 0;
-    padding: 10px 8px 10px 0;
+    padding: 10px var(--space-tight) 10px 0;
   }
 
   .methodSummary > div + div {
@@ -1313,7 +1313,7 @@
     min-height: 0;
     grid-template-columns: none;
     gap: 0;
-    padding: 8px 10px;
+    padding: var(--space-tight) 10px;
     text-align: left;
   }
 
@@ -1367,7 +1367,7 @@
   }
 
   .registrationAmounts > dl {
-    gap: 8px;
+    gap: var(--space-tight);
   }
 
   .registrationAmounts dd {
@@ -1397,8 +1397,8 @@
     min-height: 60px;
     align-items: center;
     flex-direction: row;
-    gap: 8px;
-    padding: 8px 16px;
+    gap: var(--space-tight);
+    padding: var(--space-tight) var(--space-copy);
   }
 
   .pagination > div {
@@ -1414,7 +1414,7 @@
   .activityList > li {
     grid-template-columns: 1fr auto;
     gap: 10px 14px;
-    padding: 14px 16px;
+    padding: 14px var(--space-copy);
   }
 
   .activityTime {
@@ -1432,7 +1432,7 @@
   .playerRecordHeader {
     grid-template-columns: 1fr;
     gap: 18px;
-    margin-top: 24px;
+    margin-top: var(--space-group);
   }
 
   .playerRecordHeader h1 {

@@ -49,7 +49,7 @@
   min-height: 58px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-group);
   padding: 0 22px;
   border-bottom: 1px dashed var(--line);
 }
@@ -58,7 +58,7 @@
   margin: 0;
   color: var(--navy);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
@@ -69,7 +69,7 @@
   border: 1px solid color-mix(in srgb, var(--red) 55%, var(--line));
   color: var(--red);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
@@ -79,14 +79,14 @@
   min-height: 204px;
   grid-template-columns: 250px minmax(300px, 1fr) minmax(270px, 310px);
   align-items: center;
-  gap: clamp(30px, 3.5vw, 48px);
+  gap: clamp(30px, 3.5vw, var(--space-content));
   padding: 28px 30px;
 }
 
 .primaryMetric {
   display: grid;
   align-content: center;
-  padding-left: 8px;
+  padding-left: var(--space-tight);
 }
 
 .primaryMetric strong {
@@ -103,7 +103,7 @@
   margin-top: 13px;
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
@@ -119,14 +119,14 @@
   min-height: 48px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-group);
   border-bottom: 1px solid var(--line);
 }
 
 .ledgerRows dt {
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -138,20 +138,20 @@
   font-size: 26px;
   font-style: italic;
   font-weight: 460;
-  line-height: 1;
+  line-height: var(--leading-display-light);
 }
 
 .ledgerAction {
   display: grid;
   align-content: center;
-  gap: 16px;
+  gap: var(--space-copy);
 }
 
 .ledgerAction p {
   margin: 0;
   color: var(--steel);
   font-size: 10px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .ledgerActionButton {
@@ -160,7 +160,7 @@
   min-height: 52px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-group);
   padding: 0 17px;
   border: 1px solid var(--navy);
   background: transparent;
@@ -193,7 +193,7 @@
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: clamp(24px, 3vw, 34px);
+  padding: clamp(var(--space-group), 3vw, 34px);
   border-top: 1px solid var(--line);
 }
 
@@ -229,11 +229,11 @@
   }
 
   .heroCopy {
-    padding-bottom: clamp(24px, 4svh, 36px);
+    padding-bottom: clamp(var(--space-group), 4svh, 36px);
   }
 
   .attendanceSection {
-    padding-block: 24px 88px;
+    padding-block: var(--space-group) 88px;
   }
 
   .ledgerMasthead {
@@ -250,7 +250,7 @@
     min-height: 0;
     grid-template-columns: minmax(0, 1fr);
     gap: 26px;
-    padding: 26px 22px 24px;
+    padding: 26px 22px var(--space-group);
   }
 
   .primaryMetric {
@@ -279,7 +279,7 @@
   }
 
   .attendanceRegister {
-    padding: 24px 20px;
+    padding: var(--space-group) 20px;
   }
 
 }
@@ -288,7 +288,7 @@
   .ledgerMasthead {
     align-items: flex-start;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-tight);
     padding-block: 14px;
   }
 
