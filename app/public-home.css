@@ -11,9 +11,9 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   min-height: 76px;
-  padding: 12px max(24px, calc((100vw - 1340px) / 2));
-  border-bottom: 1px solid rgba(7, 27, 50, 0.1);
-  background: rgba(247, 245, 240, 0.9);
+  padding: 12px max(var(--space-group), calc((100vw - 1340px) / 2));
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 10%, transparent);
+  background: color-mix(in srgb, var(--ivory) 90%, transparent);
   backdrop-filter: blur(18px);
 }
 
@@ -44,7 +44,7 @@
   align-items: center;
   color: #36404a;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .desktop-nav a::after {
@@ -86,7 +86,7 @@
   display: flex;
   align-items: center;
   justify-self: end;
-  gap: 16px;
+  gap: var(--space-copy);
 }
 
 .header-account-slot {
@@ -166,10 +166,10 @@
   right: 0;
   display: grid;
   width: 240px;
-  padding: 8px 16px 12px;
-  border: 1px solid rgba(7, 27, 50, 0.12);
+  padding: var(--space-tight) var(--space-copy) 12px;
+  border: 1px solid color-mix(in srgb, var(--navy) 12%, transparent);
   background: var(--ivory);
-  box-shadow: 0 24px 50px rgba(7, 27, 50, 0.13);
+  box-shadow: 0 24px 50px color-mix(in srgb, var(--navy) 13%, transparent);
 }
 
 .header-account-menu p {
@@ -254,14 +254,14 @@
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(80px, 10vw, 148px) clamp(32px, 6vw, 108px);
-  padding-left: max(32px, calc((100vw - 1240px) / 2));
+  padding: clamp(80px, 10vw, 148px) clamp(var(--space-block), 6vw, 108px);
+  padding-left: max(var(--space-block), calc((100vw - 1240px) / 2));
 }
 
 .public-eyebrow {
   color: var(--red);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.16em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -273,7 +273,7 @@
 
 .hero h1 {
   max-width: 850px;
-  margin-top: 24px;
+  margin-top: var(--space-group);
   font-size: clamp(54px, 6vw, 104px);
   font-weight: 580;
   letter-spacing: -0.07em;
@@ -337,13 +337,13 @@
 }
 
 .button-secondary {
-  border-color: rgba(7, 27, 50, 0.2);
+  border-color: color-mix(in srgb, var(--navy) 20%, transparent);
   color: var(--navy);
 }
 
 .button-secondary:hover {
   border-color: var(--navy);
-  background: rgba(7, 27, 50, 0.04);
+  background: color-mix(in srgb, var(--navy) 4%, transparent);
 }
 
 .button-light {
@@ -391,7 +391,7 @@
   min-height: 640px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 78% 20%, rgba(255, 255, 255, 0.1), transparent 18%),
+    radial-gradient(circle at 78% 20%, color-mix(in srgb, var(--white) 10%, transparent), transparent 18%),
     linear-gradient(145deg, #0a2441 0%, var(--navy) 52%, #041424 100%);
   color: var(--red);
 }
@@ -405,49 +405,49 @@
 }
 
 .court-outline {
-  stroke: rgba(247, 245, 240, 0.24);
+  stroke: color-mix(in srgb, var(--ivory) 24%, transparent);
   stroke-width: 1.35;
   vector-effect: non-scaling-stroke;
 }
 
 .court-outline path:first-child {
-  stroke: rgba(247, 245, 240, 0.44);
+  stroke: color-mix(in srgb, var(--ivory) 44%, transparent);
   stroke-width: 1.7;
 }
 
 .court-net {
-  stroke: rgba(247, 245, 240, 0.55);
+  stroke: color-mix(in srgb, var(--ivory) 55%, transparent);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
 
 .court-net .net-post {
-  stroke: rgba(247, 245, 240, 0.84);
+  stroke: color-mix(in srgb, var(--ivory) 84%, transparent);
   stroke-width: 2.3;
 }
 
 .racket-illustration {
   fill: none;
-  stroke: rgba(247, 245, 240, 0.9);
+  stroke: color-mix(in srgb, var(--ivory) 90%, transparent);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .racket-illustration .racket-head {
-  fill: rgba(7, 27, 50, 0.24);
+  fill: color-mix(in srgb, var(--navy) 24%, transparent);
   stroke-width: 3;
   vector-effect: non-scaling-stroke;
 }
 
 .racket-illustration .racket-strings {
-  stroke: rgba(247, 245, 240, 0.52);
+  stroke: color-mix(in srgb, var(--ivory) 52%, transparent);
   stroke-width: 0.85;
   stroke-linecap: butt;
   vector-effect: non-scaling-stroke;
 }
 
 .racket-illustration .racket-t-joint {
-  stroke: rgba(247, 245, 240, 0.88);
+  stroke: color-mix(in srgb, var(--ivory) 88%, transparent);
   stroke-width: 2.4;
   vector-effect: non-scaling-stroke;
 }
@@ -458,20 +458,20 @@
 }
 
 .racket-illustration .racket-grip {
-  stroke: rgba(247, 245, 240, 0.94);
+  stroke: color-mix(in srgb, var(--ivory) 94%, transparent);
   stroke-width: 10;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 
 .racket-illustration .racket-grip-bands {
-  stroke: rgba(7, 27, 50, 0.6);
+  stroke: color-mix(in srgb, var(--navy) 60%, transparent);
   stroke-width: 1.25;
   vector-effect: non-scaling-stroke;
 }
 
 .shuttle-trajectory {
-  filter: drop-shadow(0 0 7px rgba(200, 29, 42, 0.18));
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--red) 18%, transparent));
   opacity: 0;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -499,7 +499,7 @@
 
 .shuttle-illustration {
   fill: none;
-  stroke: rgba(247, 245, 240, 0.9);
+  stroke: color-mix(in srgb, var(--ivory) 90%, transparent);
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -510,17 +510,17 @@
 }
 
 .shuttle-illustration .shuttle-feather-shell {
-  fill: rgba(247, 245, 240, 0.035);
+  fill: color-mix(in srgb, var(--ivory) 3.5%, transparent);
   stroke-width: 2.25;
 }
 
 .shuttle-illustration .shuttle-feather-ribs {
-  stroke: rgba(247, 245, 240, 0.68);
+  stroke: color-mix(in srgb, var(--ivory) 68%, transparent);
   stroke-width: 1.15;
 }
 
 .shuttle-illustration .shuttle-skirt-bands {
-  stroke: rgba(247, 245, 240, 0.62);
+  stroke: color-mix(in srgb, var(--ivory) 62%, transparent);
   stroke-width: 1.45;
 }
 
@@ -531,19 +531,19 @@
 }
 
 .shuttle-illustration .shuttle-cork {
-  fill: rgba(247, 245, 240, 0.94);
-  stroke: rgba(247, 245, 240, 0.98);
+  fill: color-mix(in srgb, var(--ivory) 94%, transparent);
+  stroke: color-mix(in srgb, var(--ivory) 98%, transparent);
   stroke-width: 1.6;
 }
 
 .shuttle-illustration .shuttle-cork-seam {
-  stroke: rgba(7, 27, 50, 0.38);
+  stroke: color-mix(in srgb, var(--navy) 38%, transparent);
   stroke-width: 1;
 }
 
 .contact-ring {
   fill: none;
-  stroke: rgba(200, 29, 42, 0.62);
+  stroke: color-mix(in srgb, var(--red) 62%, transparent);
   stroke-width: 1.4;
 }
 
@@ -559,7 +559,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  border-top: 1px solid rgba(247, 245, 240, 0.14);
+  border-top: 1px solid color-mix(in srgb, var(--ivory) 14%, transparent);
   padding-top: 18px;
   color: var(--ivory);
 }
@@ -567,12 +567,12 @@
 .hero-visual-note span {
   color: #f47c83;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.14em;
 }
 
 .hero-visual-note p {
-  color: rgba(247, 245, 240, 0.62);
+  color: color-mix(in srgb, var(--ivory) 62%, transparent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.15em;
@@ -587,7 +587,7 @@
   grid-template-areas:
     "portrait story"
     "portrait coach";
-  column-gap: clamp(56px, 9vw, 132px);
+  column-gap: clamp(var(--space-section-sm), 9vw, 132px);
   row-gap: var(--section-space-md);
   align-items: start;
   padding-block: clamp(84px, 10vw, 152px);
@@ -611,7 +611,7 @@
 .about-image-frame::after {
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(7, 27, 50, 0.13);
+  border: 1px solid color-mix(in srgb, var(--navy) 13%, transparent);
   content: "";
   pointer-events: none;
 }
@@ -633,7 +633,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  padding: 58px 24px 22px;
+  padding: 58px var(--space-group) 22px;
   background: linear-gradient(transparent, rgba(4, 20, 36, 0.84));
   color: var(--white);
 }
@@ -658,7 +658,7 @@
   font-size: clamp(44px, 5.2vw, 78px);
   font-weight: 580;
   letter-spacing: -0.065em;
-  line-height: 0.98;
+  line-height: var(--leading-display);
 }
 
 .section-intro > p:last-child {
@@ -673,7 +673,7 @@
 }
 
 .body-light {
-  color: rgba(247, 245, 240, 0.7);
+  color: color-mix(in srgb, var(--ivory) 70%, transparent);
 }
 
 .text-ivory {
@@ -711,7 +711,7 @@
 .about-principles span {
   color: var(--red);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.12em;
 }
 
@@ -737,7 +737,7 @@
 .coach-philosophy {
   max-width: 570px;
   margin: 0;
-  padding-left: 24px;
+  padding-left: var(--space-group);
   border-left: 2px solid var(--red);
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
@@ -796,7 +796,7 @@
 .path-card {
   position: relative;
   min-height: 470px;
-  padding: 28px 24px;
+  padding: 28px var(--space-group);
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -808,7 +808,7 @@
 .path-number {
   color: var(--steel);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   transition: color var(--duration-base) var(--ease-standard);
 }
@@ -818,7 +818,7 @@
   margin-top: 72px;
   color: var(--red);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -827,7 +827,7 @@
   margin-top: 12px;
   font-size: clamp(27px, 2.2vw, 34px);
   font-weight: 600;
-  letter-spacing: -0.045em;
+  letter-spacing: var(--tracking-display);
 }
 
 .path-description {
@@ -851,7 +851,7 @@
   gap: 9px;
   color: #39434d;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .path-card li svg {
@@ -864,7 +864,7 @@
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(500px, 1.15fr);
   gap: clamp(44px, 8vw, 112px);
-  margin-top: 48px;
+  margin-top: var(--space-content);
   padding: clamp(42px, 6vw, 82px);
   background: var(--navy);
   color: var(--ivory);
@@ -881,8 +881,8 @@
 
 .fee-copy > p:not(.public-eyebrow) {
   max-width: 490px;
-  margin-top: 24px;
-  color: rgba(247, 245, 240, 0.65);
+  margin-top: var(--space-group);
+  color: color-mix(in srgb, var(--ivory) 65%, transparent);
   font-size: 14px;
   line-height: 1.75;
 }
@@ -895,9 +895,9 @@
 
 .term-savings-label {
   margin-bottom: 4px;
-  color: rgba(247, 245, 240, 0.62);
+  color: color-mix(in srgb, var(--ivory) 62%, transparent);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -905,9 +905,9 @@
 .term-savings span {
   display: flex;
   justify-content: space-between;
-  color: rgba(247, 245, 240, 0.62);
+  color: color-mix(in srgb, var(--ivory) 62%, transparent);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .term-savings strong {
@@ -920,14 +920,14 @@
 
 .fee-panel {
   padding: 26px;
-  border: 1px solid rgba(247, 245, 240, 0.14);
-  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid color-mix(in srgb, var(--ivory) 14%, transparent);
+  background: color-mix(in srgb, var(--white) 3.5%, transparent);
 }
 
 .fee-helper {
   display: block;
   margin-bottom: 15px;
-  color: rgba(247, 245, 240, 0.72);
+  color: color-mix(in srgb, var(--ivory) 72%, transparent);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.025em;
@@ -936,7 +936,7 @@
 .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border: 1px solid rgba(247, 245, 240, 0.18);
+  border: 1px solid color-mix(in srgb, var(--ivory) 18%, transparent);
 }
 
 .segmented button {
@@ -945,10 +945,10 @@
   min-height: 64px;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 10px var(--space-copy);
   border: 0;
   background: transparent;
-  color: rgba(247, 245, 240, 0.86);
+  color: color-mix(in srgb, var(--ivory) 86%, transparent);
   font-size: 12px;
   font-weight: 750;
   text-align: left;
@@ -965,7 +965,7 @@
 }
 
 .segmented button:first-child {
-  border-right: 1px solid rgba(247, 245, 240, 0.18);
+  border-right: 1px solid color-mix(in srgb, var(--ivory) 18%, transparent);
 }
 
 .segmented button[aria-pressed="true"] {
@@ -1005,9 +1005,9 @@
 .fee-label {
   display: block;
   margin-bottom: 10px;
-  color: rgba(247, 245, 240, 0.55);
+  color: color-mix(in srgb, var(--ivory) 55%, transparent);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -1025,10 +1025,10 @@
   justify-content: center;
   gap: 6px;
   padding: 0 13px;
-  border: 1px solid rgba(247, 245, 240, 0.16);
+  border: 1px solid color-mix(in srgb, var(--ivory) 16%, transparent);
   border-radius: var(--radius-xs);
   background: transparent;
-  color: rgba(247, 245, 240, 0.66);
+  color: color-mix(in srgb, var(--ivory) 66%, transparent);
   font-size: 11px;
   font-weight: 750;
   transition:
@@ -1038,7 +1038,7 @@
 }
 
 .choice-row button:hover {
-  border-color: rgba(247, 245, 240, 0.4);
+  border-color: color-mix(in srgb, var(--ivory) 40%, transparent);
   color: var(--ivory);
 }
 
@@ -1046,7 +1046,7 @@
   border-color: var(--red);
   background: var(--red);
   color: var(--white);
-  box-shadow: 0 0 0 1px rgba(247, 245, 240, 0.2);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ivory) 20%, transparent);
 }
 
 .choice-row button svg {
@@ -1058,8 +1058,8 @@
 .price-result-shell {
   min-height: 113px;
   margin-top: 30px;
-  border-top: 1px solid rgba(247, 245, 240, 0.16);
-  border-bottom: 1px solid rgba(247, 245, 240, 0.16);
+  border-top: 1px solid color-mix(in srgb, var(--ivory) 16%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ivory) 16%, transparent);
 }
 
 .price-result {
@@ -1067,7 +1067,7 @@
   min-height: 112px;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-group);
   padding: 20px 0;
   animation: price-result-enter 200ms cubic-bezier(0.26, 0.02, 0.23, 0.94);
 }
@@ -1096,16 +1096,16 @@
 
 .price-result small {
   margin-top: 5px;
-  color: rgba(247, 245, 240, 0.52);
+  color: color-mix(in srgb, var(--ivory) 52%, transparent);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .price-result > strong {
   color: var(--ivory);
   font-size: clamp(28px, 3vw, 42px);
-  font-weight: 570;
-  letter-spacing: -0.045em;
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-display);
   white-space: nowrap;
 }
 
@@ -1115,16 +1115,16 @@
 }
 
 .fee-note {
-  margin-top: 24px;
+  margin-top: var(--space-group);
   padding-top: 18px;
-  border-top: 1px solid rgba(247, 245, 240, 0.16);
-  color: rgba(247, 245, 240, 0.5);
+  border-top: 1px solid color-mix(in srgb, var(--ivory) 16%, transparent);
+  color: color-mix(in srgb, var(--ivory) 50%, transparent);
   font-size: 11px;
   line-height: 1.65;
 }
 
 .why {
-  padding: clamp(48px, 5vw, 72px) 0 clamp(48px, 4vw, 64px);
+  padding: clamp(var(--space-content), 5vw, 72px) 0 clamp(var(--space-content), 4vw, 64px);
 }
 
 .why-mobile-bridge {
@@ -1135,7 +1135,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
-  margin-top: clamp(32px, 4vw, 48px);
+  margin-top: clamp(var(--space-block), 4vw, var(--space-content));
   background: var(--line);
   border: 1px solid var(--line);
 }
@@ -1148,7 +1148,7 @@
   column-gap: clamp(18px, 2vw, 26px);
   align-content: start;
   min-height: 0;
-  padding: clamp(24px, 2.4vw, 30px);
+  padding: clamp(var(--space-group), 2.4vw, 30px);
   overflow: hidden;
   background: var(--ivory);
   transition: background var(--duration-base) var(--ease-standard);
@@ -1165,7 +1165,7 @@
   padding-top: 4px;
   color: var(--red);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.13em;
   text-transform: uppercase;
 }
@@ -1193,7 +1193,7 @@
 
 .trial {
   background:
-    radial-gradient(circle at 7% 12%, rgba(255, 255, 255, 0.06), transparent 22%),
+    radial-gradient(circle at 7% 12%, color-mix(in srgb, var(--white) 6%, transparent), transparent 22%),
     var(--navy);
   color: var(--ivory);
 }
@@ -1214,13 +1214,13 @@
   grid-template-columns: 45px 1fr;
   gap: 18px;
   padding: 20px 0;
-  border-bottom: 1px solid rgba(247, 245, 240, 0.15);
+  border-bottom: 1px solid color-mix(in srgb, var(--ivory) 15%, transparent);
 }
 
 .next-step > span {
   color: #f47c83;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.12em;
 }
 
@@ -1232,7 +1232,7 @@
 .next-step p {
   max-width: 470px;
   margin-top: 7px;
-  color: rgba(247, 245, 240, 0.58);
+  color: color-mix(in srgb, var(--ivory) 58%, transparent);
   font-size: 11px;
   line-height: 1.7;
 }
@@ -1272,7 +1272,7 @@
 
 .form-field {
   display: grid;
-  gap: 8px;
+  gap: var(--space-tight);
 }
 
 .form-field-full {
@@ -1282,7 +1282,7 @@
 .form-field label {
   color: #39434d;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -1294,7 +1294,7 @@
 
 .form-field label .form-required-mark {
   color: var(--red);
-  font-weight: 800;
+  font-weight: var(--weight-label);
 }
 
 .form-field input,
@@ -1360,7 +1360,7 @@
   margin-top: 20px;
   color: #48535d;
   font-size: 11px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .callback-row input {
@@ -1378,7 +1378,7 @@
   border-top: 1px solid var(--line);
   color: var(--steel);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
   line-height: 1.6;
 }
 
@@ -1405,7 +1405,7 @@
   background: var(--red);
   color: var(--white);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   line-height: 1.2;
 }
 
@@ -1435,8 +1435,8 @@
   margin-top: 12px;
   color: #17673c;
   font-size: 11px;
-  font-weight: 650;
-  line-height: 1.55;
+  font-weight: var(--weight-emphasis);
+  line-height: var(--leading-body);
   text-align: center;
 }
 
@@ -1450,13 +1450,13 @@
 }
 
 .contact {
-  padding: clamp(48px, 5vw, 72px) 0 clamp(96px, 11vw, 160px);
+  padding: clamp(var(--space-content), 5vw, 72px) 0 clamp(96px, 11vw, 160px);
 }
 
 .contact-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(380px, 0.85fr);
-  gap: 24px;
+  gap: var(--space-group);
   margin-top: 68px;
 }
 
@@ -1468,7 +1468,7 @@
   padding: clamp(30px, 5vw, 58px);
   overflow: hidden;
   background:
-    radial-gradient(circle at 86% 16%, rgba(255, 255, 255, 0.08), transparent 21%),
+    radial-gradient(circle at 86% 16%, color-mix(in srgb, var(--white) 8%, transparent), transparent 21%),
     var(--navy);
   color: var(--ivory);
 }
@@ -1477,9 +1477,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  color: rgba(247, 245, 240, 0.6);
+  color: color-mix(in srgb, var(--ivory) 60%, transparent);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
@@ -1500,9 +1500,9 @@
 
 .instagram-handle {
   margin-top: 14px;
-  color: rgba(247, 245, 240, 0.78);
+  color: color-mix(in srgb, var(--ivory) 78%, transparent);
   font-size: clamp(12px, 1.05vw, 15px);
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
   letter-spacing: -0.025em;
   line-height: 1.4;
   white-space: nowrap;
@@ -1510,7 +1510,7 @@
 
 .instagram-tagline {
   margin-top: 17px;
-  color: rgba(247, 245, 240, 0.6);
+  color: color-mix(in srgb, var(--ivory) 60%, transparent);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 19px;
   font-style: italic;
@@ -1522,7 +1522,7 @@
   min-height: 44px;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid rgba(247, 245, 240, 0.3);
+  border-bottom: 1px solid color-mix(in srgb, var(--ivory) 30%, transparent);
   padding-bottom: 7px;
   font-size: 11px;
   font-weight: 750;
@@ -1549,7 +1549,7 @@
   grid-template-columns: 44px 1fr 22px;
   align-items: center;
   gap: 18px;
-  padding: 24px;
+  padding: var(--space-group);
   background: var(--ivory);
   transition: background var(--duration-base) var(--ease-standard);
 }
@@ -1585,7 +1585,7 @@
 .contact-card span {
   color: var(--steel);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -1632,7 +1632,7 @@
 .footer-brand p {
   max-width: 320px;
   margin-top: 22px;
-  color: rgba(247, 245, 240, 0.5);
+  color: color-mix(in srgb, var(--ivory) 50%, transparent);
   font-size: 12px;
 }
 
@@ -1642,17 +1642,17 @@
   font-size: clamp(43px, 6vw, 82px);
   font-weight: 560;
   letter-spacing: -0.065em;
-  line-height: 0.98;
+  line-height: var(--leading-display);
 }
 
 .footer-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 32px;
+  gap: var(--space-block);
   padding-block: 22px;
-  border-top: 1px solid rgba(247, 245, 240, 0.12);
-  color: rgba(247, 245, 240, 0.62);
+  border-top: 1px solid color-mix(in srgb, var(--ivory) 12%, transparent);
+  color: color-mix(in srgb, var(--ivory) 62%, transparent);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.07em;
@@ -1662,7 +1662,7 @@
 .footer-bottom > div {
   display: flex;
   flex-wrap: wrap;
-  gap: 24px;
+  gap: var(--space-group);
 }
 
 .footer-bottom a:hover {
@@ -1708,7 +1708,7 @@
 
   .site-header {
     grid-template-columns: minmax(0, 1fr) 56px 44px;
-    column-gap: 8px;
+    column-gap: var(--space-tight);
   }
 
   .desktop-nav,
@@ -1745,10 +1745,10 @@
     max-height: calc(100dvh - var(--public-mobile-header-height));
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 12px 24px calc(20px + env(safe-area-inset-bottom));
+    padding: 12px var(--space-group) calc(20px + env(safe-area-inset-bottom));
     border-bottom: 1px solid var(--line);
     background: var(--ivory);
-    box-shadow: 0 24px 50px rgba(7, 27, 50, 0.11);
+    box-shadow: 0 24px 50px color-mix(in srgb, var(--navy) 11%, transparent);
     -webkit-overflow-scrolling: touch;
   }
 
@@ -1760,7 +1760,7 @@
     bottom: 0;
     left: 0;
     display: block;
-    background: rgba(7, 27, 50, 0.07);
+    background: color-mix(in srgb, var(--navy) 7%, transparent);
   }
 
   .header-account-menu {
@@ -1798,7 +1798,7 @@
 
   .hero-copy {
     min-height: 74svh;
-    padding: 84px 24px;
+    padding: 84px var(--space-group);
   }
 
   .hero-visual {
@@ -1863,7 +1863,7 @@
 
   .site-header {
     min-height: 68px;
-    padding-inline: 16px;
+    padding-inline: var(--space-copy);
   }
 
   .brand-link {
@@ -1877,7 +1877,7 @@
 
   .hero-copy {
     min-height: 0;
-    padding: 20px 16px 24px;
+    padding: 20px var(--space-copy) var(--space-group);
   }
 
   .hero-copy .public-eyebrow {
@@ -1898,7 +1898,7 @@
 
   .hero-actions {
     display: grid;
-    gap: 8px;
+    gap: var(--space-tight);
     margin-top: 28px;
   }
 
@@ -1951,7 +1951,7 @@
   }
 
   .hero-trust small {
-    margin-top: 8px;
+    margin-top: var(--space-tight);
     color: var(--steel);
     font-size: 11px;
     font-weight: 700;
@@ -2083,7 +2083,7 @@
     grid-template-columns: 28px minmax(0, 1fr);
     column-gap: 12px;
     min-height: 0;
-    padding: 20px 24px;
+    padding: 20px var(--space-group);
     border: 1px solid var(--line);
   }
 
@@ -2103,23 +2103,23 @@
 
   .path-card h3 {
     grid-column: 1 / -1;
-    margin-top: 16px;
+    margin-top: var(--space-copy);
   }
 
   .path-description {
     grid-column: 1 / -1;
-    margin-top: 16px;
+    margin-top: var(--space-copy);
     line-height: 1.6;
   }
 
   .path-card ul {
     grid-column: 1 / -1;
-    gap: 8px;
-    margin-top: 16px;
+    gap: var(--space-tight);
+    margin-top: var(--space-copy);
   }
 
   .path-card li {
-    gap: 8px;
+    gap: var(--space-tight);
     line-height: 1.45;
   }
 
@@ -2128,7 +2128,7 @@
     gap: var(--space-content);
     margin-inline: -16px;
     margin-top: var(--space-content);
-    padding: var(--space-content) 16px;
+    padding: var(--space-content) var(--space-copy);
   }
 
   .fee-copy h3 {
@@ -2142,9 +2142,9 @@
 
   .fee-helper {
     margin-bottom: var(--space-copy);
-    color: rgba(247, 245, 240, 0.84);
+    color: color-mix(in srgb, var(--ivory) 84%, transparent);
     font-size: 12px;
-    line-height: 1.55;
+    line-height: var(--leading-body);
   }
 
   .segmented button {
@@ -2163,12 +2163,12 @@
   .choice-row {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    gap: var(--space-tight);
   }
 
   .choice-row button {
     min-height: 44px;
-    padding-inline: 8px;
+    padding-inline: var(--space-tight);
   }
 
   .term-savings {
@@ -2179,7 +2179,7 @@
   .term-savings span {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 32px;
+    column-gap: var(--space-block);
   }
 
   .price-result-shell {
@@ -2255,7 +2255,7 @@
   }
 
   .trial-form-card {
-    padding: 24px 18px;
+    padding: var(--space-group) 18px;
   }
 
   .form-grid {

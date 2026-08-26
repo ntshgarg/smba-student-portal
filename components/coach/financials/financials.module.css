@@ -23,7 +23,7 @@
 }
 
 .activationHeader h1 {
-  margin-top: 16px;
+  margin-top: var(--space-copy);
   color: var(--navy);
   font-size: var(--type-page-title);
   font-weight: 545;
@@ -48,13 +48,13 @@
   margin-top: clamp(46px, 7vw, 84px);
   padding: clamp(30px, 5vw, 62px);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.58);
+  background: color-mix(in srgb, var(--white) 58%, transparent);
 }
 
 .activationPanel > div > span {
   color: var(--red);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -64,9 +64,9 @@
   margin-top: 12px;
   color: var(--navy);
   font-size: clamp(34px, 4.5vw, 60px);
-  font-weight: 570;
+  font-weight: var(--weight-display);
   letter-spacing: -0.06em;
-  line-height: 0.98;
+  line-height: var(--leading-display);
 }
 
 .activationPanel > div > p {
@@ -90,7 +90,7 @@
   gap: 11px;
   color: var(--steel);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .activationConfirmation input {
@@ -135,13 +135,13 @@
 
 .routeState button {
   min-height: 46px;
-  margin-top: 24px;
+  margin-top: var(--space-group);
   padding: 0 18px;
   border: 1px solid var(--navy);
   background: var(--navy);
   color: var(--white);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .loadingSummary,
@@ -178,16 +178,16 @@
   display: block;
   color: var(--red);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .preparation {
   margin-top: clamp(34px, 4vw, 52px);
-  padding: clamp(24px, 3.3vw, 42px);
+  padding: clamp(var(--space-group), 3.3vw, 42px);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.5);
+  background: color-mix(in srgb, var(--white) 50%, transparent);
 }
 
 .preparationHeading {
@@ -219,7 +219,7 @@
   padding: 0 18px;
   border: 1px solid var(--navy);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .preparationHeading > button,
@@ -266,7 +266,7 @@
 .preparationCounts dt {
   color: var(--steel);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   line-height: 1.35;
 }
 
@@ -280,7 +280,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-group);
   margin-top: 28px;
   padding: 22px;
   background: var(--navy);
@@ -297,9 +297,9 @@
 
 .preparationReview p {
   margin-top: 7px;
-  color: rgba(255, 255, 255, 0.68);
+  color: color-mix(in srgb, var(--white) 68%, transparent);
   font-size: 12px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .preparationReview > div:last-child {
@@ -310,7 +310,7 @@
 
 .preparationReview .quietButton,
 .preparationReview .primaryButton {
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: color-mix(in srgb, var(--white) 35%, transparent);
   color: var(--white);
 }
 
@@ -367,7 +367,7 @@
 
 .compactPreparation .preparationReview {
   margin: 0;
-  padding: 16px clamp(18px, 2.5vw, 28px);
+  padding: var(--space-copy) clamp(18px, 2.5vw, 28px);
 }
 
 .compactPreparation .notice {
@@ -389,7 +389,7 @@
 }
 
 .directory {
-  padding: clamp(28px, 3.2vw, 40px) 0;
+  padding: clamp(28px, 3.2vw, var(--space-editorial)) 0;
 }
 
 .directoryHeading {
@@ -436,7 +436,7 @@
   background: transparent;
   color: var(--navy);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .playerList {
@@ -485,7 +485,7 @@
   background: var(--navy);
   color: var(--white);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.05em;
 }
 
@@ -526,7 +526,7 @@
 .chargeHeading em {
   font-size: var(--type-operational-floor);
   font-style: normal;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   line-height: 1.25;
 }
 
@@ -553,7 +553,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 32px;
+  gap: var(--space-block);
   padding: clamp(28px, 4vw, 50px);
   background: var(--navy);
   color: var(--white);
@@ -562,7 +562,7 @@
 .ledgerHeader > div:first-child > span {
   color: var(--rose-strong);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -570,14 +570,14 @@
 .ledgerHeader h2 {
   margin-top: 10px;
   font-size: clamp(31px, 4vw, 48px);
-  font-weight: 570;
+  font-weight: var(--weight-display);
   letter-spacing: -0.055em;
-  line-height: 1;
+  line-height: var(--leading-display-light);
 }
 
 .ledgerHeader > div:first-child > p {
   margin-top: 11px;
-  color: rgba(255, 255, 255, 0.65);
+  color: color-mix(in srgb, var(--white) 65%, transparent);
   font-size: 12px;
 }
 
@@ -590,9 +590,9 @@
 }
 
 .ledgerBalance > span {
-  color: rgba(255, 255, 255, 0.55);
+  color: color-mix(in srgb, var(--white) 55%, transparent);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
@@ -619,8 +619,8 @@
 
 .feePlan > div {
   display: grid;
-  gap: 8px;
-  padding: 24px clamp(20px, 3vw, 34px);
+  gap: var(--space-tight);
+  padding: var(--space-group) clamp(20px, 3vw, 34px);
 }
 
 .feePlan > div + div {
@@ -631,8 +631,8 @@
 .chargeAmounts dt {
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -669,13 +669,13 @@
   margin-top: 5px;
   color: var(--red);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .setupDefaults {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 24px;
+  margin-top: var(--space-group);
   border-block: 1px solid var(--line);
 }
 
@@ -692,8 +692,8 @@
 .setupDefaults dt {
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -715,7 +715,7 @@
   color: var(--steel);
   cursor: pointer;
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   list-style-position: inside;
 }
 
@@ -726,7 +726,7 @@
 .planEditorBody > p {
   color: var(--steel);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .planEditorBody form {
@@ -747,7 +747,7 @@
 }
 
 .chargeSection {
-  padding: clamp(28px, 4vw, 48px);
+  padding: clamp(28px, 4vw, var(--space-content));
 }
 
 .sectionHeading {
@@ -760,7 +760,7 @@
 .sectionHeading > p {
   color: var(--steel);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   text-transform: uppercase;
 }
 
@@ -785,7 +785,7 @@
 .chargeHeading > div > span {
   color: var(--red);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
@@ -815,7 +815,7 @@
 .chargeAmounts > div {
   display: grid;
   gap: 6px;
-  padding: 16px;
+  padding: var(--space-copy);
 }
 
 .chargeAmounts > div + div {
@@ -834,7 +834,7 @@
   color: var(--navy);
   cursor: pointer;
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   list-style-position: inside;
 }
 
@@ -878,7 +878,7 @@
 }
 
 .emptyLedger {
-  margin-top: 24px;
+  margin-top: var(--space-group);
   padding: 28px;
   border: 1px solid var(--line);
   color: var(--steel);
@@ -905,7 +905,7 @@
   display: block;
   color: var(--red);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
@@ -1002,7 +1002,7 @@
 }
 
 .receiptSection {
-  padding: 0 clamp(28px, 4vw, 48px) clamp(28px, 4vw, 48px);
+  padding: 0 clamp(28px, 4vw, var(--space-content)) clamp(28px, 4vw, var(--space-content));
   border-bottom: 1px solid var(--line);
 }
 
@@ -1022,7 +1022,7 @@
   min-height: 68px;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-copy);
   padding: 12px 15px;
   color: var(--navy);
   cursor: pointer;
@@ -1089,7 +1089,7 @@
   border: 1px solid var(--navy);
   color: var(--navy);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .receiptDownload:hover {
@@ -1124,8 +1124,8 @@
 .refundHistory > span {
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -1185,7 +1185,7 @@
 .refundHistory article {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 18px;
+  gap: var(--space-tight) 18px;
   padding: 14px;
   border: 1px solid var(--line);
   background: var(--white);
@@ -1253,7 +1253,7 @@
   color: var(--red);
   cursor: pointer;
   font-size: 10px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   list-style: none;
 }
 
@@ -1294,7 +1294,7 @@
 
 .field {
   display: grid;
-  gap: 8px;
+  gap: var(--space-tight);
   min-width: 0;
 }
 
@@ -1304,7 +1304,7 @@
   gap: 10px;
   color: var(--navy);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
@@ -1390,7 +1390,7 @@
 }
 
 .corrections {
-  margin: 0 clamp(28px, 4vw, 48px) clamp(28px, 4vw, 48px);
+  margin: 0 clamp(28px, 4vw, var(--space-content)) clamp(28px, 4vw, var(--space-content));
   border: 1px solid var(--line);
 }
 
@@ -1402,7 +1402,7 @@
   color: var(--steel);
   cursor: pointer;
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   list-style-position: inside;
 }
 
@@ -1416,7 +1416,7 @@
   max-width: 520px;
   color: var(--steel);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .correctionsBody form {
@@ -1431,12 +1431,12 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  padding: 0 16px;
+  padding: 0 var(--space-copy);
   border: 1px solid var(--red);
   background: transparent;
   color: var(--red);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .correctionButton:disabled {
@@ -1459,7 +1459,7 @@
   color: var(--navy);
   cursor: pointer;
   font-size: 11px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   list-style: none;
 }
 
@@ -1509,7 +1509,7 @@
 .concessionReversal > p {
   color: var(--steel);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .concessionCreate {
@@ -1518,7 +1518,7 @@
 }
 
 .concessionCreate > summary {
-  padding: 0 16px;
+  padding: 0 var(--space-copy);
 }
 
 .concessionCreate > form {
@@ -1555,22 +1555,22 @@
 .concessionApplications > span {
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
 .concession > header strong {
   color: var(--navy);
   font-size: 18px;
-  font-weight: 650;
+  font-weight: var(--weight-emphasis);
 }
 
 .concession > header em {
   color: var(--green);
   font-size: var(--type-operational-floor);
   font-style: normal;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   text-transform: uppercase;
 }
 
@@ -1611,7 +1611,7 @@
   display: grid;
   gap: 9px;
   margin-top: 18px;
-  padding-top: 16px;
+  padding-top: var(--space-copy);
   border-top: 1px solid var(--line);
 }
 
@@ -1677,10 +1677,10 @@
 
 .rapidDeskHeader p {
   max-width: 600px;
-  margin-top: 16px;
+  margin-top: var(--space-copy);
   color: var(--steel);
   font-size: 13px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .recordsWorkspace {
@@ -1701,7 +1701,7 @@
 }
 
 .rapidDesk {
-  margin-top: clamp(30px, 4vw, 48px);
+  margin-top: clamp(30px, 4vw, var(--space-content));
   border: 1px solid var(--line);
   background: var(--white);
 }
@@ -1786,7 +1786,7 @@
 }
 
 .rapidCompletionNotice {
-  padding: 18px clamp(24px, 4vw, 42px) 0;
+  padding: 18px clamp(var(--space-group), 4vw, 42px) 0;
 }
 
 .rapidResults {
@@ -1801,14 +1801,14 @@
   padding: 20px clamp(22px, 3vw, 34px) 0;
   color: var(--steel);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .rapidResults > span {
   padding-bottom: 12px;
   font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -1840,14 +1840,14 @@
 
 .rapidResultsToggle strong {
   font-size: 12px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .rapidResultsToggle small {
   color: var(--steel);
   font-size: var(--type-operational-floor);
   font-weight: 750;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -1855,10 +1855,10 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-tight);
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   text-transform: uppercase;
 }
 
@@ -1892,7 +1892,7 @@
   max-width: none;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.7fr);
   align-items: end;
-  gap: clamp(40px, 7vw, 110px);
+  gap: clamp(var(--space-editorial), 7vw, 110px);
   margin-top: clamp(30px, 4.5vw, 52px);
 }
 
@@ -1947,7 +1947,7 @@
 .balancePlayerLabel {
   color: var(--red);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   line-height: 1.35;
   text-transform: uppercase;
@@ -1987,8 +1987,8 @@
 .balancePlayerOutstanding span {
   margin-top: 0;
   font-size: var(--type-operational-floor);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
 
@@ -1998,7 +1998,7 @@
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 23px;
   font-weight: 520;
-  line-height: 1;
+  line-height: var(--leading-display-light);
 }
 
 .balancePlayerRail > button {
@@ -2011,7 +2011,7 @@
   color: var(--navy);
   font: inherit;
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   cursor: pointer;
@@ -2054,7 +2054,7 @@
 .balanceAllocationTotal > span {
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.09em;
   line-height: 1.35;
   text-transform: uppercase;
@@ -2064,8 +2064,8 @@
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: clamp(36px, 4vw, 50px);
-  font-weight: 470;
-  letter-spacing: -0.045em;
+  font-weight: var(--weight-display-light);
+  letter-spacing: var(--tracking-display);
   line-height: 0.94;
   white-space: nowrap;
 }
@@ -2082,7 +2082,7 @@
   color: var(--red);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 26px;
-  line-height: 1;
+  line-height: var(--leading-display-light);
 }
 
 .balanceProjectedMetric > strong {
@@ -2121,8 +2121,8 @@
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: clamp(36px, 4vw, 50px);
-  font-weight: 470;
-  letter-spacing: -0.045em;
+  font-weight: var(--weight-display-light);
+  letter-spacing: var(--tracking-display);
   text-align: center;
 }
 
@@ -2140,8 +2140,8 @@
   display: grid;
   min-width: 0;
   align-content: center;
-  gap: 8px;
-  padding: 16px clamp(18px, 2.5vw, 28px);
+  gap: var(--space-tight);
+  padding: var(--space-copy) clamp(18px, 2.5vw, 28px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -2202,8 +2202,8 @@
   min-height: 86px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px 24px;
-  padding: 16px clamp(18px, 2.5vw, 28px);
+  gap: 12px var(--space-group);
+  padding: var(--space-copy) clamp(18px, 2.5vw, 28px);
 }
 
 .balanceReviewPrompt > .notice {
@@ -2228,7 +2228,7 @@
 
 .balanceAllocationReview {
   display: grid;
-  gap: 16px;
+  gap: var(--space-copy);
   padding: 20px clamp(18px, 2.5vw, 28px);
 }
 
@@ -2260,7 +2260,7 @@
   color: var(--red);
   font: inherit;
   font-size: var(--type-operational-floor);
-  font-weight: 800;
+  font-weight: var(--weight-label);
   text-transform: uppercase;
 }
 
@@ -2346,7 +2346,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 10px 24px;
+  gap: 10px var(--space-group);
 }
 
 .balancePaymentFooter > .notice {
@@ -2364,7 +2364,7 @@
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 22px;
   font-weight: 520;
-  line-height: 1;
+  line-height: var(--leading-display-light);
 }
 
 .balancePaymentFooter .primaryButton {
@@ -2391,7 +2391,7 @@
   display: grid;
   align-content: center;
   min-height: 104px;
-  padding: 20px clamp(22px, 3vw, 32px);
+  padding: 20px clamp(22px, 3vw, var(--space-block));
 }
 
 .focusedLedger .ledgerHeader > div:first-child > span {
@@ -2405,7 +2405,7 @@
 }
 
 .focusedLedger .ledgerHeader > div:first-child > p {
-  margin-top: 8px;
+  margin-top: var(--space-tight);
   color: var(--steel);
   font-size: 13px;
 }
@@ -2414,7 +2414,7 @@
   align-content: center;
   justify-items: center;
   gap: 7px;
-  padding: 16px 22px;
+  padding: var(--space-copy) 22px;
   border-left: 1px solid var(--line);
   background: color-mix(in srgb, var(--ivory) 58%, var(--white));
   text-align: center;
@@ -2559,7 +2559,7 @@
 
 .focusedLedger .planEditorBody .paymentFooter {
   display: grid;
-  gap: 8px;
+  gap: var(--space-tight);
 }
 
 .focusedLedger .planEditorBody .paymentFooter .primaryButton {
@@ -2569,7 +2569,7 @@
 
 .focusedLedger .receiptSection,
 .focusedLedger .chargeSection {
-  padding: 22px clamp(20px, 2.5vw, 28px) 24px;
+  padding: 22px clamp(20px, 2.5vw, 28px) var(--space-group);
 }
 
 .focusedLedger .sectionHeading > p {
@@ -2584,7 +2584,7 @@
 .focusedLedger .chargeList {
   display: grid;
   gap: 0;
-  margin-top: 16px;
+  margin-top: var(--space-copy);
   border: 1px solid var(--line);
   background: var(--white);
 }
@@ -2616,7 +2616,7 @@
   font-size: 18px;
   font-style: italic;
   font-weight: 520;
-  line-height: 1;
+  line-height: var(--leading-display-light);
 }
 
 .focusedLedger .receiptFolio {
@@ -2632,8 +2632,8 @@
 }
 
 .focusedLedger .receiptBody {
-  gap: 16px;
-  padding: 16px 18px 18px 56px;
+  gap: var(--space-copy);
+  padding: var(--space-copy) 18px 18px var(--space-section-sm);
 }
 
 .focusedLedger .receiptMeta dt,
@@ -2652,7 +2652,7 @@
 }
 
 .focusedLedger .chargeList {
-  margin-top: 16px;
+  margin-top: var(--space-copy);
 }
 
 .focusedLedger .chargeHeading {
@@ -2715,12 +2715,12 @@
 }
 
 .focusedLedger .corrections {
-  margin: 0 clamp(20px, 2.5vw, 28px) 24px;
+  margin: 0 clamp(20px, 2.5vw, 28px) var(--space-group);
 }
 
 @media (min-width: 721px) {
   .rapidDeskHeader.balanceHeader {
-    margin-top: clamp(24px, 3vw, 38px);
+    margin-top: clamp(var(--space-group), 3vw, 38px);
   }
 
   .rapidDeskHeader.balanceHeader h1 {
@@ -2743,7 +2743,7 @@
   .balancePlayerLabel,
   .balancePlayerIdentity,
   .balancePlayerOutstanding {
-    padding: 10px 16px;
+    padding: 10px var(--space-copy);
   }
 
   .balancePlayerLabel,
@@ -2782,7 +2782,7 @@
   }
 
   .balanceMetric {
-    gap: 8px;
+    gap: var(--space-tight);
     justify-items: center;
     padding: 18px clamp(20px, 2.5vw, 30px);
     text-align: center;
@@ -2817,7 +2817,7 @@
 
   .balanceField {
     gap: 6px;
-    padding: 12px clamp(16px, 2vw, 22px);
+    padding: 12px clamp(var(--space-copy), 2vw, 22px);
   }
 
   .balanceField > span em {
@@ -2839,7 +2839,7 @@
 
   .balanceReviewPrompt {
     min-height: 74px;
-    padding: 12px clamp(16px, 2vw, 22px);
+    padding: 12px clamp(var(--space-copy), 2vw, 22px);
   }
 
   .balanceReviewPrompt > div > p {
@@ -2848,7 +2848,7 @@
 
   .balanceAllocationReview {
     gap: 12px;
-    padding: 14px clamp(16px, 2vw, 22px);
+    padding: 14px clamp(var(--space-copy), 2vw, 22px);
   }
 
   .balanceAllocationHeading strong {
@@ -2929,7 +2929,7 @@
 
 @media (max-width: 720px) {
   .workspace {
-    padding-top: 16px;
+    padding-top: var(--space-copy);
   }
 
   .activationHeader {
@@ -2946,7 +2946,7 @@
   }
 
   .recordsPageHeader {
-    margin-top: 24px;
+    margin-top: var(--space-group);
   }
 
   .recordsPageHeader h1 {
@@ -2968,7 +2968,7 @@
 
   .rapidDeskHeader.balanceHeader h1 {
     font-size: clamp(40px, 11.5vw, 48px);
-    line-height: 0.98;
+    line-height: var(--leading-display);
   }
 
   .rapidDeskHeader.balanceHeader p {
@@ -2985,7 +2985,7 @@
     grid-template-columns: 1fr;
     align-items: stretch;
     gap: 18px;
-    padding: 24px 22px;
+    padding: var(--space-group) 22px;
   }
 
   .rapidFinderControls {
@@ -3048,7 +3048,7 @@
   .balanceEquation {
     display: block;
     min-height: 0;
-    padding: 0 16px;
+    padding: 0 var(--space-copy);
     background: color-mix(in srgb, var(--ivory) 70%, var(--white));
   }
 
@@ -3057,7 +3057,7 @@
     min-height: 86px;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 4px 16px;
+    gap: 4px var(--space-copy);
     padding: 15px 0;
     border-bottom: 1px solid var(--line);
   }
@@ -3150,12 +3150,12 @@
   }
 
   .activationHeader p {
-    margin-top: 16px;
+    margin-top: var(--space-copy);
     font-size: 18px;
   }
 
   .activationPanel {
-    gap: 32px;
+    gap: var(--space-block);
     margin-top: 34px;
     padding: 28px 22px;
   }
@@ -3181,7 +3181,7 @@
   }
 
   .preparationCounts > div {
-    padding: 18px 10px 16px 0;
+    padding: 18px 10px var(--space-copy) 0;
     border-bottom: 1px solid var(--line);
   }
 
@@ -3214,7 +3214,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px;
-    padding: 12px 16px;
+    padding: 12px var(--space-copy);
   }
 
   .compactPreparation .preparationHeading h2 {
@@ -3250,7 +3250,7 @@
 
   .compactPreparation .preparationReview {
     margin-top: 0;
-    padding: 15px 16px;
+    padding: 15px var(--space-copy);
   }
 
   .records {
@@ -3390,7 +3390,7 @@
 
   .focusedLedger .ledgerHeader > div:first-child {
     min-height: 106px;
-    padding: 17px 16px;
+    padding: 17px var(--space-copy);
   }
 
   .focusedLedger .ledgerHeader h2 {
@@ -3418,7 +3418,7 @@
   }
 
   .focusedLedger .feePlan > div {
-    padding: 13px 16px;
+    padding: 13px var(--space-copy);
   }
 
   .focusedLedger .feePlan > div:first-child {
@@ -3431,14 +3431,14 @@
 
   .focusedLedger .receiptSection,
   .focusedLedger .chargeSection {
-    padding: 20px 16px 22px;
+    padding: 20px var(--space-copy) 22px;
   }
 
   .focusedLedger .receipt > summary {
     min-height: 68px;
     grid-template-columns: 34px minmax(0, 1fr) auto;
     gap: 10px;
-    padding: 8px 11px 8px 0;
+    padding: var(--space-tight) 11px var(--space-tight) 0;
   }
 
   .focusedLedger .receiptFolio,
@@ -3492,14 +3492,14 @@
   }
 
   .focusedLedger .corrections {
-    margin: 0 16px 22px;
+    margin: 0 var(--space-copy) 22px;
     padding: 0;
   }
 
   .focusedLedger .planEditor > summary,
   .focusedLedger .concessions > summary,
   .focusedLedger .corrections > summary {
-    padding-inline: 16px;
+    padding-inline: var(--space-copy);
   }
 
   .focusedLedger .paymentHistory summary {
@@ -3546,7 +3546,7 @@
   }
 
   .focusedLedger .planEditorBody > p {
-    padding: 9px 16px;
+    padding: 9px var(--space-copy);
     line-height: 1.45;
   }
 }

@@ -102,7 +102,7 @@
   min-height: 56px;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-copy);
   padding: 17px 22px 14px;
   border-bottom: 1px dashed var(--line);
 }
@@ -147,13 +147,13 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  padding: 24px;
+  padding: var(--space-group);
 }
 
 .summary {
   display: grid;
   min-width: 0;
-  gap: 8px;
+  gap: var(--space-tight);
 }
 
 .summary > p {
@@ -202,7 +202,7 @@
 .actions {
   display: grid;
   min-width: 0;
-  gap: 8px;
+  gap: var(--space-tight);
   margin-top: auto;
   padding-top: 20px;
 }
@@ -259,7 +259,7 @@
   width: 100%;
   min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 40px;
+  gap: var(--space-editorial);
 }
 
 .group {
@@ -305,7 +305,7 @@
   display: grid;
   grid-template-columns: minmax(220px, 0.78fr) minmax(0, 2.22fr);
   align-items: start;
-  gap: clamp(32px, 4vw, 56px);
+  gap: clamp(var(--space-block), 4vw, var(--space-section-sm));
 }
 
 @media (min-width: 761px) and (max-width: 980px) {
@@ -368,7 +368,7 @@
       "financials"
       "announcements"
       "members";
-    gap: 16px;
+    gap: var(--space-copy);
     padding-block: var(--space-copy) 72px;
   }
 
@@ -385,7 +385,7 @@
 
   .masthead {
     min-height: 52px;
-    padding: 16px 18px 13px;
+    padding: var(--space-copy) 18px 13px;
   }
 
   .masthead h2 {

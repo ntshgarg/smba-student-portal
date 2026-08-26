@@ -7,6 +7,16 @@ function source(relativePath: string) {
   return readFileSync(path.join(process.cwd(), relativePath), "utf8")
 }
 
+// The register and legend rules these assertions pin are portal-only, so they live
+// in app/portal.css since the boundary redraw; the tokens they read live in
+// app/globals.css. Both stylesheets load on every authenticated route, globals
+// first, so concatenating them in that order is what the browser resolves and
+// keeps the assertions indifferent to which side a rule sits on. Same idiom as
+// tests/accessibility-hardening.test.ts.
+function portalStyles() {
+  return source("app/globals.css") + source("app/portal.css")
+}
+
 function relativeLuminance(hex: string) {
   const channels = hex.match(/[0-9a-f]{2}/giu)?.map((channel) => (
     Number.parseInt(channel, 16) / 255
@@ -50,7 +60,7 @@ describe("Phase 3 accessibility corrections", () => {
   it("gives the annual registers a glyph per attendance state, not colour alone", () => {
     const playerRegister = source("components/coach/player-attendance-register.tsx")
     const staffRegister = source("components/coach/staff-attendance-register.tsx")
-    const styles = source("app/globals.css")
+    const styles = portalStyles()
     const green = styles.match(/--green:\s*(#[0-9a-f]{6})/iu)?.[1]
     const red = styles.match(/--red:\s*(#[0-9a-f]{6})/iu)?.[1]
 
@@ -73,7 +83,7 @@ describe("Phase 3 accessibility corrections", () => {
 
   it("keeps unavailable register labels muted while meeting text contrast", () => {
     const background = "#f0efec"
-    const styles = source("app/globals.css")
+    const styles = portalStyles()
     const steel = styles.match(/--steel:\s*(#[0-9a-f]{6})/iu)?.[1]
     const unavailableRule = styles.match(
       /\.coach-register-table \.coach-register-date-row th\.is-unavailable \{([^}]*)\}/u,

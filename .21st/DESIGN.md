@@ -2,7 +2,7 @@
 <!-- WARNING: the Sources, Components, Tokens, Layers and Breakpoints sections below are
      hand-corrected. `21st init --design-context --refresh` regenerates this file and will
      discard those corrections. Its token classifier reads only names, so it captures 27 of
-     the 54 :root tokens, omits every literal colour token, files --text-placeholder under
+     the 65 :root tokens, omits every literal colour token, files --text-placeholder under
      Typography and --shadow-focus-ring under Colors, has no category for z-index, and
      reports "Components: None detected" because it looks for an installed primitive
      registry that this project deliberately does not have. Re-apply these corrections
@@ -22,9 +22,9 @@ breakpoint sections hand-corrected on the same date.
 
 ## Sources
 
-- Tokens: app/globals.css (`:root`, 54 tokens — the single source of truth)
-- Stylesheets: 12 hand-written files — app/globals.css (14,013 lines), app/public-home.css
-  (2,360 lines) and 10 CSS modules
+- Tokens: app/globals.css (`:root`, 65 tokens — the single source of truth)
+- Stylesheets: 13 hand-written files — app/globals.css (522 lines), app/portal.css (13,797
+  lines), app/public-home.css (2,361 lines) and 10 CSS modules
 - Components: 10 CSS modules under components/ (see Components below)
 - Assets: public/images
 - Instructions: None detected
@@ -55,10 +55,15 @@ breakpoint sections hand-corrected on the same date.
 
 ## Tokens
 
-All 54 tokens are declared in the single `:root` block at app/globals.css. Exactly one of them
+All 65 tokens are declared in the single `:root` block at app/globals.css. Exactly one of them
 is overridden in a narrower scope — `--portal-header-height` becomes `70px` inside a mobile
-media query at app/globals.css:5763. For every other token, `var(--token)` and the token's
-literal value are interchangeable anywhere in the document.
+media query. For every other token, `var(--token)` and the token's literal value are
+interchangeable anywhere in the document, which is what makes a literal-for-token swap a
+provable no-op rather than a judgement call.
+
+Two corrections to the previous inventory, which read 54: it omitted `--type-page-title`,
+which is in `:root`, and it counted `--player-dashboard-header-gap`, which is not — that one
+is a local custom property on a component scope and is marked as such under Spacing below.
 
 ### Colors
 
@@ -93,6 +98,22 @@ literal value are interchangeable anywhere in the document.
 - `--type-operational-body`: `13px` (app/globals.css)
 - `--type-operational-action`: `12px` (app/globals.css)
 - `--type-operational-floor`: `10px` (app/globals.css)
+- `--type-page-title`: `clamp(58px, 7.5vw, 102px)` (app/globals.css)
+- `--weight-display-light`: `470` (app/globals.css)
+- `--weight-display`: `570` (app/globals.css)
+- `--weight-emphasis`: `650` (app/globals.css)
+- `--weight-control`: `760` (app/globals.css)
+- `--weight-label`: `800` (app/globals.css)
+- `--tracking-display`: `-0.045em` (app/globals.css)
+- `--tracking-label`: `0.08em` (app/globals.css)
+- `--leading-display`: `0.98` (app/globals.css)
+- `--leading-display-light`: `1` (app/globals.css)
+- `--leading-body`: `1.55` (app/globals.css)
+
+The ten weight/tracking/leading tokens are a census of values already in the sheet, not a
+scale to snap onto: 266 of the 776 declarations outside the frozen surfaces already held one
+of these values and now read it from here, while 510 stay on 96 other (axis, value) pairs
+as documented drift. See the comment beside them in app/globals.css for the selection rule.
 
 ### Spacing
 
@@ -105,7 +126,8 @@ literal value are interchangeable anywhere in the document.
 - `--space-section-sm`: `56px` (app/globals.css)
 - `--section-space-md`: `var(--space-editorial)` (app/globals.css)
 - `--section-space-lg`: `var(--space-section-sm)` (app/globals.css)
-- `--player-dashboard-header-gap`: `16px` (app/globals.css)
+- `--player-dashboard-header-gap`: `16px` (app/portal.css, declared on `.dashboard-section` — a
+  component-scoped property, not a `:root` token)
 - `--page-scroll-padding`: `88px` (app/globals.css)
 - `--portal-header-height`: `82px` (app/globals.css)
 
@@ -199,7 +221,7 @@ Reconciling any of these would change rendered output, so they are documented, n
   components/coach/financials/financials.module.css left over from the financials-to-modules
   migration — 693 net lines. The token test no longer needs its allowlist for them.
 - A third visually-hidden implementation still exists as a scoped rule rather than a utility:
-  `.personal-attendance-calendar .player-attendance-month-nav span` in app/globals.css. It is
+  `.personal-attendance-calendar .player-attendance-month-nav span` in app/portal.css. It is
   the only one that already carries both `clip` and `clip-path`. Folding it into `.sr-only`
   needs component edits inside the frozen calendar surfaces.
 

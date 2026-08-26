@@ -43,7 +43,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 24px;
+  gap: var(--space-group);
 }
 
 .yearControl > span,
@@ -55,7 +55,7 @@
 .monthDetailFooter {
   color: var(--steel);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: var(--weight-label);
   letter-spacing: 0.085em;
   line-height: 1.35;
   text-transform: uppercase;
@@ -84,7 +84,7 @@
   color: var(--steel);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  font-weight: 760;
+  font-weight: var(--weight-control);
 }
 
 .yearControl a + a {
@@ -110,7 +110,7 @@
 
 .currentSummary > div {
   min-width: 0;
-  padding: 4px 0 4px 24px;
+  padding: 4px 0 4px var(--space-group);
   border-left: 1px solid var(--line);
 }
 
@@ -120,7 +120,7 @@
   color: var(--navy);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   line-height: 1.35;
 }
 
@@ -149,7 +149,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  padding: 15px clamp(18px, 2vw, 24px);
+  padding: 15px clamp(18px, 2vw, var(--space-group));
 }
 
 .registrationIdentity strong {
@@ -217,8 +217,8 @@
   min-height: 68px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 24px;
-  padding: 14px clamp(18px, 2vw, 24px);
+  gap: var(--space-group);
+  padding: 14px clamp(18px, 2vw, var(--space-group));
   border: 1px solid var(--line);
   background: var(--fee-paper);
 }
@@ -253,8 +253,8 @@
   grid-column: var(--month-column-wide);
   grid-row: var(--month-row-wide);
   align-content: space-between;
-  gap: 8px;
-  padding: 16px;
+  gap: var(--space-tight);
+  padding: var(--space-copy);
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--ivory) 86%, var(--white));
@@ -296,7 +296,7 @@ a.monthCell::before {
   overflow-wrap: anywhere;
   color: var(--navy);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   line-height: 1.35;
 }
 
@@ -371,7 +371,7 @@ a.monthCell:focus-visible {
   min-width: 0;
   grid-column: 1 / -1;
   grid-row: var(--detail-row-wide);
-  padding: clamp(28px, 4vw, 48px);
+  padding: clamp(28px, 4vw, var(--space-content));
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: var(--fee-paper);
@@ -395,7 +395,7 @@ a.monthCell:focus-visible {
   font-size: clamp(38px, 4.2vw, 58px);
   font-style: italic;
   font-weight: 500;
-  letter-spacing: -0.045em;
+  letter-spacing: var(--tracking-display);
   line-height: 0.95;
 }
 
@@ -450,7 +450,7 @@ a.monthCell:focus-visible {
   color: var(--navy);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  font-weight: 760;
+  font-weight: var(--weight-control);
   line-height: 1.45;
 }
 
@@ -517,7 +517,7 @@ a.monthCell:focus-visible {
   overflow-wrap: anywhere;
   color: var(--steel);
   font-size: 10px;
-  line-height: 1.55;
+  line-height: var(--leading-body);
 }
 
 .receiptMetaList,
@@ -548,7 +548,7 @@ a.monthCell:focus-visible {
 
   .receiptMetaList,
   .receiptAllocations {
-    gap: 2px 8px;
+    gap: 2px var(--space-tight);
   }
 }
 
@@ -585,7 +585,7 @@ a.monthCell:focus-visible {
 }
 
 .pageState {
-  margin-top: clamp(48px, 7vw, 82px);
+  margin-top: clamp(var(--space-content), 7vw, 82px);
 }
 
 .retryButton {
@@ -622,7 +622,7 @@ a.monthCell:focus-visible {
 @media (max-width: 900px) {
   .seasonSummary {
     grid-template-columns: minmax(280px, 1fr) minmax(300px, 0.8fr);
-    gap: 32px;
+    gap: var(--space-block);
   }
 
   .yearControl {
@@ -651,7 +651,7 @@ a.monthCell:focus-visible {
     min-height: 0;
     grid-template-columns: var(--player-dashboard-icon-size, 44px) minmax(0, 1fr) var(--player-dashboard-icon-size, 44px);
     gap: 14px;
-    padding: var(--player-dashboard-card-padding, 24px 22px);
+    padding: var(--player-dashboard-card-padding, var(--space-group) 22px);
   }
 
   .dashboardCopy h3 {
@@ -661,7 +661,7 @@ a.monthCell:focus-visible {
 
 @media (max-width: 720px) {
   .page {
-    padding-top: 24px;
+    padding-top: var(--space-group);
   }
 
   .toolbar {
@@ -711,7 +711,7 @@ a.monthCell:focus-visible {
   }
 
   .registrationIdentity {
-    padding: 13px 16px;
+    padding: 13px var(--space-copy);
   }
 
   .registrationOutcome {
@@ -850,7 +850,7 @@ a.monthCell:focus-visible {
   .monthDetailHeader {
     grid-template-columns: clamp(132px, 15vw, 170px) minmax(0, 1fr);
     align-items: center;
-    gap: clamp(22px, 3vw, 40px);
+    gap: clamp(22px, 3vw, var(--space-editorial));
   }
 
   .monthDetailHeader h2 {
@@ -859,7 +859,7 @@ a.monthCell:focus-visible {
   }
 
   .monthDetailHeader > div > strong {
-    margin-top: 8px;
+    margin-top: var(--space-tight);
   }
 
   .monthFacts {
