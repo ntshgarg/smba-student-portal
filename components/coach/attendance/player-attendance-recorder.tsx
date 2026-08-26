@@ -31,6 +31,7 @@ import {
   chronologicalOccurrencesForDate,
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
+  rosterProgressForOccurrences,
 } from "@/lib/attendance/recording-workspace"
 import {
   discardPlayerAttendanceDraft,
@@ -237,6 +238,35 @@ export function PlayerAttendanceRecorder({
     () => chronologicalOccurrencesForDate(sessionOccurrences, selectedDate),
     [selectedDate, sessionOccurrences],
   )
+  /*
+   * How far each of the day's registers got, for the picker.
+   *
+   * The picker used to derive its one status word from `occurrence.status` and
+   * the clock alone, so eight sessions all read "Available" whether their
+   * register was untouched, half done, or finished that morning. The answer was
+   * already in the component: `getCoachAttendanceRecorderSnapshot` fetches
+   * `attendanceRecords` for *every* occurrence in the day's window, not just the
+   * selected one, and `renderOccurrenceButton` simply never consulted it.
+   *
+   * Counted rather than reduced to a flag. `attendanceRecords[id]` being
+   * non-empty means at least one player was marked, and putting "Recorded" on a
+   * register abandoned at 3 of 30 would be a worse claim than saying nothing --
+   * it is the reassuring word on the dangerous case.
+   *
+   * The eligible set is resolved here for all of them rather than inline per
+   * button, so a hundred players across eight occurrences is one pass per render
+   * instead of one per paint of each row.
+   */
+  const rosterProgressByOccurrence = useMemo(() => rosterProgressForOccurrences({
+    assignments: sessionAssignments,
+    occurrences: dayOccurrences,
+    players: players.map((player) => ({
+      id: player.member.id,
+      joinedOn: player.member.trainingStartOn,
+    })),
+    records: attendanceRecords,
+  }), [attendanceRecords, dayOccurrences, players, sessionAssignments])
+
   const selectedOccurrence = dayOccurrences.find(
     (occurrence) => occurrence.id === selectedOccurrenceId,
   ) ?? null
@@ -254,6 +284,13 @@ export function PlayerAttendanceRecorder({
     }))
     : new Set<string>()
   const roster = players.filter((player) => eligiblePlayerIds.has(player.member.id))
+  // Deliberately the saved count, not saved-plus-draft: the footer already
+  // reports unsaved marks as "N unsaved changes", so keeping this one to what
+  // the register actually holds means the two numbers describe different things
+  // instead of disagreeing about the same one.
+  const selectedProgress = selectedOccurrenceId
+    ? rosterProgressByOccurrence.get(selectedOccurrenceId)
+    : undefined
   const activeSourceAdjustmentByPlayer = new Map(
     attendanceAdjustments
       .filter((adjustment) => (
@@ -436,9 +473,20 @@ export function PlayerAttendanceRecorder({
     const upcoming = occurrenceIsUpcoming(occurrence, referenceInstant)
     const unavailable = occurrence.status !== "scheduled" || upcoming
     const isSelected = occurrence.id === selectedOccurrenceId
+    const progress = rosterProgressByOccurrence.get(occurrence.id)
+    // "Available" stays the honest word for a register nobody has touched: a
+    // session that has only just started has not failed at anything, and
+    // "0/30 marked" on it would read as an accusation. Once there is progress
+    // the count replaces it, and it keeps reading as progress at the end rather
+    // than flipping to a different word, so the coach never has to learn which
+    // of two vocabularies a row is speaking.
     const state = occurrence.status === "cancelled"
       ? "Cancelled"
-      : upcoming ? "Upcoming" : "Available"
+      : upcoming
+        ? "Upcoming"
+        : progress?.marked
+          ? `${progress.marked}/${progress.eligible} marked`
+          : "Available"
 
     return (
       <button
@@ -494,7 +542,14 @@ export function PlayerAttendanceRecorder({
                 <MapPin aria-hidden="true" /> {selectedOccurrence.venue}
               </p>
             </div>
-            <strong>{roster.length} {roster.length === 1 ? "player" : "players"}</strong>
+            {/*
+              * The same question the picker now answers, for the coach who has
+              * already opened the session: without it, "how far did I get?" is
+              * a scroll through the whole roster looking for "Not marked".
+              */}
+            <strong>{selectedProgress?.marked
+              ? `${selectedProgress.marked}/${roster.length} marked`
+              : `${roster.length} ${roster.length === 1 ? "player" : "players"}`}</strong>
           </div>
 
           {selectedUnavailable ? (
