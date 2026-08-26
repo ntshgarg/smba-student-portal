@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Check, CircleAlert, CircleMinus, X } from "lucide-react"
+import { ArrowLeft, Check, CircleAlert, CircleMinus, RefreshCw, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
@@ -258,11 +258,32 @@ export function PlayerAttendanceRegister({
                 </div>
               </div>
 
+              {/*
+                * "Rescheduled" and "Needs review" were rendered by the grid and
+                * missing from the key, so an amber cell and a red-ringed one had
+                * to be guessed at -- on the register that feeds monthly reports
+                * and fee decisions.
+                *
+                * Neither the wording nor the swatch is invented here. The
+                * player's own attendance card already labels this exact state
+                * "Rescheduled" (components/dashboard/player-attendance-card.tsx),
+                * and `.player-attendance-legend i.is-makeup` has been styled in
+                * app/portal.css all along with nothing rendering it: the row was
+                * intended and got dropped, which is why the coach saw a state the
+                * player it describes has always had explained to them.
+                *
+                * The two states the grid can also produce -- a `+N` completion
+                * chip and a solid-green completion cell -- are deliberately not
+                * listed. Publish validation makes them unreachable on the normal
+                * path, and a key to something nobody can see is worse than no key.
+                */}
               <div className="player-attendance-legend staff-attendance-legend" role="group" aria-label="Attendance status legend">
                 <span><i className="is-present" aria-hidden="true"><Check /></i>Present</span>
                 <span><i className="is-absent" aria-hidden="true"><CircleMinus /></i>Absent</span>
                 <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
                 <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
+                <span><i className="is-makeup" aria-hidden="true"><RefreshCw /></i>Rescheduled</span>
+                <span><i className="is-review" aria-hidden="true"><CircleAlert /></i>Needs review</span>
               </div>
 
               {!categorySeries.length ? (
@@ -465,7 +486,9 @@ export function PlayerAttendanceRegister({
                                       title={`${sessionLabel} · ${date.label}: ${state}`}
                                     >
                                       {completionCount ? <span className="coach-register-makeup-count" aria-hidden="true">+{completionCount}</span> : null}
-                                      {adjustment.reviewRequiredAt ? <CircleAlert aria-hidden="true" /> : null}
+                                      {adjustment.reviewRequiredAt
+                                        ? <CircleAlert aria-hidden="true" />
+                                        : completionCount ? null : <RefreshCw aria-hidden="true" />}
                                     </Link>
                                   ) : completionAdjustment && unavailable ? (
                                     <Link
