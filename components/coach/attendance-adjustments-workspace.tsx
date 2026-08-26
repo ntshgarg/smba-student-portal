@@ -12,6 +12,7 @@ import {
   RotateCcw,
   X,
 } from "lucide-react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   forwardRef,
@@ -565,7 +566,32 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
             />
           ) : null}
 
-          {!isReviewing ? (
+          {/*
+            * Day one, and any day the academy has no approved players: the
+            * three-step form opens on a select whose only option is "Choose a
+            * player", with nothing saying why or what to do first. The
+            * Attendance card links here unconditionally, so this is reachable
+            * from the dashboard of an academy that has never onboarded anyone,
+            * and it reads as broken rather than as empty.
+            *
+            * Rendered as a branch rather than an early return: this component
+            * is a forwardRef whose body declares its hooks -- including
+            * `useImperativeHandle` and `useUnsavedWorkGuard` -- above this
+            * point, and returning before them would break the rules of hooks.
+            *
+            * Wording follows the register's three empty branches, which each
+            * name their own cause and link the one action that resolves it.
+            */}
+          {!players.length ? (
+            <div className="coach-register-empty-schedule">
+              <h2>No players yet.</h2>
+              <p>
+                Attendance can be rescheduled once players are approved and
+                assigned to a recurring session.
+              </p>
+              <Link href="/coach/onboarding">Open onboarding</Link>
+            </div>
+          ) : !isReviewing ? (
             <div className="coach-adjustment-form">
               <label className="coach-adjustment-field">
                 <span><strong>Player</strong><small>1 of 3</small></span>
