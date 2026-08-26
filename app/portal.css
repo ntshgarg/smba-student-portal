@@ -8022,6 +8022,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .attendance-record-section-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-group);
