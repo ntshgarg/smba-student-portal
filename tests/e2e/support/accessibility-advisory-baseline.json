@@ -13,7 +13,9 @@
     "stress": {
       "aria-allowed-role": 7,
       "aria-prohibited-attr": 24,
-      "color-contrast": 990
+      "color-contrast": 990,
+      "text-resize-clipped-interactive-control": 1,
+      "text-resize-document-horizontal-overflow": 8
     }
   }
 }
