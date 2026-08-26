@@ -130,6 +130,27 @@ jobs:
           npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-clean.log output/failure-evidence/accessibility/clean-server.sanitized.txt
           exit 1
 
+      # Only this profile carries a fixture whose dates are frozen: the stress
+      # academy is built against FIXTURE_ANCHOR_DATE, while the admin and clean
+      # databases are seeded from this runner's own clock and are already
+      # self-consistent. Rendering the frozen fixture against a moving clock is
+      # what walked `stress · color-contrast` 1015 -> 1021 across one academy
+      # midnight, in 58460e6, a commit that changed no CSS at all, because every
+      # midnight promotes one more attendance cell out of the future. The instant
+      # has to sit inside August 2026 for the matrix's own literals
+      # (`?year=2026&month=08`, `?period=2026-08`, `?from=2026-08-01&to=2026-08-31`)
+      # to keep meaning what they meant when they were written, after 2026-08-03
+      # so the ledger still renders "not recorded" days, and before 2026-08-31 so
+      # it still renders "not available" ones. Pinning to the anchor itself would
+      # drop the first of those states out of the audit entirely.
+      #
+      # This block covers both `next start` and the runner below, and only the
+      # first of those matters: lib/clock.ts reads the variable in the Next
+      # process. That used to be true by accident. It is now checked -- the run
+      # reads the server's own answer back from /api/health before it audits
+      # anything -- so moving the runner out of this env, or into a step that
+      # starts its own server, fails loudly instead of quietly auditing a
+      # wall-clock DOM.
       - name: Audit populated stress academy
         id: stress
         continue-on-error: true
@@ -137,6 +158,7 @@ jobs:
           BETTER_AUTH_SECURE_COOKIES: "false"
           DB_FILE_NAME: /tmp/smba-accessibility-stress.db
           SMBA_ACCESSIBILITY_BASE_URL: http://127.0.0.1:3112
+          SMBA_ACCESSIBILITY_CLOCK: "2026-08-17T09:30:00+05:30"
           SMBA_ACCESSIBILITY_DB: /tmp/smba-accessibility-stress.db
           SMBA_ACCESSIBILITY_PROFILE: stress
           SMBA_REQUIRE_COACH_TOTP: "false"
@@ -178,12 +200,26 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ui-accessibility-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          # Every file writeAccessibilityResults produces, not only the counts.
+          # update-accessibility-advisory-baseline.ts refuses to record a profile
+          # whose fixture-clock.sanitized.json is missing -- it will not invent the
+          # day a set of results was rendered at -- so an artifact carrying the
+          # results without the clock is an artifact nobody can record from, and the
+          # only remedy left is a local fixture build, `npm run build` and Playwright
+          # run. The clock file is what makes this the recovery path for the
+          # re-record the pin asks for on merge:
+          #   npx tsx scripts/regression/update-accessibility-advisory-baseline.ts
+          #     --root <extracted>/accessibility
+          # The `--root` is needed because upload-artifact roots the archive at the
+          # deepest common ancestor of everything it matched, and the sanitized
+          # server logs written above put that at `output/`.
           path: |
             output/failure-evidence/**/*.masked.png
             output/failure-evidence/**/*.sanitized.json
             output/failure-evidence/**/*.sanitized.txt
             output/accessibility/**/results.sanitized.json
             output/accessibility/**/summary.sanitized.txt
+            output/accessibility/**/fixture-clock.sanitized.json
           if-no-files-found: warn
           retention-days: 14
 

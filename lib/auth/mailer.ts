@@ -1,5 +1,10 @@
 import "server-only"
 
+import {
+  disposableAccessibilityDatabase,
+  isAccessibilityGateProfile,
+} from "@/lib/accessibility-gate"
+
 export type RecoveryEmailVerificationMessage = {
   code: string
   expiresInMinutes: number
@@ -43,21 +48,11 @@ function memoryAuthMailerAllowed() {
   // The accessibility gate deliberately exercises a production build without
   // sending real email. Keep that escape hatch bound to a named test profile
   // and an accessibility-specific disposable database under the OS temp root.
-  const profile = process.env.SMBA_ACCESSIBILITY_PROFILE
-  const databasePath = process.env.DB_FILE_NAME?.trim() ?? ""
-  if (!profile || !["admin", "clean", "stress"].includes(profile)) return false
-  const normalizedDatabase = databasePath.replaceAll("\\", "/")
-  if (!normalizedDatabase.startsWith("/") || normalizedDatabase.includes("/../")) return false
-  const configuredTempRoot = process.env.TMPDIR?.replaceAll("\\", "/").replace(/\/+$/u, "")
-  const temporaryPrefixes = [
-    "/tmp/",
-    "/private/tmp/",
-    configuredTempRoot ? `${configuredTempRoot}/` : "",
-  ].filter(Boolean)
-  const inTemporaryRoot = temporaryPrefixes.some((prefix) => normalizedDatabase.startsWith(prefix))
-  const databaseName = normalizedDatabase.split("/").at(-1) ?? ""
-  return inTemporaryRoot
-    && /smba[-_.].*(accessibility|a11y)|smba-accessibility/u.test(databaseName)
+  // Both conditions come from lib/accessibility-gate.ts rather than being spelled
+  // out here, because lib/clock.ts gates its render-clock pin on the same two and
+  // the pair used to exist twice, verbatim.
+  return isAccessibilityGateProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)
+    && disposableAccessibilityDatabase()
 }
 
 function escapeHtml(value: string) {

@@ -817,6 +817,17 @@ export function accessibilityAdvisoryCountsByRule(results: readonly Accessibilit
 }
 
 export type AccessibilityAdvisoryBaseline = {
+  // The academy date each profile's counts were observed at: the value
+  // `app/api/health/route.ts` reported for the render, or null for a profile
+  // whose fixture follows the runner's own clock and is never pinned. Recorded
+  // because a ceiling is a count of a DOM, and the stress fixture renders a
+  // different DOM on a different day -- nine cells of the junior-coach ledger
+  // move between "not available" and "not recorded" across nine days. Before
+  // the pin, drift forced a re-record every few days and kept the number honest
+  // by accident; with the pin that pressure is gone, so the clock is recorded
+  // beside the counts and accessibilityAdvisoryClockMismatch below refuses to
+  // compare counts taken on two different days.
+  clocks?: Record<string, string | null>
   // null means "never recorded", which is deliberately not the same as {}: an
   // empty object is a claim that the profile has no advisories, and an absent
   // one has to fail rather than pass on no evidence.
@@ -862,7 +873,59 @@ export function readAccessibilityAdvisoryBaseline(): {
     }
     recorded[profile] = counts
   }
-  return { baseline: { profiles: recorded }, problem: null }
+  const clocksValue = (parsed as { clocks?: unknown }).clocks
+  if (clocksValue !== undefined && (!clocksValue || typeof clocksValue !== "object")) {
+    return { baseline: empty, problem: 'the file has a "clocks" entry that is not an object' }
+  }
+  const clocks: Record<string, string | null> = {}
+  for (const [profile, clock] of Object.entries((clocksValue ?? {}) as Record<string, unknown>)) {
+    if (clock !== null && typeof clock !== "string") {
+      return { baseline: empty, problem: `profile "${profile}" clock is neither null nor a date` }
+    }
+    clocks[profile] = clock
+  }
+  return { baseline: { clocks, profiles: recorded }, problem: null }
+}
+
+// The other half of what a recorded ceiling means. accessibilityAdvisoryRegressions
+// asks "did this run exceed the recorded count?"; that question is only worth
+// asking when both counts describe the same DOM, and the stress fixture's DOM is
+// a function of the day it is rendered on. Answering it separately, at import
+// rather than after the matrix, is deliberate: an unequal clock is knowable in
+// milliseconds and the matrix costs most of the 25-minute CI limit.
+//
+// A mismatch reports rather than re-records. The recorded 1021 was measured on
+// an unpinned run at 2026-08-26; the pin renders 2026-08-17, nine junior-coach
+// ledger cells earlier, so leaving 1021 in place under the pin would buy a
+// stable gate with permanent headroom -- the exact trade the pin exists to
+// avoid. There is no number this file can honestly guess for the pinned render,
+// so it refuses until one is measured.
+export function accessibilityAdvisoryClockMismatch(
+  profile: string,
+  fixtureClock: string | null,
+  recorded?: AccessibilityAdvisoryBaseline,
+): string | null {
+  const { baseline, problem } = recorded
+    ? { baseline: recorded, problem: null }
+    : readAccessibilityAdvisoryBaseline()
+  if (problem) {
+    return `advisory baseline unreadable (${accessibilityAdvisoryBaselinePath}): ${problem}.`
+      + ` Record it with: ${RECORD_BASELINE_COMMAND}`
+  }
+  // A profile that has never been recorded fails in accessibilityAdvisoryRegressions
+  // on stronger grounds than this; do not pre-empt it with a clock complaint.
+  if (!baseline.profiles[profile]) return null
+  const recordedClock = baseline.clocks?.[profile] ?? null
+  if (recordedClock === fixtureClock) return null
+  return `${profile} · advisory ceilings were counted against a render at`
+    + ` ${describeFixtureClock(recordedClock)}, but this run renders at`
+    + ` ${describeFixtureClock(fixtureClock)}. Those are different DOMs, so the recorded counts`
+    + " are neither a ceiling nor a floor for this one."
+    + ` Re-record them from this run with: ${RECORD_BASELINE_COMMAND}`
+}
+
+function describeFixtureClock(clock: string | null) {
+  return clock ?? "the runner's own clock"
 }
 
 // The writer's half of the ratchet. accessibilityAdvisoryRegressions below asks
@@ -1049,13 +1112,50 @@ export function buildAccessibilitySummary(
   return `${lines.join("\n")}\n`
 }
 
+// The day the run rendered at, written beside the results it produced rather
+// than left in the operator's shell. update-accessibility-advisory-baseline.ts
+// records it into the baseline, and it has to describe the results on disk --
+// re-reading an environment variable at recording time would record a claim
+// about a run instead of a fact about it, which is the mistake this whole
+// finding is about.
+const FIXTURE_CLOCK_FILE = "fixture-clock.sanitized.json"
+
+export function readAccessibilityFixtureClock(outputDirectory: string): {
+  fixtureClock: string | null
+  problem: string | null
+} {
+  const clockPath = path.join(outputDirectory, FIXTURE_CLOCK_FILE)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(clockPath, "utf8"))
+  } catch (error) {
+    return {
+      fixtureClock: null,
+      problem: error instanceof Error ? error.message : String(error),
+    }
+  }
+  const value = parsed && typeof parsed === "object"
+    ? (parsed as { fixtureClock?: unknown }).fixtureClock
+    : undefined
+  if (value !== null && typeof value !== "string") {
+    return { fixtureClock: null, problem: `${clockPath} has no "fixtureClock" string or null` }
+  }
+  return { fixtureClock: value, problem: null }
+}
+
 export function writeAccessibilityResults(
   outputDirectory: string,
   results: readonly AccessibilityResult[],
+  fixtureClock: string | null,
 ) {
   mkdirSync(outputDirectory, { recursive: true })
   const jsonPath = path.join(outputDirectory, "results.sanitized.json")
   const summaryPath = path.join(outputDirectory, "summary.sanitized.txt")
+  writeFileSync(
+    path.join(outputDirectory, FIXTURE_CLOCK_FILE),
+    `${JSON.stringify({ fixtureClock }, null, 2)}\n`,
+    { mode: 0o600 },
+  )
   writeFileSync(jsonPath, `${JSON.stringify(results, null, 2)}\n`, { mode: 0o600 })
   writeFileSync(summaryPath, buildAccessibilitySummary(results), { mode: 0o600 })
   const advisories = countAccessibilityAdvisories(results)

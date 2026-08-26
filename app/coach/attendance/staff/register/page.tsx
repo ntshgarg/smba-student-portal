@@ -1,7 +1,7 @@
 import { StaffAttendanceRegister } from "@/components/coach/staff-attendance-register"
 import { buildAttendanceRegisterYearOptions } from "@/lib/attendance/register-workspace"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
+import { academyToday } from "@/lib/clock"
 import {
   listJuniorCoachAttendanceRegisterProfiles,
   listStaffAttendanceRecordsByCoach,
@@ -13,7 +13,7 @@ export const metadata = {
 
 export default async function StaffAttendanceRegisterPage() {
   const { identity } = await requireHeadAdminPage()
-  const referenceDate = getIndiaDateKey()
+  const referenceDate = academyToday()
   const juniorCoaches = listJuniorCoachAttendanceRegisterProfiles({
     requesterAccountId: identity.subjectId,
   })

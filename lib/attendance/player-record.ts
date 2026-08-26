@@ -2,6 +2,7 @@ import "server-only"
 
 import { and, asc, eq, gte, inArray, isNull, lte, ne } from "drizzle-orm"
 
+import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { initializeDatabase } from "@/lib/db/client"
 import {
@@ -19,7 +20,7 @@ import type { PlayerAttendanceRecord } from "@/lib/types"
 
 export function getPlayerAttendanceRecord(
   accountId: string,
-  referenceInstant = new Date(),
+  referenceInstant = academyNow(),
 ): PlayerAttendanceRecord | null {
   const database = initializeDatabase()
   const enrollment = database.select({ trainingStartOn: playerEnrollments.trainingStartOn })

@@ -6,6 +6,7 @@ import {
   type AttendanceRegisterQuery,
 } from "@/lib/attendance/register-workspace"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
+import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { getCoachAttendanceRegisterSnapshot } from "@/lib/coach/session-read-models"
 import { listSessionOccurrences, listSessionSeries } from "@/lib/sessions/database"
@@ -21,7 +22,7 @@ export default async function PlayerAttendanceRegisterPage({
 }) {
   await requireHeadAdminPage()
   const query = await searchParams
-  const now = new Date()
+  const now = academyNow()
   const today = getIndiaDateKey(now)
   const sessionSeries = listSessionSeries()
   const yearOptions = buildAttendanceRegisterYearOptions({

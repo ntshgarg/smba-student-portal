@@ -4,7 +4,7 @@ import { FinancialsActivation } from "@/components/coach/financials/financials-a
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { initializeDatabase } from "@/lib/db/client"
 import { getFinanceActivation } from "@/lib/finance/service"
-import { getAcademyMonthKey } from "@/lib/format"
+import { academyCurrentMonth } from "@/lib/clock"
 
 export const metadata = {
   title: "Financials",
@@ -23,7 +23,7 @@ function firstValue(value: string | string[] | undefined) {
 }
 
 function validPeriod(value: string | undefined) {
-  return value && /^\d{4}-(?:0[1-9]|1[0-2])$/u.test(value) ? value : getAcademyMonthKey()
+  return value && /^\d{4}-(?:0[1-9]|1[0-2])$/u.test(value) ? value : academyCurrentMonth()
 }
 
 function legacyQuery(params: SearchParams) {

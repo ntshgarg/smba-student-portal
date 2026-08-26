@@ -8,6 +8,7 @@ import {
 
 import { isValidDateKey, isValidMonthKey } from "@/lib/attendance/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
+import { academyNow } from "@/lib/clock"
 import type { SmbaDatabase, SmbaDatabaseExecutor } from "@/lib/db/client"
 import { initializeDatabase } from "@/lib/db/client"
 import {
@@ -4091,7 +4092,7 @@ export const reconcileRegistrationStatus = resolveExistingRegistrationFee
 
 export function getPlayerFeeRecord(
   playerId: string,
-  { database = initializeDatabase(), now = new Date() }: QueryContext = {},
+  { database = initializeDatabase(), now = academyNow() }: QueryContext = {},
 ): PlayerFeeRecord | null {
   return loadPlayerFeeRecord(database, playerId, now)
 }
@@ -4117,7 +4118,7 @@ export function getCoachFinancePlayerRecord(
   {
     coachId,
     database = initializeDatabase(),
-    now = new Date(),
+    now = academyNow(),
   }: CoachContext,
 ): PlayerFeeRecord | null {
   requireCoach(database, coachId)
@@ -4133,7 +4134,7 @@ export function getCoachMonthlyPreparationPreview(
   {
     coachId,
     database = initializeDatabase(),
-    now = new Date(),
+    now = academyNow(),
   }: CoachContext,
 ): MonthlyPreparationPreview {
   requireCoach(database, coachId)
@@ -4154,7 +4155,7 @@ export function getCoachFinanceRapidDesk(
   {
     coachId,
     database = initializeDatabase(),
-    now = new Date(),
+    now = academyNow(),
   }: CoachContext,
 ): CoachFinanceRapidDesk {
   requireCoach(database, coachId)
@@ -4219,7 +4220,7 @@ export function getCoachFinanceWorkspace(
   {
     coachId,
     database = initializeDatabase(),
-    now = new Date(),
+    now = academyNow(),
   }: CoachContext,
 ): CoachFinanceWorkspace {
   requireCoach(database, coachId)
@@ -4279,7 +4280,7 @@ export function getCoachFinanceDashboardSummary(
   {
     coachId,
     database = initializeDatabase(),
-    now = new Date(),
+    now = academyNow(),
   }: CoachContext,
 ): CoachFinanceDashboardSummary {
   requireCoach(database, coachId)
@@ -4474,7 +4475,7 @@ export function getFeeRegister(
   {
     coachId,
     database = initializeDatabase(),
-    now = new Date(),
+    now = academyNow(),
   }: CoachContext,
 ): FinanceRegisterResult {
   requireCoach(database, coachId)

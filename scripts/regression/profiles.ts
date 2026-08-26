@@ -1,5 +1,12 @@
 import path from "node:path"
 
+// Every dated row a fixture build writes is derived from this date, so the
+// accessibility gate has to render the result at a matching instant or the
+// audited DOM changes on its own every midnight. That instant is
+// SMBA_ACCESSIBILITY_CLOCK in .github/workflows/ui-accessibility.yml, and it is
+// deliberately a fortnight later than this anchor rather than equal to it —
+// moving this date means moving that one, and re-checking the bounds recorded
+// beside it.
 export const FIXTURE_ANCHOR_DATE = "2026-08-03"
 export const FIXTURE_SCHEDULE_START = "2026-07-01"
 export const FIXTURE_SCHEDULE_END = "2026-09-30"

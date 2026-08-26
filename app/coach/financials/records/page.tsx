@@ -26,7 +26,7 @@ import {
   type FinanceRegisterMode,
   type FinanceStatus,
 } from "@/lib/finance/types"
-import { getAcademyMonthKey } from "@/lib/format"
+import { academyCurrentMonth } from "@/lib/clock"
 
 export const metadata = {
   title: "Fee records",
@@ -154,7 +154,7 @@ export default async function FinancialRecordsPage({
   const view = validView(queryValue(params, "view"))
   const query = queryValue(params, "q")
   const periodValue = queryValue(params, "period")
-  const period = isValidMonthKey(periodValue) ? periodValue : getAcademyMonthKey()
+  const period = isValidMonthKey(periodValue) ? periodValue : academyCurrentMonth()
   const trail = cursorTrail(queryValue(params, "cursors"))
   const cursor = trail.at(-1)
 

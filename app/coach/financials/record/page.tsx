@@ -4,7 +4,7 @@ import { FinancialsRapidDesk } from "@/components/coach/financials/financials-ra
 import { toRapidFinancialWorkspaceView } from "@/components/coach/financials/view-model"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { initializeDatabase } from "@/lib/db/client"
-import { getAcademyMonthKey } from "@/lib/format"
+import { academyCurrentMonth } from "@/lib/clock"
 import { getCoachFinanceRapidDesk, getFinanceActivation } from "@/lib/finance/service"
 import type { FinanceRapidScope } from "@/lib/finance/types"
 
@@ -53,7 +53,7 @@ export default async function FinancialsRapidDeskPage({
   const requestedScope = firstValue(params.scope)
   const scope: FinanceRapidScope = requestedScope === "all" ? "all" : "outstanding"
   const workspace = getCoachFinanceRapidDesk({
-    period: getAcademyMonthKey(),
+    period: academyCurrentMonth(),
     playerId,
     query,
     scope,

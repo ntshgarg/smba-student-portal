@@ -63,6 +63,13 @@ const evidenceUploads = [
       "output/failure-evidence/**/*.sanitized.txt",
       "output/accessibility/**/results.sanitized.json",
       "output/accessibility/**/summary.sanitized.txt",
+      // The third file writeAccessibilityResults produces: the academy date the
+      // run rendered at, a bare date string beside the counts it explains.
+      // update-accessibility-advisory-baseline.ts refuses to record a profile
+      // without it, so an artifact holding the counts alone is one no operator
+      // can re-record from, and the gate's only remaining remedy would be a
+      // local fixture build, `npm run build` and Playwright run.
+      "output/accessibility/**/fixture-clock.sanitized.json",
     ],
   },
 ]

@@ -7,6 +7,7 @@ import {
   normalizeCoachReportArchiveQuery,
   normalizeCoachReportArchiveReturnShown,
 } from "@/lib/coach/report-navigation"
+import { academyNow } from "@/lib/clock"
 import { getLatestCompletedReportMonth } from "@/lib/coach/report-utils"
 import { getCoachPublishedReportDetail } from "@/lib/reports/coach-archive"
 
@@ -29,7 +30,7 @@ export default async function CoachPublishedReportPage({
   const report = getCoachPublishedReportDetail(identity.subjectId, publicationId)
   if (!report) notFound()
 
-  const latestCompletedPeriod = getLatestCompletedReportMonth()
+  const latestCompletedPeriod = getLatestCompletedReportMonth(academyNow())
   const period = isCompletedReportPeriod(query.period, latestCompletedPeriod)
     ? query.period
     : report.month

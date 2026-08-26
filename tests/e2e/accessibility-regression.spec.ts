@@ -10,6 +10,7 @@ import Database from "better-sqlite3"
 import { expect, test } from "./support/failure-evidence"
 
 import {
+  accessibilityAdvisoryClockMismatch,
   accessibilityAdvisoryRegressions,
   auditAccessibilityState,
   captureMaskedFailure,
@@ -18,7 +19,11 @@ import {
   type AccessibilityFinding,
   type AccessibilityResult,
 } from "./support/accessibility-audit"
-import { assertDisposableAccessibilityDatabase } from "./support/accessibility-environment"
+import {
+  assertDisposableAccessibilityDatabase,
+  assertPinnedFixtureClock,
+  assertServerFixtureClock,
+} from "./support/accessibility-environment"
 import { executeAccessibilityInteraction } from "./support/accessibility-interactions"
 import {
   accessibilityProfiles,
@@ -37,8 +42,14 @@ if (!accessibilityProfiles.includes(profileValue as AccessibilityProfile)) {
   throw new Error(`SMBA_ACCESSIBILITY_PROFILE must be one of: ${accessibilityProfiles.join(", ")}`)
 }
 const profile = profileValue as AccessibilityProfile
+const fixtureClock = assertPinnedFixtureClock(profile, process.env.SMBA_ACCESSIBILITY_CLOCK)
 const databasePath = assertDisposableAccessibilityDatabase(process.env.SMBA_ACCESSIBILITY_DB)
 const baseURL = process.env.SMBA_ACCESSIBILITY_BASE_URL ?? "http://127.0.0.1:3000"
+// Read here, asserted at the very end. A ceiling counted on another day can only
+// be repaired by re-recording from this run's own results, so refusing at import
+// would withhold the one artifact that fixes it -- the matrix has to run and
+// write output/accessibility/<profile>/ before this is allowed to fail the run.
+const clockMismatch = accessibilityAdvisoryClockMismatch(profile, fixtureClock)
 function requiredEnvironmentValue(name: string) {
   const value = process.env[name]?.trim()
   if (!value) throw new Error(`${name} is required for the accessibility regression.`)
@@ -820,6 +831,19 @@ const dispatchedSessionPairs = new Set<string>([
 ])
 
 test.describe("UI accessibility / WCAG 2.2 AA", () => {
+  // The only check in this file that interrogates the server rather than the
+  // runner. Everything above reads this process's environment; this reads the
+  // process that will actually render the DOM axe measures.
+  test.beforeAll(async () => {
+    if (fixtureClock === null) return
+    const healthUrl = new URL("/api/health", baseURL).toString()
+    const response = await fetch(healthUrl)
+    if (!response.ok) {
+      throw new Error(`${healthUrl} returned HTTP ${response.status} before the audit began.`)
+    }
+    assertServerFixtureClock(fixtureClock, await response.json(), healthUrl)
+  })
+
   test("audits the representative role and state matrix", async ({ browser }, testInfo) => {
     // GitHub Actions owns the 25-minute wall-clock limit. Keep Playwright's
     // internal timeout generous so host clock adjustments cannot manufacture
@@ -994,8 +1018,10 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
         await auditStressRecoveryStates(browser, results, testInfo)
       }
     } finally {
-      const { jsonPath } = writeAccessibilityResults(outputRoot, results)
-      if (formatAccessibilityFailures(results).length || accessibilityAdvisoryRegressions(results).length) {
+      const { jsonPath } = writeAccessibilityResults(outputRoot, results, fixtureClock)
+      if (clockMismatch
+        || formatAccessibilityFailures(results).length
+        || accessibilityAdvisoryRegressions(results).length) {
         await testInfo.attach(`${profile}-accessibility-results`, {
           contentType: "application/json",
           path: jsonPath,
@@ -1015,6 +1041,10 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
 
     const failures = formatAccessibilityFailures(results)
     expect(failures, failures.slice(0, 80).join("\n")).toEqual([])
+    // Ahead of the ratchet, because it decides whether the ratchet means
+    // anything: counts taken on a different day are neither a ceiling nor a
+    // floor for this run, so its verdict would be noise rather than evidence.
+    expect(clockMismatch, clockMismatch ?? "").toBeNull()
     // Second assertion rather than one merged list: a ratchet breach is a count
     // that rose, not a defect at a state, and it needs the advisory JSON above
     // to triage rather than the finding's own evidence line.

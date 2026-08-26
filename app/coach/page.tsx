@@ -20,6 +20,7 @@ import {
   requireCoachPage,
 } from "@/lib/auth/current-coach"
 import { countActiveCoachAnnouncements } from "@/lib/announcements/queries"
+import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   getCoachSessionSnapshot,
@@ -77,7 +78,7 @@ export default async function CoachDashboardPage({
   const { access, identity } = await requireCoachPage()
 
   if (access.accessLevel === "junior_coach") {
-    const now = new Date()
+    const now = academyNow()
     const referenceDate = getIndiaDateKey(now)
     const currentYear = Number(referenceDate.slice(0, 4))
     const years = [currentYear - 1, currentYear, currentYear + 1]
@@ -135,7 +136,7 @@ export default async function CoachDashboardPage({
     redirect(`/coach/attendance/adjustments${search ? `?${search}` : ""}`)
   }
 
-  const now = new Date()
+  const now = academyNow()
   const today = getIndiaDateKey(now)
   const sessionSnapshot = getCoachSessionSnapshot(today)
   const series = sessionSnapshot.sessionSeries
@@ -192,7 +193,7 @@ export default async function CoachDashboardPage({
   const activePlayerIds = playerRecords.trainingProfiles
     .filter((profile) => profile.status === "active")
     .map((profile) => profile.memberId)
-  const reportMonth = getLatestCompletedReportMonth()
+  const reportMonth = getLatestCompletedReportMonth(now)
   // The card counts one month, and every other month's row was being read only
   // to be dropped by the `report.month === reportMonth` test below -- with its
   // 5,000-character draft and its published body attached.

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { StaffRollCall } from "@/components/coach/attendance/staff-roll-call"
 import { isValidDateKey } from "@/lib/attendance/domain"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
+import { academyToday } from "@/lib/clock"
 import {
   listJuniorCoachProfiles,
   listStaffAttendanceRecordsByCoach,
@@ -25,7 +25,7 @@ export default async function StaffRollCallPage({
   const { identity } = await requireHeadAdminPage()
   const query = await searchParams
   const requestedDate = firstQueryValue(query.date)
-  const today = getIndiaDateKey()
+  const today = academyToday()
   const selectedDate = requestedDate && isValidDateKey(requestedDate)
     ? requestedDate
     : today

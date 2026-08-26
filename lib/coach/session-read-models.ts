@@ -7,7 +7,7 @@ import {
   type AttendanceAdjustmentRecord,
 } from "@/lib/attendance/adjustments"
 import type { AttendanceRegisterSelection } from "@/lib/attendance/register-workspace"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
+import { academyNow, academyToday } from "@/lib/clock"
 import {
   listAttendanceRegisterPlayerRecords,
   listCoachMonthlyReports,
@@ -227,8 +227,8 @@ export function getCoachAttendanceAdjustmentsSnapshot({
 }
 
 export function getCoachScheduleRosterSnapshot(
-  referenceDate = getIndiaDateKey(),
-  referenceInstant = new Date(),
+  referenceDate = academyToday(),
+  referenceInstant = academyNow(),
 ): CoachScheduleRosterSnapshot {
   const sessionSeries = listSessionSeries()
   const earliestStart = sessionSeries.reduce<string | null>(

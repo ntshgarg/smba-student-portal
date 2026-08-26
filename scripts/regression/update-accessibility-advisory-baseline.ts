@@ -6,6 +6,7 @@ import {
   accessibilityAdvisoryCountsByRule,
   accessibilityAdvisoryIncreases,
   readAccessibilityAdvisoryBaseline,
+  readAccessibilityFixtureClock,
   type AccessibilityAdvisoryBaseline,
   type AccessibilityResult,
 } from "../../tests/e2e/support/accessibility-audit"
@@ -17,7 +18,10 @@ import { accessibilityProfiles } from "../../tests/e2e/support/accessibility-mat
 // rather than replaced.
 const DOCUMENTATION = "Ratchet baseline for the accessibility advisories that are not promoted to"
   + " blocking findings, counted per axe rule id per profile. null means the profile has never been"
-  + " recorded and fails the gate until it is. Record or re-record with:"
+  + " recorded and fails the gate until it is. \"clocks\" records the academy date each profile's"
+  + " counts were rendered at, taken from the run that produced them: counts from two different"
+  + " days describe two different DOMs, so the gate refuses to compare them and asks for a"
+  + " re-record. Record or re-record with:"
   + " npx tsx scripts/regression/update-accessibility-advisory-baseline.ts — which refuses to write"
   + " when a recorded count would rise, unless it is passed --allow-increase."
 
@@ -51,18 +55,35 @@ if (problem) {
 }
 
 const existing = baseline.profiles
+const existingClocks = baseline.clocks ?? {}
 const profiles: AccessibilityAdvisoryBaseline["profiles"] = {}
+const clocks: Record<string, string | null> = {}
 const unrecorded: string[] = []
 const recorded: string[] = []
 
 for (const profile of accessibilityProfiles) {
-  const resultPath = path.join(root, profile, "results.sanitized.json")
+  const profileRoot = path.join(root, profile)
+  const resultPath = path.join(profileRoot, "results.sanitized.json")
   if (!existsSync(resultPath)) {
     // A run of one profile must not erase the other two, so an absent result
-    // file keeps whatever was recorded before — including null.
+    // file keeps whatever was recorded before — including null, and including
+    // the clock the kept counts were taken at.
     profiles[profile] = existing[profile] ?? null
+    clocks[profile] = existingClocks[profile] ?? null
     if (!profiles[profile]) unrecorded.push(profile)
     continue
+  }
+  // The clock the run wrote beside its own results. Refusing when it is missing
+  // keeps this script from inventing the one fact it cannot derive: a results
+  // directory left over from before the pin would otherwise be recorded as if it
+  // had been rendered at today's pin, which is how a slack ceiling gets laundered
+  // into the file.
+  const { fixtureClock, problem: clockProblem } = readAccessibilityFixtureClock(profileRoot)
+  if (clockProblem) {
+    process.stderr.write(`Refusing to record ${profile}: ${clockProblem}.\n`
+      + "Re-run the gate for this profile — the recording needs the day its results were"
+      + " rendered at, and only the run itself knows it.\n")
+    process.exit(1)
   }
   const results = JSON.parse(readFileSync(resultPath, "utf8")) as AccessibilityResult[]
   // Keyed off result.profile, the same field accessibilityAdvisoryRegressions
@@ -71,12 +92,17 @@ for (const profile of accessibilityProfiles) {
     results.filter((result) => result.profile === profile),
   )
   profiles[profile] = counts
+  clocks[profile] = fixtureClock
   const occurrences = Object.values(counts).reduce((total, count) => total + count, 0)
-  recorded.push(`${profile}: ${Object.keys(counts).length} rules / ${occurrences} advisories`)
+  recorded.push(`${profile}: ${Object.keys(counts).length} rules / ${occurrences} advisories`
+    + ` at ${fixtureClock ?? "the runner's own clock"}`)
 }
 
 // Asked of the whole recording at once, through the gate's own comparison, so the
-// writer and the gate cannot disagree about what a rise is.
+// writer and the gate cannot disagree about what a rise is. A re-record forced by
+// a changed clock is not exempt: the DOM moved, so a rule may genuinely cover more
+// surface than before, and that still has to be asked for with --allow-increase
+// and explained in the PR rather than absorbed.
 const increases = accessibilityAdvisoryIncreases(existing, profiles)
 
 if (increases.length && !allowIncrease) {
@@ -92,7 +118,7 @@ if (increases.length && !allowIncrease) {
 
 writeFileSync(
   accessibilityAdvisoryBaselinePath,
-  `${JSON.stringify({ documentation: DOCUMENTATION, profiles }, null, 2)}\n`,
+  `${JSON.stringify({ clocks, documentation: DOCUMENTATION, profiles }, null, 2)}\n`,
 )
 
 process.stdout.write(`${[

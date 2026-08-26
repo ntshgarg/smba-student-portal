@@ -1,6 +1,6 @@
 import { PlayerOnboardingRegister } from "@/components/coach/onboarding/player-onboarding-register"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
+import { academyToday } from "@/lib/clock"
 import {
   getPlayerOnboardingWorkspace,
 } from "@/lib/coach/database"
@@ -13,7 +13,7 @@ export const metadata = {
 
 export default async function CoachOnboardingPage() {
   await requireHeadAdminPage()
-  const today = getIndiaDateKey()
+  const today = academyToday()
   const workspace = getPlayerOnboardingWorkspace(today)
 
   return (

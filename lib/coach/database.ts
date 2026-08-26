@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, notExists } from "drizzle-orm"
 import { alias } from "drizzle-orm/sqlite-core"
 
 import { formatAcademyId, identityNameParts } from "@/lib/auth/identity"
+import { academyToday } from "@/lib/clock"
 import { initializeDatabase } from "@/lib/db/client"
 import {
   academyIdAllocations,
@@ -21,7 +22,6 @@ import {
   type PlayerOnboardingSummary,
   type PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import type {
   AcademyMember,
   CoachMonthlyReportRecord,
@@ -234,13 +234,13 @@ export function listApprovedPlayerRecords() {
 }
 
 export function getPlayerOnboardingSummary(
-  referenceDate = getIndiaDateKey(),
+  referenceDate = academyToday(),
 ): PlayerOnboardingSummary {
   return getPlayerOnboardingWorkspace(referenceDate).summary
 }
 
 export function getPlayerOnboardingWorkspace(
-  referenceDate = getIndiaDateKey(),
+  referenceDate = academyToday(),
 ): PlayerOnboardingWorkspace {
   const db = initializeDatabase()
   const pendingRequests = db.select({
@@ -401,7 +401,7 @@ export function listCoachMonthlyReports(month?: string): CoachMonthlyReportRecor
   })
 }
 
-export function getCoachSessionSnapshot(referenceDate = getIndiaDateKey()) {
+export function getCoachSessionSnapshot(referenceDate = academyToday()) {
   const window = sessionPortalWindow(referenceDate)
   return {
     sessionSeries: listSessionSeries(),

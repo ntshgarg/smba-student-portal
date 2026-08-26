@@ -152,10 +152,28 @@ export function PlayerAttendanceRecorder({
     scope: "record-player-attendance",
   })
 
+  // Advanced from the instant the server rendered with, by however much real
+  // time has passed, rather than reset to the device's own clock. The register
+  // has to notice a session starting while the coach is looking at it, so the
+  // 30s tick stays; what changes is whose "now" it counts from.
+  //
+  // Courtside that removes a dependency on the phone being set correctly:
+  // whether this session can be marked at all is `occurrenceIsUpcoming` on this instant, so a handset
+  // running minutes fast used to be what stood between a coach and the register.
+  //
+  // It also keeps the audited DOM still. `academyNow()` can pin the server's
+  // clock for the accessibility gate (`lib/clock.ts`); a tick that jumped to the
+  // browser's wall clock would un-pin this subtree 30s after load, by the nine
+  // days the pin currently holds back today -- and by one more day for every day
+  // that passes.
   useEffect(() => {
-    const timer = window.setInterval(() => setReferenceInstant(Date.now()), 30_000)
+    const mountedAt = Date.now()
+    const timer = window.setInterval(
+      () => setReferenceInstant(initialReferenceInstant + (Date.now() - mountedAt)),
+      30_000,
+    )
     return () => window.clearInterval(timer)
-  }, [])
+  }, [initialReferenceInstant])
 
   // Marks the coach never got to save survive only here. The stored copy is
   // keyed by occurrence, so it can come back to the register it was made on and

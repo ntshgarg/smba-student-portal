@@ -2,8 +2,10 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 import {
+  accessibilityAdvisoryClockMismatch,
   accessibilityAdvisoryRegressions,
   buildAccessibilitySummary,
+  readAccessibilityFixtureClock,
   type AccessibilityResult,
 } from "../../tests/e2e/support/accessibility-audit"
 import { accessibilityProfiles } from "../../tests/e2e/support/accessibility-matrix"
@@ -28,10 +30,22 @@ const results = accessibilityProfiles.flatMap((profile) => {
 const missingCopy = missingProfiles.length
   ? `\n❌ Missing profiles: ${missingProfiles.join(", ")}\n`
   : ""
+// A ceiling counted on a different day is not a ceiling for this run, and this
+// step runs without the gate's environment, so the day comes from the file each
+// run wrote beside its own results rather than from a variable this process
+// happens to hold. Listed first: it decides whether the counts below mean
+// anything.
+const clockMismatches = accessibilityProfiles.flatMap((profile) => {
+  if (missingProfiles.includes(profile)) return []
+  const { fixtureClock, problem } = readAccessibilityFixtureClock(path.join(root, profile))
+  if (problem) return [`${profile} · the run recorded no fixture clock beside its results: ${problem}`]
+  const mismatch = accessibilityAdvisoryClockMismatch(profile, fixtureClock)
+  return mismatch ? [mismatch] : []
+})
 // Computed once and handed to the summary, so the ratchet section printed below
 // and the exit code set at the bottom are the same list rather than two reads of
 // the baseline file that could disagree if it changed mid-step.
-const regressions = accessibilityAdvisoryRegressions(results)
+const regressions = [...clockMismatches, ...accessibilityAdvisoryRegressions(results)]
 const summary = results.length
   ? `${buildAccessibilitySummary(results, regressions)}${missingCopy}`
   : "## UI accessibility / WCAG 2.2 AA\n\n❌ No accessibility results were produced.\n"

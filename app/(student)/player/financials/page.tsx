@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 
 import { PlayerFeeRecordView } from "@/components/financials/player-fee-record"
 import styles from "@/components/financials/player-financials.module.css"
+import { academyCurrentMonth } from "@/lib/clock"
 import { getPlayerFeeRecord } from "@/lib/finance/service"
 import { getCurrentStudent } from "@/lib/student/current-student"
 
@@ -50,6 +51,7 @@ export default async function PlayerFinancialsPage({
 
       {record ? (
         <PlayerFeeRecordView
+          currentPeriod={academyCurrentMonth()}
           record={record}
           requestedMonth={firstSearchValue(requestedSelection.month)}
           requestedYear={firstSearchValue(requestedSelection.year)}
