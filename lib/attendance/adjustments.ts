@@ -60,6 +60,9 @@ export type ReconcileAttendanceAdjustmentReviewInput = {
   now: Date
 }
 
+export type AttendanceAdjustmentReviewTarget =
+  Omit<ReconcileAttendanceAdjustmentReviewInput, "database" | "now">
+
 function addCalendarDays(dateKey: string, days: number) {
   const date = new Date(`${dateKey}T00:00:00.000Z`)
   date.setUTCDate(date.getUTCDate() + days)
@@ -483,6 +486,125 @@ export function voidAttendanceAdjustment({
   }, { behavior: "immediate" })
 }
 
+/*
+ * One reconcile for a whole register instead of one per changed player. The
+ * caller is `saveSessionAttendanceRecords`, which runs this inside `immediate`
+ * while a coach waits courtside, and production speaks to libSQL over the
+ * network with the synchronous driver: the per-pair version cost one blocking
+ * round trip per (player, date) even when the player had no adjustment at all
+ * -- measured 10 statements for a one-player save and 21 for twelve -- and a
+ * player who did have one cost three.
+ *
+ * Nothing about the review rule moves. Each adjustment is still judged only by
+ * whether its own completion session holds a saved Present -- for the legacy
+ * rows that predate `completion_occurrence_id`, by any Present on the completed
+ * date -- and `lostFinalPresence` is still read per (player, date), never
+ * shared across pairs. Reads may be hoisted above the writes because the only
+ * column written, `reviewRequiredAt`, appears in no predicate here, and because
+ * an adjustment row belongs to exactly one (playerId, completedOn) pair, so no
+ * pair can see another pair's update.
+ */
+export function reconcileAttendanceAdjustmentReviewStates({
+  database,
+  now,
+  targets,
+}: {
+  database: SmbaDatabaseExecutor
+  now: Date
+  targets: readonly AttendanceAdjustmentReviewTarget[]
+}) {
+  const pairKey = (playerId: string, completedOn: string) => `${playerId}:${completedOn}`
+  const lostFinalPresenceByPair = new Map(targets.map((target) => [
+    pairKey(target.playerId, target.completedOn),
+    target.lostFinalPresence,
+  ]))
+  if (!lostFinalPresenceByPair.size) return 0
+
+  const playerIds = [...new Set(targets.map((target) => target.playerId))]
+  const completedOnDates = [...new Set(targets.map((target) => target.completedOn))]
+
+  // Two `in` lists are a cross product, so a register that changes player A on
+  // one date and player B on another would otherwise sweep in A's adjustment
+  // on B's date. Only pairs the caller actually asked for survive.
+  const active = database.select().from(attendanceAdjustments).where(and(
+    inArray(attendanceAdjustments.playerId, playerIds),
+    inArray(attendanceAdjustments.completedOn, completedOnDates),
+    isNull(attendanceAdjustments.voidedAt),
+  )).all().filter((adjustment) => lostFinalPresenceByPair.has(
+    pairKey(adjustment.playerId, adjustment.completedOn),
+  ))
+  if (!active.length) return 0
+
+  // Two players can complete the same make-up session, so this is a set.
+  const completionOccurrenceIds = [...new Set(
+    active.map((adjustment) => adjustment.completionOccurrenceId)
+      .filter((occurrenceId): occurrenceId is string => Boolean(occurrenceId)),
+  )]
+  const presenceByPlayerCompletion = new Set(
+    completionOccurrenceIds.length
+      ? database.select({
+        accountId: sessionAttendanceRecords.accountId,
+        occurrenceId: sessionAttendanceRecords.occurrenceId,
+      }).from(sessionAttendanceRecords).where(and(
+        inArray(sessionAttendanceRecords.accountId, playerIds),
+        inArray(sessionAttendanceRecords.occurrenceId, completionOccurrenceIds),
+        eq(sessionAttendanceRecords.choice, "present"),
+      )).all().map((row) => pairKey(row.accountId, row.occurrenceId))
+      : [],
+  )
+
+  const legacyCompletedOnDates = [...new Set(
+    active.filter((adjustment) => !adjustment.completionOccurrenceId)
+      .map((adjustment) => adjustment.completedOn),
+  )]
+  const presenceByPlayerDate = new Set(
+    legacyCompletedOnDates.length
+      ? database.select({
+        accountId: sessionAttendanceRecords.accountId,
+        occurrenceDate: sessionOccurrences.occurrenceDate,
+      }).from(sessionAttendanceRecords)
+        .innerJoin(
+          sessionOccurrences,
+          eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
+        ).where(and(
+          inArray(sessionAttendanceRecords.accountId, playerIds),
+          eq(sessionAttendanceRecords.choice, "present"),
+          inArray(sessionOccurrences.occurrenceDate, legacyCompletedOnDates),
+        )).all().map((row) => pairKey(row.accountId, row.occurrenceDate))
+      : [],
+  )
+
+  const clearedIds: string[] = []
+  const reviewRequiredIds: string[] = []
+  active.forEach((adjustment) => {
+    const hasOrdinaryPresence = adjustment.completionOccurrenceId
+      ? presenceByPlayerCompletion.has(
+        pairKey(adjustment.playerId, adjustment.completionOccurrenceId),
+      )
+      : presenceByPlayerDate.has(pairKey(adjustment.playerId, adjustment.completedOn))
+    if (hasOrdinaryPresence) {
+      clearedIds.push(adjustment.id)
+      return
+    }
+    if (lostFinalPresenceByPair.get(pairKey(adjustment.playerId, adjustment.completedOn))) {
+      reviewRequiredIds.push(adjustment.id)
+    }
+  })
+
+  // The two sets are disjoint by construction -- an adjustment is judged once --
+  // so the order these run in cannot decide a review state.
+  let changes = 0
+  if (clearedIds.length) {
+    changes += database.update(attendanceAdjustments).set({ reviewRequiredAt: null })
+      .where(inArray(attendanceAdjustments.id, clearedIds)).run().changes
+  }
+  if (reviewRequiredIds.length) {
+    changes += database.update(attendanceAdjustments).set({ reviewRequiredAt: now })
+      .where(inArray(attendanceAdjustments.id, reviewRequiredIds)).run().changes
+  }
+  return changes
+}
+
 export function reconcileAttendanceAdjustmentReviewState({
   completedOn,
   database,
@@ -490,39 +612,9 @@ export function reconcileAttendanceAdjustmentReviewState({
   now,
   playerId,
 }: ReconcileAttendanceAdjustmentReviewInput) {
-  const active = database.select().from(attendanceAdjustments).where(and(
-    eq(attendanceAdjustments.playerId, playerId),
-    eq(attendanceAdjustments.completedOn, completedOn),
-    isNull(attendanceAdjustments.voidedAt),
-  )).all()
-
-  return active.reduce((changes, adjustment) => {
-    const hasOrdinaryPresence = adjustment.completionOccurrenceId
-      ? Boolean(database.select({ id: sessionAttendanceRecords.id })
-          .from(sessionAttendanceRecords).where(and(
-            eq(sessionAttendanceRecords.accountId, playerId),
-            eq(sessionAttendanceRecords.occurrenceId, adjustment.completionOccurrenceId),
-            eq(sessionAttendanceRecords.choice, "present"),
-          )).get())
-      : Boolean(database.select({ id: sessionAttendanceRecords.id })
-          .from(sessionAttendanceRecords)
-          .innerJoin(
-            sessionOccurrences,
-            eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
-          ).where(and(
-            eq(sessionAttendanceRecords.accountId, playerId),
-            eq(sessionAttendanceRecords.choice, "present"),
-            eq(sessionOccurrences.occurrenceDate, completedOn),
-          )).get())
-
-    if (hasOrdinaryPresence) {
-      return changes + database.update(attendanceAdjustments)
-        .set({ reviewRequiredAt: null })
-        .where(eq(attendanceAdjustments.id, adjustment.id)).run().changes
-    }
-    if (!lostFinalPresence) return changes
-    return changes + database.update(attendanceAdjustments)
-      .set({ reviewRequiredAt: now })
-      .where(eq(attendanceAdjustments.id, adjustment.id)).run().changes
-  }, 0)
+  return reconcileAttendanceAdjustmentReviewStates({
+    database,
+    now,
+    targets: [{ completedOn, lostFinalPresence, playerId }],
+  })
 }

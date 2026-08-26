@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 
 import { isValidDateKey } from "@/lib/attendance/domain"
-import { reconcileAttendanceAdjustmentReviewState } from "@/lib/attendance/adjustments"
+import { reconcileAttendanceAdjustmentReviewStates } from "@/lib/attendance/adjustments"
 import {
   OperationalActionError,
   operationalActionError,
@@ -807,14 +807,20 @@ export function saveSessionAttendanceRecords({
       }).run()
     }
 
-    affectedDates.forEach(({ completedOn, hadOrdinaryPresence, playerId }) => {
-      reconcileAttendanceAdjustmentReviewState({
-        database: tx as unknown as SmbaDatabase,
-        playerId,
+    /*
+     * The ninth per-player read. This ran once per (player, date) pair and
+     * opened with an unbatched select each time, so a twelve-player register
+     * paid twelve blocking round trips here for adjustments that, on almost
+     * every register, do not exist. Batched it is one, whatever the roster.
+     */
+    reconcileAttendanceAdjustmentReviewStates({
+      database: tx,
+      now,
+      targets: [...affectedDates.values()].map(({
         completedOn,
-        lostFinalPresence: hadOrdinaryPresence,
-        now,
-      })
+        hadOrdinaryPresence,
+        playerId,
+      }) => ({ completedOn, lostFinalPresence: hadOrdinaryPresence, playerId })),
     })
     return { applied }
   }, { behavior: "immediate" })
