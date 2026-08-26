@@ -20,12 +20,40 @@ const signInFailureCopy = {
   subject: "Your sign-in",
 }
 
+/** The Academy ID is owned by `LoginForm`, not by either method's form. */
+type AcademyIdCarrier = {
+  academyId: string
+  onAcademyIdChange: (value: string) => void
+}
+
+/**
+ * The Academy ID survives both a failed submit and a switch between the two
+ * login methods, and it does so through `defaultValue` rather than `value`.
+ *
+ * Two mechanisms erase an uncontrolled field here. React resets a form once its
+ * action settles, so a refused sign-in returns every control to its default --
+ * correct for the password, wrong for the identifier the user just typed. And
+ * `PasswordLoginForm` and `PinLoginForm` are distinct component types rendered
+ * at one slot, so toggling the method unmounts one subtree and mounts the
+ * other rather than reconciling them.
+ *
+ * Holding the value in `LoginForm` and feeding it back as `defaultValue`
+ * answers both: the reset restores the attribute React has been keeping current
+ * from `onChange`, and the newly mounted form mounts with it already in place.
+ * Deliberately not a controlled input -- this field carries
+ * `autoComplete="username"`, and forcing `value` back on every render fights a
+ * password manager filling it.
+ */
 function AcademyIdField({
   academyIdRef,
+  defaultValue,
   error,
+  onValueChange,
 }: {
   academyIdRef: React.RefObject<HTMLInputElement | null>
+  defaultValue: string
   error: string | null
+  onValueChange: (value: string) => void
 }) {
   return (
     <div className="login-field">
@@ -42,6 +70,8 @@ function AcademyIdField({
         aria-describedby={error ? "academy-id-error" : "academy-id-help"}
         aria-invalid={error ? true : undefined}
         placeholder="SMBA-HC-0001"
+        defaultValue={defaultValue}
+        onChange={(event) => onValueChange(event.target.value)}
       />
       {error ? (
         <p id="academy-id-error" className="login-error" role="alert">{error}</p>
@@ -52,7 +82,7 @@ function AcademyIdField({
   )
 }
 
-function PasswordLoginForm() {
+function PasswordLoginForm({ academyId, onAcademyIdChange }: AcademyIdCarrier) {
   const [state, formAction, pending] = useResilientActionState(
     loginWithAcademyId,
     initialState,
@@ -72,7 +102,12 @@ function PasswordLoginForm() {
   }, [pending, state])
   return (
     <form className="login-form" action={formAction} noValidate>
-      <AcademyIdField academyIdRef={academyIdRef} error={state.error} />
+      <AcademyIdField
+        academyIdRef={academyIdRef}
+        defaultValue={academyId}
+        error={state.error}
+        onValueChange={onAcademyIdChange}
+      />
       <div className="login-field">
         <label htmlFor="password">Password</label>
         <PasswordInput
@@ -93,7 +128,7 @@ function PasswordLoginForm() {
   )
 }
 
-function PinLoginForm() {
+function PinLoginForm({ academyId, onAcademyIdChange }: AcademyIdCarrier) {
   const [state, formAction, pending] = useResilientActionState(
     loginWithPin,
     initialState,
@@ -113,7 +148,12 @@ function PinLoginForm() {
   }, [pending, state])
   return (
     <form className="login-form" action={formAction} noValidate>
-      <AcademyIdField academyIdRef={academyIdRef} error={state.error} />
+      <AcademyIdField
+        academyIdRef={academyIdRef}
+        defaultValue={academyId}
+        error={state.error}
+        onValueChange={onAcademyIdChange}
+      />
       <div className="login-field">
         <label htmlFor="pin">6-digit PIN</label>
         <input
@@ -141,6 +181,7 @@ function PinLoginForm() {
 
 export function LoginForm() {
   const [method, setMethod] = useState<"password" | "pin">("password")
+  const [academyId, setAcademyId] = useState("")
   return (
     <>
       <div className="login-method-switch" role="group" aria-label="Login method">
@@ -159,7 +200,9 @@ export function LoginForm() {
           6-digit PIN
         </button>
       </div>
-      {method === "password" ? <PasswordLoginForm /> : <PinLoginForm />}
+      {method === "password"
+        ? <PasswordLoginForm academyId={academyId} onAcademyIdChange={setAcademyId} />
+        : <PinLoginForm academyId={academyId} onAcademyIdChange={setAcademyId} />}
       <nav className="login-register-link" aria-label="Account access">
         <span className="login-register-prompt">First visit?</span>
         <Link href="/activate">Activate your account</Link>
