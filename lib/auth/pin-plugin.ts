@@ -6,7 +6,7 @@ import { createAuthEndpoint } from "better-auth/api"
 import { setSessionCookie } from "better-auth/cookies"
 import { z } from "zod"
 
-import { normalizeAcademyId } from "@/lib/auth/identity"
+import { ACADEMY_ID_LABEL, normalizeAcademyId } from "@/lib/auth/identity"
 import { findApprovedAccountByAcademyId } from "@/lib/auth/account-service"
 import {
   loginIsBlocked,
@@ -20,7 +20,7 @@ import {
   writeAuthSecurityEvent,
 } from "@/lib/auth/security-context"
 
-const INVALID_PIN_LOGIN = "SMBA username or PIN is incorrect."
+const INVALID_PIN_LOGIN = `${ACADEMY_ID_LABEL} or PIN is incorrect.`
 const RATE_LIMITED_PIN_LOGIN =
   "We couldn\u2019t sign you in. Wait a few minutes before trying again."
 

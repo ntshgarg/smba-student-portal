@@ -285,7 +285,7 @@ describe("role-aware login actions", () => {
     await expect(
       loginWithAcademyId({ error: null }, loginData("password", "A secure password")),
     ).resolves.toEqual({
-      error: "SMBA username or password is incorrect. If this is your first visit, activate your account.",
+      error: "Academy ID or password is incorrect. If this is your first visit, activate your account.",
     })
     expect(mocks.signInUsername).toHaveBeenCalledOnce()
     // The block is read here, but a failure is only ever counted by the hooks:
@@ -301,7 +301,7 @@ describe("role-aware login actions", () => {
     await expect(
       loginWithAcademyId({ error: null }, loginData("password", "A secure password")),
     ).resolves.toEqual({
-      error: "SMBA username or password is incorrect. If this is your first visit, activate your account.",
+      error: "Academy ID or password is incorrect. If this is your first visit, activate your account.",
     })
     // The hooks never see this attempt, so leaving it uncounted would make the
     // form a cheaper way to probe which Academy IDs exist than the endpoint.
@@ -388,7 +388,7 @@ describe("role-aware login actions", () => {
     mocks.signInPin.mockRejectedValue(new Error("invalid pin"))
 
     await expect(loginWithPin({ error: null }, loginData("pin", "123456"))).resolves.toEqual({
-      error: "SMBA username or PIN is incorrect. Use your password if PIN login is unavailable.",
+      error: "Academy ID or PIN is incorrect. Use your password if PIN login is unavailable.",
     })
     expect(mocks.signInPin).toHaveBeenCalledOnce()
     // Counting here as well as in the endpoint would halve the real budget and

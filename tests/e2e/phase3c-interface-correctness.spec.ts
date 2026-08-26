@@ -12,7 +12,7 @@ const FIXTURE_PASSWORD = process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture acce
 
 async function login(page: Page, academyId: string, routePrefix: string) {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  await page.getByLabel("SMBA username").fill(academyId)
+  await page.getByLabel("Academy ID").fill(academyId)
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith(routePrefix), { timeout: 20_000 })

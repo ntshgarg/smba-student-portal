@@ -354,7 +354,7 @@ async function loginAsHeadCoach(browser: Browser) {
   const context = await browser.newContext({ baseURL, viewport: { height: 900, width: 1440 } })
   const page = await context.newPage()
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  await page.getByLabel("SMBA username").fill("SMBA-HC-0001")
+  await page.getByLabel("Academy ID").fill("SMBA-HC-0001")
   await page.getByLabel("Password").fill(
     process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture access 2026!",
   )
@@ -422,7 +422,7 @@ async function loginAsActivatedPlayer(
   const page = await context.newPage()
   await page.goto("/login", { waitUntil: "domcontentloaded" })
   if ("pin" in factor) await page.getByRole("button", { name: "6-digit PIN" }).click()
-  await page.getByLabel("SMBA username").fill(academyId)
+  await page.getByLabel("Academy ID").fill(academyId)
   await page.getByLabel("pin" in factor ? "6-digit PIN" : "Password").fill(
     "pin" in factor ? factor.pin : factor.password,
   )

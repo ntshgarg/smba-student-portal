@@ -29,7 +29,7 @@ async function loginAs(
   const page = await context.newPage()
   try {
     await page.goto("/login", { waitUntil: "networkidle" })
-    await page.getByLabel("SMBA username").fill(academyId)
+    await page.getByLabel("Academy ID").fill(academyId)
     await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
     await page.getByRole("button", { name: "Continue" }).click()
     await page.waitForURL((url) => (
@@ -65,7 +65,7 @@ test("shared password and PIN login remains contained in all three views", async
     await page.setViewportSize(viewport)
     await page.goto("/login", { waitUntil: "networkidle" })
     await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible()
-    await expect(page.getByLabel("SMBA username")).toBeVisible()
+    await expect(page.getByLabel("Academy ID")).toBeVisible()
     const password = page.getByLabel("Password")
     await expect(password).toBeVisible()
     await expect(password).toHaveAttribute("type", "password")
@@ -104,18 +104,18 @@ test("shared password and PIN login remains contained in all three views", async
 test("a refused sign-in and a method switch both keep the Academy ID", async ({ page }) => {
   const unissuedAcademyId = "SMBA-PL-9999"
   await page.goto("/login", { waitUntil: "networkidle" })
-  await page.getByLabel("SMBA username").fill(unissuedAcademyId)
+  await page.getByLabel("Academy ID").fill(unissuedAcademyId)
 
   await page.getByRole("button", { name: "6-digit PIN" }).click()
-  await expect(page.getByLabel("SMBA username")).toHaveValue(unissuedAcademyId)
+  await expect(page.getByLabel("Academy ID")).toHaveValue(unissuedAcademyId)
   await page.getByRole("button", { name: "Password" }).click()
-  await expect(page.getByLabel("SMBA username")).toHaveValue(unissuedAcademyId)
+  await expect(page.getByLabel("Academy ID")).toHaveValue(unissuedAcademyId)
 
   await page.getByLabel("Password").fill("not the stored password")
   await page.getByRole("button", { name: "Continue" }).click()
 
   await expect(page.locator("#academy-id-error")).toContainText("incorrect")
-  await expect(page.getByLabel("SMBA username")).toHaveValue(unissuedAcademyId)
+  await expect(page.getByLabel("Academy ID")).toHaveValue(unissuedAcademyId)
   // The password is the one field the reset should still be clearing.
   await expect(page.getByLabel("Password")).toHaveValue("")
 })

@@ -1,5 +1,21 @@
 export type AccountRole = "player" | "coach" | "platform_admin"
 
+/**
+ * What the product calls the sign-in credential, in one place.
+ *
+ * The same value -- column `academyId`, format SMBA-PL-0004 -- was issued and
+ * taught as "Academy ID" on /activate and in the coach workspace, then asked for
+ * as "SMBA username" on /login and /recover. /recover managed both at once: copy
+ * reading "Enter the Academy ID" above a field labelled "SMBA username". That is
+ * the front door and the locked-out path, so the hesitation costs a call to the
+ * coach at the moment the user is already shut out.
+ *
+ * "Academy ID" wins because it is what the credential is called everywhere it is
+ * issued, displayed and searched -- and because "username" implies something the
+ * holder chose, which this is not.
+ */
+export const ACADEMY_ID_LABEL = "Academy ID"
+
 export const PLATFORM_ADMIN_ACADEMY_ID = "SMBA-ADMIN-0001"
 export const HEAD_COACH_ACADEMY_ID = "SMBA-HC-0001"
 

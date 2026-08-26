@@ -109,7 +109,7 @@ function expectHealthyDatabase() {
 
 async function login(page: Page, academyId: string, destination: "/coach" | "/player") {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  await page.getByLabel("SMBA username").fill(academyId)
+  await page.getByLabel("Academy ID").fill(academyId)
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => (

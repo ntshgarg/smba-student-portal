@@ -8,6 +8,7 @@ import {
   isAcademyId,
   normalizeAcademyId,
   normalizeFullName,
+  ACADEMY_ID_LABEL,
 } from "@/lib/auth/identity"
 import {
   findApprovedAccountByAcademyId,
@@ -34,8 +35,8 @@ import {
 import { clearDatabaseSession } from "@/lib/auth/session"
 import { publicSiteUrl } from "@/lib/config"
 
-const GENERIC_LOGIN_ERROR = "SMBA username or password is incorrect. If this is your first visit, activate your account."
-const GENERIC_PIN_ERROR = "SMBA username or PIN is incorrect. Use your password if PIN login is unavailable."
+const GENERIC_LOGIN_ERROR = `${ACADEMY_ID_LABEL} or password is incorrect. If this is your first visit, activate your account.`
+const GENERIC_PIN_ERROR = `${ACADEMY_ID_LABEL} or PIN is incorrect. Use your password if PIN login is unavailable.`
 const RATE_LIMITED_LOGIN_ERROR = "We couldn\u2019t sign you in. Wait a few minutes before trying again."
 const ACTIVATED_WITHOUT_SESSION_ERROR = "Your account is ready, but we couldn\u2019t sign you in. Open the sign-in page and use your new password."
 
@@ -73,7 +74,7 @@ export async function loginWithAcademyId(
   const academyId = normalizeAcademyId(String(formData.get("academyId") ?? ""))
   const password = String(formData.get("password") ?? "")
   if (!isAcademyId(academyId)) {
-    return { error: "Enter your SMBA username." }
+    return { error: `Enter your ${ACADEMY_ID_LABEL}.` }
   }
   if (!password) return { error: GENERIC_LOGIN_ERROR }
 

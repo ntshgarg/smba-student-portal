@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 
 import { PasswordInput } from "@/components/password-input"
+import { ACADEMY_ID_LABEL } from "@/lib/auth/identity"
 import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 import {
@@ -57,7 +58,7 @@ function AcademyIdField({
 }) {
   return (
     <div className="login-field">
-      <label htmlFor="academy-id">SMBA username</label>
+      <label htmlFor="academy-id">{ACADEMY_ID_LABEL}</label>
       <input
         ref={academyIdRef}
         id="academy-id"
@@ -76,7 +77,7 @@ function AcademyIdField({
       {error ? (
         <p id="academy-id-error" className="login-error" role="alert">{error}</p>
       ) : (
-        <p id="academy-id-help" className="login-helper">Use your permanent SMBA username.</p>
+        <p id="academy-id-help" className="login-helper">Use your permanent {ACADEMY_ID_LABEL}.</p>
       )}
     </div>
   )

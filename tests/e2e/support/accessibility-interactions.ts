@@ -96,7 +96,7 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "login-error": {
-      await page.getByLabel("SMBA username").fill("invalid")
+      await page.getByLabel("Academy ID").fill("invalid")
       await page.getByRole("button", { name: "Continue" }).click()
       await page.locator('[role="alert"]').first().waitFor({ state: "visible" })
       break
