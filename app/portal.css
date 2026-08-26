@@ -12984,14 +12984,6 @@ tr.is-expanded .coach-member-row-action button svg {
   text-transform: uppercase;
 }
 
-.admin-support-message {
-  margin-top: var(--space-copy);
-  border: 1px solid color-mix(in srgb, var(--navy) 20%, transparent);
-  padding: 11px 13px;
-  color: var(--navy);
-  font-size: 0.75rem;
-}
-
 .admin-support-list {
   display: grid;
   gap: 12px;
