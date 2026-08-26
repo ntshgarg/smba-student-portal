@@ -85,3 +85,18 @@ export class SessionExpiredError extends OperationalActionError {
     this.name = "SessionExpiredError"
   }
 }
+
+/**
+ * The wire form of the error above, narrowed to the one code it can carry.
+ *
+ * A guard conversion is the only producer and it converts nothing else, so a
+ * caller widened to admit this value learns that its session can expire without
+ * also being told to handle the four operational codes a guard cannot raise.
+ * That matters because the actions this reaches return domain results of their
+ * own -- `MemberMutationResult`, `ReportMutationResult`, `FinanceActionResult`
+ * -- whose own code unions stay untouched: an expiry joins the result union as
+ * a separate member rather than being folded into any domain code union.
+ */
+export type SessionExpiredFailure = OperationalActionFailure & {
+  code: "SESSION_EXPIRED"
+}

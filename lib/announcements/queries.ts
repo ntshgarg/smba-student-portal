@@ -18,6 +18,7 @@ import {
   isAnnouncementNew,
 } from "@/lib/announcements/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
+import { academyNow } from "@/lib/clock"
 import {
   initializeDatabase,
   type SmbaDatabaseExecutor,
@@ -194,7 +195,7 @@ export function getCoachAnnouncement(
   {
     coachId,
     database = initializeDatabase(),
-    now = new Date(),
+    now = academyNow(),
   }: CoachAnnouncementQueryOptions,
 ): CoachAnnouncement | null {
   requireHeadAdminAccess(coachId, { database })
@@ -221,7 +222,7 @@ export function listCoachAnnouncements(
   {
     coachId,
     database = initializeDatabase(),
-    now = new Date(),
+    now = academyNow(),
   }: CoachAnnouncementQueryOptions,
 ): CoachAnnouncementArchiveItem[] {
   requireHeadAdminAccess(coachId, { database })
@@ -304,7 +305,7 @@ export function hasCoachAnnouncements({
 export function countActiveCoachAnnouncements({
   coachId,
   database = initializeDatabase(),
-  now = new Date(),
+  now = academyNow(),
 }: CoachAnnouncementQueryOptions): number {
   requireHeadAdminAccess(coachId, { database })
   const academyDate = getAcademyDateKey(now)
@@ -332,7 +333,7 @@ export function listActiveHomepageAnnouncements(
 ): PublicAnnouncementSummary[] {
   try {
     const database = options.database ?? initializeDatabase()
-    const now = options.now ?? new Date()
+    const now = options.now ?? academyNow()
     return activeChannelRows("homepage", database, now).map(publicSummary)
   } catch {
     return []
@@ -345,7 +346,7 @@ export function getActiveHomepageAnnouncement(
 ): PublicAnnouncementDetail | null {
   try {
     const database = options.database ?? initializeDatabase()
-    const now = options.now ?? new Date()
+    const now = options.now ?? academyNow()
     const row = activeChannelRows("homepage", database, now)
       .find(({ id }) => id === announcementId)
     if (!row) return null
@@ -367,7 +368,7 @@ export function listActivePlayerAnnouncements(
   options: AnnouncementQueryOptions = {},
 ): PlayerAnnouncementSummary[] {
   const database = options.database ?? initializeDatabase()
-  const now = options.now ?? new Date()
+  const now = options.now ?? academyNow()
   if (!playerIsEligible(database, playerId)) return []
   return activeChannelRows("player_dashboard", database, now).map((row) => ({
     ...publicSummary(row),
@@ -381,7 +382,7 @@ export function getActivePlayerAnnouncement(
   options: AnnouncementQueryOptions = {},
 ): PlayerAnnouncementDetail | null {
   const database = options.database ?? initializeDatabase()
-  const now = options.now ?? new Date()
+  const now = options.now ?? academyNow()
   if (!playerIsEligible(database, playerId)) return null
   const row = activeChannelRows("player_dashboard", database, now)
     .find(({ id }) => id === announcementId)

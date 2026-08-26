@@ -1,6 +1,6 @@
 import { AnnouncementComposer } from "@/components/coach/announcements/announcement-composer"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
-import { getAcademyDateKey } from "@/lib/format"
+import { academyToday } from "@/lib/clock"
 
 export const metadata = {
   title: "New announcement",
@@ -9,5 +9,5 @@ export const metadata = {
 export default async function NewAnnouncementPage() {
   await requireHeadAdminPage()
 
-  return <AnnouncementComposer academyToday={getAcademyDateKey()} />
+  return <AnnouncementComposer academyToday={academyToday()} />
 }

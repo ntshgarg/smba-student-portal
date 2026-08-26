@@ -2181,6 +2181,24 @@
   color: var(--red-dark);
 }
 
+/* The notice's own way out, present only when the surface cannot correct what
+   the notice reports. `color: inherit` keeps it inside the tone rather than
+   competing with it, so the underline is what marks it as the thing to press.
+   44px matches `.totp-recovery-link` and `.coach-calendar-back-row a`: this is
+   pressed courtside on a phone, and 12px underlined text is a 17px target
+   without it. That does grow the 32px notice row -- only in the one state that
+   renders an action, which no register reaches unless a save was refused. */
+.inline-notice-action {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
 /* Focused player and staff attendance recording workspaces. */
 .attendance-record-workspace {
   margin-top: clamp(32px, 5vw, 56px);

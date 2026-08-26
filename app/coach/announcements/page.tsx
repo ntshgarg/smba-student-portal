@@ -8,7 +8,7 @@ import {
   listCoachAnnouncements,
 } from "@/lib/announcements/queries"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
-import { getAcademyMonthKey } from "@/lib/format"
+import { academyCurrentMonth } from "@/lib/clock"
 
 export const metadata = {
   title: "Published announcements",
@@ -47,7 +47,7 @@ export default async function PublishedAnnouncementsPage({
     searchParams,
     requireHeadAdminPage(),
   ])
-  const currentMonth = getAcademyMonthKey()
+  const currentMonth = academyCurrentMonth()
   const requestedMonth = firstValue(query.month)
   const month = requestedMonth && MONTH_PATTERN.test(requestedMonth)
     ? requestedMonth

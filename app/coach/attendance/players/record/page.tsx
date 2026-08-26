@@ -8,6 +8,7 @@ import {
   type PlayerAttendanceQuery,
 } from "@/lib/attendance/recording-workspace"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
+import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { getCoachAttendanceRecorderSnapshot } from "@/lib/coach/session-read-models"
 
@@ -22,7 +23,7 @@ export default async function RecordPlayerAttendancePage({
 }) {
   await requireHeadAdminPage()
   const query = await searchParams
-  const now = new Date()
+  const now = academyNow()
   const today = getIndiaDateKey(now)
   const requestedDate = Array.isArray(query.date) ? query.date[0] : query.date
   const referenceDate = requestedDate && /^\d{4}-\d{2}-\d{2}$/u.test(requestedDate)

@@ -11,6 +11,7 @@ import {
   resolveCoachReportArchivePeriod,
   type CoachPublishedReportsSearchParams,
 } from "@/lib/coach/report-navigation"
+import { academyNow } from "@/lib/clock"
 import { getLatestCompletedReportMonth } from "@/lib/coach/report-utils"
 import {
   listCoachPublishedReportPeriods,
@@ -32,7 +33,7 @@ export default async function CoachReportsPage({
   const writerHref = getLegacyCoachReportWriterHref(query)
   if (writerHref) permanentRedirect(writerHref)
 
-  const latestCompletedPeriod = getLatestCompletedReportMonth()
+  const latestCompletedPeriod = getLatestCompletedReportMonth(academyNow())
   const period = resolveCoachReportArchivePeriod(
     query.period,
     latestCompletedPeriod,

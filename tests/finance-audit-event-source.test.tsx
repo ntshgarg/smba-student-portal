@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("server-only", () => ({}))
+
 const mocks = vi.hoisted(() => ({
   getCollectionsDayBook: vi.fn(),
   getCoachMonthlyPreparationPreview: vi.fn(),

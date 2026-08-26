@@ -482,9 +482,51 @@ gate.
 - **Effort:** M
 - **Confidence:** High (proved from harness and axe-core source)
 - **How to prove:** Already proved. To quantify the live cost, run the gate once and read the
-  advisory counts it already prints:
-  `SMBA_ACCESSIBILITY_PROFILE=stress npm run regression:accessibility` then
-  `sed -n '/Non-blocking advisories/,$p' output/accessibility/stress/summary.sanitized.txt`.
+  advisory counts it already prints. `SMBA_ACCESSIBILITY_CLOCK` has to be exported **before the
+  server starts**, not just before the runner: `lib/clock.ts` reads it in the Next process, and
+  `tests/e2e/playwright.accessibility.config.ts` declares no `webServer`, so Playwright attaches to
+  a server it did not start. Prefixing only `npm run regression:accessibility` pins the runner and
+  nothing else; the run now refuses, because it reads the server's own answer back from
+  `/api/health` first.
+
+  ```sh
+  # Exported, not prefixed: the server has to inherit these, and the runner below
+  # reads the same shell. Everything else the gate needs (BETTER_AUTH_SECRET, the
+  # fixture passwords, the PIN) is the usual local set — see the stress step in
+  # .github/workflows/ui-accessibility.yml.
+  export SMBA_ACCESSIBILITY_CLOCK=2026-08-17T09:30:00+05:30
+  export SMBA_ACCESSIBILITY_PROFILE=stress
+  export DB_FILE_NAME=/tmp/smba-accessibility-stress.db
+  export SMBA_ACCESSIBILITY_DB=/tmp/smba-accessibility-stress.db
+  export SMBA_ACCESSIBILITY_BASE_URL=http://127.0.0.1:3112
+  npx next start -p 3112 &
+  npm run regression:accessibility
+  sed -n '/Non-blocking advisories/,$p' output/accessibility/stress/summary.sanitized.txt
+  ```
+
+  The clock is not optional for this profile: its fixture is frozen at FIXTURE_ANCHOR_DATE, so an
+  unpinned run counts a DOM that has moved since, and the gate refuses rather than report it.
+
+  It is equally not optional to unset it before auditing `admin` or `clean` in the same shell.
+  `lib/clock.ts` pins those servers too — both profile names and both `/tmp/smba-accessibility-*.db`
+  paths satisfy it — while the runner would record no clock beside their results, so a leaked export
+  compares a frozen DOM against ceilings counted on an unpinned one. The runner refuses that
+  combination outright rather than let it pass; `unset SMBA_ACCESSIBILITY_CLOCK` between profiles.
+
+  The ceilings in `tests/e2e/support/accessibility-advisory-baseline.json` are still the ones an
+  unpinned run recorded on 2026-08-26 — `"clocks": {"stress": null}` says so, and `color-contrast`
+  1021 was counted nine ledger cells later than the pin renders. So the first pinned run completes
+  the matrix, writes `output/accessibility/stress/`, and *then* fails asking for a re-record with
+  `npx tsx scripts/regression/update-accessibility-advisory-baseline.ts` — the failure is ordered
+  that way on purpose, because the re-record reads exactly the results that run produced. If a rule
+  genuinely covers more surface under the pin, that recording needs `--allow-increase` and a reason
+  in the PR, the same as any other rise.
+
+  The re-record does not need a local run. CI's `ui-accessibility-failure-*` artifact carries
+  `results.sanitized.json`, `summary.sanitized.txt` **and** `fixture-clock.sanitized.json` for every
+  profile that produced them — the third is what the recording reads for the day, and without it the
+  script refuses rather than guess. From an extracted artifact:
+  `npx tsx scripts/regression/update-accessibility-advisory-baseline.ts --root <extracted>/accessibility`.
 
 ---
 
@@ -536,9 +578,10 @@ export function viewportsForState(state: AccessibilityState): readonly Accessibi
   reading fee status on an older handset.
 - **Effort:** S to add the flag; M to fix whatever it surfaces
 - **Confidence:** High (proved by counting the matrix)
-- **How to prove:** Already proved for coverage. For behaviour:
-  `SMBA_ACCESSIBILITY_STATE=coach-monthly-fees SMBA_ACCESSIBILITY_PROFILE=stress npm run regression:accessibility`
-  after adding `compact: true` to that state.
+- **How to prove:** Already proved for coverage. For behaviour, add `compact: true` to that state
+  and re-run the stress recipe in A11Y-2 above with `SMBA_ACCESSIBILITY_STATE=coach-monthly-fees`
+  added to the runner line. `SMBA_ACCESSIBILITY_CLOCK` belongs on the `next start` there for the
+  reason given in that recipe.
 
 ---
 

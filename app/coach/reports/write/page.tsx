@@ -1,6 +1,7 @@
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import { ReportWritingWorkspace } from "@/components/coach/reports/report-workspace"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
+import { academyNow } from "@/lib/clock"
 import {
   getCurrentIndiaMonth,
   getLatestCompletedReportMonth,
@@ -18,10 +19,11 @@ export default async function CoachReportWritingPage({
 }) {
   const query = await searchParams
   const { identity } = await requireHeadAdminPage()
+  const now = academyNow()
   const selectedMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(query.month ?? "")
-    && (query.month as string) < getCurrentIndiaMonth()
+    && (query.month as string) < getCurrentIndiaMonth(now)
     ? query.month as string
-    : getLatestCompletedReportMonth()
+    : getLatestCompletedReportMonth(now)
   const snapshot = getCoachReportWritingSnapshot(selectedMonth)
 
   return (

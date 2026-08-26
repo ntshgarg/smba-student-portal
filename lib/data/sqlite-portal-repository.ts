@@ -16,6 +16,7 @@ import {
   reportPublications,
   sessionSeries,
 } from "@/lib/db/schema"
+import { academyCurrentMonth, academyNow, academyToday } from "@/lib/clock"
 import { coachMessage } from "@/lib/data/portal-content"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import type { PortalRepository } from "@/lib/data/portal-repository"
@@ -23,7 +24,6 @@ import {
   academyTimeInputValue,
   formatDateKey,
   formatSessionLabel,
-  getAcademyMonthKey,
 } from "@/lib/format"
 import type {
   AttendanceSummary,
@@ -41,7 +41,7 @@ import { academyPlanSummary } from "@/lib/training/academy-plans"
 import { resolvePublishedReportAttendance } from "@/lib/reports/published-report"
 
 function indiaMonthKey() {
-  return getAcademyMonthKey()
+  return academyCurrentMonth()
 }
 
 function monthDetails(month: string) {
@@ -76,7 +76,7 @@ function emptyAttendance(): AttendanceBreakdown {
 function attendanceForMonth(
   accountId: string,
   month: string,
-  referenceInstant = new Date(),
+  referenceInstant = academyNow(),
   referenceDate = getIndiaDateKey(referenceInstant),
 ): AttendanceSummary {
   const attendance = calculatePlayerAttendanceForMonth(
@@ -146,9 +146,9 @@ function nextPlayerSession(accountId: string) {
   const db = initializeDatabase()
   const assignments = listSessionAssignmentsForPlayers([accountId])
   if (!assignments.length) return null
-  const today = getIndiaDateKey()
+  const today = academyToday()
   const year = Number(today.slice(0, 4))
-  const now = new Date()
+  const now = academyNow()
   // `resolveNextAssignedOccurrence` keeps only occurrences an assignment
   // covers, and `assignmentCoversOccurrence` requires the same `seriesId`
   // (`lib/sessions/domain.ts:274`), so every occurrence outside this player's

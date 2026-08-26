@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("server-only", () => ({}))
+
 const mocks = vi.hoisted(() => ({
   getCoachFinanceRapidDesk: vi.fn(),
   getFinanceActivation: vi.fn(),

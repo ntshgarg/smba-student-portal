@@ -7,12 +7,12 @@ export function shiftReportMonth(month: string, offset: number) {
   return date.toISOString().slice(0, 7)
 }
 
-export function getCurrentIndiaMonth() {
-  return getAcademyMonthKey()
+export function getCurrentIndiaMonth(now = new Date()) {
+  return getAcademyMonthKey(now)
 }
 
-export function getLatestCompletedReportMonth() {
-  return shiftReportMonth(getCurrentIndiaMonth(), -1)
+export function getLatestCompletedReportMonth(now = new Date()) {
+  return shiftReportMonth(getCurrentIndiaMonth(now), -1)
 }
 
 export function formatReportMonth(month: string) {

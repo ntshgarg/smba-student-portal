@@ -4,6 +4,7 @@ import { SessionCalendar } from "@/components/coach/calendar/session-calendar"
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import { isValidDateKey } from "@/lib/attendance/domain"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
+import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { getCoachCalendarMonthSnapshot } from "@/lib/coach/session-read-models"
 
@@ -16,7 +17,7 @@ export default async function CoachCalendarPage({
 }) {
   await requireHeadAdminPage()
   const query = await searchParams
-  const now = new Date()
+  const now = academyNow()
   const today = getIndiaDateKey(now)
   const requestedDate = Array.isArray(query.date) ? query.date[0] : query.date
   if (!requestedDate || !isValidDateKey(requestedDate)) {

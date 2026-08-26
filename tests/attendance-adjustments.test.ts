@@ -724,4 +724,149 @@ describe("attendance adjustments", () => {
     )).get()?.choice).toBe("absent")
     expect(published.voidedAt).toBeNull()
   })
+
+  /*
+   * One save now reconciles the whole register in one batch instead of once per
+   * (player, date), and `saveAttendanceRegisterAction` accepts whatever changes
+   * a client sends -- several players across several dates. Batching two `in`
+   * lists is a cross product, so this pins the three ways it could smear one
+   * player's answer onto another: the pair it was asked about, the presence it
+   * judges that pair by, and whether that pair lost its final presence.
+   */
+  it("reconciles a multi-player register without crossing players or dates", async () => {
+    const { saveSessionAttendanceRecords } = await import("@/lib/sessions/service")
+    const flagged = createScenario("register-flagged", {
+      completedOn: "2026-08-12",
+      sourceDate: "2026-08-10",
+    })
+    const cleared = createScenario("register-cleared", {
+      completedOn: "2026-08-13",
+      sourceDate: "2026-08-11",
+    })
+    const flaggedAdjustment = adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: flagged.completionOccurrenceId,
+      playerId: flagged.playerId,
+      sourceOccurrenceId: flagged.sourceOccurrenceId,
+    })
+    const clearedAdjustment = adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: cleared.completionOccurrenceId,
+      playerId: cleared.playerId,
+      sourceOccurrenceId: cleared.sourceOccurrenceId,
+    })
+
+    // Take the completion presence away so this adjustment starts the register
+    // already needing review, and the register can be seen to clear it.
+    saveSessionAttendanceRecords({
+      database,
+      coachId,
+      now,
+      referenceDate: "2026-08-20",
+      changes: [{
+        playerId: cleared.playerId,
+        occurrenceId: cleared.completionOccurrenceId,
+        choice: "cleared",
+        expectedChoice: "present",
+      }],
+    })
+    expect(database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, clearedAdjustment.id)).get()?.reviewRequiredAt)
+      .toBeInstanceOf(Date)
+
+    /*
+     * The bystander: a second adjustment for the cleared player, on the other
+     * player's date. The register never asks about that pair, so it must not be
+     * written -- and it is the legacy shape, judged by any presence on the
+     * completed date, so an unfiltered cross product would find the presence
+     * seeded below and wrongly clear it.
+     */
+    const bystanderSourceOccurrenceId = addAbsentSource(
+      "register-bystander-source",
+      cleared.playerId,
+      "2026-08-09",
+    )
+    database.insert(schema.sessionSeries).values({
+      id: "register-bystander-series",
+      title: "Register bystander",
+      programme: "Adult",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: "2026-08-01",
+      endsOn: "2026-08-31",
+      status: "active",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionOccurrences).values({
+      id: "register-bystander-occurrence",
+      seriesId: "register-bystander-series",
+      occurrenceDate: "2026-08-12",
+      startsAt: new Date("2026-08-12T09:00:00+05:30"),
+      durationMinutes: 60,
+      venue: "SMBA Court",
+      status: "scheduled",
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionAttendanceRecords).values({
+      id: "register-bystander-attendance",
+      accountId: cleared.playerId,
+      occurrenceId: "register-bystander-occurrence",
+      choice: "present",
+      markedByAccountId: coachId,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    const bystanderReviewRequiredAt = new Date("2026-08-14T12:00:00+05:30")
+    database.insert(schema.attendanceAdjustments).values({
+      id: "register-bystander-adjustment",
+      type: "makeup",
+      playerId: cleared.playerId,
+      sourceOccurrenceId: bystanderSourceOccurrenceId,
+      completedOn: "2026-08-12",
+      completionOccurrenceId: null,
+      reason: null,
+      publishedByAccountId: coachId,
+      publishedAt: now,
+      reviewRequiredAt: bystanderReviewRequiredAt,
+      voidedByAccountId: null,
+      voidedAt: null,
+    }).run()
+
+    // One register, two players, two dates, opposite outcomes: the flagged
+    // player loses the presence its adjustment rests on, the cleared player
+    // gets its presence back.
+    expect(saveSessionAttendanceRecords({
+      database,
+      coachId,
+      now,
+      referenceDate: "2026-08-20",
+      changes: [
+        {
+          playerId: flagged.playerId,
+          occurrenceId: flagged.completionOccurrenceId,
+          choice: "cleared",
+          expectedChoice: "present",
+        },
+        {
+          playerId: cleared.playerId,
+          occurrenceId: cleared.completionOccurrenceId,
+          choice: "present",
+          expectedChoice: "cleared",
+        },
+      ],
+    })).toEqual({ applied: 2 })
+
+    const readAdjustment = (id: string) => database.select()
+      .from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, id)).get()
+    expect(readAdjustment(flaggedAdjustment.id)?.reviewRequiredAt).toEqual(now)
+    expect(readAdjustment(clearedAdjustment.id)?.reviewRequiredAt).toBeNull()
+    expect(readAdjustment("register-bystander-adjustment")?.reviewRequiredAt)
+      .toEqual(bystanderReviewRequiredAt)
+  })
 })

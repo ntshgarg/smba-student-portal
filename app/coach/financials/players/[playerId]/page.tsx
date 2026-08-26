@@ -6,7 +6,7 @@ import { isValidMonthKey } from "@/lib/attendance/domain"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { initializeDatabase } from "@/lib/db/client"
 import { getCoachFinancePlayerRecord, getFinanceActivation } from "@/lib/finance/service"
-import { getAcademyMonthKey } from "@/lib/format"
+import { academyCurrentMonth } from "@/lib/clock"
 
 export const metadata = {
   title: "Player fee record",
@@ -61,7 +61,7 @@ export default async function FinancialPlayerRecordPage({
 
   const [{ playerId }, query] = await Promise.all([params, searchParams])
   const requestedPeriod = firstValue(query.period)
-  const paymentPeriod = getAcademyMonthKey()
+  const paymentPeriod = academyCurrentMonth()
   const period = requestedPeriod && isValidMonthKey(requestedPeriod)
     ? requestedPeriod
     : paymentPeriod
