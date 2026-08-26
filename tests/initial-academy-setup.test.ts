@@ -21,6 +21,7 @@ import {
   HEAD_COACH_SETUP_CLAIM_LIFETIME_MS,
   headCoachSetupAvailable,
   platformAdminSetupAvailable,
+  validateInitialHeadCoachSetup,
   validHeadCoachSetupToken,
 } from "@/lib/auth/initial-setup"
 import {
@@ -204,5 +205,45 @@ describe("empty-academy first-run security", () => {
       database,
       now: new Date(NOW.getTime() + HEAD_COACH_SETUP_CLAIM_LIFETIME_MS + 1_001),
     })).toBe(false)
+  })
+})
+
+/*
+ * The form has six controls and one error channel, so the field a refusal
+ * belongs to has to travel with the message. Without it every failure marked
+ * "Full name" invalid and moved focus there -- a screen-reader user who
+ * mistyped Confirm PIN was told "Full name, invalid entry, The PINs do not
+ * match." and pointed at a correct field.
+ */
+describe("first head-coach setup validation names the field at fault", () => {
+  const valid = {
+    confirmPassword: "A stronger passphrase 1",
+    confirmPin: "246813",
+    fullName: "Sathiya Moorthy",
+    password: "A stronger passphrase 1",
+    pin: "246813",
+    recoveryEmailReceiptToken: "receipt",
+    recoveryEmailSubjectKey: "subject",
+    setupToken: "token",
+  }
+
+  it("accepts a complete submission", () => {
+    expect(validateInitialHeadCoachSetup(valid)).toBeNull()
+  })
+
+  it("blames the name, the password, and the password confirmation separately", () => {
+    expect(validateInitialHeadCoachSetup({ ...valid, fullName: "A" }))
+      .toMatchObject({ field: "fullName" })
+    expect(validateInitialHeadCoachSetup({ ...valid, confirmPassword: "short", password: "short" }))
+      .toMatchObject({ field: "password" })
+    expect(validateInitialHeadCoachSetup({ ...valid, confirmPassword: "A different one 12" }))
+      .toMatchObject({ field: "confirmPassword", message: "The passwords do not match." })
+  })
+
+  it("blames the PIN and its confirmation separately", () => {
+    expect(validateInitialHeadCoachSetup({ ...valid, confirmPin: "12345", pin: "12345" }))
+      .toMatchObject({ field: "pin" })
+    expect(validateInitialHeadCoachSetup({ ...valid, confirmPin: "246814" }))
+      .toMatchObject({ field: "confirmPin", message: "The PINs do not match." })
   })
 })

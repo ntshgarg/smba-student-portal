@@ -271,15 +271,44 @@ export type InitialHeadCoachSetupInput = {
   setupToken: string
 }
 
-export function validateInitialHeadCoachSetup(input: InitialHeadCoachSetupInput) {
+/**
+ * The field each message belongs to travels with the message.
+ *
+ * Without it the form had one error channel and no way to say which of its six
+ * controls was at fault, so every refusal -- a short password, mismatched PINs
+ * -- marked "Full name" invalid and moved focus there. Naming the field is what
+ * lets the form point at the control the coach has to correct, the way
+ * `ActivationFormState` and the PIN form already do.
+ */
+export type HeadCoachSetupField =
+  | "confirmPassword"
+  | "confirmPin"
+  | "fullName"
+  | "password"
+  | "pin"
+
+export type HeadCoachSetupValidationError = {
+  field: HeadCoachSetupField
+  message: string
+}
+
+export function validateInitialHeadCoachSetup(
+  input: InitialHeadCoachSetupInput,
+): HeadCoachSetupValidationError | null {
   const fullName = normalizeFullName(input.fullName)
-  if (fullName.length < 2 || fullName.length > 80) return "Enter the head coach’s full name."
+  if (fullName.length < 2 || fullName.length > 80) {
+    return { field: "fullName", message: "Enter the head coach’s full name." }
+  }
   const passwordError = validateNewPassword(input.password)
-  if (passwordError) return passwordError
-  if (input.password !== input.confirmPassword) return "The passwords do not match."
+  if (passwordError) return { field: "password", message: passwordError }
+  if (input.password !== input.confirmPassword) {
+    return { field: "confirmPassword", message: "The passwords do not match." }
+  }
   const pinError = validatePin(input.pin)
-  if (pinError) return pinError
-  if (input.pin !== input.confirmPin) return "The PINs do not match."
+  if (pinError) return { field: "pin", message: pinError }
+  if (input.pin !== input.confirmPin) {
+    return { field: "confirmPin", message: "The PINs do not match." }
+  }
   return null
 }
 
@@ -294,7 +323,7 @@ export async function completeInitialHeadCoachSetup(
   } = {},
 ) {
   const validationError = validateInitialHeadCoachSetup(input)
-  if (validationError) throw new Error(validationError)
+  if (validationError) throw new Error(validationError.message)
   const fullName = normalizeFullName(input.fullName)
   const accountId = randomUUID()
   const [passwordHash, pinHash] = await Promise.all([
