@@ -155,6 +155,8 @@ export function SessionCalendar({
   const [feedback, setFeedback] = useState<CalendarFeedback | null>(null)
   const shouldFocusDay = useRef(false)
   const dayHeadingRef = useRef<HTMLHeadingElement>(null)
+  const shouldFocusMonth = useRef(false)
+  const monthHeadingRef = useRef<HTMLHeadingElement>(null)
   const replacementGuard = useUnsavedWorkGuard({
     isDirty: Boolean(expandedOccurrenceId)
       && JSON.stringify(replacement) !== JSON.stringify(replacementBaseline),
@@ -191,6 +193,27 @@ export function SessionCalendar({
     shouldFocusDay.current = false
     dayHeadingRef.current?.focus({ preventScroll: true })
   }, [selectedDate])
+
+  /*
+   * The reverse of the effect above, which was missing.
+   *
+   * At or below 760px the two panes are exclusive -- `.coach-calendar-workspace`
+   * carries `is-month`/`is-day` and app/portal.css hides the other one outright.
+   * So "Back to month" hides the pane the pressed button lives in, and the HTML
+   * focus-fixup rule then moves focus to `<body>` on the next style update. The
+   * next Tab restarts at the top of the document, past the skip link; a screen
+   * reader hears nothing at all, because the view changed and no live region
+   * says so.
+   *
+   * Gated on the ref, not on `mobileView` alone, so only a deliberate press
+   * moves focus. The same layout is what a desktop coach at 400% zoom gets,
+   * which is the other way this is reached.
+   */
+  useEffect(() => {
+    if (mobileView !== "month" || !shouldFocusMonth.current) return
+    shouldFocusMonth.current = false
+    monthHeadingRef.current?.focus({ preventScroll: true })
+  }, [mobileView])
 
   function occurrenceRoster(occurrence: TrainingSessionOccurrence) {
     return players.filter((player) => (
@@ -266,7 +289,7 @@ export function SessionCalendar({
           <div className="coach-calendar-title-row">
             <div>
               <span>Month view</span>
-              <h2>{formatDateKey(monthWindow.from, {
+              <h2 ref={monthHeadingRef} tabIndex={-1}>{formatDateKey(monthWindow.from, {
                 month: "long",
                 year: "numeric",
                 weekday: undefined,
@@ -286,7 +309,14 @@ export function SessionCalendar({
         </div>
 
         <section className="coach-day-view" aria-labelledby="coach-day-view-title">
-          <button className="coach-day-view-back" type="button" onClick={() => setMobileView("month")}>
+          <button
+            className="coach-day-view-back"
+            type="button"
+            onClick={() => {
+              shouldFocusMonth.current = true
+              setMobileView("month")
+            }}
+          >
             <ArrowLeft aria-hidden="true" /> Back to month
           </button>
           <div className="coach-day-view-heading">

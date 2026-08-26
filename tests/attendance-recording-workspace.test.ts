@@ -5,6 +5,7 @@ import {
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
   resolvePlayerAttendanceSelection,
+  rosterProgressForOccurrences,
 } from "@/lib/attendance/recording-workspace"
 import type {
   SessionAssignment,
@@ -106,5 +107,56 @@ describe("focused attendance recording selection", () => {
         { id: "joined-later", joinedOn: "2026-08-11" },
       ],
     })).toEqual(["eligible"])
+  })
+
+  it("reports how far each register got, counting only the eligible and only what is saved", () => {
+    const assignments: SessionAssignment[] = [
+      {
+        id: "monday-assignment",
+        playerId: "eligible",
+        seriesId: morning.seriesId,
+        effectiveFrom: "2026-08-01",
+        effectiveTo: null,
+        weekdays: [1],
+      },
+      {
+        id: "second-monday-assignment",
+        playerId: "also-eligible",
+        seriesId: morning.seriesId,
+        effectiveFrom: "2026-08-01",
+        effectiveTo: null,
+        weekdays: [1],
+      },
+    ]
+    const players = [
+      { id: "eligible", joinedOn: "2026-08-01" },
+      { id: "also-eligible", joinedOn: "2026-08-01" },
+      { id: "never-assigned", joinedOn: "2026-08-01" },
+    ]
+
+    const progress = rosterProgressForOccurrences({
+      assignments,
+      occurrences: [morning, evening],
+      players,
+      records: {
+        // A mark against someone this session never rostered must not count
+        // towards it, or a finished register reads as over-complete.
+        morning: { eligible: "present", "never-assigned": "present" },
+      },
+    })
+
+    expect(progress.get("morning")).toEqual({ eligible: 2, marked: 1 })
+    expect(progress.get("evening")).toEqual({ eligible: 2, marked: 0 })
+  })
+
+  it("counts a register nobody has touched as zero rather than omitting it", () => {
+    const progress = rosterProgressForOccurrences({
+      assignments: [],
+      occurrences: [morning],
+      players: [],
+      records: {},
+    })
+
+    expect(progress.get("morning")).toEqual({ eligible: 0, marked: 0 })
   })
 })

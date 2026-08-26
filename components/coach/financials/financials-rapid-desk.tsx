@@ -82,6 +82,9 @@ function PaymentForm({
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState<"preview" | "record" | null>(null)
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
+  // Set when the refusal belongs to the amount box rather than to the request,
+  // so the field can carry `aria-invalid` and point at the message.
+  const [amountInvalid, setAmountInvalid] = useState(false)
   const amountRef = useRef<HTMLInputElement>(null)
   const requestKey = useIdempotencyKey()
 
@@ -118,6 +121,7 @@ function PaymentForm({
 
   function editAmount(nextAmount: string) {
     setAmount(nextAmount)
+    setAmountInvalid(false)
     setReviewedAmountPaise(null)
     setAllocationValues({})
     resetMutation()
@@ -128,6 +132,7 @@ function PaymentForm({
     const amountPaise = parseRupeesToPaise(amount)
     if (amountPaise === null) {
       setFeedback({ message: "Enter a valid payment amount", tone: "error" })
+      setAmountInvalid(true)
       amountRef.current?.focus()
       return
     }
@@ -140,7 +145,10 @@ function PaymentForm({
       })
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
-        if (result.field === "amountPaise") amountRef.current?.focus()
+        if (result.field === "amountPaise") {
+          setAmountInvalid(true)
+          amountRef.current?.focus()
+        }
         return
       }
       const suggested = new Map(result.data.allocations.map((allocation) => [
@@ -254,7 +262,10 @@ function PaymentForm({
                 autoComplete="off"
                 value={amount}
                 disabled={Boolean(pending)}
-                aria-describedby="payment-amount-help"
+                aria-invalid={amountInvalid || undefined}
+                aria-describedby={amountInvalid
+                  ? `payment-amount-help ${RAPID_DESK_FEEDBACK_ID}`
+                  : "payment-amount-help"}
                 onChange={(event) => editAmount(event.target.value)}
               />
             </span>
@@ -344,6 +355,7 @@ function PaymentForm({
           <div className={styles.balanceReviewPrompt}>
             <InlineNotice
               className={styles.notice}
+              id={RAPID_DESK_FEEDBACK_ID}
               message={feedback?.message}
               reserveSpace={false}
               tone={feedback?.tone}
@@ -440,6 +452,19 @@ function PaymentForm({
   )
 }
 
+
+/*
+ * The amount box is the one money field in the product whose refusal was
+ * announced and then unreachable: `role="alert"` fired once and focus moved
+ * here, but the input kept `aria-describedby="payment-amount-help"` and never
+ * carried `aria-invalid`, so a screen-reader user who tabbed away and back
+ * heard only "Total outstanding ₹1,000" and no hint that the value was refused.
+ *
+ * Every other form in the tree already wires a field to its own message --
+ * member-edit-form, activation-form, pin-setup-form, recovery-reset-forms. This
+ * gives the desk the same wiring by naming the shared notice.
+ */
+const RAPID_DESK_FEEDBACK_ID = "quick-payment-feedback"
 
 export function FinancialsRapidDesk({
   initialQuery,

@@ -250,6 +250,14 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["components/coach/financials/financials.module.css", "@media (max-width: 720px)", ".balanceMetric > strong", "30px"], // the one with nothing to protect
   ["components/coach/financials/financials.module.css", "@media (max-width: 720px), (pointer: coarse)", ".balanceField input", "16px"],
   ["components/coach/onboarding/player-onboarding-register.module.css", "@media (max-width: 700px)", ".threeFieldGrid select", "16px"],
+  // The touch half of the focus-zoom floor, lifted out of the width-only blocks that
+  // could not reach a tablet or a landscape phone. Each is the same declaration as the
+  // (max-width: N) entry above it, repeated under (pointer: coarse) alone; only the
+  // font-size was lifted, so the layout those blocks carry still keys on width.
+  ["app/portal.css", "@media (pointer: coarse)", ".security-form input", "16px"],
+  ["components/coach/announcements/announcements.module.css", "@media (pointer: coarse)", ".slipField input", "16px"],
+  ["components/coach/financials/financial-records.module.css", "@media (pointer: coarse)", '.filters input:not([type="checkbox"])', "16px"],
+  ["components/coach/financials/financials.module.css", "@media (pointer: coarse)", ".focusedLedger .planEditorBody .field input", "16px"],
 ]
 
 /** One line per exempt declaration, in the spelling the failure messages use. The first

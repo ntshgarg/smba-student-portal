@@ -16,6 +16,7 @@ import {
   type RecoveryCodeReissueState,
 } from "@/app/account/security/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import { PasswordInput } from "@/components/password-input"
 import {
   browserDownloadPort,
@@ -133,6 +134,45 @@ export function AccountSecurityWorkspace({
   const [isPending, startTransition] = useTransition()
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null)
   const [showAllSessions, setShowAllSessions] = useState(false)
+  const [sessionsFeedback, setSessionsFeedback] = useState<ActionFeedback | null>(null)
+
+  /*
+   * The two revoke buttons were the only mutations in this file that did not
+   * go through `describeSaveFailure`: `startTransition(() => action())` hands
+   * React a promise it can only reject, and a rejected action throws during
+   * render and escalates to the root boundary. So a dropped request on a venue
+   * connection replaced the whole security page -- including the session list
+   * being read -- with the generic error card, and said nothing about whether
+   * the device had been signed out.
+   *
+   * Awaiting inside the transition and folding the failure into a notice beside
+   * the list keeps the page, keeps the list, and answers the only question that
+   * matters after a failed revoke. Neither action calls `redirect()`, so this
+   * catch cannot swallow Next's redirect control-flow rejection; if either ever
+   * grows one, it has to be rethrown here.
+   */
+  function revokeSessions(
+    run: () => Promise<void>,
+    { fallbackMessage, retained, subject }: {
+      fallbackMessage: string
+      retained: string
+      subject: string
+    },
+  ) {
+    setSessionsFeedback(null)
+    startTransition(async () => {
+      try {
+        await run()
+      } catch (error) {
+        setSessionsFeedback({
+          message: describeSaveFailure({ error, fallbackMessage, retained, subject }).message,
+          tone: "error",
+        })
+      } finally {
+        setRevokingSessionId(null)
+      }
+    })
+  }
 
   // Send focus to the field the error names, matching the PIN form below.
   useEffect(() => {
@@ -340,7 +380,11 @@ export function AccountSecurityWorkspace({
                       disabled={isPending}
                       onClick={() => {
                         setRevokingSessionId(session.id)
-                        startTransition(() => revokeSessionAction(session.id))
+                        revokeSessions(() => revokeSessionAction(session.id), {
+                          fallbackMessage: "That device could not be signed out",
+                          retained: "It is still signed in",
+                          subject: "The sign-out",
+                        })
                       }}
                     >
                       {revoking && isPending ? "Logging out…" : "Log out"}
@@ -363,10 +407,24 @@ export function AccountSecurityWorkspace({
             </button>
           ) : null}
           {orderedSessions.length > 1 ? (
-            <button className="security-secondary-action" type="button" onClick={() => startTransition(() => revokeOtherSessionsAction())} disabled={isPending}>
+            <button
+              className="security-secondary-action"
+              type="button"
+              onClick={() => revokeSessions(() => revokeOtherSessionsAction(), {
+                fallbackMessage: "The other devices could not be signed out",
+                retained: "They are still signed in",
+                subject: "The sign-out",
+              })}
+              disabled={isPending}
+            >
               Log out other devices
             </button>
           ) : null}
+          <InlineNotice
+            message={sessionsFeedback?.message}
+            reserveSpace={false}
+            tone={sessionsFeedback?.tone}
+          />
         </section>
       </div>
 

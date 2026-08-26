@@ -176,6 +176,51 @@ jobs:
           npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-stress.log output/failure-evidence/accessibility/stress-server.sanitized.txt
           exit 1
 
+      # capture-regression.spec.ts is 189 lines and 48 cases that no workflow has
+      # ever invoked: `regression:capture` exists in package.json and nothing calls
+      # it. It is not a screenshot-diff suite -- `evidenceViolations` fails a case
+      # on horizontal document overflow, an uncaught page error, a console error, a
+      # failed request, an HTTP error response or an incomplete image, and
+      # `SMBA_CAPTURE_STRICT` already defaults to true. So it has been a working
+      # gate with nothing pulling the lever.
+      #
+      # It runs here rather than in its own workflow because it needs exactly what
+      # this job has already paid for: a production build and a served stress
+      # fixture. A separate port keeps it off the audit server above, whose own
+      # step has already exited by this point.
+      #
+      # Deliberately the harness default viewport set, not SMBA_CAPTURE_VIEWPORT_SET=responsive.
+      # `viewportsForCapture` (capture-matrix.ts:589-595) returns `responsiveViewports`
+      # for *every* definition once that variable is set, ignoring what each capture
+      # is written for -- so the six `public-home-*` captures, whose action opens the
+      # mobile navigation, get run at 1440x900 where no mobile navigation exists and
+      # time out waiting for it. That is a property of the harness rather than of this
+      # step, and `regression:capture:responsive` carries it too; fixing it means
+      # per-definition viewport handling, which is a change to the matrix and not to
+      # the wiring.
+      - name: Capture responsive regression evidence
+        id: capture
+        continue-on-error: true
+        env:
+          BETTER_AUTH_SECURE_COOKIES: "false"
+          DB_FILE_NAME: /tmp/smba-accessibility-stress.db
+          SMBA_CAPTURE_BASE_URL: http://127.0.0.1:3113
+          SMBA_CAPTURE_OUTPUT_DIR: output/runtime-regression/capture
+          SMBA_REQUIRE_COACH_TOTP: "false"
+        run: |
+          npx next start -p 3113 > /tmp/smba-capture.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3113/api/health > /dev/null; then
+              npm run regression:capture
+              exit $?
+            fi
+            sleep 1
+          done
+          npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-capture.log output/failure-evidence/accessibility/capture-server.sanitized.txt
+          exit 1
+
       - name: Write accessibility job summary
         id: summary
         if: always()
@@ -189,14 +234,14 @@ jobs:
         run: sha256sum --check /tmp/smba-accessibility-sources.sha256
 
       - name: Show server logs after a failure
-        if: always() && (steps.admin.outcome == 'failure' || steps.clean.outcome == 'failure' || steps.stress.outcome == 'failure')
+        if: always() && (steps.admin.outcome == 'failure' || steps.clean.outcome == 'failure' || steps.stress.outcome == 'failure' || steps.capture.outcome == 'failure')
         run: |
           npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-admin.log output/failure-evidence/accessibility/admin-server.sanitized.txt
           npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-clean.log output/failure-evidence/accessibility/clean-server.sanitized.txt
           npx tsx scripts/regression/sanitize-server-log.ts /tmp/smba-accessibility-stress.log output/failure-evidence/accessibility/stress-server.sanitized.txt
 
       - name: Upload failure evidence
-        if: always() && (steps.admin.outcome == 'failure' || steps.clean.outcome == 'failure' || steps.stress.outcome == 'failure' || steps.summary.outcome == 'failure')
+        if: always() && (steps.admin.outcome == 'failure' || steps.clean.outcome == 'failure' || steps.stress.outcome == 'failure' || steps.capture.outcome == 'failure' || steps.summary.outcome == 'failure')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ui-accessibility-failure-${{ github.run_id }}-${{ github.run_attempt }}
@@ -229,5 +274,6 @@ jobs:
           test "${{ steps.admin.outcome }}" = success
           test "${{ steps.clean.outcome }}" = success
           test "${{ steps.stress.outcome }}" = success
+          test "${{ steps.capture.outcome }}" = success
           test "${{ steps.summary.outcome }}" = success
           test "${{ steps.fixtures.outcome }}" = success

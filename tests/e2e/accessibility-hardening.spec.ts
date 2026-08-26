@@ -10,7 +10,7 @@ const FIXTURE_PASSWORD = process.env.SMBA_FIXTURE_PASSWORD ?? "SMBA fixture acce
 
 async function loginAsCoach(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  await page.getByLabel("SMBA username").fill(COACH_ACADEMY_ID)
+  await page.getByLabel("Academy ID").fill(COACH_ACADEMY_ID)
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/coach"), {
@@ -20,7 +20,7 @@ async function loginAsCoach(page: Page) {
 
 async function loginAsPlayer(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  await page.getByLabel("SMBA username").fill(PLAYER_ACADEMY_ID)
+  await page.getByLabel("Academy ID").fill(PLAYER_ACADEMY_ID)
   await page.getByLabel("Password").fill(FIXTURE_PASSWORD)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/player"), {
@@ -38,7 +38,7 @@ async function expectMobileSafeFont(control: Locator) {
 
 test("authentication failures restore focus to the invalid field", async ({ page }) => {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  const academyId = page.getByLabel("SMBA username")
+  const academyId = page.getByLabel("Academy ID")
 
   await academyId.fill("invalid")
   await page.getByRole("button", { name: "Continue" }).click()

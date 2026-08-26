@@ -60,6 +60,28 @@ export const authMethods = sqliteTable("auth_methods", {
   index("auth_methods_account_idx").on(table.accountId),
 ])
 
+/**
+ * Retained, not live. Nothing in this application inserts into or selects from
+ * `auth_sessions`: Better Auth owns the session a request is actually
+ * authenticated by, in `authRuntimeSessions` below, and every read, write and
+ * revocation goes there.
+ *
+ * What is left are three deletes -- authenticator reset, password recovery and
+ * member archival -- which sweep this table alongside the runtime one. They are
+ * a legacy sweep, and they are the reason to keep the declaration rather than a
+ * reason to think the table is in use. It predates the Better Auth adapter
+ * (drizzle/0000_init_shared_identity.sql), so a database that has been through
+ * that transition can still hold rows, and the three paths that revoke access
+ * are exactly the paths that must not leave one behind.
+ *
+ * Dropping it is therefore a data decision, not a code cleanup, and it is not
+ * made here: a DROP would run against the production database on the next
+ * deployment and nothing in this repository can tell you whether that database
+ * still holds rows worth clearing rather than discarding. Once it is confirmed
+ * empty in production, this declaration, the three deletes and their assertions
+ * in tests/member-service.test.ts, tests/member-finance-closeout.test.ts and
+ * tests/authenticator-reset-service.test.ts go together, with a migration.
+ */
 export const authSessions = sqliteTable("auth_sessions", {
   tokenHash: text("token_hash").primaryKey(),
   accountId: text("account_id").notNull().references(() => accounts.id),

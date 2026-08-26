@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import { ArrowRight, MailCheck } from "lucide-react"
 
 import { AuthField } from "@/components/auth-field"
+import { ACADEMY_ID_LABEL } from "@/lib/auth/identity"
 import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 import {
@@ -46,7 +47,7 @@ export function RecoveryForm() {
     <form className="login-form" action={formAction} noValidate>
       <AuthField
         id="recovery-academy-id"
-        label="SMBA username"
+        label={ACADEMY_ID_LABEL}
         errorId={state.error ? recoveryRequestErrorId : undefined}
       >
         {(control) => (

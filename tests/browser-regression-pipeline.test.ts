@@ -15,16 +15,20 @@ const workflowDirectory = path.join(repositoryRoot, ".github/workflows")
  * four specs that were not, sitting in the same directory as the specs that are,
  * and nothing in the repository said so -- which is the whole point of deriving
  * this from the directory listing rather than from a checked-in list of names.
+ *
+ * There are none left. `playwright.config.ts` and capture-regression.spec.ts were
+ * exempt on the grounds that the capture harness "produces screenshots and
+ * evidence JSON for a person to read rather than a pass/fail signal". That was
+ * not true of the harness as written: `SMBA_CAPTURE_STRICT` defaults to true and
+ * `evidenceViolations` fails a case on horizontal document overflow, an uncaught
+ * page error, a console error, a failed request, an HTTP error response or an
+ * incomplete image. It was a working gate that nothing invoked, and the exemption
+ * is what kept anyone from noticing. ui-accessibility.yml now runs it against the
+ * same stress fixture it has already built, so the map is empty and both entries
+ * are enforced like every other spec.
  */
-const manualOnlyConfigs = new Map([[
-  "playwright.config.ts",
-  "the authenticated capture harness produces screenshots and evidence JSON for a"
-  + " person to read rather than a pass/fail signal (tests/e2e/README.md)",
-]])
-const manualOnlySpecs = new Map([[
-  "capture-regression.spec.ts",
-  "the only spec the capture harness schedules, manual for the same reason",
-]])
+const manualOnlyConfigs = new Map<string, string>()
+const manualOnlySpecs = new Map<string, string>()
 
 // Some configs refuse to load without the environment their runner supplies.
 // These values only have to satisfy the guards; nothing here starts a server.

@@ -9,6 +9,7 @@ import {
   type AuthenticatorRecoveryRequestState,
 } from "@/app/auth/two-factor/recovery/actions"
 import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
+import { ACADEMY_ID_LABEL } from "@/lib/auth/identity"
 
 const initialRequestState: AuthenticatorRecoveryRequestState = { error: null, sent: false }
 const initialApprovalState: AuthenticatorRecoveryApprovalState = { error: null }
@@ -32,7 +33,7 @@ export function AuthenticatorRecoveryRequestForm() {
   return (
     <form className="login-form" action={action} noValidate>
       <div className="login-field">
-        <label htmlFor="authenticator-recovery-id">SMBA username</label>
+        <label htmlFor="authenticator-recovery-id">{ACADEMY_ID_LABEL}</label>
         <input id="authenticator-recovery-id" name="academyId" autoComplete="username" maxLength={15} required />
       </div>
       <div className="login-field">

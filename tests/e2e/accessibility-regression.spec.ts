@@ -551,7 +551,7 @@ async function loginWithPassword(
   password: string,
 ) {
   await page.goto("/login", { waitUntil: "domcontentloaded" })
-  await page.getByLabel("SMBA username").fill(academyId)
+  await page.getByLabel("Academy ID").fill(academyId)
   await page.getByLabel("Password").fill(password)
   await page.getByRole("button", { name: "Continue" }).click()
   await page.waitForURL((url) => [

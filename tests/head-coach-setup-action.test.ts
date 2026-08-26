@@ -83,7 +83,7 @@ describe("first-run head-coach setup action", () => {
   it("signs the new head coach in and sends them to authenticator setup", async () => {
     mocks.signInUsername.mockResolvedValue({ user: {} })
 
-    await completeHeadCoachSetupAction({ error: null }, setupData())
+    await completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())
 
     expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_coach_setup")
     expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_setup_email")
@@ -97,7 +97,7 @@ describe("first-run head-coach setup action", () => {
   it("presents the just-written password under the login-lockout exemption", async () => {
     mocks.signInUsername.mockResolvedValue({ user: {} })
 
-    await completeHeadCoachSetupAction({ error: null }, setupData())
+    await completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())
 
     expect(mocks.signInUsername).toHaveBeenCalledOnce()
     expect(mocks.signedInWhileExempt).toBe(true)
@@ -112,9 +112,10 @@ describe("first-run head-coach setup action", () => {
       status: "TOO_MANY_REQUESTS",
     }))
 
-    await expect(completeHeadCoachSetupAction({ error: null }, setupData())).resolves.toEqual({
+    await expect(completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())).resolves.toEqual({
       error: "The head-coach account is ready, but we couldn’t sign you in."
         + " Open the sign-in page and use your new password.",
+      errorField: null,
     })
     expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_coach_setup")
     expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_setup_email")
@@ -127,8 +128,9 @@ describe("first-run head-coach setup action", () => {
   it("keeps the setup session alive when the account itself could not be created", async () => {
     mocks.completeInitialHeadCoachSetup.mockRejectedValue(new Error("An academy already exists."))
 
-    await expect(completeHeadCoachSetupAction({ error: null }, setupData())).resolves.toEqual({
+    await expect(completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())).resolves.toEqual({
       error: "An academy already exists.",
+      errorField: null,
     })
     expect(mocks.cookieDelete).not.toHaveBeenCalled()
     expect(mocks.signInUsername).not.toHaveBeenCalled()

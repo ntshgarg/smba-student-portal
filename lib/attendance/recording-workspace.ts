@@ -59,6 +59,44 @@ export function eligiblePlayerIdsForOccurrence({
     .map((player) => player.id)
 }
 
+export type OccurrenceRosterProgress = {
+  eligible: number
+  marked: number
+}
+
+/**
+ * How far each of a day's registers got, for the session picker.
+ *
+ * Counted rather than reduced to a flag on purpose. A register holding one mark
+ * out of thirty is the state most worth distinguishing, and any boolean would
+ * put the same reassuring word on it as on a finished one.
+ *
+ * Only saved marks are counted -- `records` is what the register holds, not what
+ * the coach has drafted locally -- so a picker built on this never claims credit
+ * for work that has not been sent.
+ */
+export function rosterProgressForOccurrences({
+  assignments,
+  occurrences,
+  players,
+  records,
+}: {
+  assignments: SessionAssignment[]
+  occurrences: TrainingSessionOccurrence[]
+  players: Array<{ id: string; joinedOn: string }>
+  records: Record<string, Record<string, string> | undefined>
+}): Map<string, OccurrenceRosterProgress> {
+  return new Map(occurrences.map((occurrence) => {
+    const eligible = eligiblePlayerIdsForOccurrence({ assignments, occurrence, players })
+    const recorded = records[occurrence.id] ?? {}
+    const marked = eligible.reduce(
+      (total, playerId) => total + (recorded[playerId] ? 1 : 0),
+      0,
+    )
+    return [occurrence.id, { eligible: eligible.length, marked }]
+  }))
+}
+
 export function resolvePlayerAttendanceSelection({
   occurrences,
   query,
