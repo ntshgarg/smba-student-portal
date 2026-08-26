@@ -484,6 +484,56 @@ function nextFeeReference(
   throw new Error("Unable to allocate a unique fee reference.")
 }
 
+/*
+ * `nextFeeReference` proves one generated reference free with one `select`;
+ * this proves a month's worth with one, for the single caller that knows up
+ * front how many it needs. Generation is untouched -- same generator, same
+ * format check, same eight attempts before giving up -- only the collision
+ * probe is shared, and it still runs against `lower(fee_reference)` so it uses
+ * the same case-insensitive unique index.
+ *
+ * References are also held apart from each other, because a batch reserved
+ * before the first insert cannot see the rows its caller is about to write.
+ */
+function reserveFeeReferences(
+  database: SmbaDatabaseExecutor,
+  createFeeReference: () => string,
+  count: number,
+) {
+  const reserved: string[] = []
+  const drawn = new Set<string>()
+  for (let attempt = 0; attempt < 8 && reserved.length < count; attempt += 1) {
+    // A fixed number of draws per attempt rather than "draw until distinct": a
+    // generator stuck on one value has to run the attempts out and fail the way
+    // the single-reference path fails, not spin here forever.
+    const candidates: string[] = []
+    for (let draw = reserved.length; draw < count; draw += 1) {
+      const reference = createFeeReference().toUpperCase()
+      if (!isValidFeeReference(reference)) {
+        financeError("INVALID_INPUT", "The fee reference generator returned an invalid value.")
+      }
+      if (drawn.has(reference)) continue
+      drawn.add(reference)
+      candidates.push(reference)
+    }
+    if (!candidates.length) continue
+    const taken = new Set(
+      database.select({ feeReference: financialCharges.feeReference }).from(financialCharges)
+        .where(inArray(
+          sql<string>`lower(${financialCharges.feeReference})`,
+          candidates.map((reference) => reference.toLowerCase()),
+        )).all().map((row) => row.feeReference.toUpperCase()),
+    )
+    candidates.forEach((reference) => {
+      if (!taken.has(reference)) reserved.push(reference)
+    })
+  }
+  if (reserved.length < count) {
+    throw new Error("Unable to allocate a unique fee reference.")
+  }
+  return reserved
+}
+
 function issueCharge(
   database: SmbaDatabaseExecutor,
   {
@@ -495,8 +545,10 @@ function issueCharge(
     createId,
     description,
     dueDate,
+    knownExisting,
     now,
     playerId,
+    reservedFeeReference,
     type,
   }: {
     actorId: string
@@ -507,25 +559,50 @@ function issueCharge(
     createId: () => string
     description: string
     dueDate: string
+    /*
+     * A caller that already ran the lookup below -- one batched `select` for a
+     * whole roster instead of one per charge -- hands its own answer in here:
+     * the row it found, or `null` for "that exact query returned nothing".
+     * Omitting it keeps the lookup local, which is what every caller but the
+     * monthly preparation does. `null` is only sound when the caller can show
+     * that nothing between its read and this call can issue a charge for the
+     * same (player, type, period); if it is ever wrong the insert trips the
+     * one-issued-charge-per-period unique index and rolls the whole
+     * transaction back, so the failure mode is a lost preparation, never a
+     * duplicated fee.
+     */
+    knownExisting?: typeof financialCharges.$inferSelect | null
     now: Date
     playerId: string
+    /*
+     * A reference the caller has already proved free, from the same kind of
+     * batch. Missing -- including a caller that reserved fewer than it ended
+     * up issuing -- falls back to the per-charge probe, so mis-sizing the
+     * reservation costs statements, not charges.
+     */
+    reservedFeeReference?: string
     type: "registration" | "monthly_training"
   },
 ) {
-  const existing = database.select().from(financialCharges).where(and(
-    eq(financialCharges.playerAccountId, playerId),
-    eq(financialCharges.type, type),
-    type === "registration"
-      ? isNull(financialCharges.billingPeriod)
-      : eq(financialCharges.billingPeriod, billingPeriod ?? ""),
-    eq(financialCharges.lifecycle, "issued"),
-  )).get()
+  const existing = knownExisting === undefined
+    ? database.select().from(financialCharges).where(and(
+      eq(financialCharges.playerAccountId, playerId),
+      eq(financialCharges.type, type),
+      type === "registration"
+        ? isNull(financialCharges.billingPeriod)
+        : eq(financialCharges.billingPeriod, billingPeriod ?? ""),
+      eq(financialCharges.lifecycle, "issued"),
+    )).get()
+    : knownExisting
   if (existing) return { charge: existing, created: false }
 
   const id = createId()
-  database.insert(financialCharges).values({
+  // `returning` rather than a read-back: SQLite hands over the row it just
+  // wrote, and there are no triggers on `financial_charges` for a second read
+  // to observe.
+  const charge = database.insert(financialCharges).values({
     id,
-    feeReference: nextFeeReference(database, createFeeReference),
+    feeReference: reservedFeeReference ?? nextFeeReference(database, createFeeReference),
     playerAccountId: playerId,
     feeAgreementId: agreementId,
     type,
@@ -538,9 +615,7 @@ function issueCharge(
     recordRevision: 0,
     issuedByAccountId: actorId,
     issuedAt: now,
-  }).run()
-  const charge = readCharge(database, id)
-  if (!charge) throw new Error("The issued charge could not be read.")
+  }).returning().get()
   insertAudit(database, {
     actorId,
     createId,
@@ -1898,6 +1973,30 @@ export function prepareMonthlyCharges(
       now,
     )
 
+    /*
+     * The fifth read that ran once per charge: the probe proving a freshly
+     * generated fee reference is not already taken. Reserved in one statement
+     * here and handed out in loop order below.
+     *
+     * The count is deliberately "certain to bill" rather than "might bill". A
+     * candidate in a month that is not its first billed one always issues,
+     * because `monthlyChargeBasis` returns the agreed fee unchanged and
+     * `fee_agreements_amount_positive_check` keeps that above zero. A first
+     * billed month can prorate to zero and issue nothing, so reserving for one
+     * would burn a reference the loop never writes -- those keep the per-charge
+     * probe, one statement each, in the one month a player joins.
+     */
+    const certainToBillCount = candidates.filter(({ agreement, enrollment, hasAssignment }) => (
+      hasAssignment
+        && !existingByPlayer.has(agreement.playerAccountId)
+        && (billedEarlierPlayers.has(agreement.playerAccountId)
+          || input.period < enrollment.trainingStartOn.slice(0, 7))
+    )).length
+    const reservedFeeReferences = certainToBillCount
+      ? reserveFeeReferences(tx, createFeeReference, certainToBillCount)
+      : []
+    let reservedFeeReferencesUsed = 0
+
     candidates.forEach(({ agreement, enrollment, hasAssignment }) => {
       if (!hasAssignment) {
         result.awaitingAssignment += 1
@@ -1925,6 +2024,14 @@ export function prepareMonthlyCharges(
         result.deferred += 1
         return
       }
+      /*
+       * `knownExisting: null` is the batched read above, not an assumption:
+       * `existingByPlayer` ran the identical predicate for this player, this
+       * period and `lifecycle = 'issued'`, the branch above returned when it
+       * found a row, and `monthlyPreparationCandidates` collapses candidates to
+       * one per player -- so no earlier iteration can have issued this player's
+       * monthly charge either.
+       */
       const issued = issueCharge(tx, {
         actorId: coachId,
         agreementId: agreement.id,
@@ -1934,10 +2041,13 @@ export function prepareMonthlyCharges(
         createId,
         description: basis.description,
         dueDate: basis.dueDate,
+        knownExisting: null,
         now,
         playerId: agreement.playerAccountId,
+        reservedFeeReference: reservedFeeReferences.at(reservedFeeReferencesUsed),
         type: "monthly_training",
       })
+      reservedFeeReferencesUsed += 1
       result.ready += 1
       result.createdChargeIds.push(issued.charge.id)
       applyRecurringConcessionForCharge(tx, issued.charge, input.period, {
