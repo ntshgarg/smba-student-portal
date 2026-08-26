@@ -4,6 +4,8 @@ import Link from "next/link"
 import { AttendanceAdjustmentsWorkspace } from "@/components/coach/attendance-adjustments-workspace"
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
+import { academyNow } from "@/lib/clock"
+import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { getCoachAttendanceAdjustmentsSnapshot } from "@/lib/coach/session-read-models"
 
 export const metadata = {
@@ -29,6 +31,12 @@ export default async function AttendanceAdjustmentsPage({
   const historyOpen = firstSearchValue(query.history) === "open"
   const player = firstSearchValue(query.player)
   const snapshot = getCoachAttendanceAdjustmentsSnapshot({ adjustmentId: adjustment, playerId: player })
+  // Passed down rather than taken at mount, for the reason lib/clock.ts records
+  // against this exact file: `sourceOptions` gates on
+  // `occurrence.occurrenceDate <= todayKey`, so a workspace reading the device
+  // clock grows one more missed-session option every midnight, and the audited
+  // `coach-attendance-adjustments` state hands axe a different DOM each day.
+  const now = academyNow()
 
   return (
     <CoachPortalProvider
@@ -63,6 +71,8 @@ export default async function AttendanceAdjustmentsPage({
             initialAdjustmentId={adjustment}
             initialHistoryOpen={historyOpen}
             initialPlayerId={snapshot.selectedPlayerId ?? undefined}
+            referenceDate={getIndiaDateKey(now)}
+            referenceInstant={now.getTime()}
           />
         </article>
       </div>

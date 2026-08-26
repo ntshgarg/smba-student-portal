@@ -35,7 +35,6 @@ import {
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   formatAcademyDate,
   formatAcademyTime,
@@ -96,6 +95,16 @@ type AttendanceAdjustmentsWorkspaceProps = {
   initialHistoryOpen?: boolean
   initialPlayerId?: string
   labelledBy?: string
+  /**
+   * The server's "now", not the device's. `sourceOptions` gates on
+   * `occurrence.occurrenceDate <= todayKey`, so taking these at mount grew the
+   * missed-session list by one every midnight and moved the DOM the
+   * accessibility gate measures -- which is the drift lib/clock.ts names against
+   * this file, and one of the reasons a ceiling recorded against no CSS change
+   * kept having to be re-recorded.
+   */
+  referenceDate: string
+  referenceInstant: number
 }
 
 /**
@@ -117,6 +126,8 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   initialHistoryOpen = false,
   initialPlayerId,
   labelledBy = "reschedule-attendance-trigger",
+  referenceDate,
+  referenceInstant: initialReferenceInstant,
 }, ref) {
   const { players } = useMemberPortal()
   const {
@@ -143,7 +154,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const [completionOccurrenceId, setCompletionOccurrenceId] = useState("")
   const [reason, setReason] = useState("")
   const [isReviewing, setIsReviewing] = useState(false)
-  const [sourceMonth, setSourceMonth] = useState(() => getIndiaDateKey().slice(0, 7))
+  const [sourceMonth, setSourceMonth] = useState(() => referenceDate.slice(0, 7))
   const [selectedSourceDate, setSelectedSourceDate] = useState("")
   const [pendingAction, setPendingAction] = useState<"publish" | string | null>(null)
   const [feedback, setFeedback] = useState<AdjustmentFeedback | null>(null)
@@ -161,8 +172,8 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const reasonRef = useRef<HTMLInputElement>(null)
   const feedbackId = "attendance-adjustment-feedback"
   const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
-  const [todayKey] = useState(() => getIndiaDateKey())
-  const [referenceInstant] = useState(() => Date.now())
+  const [todayKey] = useState(referenceDate)
+  const [referenceInstant] = useState(initialReferenceInstant)
   const draftIsDirty = Boolean(sourceOccurrenceId || completionOccurrenceId || reason.trim())
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: draftIsDirty,
