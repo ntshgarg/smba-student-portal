@@ -4,7 +4,7 @@ import path from "node:path"
 
 import { base32 } from "@better-auth/utils/base32"
 import { createOTP } from "@better-auth/utils/otp"
-import type { Browser, Page, TestInfo } from "@playwright/test"
+import type { Browser, BrowserContext, Page, TestInfo } from "@playwright/test"
 import Database from "better-sqlite3"
 
 import { expect, test } from "./support/failure-evidence"
@@ -36,6 +36,14 @@ import {
   type AccessibilityState,
   type AccessibilityViewport,
 } from "./support/accessibility-matrix"
+import {
+  applyBrowserFontSizePreference,
+  auditTextResizeLayout,
+  textResizeResultId,
+  textResizeStates,
+  textResizeStatesForActor,
+  TEXT_RESIZE_FONT_SIZES,
+} from "./support/accessibility-text-resize"
 
 const profileValue = process.env.SMBA_ACCESSIBILITY_PROFILE ?? "stress"
 if (!accessibilityProfiles.includes(profileValue as AccessibilityProfile)) {
@@ -406,6 +414,130 @@ async function auditMatrixState(
       results.push(result)
       await captureMaskedFailure(page, testInfo, `${state.id}-${viewport.label}`).catch(() => undefined)
     }
+  }
+}
+
+function selectedTextResizeStates(actor: AccessibilityActor) {
+  return textResizeStatesForActor(actor).filter((state) => state.profile === profile
+    && (!stateFilter || state.id === stateFilter))
+}
+
+// The same walk auditMatrixState performs -- goto per viewport, route check,
+// interaction, scroll to origin -- against a page whose browser font-size
+// preference has been raised. It is a separate function rather than a flag on
+// auditMatrixState because what it records afterwards is different in kind:
+// three layout measurements, filed as advisories against a ceiling, and no axe
+// pass. Merging the two would put a branch inside the walk that every ordinary
+// state pays for.
+async function auditTextResizeState(
+  page: Page,
+  state: AccessibilityState,
+  results: AccessibilityResult[],
+  testInfo: TestInfo,
+  raiseBrowserTextSize: () => Promise<void>,
+) {
+  const id = textResizeResultId(state.id)
+  for (const viewport of viewportsForState(state)) {
+    await page.setViewportSize({ height: viewport.height, width: viewport.width })
+    try {
+      await raiseBrowserTextSize()
+      await page.goto(state.route, { waitUntil: "domcontentloaded" })
+      await settle(page)
+      const expectedPath = state.expectedRoute ?? new URL(state.route, baseURL).pathname
+      const actualPath = new URL(page.url()).pathname
+      if (actualPath !== expectedPath) {
+        throw new Error(`Expected ${expectedPath}, but navigation resolved to ${actualPath}.`)
+      }
+      if (state.interaction) await executeAccessibilityInteraction(page, state.interaction)
+      // Same normalisation auditCurrentPage applies, and for the same reason: an
+      // interaction that scrolled its trigger into view would otherwise leave
+      // sticky chrome sitting over controls that are merely above the fold.
+      //
+      // Unconditional, and kept unconditional on purpose. Twelve of the sixteen
+      // states declare no interaction, so it looks like 41 of the 55 audits are
+      // paying a second `settle` for nothing -- but a repeated `settle` on the
+      // same document is nearly free: Playwright records `networkidle` as a
+      // lifecycle event of the current document and `waitForLoadState` returns
+      // immediately once it has fired ("not waiting, networkidle event already
+      // fired"), so the 2s is a timeout rather than a cost, and what is left is
+      // `document.fonts.ready` and two animation frames. Dropping it would buy
+      // tens of milliseconds and give up the one wait that would catch content
+      // arriving after hydration -- on the pass whose whole value is that its
+      // measurements are trustworthy.
+      await page.evaluate(() => window.scrollTo(0, 0))
+      await settle(page)
+      const { advisories, findings } = await auditTextResizeLayout({ page, viewport })
+      results.push({
+        actor: state.actor,
+        advisories,
+        description: `${state.description} at ${TEXT_RESIZE_FONT_SIZES.standard}px browser text`,
+        findings,
+        id,
+        profile,
+        route: state.route,
+        title: await page.title().catch(() => ""),
+        url: page.url(),
+        viewport,
+      })
+      if (findings.length || advisories.length) {
+        await captureMaskedFailure(page, testInfo, `${id}-${viewport.label}`).catch(() => undefined)
+      }
+    } catch (error) {
+      results.push({
+        actor: state.actor,
+        description: state.description,
+        findings: [executionFinding(error)],
+        id,
+        profile,
+        route: state.route,
+        title: await page.title().catch(() => ""),
+        url: page.url(),
+        viewport,
+      })
+      await captureMaskedFailure(page, testInfo, `${id}-${viewport.label}`).catch(() => undefined)
+    }
+  }
+}
+
+// A second page in the actor's existing context, so the raised preference is
+// scoped to a target that is closed straight afterwards and cannot follow the
+// ordinary pass. It shares the context's cookies, so no second sign-in is paid
+// for; it does not share the CDP session, because newCDPSession attaches per
+// target.
+async function sweepTextResizeStates({
+  context,
+  actor,
+  results,
+  testInfo,
+}: {
+  actor: AccessibilityActor
+  context: BrowserContext
+  results: AccessibilityResult[]
+  testInfo: TestInfo
+}) {
+  const states = selectedTextResizeStates(actor)
+  if (!states.length) return
+  const page = await context.newPage()
+  // Sent once and kept: Page.setFontSizes writes the tab's web preferences, so
+  // it survives every navigation below rather than needing a resend per goto.
+  //
+  // Deferred into the first state's own try block rather than awaited here,
+  // because a browser that cannot give us a CDP session at all is a gate
+  // failure, and a gate failure thrown from this line would abort the sweep,
+  // the actors after it and the recovery walkthrough that follows -- reporting
+  // one unattributed stack instead of a finding per state with the state, the
+  // viewport and a screenshot beside it.
+  let preference: Promise<unknown> | null = null
+  const raiseBrowserTextSize = async () => {
+    preference ??= applyBrowserFontSizePreference(page)
+    await preference
+  }
+  try {
+    for (const state of states) {
+      await auditTextResizeState(page, state, results, testInfo, raiseBrowserTextSize)
+    }
+  } finally {
+    await page.close()
   }
 }
 
@@ -1013,6 +1145,14 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
             states: actorStates,
             testInfo,
           })
+          // After the ordinary pass, and inside the same signed-in context, so
+          // the raised font-size preference cannot reach a state audited above.
+          await sweepTextResizeStates({
+            actor,
+            context: session.context,
+            results,
+            testInfo,
+          })
           await session.context.close()
         }
         await auditStressRecoveryStates(browser, results, testInfo)
@@ -1038,6 +1178,18 @@ test.describe("UI accessibility / WCAG 2.2 AA", () => {
       .filter((state) => !audited.has(state.id))
       .map((state) => `${state.id} (${state.actor})`)
     expect(undispatched, `No context audited: ${undispatched.join(", ")}`).toEqual([])
+
+    // The same argument, for the text-resize pass. Its findings are advisory and
+    // its ceiling is zero, so a sweep that never ran produces no advisory, no
+    // breach and a green gate -- silence that reads exactly like success. An
+    // actor whose sweep was never wired in fails here instead.
+    const unresizedStates = textResizeStates
+      .filter((state) => state.profile === profile
+        && (!stateFilter || state.id === stateFilter)
+        && !audited.has(textResizeResultId(state.id)))
+      .map((state) => `${state.id} (${state.actor})`)
+    expect(unresizedStates, `No text-resize sweep audited: ${unresizedStates.join(", ")}`)
+      .toEqual([])
 
     const failures = formatAccessibilityFailures(results)
     expect(failures, failures.slice(0, 80).join("\n")).toEqual([])

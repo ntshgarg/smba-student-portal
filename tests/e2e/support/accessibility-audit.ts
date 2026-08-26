@@ -66,6 +66,14 @@ export type AccessibilityAdvisoryCategory =
   | "best-practice"
   | "best-practice-needs-review"
   | "needs-review"
+  // Layout that held at the browser's shipped 16px default and stopped holding
+  // when the default was raised. Advisory rather than blocking for the same
+  // reason `needs-review` is: the app is sized in px today, so the first run of
+  // this pass measures debt that already exists rather than debt this commit
+  // introduced, and a gate that starts red can never be the thing that catches
+  // the next regression. accessibilityAdvisoryRegressions holds it to a ceiling
+  // of zero until an operator records one, so it can only ever fall from there.
+  | "text-resize"
 
 export type AccessibilityAdvisory = AccessibilityFinding & {
   category: AccessibilityAdvisoryCategory
@@ -94,6 +102,18 @@ export type AccessibilityResult = {
 }
 
 type AxeRuleResult = Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"][number]
+
+// The three measurements that answer "does the page still fit, and can every
+// control still be reached" — the subset a caller wants when it has changed a
+// rendering condition rather than the page, and has no reason to re-run axe or
+// the keyboard walk against the same markup. Named as a projection of DomAudit
+// rather than a type of its own so there is exactly one definition of each
+// measurement: accessibility-text-resize.ts reads these three fields from the
+// same browser-side function auditAccessibilityState reads all fourteen from.
+export type LayoutAudit = Pick<
+  DomAudit,
+  "clippedControls" | "coveredControls" | "pageOverflow"
+>
 
 type DomAudit = {
   ariaReferences: Array<{ attribute: string; id: string; source: string }>
@@ -193,6 +213,44 @@ export function promoteBlockingAdvisories(advisories: readonly AccessibilityAdvi
   return { blocking, remaining }
 }
 
+// Lifted out of domFindings unchanged — same three ids, same messages, same
+// order — so a second caller cannot end up describing the same measurement in
+// different words. accessibility-text-resize.ts calls this and nothing else:
+// the eleven other checks in domFindings are properties of the markup, which a
+// raised font-size preference does not touch, so re-reporting them from a second
+// render would double every existing count in the advisory ratchet.
+export function layoutFindings(audit: LayoutAudit): AccessibilityFinding[] {
+  const findings: AccessibilityFinding[] = []
+  if (audit.pageOverflow) {
+    findings.push(finding({
+      id: "document-horizontal-overflow",
+      impact: "serious",
+      message: `Document width is ${audit.pageOverflow.scrollWidth}px at a ${audit.pageOverflow.clientWidth}px viewport.`,
+      source: "layout",
+      targets: ["html"],
+    }))
+  }
+  for (const target of audit.clippedControls) {
+    findings.push(finding({
+      id: "clipped-interactive-control",
+      impact: "serious",
+      message: "An interactive control crosses the horizontal viewport edge.",
+      source: "layout",
+      targets: [target],
+    }))
+  }
+  for (const target of audit.coveredControls) {
+    findings.push(finding({
+      id: "covered-interactive-control",
+      impact: "serious",
+      message: `The centre of an interactive control is covered by ${target.covering}.`,
+      source: "layout",
+      targets: [target.target],
+    }))
+  }
+  return findings
+}
+
 function domFindings(audit: DomAudit, viewport: AccessibilityViewport) {
   const findings: AccessibilityFinding[] = []
   if (!audit.title.trim()) {
@@ -256,33 +314,7 @@ function domFindings(audit: DomAudit, viewport: AccessibilityViewport) {
       source: "dom",
     }))
   }
-  if (audit.pageOverflow) {
-    findings.push(finding({
-      id: "document-horizontal-overflow",
-      impact: "serious",
-      message: `Document width is ${audit.pageOverflow.scrollWidth}px at a ${audit.pageOverflow.clientWidth}px viewport.`,
-      source: "layout",
-      targets: ["html"],
-    }))
-  }
-  for (const target of audit.clippedControls) {
-    findings.push(finding({
-      id: "clipped-interactive-control",
-      impact: "serious",
-      message: "An interactive control crosses the horizontal viewport edge.",
-      source: "layout",
-      targets: [target],
-    }))
-  }
-  for (const target of audit.coveredControls) {
-    findings.push(finding({
-      id: "covered-interactive-control",
-      impact: "serious",
-      message: `The centre of an interactive control is covered by ${target.covering}.`,
-      source: "layout",
-      targets: [target.target],
-    }))
-  }
+  findings.push(...layoutFindings(audit))
   for (const target of audit.touchTargets) {
     findings.push(finding({
       id: "touch-target-size",
@@ -322,8 +354,24 @@ function domFindings(audit: DomAudit, viewport: AccessibilityViewport) {
   return findings
 }
 
-async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Promise<DomAudit> {
-  return page.evaluate(({ isCompact, viewportWidth }) => {
+// `scope` decides how much of the walk below runs, and nothing else: every
+// measurement is defined once, in one browser-side function, whichever caller
+// asks for it. "layout" skips the eleven markup checks because they cannot have
+// changed — a raised font-size preference does not add an id, a landmark or an
+// aria reference — and because two of the skipped walks are the expensive ones.
+// reducedMotionAnimations alone calls getComputedStyle on every element under
+// `body`, which on the stress fee table is thousands of elements, and it only
+// runs at the two widths the text-resize pass spends most of its states at.
+async function runDomAudit(
+  page: Page,
+  { isCompact, scope, viewportWidth }: {
+    isCompact: boolean
+    scope: "full" | "layout"
+    viewportWidth: number
+  },
+): Promise<DomAudit> {
+  return page.evaluate(({ isCompact, scope, viewportWidth }) => {
+    const full = scope === "full"
     const selectorFor = (element: Element) => {
       if (element.id) return `#${CSS.escape(element.id)}`
       const name = element.getAttribute("name")
@@ -366,10 +414,12 @@ async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Pro
     }
 
     const idCounts = new Map<string, number>()
-    document.querySelectorAll("[id]").forEach((element) => {
-      const id = element.id
-      idCounts.set(id, (idCounts.get(id) ?? 0) + 1)
-    })
+    if (full) {
+      document.querySelectorAll("[id]").forEach((element) => {
+        const id = element.id
+        idCounts.set(id, (idCounts.get(id) ?? 0) + 1)
+      })
+    }
 
     const ariaReferences: DomAudit["ariaReferences"] = []
     const referenceAttributes = [
@@ -381,25 +431,29 @@ async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Pro
       "aria-labelledby",
       "aria-owns",
     ]
-    document.querySelectorAll(referenceAttributes.map((attribute) => `[${attribute}]`).join(","))
-      .forEach((element) => {
-        for (const attribute of referenceAttributes) {
-          const value = element.getAttribute(attribute)
-          if (!value) continue
-          for (const id of value.trim().split(/\s+/u)) {
-            if (!document.getElementById(id)) {
-              ariaReferences.push({ attribute, id, source: selectorFor(element) })
+    if (full) {
+      document.querySelectorAll(referenceAttributes.map((attribute) => `[${attribute}]`).join(","))
+        .forEach((element) => {
+          for (const attribute of referenceAttributes) {
+            const value = element.getAttribute(attribute)
+            if (!value) continue
+            for (const id of value.trim().split(/\s+/u)) {
+              if (!document.getElementById(id)) {
+                ariaReferences.push({ attribute, id, source: selectorFor(element) })
+              }
             }
           }
-        }
-      })
+        })
+    }
 
-    const headings = [...document.querySelectorAll("h1,h2,h3,h4,h5,h6")]
-      .filter(visible)
-      .map((element) => ({
-        level: Number(element.tagName.slice(1)),
-        text: element.textContent?.trim().replace(/\s+/gu, " ").slice(0, 80) ?? "",
-      }))
+    const headings = full
+      ? [...document.querySelectorAll("h1,h2,h3,h4,h5,h6")]
+        .filter(visible)
+        .map((element) => ({
+          level: Number(element.tagName.slice(1)),
+          text: element.textContent?.trim().replace(/\s+/gu, " ").slice(0, 80) ?? "",
+        }))
+      : []
     const headingSkips: string[] = []
     for (let index = 1; index < headings.length; index += 1) {
       if (headings[index].level > headings[index - 1].level + 1) {
@@ -461,7 +515,7 @@ async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Pro
     // of the two it is, and the exception gap is recorded in
     // docs/audit/accessibility-responsiveness.md.
     const comfortFloorApplies = viewportWidth <= 820
-    for (const control of controls) {
+    for (const control of full ? controls : []) {
       const label = control instanceof HTMLInputElement
         && ["checkbox", "radio"].includes(control.type)
         ? control.closest("label")
@@ -486,7 +540,7 @@ async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Pro
     }
 
     const mobileFontControls: DomAudit["mobileFontControls"] = []
-    if (viewportWidth <= 430) {
+    if (full && viewportWidth <= 430) {
       document.querySelectorAll("input:not([type=hidden]), select, textarea").forEach((control) => {
         if (!visible(control)) return
         if (control instanceof HTMLInputElement
@@ -499,7 +553,7 @@ async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Pro
     }
 
     const reducedMotionAnimations: DomAudit["reducedMotionAnimations"] = []
-    if (isCompact && matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (full && isCompact && matchMedia("(prefers-reduced-motion: reduce)").matches) {
       document.querySelectorAll("body *").forEach((element) => {
         if (!visible(element)) return
         const style = getComputedStyle(element)
@@ -528,18 +582,42 @@ async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Pro
       duplicateIds: [...idCounts.entries()].filter(([, count]) => count > 1).map(([id]) => id),
       headingSkips,
       h1Count: headings.filter((heading) => heading.level === 1).length,
-      lang: document.documentElement.lang,
-      mainCount: document.querySelectorAll("main, [role=main]").length,
+      lang: full ? document.documentElement.lang : "",
+      mainCount: full ? document.querySelectorAll("main, [role=main]").length : 0,
       mobileFontControls,
       pageOverflow: scrollWidth > clientWidth + 1 ? { clientWidth, scrollWidth } : null,
       reducedMotionAnimations,
-      title: document.title,
+      title: full ? document.title : "",
       touchTargets,
     }
-  }, {
+  }, { isCompact, scope, viewportWidth })
+}
+
+// The full walk, unchanged: every caller that audits a page as rendered gets
+// exactly what it got before.
+async function collectDomAudit(page: Page, viewport: AccessibilityViewport): Promise<DomAudit> {
+  return runDomAudit(page, {
     isCompact: viewport.width <= 430,
+    scope: "full",
     viewportWidth: viewport.width,
   })
+}
+
+// The three-measurement projection. `viewportWidth` is passed rather than read
+// from `innerWidth` for the same reason collectDomAudit passes it: the clipped
+// walk compares each control's right edge against the width the run asked the
+// page to be, so a page that has grown a scrollbar cannot narrow the edge it is
+// judged against.
+export async function collectAccessibilityLayout(
+  page: Page,
+  viewport: AccessibilityViewport,
+): Promise<LayoutAudit> {
+  const { clippedControls, coveredControls, pageOverflow } = await runDomAudit(page, {
+    isCompact: viewport.width <= 430,
+    scope: "layout",
+    viewportWidth: viewport.width,
+  })
+  return { clippedControls, coveredControls, pageOverflow }
 }
 
 async function interactionFindings(page: Page) {
@@ -798,6 +876,7 @@ export function countAccessibilityAdvisories(results: readonly AccessibilityResu
     "best-practice": 0,
     "best-practice-needs-review": 0,
     "needs-review": 0,
+    "text-resize": 0,
   }
   for (const result of results) {
     for (const item of result.advisories ?? []) counts[item.category] += 1
@@ -1035,12 +1114,16 @@ function advisorySummaryLines(results: readonly AccessibilityResult[]) {
       + ` ${[...BLOCKING_ADVISORY_RULES].sort().join(", ")}.`
       + " Needs-review items are axe checks that could not decide without a human."
       + " Best-practice items come from rules outside the WCAG tags, which is where"
-      + " every landmark rule lives. None of these fails on its own; the ratchet"
-      + " section fails when a rule rises above the ceiling recorded for it.",
+      + " every landmark rule lives. Text-resize items are the layout measurements"
+      + " taken with the browser's default font size raised to twice its shipped"
+      + " value, on the states listed in accessibility-text-resize.ts. None of these"
+      + " fails on its own; the ratchet section fails when a rule rises above the"
+      + " ceiling recorded for it.",
     "",
     `- Needs review: ${counts["needs-review"]}`,
     `- Best practice: ${counts["best-practice"]}`,
     `- Best practice needs review: ${counts["best-practice-needs-review"]}`,
+    `- Text resize: ${counts["text-resize"]}`,
     `- Advisories: ${total}`,
     "",
     "| Category | Rule | Occurrences | States |",

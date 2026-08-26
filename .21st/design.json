@@ -37,23 +37,23 @@
         "source": "app/globals.css"
       },
       "--type-utility-label": {
-        "value": "11px",
+        "value": "0.6875rem",
         "source": "app/globals.css"
       },
       "--type-utility-meta": {
-        "value": "12px",
+        "value": "0.75rem",
         "source": "app/globals.css"
       },
       "--type-operational-body": {
-        "value": "13px",
+        "value": "0.8125rem",
         "source": "app/globals.css"
       },
       "--type-operational-action": {
-        "value": "12px",
+        "value": "0.75rem",
         "source": "app/globals.css"
       },
       "--type-operational-floor": {
-        "value": "10px",
+        "value": "0.625rem",
         "source": "app/globals.css"
       }
     },

@@ -22,7 +22,7 @@
 .publicHeading > p {
   max-width: 410px;
   color: var(--steel);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.75;
 }
 
@@ -57,7 +57,7 @@
 .labels > span,
 .detailMeta > span {
   color: var(--red);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -68,7 +68,7 @@
 .dashboardItemMeta time,
 .detailHeading > time {
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 680;
 }
 
@@ -104,7 +104,7 @@
   margin-top: 10px;
   overflow: hidden;
   color: var(--steel);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.65;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -120,7 +120,7 @@
   justify-content: center;
   gap: 10px;
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
 }
 
@@ -160,7 +160,7 @@
   padding-top: var(--space-copy);
   border-top: 1px solid var(--line);
   color: var(--steel);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.6;
 }
 
@@ -178,7 +178,7 @@
   display: block;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 32px;
+  font-size: 2rem;
   font-style: italic;
   font-weight: var(--weight-display-light);
   letter-spacing: var(--tracking-display);
@@ -190,7 +190,7 @@
   margin: 0;
   padding-bottom: 2px;
   color: var(--steel);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: var(--leading-body);
 }
 
@@ -283,7 +283,7 @@
   overflow-wrap: anywhere;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 31px;
+  font-size: 1.9375rem;
   font-style: italic;
   font-weight: var(--weight-display-light);
   letter-spacing: var(--tracking-display);
@@ -297,7 +297,7 @@
 }
 
 .dashboardPairList .dashboardNoticeTitle {
-  font-size: 27px;
+  font-size: 1.6875rem;
 }
 
 .dashboardNoticeCopy {
@@ -306,7 +306,7 @@
   margin-top: 7px;
   overflow: hidden;
   color: var(--steel);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -392,7 +392,7 @@
 
 .detailMeta > p {
   color: var(--red);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -447,7 +447,7 @@
   }
 
   .dashboardEmptyTitle {
-    font-size: 29px;
+    font-size: 1.8125rem;
   }
 
   .dashboardFeatureLayout {
@@ -456,7 +456,7 @@
   }
 
   .dashboardFeatureList .dashboardNoticeTitle {
-    font-size: 28px;
+    font-size: 1.75rem;
   }
 }
 
@@ -471,7 +471,7 @@
   }
 
   .dashboardEmptyTitle {
-    font-size: 29px;
+    font-size: 1.8125rem;
   }
 
   .dashboardEmptyCopy {
@@ -509,11 +509,11 @@
 
   .dashboardNoticeTitle {
     margin-top: 10px;
-    font-size: 29px;
+    font-size: 1.8125rem;
   }
 
   .dashboardPairList .dashboardNoticeTitle {
-    font-size: 27px;
+    font-size: 1.6875rem;
   }
 
   .dashboardNoticeCopy {
@@ -614,7 +614,7 @@
   }
 
   .detailMessage {
-    font-size: 20px;
+    font-size: 1.25rem;
   }
 }
 
