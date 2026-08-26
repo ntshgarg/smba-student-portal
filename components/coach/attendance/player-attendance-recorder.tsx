@@ -21,7 +21,11 @@ import {
   useMemberPortal,
   useSessionPortal,
 } from "@/components/coach/coach-portal-provider"
-import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
+import {
+  InlineNotice,
+  type ActionFeedback,
+  type InlineNoticeAction,
+} from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import {
   chronologicalOccurrencesForDate,
@@ -36,6 +40,7 @@ import {
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
+import { describeRefusedSave } from "@/lib/client/session-expiry"
 import {
   academyTimeInputValue,
   formatAcademyTime,
@@ -56,10 +61,28 @@ const attendanceChoices = [
 ] satisfies Array<{ label: string; value: SessionAttendanceChoice }>
 
 /**
- * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
- * withdraws the retry prompt.
+ * The prompt for leaving with marks the coach has not saved. Hoisted because
+ * `discardDraftForSelectionChange` now hands it back to `confirmDiscard`
+ * explicitly: the surface message the guard uses for everything else becomes
+ * the expiry's own wording while a refused save stands, and that wording must
+ * not reach this path. Confirming here really does discard the marks -- the
+ * stored draft for the occurrence being left is cleared with them -- so "kept
+ * on this device" would be a lie exactly where it costs a register.
  */
-type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
+const discardMarksPrompt = "Leave this session and discard the unsaved attendance changes?"
+
+/**
+ * `offerRetry`, `signIn` and `leaveConfirmation` ride on the feedback so every
+ * existing `setFeedback(null)` also withdraws the retry prompt, the sign-in
+ * link and the re-worded leave confirmation together. The first two never
+ * appear at once: a refusal the coach can act on here offers the button, an
+ * expired sign-in offers the link.
+ */
+type SaveFeedback = ActionFeedback & {
+  leaveConfirmation?: string
+  offerRetry?: boolean
+  signIn?: InlineNoticeAction
+}
 
 /**
  * Courtside connections are slow rather than dead, so this deadline only has to
@@ -120,7 +143,12 @@ export function PlayerAttendanceRecorder({
   const [isChangingDate, startDateChange] = useTransition()
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: draftChanges.length > 0,
-    message: "Leave this session and discard the unsaved attendance changes?",
+    // Leaving the *page* discards nothing while an expiry stands: the marks are
+    // on the device, the notice has just said so, and this register is the one
+    // place they cannot be saved from. The guard still confirms -- only the
+    // sentence changes, and only once the draft has been read back out of
+    // storage. See `describeRefusedSave`.
+    message: feedback?.leaveConfirmation ?? discardMarksPrompt,
     scope: "record-player-attendance",
   })
 
@@ -255,7 +283,7 @@ export function PlayerAttendanceRecorder({
 
   function discardDraftForSelectionChange() {
     if (!draftChanges.length) return true
-    if (!confirmDiscard()) return false
+    if (!confirmDiscard(discardMarksPrompt)) return false
     if (selectedOccurrenceId) discardPlayerAttendanceDraft(selectedOccurrenceId)
     setDraftChanges([])
     setFeedback(null)
@@ -332,7 +360,19 @@ export function PlayerAttendanceRecorder({
         saveDeadlineMs,
       )
       if (!result.ok) {
-        setFeedback({ message: result.message, tone: "error" })
+        setFeedback({
+          ...describeRefusedSave(result, {
+            // Read back rather than assumed: `chooseAttendance` persists on
+            // every mark, but a device that refused the write leaves the coach
+            // holding marks that only exist on this screen.
+            marksOnDevice: () => (
+              readPlayerAttendanceDraft(selectedOccurrence.id).length > 0
+            ),
+            place: "session",
+            subject: "Attendance",
+          }),
+          tone: "error",
+        })
         return
       }
       discardPlayerAttendanceDraft(selectedOccurrence.id)
@@ -513,6 +553,7 @@ export function PlayerAttendanceRecorder({
 
           <div className="attendance-record-footer">
             <InlineNotice
+              action={feedback?.signIn}
               reserveSpace={false}
               message={feedback?.message ?? (draftChanges.length
                 ? `${draftChanges.length} unsaved ${draftChanges.length === 1 ? "change" : "changes"}`

@@ -73,12 +73,14 @@ import {
   createSessionSeriesAction,
   replaceSessionOccurrenceAction,
   saveAttendanceRegisterAction,
+  saveStaffAttendanceAction,
 } from "@/app/coach/actions"
 import { publishAttendanceAdjustmentAction } from "@/app/coach/attendance/adjustments/actions"
 import {
   OperationalActionError,
   SessionExpiredError,
 } from "@/lib/actions/operational-result"
+import type { StaffAttendanceChange } from "@/lib/coach/staff-attendance"
 import type { SessionAttendanceChange } from "@/lib/sessions/types"
 
 const snapshot = {
@@ -93,6 +95,15 @@ const registerMarks: SessionAttendanceChange[] = [
     expectedChoice: "cleared",
     occurrenceId: "occurrence-1",
     playerId: "player-1",
+  },
+]
+
+const rollCallMarks: StaffAttendanceChange[] = [
+  {
+    choice: "present",
+    coachAccountId: "coach-2",
+    dateKey: "2026-08-21",
+    expectedChoice: "cleared",
   },
 ]
 
@@ -189,6 +200,34 @@ describe("production-safe operational action results", () => {
     // not inside the mutation.
     expect(mocks.saveSessionAttendanceRecords).not.toHaveBeenCalled()
     expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+
+  // The staff roll call is the register a head coach fills courtside while a
+  // session runs, and it is the second surface moved onto the shared
+  // conversion. Without it the guard's throw crosses the server-action
+  // boundary, where React replaces the class, the message and every own
+  // property with a fixed sentence and a digest.
+  it("hands an expired session to the staff roll call as data as well", async () => {
+    mocks.requireHeadAdminAction.mockRejectedValueOnce(new SessionExpiredError())
+
+    await expect(saveStaffAttendanceAction({ changes: rollCallMarks })).resolves.toEqual({
+      ok: false,
+      code: "SESSION_EXPIRED",
+      field: undefined,
+      message: "Your sign-in expired. Sign in again to continue.",
+    })
+    expect(mocks.saveStaffAttendanceRecords).not.toHaveBeenCalled()
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("still throws a head-coach refusal out of the staff roll call", async () => {
+    mocks.requireHeadAdminAction.mockRejectedValueOnce(
+      new Error("Head coach access is required."),
+    )
+
+    await expect(saveStaffAttendanceAction({ changes: rollCallMarks }))
+      .rejects.toThrow("Head coach access is required.")
+    expect(mocks.saveStaffAttendanceRecords).not.toHaveBeenCalled()
   })
 
   it("still throws a head-coach refusal out of the same wrapped action", async () => {

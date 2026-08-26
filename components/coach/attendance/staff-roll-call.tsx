@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
 import { saveStaffAttendanceAction } from "@/app/coach/actions"
-import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
+import {
+  InlineNotice,
+  type ActionFeedback,
+  type InlineNoticeAction,
+} from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import {
   discardStaffAttendanceDraft,
@@ -16,6 +20,7 @@ import {
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
+import { describeRefusedSave } from "@/lib/client/session-expiry"
 import type {
   StaffAttendanceChange,
   StaffAttendanceChoice,
@@ -43,10 +48,28 @@ const choices: Array<{
 ]
 
 /**
- * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
- * withdraws the retry prompt.
+ * The prompt for leaving with marks the coach has not saved. Hoisted because
+ * `chooseDate` now hands it back to `confirmDiscard` explicitly: the surface
+ * message the guard uses for everything else becomes the expiry's own wording
+ * while a refused save stands, and that wording must not reach this path.
+ * Confirming here really does discard the marks -- `chooseDate` clears the
+ * stored draft for the date it is leaving -- so "kept on this device" would be
+ * a lie exactly where it costs a register.
  */
-type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
+const discardMarksPrompt = "Leave this date and discard the unsaved staff attendance changes?"
+
+/**
+ * `offerRetry`, `signIn` and `leaveConfirmation` ride on the feedback so every
+ * existing `setFeedback(null)` also withdraws the retry prompt, the sign-in
+ * link and the re-worded leave confirmation together. The first two never
+ * appear at once: a refusal the coach can act on here offers the button, an
+ * expired sign-in offers the link.
+ */
+type SaveFeedback = ActionFeedback & {
+  leaveConfirmation?: string
+  offerRetry?: boolean
+  signIn?: InlineNoticeAction
+}
 
 /**
  * Shorter than the player register's deadline: one day of junior coaches is a
@@ -75,7 +98,12 @@ export function StaffRollCall({
   const [isSaving, setIsSaving] = useState(false)
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: drafts.length > 0,
-    message: "Leave this date and discard the unsaved staff attendance changes?",
+    // Leaving the *page* discards nothing while an expiry stands: the marks are
+    // on the device, the notice has just said so, and this register is the one
+    // place they cannot be saved from. The guard still confirms -- only the
+    // sentence changes, and only once the draft has been read back out of
+    // storage. See `describeRefusedSave`.
+    message: feedback?.leaveConfirmation ?? discardMarksPrompt,
     scope: "staff-roll-call",
   })
   const storedByCoach = useMemo(
@@ -153,7 +181,7 @@ export function StaffRollCall({
 
   function chooseDate(dateKey: string) {
     if (!dateKey || dateKey === selectedDate) return
-    if (drafts.length && !confirmDiscard()) return
+    if (drafts.length && !confirmDiscard(discardMarksPrompt)) return
     if (drafts.length) discardStaffAttendanceDraft(selectedDate)
     setDrafts([])
     setFeedback(null)
@@ -198,7 +226,17 @@ export function StaffRollCall({
         saveDeadlineMs,
       )
       if (!result.ok) {
-        setFeedback({ message: result.message, tone: "error" })
+        setFeedback({
+          ...describeRefusedSave(result, {
+            // Read back rather than assumed: `chooseAttendance` persists on
+            // every mark, but a device that refused the write leaves the coach
+            // holding marks that only exist on this screen.
+            marksOnDevice: () => readStaffAttendanceDraft(selectedDate).length > 0,
+            place: "date",
+            subject: "Staff attendance",
+          }),
+          tone: "error",
+        })
         return
       }
       setRecords((current) => {
@@ -337,6 +375,7 @@ export function StaffRollCall({
 
         <div className="attendance-record-footer">
           <InlineNotice
+            action={feedback?.signIn}
             message={feedback?.message ?? (drafts.length
               ? `${drafts.length} unsaved ${drafts.length === 1 ? "change" : "changes"}`
               : undefined)}
