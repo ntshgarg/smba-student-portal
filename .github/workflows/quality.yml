@@ -72,7 +72,11 @@ jobs:
   browser:
     name: Build and browser regression
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # 45 covered four suites against three workspaces. The two added below run
+    # 14 further cases single-worker, most of them reloading a route once per
+    # viewport across four or five widths, so the headroom goes with them; a job
+    # that runs out of clock is a red merge check that says nothing about the code.
+    timeout-minutes: 60
     env:
       SMBA_FAILURE_EVIDENCE_ROOT: output/failure-evidence/browser
     steps:
@@ -231,6 +235,29 @@ jobs:
         env:
           SMBA_ATTENDANCE_WORKSPACES_BASE_URL: http://127.0.0.1:3000
         run: npm run regression:attendance
+
+      - name: Run responsive overflow and interface correctness E2E
+        env:
+          SMBA_RESPONSIVE_OVERFLOW_BASE_URL: http://127.0.0.1:3000
+        run: npm run regression:responsive-overflow
+
+      # Last against this workspace because of what it publishes, not because it
+      # is the only writer here: attendance-workspaces.spec.ts, two steps up,
+      # commits two saves against the 2026-07-31 player register and has a third
+      # rejected as stale. phase8-followup.spec.ts adds an announcement, and the
+      # dashboard and the archive the responsive suite measures would see that
+      # arrive underneath them, so it has to run after that suite. The order it inherits
+      # is not free: its 379,350-byte budget reads
+      # /coach/attendance/players/register?year=2026, which renders those
+      # 2026-07-31 rows, so an overrun here can mean the earlier saves changed
+      # the register rather than that a route grew. Read the attendance step
+      # before blaming the diff. The disposable database is named so the config
+      # can refuse to run against anything but a clone.
+      - name: Run phase 8 follow-up E2E
+        env:
+          SMBA_PHASE8_BASE_URL: http://127.0.0.1:3000
+          SMBA_PHASE8_DISPOSABLE_DB: /tmp/smba-ci-stress.db
+        run: npm run regression:phase8-followup
 
       - name: Show stress server log after a failure
         if: failure()

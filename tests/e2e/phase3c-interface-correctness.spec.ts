@@ -1,7 +1,10 @@
 import path from "node:path"
 
-import { expect, test } from "@playwright/test"
 import type { Page } from "@playwright/test"
+
+// Not "@playwright/test": the harness stages the masked failure evidence the
+// browser job uploads. See playwright.responsive-overflow.config.ts.
+import { expect, test } from "./support/failure-evidence"
 
 const COACH_ACADEMY_ID = "SMBA-HC-0001"
 const PLAYER_ACADEMY_ID = process.env.SMBA_CAPTURE_PLAYER_ACADEMY_ID ?? "SMBA-PL-0001"

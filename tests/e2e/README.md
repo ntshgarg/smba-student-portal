@@ -101,15 +101,72 @@ Override the server when needed with
 The focused overflow suite verifies that Announcements remains within every
 supported portrait width and that Fee Records owns its table scrolling in
 common landscape viewports without widening the document. It also guards the
-existing 720px stacked-table breakpoint.
+existing 720px stacked-table breakpoint. Its configuration additionally
+schedules `accessibility-hardening.spec.ts` and
+`phase3c-interface-correctness.spec.ts`; it deliberately does not schedule
+`authentication-responsive.spec.ts`, which `npm run regression:authentication`
+already gates at its own three viewports.
 
 Run it against an already-running disposable copy of the loaded Stress fixture:
 
 ```sh
 SMBA_RESPONSIVE_OVERFLOW_BASE_URL=http://127.0.0.1:3000 \
-npx playwright test -c tests/e2e/playwright.responsive-overflow.config.ts
+npm run regression:responsive-overflow
 ```
 
 The suite never submits a product mutation. UI login creates an ordinary session
 record, so the target server must not use one of the stored canonical fixture
 databases directly.
+
+Neither this suite nor the follow-up suite below keeps a trace, a video or a raw
+screenshot: every spec they schedule imports `support/failure-evidence`, which
+stages a masked screenshot and sanitized JSON under `SMBA_FAILURE_EVIDENCE_ROOT`.
+That is the only tree `quality.yml` uploads, and `outputDir` is one it is
+forbidden to upload, so a diagnostic written there could never be read.
+
+## Phase 8 follow-up suite
+
+The follow-up suite holds the route payload budgets for Attendance and Calendar,
+the progressive reveal of the published report archive, and the single history
+entry an announcement publication is allowed to leave behind. It **publishes a
+real announcement** — the only suite here that publishes one, though not the only
+one that writes: `attendance-workspaces.spec.ts` saves the 2026-07-31 player
+register — so its configuration refuses to load unless
+`SMBA_PHASE8_DISPOSABLE_DB` names an existing file inside a temporary directory
+and outside the repository.
+
+In CI it runs last against the shared port 3000 workspace, after the responsive
+suite whose dashboard and archive measurements that announcement would otherwise
+move underneath them. The order couples the other way too: the 379,350-byte
+Attendance budget reads
+`/coach/attendance/players/register?year=2026&batch=Weekday&level=Beginner`,
+which renders the rows the attendance suite has already saved. Neither budget has
+been re-measured since `42aa041` introduced them, so read an overrun as a
+measurement to take rather than a regression to assume. Every run prints what it
+measured as a `[payload-budget]` line in the step log, green runs included; that
+line, not the budget in the spec, is the number to re-measure against.
+
+```sh
+SMBA_PHASE8_BASE_URL=http://127.0.0.1:3000 \
+SMBA_PHASE8_DISPOSABLE_DB=/tmp/smba-stress-clone.db \
+npm run regression:phase8-followup
+```
+
+## Quarantined cases
+
+Five of the 19 cases across the two suites above are marked `test.fixme` with
+the reason in a comment above them, so the register that runs stays honest
+rather than green by omission. Each names what has to be proved against a
+running fixture server before it gates again:
+
+| Spec | Case | Why |
+| --- | --- | --- |
+| `responsive-overflow.spec.ts` | Fee Records landscape overflow | `getByRole("table", { name: "Player fee records" })` — the caption became `<period> monthly fee records` in `f3ca2e1` |
+| `responsive-overflow.spec.ts` | Fee Records 720px breakpoint | same locator |
+| `accessibility-hardening.spec.ts` | Member Directory groups of twelve | searches `SMBA#`, which no role-prefixed fixture Academy ID contains since `d9d8dbf` |
+| `accessibility-hardening.spec.ts` | Replacement validation stays inline | hard-codes `2026-08-10`, a session date the wall clock has passed, so "Replace session" is no longer rendered |
+| `accessibility-hardening.spec.ts` | Player attendance month and year restore | hard-codes `View July 2026`, the previous-month label only while the wall clock is inside August 2026 |
+
+The last three all fail for the same underlying reason: a date literal measured
+against `new Date()` on the server. Repairing them means reading the reference
+date the page renders rather than naming the month in the spec.

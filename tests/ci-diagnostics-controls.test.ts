@@ -1,9 +1,12 @@
-import { readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import os from "node:os"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..")
+const e2eDirectory = path.join(repositoryRoot, "tests/e2e")
 
 function readRepositoryFile(file: string) {
   return readFileSync(path.join(repositoryRoot, file), "utf8")
@@ -87,18 +90,52 @@ describe("CI failure diagnostics and deployment verification", () => {
     }
   })
 
-  it("disables raw trace, video and automatic screenshot retention in required suites", () => {
-    for (const file of [
-      "tests/e2e/playwright.registration-resilience.config.ts",
-      "tests/e2e/playwright.authentication.config.ts",
-      "tests/e2e/playwright.onboarding.config.ts",
-      "tests/e2e/playwright.attendance-workspaces.config.ts",
-      "tests/e2e/playwright.accessibility.config.ts",
-    ]) {
-      const config = readRepositoryFile(file)
-      expect(config, file).toContain('trace: "off"')
-      expect(config, file).toContain('video: "off"')
-      expect(config, file).toContain('screenshot: "off"')
+  /*
+   * The five configurations this named were the five that gated on the day it
+   * was written. Two more gate now, and neither was added here, so the rule went
+   * on passing while the only two suites that did retain a raw trace were
+   * exactly the ones nothing was looking at. Reading the directory deletes the
+   * step a person has to remember. Every configuration is in scope except the
+   * capture harness, which never runs in a workflow and exists to produce
+   * artifacts a person reads (tests/e2e/README.md): a suite does not have to be
+   * wired up yet to be forbidden from writing a trace zip nothing can collect.
+   *
+   * Asserted against the evaluated configuration rather than its source: these
+   * files build half of `use` from the environment at module scope, and a
+   * `toContain('trace: "off"')` would be satisfied just as well by that literal
+   * sitting in a comment above a key that says something else.
+   */
+  it("disables raw trace, video and automatic screenshot retention in every suite but the manual capture harness", async () => {
+    const configFileNames = readdirSync(e2eDirectory)
+      .filter((entry) => entry.startsWith("playwright.")
+        && entry.endsWith(".config.ts")
+        && entry !== "playwright.config.ts")
+      .sort()
+    expect(configFileNames.length).toBeGreaterThan(5)
+
+    // Two configurations refuse to load without the environment their runner
+    // supplies. These values only have to satisfy those guards; nothing here
+    // starts a server, and the database only has to exist.
+    const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "smba-diagnostics-"))
+    const disposableDatabase = path.join(temporaryDirectory, "academy-stress.db")
+    writeFileSync(disposableDatabase, "")
+    vi.stubEnv("SMBA_PHASE8_DISPOSABLE_DB", disposableDatabase)
+    vi.stubEnv("SMBA_REGISTRATION_RESILIENCE_BASE_URL", "http://127.0.0.1:3101")
+
+    try {
+      for (const fileName of configFileNames) {
+        const specifier = pathToFileURL(path.join(e2eDirectory, fileName)).href
+        const loaded = await import(/* @vite-ignore */ specifier) as {
+          default: { use?: { screenshot?: unknown; trace?: unknown; video?: unknown } }
+        }
+
+        expect(loaded.default.use?.screenshot, fileName).toBe("off")
+        expect(loaded.default.use?.trace, fileName).toBe("off")
+        expect(loaded.default.use?.video, fileName).toBe("off")
+      }
+    } finally {
+      vi.unstubAllEnvs()
+      rmSync(temporaryDirectory, { force: true, recursive: true })
     }
   })
 
