@@ -1,0 +1,161 @@
+{
+  "version": "1",
+  "generatedBy": "npm run db:checksums",
+  "entries": [
+    {
+      "tag": "0000_init_shared_identity",
+      "when": 1785661333261,
+      "sha256": "ebd0e52ac89ff905baa3af47d119769d8c796ffba5304c775783560023e26b48"
+    },
+    {
+      "tag": "0001_single_active_batch_and_adult_level",
+      "when": 1785665343029,
+      "sha256": "9c25a98ffbcb170b2c6aa325b5d3a478097065cf53dd042bd75d12c9d179c654"
+    },
+    {
+      "tag": "0002_align_level_with_current_batch",
+      "when": 1785665539030,
+      "sha256": "6bf9e127f9d1ef969d09d15c9cea89ba54387fc1aa89d0293d4f57359519ba91"
+    },
+    {
+      "tag": "0003_report_attendance_snapshots",
+      "when": 1785668400000,
+      "sha256": "634e86861969c26478d177d7952744c04b68906302d223eb48c815fe537c832e"
+    },
+    {
+      "tag": "0004_session_driven_attendance",
+      "when": 1785670694000,
+      "sha256": "e9cf96fb93ce51d88825112b44d7c89c536a4a2eac6384aaf040839b26dcaf8e"
+    },
+    {
+      "tag": "0005_reschedulable_session_occurrences",
+      "when": 1785672760000,
+      "sha256": "1f59ca072f8ed25ab6a0e1ad260217184fc4d3575c3b9cc8e0dcc4d560273b49"
+    },
+    {
+      "tag": "0006_level_batch_multi_session",
+      "when": 1785673918000,
+      "sha256": "9f71ae4bd778145d48d791ddc0809d8a0b3a860ad79d5ef109aa74a125095f5d"
+    },
+    {
+      "tag": "0007_academy_plan_assignment_weekdays",
+      "when": 1785682321368,
+      "sha256": "3c022bbf84f2369c0a56f2083312df36e8ddae2a8195216caf1fdfb9b1019d00"
+    },
+    {
+      "tag": "0008_attendance_adjustments",
+      "when": 1785718321071,
+      "sha256": "5c68f82597d40b384a8b0cef2d98cf742a02f16db17c3f890903541749ba7050"
+    },
+    {
+      "tag": "0009_report_publication_idempotency",
+      "when": 1785733238139,
+      "sha256": "a079e788d765414a146794976a9bbe2ac65f55f54261627c7bc53cbc3ee5efbe"
+    },
+    {
+      "tag": "0010_member_directory_hardening",
+      "when": 1785736182769,
+      "sha256": "3b345bd593c5667daa8fdd6d1e3e63ac1b53f4754d96cf9d1e01c4da88f5eb8e"
+    },
+    {
+      "tag": "0011_finance_v1",
+      "when": 1786185806483,
+      "sha256": "4a2e2d78400f76d3dd86f27c1bd02960f1c71b55272943ae3b5e4cbce24b8514"
+    },
+    {
+      "tag": "0012_finance_v2",
+      "when": 1786190946283,
+      "sha256": "9a166dc1a694cc0fec36c7b1d9db370d7933486c46121f526d44a32361f87ddb"
+    },
+    {
+      "tag": "0013_finance_records_indexes",
+      "when": 1786200000000,
+      "sha256": "f9ff8be3aa77e2c143f69a1c53d51f79baaa6e1b17b27e5a4f6ffb51e4156840"
+    },
+    {
+      "tag": "0014_coach_profiles_and_staff_attendance",
+      "when": 1786210000000,
+      "sha256": "695dbc3eafdd888030f0d16c68376c5401e222834496aae3437feb60a187fd21"
+    },
+    {
+      "tag": "0015_announcements",
+      "when": 1786300000000,
+      "sha256": "a8f1faf218833d3af9406c7c8e4123b9c1cd76f26be2a1c39130ec243138e97e"
+    },
+    {
+      "tag": "0016_registration_request_idempotency",
+      "when": 1786310000000,
+      "sha256": "68c6f20944d2f0330dc41c0991bf989c44bfd338e4e4f3a1dc36fa0844b27614"
+    },
+    {
+      "tag": "0017_mid_term_withdrawal_refunds",
+      "when": 1786484715446,
+      "sha256": "24d104060f20c1dac8fabcafa1c26554981709576ca91a3ec7bf0cad8cb44a28"
+    },
+    {
+      "tag": "0018_attendance_session_integrity",
+      "when": 1786830625507,
+      "sha256": "d27a3ae1e4b386c190f7613fc49c58664125981660d14c8ee7fa09756cef75c1"
+    },
+    {
+      "tag": "0019_attendance_evidence_review_cleanup",
+      "when": 1786832420573,
+      "sha256": "62776334e5c6e7760887717003d26c805e5ec5e112d79d314dec461a83fe81d0"
+    },
+    {
+      "tag": "0020_production_auth",
+      "when": 1786914923405,
+      "sha256": "cfbec012626e0f22847900285e50122362d12a2d8db513df8a817fe5e94744c5"
+    },
+    {
+      "tag": "0021_code_free_activation_pin",
+      "when": 1786995219710,
+      "sha256": "9dafa4f65a73c021132b256c3bc1d77a5664594d1dc4ed980abc1bf3c5a627fa"
+    },
+    {
+      "tag": "0022_verified_email_recovery",
+      "when": 1787065345425,
+      "sha256": "9fb1460694772c26c9ba2ec6df101d087363ee76773edff513046dc9279a750f"
+    },
+    {
+      "tag": "0023_authenticator_reset_approval",
+      "when": 1787156073567,
+      "sha256": "6feb33be766e6f7f2ecee7eb7ad3e441b6a3a6f997e10b2fc8f794fae0bfa8fd"
+    },
+    {
+      "tag": "0024_head_coach_setup_claims",
+      "when": 1787175215386,
+      "sha256": "ac0929150d757e44976cd6d3bc3cfa4ebe672511e8396ab5409837bac308139b"
+    },
+    {
+      "tag": "0025_operational_events",
+      "when": 1787181624249,
+      "sha256": "276ad68afb26d05022bde74faed46c8e7482d0522afd4490d0b78d5d1522578f"
+    },
+    {
+      "tag": "0026_issuer_scoped_account_identity",
+      "when": 1787436214184,
+      "sha256": "69d509086fd68e0e250fb2213346982af90976be5b60a9ad3100923b649ef9f7"
+    },
+    {
+      "tag": "0027_immutable_training_start",
+      "when": 1787466550412,
+      "sha256": "e55deb1444ac2226e5cd5abccd2a3d28bc38a552228c6201bf27d3c4af7f6c3e"
+    },
+    {
+      "tag": "0028_client_error_reports",
+      "when": 1787499843034,
+      "sha256": "50ff9443e16e50693b22f7b7cdc15c061a401a4d3522c62c0c4d51d988f9cc08"
+    },
+    {
+      "tag": "0029_concession_application_lookup_index",
+      "when": 1787550493410,
+      "sha256": "7fb0a3d44c05e7b1f1be9ac84e9158567f3cdd6ff94868c9493633459162746a"
+    },
+    {
+      "tag": "0030_session_occurrence_series_date_lookup",
+      "when": 1787648522016,
+      "sha256": "1574ac20515a7c4a8835a714c7884329bcacf8e1623e0c7211cb806cc27a3984"
+    }
+  ]
+}
