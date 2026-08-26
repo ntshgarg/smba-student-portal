@@ -2,7 +2,7 @@
   "clocks": {
     "admin": null,
     "clean": null,
-    "stress": null
+    "stress": "2026-08-17"
   },
   "documentation": "Ratchet baseline for the accessibility advisories that are not promoted to blocking findings, counted per axe rule id per profile. null means the profile has never been recorded and fails the gate until it is. \"clocks\" records the academy date each profile's counts were rendered at, taken from the run that produced them: counts from two different days describe two different DOMs, so the gate refuses to compare them and asks for a re-record. Record or re-record with: npx tsx scripts/regression/update-accessibility-advisory-baseline.ts — which refuses to write when a recorded count would rise, unless it is passed --allow-increase.",
   "profiles": {
@@ -13,7 +13,7 @@
     "stress": {
       "aria-allowed-role": 7,
       "aria-prohibited-attr": 24,
-      "color-contrast": 1021
+      "color-contrast": 990
     }
   }
 }
