@@ -11579,6 +11579,28 @@ tr.is-expanded .coach-member-row-action button svg {
     content: none;
   }
 
+  /* Two of the six columns cannot be read without their header, and below 980px
+     there is no header: `thead` is `display: none` and the rule above turns off
+     the `data-label` fallback the markup ships. That leaves a bare "1 Jul 2026"
+     and a bare "1 active" -- verified in the browser at 900px, where
+     `getComputedStyle(td, "::before").content` is `none` on a cell still
+     carrying `data-label="Training from"`.
+     The other four say what they are: the name, "Beginner · Weekday", the status
+     pill, and the action. So the label comes back for these two only, and inline
+     rather than as its own line, because the composition here is a fixed
+     two-row named-area grid and a stacked label would move every row. */
+  .coach-member-table tbody td.coach-member-sessions::before,
+  .coach-member-table tbody td.coach-member-joined::before {
+    display: inline;
+    margin-right: 5px;
+    color: var(--steel);
+    content: attr(data-label);
+    font-size: var(--type-operational-floor);
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
   .coach-member-folio {
     display: flex !important;
     grid-area: folio;
