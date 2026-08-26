@@ -1546,3 +1546,22 @@
     transition: none;
   }
 }
+
+/* The 16px focus-zoom floor, repeated for touch at any width.
+   Its sibling rule sits in the width-only block above, which is right for the
+   layout it stacks and wrong for this: a phone in landscape is 844-956 CSS px
+   and an iPad 744-1024, so no width ceiling reaches them. Only the font-size is
+   lifted -- widening the whole block would apply the tablet layout to a
+   tablet-mode laptop at desktop width, which is the hazard the matching comment
+   in app/portal.css records. */
+@media (pointer: coarse) {
+  .slipField input,
+  .slipField textarea,
+  .slipExpiryField input,
+  .field input,
+  .field textarea,
+  .archiveSearch input,
+  .archiveFilters select {
+    font-size: 16px;
+  }
+}

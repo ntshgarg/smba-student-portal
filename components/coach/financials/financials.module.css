@@ -2557,6 +2557,17 @@
   font-size: 0.9375rem;
 }
 
+/* The Agreed monthly fee box, held at the 16px focus-zoom floor on touch. The
+   declaration above is unconditional, so unlike its neighbours this one was
+   under the floor at every width; only the blanket <=430px rule in
+   app/globals.css was ever rescuing it, and that leaves every tablet and every
+   landscape phone zooming into a money field it cannot zoom back out of. */
+@media (pointer: coarse) {
+  .focusedLedger .planEditorBody .field input {
+    font-size: 16px;
+  }
+}
+
 .focusedLedger .planEditorBody .paymentFooter {
   display: grid;
   gap: var(--space-tight);

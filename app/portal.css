@@ -13789,3 +13789,15 @@ tr.is-expanded .coach-member-row-action button svg {
     text-align: left;
   }
 }
+
+/* The 16px focus-zoom floor, repeated for touch at any width -- see the matching
+   comment above the named list in this file. `.security-form input` has its own
+   16px rule inside (max-width: 760px), which no tablet and no landscape phone
+   matches, and `.focusedLedger .planEditorBody .field input` is 0.9375rem at
+   every width: that one is the Agreed monthly fee box, so the control this
+   misses is a money field. */
+@media (pointer: coarse) {
+  .security-form input {
+    font-size: 16px;
+  }
+}
