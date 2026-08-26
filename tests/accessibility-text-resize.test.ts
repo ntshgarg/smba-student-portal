@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 
-import type { Page } from "@playwright/test"
+import type { CDPSession, Page } from "@playwright/test"
 
 import { describe, expect, it } from "vitest"
 
@@ -56,10 +56,18 @@ function responsiveSample(): TextScaleSample {
   }
 }
 
-// A page that answers the three questions auditTextResizeLayout asks, in the order it asks
-// them, and records which ones it was asked. The record is the assertion: each of the three
-// is one `evaluate`, so the list of names is a transcript of how far the walk got before it
-// decided it was measuring the wrong render.
+// A page that answers the questions auditTextResizeLayout asks, in the order it asks them,
+// and records which ones it was asked. The record is the assertion: each entry is one
+// `evaluate`, so the list of names is a transcript of how far the walk got before it decided
+// it was measuring the wrong render.
+//
+// Six entries, not three, because the probe is now two readings with a CDP round trip
+// between them: it reads the page at the raised preference, sends the preference back down,
+// waits for the change to arrive, reads again, and puts the preference back. `settle` is
+// that wait, and it appears once per direction. The first entry is a wait too -- the root
+// reading that opens the audit waits for the raised preference to have reached the document
+// before it believes what the root says -- which is why it is named for the settled root
+// rather than for a bare read.
 function pageAnswering({
   layout = CLEAN_LAYOUT,
   rootFontSize,
@@ -69,12 +77,25 @@ function pageAnswering({
   rootFontSize: number
   sample?: TextScaleSample
 }) {
+  const reading = (side: "baseline" | "raised") => ({
+    body: sample.body[side],
+    root: sample.root[side],
+    sampled: sample.sampled.map((entry, index) => ({
+      index,
+      size: entry[side],
+      target: entry.target,
+    })),
+  })
   const script = [
-    { answer: () => rootFontSize as unknown, name: "root-font-size" },
+    { answer: () => rootFontSize as unknown, name: "settled-root-font-size" },
     { answer: () => layout as unknown, name: "layout" },
-    { answer: () => sample as unknown, name: "text-scale" },
+    { answer: () => reading("raised") as unknown, name: "text-scale" },
+    { answer: () => BROWSER_DEFAULT_FONT_SIZES.standard as unknown, name: "settle" },
+    { answer: () => reading("baseline") as unknown, name: "text-scale" },
+    { answer: () => TEXT_RESIZE_FONT_SIZES.standard as unknown, name: "settle" },
   ]
   const calls: string[] = []
+  const sends: { fixed: number; standard: number }[] = []
   const page = {
     evaluate: async () => {
       const step = script[calls.length]
@@ -82,7 +103,13 @@ function pageAnswering({
       return step?.answer()
     },
   }
-  return { calls, page: page as unknown as Page }
+  const client = {
+    send: async (method: string, params: { fontSizes: { fixed: number; standard: number } }) => {
+      expect(method).toBe("Page.setFontSizes")
+      sends.push(params.fontSizes)
+    },
+  }
+  return { calls, client: client as unknown as CDPSession, page: page as unknown as Page, sends }
 }
 
 function textResizeResult(advisories: readonly AccessibilityAdvisory[]): AccessibilityResult {
@@ -135,12 +162,16 @@ describe("the size the text-resize pass renders at", () => {
     // the moment somebody triaged the finding away.
     const unapplied = pageAnswering({ rootFontSize: 16 })
     const audited = await auditTextResizeLayout({
+      client: unapplied.client,
       page: unapplied.page,
       viewport: accessibilityViewports[0],
     })
     expect(audited.findings.map((item) => item.id)).toEqual(["text-resize-not-applied"])
     expect(audited.advisories).toEqual([])
-    expect(unapplied.calls).toEqual(["root-font-size"])
+    expect(unapplied.calls).toEqual(["settled-root-font-size"])
+    // And it left the browser preference alone: a pass that has given up on this render
+    // still owes the next state the size it was handed.
+    expect(unapplied.sends).toEqual([])
   })
 })
 
@@ -219,11 +250,11 @@ describe("whether the page received the size the pass renders at", () => {
   })
 
   it("blames the probe, not the page, when the probe could not move the root", () => {
-    // The probe forces the root back to 16px with an inline style, which loses to
-    // `html { font-size: … !important }` and to nothing else. If that ever happens every
-    // element reads the same number twice and the page looks inert when it is not, so the
-    // one case where this check cannot measure has to be the one case where it does not
-    // accuse.
+    // The probe sends the browser font-size preference back down to 16px and waits for the
+    // change to reach the document. If the root still reads 32px afterwards then every
+    // element reads the same number twice and the page looks inert when it is not -- which
+    // is what shipped last round, and what CI reported on all 55 audits -- so the one case
+    // where this check cannot measure has to be the one case where it does not accuse.
     const [broken] = textResizeAbsorbedFindings(sample({
       body: { baseline: 32, raised: 32 },
       root: { baseline: 32, raised: 32 },
@@ -231,7 +262,8 @@ describe("whether the page received the size the pass renders at", () => {
     }), 32, 16)
     expect(broken.id).toBe("text-resize-probe-not-applied")
     expect(broken.impact).toBe("critical")
-    expect(broken.message).toContain("32px at the browser preference and 32px under the probe")
+    expect(broken.message).toContain("32px at the raised preference and 32px under the probe")
+    expect(broken.message).toContain("settleBrowserFontSizePreference")
   })
 
   it("refuses to file a layout measurement taken from an absorbed render", async () => {
@@ -254,12 +286,14 @@ describe("whether the page received the size the pass renders at", () => {
       },
     })
     const audited = await auditTextResizeLayout({
+      client: absorbed.client,
       page: absorbed.page,
       viewport: accessibilityViewports[2],
     })
     expect(audited.findings.map((item) => item.id)).toEqual(["text-resize-absorbed"])
     expect(audited.advisories).toEqual([])
-    expect(absorbed.calls).toEqual(["root-font-size", "layout", "text-scale"])
+    expect(absorbed.calls)
+      .toEqual(["settled-root-font-size", "layout", "text-scale", "settle", "text-scale", "settle"])
   })
 
   it("files the advisories once the render is one the reader's setting reached", async () => {
@@ -272,16 +306,333 @@ describe("whether the page received the size the pass renders at", () => {
       rootFontSize: 32,
     })
     const audited = await auditTextResizeLayout({
+      client: live.client,
       page: live.page,
       viewport: accessibilityViewports[2],
     })
     expect(audited.findings).toEqual([])
     expect(audited.advisories.map((item) => item.id))
       .toEqual(["text-resize-clipped-interactive-control"])
-    // The probe runs after the layout walk, never before it: it moves the root to take its
-    // second reading, and a walk handed a page that had just been shrunk and regrown would
-    // be measuring the recovery rather than the render.
-    expect(live.calls).toEqual(["root-font-size", "layout", "text-scale"])
+    // The probe runs after the layout walk, never before it: it lowers the browser
+    // preference to take its second reading, and a walk handed a page that had just been
+    // shrunk and regrown would be measuring the recovery rather than the render.
+    expect(live.calls)
+      .toEqual(["settled-root-font-size", "layout", "text-scale", "settle", "text-scale", "settle"])
+    // Down to the browser's shipped defaults and back up to the size this pass renders at,
+    // in that order. The second half is not optional: the page is reused by every state
+    // after this one, and one left at 16px would fail the next state's root reading for a
+    // reason that has nothing to do with the next state.
+    expect(live.sends).toEqual([BROWSER_DEFAULT_FONT_SIZES, TEXT_RESIZE_FONT_SIZES])
+  })
+})
+
+/*
+ * A browser that behaves the way the one in CI behaved, so that this file can hold the
+ * failure the last round shipped.
+ *
+ * Run 32967379162 reported `text-resize-probe-not-applied` on 55 of 55 audits and
+ * `text-resize-absorbed` on none: the probe wrote `font-size: 16px` onto the root element
+ * and read the root back, and got the raised size both times. Reproduced afterwards over raw
+ * CDP against Chrome for Testing 151.0.7922.34 — the build the workflow installs — driving
+ * the app's own stylesheets in a fresh browser context: a font-size change read back in the
+ * same task reports the size from before the change, on every attempt, and the root, `body`,
+ * every rem-sized descendant and the document height have all followed two animation frames
+ * later. That is the one behaviour modelled here, and it is the only thing this fake adds to
+ * a DOM: `applied` trails `preference` until a frame runs.
+ *
+ * The page functions under test are executed rather than stubbed. That is the point. A fake
+ * that answered `evaluate` from a script would agree with any probe that asked politely,
+ * including the one that shipped broken; this one makes the real walk read a real
+ * `getComputedStyle` on real elements, so a probe that reads before the frame gets the same
+ * answer twice here that it got in CI. The layout walk is the one exception — it belongs to
+ * accessibility-audit.ts, wants a whole document, and is recognised by the `scope` in its
+ * argument.
+ */
+type ModelElement = {
+  className: string
+  /** Absolute, so it cannot answer the root. */
+  px?: number
+  /** Relative to the root, the way every converted declaration in these sheets is. */
+  rem?: number
+  /** Inherited from `body`, which is how most of the document is sized. */
+  inherits?: boolean
+  localName: string
+  text: string
+}
+
+function chromiumFontSizeModel({
+  bodyPx,
+  elements,
+  layout = CLEAN_LAYOUT,
+  unrestyled = false,
+}: {
+  bodyPx?: number
+  elements: ModelElement[]
+  layout?: LayoutAudit
+  /** Start with the root already at the raised size and the document still laid out at the
+   *  browser default -- the state run 32967379162's own failure screenshots were taken in. */
+  unrestyled?: boolean
+}) {
+  // The browser's own default font size. Only Page.setFontSizes moves it.
+  let preference = TEXT_RESIZE_FONT_SIZES.standard
+  // An inline `font-size` on the root, which is what the probe that shipped last round used.
+  // It reaches the render by the same two stages a preference change does, and that is the
+  // whole of why it read as inert: nothing here advances without an animation frame.
+  let inlineRoot: number | null = null
+  const target = () => inlineRoot ?? preference
+
+  // Two stages, because two is what was measured. A document whose root already reported
+  // 16px still reported `body` at 32px in the same task, and matched only a frame later. A
+  // probe that waited for the root alone would read a halved root beside unhalved text and
+  // report the page as having absorbed the reader's setting — a false accusation, which is
+  // worse than the silence this round is repairing.
+  let renderedRoot = preference
+  let renderedText = unrestyled ? BROWSER_DEFAULT_FONT_SIZES.standard : preference
+  const commitFrame = () => {
+    if (renderedRoot !== target()) renderedRoot = target()
+    else renderedText = target()
+  }
+
+  const bodyFontSize = () => bodyPx ?? renderedText
+  const sizeOf = (element: ModelElement) => {
+    if (element.px !== undefined) return element.px
+    if (element.inherits) return bodyFontSize()
+    return (element.rem ?? 1) * renderedText
+  }
+
+  const attributesOf = new Map<object, Map<string, string>>()
+  const node = (element: ModelElement) => {
+    const attributes = new Map<string, string>()
+    const fake = {
+      childNodes: [{ nodeType: 3, textContent: element.text }],
+      classList: element.className ? [element.className] : [],
+      getAttribute: (name: string) => attributes.get(name) ?? null,
+      getBoundingClientRect: () => ({ height: 20, width: 120 }),
+      id: "",
+      localName: element.localName,
+      removeAttribute: (name: string) => { attributes.delete(name) },
+      setAttribute: (name: string, value: string) => { attributes.set(name, String(value)) },
+      source: element,
+    }
+    attributesOf.set(fake, attributes)
+    return fake
+  }
+  const nodes = elements.map(node)
+
+  const rootStyle = {
+    get fontSize() { return inlineRoot === null ? "" : `${inlineRoot}px` },
+    set fontSize(value: string) {
+      inlineRoot = value.trim() ? Number.parseFloat(value) : null
+    },
+    removeProperty(property: string) { if (property === "font-size") inlineRoot = null },
+  }
+  const documentElement = { style: rootStyle }
+  const body = {}
+
+  const globals = {
+    CSS: { escape: (value: string) => value },
+    document: {
+      body,
+      createTreeWalker: () => {
+        let index = 0
+        return { nextNode: () => (index < nodes.length ? nodes[index++] : null) }
+      },
+      documentElement,
+      querySelectorAll: (selector: string) => {
+        const attribute = selector.replace(/^\[|\]$/gu, "")
+        return nodes.filter((candidate) => attributesOf.get(candidate)?.has(attribute))
+      },
+    },
+    getComputedStyle: (element: object) => {
+      if (element === documentElement) return { fontSize: `${renderedRoot}px` }
+      if (element === body) return { fontSize: `${bodyFontSize()}px` }
+      const found = nodes.find((candidate) => candidate === element)
+      if (!found) {
+        throw new Error("getComputedStyle was called on an element this model never rendered")
+      }
+      return { fontSize: `${sizeOf(found.source)}px` }
+    },
+    Node: { TEXT_NODE: 3 },
+    NodeFilter: { SHOW_ELEMENT: 1 },
+    window: {
+      requestAnimationFrame: (callback: (time: number) => void) => {
+        queueMicrotask(() => {
+          // The frame is where a pending font-size change reaches the document.
+          commitFrame()
+          callback(0)
+        })
+        return 1
+      },
+    },
+  }
+
+  const sends: { fixed: number; standard: number }[] = []
+  const page = {
+    evaluate: async (run: (argument: unknown) => unknown, argument: unknown) => {
+      // The one call that belongs to accessibility-audit.ts rather than to the probe.
+      if (argument && typeof argument === "object" && "scope" in argument) return layout
+      return run(argument)
+    },
+  }
+  const client = {
+    send: async (method: string, params: { fontSizes: { fixed: number; standard: number } }) => {
+      expect(method).toBe("Page.setFontSizes")
+      sends.push(params.fontSizes)
+      preference = params.fontSizes.standard
+    },
+  }
+
+  return {
+    client: client as unknown as CDPSession,
+    page: page as unknown as Page,
+    get preference() { return preference },
+    get renderedRootFontSize() { return renderedRoot },
+    get renderedTextFontSize() { return renderedText },
+    sends,
+    async run<T>(body: () => Promise<T>) {
+      const restore = Object.entries(globals).map(([name, value]) => {
+        const previous = (globalThis as Record<string, unknown>)[name]
+        ;(globalThis as Record<string, unknown>)[name] = value
+        return () => { (globalThis as Record<string, unknown>)[name] = previous }
+      })
+      try {
+        return await body()
+      } finally {
+        for (const undo of restore) undo()
+      }
+    },
+  }
+}
+
+/*
+ * The half of the guard the last round could not measure, against a browser that reproduces
+ * why.
+ *
+ * These do not check that the probe is written a particular way. They check that a probe put
+ * in front of the browser CI ran gets an answer out of it — the previous one did not, on all
+ * 55 audits — and that the answer is still a verdict on the page rather than on the probe.
+ */
+describe("the probe, against a browser that answers the way the one in CI did", () => {
+  const remSizedPage = () => ([
+    { className: "coach-fee-amount", inherits: true, localName: "td", text: "₹5,500" },
+    { className: "coach-fee-label", localName: "span", rem: 0.6875, text: "Billed" },
+    { className: "coach-fee-date", localName: "time", rem: 0.75, text: "5 Aug 2026" },
+  ])
+
+  it("gets a second reading out of a browser the inline probe could not move", async () => {
+    // The regression. Under the shipped probe every one of these reads the raised size
+    // twice, because the write and the read share a task, and auditTextResizeLayout reports
+    // text-resize-probe-not-applied — 55 times, which is what run 32967379162 did.
+    const browser = chromiumFontSizeModel({ elements: remSizedPage() })
+    const audited = await browser.run(() => auditTextResizeLayout({
+      client: browser.client,
+      page: browser.page,
+      viewport: accessibilityViewports[2],
+    }))
+    expect(audited.findings).toEqual([])
+    expect(audited.advisories).toEqual([])
+  })
+
+  it("waits for the raised render before it measures one, rather than after", async () => {
+    // The state the failure screenshots from run 32967379162 were taken in, and the reason
+    // the audit opens with a wait instead of a bare root read. The root reports the raised
+    // size while the document is still laid out at the browser default: a pass that believed
+    // the root would hand its layout walk the ordinary render, and would then read `body`
+    // unmoved at both preferences and file text-resize-absorbed against a page whose type is
+    // entirely in rem. Accusing the page of what the browser did is the one outcome worse
+    // than the silence this round is repairing.
+    const browser = chromiumFontSizeModel({ elements: remSizedPage(), unrestyled: true })
+    expect(browser.renderedTextFontSize).toBe(BROWSER_DEFAULT_FONT_SIZES.standard)
+    const audited = await browser.run(() => auditTextResizeLayout({
+      client: browser.client,
+      page: browser.page,
+      viewport: accessibilityViewports[2],
+    }))
+    expect(audited.findings).toEqual([])
+    expect(browser.renderedTextFontSize).toBe(TEXT_RESIZE_FONT_SIZES.standard)
+  })
+
+  it("lowers the browser preference and puts it back where it found it", async () => {
+    // The page is reused by every state after this one and every one of them opens with a
+    // root reading. A probe that left the preference at the browser default would fail all
+    // of them, and the message would name the page rather than the probe.
+    const browser = chromiumFontSizeModel({ elements: remSizedPage() })
+    await browser.run(() => auditTextResizeLayout({
+      client: browser.client,
+      page: browser.page,
+      viewport: accessibilityViewports[2],
+    }))
+    expect(browser.sends).toEqual([BROWSER_DEFAULT_FONT_SIZES, TEXT_RESIZE_FONT_SIZES])
+    expect(browser.preference).toBe(TEXT_RESIZE_FONT_SIZES.standard)
+    // And it waited for the restore to reach the document, rather than sending it and
+    // walking away: the render this leaves behind is the one it measured, which is the
+    // render a failure screenshot captures. Both stages, not just the root — a page whose
+    // root had come back to 32px while its text was still at 16px would put a screenshot of
+    // the ordinary render beside a finding that claims to have been taken at 200%.
+    expect(browser.renderedRootFontSize).toBe(TEXT_RESIZE_FONT_SIZES.standard)
+    expect(browser.renderedTextFontSize).toBe(TEXT_RESIZE_FONT_SIZES.standard)
+  })
+
+  it("still fails the page that absorbs the reader's setting", async () => {
+    // The inertness detection, which is the only reason this pass costs 55 audits. Reverting
+    // `body { font-size: 1rem }` to `body { font-size: 16px }` has to turn the gate red, and
+    // the whole objection to the last round was that it could not.
+    const browser = chromiumFontSizeModel({
+      bodyPx: BROWSER_DEFAULT_FONT_SIZES.standard,
+      elements: [
+        { className: "coach-fee-amount", inherits: true, localName: "td", text: "₹5,500" },
+        { className: "coach-fee-label", inherits: true, localName: "span", text: "Billed" },
+      ],
+    })
+    const audited = await browser.run(() => auditTextResizeLayout({
+      client: browser.client,
+      page: browser.page,
+      viewport: accessibilityViewports[2],
+    }))
+    expect(audited.findings.map((item) => item.id)).toEqual(["text-resize-absorbed"])
+    expect(audited.findings[0].message).toContain("body computed to 16px at the raised root")
+    expect(audited.findings[0].message).toContain("0 of 2 sampled text elements moved")
+    // Still restored, even on the failing path.
+    expect(browser.preference).toBe(TEXT_RESIZE_FONT_SIZES.standard)
+  })
+
+  it("names the element that did not move, by the selector it was sampled under", async () => {
+    // The narrower case the sample exists for: `body` follows the root and a subtree does
+    // not. It also pins the join between the two readings — the raised reading names the
+    // element, the baseline reading is taken after a CDP round trip, and pairing them by
+    // position is the thing that would silently mismatch if the walk were re-run instead.
+    const browser = chromiumFontSizeModel({
+      elements: [
+        { className: "coach-fee-amount", localName: "td", px: 13, text: "₹5,500" },
+        { className: "coach-fee-label", localName: "span", px: 11, text: "Billed" },
+      ],
+    })
+    const audited = await browser.run(() => auditTextResizeLayout({
+      client: browser.client,
+      page: browser.page,
+      viewport: accessibilityViewports[2],
+    }))
+    expect(audited.findings.map((item) => item.id)).toEqual(["text-resize-absorbed"])
+    expect(audited.findings[0].targets)
+      .toEqual(["body", "td.coach-fee-amount", "span.coach-fee-label"])
+    expect(audited.findings[0].message).toContain("td.coach-fee-amount at 13px")
+  })
+
+  it("leaves no probe attributes on the page it measured", async () => {
+    // The sample is carried between the two readings on a data attribute, because a CDP
+    // round trip sits between them. Anything left behind would be visible to the ordinary
+    // pass on the next state and to every screenshot taken afterwards.
+    const browser = chromiumFontSizeModel({ elements: remSizedPage() })
+    await browser.run(() => auditTextResizeLayout({
+      client: browser.client,
+      page: browser.page,
+      viewport: accessibilityViewports[2],
+    }))
+    const remaining = await browser.run(async () => browser.page.evaluate(
+      () => document.querySelectorAll("[data-text-resize-sample]").length,
+      undefined,
+    ))
+    expect(remaining).toBe(0)
   })
 })
 

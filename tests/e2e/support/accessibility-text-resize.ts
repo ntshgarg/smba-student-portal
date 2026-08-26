@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { CDPSession, Page } from "@playwright/test"
 
 import {
   collectAccessibilityLayout,
@@ -222,10 +222,57 @@ export async function applyBrowserFontSizePreference(
   return client
 }
 
-export async function readRootFontSize(page: Page) {
-  return page.evaluate(() => (
-    Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
-  ))
+/*
+ * Why every font-size change below is followed by a wait.
+ *
+ * `Page.setFontSizes` resolves before the renderer has restyled anything. The
+ * preference is delivered on the next animation frame, and until that frame has
+ * run `getComputedStyle` on the root still reports the size from before the
+ * call. Measured rather than reasoned, against Chrome for Testing
+ * 151.0.7922.34 — the build .github/workflows/ui-accessibility.yml installs —
+ * driven over raw CDP against the app's own stylesheets: a root read in the same
+ * task as the call returned reported the old size on every attempt, and the
+ * root, `body`, every rem-sized descendant and the document's own height had all
+ * followed two animation frames later.
+ *
+ * This is the whole of what went wrong the first time. The previous probe wrote
+ * `font-size: 16px` onto the root and read it back inside a single
+ * `page.evaluate`, with no frame in between, so both readings came back at the
+ * raised size, and it correctly refused to accuse the page — on all 55 audits.
+ * The mechanism it chose was not the problem; reading in the same task was.
+ *
+ * Two frames rather than one, because the root arrives before the tree that
+ * inherits from it: a document whose root already read 16px reported `body` at
+ * 32px in the same task, and only matched a frame later. The loop that precedes
+ * them is a ceiling on the wait rather than an expectation of it — every
+ * direction of every measurement taken settled within two frames — and it exits
+ * on the size rather than on a fixed count so that a preference which never
+ * arrives costs 30 frames and is then visible to the caller in the returned
+ * reading rather than assumed to have landed.
+ */
+const FONT_SIZE_SETTLE_FRAMES = 2
+const FONT_SIZE_SETTLE_FRAME_LIMIT = 30
+
+export async function settleBrowserFontSizePreference(page: Page, expectedStandard: number) {
+  return page.evaluate(async ({ expected, frames, limit, tolerance }) => {
+    const rootFontSize = () => (
+      Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+    )
+    const frame = () => new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve())
+    })
+    for (let waited = 0; waited < limit; waited += 1) {
+      if (Math.abs(rootFontSize() - expected) <= tolerance) break
+      await frame()
+    }
+    for (let waited = 0; waited < frames; waited += 1) await frame()
+    return rootFontSize()
+  }, {
+    expected: expectedStandard,
+    frames: FONT_SIZE_SETTLE_FRAMES,
+    limit: FONT_SIZE_SETTLE_FRAME_LIMIT,
+    tolerance: ROOT_FONT_SIZE_TOLERANCE,
+  })
 }
 
 /** One reading of the same element at two root font sizes. */
@@ -236,6 +283,16 @@ export type TextScaleSample = {
   root: TextScaleReading
   sampled: (TextScaleReading & { target: string })[]
 }
+
+// Carries the position of a sampled element from the first reading to the
+// second, because the two readings are now two `page.evaluate` calls with a CDP
+// round trip between them and nothing else survives that boundary. An attribute
+// rather than a re-run of the walk: the walk skips elements with a zero-sized
+// box, an element can cross that line when the type it holds halves, and a walk
+// that returned a different list would pair the raised reading of one element
+// against the baseline reading of another and file the difference as a defect in
+// the page. Removed by the second reading itself, in a `finally`.
+const TEXT_SAMPLE_ATTRIBUTE = "data-text-resize-sample"
 
 /*
  * Whether the text this page renders answers to the root, measured rather than
@@ -250,30 +307,39 @@ export type TextScaleSample = {
  * green 200% result it never took.
  *
  * So vary the stimulus and watch. Every element is read twice: once at the root
- * the CDP preference produced, then again with `font-size: 16px` forced onto the
- * root as an inline style, and then the inline style is removed. Anything
- * declared in `rem`, `em`, `%` or nothing at all halves; anything pinned in an
- * absolute unit reads the same number twice.
+ * the CDP preference produced, then again with the same CDP call sent back down
+ * to the browser's shipped defaults, and then the preference is restored.
+ * Anything declared in `rem`, `em`, `%` or nothing at all halves; anything pinned
+ * in an absolute unit reads the same number twice.
  *
- * The inline style is a probe, not the magnification. The distinction matters
- * because the module comment above rejects injection as the *mechanism*: an
- * injected root font-size cannot see a stylesheet that overrides the reader,
- * because the injection is the override. Here the override is the point — it is
- * asking "what would this element be at the default root", and by the time it
- * runs, textResizeApplicationFindings has already proved the CDP preference
- * reached the root, which is the fact injection would have hidden. The probe
- * loses to `html { font-size: X !important }`, and that case is caught by the
- * root reading below rather than blamed on the page.
+ * One mechanism in both directions, which is the change this round. The probe
+ * used to force `font-size: 16px` onto the root as an inline style, and the
+ * module comment above had to argue that an inline style outranks everything a
+ * stylesheet can declare — true, and beside the point, because what defeated it
+ * was reading the result in the same task as the write. Lowering the same
+ * preference that raised the page removes the argument entirely: if the call
+ * moved the root up it moves it back down, and there is no cascade to reason
+ * about. It costs one more CDP round trip and one more `page.evaluate` per audit.
  *
  * Run after the layout walk, never before, so the render this pass reports on is
  * the one the preference produced and not one that has just been shrunk and
- * regrown under a ResizeObserver.
+ * regrown under a ResizeObserver. The `finally` restores the raised preference
+ * and waits for it to arrive, so the page this leaves behind — the one a failure
+ * screenshot captures, and the one the next state inherits before it navigates —
+ * is the render that was measured rather than the halved one.
  */
-export async function measureTextScaleResponse(
-  page: Page,
-  baselineStandard: number = BROWSER_DEFAULT_FONT_SIZES.standard,
-): Promise<TextScaleSample> {
-  return page.evaluate(({ baselineStandard: baseline, limit }) => {
+export async function measureTextScaleResponse({
+  baselineFontSizes = BROWSER_DEFAULT_FONT_SIZES,
+  client,
+  fontSizes = TEXT_RESIZE_FONT_SIZES,
+  page,
+}: {
+  baselineFontSizes?: { fixed: number; standard: number }
+  client: CDPSession
+  fontSizes?: { fixed: number; standard: number }
+  page: Page
+}): Promise<TextScaleSample> {
+  const raised = await page.evaluate(({ attribute, limit }) => {
     // A shorter selectorFor than the audit's, and separate from it on purpose:
     // that one lives inside its own page.evaluate body and cannot be imported,
     // and this one only has to name an element in a failure message.
@@ -300,39 +366,69 @@ export async function measureTextScaleResponse(
       if (!writes) continue
       const rect = element.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) continue
+      element.setAttribute(attribute, String(sample.length))
       sample.push(element)
     }
 
     const sizeOf = (element: Element) => Number.parseFloat(getComputedStyle(element).fontSize)
-    const readAll = () => ({
+    return {
       body: sizeOf(document.body),
       root: sizeOf(document.documentElement),
-      sampled: sample.map(sizeOf),
-    })
-
-    const raised = readAll()
-    const inline = document.documentElement.style.fontSize
-    try {
-      document.documentElement.style.fontSize = `${baseline}px`
-      const dropped = readAll()
-      return {
-        body: { baseline: dropped.body, raised: raised.body },
-        root: { baseline: dropped.root, raised: raised.root },
-        sampled: sample.map((element, index) => ({
-          baseline: dropped.sampled[index],
-          raised: raised.sampled[index],
-          target: selectorFor(element),
-        })),
-      }
-    } finally {
-      // Restored whatever happened, because the page is reused for every
-      // remaining state in the sweep and a leftover 16px root would make the
-      // next state's root reading fail for a reason that has nothing to do with
-      // the next state.
-      if (inline) document.documentElement.style.fontSize = inline
-      else document.documentElement.style.removeProperty("font-size")
+      sampled: sample.map((element, index) => ({
+        index,
+        size: sizeOf(element),
+        target: selectorFor(element),
+      })),
     }
-  }, { baselineStandard, limit: TEXT_SAMPLE_LIMIT })
+  }, { attribute: TEXT_SAMPLE_ATTRIBUTE, limit: TEXT_SAMPLE_LIMIT })
+
+  try {
+    await client.send("Page.setFontSizes", { fontSizes: baselineFontSizes })
+    await settleBrowserFontSizePreference(page, baselineFontSizes.standard)
+    const dropped = await page.evaluate((attribute) => {
+      const sizeOf = (element: Element) => Number.parseFloat(getComputedStyle(element).fontSize)
+      const tagged = [...document.querySelectorAll(`[${attribute}]`)]
+      try {
+        return {
+          body: sizeOf(document.body),
+          root: sizeOf(document.documentElement),
+          sampled: tagged.map((element) => ({
+            index: Number(element.getAttribute(attribute)),
+            size: sizeOf(element),
+          })),
+        }
+      } finally {
+        for (const element of tagged) element.removeAttribute(attribute)
+      }
+    }, TEXT_SAMPLE_ATTRIBUTE)
+
+    // Joined on the position the attribute carries rather than on array order,
+    // so an element that lost its box between the two readings drops out of the
+    // sample instead of shifting every reading after it by one.
+    const baselineByIndex = new Map(dropped.sampled.map((reading) => [reading.index, reading.size]))
+    return {
+      body: { baseline: dropped.body, raised: raised.body },
+      root: { baseline: dropped.root, raised: raised.root },
+      sampled: raised.sampled.flatMap((reading) => {
+        const baseline = baselineByIndex.get(reading.index)
+        if (baseline === undefined) return []
+        return [{ baseline, raised: reading.size, target: reading.target }]
+      }),
+    }
+  } finally {
+    // Restored whatever happened, because the page is reused for every remaining
+    // state in the sweep and a preference left at the browser default would make
+    // the next state's root reading fail for a reason that has nothing to do
+    // with the next state.
+    await client.send("Page.setFontSizes", { fontSizes })
+    // Swallowed, and only this half of the restore is. The `send` above is what
+    // the next state depends on — it navigates, and a fresh document is styled
+    // from the preference rather than from this render — so the wait is about
+    // the page this leaves behind for a failure screenshot. A wait that threw
+    // here would replace whatever error brought us into the `finally` with a
+    // stack about a screenshot.
+    await settleBrowserFontSizePreference(page, fontSizes.standard).catch(() => undefined)
+  }
 }
 
 /*
@@ -362,14 +458,16 @@ export function textResizeAbsorbedFindings(
     return [{
       id: "text-resize-probe-not-applied",
       impact: "critical",
-      message: `This pass checks that rendered text answers to the root by forcing the root back`
-        + ` to ${baselineStandard}px as an inline style and reading everything a second time, and`
-        + ` the root did not move: ${sample.root.raised}px at the browser preference and`
-        + ` ${sample.root.baseline}px under the probe. An inline style loses to`
-        + " `html { font-size: … !important }` and to nothing else, so that is what to look for."
-        + " Reported separately from the page's own result because it is this check that stopped"
-        + " working, not the page, and a check that cannot measure must not be allowed to"
-        + " accuse.",
+      message: `This pass checks that rendered text answers to the root by sending the browser`
+        + ` font-size preference back down to ${baselineStandard}px over CDP — the same call that`
+        + " raised it — waiting for the change to reach the document, and reading everything a"
+        + ` second time. The root did not move: ${sample.root.raised}px at the raised preference`
+        + ` and ${sample.root.baseline}px under the probe. No stylesheet produces that, because`
+        + " the preference is the browser's own default font size rather than a rule the cascade"
+        + " can outrank; what produces it is a reading taken before the change has arrived, so"
+        + " start at settleBrowserFontSizePreference and at how many frames it waited. Reported"
+        + " separately from the page's own result because it is this check that stopped working,"
+        + " not the page, and a check that cannot measure must not be allowed to accuse.",
       source: "layout",
       targets: ["html"],
     }]
@@ -401,10 +499,17 @@ export function textResizeAbsorbedFindings(
 /*
  * Two blocking questions, then one advisory measurement.
  *
- * The first blocking question is whether the preference reached the root: if the
+ * The first blocking question is whether the preference reached the root, asked
+ * after waiting for it rather than the moment the navigation returned: if the
  * root element did not end up at the size that was asked for, then this pass
  * measured some other magnification and every green result it produced belongs
- * to a ceiling nobody chose. The three ways that happens are named in the
+ * to a ceiling nobody chose. The wait is not politeness: a font-size change
+ * reaches the root a frame before it reaches the tree that inherits from it, so
+ * a read taken the moment `goto` returned can find the root at 200% above a
+ * document still laid out at 100% — and the layout walk on the next line would
+ * then measure that document and file its measurements as a 200% result.
+ *
+ * The three ways the root itself can be wrong are named in the
  * message. Today app/globals.css declares `scroll-behavior` and
  * `scroll-padding-top` on `html` and no `font-size`, and no other stylesheet in
  * the app touches the root either — tests/accessibility-text-resize.test.ts
@@ -433,30 +538,36 @@ export function textResizeAbsorbedFindings(
  *
  * Order: root, layout, probe. The root check comes first because everything
  * after it is meaningless without it, and because a wrong render should cost one
- * evaluate rather than three. The probe comes last, after the layout walk rather
- * than before it, because it moves the root to take its second reading — doing
- * that first would hand the layout walk a page that had just been shrunk and
- * regrown, and this pass exists to measure a render, not to survive one. Its
- * answer still governs: an absorbed render reports the finding and discards the
- * advisories it collected, because an advisory taken from the ordinary render is
- * worse than no advisory at all.
+ * evaluate rather than four. The probe comes last, after the layout walk rather
+ * than before it, because it lowers the browser preference to take its second
+ * reading — doing that first would hand the layout walk a page that had just been
+ * shrunk and regrown, and this pass exists to measure a render, not to survive
+ * one. Its answer still governs: an absorbed render reports the finding and
+ * discards the advisories it collected, because an advisory taken from the
+ * ordinary render is worse than no advisory at all.
+ *
+ * `client` is the CDP session that raised the preference in the first place, not
+ * a second one. Same target, same settings object: a probe that lowered some
+ * other session's preference would move nothing and blame itself for it.
  */
 export async function auditTextResizeLayout({
   baselineFontSizes = BROWSER_DEFAULT_FONT_SIZES,
+  client,
   fontSizes = TEXT_RESIZE_FONT_SIZES,
   page,
   viewport,
 }: {
   baselineFontSizes?: { fixed: number; standard: number }
+  client: CDPSession
   fontSizes?: { fixed: number; standard: number }
   page: Page
   viewport: AccessibilityViewport
 }): Promise<{ advisories: AccessibilityAdvisory[]; findings: AccessibilityFinding[] }> {
-  const rootFontSize = await readRootFontSize(page)
+  const rootFontSize = await settleBrowserFontSizePreference(page, fontSizes.standard)
   const applied = textResizeApplicationFindings(rootFontSize, fontSizes.standard)
   if (applied.length) return { advisories: [], findings: applied }
   const layout = await collectAccessibilityLayout(page, viewport)
-  const sample = await measureTextScaleResponse(page, baselineFontSizes.standard)
+  const sample = await measureTextScaleResponse({ baselineFontSizes, client, fontSizes, page })
   const absorbed = textResizeAbsorbedFindings(sample, fontSizes.standard, baselineFontSizes.standard)
   if (absorbed.length) return { advisories: [], findings: absorbed }
   return {

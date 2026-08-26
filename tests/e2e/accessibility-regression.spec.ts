@@ -4,7 +4,7 @@ import path from "node:path"
 
 import { base32 } from "@better-auth/utils/base32"
 import { createOTP } from "@better-auth/utils/otp"
-import type { Browser, BrowserContext, Page, TestInfo } from "@playwright/test"
+import type { Browser, BrowserContext, CDPSession, Page, TestInfo } from "@playwright/test"
 import Database from "better-sqlite3"
 
 import { expect, test } from "./support/failure-evidence"
@@ -434,13 +434,13 @@ async function auditTextResizeState(
   state: AccessibilityState,
   results: AccessibilityResult[],
   testInfo: TestInfo,
-  raiseBrowserTextSize: () => Promise<void>,
+  raiseBrowserTextSize: () => Promise<CDPSession>,
 ) {
   const id = textResizeResultId(state.id)
   for (const viewport of viewportsForState(state)) {
     await page.setViewportSize({ height: viewport.height, width: viewport.width })
     try {
-      await raiseBrowserTextSize()
+      const client = await raiseBrowserTextSize()
       await page.goto(state.route, { waitUntil: "domcontentloaded" })
       await settle(page)
       const expectedPath = state.expectedRoute ?? new URL(state.route, baseURL).pathname
@@ -466,7 +466,7 @@ async function auditTextResizeState(
       // measurements are trustworthy.
       await page.evaluate(() => window.scrollTo(0, 0))
       await settle(page)
-      const { advisories, findings } = await auditTextResizeLayout({ page, viewport })
+      const { advisories, findings } = await auditTextResizeLayout({ client, page, viewport })
       results.push({
         actor: state.actor,
         advisories,
@@ -527,10 +527,14 @@ async function sweepTextResizeStates({
   // the actors after it and the recovery walkthrough that follows -- reporting
   // one unattributed stack instead of a finding per state with the state, the
   // viewport and a screenshot beside it.
-  let preference: Promise<unknown> | null = null
+  let preference: Promise<CDPSession> | null = null
   const raiseBrowserTextSize = async () => {
     preference ??= applyBrowserFontSizePreference(page)
-    await preference
+    // The same session every time, because the probe in auditTextResizeLayout
+    // lowers this preference and puts it back: a second session would be a
+    // second override of the same setting, and whichever one lost would leave
+    // the pass measuring a magnification nobody asked for.
+    return preference
   }
   try {
     for (const state of states) {
