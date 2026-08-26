@@ -52,9 +52,13 @@ const evidenceUploads = [
   },
   {
     file: ".github/workflows/ui-accessibility.yml",
+    // Every step whose failure produces evidence has to be named here, including
+    // the capture pass -- an upload gate that omits one uploads nothing on the
+    // run that needed it most.
     gate: "if: always() && (steps.admin.outcome == 'failure'"
       + " || steps.clean.outcome == 'failure'"
       + " || steps.stress.outcome == 'failure'"
+      + " || steps.capture.outcome == 'failure'"
       + " || steps.summary.outcome == 'failure')",
     artifact: "name: ui-accessibility-failure-${{ github.run_id }}-${{ github.run_attempt }}",
     paths: [

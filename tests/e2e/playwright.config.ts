@@ -18,7 +18,13 @@ export default defineConfig({
   timeout: 180_000,
   use: {
     baseURL: captureSettings.baseURL,
-    channel: "chrome",
+    // Never pin a channel here. Both workflows install the bundled build with
+    // `npx playwright install --with-deps chromium` and nothing installs the
+    // Google Chrome stable that channel: "chrome" resolves to, so this pin named
+    // a browser no pipeline has -- which is part of why this suite has never run
+    // anywhere but a developer's laptop. The other three configs already take it
+    // from the environment; this follows them.
+    channel: process.env.SMBA_CAPTURE_BROWSER_CHANNEL || undefined,
     colorScheme: "light",
     deviceScaleFactor: 1,
     headless: true,
