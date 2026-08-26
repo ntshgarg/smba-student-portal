@@ -21,9 +21,23 @@ const nextConfig: NextConfig = {
   // external preserves those files at their real node_modules paths instead
   // of rewriting them into the Next.js server bundle.
   serverExternalPackages: ["libsql", "pdfkit"],
-  outputFileTracingIncludes: {
-    "/*": ["./drizzle/**/*"],
-  },
+
+  // No `outputFileTracingIncludes` for ./drizzle/**. The only thing that reads a
+  // migration is `prepareDatabase` in lib/db/setup.ts, whose own comment says
+  // "Deployment, development and test setup only. Request code must use
+  // initializeDatabase(), which opens the prepared database without writing to
+  // it." Its single importer is scripts/database/prepare.ts, which `vercel-build`
+  // runs *before* `next build`, in the build container where the checkout is
+  // already on disk -- tracing decides what is copied into the function output,
+  // not what the build step can see.
+  //
+  // So the include was copying 3.0 MB of SQL and metadata into all 67 route
+  // bundles for code no request can reach. Measured before removal: 3,886 entries
+  // across the .nft.json manifests referenced drizzle/.
+  //
+  // If a runtime path ever does need to migrate, this has to come back -- and the
+  // failure mode is a route throwing on a missing migrations folder, not a build
+  // error, so the check belongs with whatever adds that path.
 }
 
 export default nextConfig
