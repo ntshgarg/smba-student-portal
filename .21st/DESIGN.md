@@ -23,7 +23,7 @@ breakpoint sections hand-corrected on the same date.
 ## Sources
 
 - Tokens: app/globals.css (`:root`, 65 tokens — the single source of truth)
-- Stylesheets: 13 hand-written files — app/globals.css (522 lines), app/portal.css (13,797
+- Stylesheets: 13 hand-written files — app/globals.css (581 lines), app/portal.css (13,799
   lines), app/public-home.css (2,361 lines) and 10 CSS modules
 - Components: 10 CSS modules under components/ (see Components below)
 - Assets: public/images
@@ -93,11 +93,11 @@ is a local custom property on a component scope and is marked as such under Spac
 
 ### Typography
 
-- `--type-utility-label`: `11px` (app/globals.css)
-- `--type-utility-meta`: `12px` (app/globals.css)
-- `--type-operational-body`: `13px` (app/globals.css)
-- `--type-operational-action`: `12px` (app/globals.css)
-- `--type-operational-floor`: `10px` (app/globals.css)
+- `--type-utility-label`: `0.6875rem` — 11px at the default root size (app/globals.css)
+- `--type-utility-meta`: `0.75rem` — 12px at the default root size (app/globals.css)
+- `--type-operational-body`: `0.8125rem` — 13px at the default root size (app/globals.css)
+- `--type-operational-action`: `0.75rem` — 12px at the default root size (app/globals.css)
+- `--type-operational-floor`: `0.625rem` — 10px at the default root size (app/globals.css)
 - `--type-page-title`: `clamp(58px, 7.5vw, 102px)` (app/globals.css)
 - `--weight-display-light`: `470` (app/globals.css)
 - `--weight-display`: `570` (app/globals.css)
@@ -109,6 +109,49 @@ is a local custom property on a component scope and is marked as such under Spac
 - `--leading-display`: `0.98` (app/globals.css)
 - `--leading-display-light`: `1` (app/globals.css)
 - `--leading-body`: `1.55` (app/globals.css)
+
+The five size tokens are `rem`, and so are 743 of the 767 loose `font-size` declarations
+across the thirteen stylesheets. `rem` resolves against the root element, which declares no
+font size in any of them, so 1rem is the reader's own default — 16px until they change it in
+chrome://settings/fonts or its equivalent. Every value is unchanged at that default: 16 is a
+power of two, so each integer px over 16 terminates exactly (11px is `0.6875rem`, not a
+rounding of it), and the conversion was checked by restoring every rem to `value * 16` and
+diffing the declaration stream against the pre-change files — 13 of 13 byte-identical.
+
+Two lines carry that: no stylesheet may put a font size on `html` or `:root`, and
+`body { font-size: 1rem }` must stay relative. An absolute size on `body` would freeze every
+inherited word in the app while the root still moved, so both are asserted over all thirteen
+sheets in tests/accessibility-text-resize.test.ts rather than left to review.
+
+Read every px type size named in a decision below as "at the reader's default size". The
+type floors those decisions pin — approximately 10px for labels and 12px for row values in
+coach-registration-fee-entry-register, 10-11px in coach-record-payment-balance-line, 10px
+supporting text and 12px-or-larger values in coach-focused-player-fee-register, and the 9px
+desktop / 8px mobile uppercase pairing in coach-staff-roll-call-daily-ledger — all hold
+exactly as written at 16px and rise together above it. None of them was chosen against a
+device constraint, so none needs the pixel to be literal.
+
+Twenty-four declarations stay in px, and are listed by name in tests/design-tokens.test.ts:
+a `font-size` of 16px or more on a rule that reaches an `input`, `select` or `textarea`. 16
+CSS px is the threshold below which iOS Safari and Chrome for Android zoom the visual
+viewport on focus — and on iOS never zoom back — and that threshold is a fixed count of
+pixels rather than a multiple of the reader's preference. In rem, a reader who *lowered*
+their default would drop under it and get the zoom trap on the courtside register and both
+money forms. The 169 clamp() font sizes also stay: they mix px with vw, and which term
+should win is a decision per site rather than a substitution.
+
+All 24 stop growing with the reader's preference, and two of them are not single fields.
+`@media (max-width: 430px) { input, select, textarea { font-size: 16px !important } }` in
+app/globals.css means that at phone width no form control's text resizes at 200% at all
+while every label beside it doubles, and the 14-selector list under
+`@media (max-width: 720px), (pointer: coarse)` in app/portal.css does the same for the coach
+forms on any touch device, tablet-mode laptops included. That is the conversion's principal
+user-visible cost. Only one of the 24 has nothing left to protect: at Chrome's lowest
+default of 9px the three exempt textarea sizes would be 10.7px, 10.1px and 9.6px — under
+the threshold, so protective after all — and only `.balanceMoneyInput input` at 30px
+(1.875rem = 16.9px at a 9px root) would still clear it. `max(16px, Nrem)` is the move that
+buys the other 23 back their scaling, and it is a new construction rather than a
+substitution, so it is not in this change.
 
 The ten weight/tracking/leading tokens are a census of values already in the sheet, not a
 scale to snap onto: 266 of the 776 declarations outside the frozen surfaces already held one

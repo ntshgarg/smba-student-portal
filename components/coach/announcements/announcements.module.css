@@ -1,7 +1,7 @@
 .archiveToolbar > div > span,
 .withdrawDialog > span {
   color: var(--red);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -18,7 +18,7 @@
   padding: 0 18px;
   border: 1px solid var(--navy);
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--weight-control);
   transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
 }
@@ -48,7 +48,7 @@
   align-items: center;
   gap: 9px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 750;
 }
 
@@ -181,7 +181,7 @@
   min-height: 13px;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1.45;
 }
 
@@ -288,7 +288,7 @@
 
 .slipChannelChoices label > span {
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-emphasis);
   line-height: 1.35;
 }
@@ -316,7 +316,7 @@
 .slipPinOption > span {
   min-width: 0;
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 720;
 }
 
@@ -342,7 +342,7 @@
   min-height: 40px;
   padding: 0 11px;
   font: inherit;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .slipReviewButton {
@@ -359,7 +359,7 @@
   border: 0;
   background: var(--navy);
   color: var(--white);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-control);
 }
 
@@ -388,7 +388,7 @@
   align-items: center;
   gap: 9px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 750;
 }
 
@@ -445,7 +445,7 @@
 
 .field > span {
   color: var(--navy);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -469,7 +469,7 @@
   background: var(--white);
   color: var(--navy);
   font: inherit;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .field input {
@@ -492,7 +492,7 @@
 .fieldMessage {
   min-height: 17px;
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: var(--leading-body);
 }
 
@@ -511,7 +511,7 @@
   border: 1px solid var(--navy);
   background: var(--navy);
   color: var(--white);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-control);
 }
 
@@ -582,7 +582,7 @@
   gap: 14px;
   margin-top: 26px;
   color: var(--navy);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.75;
   white-space: pre-wrap;
 }
@@ -597,7 +597,7 @@
 
 .reviewMeta > p {
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.5;
 }
 
@@ -659,7 +659,7 @@
   max-width: 500px;
   margin: 18px 0 28px;
   color: var(--steel);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.65;
 }
 
@@ -724,7 +724,7 @@
 
 .monthControl > div strong {
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--weight-control);
 }
 
@@ -800,7 +800,7 @@
   border: 0;
   background: var(--navy);
   color: var(--white);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-control);
 }
 
@@ -815,7 +815,7 @@
   gap: var(--space-tight);
   margin-left: clamp(20px, 3vw, 34px);
   color: var(--navy);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-control);
   cursor: pointer;
   list-style: none;
@@ -862,7 +862,7 @@
   place-items: center;
   padding: 0 12px;
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-control);
 }
 
@@ -875,7 +875,7 @@
   padding: var(--space-tight) clamp(20px, 3vw, 34px);
   border-bottom: 1px solid var(--line);
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
 }
 
@@ -924,7 +924,7 @@
 .announcementIdentity h3 {
   min-width: 0;
   color: var(--navy);
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 720;
   letter-spacing: -0.025em;
   line-height: 1.25;
@@ -935,7 +935,7 @@
   max-width: 660px;
   margin-top: var(--space-tight);
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: var(--leading-body);
 }
 
@@ -968,7 +968,7 @@
 .detailMeta dd {
   margin: 0;
   color: var(--navy);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 720;
   line-height: 1.45;
 }
@@ -992,7 +992,7 @@
   padding: 0 13px;
   border: 1px solid var(--navy);
   color: var(--navy);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-control);
 }
 
@@ -1022,14 +1022,14 @@
   margin-top: 18px;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 28px;
+  font-size: 1.75rem;
   font-weight: 500;
 }
 
 .emptyState p {
   margin-top: 9px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: var(--leading-body);
 }
 
@@ -1042,7 +1042,7 @@
   padding: 14px var(--space-copy);
   border: 1px solid var(--navy);
   color: var(--navy);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-control);
 }
 
@@ -1068,7 +1068,7 @@
   flex: 0 0 auto;
   padding-bottom: 7px;
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-label);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -1110,7 +1110,7 @@
 }
 
 .detailMeta dd {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .withdrawalRecord {
@@ -1131,7 +1131,7 @@
 .withdrawalRecord p {
   margin-top: var(--space-tight);
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: var(--leading-body);
 }
 
@@ -1198,7 +1198,7 @@
 
   .composerBackRow a {
     min-height: 44px;
-    font-size: 10px;
+    font-size: 0.625rem;
   }
 
   .composerHeader {
@@ -1344,7 +1344,7 @@
   .workspaceHeader p,
   .archiveHeader > div > p {
     margin-top: var(--space-copy);
-    font-size: 17px;
+    font-size: 1.0625rem;
   }
 
   .composerPanel,
@@ -1414,7 +1414,7 @@
 
   .reviewCopy h3,
   .withdrawDialog h2 {
-    font-size: 32px;
+    font-size: 2rem;
   }
 
   .dialogActions {
@@ -1514,7 +1514,7 @@
 
   .slipChannelChoices label > span,
   .slipPinOption > span {
-    font-size: 10px;
+    font-size: 0.625rem;
   }
 
   .slipExpiryField {
@@ -1523,7 +1523,7 @@
 
   .slipExpiryField input {
     padding-inline: 7px;
-    font-size: 11px;
+    font-size: 0.6875rem;
   }
 
   .monthControl {
@@ -1536,7 +1536,7 @@
   }
 
   .monthControl > div strong {
-    font-size: 11px;
+    font-size: 0.6875rem;
   }
 }
 

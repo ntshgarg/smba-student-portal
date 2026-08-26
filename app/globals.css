@@ -110,11 +110,32 @@
   --section-space-lg: var(--space-section-sm);
   --page-scroll-padding: 88px;
   --portal-header-height: 82px;
-  --type-utility-label: 11px;
-  --type-utility-meta: 12px;
-  --type-operational-body: 13px;
-  --type-operational-action: 12px;
-  --type-operational-floor: 10px;
+  /* The five size tokens, and the 743 loose `font-size` declarations elsewhere, are
+     `rem` rather than `px`. Browser *zoom* already scales a px type scale correctly;
+     what a px type scale defeats is the other control — the reader's default font
+     size, `chrome://settings/fonts` and its equivalents — because that preference
+     reaches a document only through the root element's initial `font-size: medium`,
+     and a px length ignores it. Nothing in these thirteen stylesheets declares a
+     font size on `html` or `:root` (tests/accessibility-text-resize.test.ts parses
+     all thirteen and holds that), so 1rem is exactly the reader's chosen default,
+     16px until they change it.
+
+     No value moved. 16 is 2^4, so every integer px divided by 16 terminates inside
+     four decimal places with no rounding at all: 11px is 0.6875rem and not an
+     approximation of it. All 748 substitutions were verified by restoring each rem
+     to `value * 16` and diffing against the pre-change file — 13 of 13 byte-identical.
+     At a 16px default this change is invisible; away from one it is the whole point.
+
+     `--type-page-title` below stays a clamp() of px and vw. Mixing a reader-relative
+     term into a viewport-relative one needs a per-site decision about which should
+     win, and that is a separate piece of work from a unit substitution that provably
+     moves nothing. The 169 other clamp() font sizes in these sheets stay for the same
+     reason. */
+  --type-utility-label: 0.6875rem;
+  --type-utility-meta: 0.75rem;
+  --type-operational-body: 0.8125rem;
+  --type-operational-action: 0.75rem;
+  --type-operational-floor: 0.625rem;
   /* The coach workspace page title. 5 of the 27 hand-authored base H1 recipes
      declare this exact clamp, every one of them beside the same 545 / -0.075em
      / 0.9. It is *not* the `.page-intro h1` size: the shared PageIntro
@@ -244,7 +265,7 @@ body {
   background: var(--ivory);
   color: var(--ink);
   font-family: var(--font-manrope), Arial, sans-serif;
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.6;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -309,7 +330,7 @@ h3 {
   padding: 10px 14px;
   background: var(--navy);
   color: var(--white);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 750;
   transform: translateY(-160%);
   transition: transform var(--duration-base) var(--ease-standard);
@@ -321,7 +342,7 @@ h3 {
 
 .eyebrow {
   color: var(--red);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -334,7 +355,7 @@ h3 {
   align-items: center;
   gap: 12px;
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--weight-label);
 }
 
@@ -410,7 +431,7 @@ h3 {
   align-items: center;
   justify-content: center;
   padding-inline: 18px;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--weight-label);
 }
 
@@ -448,7 +469,7 @@ h3 {
   max-width: 580px;
   margin-top: 26px;
   color: var(--steel);
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
 
 .primary-link {
@@ -513,6 +534,44 @@ textarea:focus-visible {
   outline: 2px solid var(--red) !important;
   outline-offset: 2px;
 }
+/* Stays `px` while the other 743 font sizes became `rem`, and this is the one place
+   the two units genuinely disagree.
+
+   16 here is not a type size, it is a device threshold: iOS Safari and Chrome for
+   Android zoom the visual viewport when a control takes focus at a *used* font size
+   below 16 CSS px, and iOS never zooms back out. That threshold is a constant number
+   of CSS pixels. It is not scaled by the reader's default font size, so `1rem` only
+   equals it while that default is 16px. A reader who lowers it — Chrome's slider goes
+   down to 9px — would take `1rem` to 9px, land under the threshold and get the
+   zoom-on-focus trap on every form in the app, including the courtside register's date
+   input and both money forms. That is the exact defect this rule and the two named
+   lists in app/portal.css and components/coach/financials/financials.module.css were
+   written to close, and expressing it in rem would reopen it for the readers who
+   changed the setting the rem conversion was made for.
+
+   So the rule is a class, not a special case: a `font-size` of 16px or more on a
+   selector subjecting input, select or textarea stays px. That is 24 declarations,
+   listed by file and line in tests/design-tokens.test.ts, which fails if the list and
+   the sheets part company in either direction.
+
+   It costs something, and the cost is worth naming properly. All 24 stop growing with
+   the reader's preference, not four of them, and the reach is not one field each: the
+   rule directly below is `input, select, textarea` with `!important`, so at 430px and
+   under, no form control's text resizes at 200% at all while every label beside it
+   doubles — and the 14-selector list in app/portal.css does the same for the coach
+   forms on any touch device, tablet-mode laptops included. That is this change's
+   principal user-visible cost.
+
+   Of the 24, exactly one has nothing left to protect. Run the arithmetic at Chrome's
+   lowest default of 9px: `.coach-report-field textarea` at 19px would be 1.1875rem =
+   10.7px, at 18px 1.125rem = 10.1px, and `.slipField textarea` at 17px 1.0625rem =
+   9.6px — all three under the threshold, so all three are protective after all. Only
+   `.balanceMoneyInput input` at 30px would still clear it (1.875rem = 16.9px at a 9px
+   root). `max(16px, Nrem)` would give the other 23 their scaling back and is where
+   this should go next; it is not in this change because it is a new construction
+   rather than a substitution that provably moves nothing, and because
+   tests/accessibility-hardening.test.ts pins the literal bytes `font-size: 16px` on
+   the (pointer: coarse) list. */
 @media (max-width: 430px) {
   input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not([type="range"]):not([type="reset"]):not([type="submit"]),
   select,

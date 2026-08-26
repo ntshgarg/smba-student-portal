@@ -43,7 +43,7 @@
   min-height: 44px;
   align-items: center;
   color: #36404a;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: var(--weight-emphasis);
 }
 
@@ -74,7 +74,7 @@
   border-radius: var(--radius-sm);
   background: var(--navy);
   color: var(--white);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 700;
   transition:
     background var(--duration-base) var(--ease-standard),
@@ -105,7 +105,7 @@
   min-height: 44px;
   place-items: center;
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -147,7 +147,7 @@
   place-items: center;
   border-radius: var(--radius-circle);
   background: var(--navy);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   transition: transform var(--duration-base) var(--ease-standard), background var(--duration-base) var(--ease-standard);
@@ -181,7 +181,7 @@
 
 .header-account-menu p span {
   color: var(--red);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -189,7 +189,7 @@
 
 .header-account-menu p strong {
   color: var(--navy);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -205,7 +205,7 @@
   border-bottom: 1px solid var(--line);
   background: transparent;
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 680;
   text-align: left;
 }
@@ -260,7 +260,7 @@
 
 .public-eyebrow {
   color: var(--red);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.16em;
   line-height: 1.4;
@@ -310,7 +310,7 @@
   padding: 0 22px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 750;
   transition:
     transform var(--duration-base) var(--ease-standard),
@@ -357,7 +357,7 @@
   gap: 0;
   margin-top: 62px;
   color: #4a5661;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 750;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -566,14 +566,14 @@
 
 .hero-visual-note span {
   color: #f47c83;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.14em;
 }
 
 .hero-visual-note p {
   color: color-mix(in srgb, var(--ivory) 62%, transparent);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   letter-spacing: 0.15em;
   line-height: 1.9;
@@ -639,7 +639,7 @@
 }
 
 .about-image-caption span {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 750;
 }
 
@@ -710,14 +710,14 @@
 
 .about-principles span {
   color: var(--red);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.12em;
 }
 
 .about-principles p {
   max-width: 520px;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 620;
   line-height: 1.5;
   text-wrap: pretty;
@@ -749,7 +749,7 @@
 
 .coach-credential {
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 750;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -761,7 +761,7 @@
   align-items: center;
   gap: 9px;
   color: var(--steel);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -807,7 +807,7 @@
 
 .path-number {
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   transition: color var(--duration-base) var(--ease-standard);
@@ -817,7 +817,7 @@
   min-height: 42px;
   margin-top: 72px;
   color: var(--red);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -833,7 +833,7 @@
 .path-description {
   margin-top: 18px;
   color: var(--steel);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.7;
 }
 
@@ -850,7 +850,7 @@
   align-items: center;
   gap: 9px;
   color: #39434d;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-emphasis);
 }
 
@@ -883,7 +883,7 @@
   max-width: 490px;
   margin-top: var(--space-group);
   color: color-mix(in srgb, var(--ivory) 65%, transparent);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.75;
 }
 
@@ -896,7 +896,7 @@
 .term-savings-label {
   margin-bottom: 4px;
   color: color-mix(in srgb, var(--ivory) 62%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -906,7 +906,7 @@
   display: flex;
   justify-content: space-between;
   color: color-mix(in srgb, var(--ivory) 62%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-emphasis);
 }
 
@@ -928,7 +928,7 @@
   display: block;
   margin-bottom: 15px;
   color: color-mix(in srgb, var(--ivory) 72%, transparent);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.025em;
 }
@@ -949,7 +949,7 @@
   border: 0;
   background: transparent;
   color: color-mix(in srgb, var(--ivory) 86%, transparent);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 750;
   text-align: left;
   transition:
@@ -988,7 +988,7 @@
 .segmented small {
   margin-top: 3px;
   color: inherit;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   opacity: 0.88;
@@ -1006,7 +1006,7 @@
   display: block;
   margin-bottom: 10px;
   color: color-mix(in srgb, var(--ivory) 55%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1029,7 +1029,7 @@
   border-radius: var(--radius-xs);
   background: transparent;
   color: color-mix(in srgb, var(--ivory) 66%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 750;
   transition:
     border var(--duration-fast) var(--ease-standard),
@@ -1090,14 +1090,14 @@
 }
 
 .price-result span {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 750;
 }
 
 .price-result small {
   margin-top: 5px;
   color: color-mix(in srgb, var(--ivory) 52%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-emphasis);
 }
 
@@ -1119,7 +1119,7 @@
   padding-top: 18px;
   border-top: 1px solid color-mix(in srgb, var(--ivory) 16%, transparent);
   color: color-mix(in srgb, var(--ivory) 50%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.65;
 }
 
@@ -1164,7 +1164,7 @@
   align-self: start;
   padding-top: 4px;
   color: var(--red);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -1187,7 +1187,7 @@
   max-width: 390px;
   margin-top: 12px;
   color: var(--steel);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.7;
 }
 
@@ -1219,13 +1219,13 @@
 
 .next-step > span {
   color: #f47c83;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.12em;
 }
 
 .next-step h3 {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 720;
 }
 
@@ -1233,7 +1233,7 @@
   max-width: 470px;
   margin-top: 7px;
   color: color-mix(in srgb, var(--ivory) 58%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.7;
 }
 
@@ -1253,7 +1253,7 @@
 }
 
 .form-heading h3 {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 780;
 }
 
@@ -1281,7 +1281,7 @@
 
 .form-field label {
   color: #39434d;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1307,7 +1307,7 @@
   background: transparent;
   box-shadow: none;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .form-field input,
@@ -1359,7 +1359,7 @@
   gap: 10px;
   margin-top: 20px;
   color: #48535d;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-emphasis);
 }
 
@@ -1377,7 +1377,7 @@
   padding-top: 18px;
   border-top: 1px solid var(--line);
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-emphasis);
   line-height: 1.6;
 }
@@ -1404,7 +1404,7 @@
   border-radius: 3px;
   background: var(--red);
   color: var(--white);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--weight-control);
   line-height: 1.2;
 }
@@ -1422,7 +1422,7 @@
 .privacy-note {
   margin-top: 13px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.6;
   text-align: center;
 }
@@ -1434,7 +1434,7 @@
 .whatsapp-status {
   margin-top: 12px;
   color: #17673c;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-emphasis);
   line-height: var(--leading-body);
   text-align: center;
@@ -1478,7 +1478,7 @@
   align-items: center;
   gap: 12px;
   color: color-mix(in srgb, var(--ivory) 60%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -1512,7 +1512,7 @@
   margin-top: 17px;
   color: color-mix(in srgb, var(--ivory) 60%, transparent);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-style: italic;
 }
 
@@ -1524,7 +1524,7 @@
   gap: 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--ivory) 30%, transparent);
   padding-bottom: 7px;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 750;
 }
 
@@ -1584,7 +1584,7 @@
 
 .contact-card span {
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1596,7 +1596,7 @@
   align-items: center;
   margin: -3px 0 -8px;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 720;
 }
 
@@ -1633,7 +1633,7 @@
   max-width: 320px;
   margin-top: 22px;
   color: color-mix(in srgb, var(--ivory) 50%, transparent);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .footer-action h2 {
@@ -1653,7 +1653,7 @@
   padding-block: 22px;
   border-top: 1px solid color-mix(in srgb, var(--ivory) 12%, transparent);
   color: color-mix(in srgb, var(--ivory) 62%, transparent);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1775,7 +1775,7 @@
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--line);
-    font-size: 13px;
+    font-size: 0.8125rem;
     font-weight: 700;
   }
 
@@ -1893,7 +1893,7 @@
   .hero-support {
     max-width: 34ch;
     margin-top: 28px;
-    font-size: 16px;
+    font-size: 1rem;
   }
 
   .hero-actions {
@@ -1953,7 +1953,7 @@
   .hero-trust small {
     margin-top: var(--space-tight);
     color: var(--steel);
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     line-height: 1.4;
@@ -1997,7 +1997,7 @@
   }
 
   .section-intro > p:last-child {
-    font-size: 15px;
+    font-size: 0.9375rem;
   }
 
   .about-image-frame {
@@ -2034,7 +2034,7 @@
   }
 
   .coach-credential {
-    font-size: 11px;
+    font-size: 0.6875rem;
   }
 
   .coach-profile {
@@ -2059,7 +2059,7 @@
     max-width: 32ch;
     margin-top: var(--space-copy);
     color: var(--steel);
-    font-size: 14px;
+    font-size: 0.875rem;
     line-height: 1.6;
   }
 
@@ -2143,7 +2143,7 @@
   .fee-helper {
     margin-bottom: var(--space-copy);
     color: color-mix(in srgb, var(--ivory) 84%, transparent);
-    font-size: 12px;
+    font-size: 0.75rem;
     line-height: var(--leading-body);
   }
 
@@ -2196,11 +2196,11 @@
   }
 
   .price-result span {
-    font-size: 16px;
+    font-size: 1rem;
   }
 
   .price-result small {
-    font-size: 11px;
+    font-size: 0.6875rem;
     line-height: 1.5;
   }
 
@@ -2318,7 +2318,7 @@
 
   .footer-action h2 {
     margin: var(--space-copy) 0 var(--space-group);
-    font-size: 47px;
+    font-size: 2.9375rem;
   }
 
   .footer-bottom {

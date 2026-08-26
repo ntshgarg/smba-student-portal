@@ -99,10 +99,12 @@ Override the server when needed with
 ## Responsive overflow regression suite
 
 The focused overflow suite verifies that Announcements remains within every
-supported portrait width and that Fee Records owns its table scrolling in
-common landscape viewports without widening the document. It also guards the
-existing 720px stacked-table breakpoint. Its configuration additionally
-schedules `accessibility-hardening.spec.ts` and
+supported portrait width and that neither Fee Records register widens the
+document in common landscape viewports. It also guards each register's own
+stacked-table breakpoint: 720px for the Collections day book, 980px for the fee
+register, which `.registrationTable` stacks a breakpoint earlier than the plain
+records table. Its configuration additionally schedules
+`accessibility-hardening.spec.ts` and
 `phase3c-interface-correctness.spec.ts`; it deliberately does not schedule
 `authentication-responsive.spec.ts`, which `npm run regression:authentication`
 already gates at its own three viewports.
@@ -114,9 +116,15 @@ SMBA_RESPONSIVE_OVERFLOW_BASE_URL=http://127.0.0.1:3000 \
 npm run regression:responsive-overflow
 ```
 
-The suite never submits a product mutation. UI login creates an ordinary session
-record, so the target server must not use one of the stored canonical fixture
-databases directly.
+The suite leaves no product row behind, but it does now submit a product
+mutation: since G-27 was un-quarantined, `accessibility-hardening.spec.ts` posts
+a replacement of 22:00 for 300 minutes to `replaceSessionOccurrenceAction`
+(`app/coach/actions.ts:326`), which `lib/sessions/service.ts:949-955` refuses for
+crossing midnight before it opens a transaction. The case counts the day's
+session cards either side of that submit, so a rule change that started accepting
+it fails there rather than two CI steps later inside the follow-up suite's
+payload budgets. UI login does create an ordinary session record, so the target
+server must not use one of the stored canonical fixture databases directly.
 
 Neither this suite nor the follow-up suite below keeps a trace, a video or a raw
 screenshot: every spec they schedule imports `support/failure-evidence`, which
@@ -152,21 +160,30 @@ SMBA_PHASE8_DISPOSABLE_DB=/tmp/smba-stress-clone.db \
 npm run regression:phase8-followup
 ```
 
-## Quarantined cases
+## The five cases G-27 quarantined
 
-Five of the 19 cases across the two suites above are marked `test.fixme` with
-the reason in a comment above them, so the register that runs stays honest
-rather than green by omission. Each names what has to be proved against a
-running fixture server before it gates again:
+All 19 cases across the two suites above now run; nothing here is marked
+`test.fixme`. The five that were quarantined are listed with what was wrong,
+because in three of them the recorded reason was not the only one, and each
+carries the same account in a comment above it:
 
-| Spec | Case | Why |
-| --- | --- | --- |
-| `responsive-overflow.spec.ts` | Fee Records landscape overflow | `getByRole("table", { name: "Player fee records" })` — the caption became `<period> monthly fee records` in `f3ca2e1` |
-| `responsive-overflow.spec.ts` | Fee Records 720px breakpoint | same locator |
-| `accessibility-hardening.spec.ts` | Member Directory groups of twelve | searches `SMBA#`, which no role-prefixed fixture Academy ID contains since `d9d8dbf` |
-| `accessibility-hardening.spec.ts` | Replacement validation stays inline | hard-codes `2026-08-10`, a session date the wall clock has passed, so "Replace session" is no longer rendered |
-| `accessibility-hardening.spec.ts` | Player attendance month and year restore | hard-codes `View July 2026`, the previous-month label only while the wall clock is inside August 2026 |
+| Spec | Case | Recorded reason | What repairing it also found |
+| --- | --- | --- | --- |
+| `responsive-overflow.spec.ts` | Fee Records landscape overflow | `getByRole("table", { name: "Player fee records" })` — the caption became `<period> monthly fee records` in `f3ca2e1` | the geometry underneath asked the fee register for horizontal scrolling at 844px and 932px, where it has stacked since the same commit |
+| `responsive-overflow.spec.ts` | Fee Records breakpoint | same locator | "720px" was the plain records table's breakpoint; the fee register's is 980px, so 721px asserted a shape it does not have |
+| `accessibility-hardening.spec.ts` | Member Directory groups of twelve | searches `SMBA#`, which no role-prefixed fixture Academy ID contains since `d9d8dbf` | the register holds 99 members, not 100 — one of the stress profile's 100 players is archived — so it failed three assertions before the search |
+| `accessibility-hardening.spec.ts` | Replacement validation stays inline | hard-codes `2026-08-10`, a session date the wall clock has passed, so "Replace session" is no longer rendered | a duration of 15 fails the input's own `min={30}`, so the submit event never fired and the Server Action was never reached |
+| `accessibility-hardening.spec.ts` | Player attendance month and year restore | hard-codes `View July 2026`, the previous-month label only while the wall clock is inside August 2026 | — |
 
-The last three all fail for the same underlying reason: a date literal measured
-against `new Date()` on the server. Repairing them means reading the reference
-date the page renders rather than naming the month in the spec.
+The last two dated cases now read the reference date the page renders instead of
+naming a month. That does not make the calendar one immortal: the stress fixture
+schedules 2026-07-01 to 2026-09-30, and past its last occurrence nothing in it is
+upcoming, so "Replace session" is rendered for nobody. What deriving buys is that
+it stops failing on dates inside the window, and that when the window ends it
+fails on a named count with the reason attached rather than on a click that times
+out.
+
+None of the five has been executed against a running fixture server. Each was
+repaired by reading the spec against the components, CSS and fixture it
+addresses; the first browser run is still the thing that confirms them, and the
+geometry in the two Fee Records cases is where to look first.

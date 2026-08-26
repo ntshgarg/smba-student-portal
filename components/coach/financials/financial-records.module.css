@@ -15,7 +15,7 @@
   gap: 9px;
   padding: 10px var(--space-copy);
   color: var(--steel);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: var(--weight-control);
   text-align: center;
   transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
@@ -59,7 +59,7 @@
 
 .panelHeader > div > span {
   color: var(--red);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -77,7 +77,7 @@
 .panelHeader p {
   margin-top: var(--space-tight);
   color: var(--steel);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -90,7 +90,7 @@
   gap: var(--space-tight);
   border: 1px solid var(--navy);
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-control);
   white-space: nowrap;
 }
@@ -128,7 +128,7 @@
   place-items: center;
   padding: 9px 14px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-control);
   text-align: center;
 }
@@ -167,7 +167,7 @@
 
 .registrationPanelHeader p {
   margin-top: 9px;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .registrationHeaderActions {
@@ -186,11 +186,11 @@
   min-height: 100%;
   border: 0;
   border-left: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .registrationHeaderActions .modeSwitch a {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .registrationTruthRail {
@@ -213,7 +213,7 @@
 .registrationEquation span,
 .registrationAmounts dt {
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -225,7 +225,7 @@
 
 .registrationRecordCount strong {
   color: var(--navy);
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 720;
 }
 
@@ -268,7 +268,7 @@
 .registrationEquation b {
   color: var(--steel);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 500;
   line-height: 1;
 }
@@ -307,7 +307,7 @@
 
 .filters label > span:first-child {
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -324,7 +324,7 @@
   background: var(--white);
   color: var(--navy);
   font: inherit;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .searchInput {
@@ -358,7 +358,7 @@
   border: 1px solid var(--navy);
   background: var(--navy);
   color: var(--white);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-control);
   white-space: nowrap;
 }
@@ -382,16 +382,16 @@
 }
 
 .registrationFilters label > span:first-child {
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .registrationFilters input:not([type="checkbox"]),
 .registrationFilters select {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .registrationFilters > button {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .checkboxField {
@@ -414,7 +414,7 @@
 
 .checkboxField > span {
   color: var(--navy) !important;
-  font-size: 12px !important;
+  font-size: 0.75rem !important;
   letter-spacing: 0 !important;
   text-transform: none !important;
 }
@@ -441,7 +441,7 @@
 .summaryGrid dt,
 .methodSummary dt {
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 790;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -483,7 +483,7 @@
 
 .methodSummary dd {
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: var(--weight-control);
 }
 
@@ -506,7 +506,7 @@
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 790;
   letter-spacing: 0.075em;
   text-align: left;
@@ -527,7 +527,7 @@
   padding: 11px 12px;
   border-bottom: 1px solid var(--line);
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
   vertical-align: middle;
 }
@@ -538,14 +538,14 @@
 }
 
 .recordsTable td > strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 740;
 }
 
 .recordsTable td > small {
   margin-top: 3px;
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .registrationTable {
@@ -554,21 +554,21 @@
 
 .registrationTable th {
   padding-block: 10px;
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .registrationTable td {
   padding-block: var(--space-tight);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .registrationTable td > strong {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .registrationTable td > small {
   margin-top: 3px;
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.4;
 }
 
@@ -604,7 +604,7 @@
 .registrationFolio {
   color: var(--red) !important;
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 19px !important;
+  font-size: 1.1875rem !important;
   font-style: italic;
   font-weight: 560;
 }
@@ -627,23 +627,23 @@
 
 .registrationAmounts dd {
   color: var(--navy);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 730;
   white-space: nowrap;
 }
 
 .registrationAmounts > dl > div:last-child dd {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .registrationAction .rowAction {
   width: 100%;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .registrationStatus .status {
   min-height: 29px;
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 
 .registrationPanel .pagination {
@@ -654,7 +654,7 @@
 .registrationPanel .pagination > span,
 .registrationPanel .pagination a,
 .registrationPanel .pagination > div > span {
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .feeReferences {
@@ -717,7 +717,7 @@
 .emptyState strong {
   margin-top: var(--space-copy);
   color: var(--navy);
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 620;
   letter-spacing: -0.035em;
 }
@@ -726,7 +726,7 @@
   max-width: 420px;
   margin-top: var(--space-tight);
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: var(--leading-body);
 }
 
@@ -741,7 +741,7 @@
 
 .pagination > span {
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .pagination > div {
@@ -758,7 +758,7 @@
   padding: 0 12px;
   border: 1px solid var(--line);
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 750;
 }
 
@@ -794,7 +794,7 @@
   align-items: flex-start;
   gap: 9px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.45;
 }
 
@@ -807,7 +807,7 @@
 
 .activityBody > span {
   color: var(--red);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-label);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -816,14 +816,14 @@
 .activityBody h3 {
   margin-top: 5px;
   color: var(--navy);
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
 .activityBody p {
   margin-top: 5px;
   color: var(--steel);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -833,14 +833,14 @@
   border-left: 2px solid var(--line);
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-style: italic;
   line-height: 1.45;
 }
 
 .activityAmount {
   color: var(--navy);
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 680;
   letter-spacing: -0.025em;
   white-space: nowrap;
@@ -867,7 +867,7 @@
   max-width: 600px;
   margin-top: 12px;
   color: var(--steel);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: var(--leading-body);
 }
 
@@ -885,7 +885,7 @@
   padding: 0 14px;
   border: 1px solid var(--line);
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-control);
 }
 
@@ -1061,7 +1061,7 @@
     flex-direction: column;
     gap: 5px;
     padding-inline: 7px;
-    font-size: 11px;
+    font-size: 0.6875rem;
   }
 
   .panel {
@@ -1116,7 +1116,7 @@
   }
 
   .registrationEquation span {
-    font-size: 10px;
+    font-size: 0.625rem;
     letter-spacing: 0.03em;
     line-height: 1.25;
   }
@@ -1263,7 +1263,7 @@
     padding: 9px 12px;
     border: 0;
     border-bottom: 1px solid var(--line);
-    font-size: 12px;
+    font-size: 0.75rem;
     text-align: left;
   }
 
@@ -1274,7 +1274,7 @@
   .recordsTable:not(.registrationTable) td::before {
     content: attr(data-label);
     color: var(--steel);
-    font-size: 10px;
+    font-size: 0.625rem;
     font-weight: 790;
     letter-spacing: 0.075em;
     text-align: left;
@@ -1337,7 +1337,7 @@
     grid-column: 1;
     grid-row: 1 / 5;
     padding: 13px 6px !important;
-    font-size: 17px !important;
+    font-size: 1.0625rem !important;
   }
 
   .registrationPlayer {
@@ -1371,11 +1371,11 @@
   }
 
   .registrationAmounts dd {
-    font-size: 12px;
+    font-size: 0.75rem;
   }
 
   .registrationAmounts > dl > div:last-child dd {
-    font-size: 14px;
+    font-size: 0.875rem;
   }
 
   .registrationAction {

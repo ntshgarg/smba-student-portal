@@ -54,7 +54,7 @@
   margin: 0;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 31px;
+  font-size: 1.9375rem;
   font-style: italic;
   font-weight: var(--weight-display-light);
   letter-spacing: -0.035em;

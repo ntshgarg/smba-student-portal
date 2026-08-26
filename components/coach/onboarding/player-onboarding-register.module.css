@@ -12,7 +12,7 @@
   align-items: center;
   gap: 9px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: var(--weight-control);
   text-decoration: none;
 }
@@ -88,7 +88,7 @@
   margin-top: 5px;
   overflow-wrap: anywhere;
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
   line-height: 1.3;
 }
@@ -105,7 +105,7 @@
 
 .assessmentDateField small {
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.45;
 }
 
@@ -167,7 +167,7 @@
 
 .stageSummary p {
   color: var(--navy);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 820;
   letter-spacing: var(--tracking-label);
   line-height: 1.25;
@@ -192,7 +192,7 @@
 
 .registerHeading h2 {
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 830;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -200,7 +200,7 @@
 
 .registerHeading p {
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-emphasis);
 }
 
@@ -241,7 +241,7 @@
 .folio {
   color: var(--red);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 27px;
+  font-size: 1.6875rem;
   font-style: italic;
   font-weight: 500;
   line-height: var(--leading-display-light);
@@ -258,7 +258,7 @@
   overflow: hidden;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 21px;
+  font-size: 1.3125rem;
   font-weight: 620;
   letter-spacing: -0.02em;
   line-height: 1.08;
@@ -270,7 +270,7 @@
 .nextAction small {
   overflow-wrap: anywhere;
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 620;
   line-height: 1.35;
 }
@@ -289,7 +289,7 @@
 
 .nextAction strong {
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 780;
   line-height: 1.25;
 }
@@ -308,7 +308,7 @@
   background: transparent;
   color: var(--navy);
   font-family: inherit;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 790;
   line-height: 1.2;
   text-align: center;
@@ -369,7 +369,7 @@
   border-radius: var(--radius-circle);
   background: var(--white);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-style: italic;
   font-weight: var(--weight-emphasis);
 }
@@ -427,7 +427,7 @@
 .editorHeading p {
   margin-top: 5px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 620;
   line-height: 1.45;
 }
@@ -477,14 +477,14 @@
 .derivedFeeMonth strong {
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-style: italic;
   font-weight: 560;
 }
 
 .derivedFeeMonth small {
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1.35;
 }
 
@@ -516,7 +516,7 @@
   background: var(--white);
   color: var(--navy);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: var(--weight-emphasis);
 }
 
@@ -534,7 +534,7 @@
 
 .threeFieldGrid label > small {
   color: var(--red-dark);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 660;
   line-height: 1.35;
 }
@@ -604,7 +604,7 @@
 .requestFacts dd,
 .trainingFacts dd {
   color: var(--navy);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 720;
   line-height: 1.3;
 }
@@ -657,7 +657,7 @@
 .seriesChoices label strong {
   overflow: hidden;
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 780;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -718,7 +718,7 @@
   border: 1px solid var(--line);
   background: var(--white);
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 780;
 }
 
@@ -753,7 +753,7 @@
   border-right: 1px solid var(--line);
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 19px;
+  font-size: 1.1875rem;
   font-weight: 560;
 }
 
@@ -764,7 +764,7 @@
 .feeNote {
   margin-top: 9px;
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1.4;
 }
 
@@ -798,7 +798,7 @@
   margin: 0;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 20px;
+  font-size: 1.25rem;
   font-style: italic;
   font-weight: 580;
   line-height: 1.1;
@@ -824,14 +824,14 @@
 
 .previewLines strong {
   color: var(--navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 720;
   line-height: 1.35;
 }
 
 .previewLines small {
   color: var(--steel);
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1.3;
 }
 
@@ -842,7 +842,7 @@
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.4;
 }
 
@@ -885,13 +885,13 @@
   display: grid;
   gap: 4px;
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.45;
 }
 
 .finalConfirmation strong {
   color: var(--navy);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .backdateNote {
@@ -900,7 +900,7 @@
   border: 1px solid var(--makeup);
   background: var(--makeup-soft);
   color: var(--makeup-dark);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: var(--weight-emphasis);
   line-height: 1.4;
 }
@@ -916,14 +916,14 @@
 .recoveryPanel strong {
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 20px;
+  font-size: 1.25rem;
   font-style: italic;
   font-weight: var(--weight-display);
 }
 
 .recoveryPanel p {
   color: var(--steel);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.45;
 }
 
@@ -955,7 +955,7 @@
 .emptyState h3 {
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 27px;
+  font-size: 1.6875rem;
   font-style: italic;
   font-weight: var(--weight-display);
 }
@@ -964,14 +964,14 @@
   max-width: 470px;
   margin-top: 5px;
   color: var(--steel);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
 .emptyState a {
   margin-top: 17px;
   color: var(--navy);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 790;
   text-underline-offset: 4px;
 }
@@ -991,7 +991,7 @@
   }
 
   .identity strong {
-    font-size: 19px;
+    font-size: 1.1875rem;
   }
 
   .editor {
@@ -1025,7 +1025,7 @@
   }
 
   .pageHeader > p {
-    font-size: 16px;
+    font-size: 1rem;
     line-height: 1.35;
   }
 
@@ -1049,7 +1049,7 @@
   }
 
   .stageSummary strong {
-    font-size: 27px;
+    font-size: 1.6875rem;
   }
 
   .stageSummary p {
@@ -1080,7 +1080,7 @@
     grid-area: folio;
     align-self: start;
     padding-top: 3px;
-    font-size: 24px;
+    font-size: 1.5rem;
   }
 
   .identity {
@@ -1088,7 +1088,7 @@
   }
 
   .identity strong {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
 
   .identity small {
@@ -1141,7 +1141,7 @@
      only 64.5px at 320px, so 10px would overrun it by 6px. 9px is the largest
      size that still fits on one line. */
   .stepRail li strong {
-    font-size: 9px;
+    font-size: 0.5625rem;
     letter-spacing: 0.03em;
   }
 
@@ -1151,11 +1151,11 @@
   }
 
   .editorHeading h3 {
-    font-size: 26px;
+    font-size: 1.625rem;
   }
 
   .editorHeading p {
-    font-size: 10px;
+    font-size: 0.625rem;
   }
 
   .dateTimeline {
