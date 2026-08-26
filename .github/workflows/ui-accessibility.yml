@@ -188,6 +188,16 @@ jobs:
       # this job has already paid for: a production build and a served stress
       # fixture. A separate port keeps it off the audit server above, whose own
       # step has already exited by this point.
+      #
+      # Deliberately the harness default viewport set, not SMBA_CAPTURE_VIEWPORT_SET=responsive.
+      # `viewportsForCapture` (capture-matrix.ts:589-595) returns `responsiveViewports`
+      # for *every* definition once that variable is set, ignoring what each capture
+      # is written for -- so the six `public-home-*` captures, whose action opens the
+      # mobile navigation, get run at 1440x900 where no mobile navigation exists and
+      # time out waiting for it. That is a property of the harness rather than of this
+      # step, and `regression:capture:responsive` carries it too; fixing it means
+      # per-definition viewport handling, which is a change to the matrix and not to
+      # the wiring.
       - name: Capture responsive regression evidence
         id: capture
         continue-on-error: true
@@ -196,7 +206,6 @@ jobs:
           DB_FILE_NAME: /tmp/smba-accessibility-stress.db
           SMBA_CAPTURE_BASE_URL: http://127.0.0.1:3113
           SMBA_CAPTURE_OUTPUT_DIR: output/runtime-regression/capture
-          SMBA_CAPTURE_VIEWPORT_SET: responsive
           SMBA_REQUIRE_COACH_TOTP: "false"
         run: |
           npx next start -p 3113 > /tmp/smba-capture.log 2>&1 &
