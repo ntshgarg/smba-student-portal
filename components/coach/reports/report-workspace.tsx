@@ -34,6 +34,13 @@ import {
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
+import {
+  discardReportDraft,
+  persistReportDraft,
+  readReportDraft,
+  rebaseRestoredReportDraft,
+  restoredReportDraftNotice,
+} from "@/lib/client/report-draft-storage"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   formatReportMonth,
@@ -254,7 +261,8 @@ function ReportEditor({
   requiresAdjustmentReview: boolean
 }) {
   const { publishReport, saveReportDraft } = useReportPortal()
-  const [reportText, setReportText] = useState(report?.reportText ?? "")
+  const savedReportText = report?.reportText ?? ""
+  const [reportText, setReportText] = useState(savedReportText)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [feedback, setFeedback] = useState<ReportEditorFeedback | null>(null)
   const dirtyRef = useRef(false)
@@ -274,9 +282,17 @@ function ReportEditor({
   }
 
   function updateReportText(nextText: string) {
-    const dirty = nextText !== (report?.reportText ?? "")
+    const dirty = nextText !== savedReportText
     setReportText(nextText)
     publicationKeyRef.current = null
+    // Written on every keystroke rather than on the dirty transition, because
+    // the transition fires once and the tab can be reclaimed at any character
+    // after it. `persistReportDraft` clears the record itself when the text is
+    // back to what is saved, so the no-op case costs a removeItem, not a row.
+    persistReportDraft(player.member.id, month, {
+      baseline: savedReportText,
+      text: nextText,
+    })
     if (dirty !== dirtyRef.current) {
       const becameDirty = shouldPersistResumeForDirtyTransition(dirtyRef.current, dirty)
       dirtyRef.current = dirty
@@ -285,6 +301,47 @@ function ReportEditor({
     }
     setFeedback(dirty ? { message: "Unsaved changes", tone: "info" } : null)
   }
+
+  /*
+   * Read back after the mounting render rather than during it, so the server's
+   * text is what hydrates and the restore is a second, deliberate step -- the
+   * same shape `useReportResume` and the courtside recorder both use.
+   *
+   * `savedReportText` is a dependency because the rebase reads it, not because a
+   * new one should restore again: publishing replaces `report` and would
+   * otherwise re-announce, as recovered from an earlier visit, text the coach
+   * has just sent. The ref holds the restore to once per mounted editor, and the
+   * editor is keyed on `${playerId}-${month}` at its call site.
+   *
+   * The restore has to arm the dirty state as well as the text. Setting
+   * `reportText` alone would leave `dirtyRef` false, which leaves
+   * `useUnsavedWorkGuard` disarmed and the footer silent -- restored text the
+   * product then treats as saved is a worse failure than the one this closes.
+   */
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (restoredRef.current) return
+      restoredRef.current = true
+      const restored = rebaseRestoredReportDraft(
+        readReportDraft(player.member.id, month),
+        savedReportText,
+      )
+      if (!restored) {
+        discardReportDraft(player.member.id, month)
+        return
+      }
+      setReportText(restored.text)
+      dirtyRef.current = true
+      onDirtyChange(true)
+      setFeedback({
+        message: restoredReportDraftNotice(restored.changedUnderneath),
+        tone: "info",
+      })
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [month, onDirtyChange, player.member.id, savedReportText])
 
   async function saveDraft() {
     if (pendingAction !== null) return
@@ -307,6 +364,9 @@ function ReportEditor({
       dirtyRef.current = false
       onDirtyChange(false)
       onResume()
+      // The server now holds this text, so the local copy is no longer the only
+      // record of it and must not outlive the save as "unsaved".
+      discardReportDraft(player.member.id, month)
       setFeedback({ message: "Draft saved", tone: "success" })
     } catch (error) {
       const failure = describeSaveFailure({
@@ -376,6 +436,7 @@ function ReportEditor({
       dirtyRef.current = false
       onDirtyChange(false)
       onResume()
+      discardReportDraft(player.member.id, month)
       setFeedback({
         message: isPublished ? "Updated report published" : "Report published",
         tone: "success",
