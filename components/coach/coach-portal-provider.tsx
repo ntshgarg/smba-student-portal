@@ -467,8 +467,26 @@ export function useReportPortal() {
 export function useMemberDirectoryPortal() {
   const memberContext = useMemberPortal()
   const sessionContext = useSessionPortal()
-  const players = memberContext.players.filter(
-    (player): player is PlayerMemberRecord => isAcademyMember(player.member),
+  /**
+   * The narrowing is a `filter`, so returning its result directly handed every
+   * render a new array. Two of the Member Directory's three `useMemo`s key off
+   * `players` — `buildMemberDirectoryIndex`, which builds five Maps over the
+   * whole roster, and the search-and-sort, which copies the roster and
+   * `localeCompare`s it — and both were therefore recomputed on every keystroke
+   * in the search box, every row expansion and every reveal. The context value
+   * this reads is itself a `useMemo` over the provider's member and
+   * training-profile state, so keying on it invalidates exactly when the roster
+   * changes and no more often.
+   */
+  const players = useMemo(
+    () => memberContext.players.filter(
+      (player): player is PlayerMemberRecord => isAcademyMember(player.member),
+    ),
+    [memberContext.players],
+  )
+  const activePlayers = useMemo(
+    () => players.filter((player) => player.training.status === "active"),
+    [players],
   )
 
   if (players.length !== memberContext.players.length) {
@@ -478,7 +496,7 @@ export function useMemberDirectoryPortal() {
   return {
     ...memberContext,
     ...sessionContext,
-    activePlayers: players.filter((player) => player.training.status === "active"),
+    activePlayers,
     players,
   }
 }
