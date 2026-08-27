@@ -89,3 +89,66 @@ describe("public production smoke", () => {
     await expect(runSmoke(origin)).rejects.toBeDefined()
   })
 })
+
+/*
+ * Preview deployments answer every path with a 302 to Vercel's SSO gate, so the
+ * same smoke that guards production could not see one at all. Vercel's
+ * documented route through that is a per-project bypass secret sent as a
+ * header; these pin that it is sent, that it comes from the environment rather
+ * than argv, and that a protected deployment says so instead of reporting a
+ * bare 302.
+ */
+describe("preview deployments behind Vercel SSO", () => {
+  it("sends the bypass header when the secret is set, and none when it is not", async () => {
+    const seen: Array<Record<string, string | undefined>> = []
+    const server = createServer((request, response) => {
+      seen.push({
+        bypass: request.headers["x-vercel-protection-bypass"] as string | undefined,
+        cookie: request.headers["x-vercel-set-bypass-cookie"] as string | undefined,
+      })
+      const configured = healthy[request.url as keyof typeof healthy]
+      response.writeHead(configured ? 200 : 404, {
+        "content-type": request.url === "/api/health" ? "application/json" : "text/html",
+      })
+      response.end(configured?.body ?? "not found")
+    })
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    if (!address || typeof address === "string") throw new Error("no port")
+    const origin = `http://127.0.0.1:${address.port}`
+
+    await execute(process.execPath, [smokeScript, origin, "--attempts", "1", "--delay-ms", "0"], {
+      env: { ...process.env, VERCEL_AUTOMATION_BYPASS_SECRET: "secret-value" },
+    })
+    expect(seen.every((headers) => headers.bypass === "secret-value")).toBe(true)
+    expect(seen.every((headers) => headers.cookie === "samesitenone")).toBe(true)
+
+    seen.length = 0
+    const withoutSecret = { ...process.env }
+    delete withoutSecret.VERCEL_AUTOMATION_BYPASS_SECRET
+    await execute(process.execPath, [smokeScript, origin, "--attempts", "1", "--delay-ms", "0"], {
+      env: withoutSecret,
+    })
+    expect(seen.every((headers) => headers.bypass === undefined)).toBe(true)
+  })
+
+  it("names the SSO gate instead of reporting a bare redirect", async () => {
+    const server = createServer((request, response) => {
+      response.writeHead(302, {
+        location: `https://vercel.com/sso-api?url=${encodeURIComponent(request.url ?? "/")}`,
+      })
+      response.end("Redirecting...")
+    })
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    if (!address || typeof address === "string") throw new Error("no port")
+
+    await expect(
+      execute(process.execPath, [
+        smokeScript, `http://127.0.0.1:${address.port}`, "--attempts", "1", "--delay-ms", "0",
+      ]),
+    ).rejects.toThrow(/behind Vercel SSO/u)
+  })
+})

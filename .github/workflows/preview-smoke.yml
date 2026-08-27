@@ -1,0 +1,73 @@
+name: Preview smoke
+
+# Vercel builds a private copy of the site for every pull request, and until now
+# nothing looked at it. The quality gate proves the code builds and behaves in a
+# local browser; this proves the thing Vercel actually deployed answers. It is
+# the last check between a merge and production, because a merge to main ships
+# straight to smbaacademy.in with no further gate.
+#
+# It runs on deployment_status rather than pull_request because the preview URL
+# only exists once Vercel has finished, and that is the event carrying it.
+
+on:
+  deployment_status:
+
+concurrency:
+  group: preview-smoke-${{ github.event.deployment.id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    # Only a successful Vercel preview. A failed or still-building deployment has
+    # nothing to smoke, and Production is already covered by Production alerts.
+    if: >-
+      github.event.deployment.environment == 'Preview' &&
+      github.event.deployment.creator.login == 'vercel[bot]' &&
+      github.event.deployment.task == 'deploy' &&
+      github.event.deployment_status.state == 'success'
+    name: Smoke the preview deployment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Confirm the preview URL belongs to Vercel
+        id: target
+        env:
+          ENVIRONMENT_URL: ${{ github.event.deployment_status.environment_url }}
+        run: |
+          # The URL arrives in the webhook payload, so it is treated as input:
+          # a smoke pointed at an attacker-chosen host would send the bypass
+          # secret there. Only vercel.app is accepted.
+          host="$(printf '%s' "$ENVIRONMENT_URL" | sed -E 's#^https://([^/]+).*#\1#')"
+          case "$ENVIRONMENT_URL" in
+            https://*) ;;
+            *) echo "Preview URL is not HTTPS."; exit 1 ;;
+          esac
+          case "$host" in
+            *.vercel.app) ;;
+            *) echo "Preview URL is not a vercel.app host: $host"; exit 1 ;;
+          esac
+          echo "origin=https://$host" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the preview answers
+        env:
+          # Preview deployments are behind Vercel SSO. Without this secret every
+          # path answers 302 and the smoke reports that rather than guessing.
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          node scripts/operations/check-production.mjs \
+            "${{ steps.target.outputs.origin }}" \
+            --attempts 6 --delay-ms 5000

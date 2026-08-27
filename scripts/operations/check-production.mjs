@@ -18,9 +18,31 @@ export function validateMonitoredOrigin(value) {
   return origin
 }
 
-async function request(origin, pathname, timeoutMs) {
+/*
+ * Preview deployments sit behind Vercel SSO, so every path answers 302 to
+ * vercel.com/sso-api rather than the application. Vercel's documented way
+ * through that for automation is a per-project bypass secret sent as a header.
+ *
+ * It is read from the environment and never accepted on the command line,
+ * because argv is visible to any process on the machine and lands in CI logs
+ * whenever a step echoes its own command. Production has no protection, so the
+ * header is simply absent there and the same script serves both.
+ */
+export const BYPASS_ENVIRONMENT_VARIABLE = "VERCEL_AUTOMATION_BYPASS_SECRET"
+
+function bypassHeaders(environment = process.env) {
+  const secret = environment[BYPASS_ENVIRONMENT_VARIABLE]?.trim()
+  if (!secret) return {}
+  return {
+    "x-vercel-protection-bypass": secret,
+    "x-vercel-set-bypass-cookie": "samesitenone",
+  }
+}
+
+async function request(origin, pathname, timeoutMs, headers = bypassHeaders()) {
   return fetch(new URL(pathname, origin), {
     cache: "no-store",
+    headers,
     redirect: "manual",
     signal: AbortSignal.timeout(timeoutMs),
   })
@@ -32,6 +54,13 @@ export async function checkProductionOnce(originValue, options = {}) {
 
   const healthResponse = await request(origin, "/api/health", timeoutMs)
   if (healthResponse.status !== 200) {
+    const target = healthResponse.headers.get("location") ?? ""
+    if (target.startsWith("https://vercel.com/sso-api")) {
+      throw new Error(
+        "The deployment is behind Vercel SSO. Set "
+        + `${BYPASS_ENVIRONMENT_VARIABLE} to the project's protection bypass secret.`,
+      )
+    }
     throw new Error(`Health endpoint returned HTTP ${healthResponse.status}.`)
   }
   const health = await healthResponse.json().catch(() => null)
