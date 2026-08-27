@@ -10,11 +10,10 @@ import { replaceFeeAgreementAction } from "@/app/coach/financials/actions"
 import { InlineNotice } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { getAcademyDateKey } from "@/lib/format"
+import { getAcademyDateKey, parseRupeesToPaise } from "@/lib/format"
 
 import {
   resultFeedback,
-  rupeesToPaise,
   useIdempotencyKey,
 } from "../financials-client-utils"
 import styles from "../financials.module.css"
@@ -42,7 +41,7 @@ export function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView })
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!agreement || !defaults || pending) return
-    const agreedMonthlyFeePaise = rupeesToPaise(amount)
+    const agreedMonthlyFeePaise = parseRupeesToPaise(amount)
     if (agreedMonthlyFeePaise === null) {
       setFeedback({ message: "Enter a valid agreed monthly fee", tone: "error" })
       amountRef.current?.focus()

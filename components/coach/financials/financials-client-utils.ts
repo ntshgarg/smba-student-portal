@@ -63,14 +63,6 @@ export function formatDueDate(value: string | null) {
   return formatDateKey(value, { day: "numeric", month: "short", year: "numeric" })
 }
 
-export function rupeesToPaise(value: string) {
-  const normalized = value.trim().replace(/,/gu, "")
-  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/u.test(normalized)) return null
-  const [rupees, paise = ""] = normalized.split(".")
-  const result = (Number(rupees) * 100) + Number(paise.padEnd(2, "0"))
-  return Number.isSafeInteger(result) && result > 0 ? result : null
-}
-
 export function resultFeedback(result: FinanceActionResult): ActionFeedback {
   return {
     message: result.message,

@@ -102,7 +102,7 @@ export function numberFormatter(
  *   - `paiseToRupeesInput` in `components/coach/financials/allocation-draft.ts`
  *     — and the `String(paise / 100)` seeds in `ledger/fee-plan-editor.tsx` and
  *     `financials-rapid-desk.tsx` — fills editable amount fields, so what it
- *     writes must survive a round trip through `parseRupeesToPaise`.
+ *     writes must survive a round trip through `parseRupeesToPaise` below.
  *   - the refund-limit message in `lib/finance/service.ts` hand-builds
  *     `INR <n>.<nn>` and is shown to the coach verbatim by `financeError`. It
  *     has no encoding or parsing excuse — it was left out because folding it in
@@ -115,6 +115,25 @@ export function formatInr(amountPaise: number) {
     currency: "INR",
     maximumFractionDigits: amountPaise % 100 ? 2 : 0,
   }).format(amountPaise / 100)
+}
+
+/**
+ * The inverse of `formatInr`, and the one place a typed rupee amount becomes
+ * paise. It lived twice in `components/coach/financials` — as `rupeesToPaise`
+ * and as `parseRupeesToPaise` — with identical bodies, so a third caller had to
+ * pick one arbitrarily. Money is parsed one way or it is parsed inconsistently.
+ *
+ * Commas are accepted because the fields it backs are labelled with grouped
+ * placeholders like `3,500`. At most two decimal places, because paise are the
+ * smallest unit the ledger stores.
+ */
+export function parseRupeesToPaise(value: string, allowZero = false) {
+  const normalized = value.trim().replace(/,/gu, "")
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/u.test(normalized)) return null
+  const [rupees, paise = ""] = normalized.split(".")
+  const result = (Number(rupees) * 100) + Number(paise.padEnd(2, "0"))
+  if (!Number.isSafeInteger(result) || result < 0 || (!allowZero && result === 0)) return null
+  return result
 }
 
 export function formatAcademyDate(
