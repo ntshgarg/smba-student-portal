@@ -9,8 +9,7 @@ import {
   formatSessionLabelFromInstant,
   formatSessionTimeRange,
   getAcademyDateKey,
-  getAcademyMonthKey,
-} from "@/lib/format"
+  getAcademyMonthKey, parseRupeesToPaise } from "@/lib/format"
 
 describe("academy presentation helpers", () => {
   it("uses the academy timezone for calendar keys at the India day boundary", () => {
@@ -76,5 +75,34 @@ describe("academy presentation helpers", () => {
       startTime: "",
       durationMinutes: 0,
     })).toBe("Beginner · Weekend")
+  })
+})
+
+describe("parseRupeesToPaise", () => {
+  /*
+   * The onboarding fee field used `type="number" min="1" step="1"` and left the
+   * refusal to the browser, so these amounts never reached the product's own
+   * message. They are pinned here because that field now depends on this
+   * function to refuse them.
+   */
+  it("accepts the amounts a coach can type, including the grouped placeholder", () => {
+    expect(parseRupeesToPaise("3500")).toBe(350_000)
+    expect(parseRupeesToPaise("3,500")).toBe(350_000)
+    expect(parseRupeesToPaise(" 3,500 ")).toBe(350_000)
+    expect(parseRupeesToPaise("3500.5")).toBe(350_050)
+    expect(parseRupeesToPaise("3500.55")).toBe(350_055)
+  })
+
+  it("refuses fractions finer than paise, zero and negatives", () => {
+    expect(parseRupeesToPaise("3500.555")).toBeNull()
+    expect(parseRupeesToPaise("-100")).toBeNull()
+    expect(parseRupeesToPaise("0")).toBeNull()
+    expect(parseRupeesToPaise("")).toBeNull()
+    expect(parseRupeesToPaise("free")).toBeNull()
+    expect(parseRupeesToPaise("1e3")).toBeNull()
+  })
+
+  it("admits zero only where a caller allows it", () => {
+    expect(parseRupeesToPaise("0", true)).toBe(0)
   })
 })

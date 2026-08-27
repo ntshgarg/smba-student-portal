@@ -14,12 +14,11 @@ import {
 import { InlineNotice } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { formatInr } from "@/lib/format"
+import { formatInr, parseRupeesToPaise } from "@/lib/format"
 
 import {
   formatDueDate,
   resultFeedback,
-  rupeesToPaise,
   useIdempotencyKey,
 } from "../financials-client-utils"
 import styles from "../financials.module.css"
@@ -91,7 +90,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
     // The amount has to be checked before the confirmation, otherwise the coach
     // approves a correction and only then learns the amount was unusable.
     const isManualAdjustment = mode === "manual_credit" || mode === "manual_debit"
-    const adjustmentAmountPaise = isManualAdjustment ? rupeesToPaise(amount) : 0
+    const adjustmentAmountPaise = isManualAdjustment ? parseRupeesToPaise(amount) : 0
     if (adjustmentAmountPaise === null) {
       setFeedback({ field: "amount", message: "Enter a valid adjustment amount", tone: "error" })
       amountRef.current?.focus()

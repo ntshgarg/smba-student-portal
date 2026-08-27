@@ -9,10 +9,10 @@ import { InlineNotice } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { ConcessionMode, ConcessionValueKind } from "@/lib/finance/types"
+import { parseRupeesToPaise } from "@/lib/format"
 
 import {
   parsePercentageToBasisPoints,
-  parseRupeesToPaise,
 } from "../allocation-draft"
 import { resultFeedback, useIdempotencyKey } from "../financials-client-utils"
 import styles from "../financials.module.css"

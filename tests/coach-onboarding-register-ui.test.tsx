@@ -69,6 +69,7 @@ const workspace: PlayerOnboardingWorkspace = {
     assessment: 1,
     feePlan: 0,
     newRequests: 1,
+    onboarded: 1,
     session: 0,
     total: 2,
   },
@@ -121,7 +122,7 @@ describe("Player Onboarding Next-Step Register", () => {
         requestedAt: "2026-08-15T09:00:00.000Z",
         stage: "request",
       }],
-      summary: { assessment: 0, feePlan: 0, newRequests: 1, session: 0, total: 1 },
+      summary: { assessment: 0, feePlan: 0, newRequests: 1, onboarded: 1, session: 0, total: 1 },
     }
     const html = renderToStaticMarkup(
       <PlayerOnboardingRegister
@@ -156,7 +157,7 @@ describe("Player Onboarding Next-Step Register", () => {
         requestedAt: null,
         stage: "feePlan",
       }],
-      summary: { assessment: 0, feePlan: 1, newRequests: 0, session: 0, total: 1 },
+      summary: { assessment: 0, feePlan: 1, newRequests: 0, onboarded: 1, session: 0, total: 1 },
     }
     const html = renderToStaticMarkup(
       <PlayerOnboardingRegister

@@ -11,7 +11,7 @@ import {
 import { InlineNotice } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { formatInr, getAcademyDateKey } from "@/lib/format"
+import { formatInr, getAcademyDateKey, parseRupeesToPaise } from "@/lib/format"
 import type {
   CoachReceiptView,
   PaymentMethod,
@@ -20,7 +20,6 @@ import type {
 
 import {
   createAllocationDraft,
-  parseRupeesToPaise,
   validateAllocationDraft,
 } from "../allocation-draft"
 import {

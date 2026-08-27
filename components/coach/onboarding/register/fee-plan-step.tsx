@@ -17,7 +17,7 @@ import {
 } from "@/components/financials/player-finance-presentation"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
-import { formatDateKey, formatInr } from "@/lib/format"
+import { formatDateKey, formatInr, parseRupeesToPaise } from "@/lib/format"
 import type { OnboardingFinancePreview } from "@/lib/finance/types"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
 
@@ -146,11 +146,19 @@ export function FeePlanStep({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || !item.level || !item.batch || !item.academyPlan) return
-    const rupees = Number(monthlyFee)
-    if (!Number.isFinite(rupees) || rupees <= 0 || !Number.isInteger(rupees)) {
+    /*
+     * Parsed here rather than by `type="number" min step`, which refused the
+     * same amounts but refused them in Chrome's voice — a native bubble reading
+     * "The two nearest valid values are 3500 and 3501" — because native
+     * constraint validation blocks submit before this handler runs, so the
+     * message below was unreachable. It also made the `3,500` placeholder a
+     * lie: a `number` input will not accept the separator it was showing.
+     */
+    const agreedMonthlyFeePaise = parseRupeesToPaise(monthlyFee)
+    if (agreedMonthlyFeePaise === null) {
       setFeedback({
         field: "monthlyFee",
-        message: "Enter the agreed monthly fee in whole rupees.",
+        message: "Enter the agreed monthly fee, like 3,500.",
         tone: "error",
       })
       monthlyFeeRef.current?.focus()
@@ -161,7 +169,7 @@ export function FeePlanStep({
       academyPlan: item.academyPlan,
       level: item.level,
       batch: item.batch,
-      agreedMonthlyFeePaise: rupees * 100,
+      agreedMonthlyFeePaise,
       monthlyDueDay: 5,
     }
     if (!preview) {
@@ -271,10 +279,7 @@ export function FeePlanStep({
           <span className={styles.moneyInput}><b>₹</b><input
             ref={monthlyFeeRef}
             name="monthlyFee"
-            inputMode="numeric"
-            min="1"
-            step="1"
-            type="number"
+            inputMode="decimal"
             value={monthlyFee}
             placeholder="3,500"
             aria-invalid={monthlyFeeInvalid || undefined}

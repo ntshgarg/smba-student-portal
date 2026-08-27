@@ -1,3 +1,5 @@
+import { parseRupeesToPaise } from "@/lib/format"
+
 export type AllocationLimit = {
   id: string
   availablePaise: number
@@ -18,15 +20,6 @@ export type AllocationDraftResult =
 
 export function paiseToRupeesInput(paise: number) {
   return paise % 100 === 0 ? String(paise / 100) : (paise / 100).toFixed(2)
-}
-
-export function parseRupeesToPaise(value: string, allowZero = false) {
-  const normalized = value.trim().replace(/,/gu, "")
-  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/u.test(normalized)) return null
-  const [rupees, paise = ""] = normalized.split(".")
-  const result = (Number(rupees) * 100) + Number(paise.padEnd(2, "0"))
-  if (!Number.isSafeInteger(result) || result < 0 || (!allowZero && result === 0)) return null
-  return result
 }
 
 export function createAllocationDraft(

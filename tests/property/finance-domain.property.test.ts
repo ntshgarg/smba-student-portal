@@ -12,10 +12,10 @@ import {
   type LedgerPaymentFact,
   type LedgerRefundFact,
 } from "@/lib/finance/domain"
+import { parseRupeesToPaise } from "@/lib/format"
 import {
   createAllocationDraft,
   paiseToRupeesInput,
-  parseRupeesToPaise,
   validateAllocationDraft,
 } from "@/components/coach/financials/allocation-draft"
 

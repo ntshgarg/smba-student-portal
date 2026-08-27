@@ -22,7 +22,13 @@ import { useResilientActionState } from "@/lib/client/use-resilient-action-state
 const initialSetup: TotpSetupState = { error: null, setup: null }
 const initialVerification: TotpVerificationState = { error: null }
 
-export function TwoFactorSetupForm() {
+/*
+ * Both a head coach and the platform owner reach this screen, and the owner
+ * meets it minutes after provisioning, as their first real interaction with
+ * the product. A single sentence naming "the coach account" is wrong for one
+ * of the two, so the noun follows the role.
+ */
+export function TwoFactorSetupForm({ role }: { role: "coach" | "platform_admin" }) {
   const [setupState, setupAction, setupPending] = useResilientActionState(
     startTotpSetup,
     initialSetup,
@@ -58,7 +64,9 @@ export function TwoFactorSetupForm() {
           {setupState.error ? (
             <p id="totp-setup-error" className="login-error" role="alert">{setupState.error}</p>
           ) : (
-            <p id="totp-password-help" className="login-helper">This confirms that you control the coach account.</p>
+            <p id="totp-password-help" className="login-helper">
+              This confirms that you control the {role === "platform_admin" ? "platform owner" : "coach"} account.
+            </p>
           )}
         </div>
         <button className="login-submit" type="submit" disabled={setupPending}>

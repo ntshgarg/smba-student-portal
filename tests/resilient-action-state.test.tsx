@@ -203,7 +203,7 @@ const surfaces: Surface[] = [
   {
     intact: ['name="password"'],
     name: "/auth/two-factor/setup",
-    render: () => <TwoFactorSetupForm />,
+    render: () => <TwoFactorSetupForm role="coach" />,
     sites: [
       { retained: "No authenticator was connected", subject: "Your authenticator setup" },
       {
@@ -376,7 +376,7 @@ describe("a dropped request leaves an authentication form standing", () => {
 
 describe("two-factor recovery codes survive a dropped verification", () => {
   it("keeps the once-only codes on screen beside the failure", async () => {
-    renderToStaticMarkup(<TwoFactorSetupForm />)
+    renderToStaticMarkup(<TwoFactorSetupForm role="coach" />)
     const [, verify] = actionSites
     const folded = await verify.action(verify.initialState, new FormData())
 
@@ -391,7 +391,7 @@ describe("two-factor recovery codes survive a dropped verification", () => {
       } as CapturedState,
       folded,
     ]
-    const markup = renderToStaticMarkup(<TwoFactorSetupForm />)
+    const markup = renderToStaticMarkup(<TwoFactorSetupForm role="coach" />)
 
     expect(markup).toContain("AAAA-1111")
     expect(markup).toContain("BBBB-2222")
