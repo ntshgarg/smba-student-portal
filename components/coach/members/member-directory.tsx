@@ -7,12 +7,23 @@ import { Fragment } from "react"
 import { MemberDetailRow } from "@/components/coach/members/directory/member-detail-row"
 import { MemberDirectoryEmptyState } from "@/components/coach/members/directory/member-directory-empty-state"
 import { MemberSummaryRow } from "@/components/coach/members/directory/member-summary-row"
+import {
+  StaffDetailRow,
+  StaffSummaryRow,
+} from "@/components/coach/members/directory/staff-summary-row"
 import { useMemberDirectory } from "@/components/coach/members/directory/use-member-directory"
 import { MemberDirectoryFilters } from "@/components/coach/members/member-directory-filters"
 import { memberWindowSummary } from "@/components/coach/members/member-window"
 import { InlineNotice } from "@/components/inline-notice"
+import type { AcademyStaffMember } from "@/lib/coach/types"
 
-export function MemberDirectory() {
+/*
+ * Staff arrive as a prop rather than through `CoachPortalProvider`. The
+ * provider's member context is player-shaped all the way down -- it runs every
+ * row through `isAcademyMember` and throws if one fails -- and that guard is
+ * worth more than the symmetry would be.
+ */
+export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }) {
   const {
     activeFilterCount,
     archivingMemberId,
@@ -23,7 +34,6 @@ export function MemberDirectory() {
     editingMemberId,
     editor,
     expandedMemberId,
-    filteredPlayers,
     filtersOpen,
     handleArchive,
     hasDirectoryCriteria,
@@ -39,10 +49,14 @@ export function MemberDirectory() {
     setContactLinkRef,
     setEditButtonRef,
     setFiltersOpen,
+    directoryCount,
     updateDirectoryCriteria,
     urlCriteria,
     visiblePlayers,
-  } = useMemberDirectory()
+    visibleStaff,
+  } = useMemberDirectory(staff)
+
+  const visibleCount = visiblePlayers.length + visibleStaff.length
 
   return (
     <div className="coach-members-directory page-shell">
@@ -83,13 +97,13 @@ export function MemberDirectory() {
               aria-atomic="true"
               tabIndex={-1}
             >
-              {memberWindowSummary(visiblePlayers.length, filteredPlayers.length)}
+              {memberWindowSummary(visibleCount, directoryCount)}
             </h2>
             <p>Private contacts remain concealed.</p>
           </div>
         </div>
 
-        {filteredPlayers.length ? (
+        {directoryCount ? (
           <div className="coach-member-table-wrap">
             <table className="coach-member-table">
               <thead>
@@ -142,6 +156,22 @@ export function MemberDirectory() {
                     </Fragment>
                   )
                 })}
+
+                {visibleStaff.map((member, index) => {
+                  const isExpanded = expandedMemberId === member.id
+
+                  return (
+                    <Fragment key={member.id}>
+                      <StaffSummaryRow
+                        index={visiblePlayers.length + index}
+                        isExpanded={isExpanded}
+                        onOpen={openMember}
+                        staff={member}
+                      />
+                      {isExpanded ? <StaffDetailRow staff={member} /> : null}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
             {hasMoreMembers ? (
@@ -159,7 +189,7 @@ export function MemberDirectory() {
           <MemberDirectoryEmptyState
             hasDirectoryCriteria={hasDirectoryCriteria}
             onResetFilters={resetFilters}
-            playerCount={players.length}
+            playerCount={players.length + staff.length}
           />
         )}
       </section>

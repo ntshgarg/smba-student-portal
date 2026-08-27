@@ -10,6 +10,7 @@ import {
   academyIdAllocations,
   accounts,
   authCredentialStates,
+  coachProfiles,
   feeAgreements,
   monthlyReports,
   playerEnrollments,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/coach/onboarding"
 import type {
   AcademyMember,
+  AcademyStaffMember,
   CoachMonthlyReportRecord,
   OperationalAcademyMember,
   PlayerTrainingProfile,
@@ -173,6 +175,52 @@ export function listAttendanceRegisterPlayerRecords(accountIds?: readonly string
     members,
     trainingProfiles: trainingProfilesFromRows(rows, activeSeriesByPlayer(accountIds)),
   }
+}
+
+/*
+ * The coaching half of the Member Directory. It is a separate read rather than
+ * a branch of `listApprovedPlayerRecords` because the player query hangs off an
+ * inner join to `player_enrollments`, and a coach has no row there -- there is
+ * no widening of that query that returns both, only a union of two.
+ *
+ * Head coach included alongside the juniors. "Coaching staff" that omits the
+ * head coach would be a second directory with a second silent exclusion, which
+ * is the thing this is fixing.
+ */
+export function listApprovedStaffRecords(): AcademyStaffMember[] {
+  const db = initializeDatabase()
+  const rows = db.select({
+    accessLevel: coachProfiles.accessLevel,
+    academyIdSerial: academyIdAllocations.serial,
+    activatedAt: authCredentialStates.activatedAt,
+    approvedAt: accounts.approvedAt,
+    fullName: accounts.fullName,
+    id: accounts.id,
+    joinedOn: coachProfiles.joinedOn,
+  })
+    .from(accounts)
+    .innerJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
+    .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
+    .leftJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
+    .where(and(
+      eq(accounts.role, "coach"),
+      eq(accounts.approvalStatus, "approved"),
+      isNull(accounts.archivedAt),
+    ))
+    .orderBy(asc(accounts.fullName))
+    .all()
+
+  return rows.map((row) => ({
+    id: row.id,
+    role: "coach" as const,
+    accessLevel: row.accessLevel === "head_admin" ? "head_admin" as const : "junior_coach" as const,
+    academyId: formatAcademyId(row.academyIdSerial),
+    activatedAt: row.activatedAt?.toISOString() ?? null,
+    approvedAt: row.approvedAt?.toISOString() ?? null,
+    fullName: row.fullName,
+    initials: identityNameParts(row.fullName).initials,
+    joinedOn: row.joinedOn,
+  }))
 }
 
 export function listApprovedPlayerRecords() {

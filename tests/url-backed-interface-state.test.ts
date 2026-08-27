@@ -19,6 +19,7 @@ describe("Member Directory URL state", () => {
       query: "Aarav",
       level: "Intermediate",
       batch: "Weekend",
+      role: "everyone",
       status: "active",
     })
 
@@ -28,8 +29,22 @@ describe("Member Directory URL state", () => {
       query: "",
       level: "All levels",
       batch: "All batches",
+      role: "everyone",
       status: "all",
     })
+  })
+
+  it("carries the role filter, and falls back to everyone on an unknown role", () => {
+    expect(parseMemberDirectoryCriteria(new URLSearchParams("role=staff")).role).toBe("staff")
+    expect(parseMemberDirectoryCriteria(new URLSearchParams("role=players")).role).toBe("players")
+    expect(parseMemberDirectoryCriteria(new URLSearchParams("role=coaches")).role).toBe("everyone")
+
+    // "everyone" is the default, so it stays out of the URL the way the other
+    // three all-values do; anything else has to survive a round trip.
+    const everyone = parseMemberDirectoryCriteria(new URLSearchParams(""))
+    expect(memberDirectorySearch("", everyone)).toBe("")
+    const staffOnly = parseMemberDirectoryCriteria(new URLSearchParams("role=staff"))
+    expect(memberDirectorySearch("", staffOnly)).toBe("role=staff")
   })
 
   it("canonicalizes criteria without removing unrelated route state", () => {

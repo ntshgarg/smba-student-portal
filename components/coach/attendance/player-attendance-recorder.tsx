@@ -480,13 +480,22 @@ export function PlayerAttendanceRecorder({
     // the count replaces it, and it keeps reading as progress at the end rather
     // than flipping to a different word, so the coach never has to learn which
     // of two vocabularies a row is speaking.
+    //
+    // An empty roster is the one case that reasoning does not cover. `0/0` is
+    // not an untouched register, it is a session with nobody to mark, and
+    // calling it "Available" sent the coach in to find that out. On a Thursday
+    // at an academy whose plans fall on other days, all four of the day's
+    // sessions read "Available" and all four were empty. `eligible` is already
+    // resolved here for the count, so the empty case costs one more branch.
     const state = occurrence.status === "cancelled"
       ? "Cancelled"
       : upcoming
         ? "Upcoming"
-        : progress?.marked
-          ? `${progress.marked}/${progress.eligible} marked`
-          : "Available"
+        : progress?.eligible === 0
+          ? "No players"
+          : progress?.marked
+            ? `${progress.marked}/${progress.eligible} marked`
+            : "Available"
 
     return (
       <button

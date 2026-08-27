@@ -243,6 +243,13 @@ test("replacement validation stays inline in the production Server Action path",
  * search term the quarantine note was about. Naming 99 rather than reading the
  * total back off the heading is deliberate: if archived members ever reach the
  * directory this is the assertion that says so.
+ *
+ * The third: the directory now also lists coaching staff, so the stress profile
+ * totals 102 -- 99 players plus its three coaches. The reveal window covers both
+ * halves, which is the part worth guarding: staff render after the players, and
+ * when they were windowed separately this page opened on fifteen rows rather
+ * than twelve. Searching "SMBA-PL-" matches players only, so the last step still
+ * reads 99 and keeps that number under test.
  */
 test("Member Directory reveals results in one-way groups of twelve", async ({ page }) => {
   await loginAsCoach(page)
@@ -251,11 +258,22 @@ test("Member Directory reveals results in one-way groups of twelve", async ({ pa
 
   const rows = page.locator(".coach-member-table tbody > tr")
   await expect(rows).toHaveCount(12)
-  await expect(page.getByRole("heading", { name: "Showing 12 of 99 members" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Showing 12 of 102 members" })).toBeVisible()
 
   await page.getByRole("button", { name: "Show more members" }).click()
   await expect(rows).toHaveCount(24)
-  await expect(page.getByRole("heading", { name: "Showing 24 of 99 members" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Showing 24 of 102 members" })).toBeVisible()
+
+  // Staff sit past the 99 players, so they are only reachable once the window
+  // has been opened all the way -- which is exactly what "one window over both
+  // halves" has to mean for the count above to hold.
+  await page.getByRole("button", { name: /^Filters/u }).click()
+  await page.getByRole("combobox", { name: "Role" }).selectOption("staff")
+  await expect(rows).toHaveCount(3)
+  await expect(page.getByRole("heading", { name: "3 members" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Show more members" })).toHaveCount(0)
+  await page.getByRole("combobox", { name: "Role" }).selectOption("everyone")
+  await page.getByRole("button", { name: /^Filters/u }).click()
 
   await page.getByPlaceholder("Search members").fill("SMBA-PL-")
   await expect(rows).toHaveCount(12)

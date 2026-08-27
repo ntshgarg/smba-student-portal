@@ -80,6 +80,28 @@ export type AcademyMember = OperationalAcademyMember & {
   }
 }
 
+/*
+ * Coaching staff are a separate shape from `AcademyMember` on purpose. A member
+ * is a player: `isAcademyMember` demands a `trainingStartOn` and a primary
+ * contact, and the Member Directory throws if any row fails that guard, which
+ * is the check standing between a partial read and a roster that silently drops
+ * people. Widening it to admit rows with neither field would retire that guard
+ * for players in order to display coaches. The directory renders both instead.
+ */
+export type AcademyStaffAccessLevel = "head_admin" | "junior_coach"
+
+export type AcademyStaffMember = {
+  id: string
+  role: "coach"
+  accessLevel: AcademyStaffAccessLevel
+  academyId: string
+  fullName: string
+  initials: string
+  joinedOn: string
+  approvedAt: string | null
+  activatedAt: string | null
+}
+
 export type PendingRegistration = {
   id: string
   fullName: string
