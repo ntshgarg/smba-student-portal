@@ -95,7 +95,7 @@ export function useMemberDirectory() {
     [searchParams],
   )
   const query = urlCriteria.query
-  const { batch, level, status } = urlCriteria
+  const { batch, level, role, status } = urlCriteria
   const requestedMemberId = searchParams.get("player")
   const deepLinkedMemberId = requestedMemberId && playerById.has(requestedMemberId)
     ? requestedMemberId
@@ -133,13 +133,17 @@ export function useMemberDirectory() {
           || player.training.level === level
         const matchesStatus = status === "all" || player.training.status === status
         const matchesBatch = batch === "All batches" || player.training.batch === batch
+        // The role filter is the only one that can empty this list wholesale.
+        // It is applied here rather than at the render so the count in the
+        // heading, the reveal window and "no results" all agree.
+        const matchesRole = role !== "staff"
 
         return player.member.id === editingMemberId
           || player.member.id === expandedMemberId
-          || (matchesSearch && matchesLevel && matchesBatch && matchesStatus)
+          || (matchesSearch && matchesLevel && matchesBatch && matchesStatus && matchesRole)
       })
       .sort((a, b) => a.member.fullName.localeCompare(b.member.fullName))
-  }, [batch, editingMemberId, expandedMemberId, level, players, query, status])
+  }, [batch, editingMemberId, expandedMemberId, level, players, query, role, status])
 
   const editingMemberIndex = editingMemberId
     ? filteredPlayers.findIndex((player) => player.member.id === editingMemberId)
@@ -168,6 +172,7 @@ export function useMemberDirectory() {
   const activeFilterCount = Number(level !== "All levels")
     + Number(status !== "all")
     + Number(batch !== "All batches")
+    + Number(role !== "everyone")
   const hasDirectoryCriteria = Boolean(query.trim()) || activeFilterCount > 0
 
   useEffect(() => {
@@ -521,6 +526,7 @@ export function useMemberDirectory() {
       query: "",
       level: "All levels",
       batch: "All batches",
+      role: "everyone",
       status: "all",
     }, "push")
     setFiltersOpen(false)
@@ -541,6 +547,7 @@ export function useMemberDirectory() {
   return {
     activeFilterCount,
     archivingMemberId,
+    role,
     beginEditing,
     directoryFeedback,
     directorySummaryRef,

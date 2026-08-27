@@ -4065,6 +4065,24 @@
   display: grid;
 }
 
+.coach-member-filter select:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.coach-member-filter:has(select:disabled) > span {
+  opacity: 0.45;
+}
+
+.coach-member-filter-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  opacity: 0.78;
+}
+
 .coach-member-filters {
   display: grid;
   min-width: 0;

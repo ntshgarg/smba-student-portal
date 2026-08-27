@@ -7,12 +7,23 @@ import { Fragment } from "react"
 import { MemberDetailRow } from "@/components/coach/members/directory/member-detail-row"
 import { MemberDirectoryEmptyState } from "@/components/coach/members/directory/member-directory-empty-state"
 import { MemberSummaryRow } from "@/components/coach/members/directory/member-summary-row"
+import {
+  StaffDetailRow,
+  StaffSummaryRow,
+} from "@/components/coach/members/directory/staff-summary-row"
 import { useMemberDirectory } from "@/components/coach/members/directory/use-member-directory"
 import { MemberDirectoryFilters } from "@/components/coach/members/member-directory-filters"
 import { memberWindowSummary } from "@/components/coach/members/member-window"
 import { InlineNotice } from "@/components/inline-notice"
+import type { AcademyStaffMember } from "@/lib/coach/types"
 
-export function MemberDirectory() {
+/*
+ * Staff arrive as a prop rather than through `CoachPortalProvider`. The
+ * provider's member context is player-shaped all the way down -- it runs every
+ * row through `isAcademyMember` and throws if one fails -- and that guard is
+ * worth more than the symmetry would be.
+ */
+export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }) {
   const {
     activeFilterCount,
     archivingMemberId,
@@ -39,10 +50,26 @@ export function MemberDirectory() {
     setContactLinkRef,
     setEditButtonRef,
     setFiltersOpen,
+    role,
     updateDirectoryCriteria,
     urlCriteria,
     visiblePlayers,
   } = useMemberDirectory()
+
+  const normalizedQuery = urlCriteria.query.trim().toLocaleLowerCase()
+  /*
+   * Staff answer to the search box and the role filter only. Level, batch and
+   * status describe training, so a coach cannot match them -- applying them
+   * here would silently empty the staff half the moment a coach filtered by
+   * batch, which is the disappearance this change exists to end.
+   */
+  const filteredStaff = role === "players" ? [] : staff.filter((member) => (
+    !normalizedQuery
+    || member.fullName.toLocaleLowerCase().includes(normalizedQuery)
+    || member.academyId.toLocaleLowerCase().includes(normalizedQuery)
+  ))
+  const totalCount = filteredPlayers.length + filteredStaff.length
+  const visibleCount = visiblePlayers.length + filteredStaff.length
 
   return (
     <div className="coach-members-directory page-shell">
@@ -83,13 +110,13 @@ export function MemberDirectory() {
               aria-atomic="true"
               tabIndex={-1}
             >
-              {memberWindowSummary(visiblePlayers.length, filteredPlayers.length)}
+              {memberWindowSummary(visibleCount, totalCount)}
             </h2>
             <p>Private contacts remain concealed.</p>
           </div>
         </div>
 
-        {filteredPlayers.length ? (
+        {totalCount ? (
           <div className="coach-member-table-wrap">
             <table className="coach-member-table">
               <thead>
@@ -142,6 +169,22 @@ export function MemberDirectory() {
                     </Fragment>
                   )
                 })}
+
+                {filteredStaff.map((member, index) => {
+                  const isExpanded = expandedMemberId === member.id
+
+                  return (
+                    <Fragment key={member.id}>
+                      <StaffSummaryRow
+                        index={visiblePlayers.length + index}
+                        isExpanded={isExpanded}
+                        onOpen={openMember}
+                        staff={member}
+                      />
+                      {isExpanded ? <StaffDetailRow staff={member} /> : null}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
             {hasMoreMembers ? (
@@ -159,7 +202,7 @@ export function MemberDirectory() {
           <MemberDirectoryEmptyState
             hasDirectoryCriteria={hasDirectoryCriteria}
             onResetFilters={resetFilters}
-            playerCount={players.length}
+            playerCount={players.length + staff.length}
           />
         )}
       </section>

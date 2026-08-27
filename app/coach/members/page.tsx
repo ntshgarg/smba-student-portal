@@ -4,6 +4,7 @@ import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import {
   getCoachSessionSnapshot,
   listApprovedPlayerRecords,
+  listApprovedStaffRecords,
 } from "@/lib/coach/database"
 
 export const metadata = {
@@ -14,6 +15,7 @@ export default async function CoachMembersPage() {
   await requireHeadAdminPage()
   const players = listApprovedPlayerRecords()
   const sessions = getCoachSessionSnapshot()
+  const staff = listApprovedStaffRecords()
 
   return (
     <CoachPortalProvider
@@ -22,7 +24,7 @@ export default async function CoachMembersPage() {
       initialSessionSeries={sessions.sessionSeries}
       initialTrainingProfiles={players.trainingProfiles}
     >
-      <MemberDirectory />
+      <MemberDirectory staff={staff} />
     </CoachPortalProvider>
   )
 }
