@@ -34,7 +34,6 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
     editingMemberId,
     editor,
     expandedMemberId,
-    filteredPlayers,
     filtersOpen,
     handleArchive,
     hasDirectoryCriteria,
@@ -50,26 +49,14 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
     setContactLinkRef,
     setEditButtonRef,
     setFiltersOpen,
-    role,
+    directoryCount,
     updateDirectoryCriteria,
     urlCriteria,
     visiblePlayers,
-  } = useMemberDirectory()
+    visibleStaff,
+  } = useMemberDirectory(staff)
 
-  const normalizedQuery = urlCriteria.query.trim().toLocaleLowerCase()
-  /*
-   * Staff answer to the search box and the role filter only. Level, batch and
-   * status describe training, so a coach cannot match them -- applying them
-   * here would silently empty the staff half the moment a coach filtered by
-   * batch, which is the disappearance this change exists to end.
-   */
-  const filteredStaff = role === "players" ? [] : staff.filter((member) => (
-    !normalizedQuery
-    || member.fullName.toLocaleLowerCase().includes(normalizedQuery)
-    || member.academyId.toLocaleLowerCase().includes(normalizedQuery)
-  ))
-  const totalCount = filteredPlayers.length + filteredStaff.length
-  const visibleCount = visiblePlayers.length + filteredStaff.length
+  const visibleCount = visiblePlayers.length + visibleStaff.length
 
   return (
     <div className="coach-members-directory page-shell">
@@ -110,13 +97,13 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
               aria-atomic="true"
               tabIndex={-1}
             >
-              {memberWindowSummary(visibleCount, totalCount)}
+              {memberWindowSummary(visibleCount, directoryCount)}
             </h2>
             <p>Private contacts remain concealed.</p>
           </div>
         </div>
 
-        {totalCount ? (
+        {directoryCount ? (
           <div className="coach-member-table-wrap">
             <table className="coach-member-table">
               <thead>
@@ -170,7 +157,7 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
                   )
                 })}
 
-                {filteredStaff.map((member, index) => {
+                {visibleStaff.map((member, index) => {
                   const isExpanded = expandedMemberId === member.id
 
                   return (

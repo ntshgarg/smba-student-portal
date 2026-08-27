@@ -33,6 +33,7 @@ import type { ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type {
+  AcademyStaffMember,
   ArchiveMemberResult,
   MemberField,
   PlayerMemberRecord,
@@ -75,7 +76,7 @@ function financialCloseoutMessage(
  * moved here byte for byte, indentation included, which is why that order is
  * checkable rather than asserted.
  */
-export function useMemberDirectory() {
+export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const {
@@ -145,19 +146,54 @@ export function useMemberDirectory() {
       .sort((a, b) => a.member.fullName.localeCompare(b.member.fullName))
   }, [batch, editingMemberId, expandedMemberId, level, players, query, role, status])
 
+  /*
+   * Staff answer to the role filter and the search box only. Level, batch and
+   * status describe training, so applying them to a coach would empty the staff
+   * half the moment anyone filtered by batch -- the same silent exclusion the
+   * directory just stopped doing.
+   */
+  const filteredStaff = useMemo(() => {
+    if (role === "players") return []
+    const normalizedQuery = query.trim().toLocaleLowerCase()
+
+    return [...staff]
+      .filter((member) => !normalizedQuery
+        || member.fullName.toLocaleLowerCase().includes(normalizedQuery)
+        || member.academyId.toLocaleLowerCase().includes(normalizedQuery))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName))
+  }, [query, role, staff])
+
+  /*
+   * One window over both halves, not one each. Staff render after the players,
+   * so the reveal counts straight through the boundary: twelve members is
+   * twelve rows whether they are twelve players, or nine players and three
+   * coaches. Windowing them separately would have let a directory with 99
+   * players open on fifteen rows, which is what it did before this.
+   */
+  const directoryCount = filteredPlayers.length + filteredStaff.length
   const editingMemberIndex = editingMemberId
     ? filteredPlayers.findIndex((player) => player.member.id === editingMemberId)
     : -1
-  const expandedMemberIndex = expandedMemberId
+  const expandedPlayerIndex = expandedMemberId
     ? filteredPlayers.findIndex((player) => player.member.id === expandedMemberId)
     : -1
+  const expandedStaffIndex = expandedMemberId
+    ? filteredStaff.findIndex((member) => member.id === expandedMemberId)
+    : -1
+  const expandedMemberIndex = expandedStaffIndex >= 0
+    ? filteredPlayers.length + expandedStaffIndex
+    : expandedPlayerIndex
   const visibleCount = visibleMemberCount(
-    filteredPlayers.length,
+    directoryCount,
     memberWindow,
     Math.max(editingMemberIndex, expandedMemberIndex),
   )
   const visiblePlayers = filteredPlayers.slice(0, visibleCount)
-  const hasMoreMembers = visiblePlayers.length < filteredPlayers.length
+  const visibleStaff = filteredStaff.slice(
+    0,
+    Math.max(0, visibleCount - filteredPlayers.length),
+  )
+  const hasMoreMembers = visiblePlayers.length + visibleStaff.length < directoryCount
 
   const editingPlayer = editingMemberId
     ? playerById.get(editingMemberId) ?? null
@@ -272,8 +308,8 @@ export function useMemberDirectory() {
   function revealMoreMembers() {
     setMemberWindow((current) => memberWindowAfterReveal(
       current,
-      visiblePlayers.length,
-      filteredPlayers.length,
+      visiblePlayers.length + visibleStaff.length,
+      directoryCount,
     ))
   }
 
@@ -547,7 +583,10 @@ export function useMemberDirectory() {
   return {
     activeFilterCount,
     archivingMemberId,
+    directoryCount,
+    filteredStaff,
     role,
+    visibleStaff,
     beginEditing,
     directoryFeedback,
     directorySummaryRef,
