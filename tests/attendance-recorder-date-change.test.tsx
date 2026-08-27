@@ -206,3 +206,29 @@ describe("player attendance recorder date change", () => {
     ])
   })
 })
+
+/*
+ * The fixture above renders one started occurrence with no assignments and no
+ * players, which is exactly the shape that used to read "Available": a session
+ * the coach could open, but with nobody in it to mark.
+ */
+describe("player attendance recorder session picker", () => {
+  it("says a session is empty rather than calling it available", () => {
+    const html = renderRecorder("2026-08-21")
+    expect(html).toContain("No players")
+    expect(html).not.toContain(">Available<")
+  })
+
+  it("still reserves Upcoming for a session that has not started", () => {
+    const html = renderToStaticMarkup(
+      <PlayerAttendanceRecorder
+        initialDate="2026-08-21"
+        initialFromCalendar={false}
+        initialOccurrenceId={null}
+        initialReferenceInstant={Date.parse("2026-08-21T06:00:00.000Z")}
+      />,
+    )
+    expect(html).toContain("Upcoming")
+    expect(html).not.toContain("No players")
+  })
+})
