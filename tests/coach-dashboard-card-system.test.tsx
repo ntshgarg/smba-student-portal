@@ -22,6 +22,7 @@ function renderDashboard() {
         assessment: 3,
         feePlan: 1,
         newRequests: 2,
+        onboarded: 1,
         session: 1,
         total: 7,
       }} />

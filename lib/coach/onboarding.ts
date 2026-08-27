@@ -8,6 +8,14 @@ export type PlayerOnboardingSummary = {
   assessment: number
   feePlan: number
   newRequests: number
+  /**
+   * Players who have finished every stage. `total` alone cannot tell the two
+   * zeroes apart: an academy on its first day and an academy that has cleared
+   * its queue both report 0 outstanding, and only one of them has onboarded
+   * anyone. The dashboard card needs the difference to avoid congratulating a
+   * new academy for finishing work it has not started.
+   */
+  onboarded: number
   session: number
   total: number
 }
@@ -209,6 +217,7 @@ export function derivePlayerOnboardingSummary({
     assessment: 0,
     feePlan: 0,
     newRequests: newRequestCount,
+    onboarded: 0,
     session: 0,
     total: newRequestCount,
   }
@@ -224,7 +233,10 @@ export function derivePlayerOnboardingSummary({
       player,
       referenceDate,
     )
-    if (!stage) return
+    if (!stage) {
+      summary.onboarded += 1
+      return
+    }
 
     summary[stage] += 1
     summary.total += 1
@@ -315,6 +327,15 @@ export function derivePlayerOnboardingWorkspace({
     assessment: 0,
     feePlan: 0,
     newRequests: 0,
+    // Counted from the players the workspace filtered out above: `playerCases`
+    // keeps only those with an outstanding stage, so a completed player never
+    // reaches this reduce and has to be counted from the source list.
+    onboarded: players.filter((player) => !onboardingStage(
+      groupByPlayer(assignments).get(player.id) ?? [],
+      groupByPlayer(feePlans).get(player.id) ?? [],
+      player,
+      referenceDate,
+    )).length,
     session: 0,
     total: 0,
   })

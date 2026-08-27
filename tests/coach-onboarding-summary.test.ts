@@ -72,6 +72,7 @@ describe("coach player onboarding summary", () => {
       assessment: 1,
       feePlan: 0,
       newRequests: 2,
+      onboarded: 0,
       session: 1,
       total: 4,
     })
@@ -90,7 +91,7 @@ describe("coach player onboarding summary", () => {
 
   it("removes a player after a matching assignment and Fee Plan overlap", () => {
     expect(summary({ assignments: [assignment()], feePlans: [feePlan()] }))
-      .toEqual({ assessment: 0, feePlan: 0, newRequests: 0, session: 0, total: 0 })
+      .toEqual({ assessment: 0, feePlan: 0, newRequests: 0, onboarded: 1, session: 0, total: 0 })
   })
 
   it("keeps completion monotonic after the assignment and Fee Plan end", () => {
@@ -179,10 +180,31 @@ describe("coach player onboarding summary", () => {
       assessment: 1,
       feePlan: 1,
       newRequests: 2,
+      onboarded: 0,
       session: 1,
       total: 5,
     })
     expect(workspace.cases.find(({ id }) => id === "request-coach"))
       .toMatchObject({ requestedRole: "coach" })
+  })
+})
+
+/*
+ * `total === 0` is true of an academy that has cleared its queue and of one that
+ * opened this morning, and the dashboard card has to tell them apart -- it used
+ * to report "Academy onboarding is complete" to a head coach on day one. That is
+ * what `onboarded` is for, so it is asserted on its own rather than only inside
+ * the summaries above.
+ */
+describe("the two zeroes an onboarding summary can report", () => {
+  it("counts nothing onboarded on an academy that has never had a player", () => {
+    expect(summary({ newRequestCount: 0, players: [] }))
+      .toEqual({ assessment: 0, feePlan: 0, newRequests: 0, onboarded: 0, session: 0, total: 0 })
+  })
+
+  it("counts the finished player once the queue is cleared", () => {
+    const cleared = summary({ assignments: [assignment()], feePlans: [feePlan()] })
+    expect(cleared.total).toBe(0)
+    expect(cleared.onboarded).toBe(1)
   })
 })

@@ -25,6 +25,19 @@ export function PlayerOnboardingCard({
   summary: PlayerOnboardingSummary
 }) {
   const accountLabel = summary.total === 1 ? "person needs" : "people need"
+  /*
+   * Three states, not two. `total === 0` means "nothing outstanding", which is
+   * true of an academy that has cleared its queue *and* of one that opened this
+   * morning — and those deserve opposite words. Reporting the finished state to
+   * a head coach on day one congratulates them for work nobody has started, on
+   * the one card that should be pointing them at their first action, while
+   * Sessions, Financials and Members all correctly read `Setup` on the same
+   * screen.
+   *
+   * `onboarded` is what separates them: it counts players who have finished
+   * every stage, so it is zero only before anyone has been through.
+   */
+  const notStarted = summary.total === 0 && summary.onboarded === 0
 
   return (
     <CoachDashboardCard
@@ -32,15 +45,19 @@ export function PlayerOnboardingCard({
       id="onboarding"
       status={summary.total
         ? { count: summary.total, unit: "in progress" }
-        : { state: "Clear" }}
+        : notStarted ? { state: "Setup" } : { state: "Clear" }}
       title="Academy onboarding"
       titleId="player-onboarding-card-title"
     >
       <div className={styles.layout}>
         <CoachDashboardSummary
-          detail="Approve staff access and move players through assessment, session and Fee Plan."
+          detail={notStarted
+            ? "Players and junior coaches request access themselves. Their requests arrive here for approval, assessment, session and Fee Plan."
+            : "Approve staff access and move players through assessment, session and Fee Plan."}
         >
-          {summary.total ? `${summary.total} ${accountLabel} a next step` : "Academy onboarding is complete"}
+          {summary.total
+            ? `${summary.total} ${accountLabel} a next step`
+            : notStarted ? "No one to onboard yet" : "Academy onboarding is complete"}
         </CoachDashboardSummary>
 
         <dl className={styles.stages} aria-label="Academy onboarding stages">
