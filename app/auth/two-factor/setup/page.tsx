@@ -14,7 +14,7 @@ import { accounts } from "@/lib/db/schema"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
 
 export const metadata: Metadata = {
-  title: "Secure coach account",
+  title: "Secure your account",
   robots: { follow: false, index: false },
 }
 
@@ -61,7 +61,7 @@ export default async function TwoFactorSetupPage({
             ? "The previous connection and recovery codes have been retired. Finish setup to reopen protected records."
             : "Add a free authenticator app before opening protected records."}</p>
         </div>
-        <TwoFactorSetupForm />
+        <TwoFactorSetupForm role={account.role} />
         <InterstitialSignOut />
       </section>
     </main>

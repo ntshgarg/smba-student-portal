@@ -72,7 +72,7 @@ function submitTag(markup: string) {
 function enrolmentMarkup({ acknowledged }: { acknowledged: boolean }) {
   controls.acknowledged = acknowledged
   controls.acknowledgementSteered = false
-  return renderToStaticMarkup(<TwoFactorSetupForm />)
+  return renderToStaticMarkup(<TwoFactorSetupForm role="coach" />)
 }
 
 describe("the recovery codes an enrolling coach has to keep", () => {
