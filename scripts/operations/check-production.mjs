@@ -33,10 +33,12 @@ export const BYPASS_ENVIRONMENT_VARIABLE = "VERCEL_AUTOMATION_BYPASS_SECRET"
 function bypassHeaders(environment = process.env) {
   const secret = environment[BYPASS_ENVIRONMENT_VARIABLE]?.trim()
   if (!secret) return {}
-  return {
-    "x-vercel-protection-bypass": secret,
-    "x-vercel-set-bypass-cookie": "samesitenone",
-  }
+  // Only the bypass header. Asking Vercel to also set the bypass cookie makes
+  // it answer with a redirect in order to deliver that cookie, which a smoke
+  // reading `redirect: "manual"` sees as a 307 rather than the application --
+  // and the cookie is pointless here, because every request below carries the
+  // header anyway.
+  return { "x-vercel-protection-bypass": secret }
 }
 
 async function request(origin, pathname, timeoutMs, headers = bypassHeaders()) {
@@ -61,7 +63,10 @@ export async function checkProductionOnce(originValue, options = {}) {
         + `${BYPASS_ENVIRONMENT_VARIABLE} to the project's protection bypass secret.`,
       )
     }
-    throw new Error(`Health endpoint returned HTTP ${healthResponse.status}.`)
+    throw new Error(
+      `Health endpoint returned HTTP ${healthResponse.status}`
+      + `${target ? `, redirecting to ${target}` : ""}.`,
+    )
   }
   const health = await healthResponse.json().catch(() => null)
   if (health?.status !== "ok") {

@@ -122,7 +122,9 @@ describe("preview deployments behind Vercel SSO", () => {
       env: { ...process.env, VERCEL_AUTOMATION_BYPASS_SECRET: "secret-value" },
     })
     expect(seen.every((headers) => headers.bypass === "secret-value")).toBe(true)
-    expect(seen.every((headers) => headers.cookie === "samesitenone")).toBe(true)
+    // Never ask Vercel to set the bypass cookie: it answers that with a redirect
+    // to deliver the cookie, which this smoke reads as a bare 307.
+    expect(seen.every((headers) => headers.cookie === undefined)).toBe(true)
 
     seen.length = 0
     const withoutSecret = { ...process.env }
@@ -150,5 +152,24 @@ describe("preview deployments behind Vercel SSO", () => {
         smokeScript, `http://127.0.0.1:${address.port}`, "--attempts", "1", "--delay-ms", "0",
       ]),
     ).rejects.toThrow(/behind Vercel SSO/u)
+  })
+})
+
+describe("a redirect that is not the SSO gate", () => {
+  it("names where it was sent, so the next failure diagnoses itself", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(307, { location: "https://example.invalid/elsewhere" })
+      response.end()
+    })
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    if (!address || typeof address === "string") throw new Error("no port")
+
+    await expect(
+      execute(process.execPath, [
+        smokeScript, `http://127.0.0.1:${address.port}`, "--attempts", "1", "--delay-ms", "0",
+      ]),
+    ).rejects.toThrow(/HTTP 307, redirecting to https:\/\/example\.invalid\/elsewhere/u)
   })
 })
