@@ -1,0 +1,116 @@
+name: Preview smoke
+
+# Vercel builds a private copy of the site for every pull request, and until now
+# nothing looked at it. The quality gate proves the code builds and behaves in a
+# local browser; this proves the thing Vercel actually deployed answers. It is
+# the last check between a merge and production, because a merge to main ships
+# straight to smbaacademy.in with no further gate.
+#
+# It runs on deployment_status rather than pull_request because the preview URL
+# only exists once Vercel has finished, and that is the event carrying it.
+#
+# Preview deployments are behind Vercel SSO, so this can only reach one when
+# VERCEL_AUTOMATION_BYPASS_SECRET is set. Until it is, the job says loudly that
+# it verified nothing and passes; once it is, a failing smoke fails the job.
+
+on:
+  deployment_status:
+
+concurrency:
+  group: preview-smoke-${{ github.event.deployment.id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    # Only a successful Vercel preview. A failed or still-building deployment has
+    # nothing to smoke, and Production is already covered by Production alerts.
+    if: >-
+      github.event.deployment.environment == 'Preview' &&
+      github.event.deployment.creator.login == 'vercel[bot]' &&
+      github.event.deployment.task == 'deploy' &&
+      github.event.deployment_status.state == 'success'
+    name: Smoke the preview deployment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # The commit Vercel actually deployed, not the default branch. Production
+      # alerts checks out `main` because for a production deploy that IS the
+      # deployed commit; here it is a different one, and taking `main` would
+      # smoke a preview of this branch using another branch's smoke script.
+      - name: Check out the deployed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.deployment.sha }}
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Confirm the preview URL belongs to Vercel
+        id: target
+        env:
+          ENVIRONMENT_URL: ${{ github.event.deployment_status.environment_url }}
+        run: |
+          # The URL arrives in the webhook payload, so it is treated as input:
+          # a smoke pointed at an attacker-chosen host would send the bypass
+          # secret there. Only vercel.app is accepted.
+          host="$(printf '%s' "$ENVIRONMENT_URL" | sed -E 's#^https://([^/]+).*#\1#')"
+          case "$ENVIRONMENT_URL" in
+            https://*) ;;
+            *) echo "Preview URL is not HTTPS."; exit 1 ;;
+          esac
+          case "$host" in
+            *.vercel.app) ;;
+            *) echo "Preview URL is not a vercel.app host: $host"; exit 1 ;;
+          esac
+          echo "origin=https://$host" >> "$GITHUB_OUTPUT"
+
+      # Preview deployments are behind Vercel SSO, so without the bypass secret
+      # there is nothing this job can reach. That is a setup state, not a
+      # regression, so it is reported as a loud unverified rather than as a
+      # failure -- a red check on every pull request for a reason no commit can
+      # fix teaches people to ignore the check. A real smoke failure still fails.
+      - name: Check the bypass secret is configured
+        id: bypass
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report that nothing was verified
+        if: steps.bypass.outputs.configured != 'true'
+        run: |
+          echo "::warning title=Preview not verified::VERCEL_AUTOMATION_BYPASS_SECRET is not set, so the preview deployment was not checked. Enable Protection Bypass for Automation on the Vercel project and store the secret under that name."
+          {
+            echo "### Preview NOT verified"
+            echo
+            echo "This deployment was **not** smoke tested. Preview deployments sit"
+            echo "behind Vercel SSO and no bypass secret is configured, so nothing"
+            echo "here could reach it."
+            echo
+            echo "To turn this into a real check:"
+            echo "1. Vercel project → Settings → Deployment Protection → enable"
+            echo "   **Protection Bypass for Automation**."
+            echo "2. Store the generated value as the repository secret"
+            echo "   \`VERCEL_AUTOMATION_BYPASS_SECRET\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the preview answers
+        if: steps.bypass.outputs.configured == 'true'
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          node scripts/operations/check-production.mjs \
+            "${{ steps.target.outputs.origin }}" \
+            --attempts 6 --delay-ms 5000
+          echo "### Preview verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "Health, homepage and login all answered on the deployed preview." >> "$GITHUB_STEP_SUMMARY"

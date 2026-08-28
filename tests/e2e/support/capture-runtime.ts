@@ -178,11 +178,30 @@ export async function createActorContext(
   return context
 }
 
+/*
+ * Next renders <div role="alert" aria-live="assertive"
+ * id="__next-route-announcer__"> for route-change announcements. It is a real
+ * alert as far as the accessibility tree is concerned, so `getByRole("alert")`
+ * matches it alongside whatever the page is actually saying, and Playwright's
+ * strict mode then refuses a two-element locator.
+ *
+ * It only appears once the router has announced a navigation, so which of the
+ * two a capture hits depended on whether it arrived by client navigation or a
+ * fresh load -- the register-validation-error capture passed for weeks and then
+ * failed on an unrelated commit. Excluding the announcer by id, and taking the
+ * first remaining match so a form with two invalid fields stays deterministic,
+ * removes the race rather than retrying it.
+ */
+function pageAlert(page: Page) {
+  return page.locator('[role="alert"]:not(#__next-route-announcer__)').first()
+}
+
 async function loginWithAcademyId(page: Page, actor: CaptureActor) {
   if (actor === "guest") throw new Error("Guest captures cannot authenticate")
   await page.goto("/login", { waitUntil: "domcontentloaded" })
   const expectedPath = actor === "coach" ? "/coach" : "/player"
   if (new URL(page.url()).pathname.startsWith(expectedPath)) return
+
 
   await page.getByLabel("Academy ID").fill(academyIdForActor(actor))
   await page.getByLabel("Password").fill(
@@ -192,7 +211,7 @@ async function loginWithAcademyId(page: Page, actor: CaptureActor) {
   try {
     await page.waitForURL((url) => url.pathname.startsWith(expectedPath), { timeout: 20_000 })
   } catch (error) {
-    const alert = await page.getByRole("alert").textContent().catch(() => null)
+    const alert = await pageAlert(page).textContent().catch(() => null)
     throw new Error(
       `Could not authenticate the ${actor} capture account${alert ? `: ${alert.trim()}` : ""}`,
       { cause: error },
@@ -416,12 +435,12 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       await page.getByLabel("Academy ID").fill("SMBA#9999")
       await page.getByLabel("Password").fill("A deliberately incorrect password")
       await clickRequired(page.getByRole("button", { name: "Continue" }), action)
-      await page.getByRole("alert").waitFor({ state: "visible", timeout: 12_000 })
+      await pageAlert(page).waitFor({ state: "visible", timeout: 12_000 })
       break
     case "login-format-error":
       await page.getByLabel("Academy ID").fill("SMBA-12")
       await clickRequired(page.getByRole("button", { name: "Continue" }), action)
-      await page.getByRole("alert").waitFor({ state: "visible", timeout: 12_000 })
+      await pageAlert(page).waitFor({ state: "visible", timeout: 12_000 })
       break
     case "member-contact-reveal":
       await clickRequired(page.locator(".coach-member-row-action button"), action)
@@ -519,7 +538,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     case "register-validation-error":
       await clickRequired(page.getByRole("button", { name: "Request registration" }), action)
-      await page.getByRole("alert").waitFor({ state: "visible", timeout: 12_000 })
+      await pageAlert(page).waitFor({ state: "visible", timeout: 12_000 })
       break
     case "report-checklist-collapse": {
       const toggle = page.locator(".coach-report-queue-toggle")
