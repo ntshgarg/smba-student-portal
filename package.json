@@ -6,6 +6,7 @@
     "db:migrate": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/database/prepare.ts",
     "db:bootstrap": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/database/prepare.ts --seed",
     "db:prepare:empty": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/database/prepare.ts --seed --empty-academy",
+    "db:reset:academy": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx --env-file-if-exists=.env.local scripts/database/reset-academy.ts",
     "db:provision:admin": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx --env-file-if-exists=.env.local scripts/database/provision-platform-admin.ts",
     "db:prepare:local": "DB_FILE_NAME=.data/academy-clean.db NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/database/prepare.ts --seed",
     "dev": "DB_FILE_NAME=.data/academy-empty.db npm run db:prepare:empty && WATCHPACK_POLLING=true SMBA_REQUIRE_COACH_TOTP=true DB_FILE_NAME=.data/academy-empty.db next dev -p 3000",
