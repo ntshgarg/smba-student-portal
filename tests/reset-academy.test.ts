@@ -182,3 +182,28 @@ describe("resetting an academy in place", () => {
     expect(accountCount(file)).toBe(3)
   }, 60_000)
 })
+
+describe("verifying an academy is empty", () => {
+  it("passes on an emptied academy even after live traffic writes to it", async () => {
+    const { file } = academyDatabase()
+    await run(file, ["--confirm", "SMBA-ADMIN-0001"])
+
+    // The site stays live through a reset, so a visitor reaching the login page
+    // writes rows straight afterwards. Those must not read as survivors.
+    const traffic = new Database(file)
+    traffic.prepare(
+      "insert into auth_login_attempts (key, failed_count, window_started_at, updated_at)"
+      + " values (?, ?, ?, ?)",
+    ).run("ip:1.2.3.4", 1, NOW.getTime(), NOW.getTime())
+    traffic.close()
+
+    const { stdout } = await run(file, ["--verify"])
+    expect(stdout).toContain("The academy is empty")
+  }, 60_000)
+
+  it("fails while academy records remain", async () => {
+    const { file } = academyDatabase()
+
+    await expect(run(file, ["--verify"])).rejects.toThrow(/still present/u)
+  }, 60_000)
+})

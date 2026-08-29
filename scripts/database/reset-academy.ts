@@ -66,7 +66,28 @@ const PURGED = new Set([
   "session_occurrences", "session_recurrence_rules", "session_series", "staff_attendance_records",
 ])
 
+/*
+ * Purged, but allowed to refill immediately: the site stays live through a
+ * reset, so a single visitor reaching the login page writes a login attempt and
+ * a security event before anyone can check the result. Treating those as
+ * survivors would fail a verification that is actually looking at ordinary
+ * traffic. Nothing here describes an academy -- no member, session, charge or
+ * report is in this list.
+ */
+const RUNTIME_NOISE = new Set([
+  "auth_email_challenges",
+  "auth_login_attempts",
+  "auth_rate_limits",
+  "auth_runtime_sessions",
+  "auth_security_events",
+  "auth_sessions",
+  "auth_verifications",
+  "client_error_reports",
+  "operational_events",
+])
+
 const confirmIndex = process.argv.indexOf("--confirm")
+const verifyOnly = process.argv.includes("--verify")
 const confirmedAcademyId = confirmIndex < 0 ? null : process.argv[confirmIndex + 1]?.trim() ?? ""
 const dryRun = confirmedAcademyId === null
 
@@ -145,10 +166,46 @@ function soleOwner() {
   return { ...owner, academyId: owner.username }
 }
 
+/*
+ * Answers "is this academy empty?" rather than "was anything deleted?", so it
+ * can be run at any time, including long after a reset and against live
+ * traffic. Owner-scoped tables are excluded because the owner is meant to
+ * survive; runtime noise is excluded because it is meant to come back.
+ */
+function verify(tables: string[], owner: { academyId: string }) {
+  const survivors = tables
+    .filter((table) => PURGED.has(table) && !RUNTIME_NOISE.has(table))
+    .map((table) => ({ count: countRows(table), table }))
+    .filter((entry) => entry.count > 0)
+
+  if (survivors.length) {
+    console.error("Academy records are still present:")
+    for (const { count, table } of survivors) {
+      console.error(`  ${table.padEnd(38)} ${String(count).padStart(6)}`)
+    }
+    process.exitCode = 1
+    return
+  }
+
+  const others = countRows("accounts") - 1
+  if (others > 0) {
+    console.error(`${others} account(s) besides ${owner.academyId} are still present.`)
+    process.exitCode = 1
+    return
+  }
+
+  console.log(`The academy is empty. Only ${owner.academyId} remains.`)
+}
+
 function main() {
   const tables = allTables()
   classify(tables)
   const owner = soleOwner()
+
+  if (verifyOnly) {
+    verify(tables, owner)
+    return
+  }
 
   const before = new Map(tables.map((table) => [table, countRows(table)]))
   const academyRows = tables
