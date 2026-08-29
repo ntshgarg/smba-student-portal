@@ -37,7 +37,6 @@ const OWNER_SCOPED = new Map([
   ["auth_pin_credentials", "account_id"],
   ["auth_recovery_emails", "account_id"],
   ["auth_provider_accounts", "user_id"],
-  ["auth_two_factors", "user_id"],
 ])
 
 /**
@@ -46,12 +45,18 @@ const OWNER_SCOPED = new Map([
  * numbering restarts at the beginning rather than continuing somebody else's
  * run. The security and financial audit trails are academy history and go with
  * the academy -- take the backup first if that history matters.
+ *
+ * `auth_two_factors` goes as well, including the owner's. A handover should not
+ * pass on an authenticator that is still paired to the outgoing operator's
+ * phone: whoever holds the account next has to enrol their own, and the
+ * recovery codes minted with it are the ones they keep. The password and PIN
+ * survive, because those are what they sign in with to do it.
  */
 const PURGED = new Set([
   "attendance_adjustments", "attendance_records", "auth_access_codes",
   "auth_activation_claims", "auth_authenticator_reset_requests", "auth_email_challenges",
   "auth_login_attempts", "auth_rate_limits", "auth_runtime_sessions", "auth_security_events",
-  "auth_sessions", "auth_setup_claims", "auth_verifications", "batch_memberships",
+  "auth_sessions", "auth_setup_claims", "auth_two_factors", "auth_verifications", "batch_memberships",
   "broadcast_audience_targets", "broadcast_channels", "broadcast_withdrawals", "broadcasts",
   "charge_adjustments", "client_error_reports", "coach_profiles", "concession_applications",
   "concessions", "fee_agreements", "finance_reference_sequences", "financial_audit_events",
@@ -61,7 +66,28 @@ const PURGED = new Set([
   "session_occurrences", "session_recurrence_rules", "session_series", "staff_attendance_records",
 ])
 
+/*
+ * Purged, but allowed to refill immediately: the site stays live through a
+ * reset, so a single visitor reaching the login page writes a login attempt and
+ * a security event before anyone can check the result. Treating those as
+ * survivors would fail a verification that is actually looking at ordinary
+ * traffic. Nothing here describes an academy -- no member, session, charge or
+ * report is in this list.
+ */
+const RUNTIME_NOISE = new Set([
+  "auth_email_challenges",
+  "auth_login_attempts",
+  "auth_rate_limits",
+  "auth_runtime_sessions",
+  "auth_security_events",
+  "auth_sessions",
+  "auth_verifications",
+  "client_error_reports",
+  "operational_events",
+])
+
 const confirmIndex = process.argv.indexOf("--confirm")
+const verifyOnly = process.argv.includes("--verify")
 const confirmedAcademyId = confirmIndex < 0 ? null : process.argv[confirmIndex + 1]?.trim() ?? ""
 const dryRun = confirmedAcademyId === null
 
@@ -140,10 +166,46 @@ function soleOwner() {
   return { ...owner, academyId: owner.username }
 }
 
+/*
+ * Answers "is this academy empty?" rather than "was anything deleted?", so it
+ * can be run at any time, including long after a reset and against live
+ * traffic. Owner-scoped tables are excluded because the owner is meant to
+ * survive; runtime noise is excluded because it is meant to come back.
+ */
+function verify(tables: string[], owner: { academyId: string }) {
+  const survivors = tables
+    .filter((table) => PURGED.has(table) && !RUNTIME_NOISE.has(table))
+    .map((table) => ({ count: countRows(table), table }))
+    .filter((entry) => entry.count > 0)
+
+  if (survivors.length) {
+    console.error("Academy records are still present:")
+    for (const { count, table } of survivors) {
+      console.error(`  ${table.padEnd(38)} ${String(count).padStart(6)}`)
+    }
+    process.exitCode = 1
+    return
+  }
+
+  const others = countRows("accounts") - 1
+  if (others > 0) {
+    console.error(`${others} account(s) besides ${owner.academyId} are still present.`)
+    process.exitCode = 1
+    return
+  }
+
+  console.log(`The academy is empty. Only ${owner.academyId} remains.`)
+}
+
 function main() {
   const tables = allTables()
   classify(tables)
   const owner = soleOwner()
+
+  if (verifyOnly) {
+    verify(tables, owner)
+    return
+  }
 
   const before = new Map(tables.map((table) => [table, countRows(table)]))
   const academyRows = tables
@@ -191,6 +253,14 @@ function main() {
       if (!tables.includes(table)) continue
       database.run(sql.raw(`delete from "${table}" where "${column}" <> '${owner.id}'`))
     }
+    /*
+     * Clearing the row is not enough on its own: better-auth reads this flag to
+     * decide whether an account has an authenticator, and an account still
+     * claiming one it no longer has cannot sign in at all.
+     */
+    database.run(sql.raw(
+      `update auth_users set two_factor_enabled = 0 where id = '${owner.id}'`,
+    ))
     database.run(sql`commit`)
   } catch (error) {
     database.run(sql`rollback`)
@@ -206,7 +276,8 @@ function main() {
     console.log(`  ${table.padEnd(38)} ${String(count).padStart(6)}`)
   }
   console.log(`\n${remaining} rows remain outside migrations and batches; all belong to ${owner.academyId}.`)
-  console.log("The head coach is now created through the one-time secure setup.")
+  console.log(`${owner.academyId} keeps its password and PIN, and must enrol a new authenticator on next sign-in.`)
+  console.log("The head coach is then created through the one-time secure setup.")
 }
 
 main()
