@@ -122,6 +122,39 @@ describe("resetting an academy in place", () => {
     expect(batches.total).toBeGreaterThan(0)
   }, 60_000)
 
+  it("takes the owner's authenticator so the next holder enrols their own", async () => {
+    const { file } = academyDatabase()
+    const seeded = new Database(file)
+    seeded.prepare(
+      "insert into auth_two_factors (id, user_id, secret, backup_codes) values (?, ?, ?, ?)",
+    ).run("tf-owner", OWNER_ID, "SECRET", "codes")
+    seeded.prepare("update auth_users set two_factor_enabled = 1 where id = ?").run(OWNER_ID)
+    // A PIN the owner already set, so "the PIN survives" is an assertion about
+    // behaviour rather than about an empty table.
+    seeded.prepare(
+      "insert into auth_pin_credentials (account_id, pin_hash, created_at, updated_at) values (?, ?, ?, ?)",
+    ).run(OWNER_ID, "hashed-pin", NOW.getTime(), NOW.getTime())
+    seeded.close()
+
+    await run(file, ["--confirm", "SMBA-ADMIN-0001"])
+
+    const sqlite = new Database(file, { readonly: true })
+    const factors = sqlite.prepare("select count(*) as total from auth_two_factors").get() as { total: number }
+    const owner = sqlite.prepare("select two_factor_enabled as enabled from auth_users where id = ?")
+      .get(OWNER_ID) as { enabled: number }
+    // The flag has to fall with the row: better-auth reads it to decide whether
+    // the account has an authenticator, and one claiming a secret it no longer
+    // holds cannot sign in at all.
+    const credentials = sqlite.prepare("select count(*) as total from auth_pin_credentials").get() as { total: number }
+    sqlite.close()
+
+    expect(factors.total).toBe(0)
+    expect(owner.enabled).toBe(0)
+    // The PIN survives: it is what the owner signs in with to enrol the
+    // replacement authenticator.
+    expect(credentials.total).toBe(1)
+  }, 60_000)
+
   it("refuses when --confirm names a different academy", async () => {
     const { file } = academyDatabase()
 
