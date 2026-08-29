@@ -6,7 +6,7 @@ import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 
 export const metadata = { title: "Create schedule" }
 
-const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
+const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 const batches: TrainingBatch[] = ["Weekday", "Weekend"]
 
 export default async function CoachCreateSchedulePage({

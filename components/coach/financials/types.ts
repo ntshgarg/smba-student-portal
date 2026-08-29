@@ -77,14 +77,14 @@ export type PlayerFinancialLedgerView = {
     academyPlanLabel: string
     batch: import("@/lib/sessions/types").TrainingBatch
     level: import("@/lib/sessions/types").TrainingProgramme
-    suggestedMonthlyFeePaise: number
+    suggestedMonthlyFeePaise: number | null
   } | null
   setupDefaults: {
     academyPlan: import("@/lib/training/academy-plans").AcademyPlan
     academyPlanLabel: string
     batch: import("@/lib/sessions/types").TrainingBatch
     level: import("@/lib/sessions/types").TrainingProgramme
-    suggestedMonthlyFeePaise: number
+    suggestedMonthlyFeePaise: number | null
   } | null
   fullName: string
   management: import("@/lib/finance/types").CoachFinanceManagementView

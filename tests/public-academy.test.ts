@@ -26,12 +26,25 @@ describe("public academy facts", () => {
       { name: "Advanced", duration: "3 hours", fees: { 5: 12500 } },
       { name: "Adult", duration: "1 hour", fees: { 3: 4000, 4: 4500, 5: 5000 } },
     ])
+    // Advanced trains five weekdays, so it has no weekend price to publish.
     expect(weekendPrograms).toEqual([
       { name: "Beginner", duration: "1 hour", fee: 3000 },
       { name: "Intermediate", duration: "1.5 hours", fee: 5000 },
-      { name: "Advanced", duration: "2 hours", fee: 7000 },
       { name: "Adult", duration: "1 hour", fee: 3500 },
     ])
+  })
+
+  /*
+   * Elite is an internal level. Its terms are agreed per player, so there is no
+   * price to advertise and the public site must never name it.
+   *
+   * Asserted over the serialised whole rather than by extending the arrays above:
+   * those check the shape that exists, this one catches Elite arriving anywhere
+   * in it -- a new marketing blurb, a fee row, a duration string.
+   */
+  it("never advertises Elite, which has no published fee", () => {
+    expect(JSON.stringify({ trainingPrograms, weekdayPrograms, weekendPrograms }))
+      .not.toContain("Elite")
   })
 
   it("keeps registration and official contact details verified", () => {

@@ -11,6 +11,7 @@ import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
+  academyBatchesFor,
   academyPlanLabel,
   academyPlansFor,
   type AcademyPlan,
@@ -19,7 +20,7 @@ import {
 import styles from "../player-onboarding-register.module.css"
 import type { SaveFeedback } from "./shared"
 
-const LEVELS: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
+const LEVELS: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 const BATCHES: TrainingBatch[] = ["Weekday", "Weekend"]
 
 export function AssessmentStep({
@@ -50,12 +51,25 @@ export function AssessmentStep({
   })
 
   const plans = level && batch ? academyPlansFor(level, batch) : []
+  /*
+   * Advanced and Elite train five weekdays, so Weekend is not offered once one of
+   * them is chosen. Narrowing here rather than rejecting on save means the coach
+   * never composes a pair the server would refuse.
+   */
+  const batches = level ? academyBatchesFor(level) : BATCHES
 
   function updateLevel(value: TrainingProgramme | "") {
     setLevel(value)
-    const nextPlans = value && batch ? academyPlansFor(value, batch) : []
+    // A batch the new level cannot train in has to go with it, or an Elite player
+    // keeps a stale Weekend selection that only fails on save.
+    const nextBatches = value ? academyBatchesFor(value) : BATCHES
+    const nextBatch = batch && nextBatches.includes(batch) ? batch : ""
+    if (nextBatch !== batch) setBatch(nextBatch)
+    const nextPlans = value && nextBatch ? academyPlansFor(value, nextBatch) : []
     if (!trainingPlan || !nextPlans.includes(trainingPlan)) setTrainingPlan("")
-    setErrors((current) => ({ ...current, level: undefined, academyPlan: undefined }))
+    setErrors((current) => ({
+      ...current, academyPlan: undefined, batch: undefined, level: undefined,
+    }))
   }
 
   function updateBatch(value: TrainingBatch | "") {
@@ -185,7 +199,7 @@ export function AssessmentStep({
             onChange={(event) => updateBatch(event.target.value as TrainingBatch | "")}
           >
             <option value="">Choose batch</option>
-            {BATCHES.map((option) => <option key={option}>{option}</option>)}
+            {batches.map((option) => <option key={option}>{option}</option>)}
           </select>
           {errors.batch ? <small id={`onboarding-${item.id}-batch-error`}>{errors.batch}</small> : null}
         </label>

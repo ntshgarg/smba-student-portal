@@ -493,7 +493,7 @@ export const staffAttendanceRecords = sqliteTable("staff_attendance_records", {
 export const playerEnrollments = sqliteTable("player_enrollments", {
   accountId: text("account_id").primaryKey().references(() => accounts.id),
   ageGroup: text("age_group"),
-  level: text("level", { enum: ["Beginner", "Intermediate", "Advanced", "Adult"] }),
+  level: text("level", { enum: ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"] }),
   batch: text("batch", { enum: ["Weekday", "Weekend"] }),
   academyPlan: text("academy_plan", {
     enum: ["weekday-3-day", "weekday-4-day", "weekday-5-day", "weekend-standard"],
@@ -521,7 +521,7 @@ export const playerEnrollments = sqliteTable("player_enrollments", {
 export const batches = sqliteTable("batches", {
   id: text("id").primaryKey(),
   schedule: text("schedule", { enum: ["Weekday", "Weekend"] }).notNull(),
-  programme: text("programme", { enum: ["Beginner", "Intermediate", "Advanced", "Adult"] }).notNull(),
+  programme: text("programme", { enum: ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"] }).notNull(),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 })
 
@@ -556,7 +556,7 @@ export const attendanceRecords = sqliteTable("attendance_records", {
 export const sessionSeries = sqliteTable("session_series", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
-  programme: text("programme", { enum: ["Beginner", "Intermediate", "Advanced", "Adult"] }).notNull(),
+  programme: text("programme", { enum: ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"] }).notNull(),
   batch: text("batch", { enum: ["Weekday", "Weekend"] }).notNull(),
   venue: text("venue").notNull(),
   startsOn: text("starts_on").notNull(),
@@ -715,7 +715,7 @@ export const feeAgreements = sqliteTable("fee_agreements", {
   academyPlan: text("academy_plan", {
     enum: ["weekday-3-day", "weekday-4-day", "weekday-5-day", "weekend-standard"],
   }).notNull(),
-  level: text("level", { enum: ["Beginner", "Intermediate", "Advanced", "Adult"] }).notNull(),
+  level: text("level", { enum: ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"] }).notNull(),
   batch: text("batch", { enum: ["Weekday", "Weekend"] }).notNull(),
   agreedMonthlyFeePaise: integer("agreed_monthly_fee_paise").notNull(),
   currency: text("currency").notNull().default("INR"),

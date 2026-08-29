@@ -36,8 +36,17 @@ async function expectMobileSafeFont(control: Locator) {
   expect(fontSize).toBeGreaterThanOrEqual(16)
 }
 
+/*
+ * Both navigations wait for the network to settle rather than for the document
+ * alone. Every error this asserts on -- #academy-id-error, #full-name-error --
+ * is rendered by client-side validation, so it only exists once React has
+ * hydrated the form. `domcontentloaded` returns before that, and a click landing
+ * on an unhydrated button is simply lost: the assertion then waits twelve
+ * seconds for an element nothing was ever going to render. That is how this
+ * passed for months and then failed on an unrelated commit.
+ */
 test("authentication failures restore focus to the invalid field", async ({ page }) => {
-  await page.goto("/login", { waitUntil: "domcontentloaded" })
+  await page.goto("/login", { waitUntil: "networkidle" })
   const academyId = page.getByLabel("Academy ID")
 
   await academyId.fill("invalid")
@@ -50,7 +59,7 @@ test("authentication failures restore focus to the invalid field", async ({ page
   await page.getByRole("button", { name: "Continue" }).click()
   await expect(academyId).toBeFocused()
 
-  await page.goto("/register", { waitUntil: "domcontentloaded" })
+  await page.goto("/register", { waitUntil: "networkidle" })
   const fullName = page.getByLabel("Full name")
 
   await page.getByRole("button", { name: "Request registration" }).click()

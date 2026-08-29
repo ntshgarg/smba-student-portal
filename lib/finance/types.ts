@@ -181,11 +181,18 @@ export type FeeAgreementView = {
   recordRevision: number
 }
 
+/*
+ * The enrolment facts a fee plan is built from. `suggestedMonthlyFeePaise` is
+ * nullable because a level is allowed to have no standard fee -- Elite terms are
+ * agreed per player -- and the absence of a price must not imply the absence of a
+ * classification. Conflating the two is what used to make the fee-plan editor
+ * disappear for such a player instead of letting the coach set their fee.
+ */
 export type FeeSetupDefaults = {
   academyPlan: AcademyPlan
   level: TrainingProgramme
   batch: TrainingBatch
-  suggestedMonthlyFeePaise: number
+  suggestedMonthlyFeePaise: number | null
 }
 
 export type PlayerFeeRecord = {

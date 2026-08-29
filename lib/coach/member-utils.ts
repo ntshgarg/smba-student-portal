@@ -7,7 +7,7 @@ import { academyPlanIsValid } from "@/lib/training/academy-plans"
 import type { AcademyPlan } from "@/lib/training/academy-plans"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 
-const trainingLevels = new Set<TrainingProgramme>(["Beginner", "Intermediate", "Advanced", "Adult"])
+const trainingLevels = new Set<TrainingProgramme>(["Beginner", "Intermediate", "Advanced", "Adult", "Elite"])
 
 export function memberInitials(fullName: string) {
   const parts = fullName.trim().split(/\s+/u).filter(Boolean)

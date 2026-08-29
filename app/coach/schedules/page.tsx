@@ -19,7 +19,7 @@ export default async function CoachSchedulesPage({
 }) {
   await requireHeadAdminPage()
   const params = await searchParams
-  const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
+  const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
   const players = listOperationalPlayerRecords()
   const sessions = getCoachScheduleRosterSnapshot()
   return (

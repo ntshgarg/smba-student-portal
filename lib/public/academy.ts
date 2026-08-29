@@ -5,6 +5,13 @@ import {
 
 const rupees = (paise: number) => paise / 100
 
+/*
+ * These names are written out rather than reusing `TrainingProgramme` on purpose.
+ * The public site advertises what the academy sells to anyone who asks; the level
+ * list is what the academy records internally, and Elite belongs only to the
+ * second. Importing the union would make every future level appear here by
+ * default, which is the wrong default for a price list.
+ */
 export type WeekdayProgram = {
   name: "Beginner" | "Intermediate" | "Advanced" | "Adult"
   duration: string
@@ -69,10 +76,10 @@ export const weekdayPrograms: WeekdayProgram[] = [
   },
 ]
 
+// Advanced is weekday-only, so it is absent here rather than priced.
 export const weekendPrograms: WeekendProgram[] = [
   { name: "Beginner", duration: "1 hour", fee: rupees(monthlyFeePaise.Beginner["weekend-standard"]) },
   { name: "Intermediate", duration: "1.5 hours", fee: rupees(monthlyFeePaise.Intermediate["weekend-standard"]) },
-  { name: "Advanced", duration: "2 hours", fee: rupees(monthlyFeePaise.Advanced["weekend-standard"]) },
   { name: "Adult", duration: "1 hour", fee: rupees(monthlyFeePaise.Adult["weekend-standard"]) },
 ]
 

@@ -5,6 +5,7 @@ export const memberDirectoryLevels: TrainingProgramme[] = [
   "Intermediate",
   "Advanced",
   "Adult",
+  "Elite",
 ]
 export const memberDirectoryBatches: TrainingBatch[] = ["Weekday", "Weekend"]
 const memberDirectoryStatuses = ["all", "unassigned", "active", "paused"] as const

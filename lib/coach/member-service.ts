@@ -36,7 +36,7 @@ import {
   academyPlanIsValid,
 } from "@/lib/training/academy-plans"
 
-const TRAINING_LEVELS = ["Beginner", "Intermediate", "Advanced", "Adult"] as const
+const TRAINING_LEVELS = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"] as const
 const TRAINING_BATCHES = ["Weekday", "Weekend"] as const
 const ACADEMY_PLANS = [
   "weekday-3-day",

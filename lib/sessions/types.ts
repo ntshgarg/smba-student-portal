@@ -1,4 +1,10 @@
-export type TrainingProgramme = "Beginner" | "Intermediate" | "Advanced" | "Adult"
+/*
+ * Elite is the competitive tier -- state, national and international players. It
+ * is a level rather than a batch because it describes the player, not when they
+ * train, and it is deliberately absent from `lib/public/academy.ts`: Elite terms
+ * are arranged individually, so there is no published fee to advertise.
+ */
+export type TrainingProgramme = "Beginner" | "Intermediate" | "Advanced" | "Adult" | "Elite"
 export type TrainingBatch = "Weekday" | "Weekend"
 
 export type SessionRecurrenceSlot = {

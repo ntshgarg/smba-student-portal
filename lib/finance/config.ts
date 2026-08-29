@@ -19,7 +19,6 @@ export const monthlyFeePaise = {
   },
   Advanced: {
     "weekday-5-day": 1_250_000,
-    "weekend-standard": 700_000,
   },
   Adult: {
     "weekday-3-day": 400_000,
@@ -27,6 +26,18 @@ export const monthlyFeePaise = {
     "weekday-5-day": 500_000,
     "weekend-standard": 350_000,
   },
+  /*
+   * Deliberately empty. Elite terms are individual -- sponsored, funded or
+   * negotiated -- so there is no rate to default to and none to publish. The
+   * coach enters the agreed fee for each player during onboarding, which is how
+   * every level already works: the onboarding form never reads this table.
+   *
+   * `defaultMonthlyFeePaise` therefore returns null for Elite. That is a
+   * supported answer, not a failure -- see `enrollmentDefaults` in
+   * lib/finance/repository.ts, which carries the enrolment facts whether or not
+   * a suggestion exists.
+   */
+  Elite: {},
 } as const satisfies Record<TrainingProgramme, Partial<Record<AcademyPlan, number>>>
 
 export function defaultMonthlyFeePaise({

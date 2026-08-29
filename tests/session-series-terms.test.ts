@@ -13,6 +13,7 @@ import { INITIAL_COACH_ACCOUNT_ID, seedDatabase } from "@/lib/db/seed"
 import * as schema from "@/lib/db/schema"
 import * as sessionService from "@/lib/sessions/service"
 import type { CreateSessionSeriesInput } from "@/lib/sessions/types"
+import { NOT_A_BATCH, NOT_A_PROGRAMME } from "./support/invalid-domain-values"
 
 const COACH_ID = INITIAL_COACH_ACCOUNT_ID
 const CREATED_AT = new Date("2026-07-01T06:00:00+05:30")
@@ -213,17 +214,26 @@ describe("recurring schedule terms", () => {
     expect(database.select().from(schema.sessionAssignments).all()).toHaveLength(0)
   })
 
+  it("refuses a weekend schedule for a level that trains weekdays only", () => {
+    // Without this the series is creatable and then rejects every player who
+    // tries to join, blaming their Academy Plan rather than the schedule.
+    for (const programme of ["Advanced", "Elite"] as const) {
+      expect(() => createSchedule({ batch: "Weekend", programme }))
+        .toThrowError(expect.objectContaining({ code: "INVALID_INPUT", field: "batch" }))
+    }
+  })
+
   it("rejects crafted programme and batch values without partial rows", () => {
     const before = scheduleCounts()
 
     expect(() => createSchedule({
-      programme: "Elite" as CreateSessionSeriesInput["programme"],
+      programme: NOT_A_PROGRAMME as CreateSessionSeriesInput["programme"],
     })).toThrowError(expect.objectContaining({
       code: "INVALID_INPUT",
       field: "programme",
     }))
     expect(() => createSchedule({
-      batch: "Holiday" as CreateSessionSeriesInput["batch"],
+      batch: NOT_A_BATCH as CreateSessionSeriesInput["batch"],
       weekdays: [0],
     })).toThrowError(expect.objectContaining({
       code: "INVALID_INPUT",

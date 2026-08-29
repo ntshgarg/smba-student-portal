@@ -24,6 +24,7 @@ import {
   sessionOccurrences,
   sessionSeries,
 } from "@/lib/db/schema"
+import { academyPlanIsValid } from "@/lib/training/academy-plans"
 import {
   calculateChargeLedger,
   combineFinanceStatuses,
@@ -962,20 +963,31 @@ export function loadPlayerFeeRecord(
   )) ?? [...charges].reverse().find((charge) => charge.type === "registration") ?? null
   const registrationResolutionRequired = activation !== null
     && !activeCharges.some((charge) => charge.type === "registration")
-  const suggestedAmount = player.academyPlan && player.level && player.batch
-    ? defaultMonthlyFeePaise({
-      academyPlan: player.academyPlan,
-      level: player.level,
-      batch: player.batch,
-    })
-    : null
+  /*
+   * The classification stands on its own. It used to require a fee as well, so a
+   * level with no standard price produced a null here, `feePlanSetupReady` went
+   * false, and the fee-plan editor returned null -- the player was billable and
+   * un-editable, with nothing on screen to say why. Elite has no standard fee by
+   * design, which would have made that reachable for every Elite player.
+   *
+   * `academyPlanIsValid` replaces the fee in the guard rather than simply being
+   * dropped: the old `defaultMonthlyFeePaise` call also refused a batch and plan
+   * that disagreed (config.ts checks `Weekend` against `weekend-standard`), so
+   * removing it would have quietly retired that check too. This one is stricter,
+   * and it is what the server already enforces in `validateAgreementInput`.
+   */
   const enrollmentDefaults = !player.archivedAt
-    && player.academyPlan && player.level && player.batch && suggestedAmount
+    && player.academyPlan && player.level && player.batch
+    && academyPlanIsValid(player.academyPlan, player.level, player.batch)
     ? {
       academyPlan: player.academyPlan,
       level: player.level,
       batch: player.batch,
-      suggestedMonthlyFeePaise: suggestedAmount,
+      suggestedMonthlyFeePaise: defaultMonthlyFeePaise({
+        academyPlan: player.academyPlan,
+        level: player.level,
+        batch: player.batch,
+      }),
     }
     : null
   const feePlanSetupReady = Boolean(enrollmentDefaults && hasCurrentOrFutureMatchingAssignment(

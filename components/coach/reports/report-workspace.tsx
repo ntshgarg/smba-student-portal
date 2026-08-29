@@ -67,7 +67,7 @@ const stateLabels: Record<ReportState, string> = {
   revision: "Revision draft",
   published: "Published",
 }
-const reportCategories: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
+const reportCategories: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 
 function reportCategory(player: OperationalPlayerMemberRecord) {
   return player.training.level
