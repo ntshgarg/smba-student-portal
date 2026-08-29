@@ -15,7 +15,7 @@ import { describeSaveFailure } from "@/lib/client/network-failure"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { formatSessionLabel } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
-import { academyPlanLabel } from "@/lib/training/academy-plans"
+import { academyBatchesFor, academyPlanLabel } from "@/lib/training/academy-plans"
 
 const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 const weekdays = [
@@ -231,7 +231,19 @@ export function SessionScheduleCreate({
         <div className="coach-series-form-grid">
           <label>
             <span>Programme</span>
-            <select name="programme" disabled={isCreating || Boolean(guidedProgramme)} value={seriesForm.programme} onChange={(event) => setSeriesForm({ ...seriesForm, programme: event.target.value as TrainingProgramme })}>
+            <select name="programme" disabled={isCreating || Boolean(guidedProgramme)} value={seriesForm.programme} onChange={(event) => {
+              const programme = event.target.value as TrainingProgramme
+              const allowed = academyBatchesFor(programme)
+              const batch = allowed.includes(seriesForm.batch) ? seriesForm.batch : allowed[0]
+              setSeriesForm({
+                ...seriesForm,
+                batch,
+                programme,
+                selectedDays: batch === seriesForm.batch
+                  ? seriesForm.selectedDays
+                  : defaultSelectedDays(batch),
+              })
+            }}>
               {programmes.map((programme) => <option key={programme}>{programme}</option>)}
             </select>
           </label>
@@ -241,8 +253,10 @@ export function SessionScheduleCreate({
               const batch = event.target.value as TrainingBatch
               setSeriesForm({ ...seriesForm, batch, selectedDays: defaultSelectedDays(batch) })
             }}>
-              <option>Weekday</option>
-              <option>Weekend</option>
+              {/* Advanced and Elite train weekdays only, so Weekend is not offered
+                  for them -- validateSeriesInput refuses the pair regardless. */}
+              {academyBatchesFor(seriesForm.programme)
+                .map((option) => <option key={option}>{option}</option>)}
             </select>
           </label>
           <label>
