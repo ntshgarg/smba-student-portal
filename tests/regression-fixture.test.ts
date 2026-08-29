@@ -215,9 +215,9 @@ describe("regression fixture repeatability", () => {
         pending: 3,
         players: 100,
         publications: 31,
-        recurrenceRules: 48,
+        recurrenceRules: 56,
         reports: 50,
-        series: 12,
+        series: 13,
         staffAttendance: 41,
       },
     })

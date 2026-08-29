@@ -82,6 +82,7 @@ import {
 } from "@/lib/actions/operational-result"
 import type { StaffAttendanceChange } from "@/lib/coach/staff-attendance"
 import type { SessionAttendanceChange } from "@/lib/sessions/types"
+import { NOT_A_PROGRAMME } from "./support/invalid-domain-values"
 
 const snapshot = {
   sessionAssignments: [],
@@ -151,7 +152,7 @@ describe("production-safe operational action results", () => {
     })
 
     await expect(createSessionSeriesAction({
-      programme: "Elite",
+      programme: NOT_A_PROGRAMME,
       batch: "Weekday",
       venue: "SMBA Court",
       startsOn: "2026-08-17",

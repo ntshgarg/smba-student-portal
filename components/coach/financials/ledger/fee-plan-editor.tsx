@@ -10,7 +10,7 @@ import { replaceFeeAgreementAction } from "@/app/coach/financials/actions"
 import { InlineNotice } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { getAcademyDateKey, parseRupeesToPaise } from "@/lib/format"
+import { formatInr, getAcademyDateKey, parseRupeesToPaise } from "@/lib/format"
 
 import {
   resultFeedback,
@@ -85,7 +85,27 @@ export function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView })
     }
   }
 
-  if (!agreement || !defaults) return null
+  // No agreement means onboarding has not issued one yet; `player-ledger.tsx`
+  // renders the setup panel in that branch, so returning null here is delegation.
+  if (!agreement) return null
+
+  /*
+   * A classification that no longer forms a valid Level/Batch/Plan combination --
+   * a player recorded as Advanced on the weekend before that pairing was retired,
+   * say. Saying so beats the blank space this used to render.
+   */
+  if (!defaults) {
+    return (
+      <section className={styles.setupState}>
+        <CircleAlert aria-hidden="true" />
+        <div>
+          <strong>This player&rsquo;s training classification needs review</strong>
+          <p>Their Level, Batch and Academy Plan no longer form a combination the academy offers.</p>
+          <Link href={`/coach/members?player=${ledger.playerId}`}>Open the Member Directory</Link>
+        </div>
+      </section>
+    )
+  }
 
   if (!ledger.feePlanSetupReady) {
     return (
@@ -109,6 +129,17 @@ export function FeePlanEditor({ ledger }: { ledger: PlayerFinancialLedgerView })
           <div><dt>Level</dt><dd>{defaults.level}</dd></div>
           <div><dt>Batch</dt><dd>{defaults.batch}</dd></div>
           <div><dt>Academy Plan</dt><dd>{defaults.academyPlanLabel}</dd></div>
+          {/*
+            * Shown in both states on purpose. Without it, a level that has no
+            * standard fee is indistinguishable from one somebody forgot to price,
+            * and the coach is typing the number that settles it.
+            */}
+          <div>
+            <dt>Standard fee</dt>
+            <dd>{defaults.suggestedMonthlyFeePaise === null
+              ? "None — agreed per player"
+              : formatInr(defaults.suggestedMonthlyFeePaise)}</dd>
+          </div>
         </dl>
         <form autoComplete="off" onSubmit={(event) => void submit(event)}>
           <div className={styles.fieldRow}>

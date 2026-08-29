@@ -169,13 +169,14 @@ const schedules: ScheduleDefinition[] = [
   { level: "Intermediate", batch: "Weekday", startTime: "07:00", weekdays: [1, 2, 3, 4, 5] },
   { level: "Advanced", batch: "Weekday", startTime: "08:00", weekdays: [1, 2, 3, 4, 5] },
   { level: "Adult", batch: "Weekday", startTime: "09:00", weekdays: [1, 2, 3, 4, 5] },
+  { level: "Elite", batch: "Weekday", startTime: "10:00", weekdays: [1, 2, 3, 4, 5] },
   { level: "Beginner", batch: "Weekday", startTime: "16:00", weekdays: [1, 2, 3, 4, 5] },
   { level: "Intermediate", batch: "Weekday", startTime: "17:00", weekdays: [1, 2, 3, 4, 5] },
   { level: "Advanced", batch: "Weekday", startTime: "18:00", weekdays: [1, 2, 3, 4, 5] },
   { level: "Adult", batch: "Weekday", startTime: "19:00", weekdays: [1, 2, 3, 4, 5] },
+  { level: "Elite", batch: "Weekday", startTime: "20:00", weekdays: [1, 2, 3, 4, 5] },
   { level: "Beginner", batch: "Weekend", startTime: "07:00", weekdays: [6, 0] },
   { level: "Intermediate", batch: "Weekend", startTime: "08:00", weekdays: [6, 0] },
-  { level: "Advanced", batch: "Weekend", startTime: "09:00", weekdays: [6, 0] },
   { level: "Adult", batch: "Weekend", startTime: "10:00", weekdays: [6, 0] },
 ]
 
@@ -832,13 +833,20 @@ function seriesLookup(db: Database.Database) {
 
 function slotTime(player: PlayerDefinition) {
   if (player.batch === "Weekend") {
-    return { Beginner: "07:00", Intermediate: "08:00", Advanced: "09:00", Adult: "10:00" }[player.level]
+    // Advanced and Elite are weekday-only, so no weekend slot exists for them.
+    const weekend: Partial<Record<TrainingLevel, string>> = {
+      Beginner: "07:00", Intermediate: "08:00", Adult: "10:00",
+    }
+    const time = weekend[player.level]
+    if (!time) throw new Error(`${player.level} has no weekend session; it is a weekday-only level.`)
+    return time
   }
   const values: Record<TrainingLevel, [string, string]> = {
     Beginner: ["06:00", "16:00"],
     Intermediate: ["07:00", "17:00"],
     Advanced: ["08:00", "18:00"],
     Adult: ["09:00", "19:00"],
+    Elite: ["10:00", "20:00"],
   }
   return values[player.level][player.slotVariant]
 }
@@ -1334,7 +1342,13 @@ async function seedFinancials(target: string) {
       batch: player.batch,
       level: player.level,
     })
-    if (!agreedMonthlyFeePaise) {
+    /*
+     * Elite has no standard fee -- the coach agrees one per player -- so the
+     * fixture stands in for that conversation rather than treating the absence as
+     * a fault. Every other level must still resolve, or the matrix has a hole.
+     */
+    const feePaise = agreedMonthlyFeePaise ?? (player.level === "Elite" ? 1_500_000 : null)
+    if (!feePaise) {
       throw new Error(`Missing canonical fee for ${player.level} ${player.academyPlan}.`)
     }
     if (player.finalState === "active") {
@@ -1343,7 +1357,7 @@ async function seedFinancials(target: string) {
         academyPlan: player.academyPlan,
         level: player.level,
         batch: player.batch,
-        agreedMonthlyFeePaise,
+        agreedMonthlyFeePaise: feePaise,
         effectiveFrom: SCHEDULE_START,
         monthlyDueDay: 5,
         registrationStatus: "pending",
@@ -1372,7 +1386,7 @@ async function seedFinancials(target: string) {
         academyPlan: player.academyPlan,
         level: player.level,
         batch: player.batch,
-        agreedMonthlyFeePaise,
+        agreedMonthlyFeePaise: feePaise,
         currency: "INR",
         monthlyDueDay: 5,
         effectiveFrom: SCHEDULE_START,
@@ -2144,7 +2158,7 @@ function verify(target: string, expectedStage?: Stage) {
             : summary.pending === registrationStageCount ? "registrations"
               : "default"
     )
-    if (tableCount(db, "batches") !== 8) problems.push("Eight reference batches must remain available.")
+    if (tableCount(db, "batches") !== 9) problems.push("Nine reference batches must remain available.")
     const coach = db.prepare(`select count(*) as count from auth_methods where identifier = ?`).get(COACH_ACADEMY_ID) as { count: number }
     if (coach.count !== 1) problems.push(`The seed coach must remain ${COACH_ACADEMY_ID}.`)
     if (stage === "default" && (summary.accounts !== 1 || summary.players || summary.series)) {
@@ -2193,8 +2207,8 @@ function verify(target: string, expectedStage?: Stage) {
       }
     }
     if (["schedules", "loaded"].includes(stage)) {
-      if (summary.series !== schedules.length || summary.recurrenceRules !== 48) {
-        problems.push("Schedule stage must contain eight weekday and four weekend series.")
+      if (summary.series !== schedules.length || summary.recurrenceRules !== 56) {
+        problems.push("Schedule stage must contain ten weekday and three weekend series.")
       }
       const dateCounts = db.prepare(`
         select occurrence_date as dateKey, count(*) as count
@@ -2217,7 +2231,7 @@ function verify(target: string, expectedStage?: Stage) {
         expectedDateGroups += 1
         const dateKey = cursor.toISOString().slice(0, 10)
         const weekday = cursor.getUTCDay()
-        const baseExpected = weekday === 0 || weekday === 6 ? 4 : 8
+        const baseExpected = weekday === 0 || weekday === 6 ? 3 : 10
         const delta = lifecycleDeltas.get(dateKey)
         const expected = baseExpected - (delta?.cancelled ?? 0) + (delta?.replacements ?? 0)
         const actual = actualDateCounts.get(dateKey) ?? 0

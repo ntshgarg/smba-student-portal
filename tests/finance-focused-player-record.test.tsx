@@ -170,3 +170,91 @@ describe("focused player fee record", () => {
     expect(html).not.toContain("Create fee plan")
   })
 })
+
+/*
+ * Elite has no standard monthly fee -- terms are agreed per player -- so
+ * `defaultMonthlyFeePaise` returns null for it. `enrollmentDefaults` used to
+ * require that amount, so a fee-less level produced a null classification,
+ * `feePlanSetupReady` went false, and the fee-plan editor returned null: the
+ * player was billable and un-editable, with nothing on screen to say why.
+ */
+describe("a level with no standard fee", () => {
+  const eliteLedger: PlayerFinancialLedgerView = {
+    ...archivedLedger,
+    archived: false,
+    enrollmentDefaults: {
+      academyPlan: "weekday-5-day",
+      academyPlanLabel: "5-day plan",
+      batch: "Weekday",
+      level: "Elite",
+      suggestedMonthlyFeePaise: null,
+    },
+    feePlan: {
+      academyPlan: "weekday-5-day",
+      agreedMonthlyFeePaise: 1_800_000,
+      batch: "Weekday",
+      effectiveFrom: "2026-08-01",
+      id: "agreement-elite",
+      label: "5-day plan",
+      level: "Elite",
+      recordRevision: 0,
+      status: "active",
+    },
+    feePlanSetupReady: true,
+    management: { concessions: [], receipts: [], refunds: [] },
+    status: "paid",
+  }
+
+  it("still offers the fee-plan editor", () => {
+    const html = renderToStaticMarkup(
+      <PlayerLedger focused ledger={eliteLedger} period="2026-08" />,
+    )
+
+    expect(html).toContain("Change fee plan")
+    expect(html).not.toContain("classification needs review")
+  })
+
+  it("says the fee is agreed per player rather than showing a price", () => {
+    const html = renderToStaticMarkup(
+      <PlayerLedger focused ledger={eliteLedger} period="2026-08" />,
+    )
+
+    expect(html).toContain("Standard fee")
+    expect(html).toContain("agreed per player")
+  })
+
+  it("shows the standard fee for a level that has one", () => {
+    const html = renderToStaticMarkup(
+      <PlayerLedger
+        focused
+        ledger={{
+          ...eliteLedger,
+          enrollmentDefaults: {
+            academyPlan: "weekday-3-day",
+            academyPlanLabel: "3-day plan",
+            batch: "Weekday",
+            level: "Beginner",
+            suggestedMonthlyFeePaise: 350_000,
+          },
+        }}
+        period="2026-08"
+      />,
+    )
+
+    expect(html).toContain("Standard fee")
+    expect(html).not.toContain("agreed per player")
+  })
+
+  it("names a classification that no longer forms a valid combination", () => {
+    const html = renderToStaticMarkup(
+      <PlayerLedger
+        focused
+        ledger={{ ...eliteLedger, enrollmentDefaults: null }}
+        period="2026-08"
+      />,
+    )
+
+    expect(html).toContain("classification needs review")
+    expect(html).not.toContain("Change fee plan")
+  })
+})

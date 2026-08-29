@@ -12,7 +12,7 @@ export const FIXTURE_SCHEDULE_START = "2026-07-01"
 export const FIXTURE_SCHEDULE_END = "2026-09-30"
 
 export type FixtureProfileName = "demo" | "edge" | "stress"
-export type TrainingLevel = "Beginner" | "Intermediate" | "Advanced" | "Adult"
+export type TrainingLevel = "Beginner" | "Intermediate" | "Advanced" | "Adult" | "Elite"
 export type TrainingBatch = "Weekday" | "Weekend"
 export type AcademyPlan =
   | "weekday-3-day"
@@ -113,7 +113,8 @@ function generatedNames(count: number) {
 }
 
 function planFor(level: TrainingLevel, ordinal: number): AcademyPlan {
-  if (level === "Advanced") return "weekday-5-day"
+  // Competitive levels train five weekdays; mirrors academyPlansFor.
+  if (level === "Advanced" || level === "Elite") return "weekday-5-day"
   return (["weekday-3-day", "weekday-4-day", "weekday-5-day"] as const)[ordinal % 3]
 }
 
@@ -148,13 +149,28 @@ export function createPlayerDefinitions(profile: FixtureProfile): PlayerDefiniti
       { level: "Intermediate", batch: "Weekday", count: 18 },
       { level: "Intermediate", batch: "Weekend", count: 8 },
       { level: "Advanced", batch: "Weekday", count: 12 },
-      { level: "Advanced", batch: "Weekend", count: 6 },
+      // Was Advanced/Weekend, which the academy no longer offers. Six Elite
+      // players keep the total at 100 and the cohort count at eight, and give the
+      // fee-less level real coverage in the fixtures.
+      { level: "Elite", batch: "Weekday", count: 6 },
       { level: "Adult", batch: "Weekday", count: 18 },
       { level: "Adult", batch: "Weekend", count: 8 },
     ]
-    : (["Beginner", "Intermediate", "Advanced", "Adult"] as TrainingLevel[])
-      .flatMap((level) => (["Weekday", "Weekend"] as TrainingBatch[])
-        .map((batch) => ({ batch, count: profile.approvedPlayerCount / 8, level })))
+    /*
+     * Written out rather than crossed, because Advanced and Elite are weekday
+     * only. Still eight cohorts, so the per-cohort divisor is unchanged.
+     */
+    : ([
+      { batch: "Weekday", level: "Beginner" },
+      { batch: "Weekend", level: "Beginner" },
+      { batch: "Weekday", level: "Intermediate" },
+      { batch: "Weekend", level: "Intermediate" },
+      { batch: "Weekday", level: "Advanced" },
+      { batch: "Weekday", level: "Elite" },
+      { batch: "Weekday", level: "Adult" },
+      { batch: "Weekend", level: "Adult" },
+    ] as Array<{ batch: TrainingBatch; level: TrainingLevel }>)
+      .map(({ batch, level }) => ({ batch, count: profile.approvedPlayerCount / 8, level }))
 
   const players: PlayerDefinition[] = []
   let index = 0

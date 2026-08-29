@@ -12,9 +12,10 @@ import type {
   TrainingSessionSeries,
 } from "@/lib/sessions/types"
 import type { ReferenceInstant } from "@/lib/sessions/occurrence-time"
+import { academyBatchesFor } from "@/lib/training/academy-plans"
 
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/u
-const TRAINING_PROGRAMMES = new Set(["Beginner", "Intermediate", "Advanced", "Adult"])
+const TRAINING_PROGRAMMES = new Set(["Beginner", "Intermediate", "Advanced", "Adult", "Elite"])
 const TRAINING_BATCHES = new Set(["Weekday", "Weekend"])
 const WEEKDAY_DAYS = new Set([1, 2, 3, 4, 5])
 const WEEKEND_DAYS = new Set([0, 6])
@@ -119,6 +120,19 @@ export function validateSeriesInput(input: CreateSessionSeriesInput) {
     operationalActionError(
       "INVALID_INPUT",
       "Choose a valid Weekday or Weekend batch.",
+      "batch",
+    )
+  }
+  /*
+   * Programme and batch were checked separately, so a weekend schedule for a
+   * weekday-only level could be created and would then reject every player who
+   * tried to join it -- with a message about the player's Academy Plan, pointing
+   * away from the schedule that was actually wrong.
+   */
+  if (!academyBatchesFor(input.programme).includes(input.batch)) {
+    operationalActionError(
+      "INVALID_INPUT",
+      `${input.programme} trains on weekdays only.`,
       "batch",
     )
   }

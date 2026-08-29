@@ -4,7 +4,7 @@ import type {
   TrainingSessionSeries,
 } from "@/lib/sessions/types"
 
-const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
+const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 
 export function assignmentKey(playerId: string, seriesId: string) {
   return `${playerId}:${seriesId}`

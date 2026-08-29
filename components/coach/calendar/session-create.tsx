@@ -17,7 +17,7 @@ import { formatSessionLabel } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
 
-const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult"]
+const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 const weekdays = [
   { value: 1, label: "Monday" },
   { value: 2, label: "Tuesday" },

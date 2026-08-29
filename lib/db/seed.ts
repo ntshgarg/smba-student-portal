@@ -22,6 +22,8 @@ const batchSeed = [
   { id: "weekend-intermediate", schedule: "Weekend", programme: "Intermediate" },
   { id: "weekend-advanced", schedule: "Weekend", programme: "Advanced" },
   { id: "weekend-adult", schedule: "Weekend", programme: "Adult" },
+  // Weekday only: Elite trains five weekdays, so there is no weekend cohort.
+  { id: "weekday-elite", schedule: "Weekday", programme: "Elite" },
 ] as const
 
 export function seedReferenceData(db: SmbaDatabase) {

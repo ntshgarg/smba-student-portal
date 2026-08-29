@@ -10,6 +10,7 @@ import {
   playerAttendanceSearch,
   shiftPlayerAttendanceMonth,
 } from "@/components/dashboard/player-attendance-query"
+import { NOT_A_BATCH, NOT_A_PROGRAMME } from "./support/invalid-domain-values"
 
 describe("Member Directory URL state", () => {
   it("parses supported criteria and rejects unsupported values", () => {
@@ -24,7 +25,8 @@ describe("Member Directory URL state", () => {
     })
 
     expect(parseMemberDirectoryCriteria(new URLSearchParams(
-      "query=%20%20&level=Elite&batch=Everyday&status=archived",
+      `query=%20%20&level=${encodeURIComponent(NOT_A_PROGRAMME)}`
+      + `&batch=${encodeURIComponent(NOT_A_BATCH)}&status=archived`,
     ))).toEqual({
       query: "",
       level: "All levels",

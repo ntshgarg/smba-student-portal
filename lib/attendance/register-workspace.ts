@@ -11,6 +11,7 @@ export const attendanceRegisterProgrammes: readonly TrainingProgramme[] = [
   "Intermediate",
   "Advanced",
   "Adult",
+  "Elite",
 ]
 export const attendanceRegisterBatches: readonly TrainingBatch[] = ["Weekday", "Weekend"]
 
