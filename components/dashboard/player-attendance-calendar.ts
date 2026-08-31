@@ -59,6 +59,13 @@ export type PlayerAttendanceCalendarDay = {
   isToday: boolean
   sessions: PlayerAttendanceCalendarSession[]
   completionCount: number
+  /*
+   * The name of the closure, when the academy was shut that day. A holiday
+   * cancels every session, so `sessions` is empty and the day would otherwise
+   * be indistinguishable from a rest day -- which is what a parent needs told
+   * apart from "my child was dropped from the batch".
+   */
+  holidayLabel: string | null
 }
 
 export type PlayerAttendanceCalendarSchedule = {
@@ -150,6 +157,9 @@ export function buildPlayerAttendanceCalendar(
       adjustment,
     ]),
   )
+  const holidayByDate = new Map((record.holidays ?? []).map(
+    (holiday) => [holiday.dateKey, holiday.label],
+  ))
   const completionsByDate = record.adjustments.reduce<Map<string, number>>((map, adjustment) => {
     map.set(adjustment.completedOn, (map.get(adjustment.completedOn) ?? 0) + 1)
     return map
@@ -225,6 +235,7 @@ export function buildPlayerAttendanceCalendar(
     const keyYear = Number(key.slice(0, 4))
     return {
       key,
+      holidayLabel: holidayByDate.get(key) ?? null,
       label: formatDateKey(key, { year: "numeric" }),
       dayNumber: String(Number(key.slice(8, 10))),
       monthShort: formatDateKey(key, {

@@ -138,8 +138,8 @@ describe("regression fixture repeatability", () => {
       stage: "default",
       schema: {
         current: true,
-        latestMigrationTag: "0030_session_occurrence_series_date_lookup",
-        migrationCount: 31,
+        latestMigrationTag: "0031_academy_holidays",
+        migrationCount: 32,
         missingColumns: [],
         missingTables: [],
       },
@@ -210,6 +210,7 @@ describe("regression fixture repeatability", () => {
       profile: "stress",
       stage: "loaded",
       summary: {
+        academyHolidays: 1,
         attendanceAdjustments: 2,
         coachProfiles: 3,
         pending: 3,
@@ -313,6 +314,28 @@ describe("regression fixture repeatability", () => {
             where replacement.replacement_for_occurrence_id = cancelled.id
           )
       `)).toBeGreaterThanOrEqual(1)
+
+      // The closure the accessibility gate renders, and the reason the two
+      // counts above are read with `holiday_id is null`: a closed day cancels
+      // every session standing on it, which is a different fact from the single
+      // hand-cancelled example and must not be summed with it.
+      expect(db.prepare(`
+        select h.date_key as dateKey, h.label,
+          (
+            select count(*) from session_occurrences o where o.holiday_id = h.id
+          ) as suspended
+        from academy_holidays h
+      `).all()).toEqual([
+        { dateKey: "2026-08-15", label: "Independence Day", suspended: 3 },
+      ])
+      expect(scalar(db, `
+        select count(*) as count from session_occurrences
+        where occurrence_date = '2026-08-15' and status = 'scheduled'
+      `)).toBe(0)
+      expect(scalar(db, `
+        select count(*) as count from session_occurrences
+        where status = 'cancelled' and holiday_id is null
+      `)).toBe(2)
 
       const replacement = db.prepare(`
         with recursive lineage(replacement_id, current_id, root_date, parent_id, depth) as (
@@ -480,6 +503,7 @@ describe("regression fixture repeatability", () => {
         profile,
         stage: "loaded",
         summary: {
+          academyHolidays: 1,
           attendanceAdjustments: 2,
           coachProfiles,
           pending,

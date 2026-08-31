@@ -156,6 +156,11 @@
       "tag": "0030_session_occurrence_series_date_lookup",
       "when": 1787648522016,
       "sha256": "1574ac20515a7c4a8835a714c7884329bcacf8e1623e0c7211cb806cc27a3984"
+    },
+    {
+      "tag": "0031_academy_holidays",
+      "when": 1788078607796,
+      "sha256": "923c787c07a73ddec6e319129929eb7318407d4992218c407b074cd1a691dd68"
     }
   ]
 }

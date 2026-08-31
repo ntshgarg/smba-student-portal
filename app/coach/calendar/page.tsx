@@ -29,6 +29,7 @@ export default async function CoachCalendarPage({
   return (
     <CoachPortalProvider
       key={selectedMonth}
+      initialAcademyHolidays={snapshot.academyHolidays}
       initialAttendanceAdjustments={[]}
       initialAttendanceRecords={{}}
       initialMembers={snapshot.members}

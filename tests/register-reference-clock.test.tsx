@@ -91,8 +91,10 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
   }),
   useMemberPortal: () => ({ players: [] }),
   useSessionPortal: () => ({
+    academyHolidays: [],
     cancelSessionOccurrence: vi.fn(),
     replaceSessionOccurrence: vi.fn(),
+    retractAcademyHoliday: vi.fn(),
     sessionAssignments: [],
     sessionOccurrences: [OCCURRENCE],
     sessionSeries: [SERIES],

@@ -12,6 +12,7 @@ function recordFixture(): PlayerAttendanceRecord {
     referenceInstant: "2026-08-03T14:00:00.000Z",
     joinedOn: "2026-01-01",
     years: [2025, 2026, 2027],
+    holidays: [],
     sessions: [
       {
         id: "series-present",
@@ -174,5 +175,30 @@ describe("Player attendance month calendar", () => {
     expect(augustFifth?.sessions[0].state).toBe("future")
     expect(julyThirtyFirst?.sessions[0].state).toBe("rescheduled")
     expect(augustFirst?.completionCount).toBe(1)
+  })
+})
+
+describe("a day the academy was closed", () => {
+  /*
+   * Without a holiday the player's calendar cannot distinguish a closure from a
+   * rest day: a closure cancels every occurrence, and cancelled rows are filtered
+   * out before the calendar ever sees them, so the day arrives empty either way.
+   */
+  it("names the closure on the day, so it is not read as an ordinary rest day", () => {
+    const record = recordFixture()
+    record.holidays = [{ dateKey: "2026-08-05", label: "Onam" }]
+    const calendar = buildPlayerAttendanceCalendar(record, 2026, 8)
+
+    const closed = calendar.days.find((day) => day.key === "2026-08-05")
+    const ordinary = calendar.days.find((day) => day.key === "2026-08-04")
+
+    expect(closed?.holidayLabel).toBe("Onam")
+    expect(ordinary?.holidayLabel).toBeNull()
+  })
+
+  it("leaves every other day unlabelled", () => {
+    const calendar = buildPlayerAttendanceCalendar(recordFixture(), 2026, 8)
+
+    expect(calendar.days.every((day) => day.holidayLabel === null)).toBe(true)
   })
 })

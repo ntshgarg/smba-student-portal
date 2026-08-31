@@ -53,7 +53,7 @@ const OWNER_SCOPED = new Map([
  * survive, because those are what they sign in with to do it.
  */
 const PURGED = new Set([
-  "attendance_adjustments", "attendance_records", "auth_access_codes",
+  "academy_holidays", "attendance_adjustments", "attendance_records", "auth_access_codes",
   "auth_activation_claims", "auth_authenticator_reset_requests", "auth_email_challenges",
   "auth_login_attempts", "auth_rate_limits", "auth_runtime_sessions", "auth_security_events",
   "auth_sessions", "auth_setup_claims", "auth_two_factors", "auth_verifications", "batch_memberships",

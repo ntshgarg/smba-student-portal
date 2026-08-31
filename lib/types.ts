@@ -27,6 +27,13 @@ export type PlayerAttendanceRecord = {
   referenceInstant: string
   joinedOn: string
   years: number[]
+  /*
+   * Days the academy was closed. Carried alongside the occurrences rather than
+   * derived from them, because a closure removes every scheduled row for that
+   * date -- so by the time the calendar sees it there is nothing left to infer
+   * a holiday from, and the day would render exactly like a Sunday.
+   */
+  holidays: Array<{ dateKey: string; label: string }>
   sessions: Array<{
     id: string
     programme: string

@@ -38,6 +38,12 @@ import {
   findScheduledOccurrence,
 } from "@/lib/sessions/database"
 import {
+  markAcademyHolidays,
+  previewAcademyHolidays,
+  retractAcademyHoliday,
+  type HolidayImpact,
+} from "@/lib/sessions/holidays"
+import {
   assignSessionRecords,
   cancelSessionOccurrence,
   createSessionSeriesRecords,
@@ -320,6 +326,67 @@ export async function cancelSessionOccurrenceAction(occurrenceId: string) {
     revalidateAcademyData()
     if (!sourceOccurrence) throw new Error("The cancelled session could not be reloaded.")
     return getCoachCalendarMonthSessionSnapshot(sourceOccurrence.occurrenceDate.slice(0, 7))
+  })
+}
+
+/*
+ * Closing a day is the one destructive session action that is allowed to reach
+ * backwards, so it is split into a read and a write. The read reports what the
+ * closure would touch -- in particular attendance already recorded, which no
+ * other cancellation path can ever encounter -- and the coach confirms against
+ * it. Preview and apply deliberately do not share a token: a stale preview
+ * over-reports at worst, and refusing the write on a changed preview would
+ * block a holiday for the sake of a count.
+ */
+export async function previewAcademyHolidaysAction(
+  dateKeys: string[],
+): Promise<OperationalActionResult<HolidayImpact>> {
+  await requireCoach()
+  return runOperationalAction(() => previewAcademyHolidays({
+    database: initializeDatabase(),
+    dateKeys,
+    now: new Date(),
+  }))
+}
+
+export async function markAcademyHolidaysAction(input: {
+  dateKeys: string[]
+  label: string
+}) {
+  const coach = await requireCoach()
+  return runOperationalAction(() => {
+    const result = markAcademyHolidays({
+      coachId: coach.subjectId,
+      database: initializeDatabase(),
+      dateKeys: input.dateKeys,
+      label: input.label,
+      now: new Date(),
+    })
+    revalidateAcademyData()
+    // The earliest closed date decides which month to reload, so a range that
+    // starts in the previous month does not return a snapshot missing its own
+    // first day.
+    const anchorDate = result.closedDates[0] ?? input.dateKeys.slice().sort()[0]
+    return {
+      ...getCoachCalendarMonthSessionSnapshot(anchorDate.slice(0, 7)),
+      ...result,
+    }
+  })
+}
+
+export async function retractAcademyHolidayAction(dateKey: string) {
+  const coach = await requireCoach()
+  return runOperationalAction(() => {
+    const result = retractAcademyHoliday({
+      coachId: coach.subjectId,
+      database: initializeDatabase(),
+      dateKey,
+    })
+    revalidateAcademyData()
+    return {
+      ...getCoachCalendarMonthSessionSnapshot(dateKey.slice(0, 7)),
+      ...result,
+    }
   })
 }
 
