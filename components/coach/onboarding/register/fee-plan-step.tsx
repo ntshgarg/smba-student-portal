@@ -97,6 +97,13 @@ export function FeePlanStep({
   }
 
   const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
+  /*
+   * Nothing can be derived from an empty fee, so "Review fee timeline" is held
+   * back rather than offered and then refused. A malformed amount is NOT held
+   * back -- `parseRupeesToPaise` rejecting "35oo" is worth saying out loud, and a
+   * button that silently will not press says nothing.
+   */
+  const awaitingFee = !preview && monthlyFee.trim() === ""
 
   if (!financeActive) {
     return (
@@ -133,6 +140,7 @@ export function FeePlanStep({
       <div className={styles.recoveryPanel}>
         <strong>Fee completion opens on {formatDateKey(item.trainingStartOn)}.</strong>
         <p>The future training date is saved. Assessment and session setup can be prepared now, but fees and the permanent date lock wait until training begins.</p>
+        <p>Resetting the session assignment reopens the assessment, which is the only step where the training start date can be changed.</p>
         <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
           {busy
@@ -367,11 +375,22 @@ export function FeePlanStep({
         </section>
       ) : null}
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <p className={styles.feeNote}>
+        Changing the training start date means resetting the session assignment. That reopens
+        the assessment, which is the only step where the date can be edited — the register
+        shows one step per player, so there is no other way back to it. Resetting stops being
+        possible once academy records exist against the assignment.
+      </p>
       <div className={styles.formActions}>
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
           {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
         </button>
-        <button className={styles.primaryButton} type="submit" disabled={busy}>
+        <button
+          className={styles.primaryButton}
+          type="submit"
+          aria-disabled={awaitingFee || undefined}
+          disabled={busy}
+        >
           {busy
             ? preview ? "Completing…" : "Building timeline…"
             : retryAction === "submit"

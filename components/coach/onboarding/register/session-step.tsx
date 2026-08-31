@@ -9,7 +9,7 @@ import { InlineNotice } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
-import { formatSessionTimeRange } from "@/lib/format"
+import { formatDateKey, formatSessionTimeRange } from "@/lib/format"
 import type { TrainingSessionSeries } from "@/lib/sessions/types"
 import {
   academyPlanAssignmentLimit,
@@ -32,6 +32,35 @@ function suggestedEffectiveDate(
   series: TrainingSessionSeries,
 ) {
   return firstDayForSeries(item, series)
+}
+
+/**
+ * The assignment window is [max(training start, series start) .. series end], and the
+ * server enforces it (lib/sessions/service.ts:328). The picker deliberately does NOT
+ * carry min/max: clamping it left a coach unable to move the calendar with nothing on
+ * screen saying why, and the browser's own "Value must be ... or later" fires only on
+ * submit and never names where the bound comes from. Let any date be picked, then say
+ * which bound it crosses and where that bound is changed.
+ */
+export function effectiveFromViolation(
+  item: PlayerOnboardingCase,
+  series: TrainingSessionSeries | null,
+  effectiveFrom: string,
+) {
+  if (!series || !effectiveFrom) return null
+  const earliest = firstDayForSeries(item, series)
+  if (effectiveFrom < earliest) {
+    return (item.trainingStartOn ?? "") > series.startsOn
+      ? `${item.fullName} starts training on ${formatDateKey(earliest)}, so a session cannot begin before it.`
+        + " Change the training start date in Assessment to start earlier."
+      : `${series.title} runs from ${formatDateKey(earliest)}, so a session cannot begin before it.`
+        + " Choose a schedule that starts earlier, or move this one's start date."
+  }
+  if (series.endsOn && effectiveFrom > series.endsOn) {
+    return `${series.title} ends on ${formatDateKey(series.endsOn)}, so a session cannot begin after it.`
+      + " Choose a schedule that runs later, or move this one's end date."
+  }
+  return null
 }
 
 function seriesWeekdays(series: TrainingSessionSeries) {
@@ -57,7 +86,7 @@ function eligibleSeries(
 }
 
 type SessionStepFeedback = SaveFeedback & {
-  field?: "weekdays"
+  field?: "weekdays" | "effectiveFrom"
 }
 
 export function SessionStep({
@@ -87,9 +116,22 @@ export function SessionStep({
   const [feedback, setFeedback] = useState<SessionStepFeedback | null>(null)
   const [busy, setBusy] = useState(false)
   const weekdaysRef = useRef<HTMLFieldSetElement>(null)
+  const effectiveFromRef = useRef<HTMLInputElement>(null)
   const feedbackId = `onboarding-${item.id}-session-feedback`
+  const rangeNoteId = `onboarding-${item.id}-effective-from-range`
   const weekdaysInvalid = feedback?.tone === "error" && feedback.field === "weekdays"
   const selectedSeries = options.find((series) => series.id === seriesId) ?? null
+  const rangeViolation = effectiveFromViolation(item, selectedSeries, effectiveFrom)
+  // The legend already states the count this plan needs, so an unmet count is
+  // visible without being told. The submit handler keeps its message for the
+  // paths this cannot reach.
+  const requiredDayCount = item.academyPlan
+    ? academyPlanRequiredWeekdayCount(item.academyPlan)
+    : null
+  const daysIncomplete = requiredDayCount === null
+    ? weekdays.length === 0
+    : weekdays.length !== requiredDayCount
+  const submitBlocked = Boolean(rangeViolation) || daysIncomplete
   const initialSeriesId = firstSeries?.id ?? ""
   const initialWeekdays = firstSeries ? seriesWeekdays(firstSeries).slice(0, initialLimit) : []
   const initialEffectiveFrom = firstSeries
@@ -123,6 +165,11 @@ export function SessionStep({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || !selectedSeries || !item.academyPlan) return
+    if (rangeViolation) {
+      setFeedback({ field: "effectiveFrom", message: rangeViolation, tone: "error" })
+      effectiveFromRef.current?.focus()
+      return
+    }
     const required = academyPlanRequiredWeekdayCount(item.academyPlan)
     if ((required !== null && weekdays.length !== required) || !weekdays.length) {
       setFeedback({
@@ -162,7 +209,14 @@ export function SessionStep({
       setBusy(false)
     }
     if (!result.ok) {
-      setFeedback({ message: result.message, tone: "error" })
+      setFeedback({
+        field: result.field === "effectiveFrom" || result.field === "weekdays"
+          ? result.field
+          : undefined,
+        message: result.message,
+        tone: "error",
+      })
+      if (result.field === "effectiveFrom") effectiveFromRef.current?.focus()
       return
     }
     guard.navigateAfterCommit(() => onSuccess({
@@ -238,24 +292,37 @@ export function SessionStep({
         <label>
           <span>Effective from</span>
           <input
+            ref={effectiveFromRef}
             name="effectiveFrom"
             type="date"
-            min={selectedSeries ? firstDayForSeries(item, selectedSeries) : item.trainingStartOn ?? undefined}
-            max={selectedSeries?.endsOn ?? undefined}
             value={effectiveFrom}
-            onChange={(event) => setEffectiveFrom(event.target.value)}
+            aria-invalid={rangeViolation ? true : undefined}
+            aria-describedby={rangeViolation ? rangeNoteId : undefined}
+            onChange={(event) => {
+              setEffectiveFrom(event.target.value)
+              setFeedback(null)
+            }}
           />
         </label>
       </div>
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
-      {effectiveFrom < referenceDate ? (
+      {rangeViolation ? (
+        <p className={styles.backdateNote} id={rangeNoteId} role="alert">
+          {rangeViolation}
+        </p>
+      ) : effectiveFrom < referenceDate ? (
         <p className={styles.backdateNote}>
           This start date also makes earlier scheduled sessions eligible for attendance.
         </p>
       ) : null}
       <div className={styles.formActions}>
         <Link href="/coach/schedules">Review schedules</Link>
-        <button className={styles.primaryButton} type="submit" disabled={busy}>
+        <button
+          className={styles.primaryButton}
+          type="submit"
+          aria-disabled={submitBlocked || undefined}
+          disabled={busy}
+        >
           {busy
             ? "Assigning…"
             : feedback?.offerRetry
