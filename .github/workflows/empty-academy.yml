@@ -11,6 +11,14 @@ name: Empty the academy
 # It cannot fire by itself. workflow_dispatch is the only trigger, `confirm` has
 # no default, and the reset refuses unless that value names the owner it is
 # about to keep.
+#
+# Every value that reaches a shell here arrives through `env:` and is read as a
+# quoted shell variable. Nothing is spliced in with ${{ }}: an expression is
+# substituted into the script *before* bash parses it, so a dispatch input
+# pasted that way is source code running beside the production write token, not
+# an argument to a command. That is the shape the `no interpolation in a
+# secret-bearing run: block` assertion in tests/ci-security-controls.test.ts
+# exists to keep out.
 
 on:
   workflow_dispatch:
@@ -63,16 +71,17 @@ jobs:
 
       - name: Encrypt the snapshot
         env:
+          RUN_ID: ${{ github.run_id }}
           SMBA_BACKUP_PASSPHRASE: ${{ secrets.SMBA_BACKUP_PASSPHRASE }}
         run: |
           test "${#SMBA_BACKUP_PASSPHRASE}" -ge 24 || { echo "SMBA_BACKUP_PASSPHRASE must contain at least 24 characters."; exit 1; }
-          tar -C .data/pre-reset -czf .data/pre-reset-${{ github.run_id }}.tar.gz \
+          tar -C .data/pre-reset -czf ".data/pre-reset-${RUN_ID}.tar.gz" \
             smba-production.db smba-production.db.manifest.json
           printf '%s' "$SMBA_BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
             --passphrase-fd 0 --symmetric --cipher-algo AES256 --s2k-digest-algo SHA512 \
-            --output .data/pre-reset-${{ github.run_id }}.tar.gz.gpg \
-            .data/pre-reset-${{ github.run_id }}.tar.gz
-          rm -f .data/pre-reset-${{ github.run_id }}.tar.gz
+            --output ".data/pre-reset-${RUN_ID}.tar.gz.gpg" \
+            ".data/pre-reset-${RUN_ID}.tar.gz"
+          rm -f ".data/pre-reset-${RUN_ID}.tar.gz"
 
       - name: Keep the snapshot as an artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v5.0.0
@@ -111,22 +120,42 @@ jobs:
 
       # Read-only in effect. Prints what the reset would remove, so the log
       # carries the before picture even when the run that follows succeeds.
+      #
+      # SMBA_CONFIRM_REMOTE_RESET is the script's opt-in for touching a remote
+      # academy at all, so every step that runs it needs it -- the guard is on
+      # the Turso credentials being present, not on the deletion, because the
+      # credentials are what makes a mistake here unrecoverable.
       - name: Report what will be removed
         env:
+          SMBA_CONFIRM_REMOTE_RESET: "1"
           SMBA_USE_TURSO: "true"
           TURSO_AUTH_TOKEN: ${{ secrets.SMBA_ADMIN_DATABASE_TOKEN }}
           TURSO_DATABASE_URL: ${{ secrets.SMBA_ADMIN_DATABASE_URL }}
         run: npm run db:reset:academy
 
+      # --confirm-target names the database out loud, because --confirm can only
+      # name PLATFORM_ADMIN_ACADEMY_ID and that constant is identical on every
+      # database the script can reach. Here it comes from the same secret that
+      # selects the target, which is a tautology on purpose: the URL is a
+      # repository secret and must not be retyped into a dispatch input, where
+      # it would be readable in the run's parameters. The typed confirmation
+      # this workflow asks a human for is `confirm`; the value below only keeps
+      # the local guard satisfiable from CI.
       - name: Empty the academy
         env:
+          CONFIRM_ACADEMY_ID: ${{ inputs.confirm }}
+          SMBA_CONFIRM_REMOTE_RESET: "1"
           SMBA_USE_TURSO: "true"
           TURSO_AUTH_TOKEN: ${{ secrets.SMBA_ADMIN_DATABASE_TOKEN }}
           TURSO_DATABASE_URL: ${{ secrets.SMBA_ADMIN_DATABASE_URL }}
-        run: npm run db:reset:academy -- --confirm "${{ inputs.confirm }}"
+        run: |
+          npm run db:reset:academy -- \
+            --confirm "$CONFIRM_ACADEMY_ID" \
+            --confirm-target "$TURSO_DATABASE_URL"
 
       - name: Confirm the academy is empty
         env:
+          SMBA_CONFIRM_REMOTE_RESET: "1"
           SMBA_USE_TURSO: "true"
           TURSO_AUTH_TOKEN: ${{ secrets.SMBA_ADMIN_DATABASE_TOKEN }}
           TURSO_DATABASE_URL: ${{ secrets.SMBA_ADMIN_DATABASE_URL }}
