@@ -122,6 +122,16 @@ export function SessionStep({
   const weekdaysInvalid = feedback?.tone === "error" && feedback.field === "weekdays"
   const selectedSeries = options.find((series) => series.id === seriesId) ?? null
   const rangeViolation = effectiveFromViolation(item, selectedSeries, effectiveFrom)
+  // The legend already states the count this plan needs, so an unmet count is
+  // visible without being told. The submit handler keeps its message for the
+  // paths this cannot reach.
+  const requiredDayCount = item.academyPlan
+    ? academyPlanRequiredWeekdayCount(item.academyPlan)
+    : null
+  const daysIncomplete = requiredDayCount === null
+    ? weekdays.length === 0
+    : weekdays.length !== requiredDayCount
+  const submitBlocked = Boolean(rangeViolation) || daysIncomplete
   const initialSeriesId = firstSeries?.id ?? ""
   const initialWeekdays = firstSeries ? seriesWeekdays(firstSeries).slice(0, initialLimit) : []
   const initialEffectiveFrom = firstSeries
@@ -310,7 +320,8 @@ export function SessionStep({
         <button
           className={styles.primaryButton}
           type="submit"
-          disabled={busy || Boolean(rangeViolation)}
+          data-blocked={submitBlocked ? "true" : undefined}
+          disabled={busy || submitBlocked}
         >
           {busy
             ? "Assigning…"

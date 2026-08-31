@@ -571,6 +571,24 @@
   opacity: 0.58;
 }
 
+/* `cursor: wait` above is right for the busy state -- something is in flight and
+   will finish. It is wrong for an action held back by the form's own contents,
+   which will not finish until the coach changes something, so a blocked action
+   gets `not-allowed` and a faded fill instead of the spinner cursor.
+
+   Faded to 60% navy rather than by opacity, so the fill is a known value: white
+   label text on it measures 4.63:1 and the boundary 4.25:1 on --ivory, both past
+   WCAG 1.4.3 and 1.4.11. Disabled controls are exempt from those, but a button a
+   coach is meant to read and act on should not need the exemption. */
+.formActions > .primaryButton[data-blocked="true"]:disabled,
+.primaryButton[data-blocked="true"]:disabled {
+  border-color: color-mix(in srgb, var(--navy) 60%, var(--white));
+  background: color-mix(in srgb, var(--navy) 60%, var(--white));
+  color: var(--white);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 .requestFacts,
 .trainingFacts {
   display: grid;

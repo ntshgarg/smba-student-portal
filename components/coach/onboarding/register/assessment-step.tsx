@@ -37,6 +37,13 @@ export function AssessmentStep({
   const [errors, setErrors] = useState<Partial<Record<"trainingStartOn" | "level" | "batch" | "academyPlan", string>>>({})
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const [busy, setBusy] = useState(false)
+  /*
+   * Every field here is required by the server, and each is a date or a closed
+   * list -- there is no malformed-input case worth explaining after the fact, so
+   * the action is held back rather than offered and then refused. The submit
+   * handler still validates: this is the affordance, not the check.
+   */
+  const classificationIncomplete = !trainingStartOn || !level || !batch || !trainingPlan
   const levelRef = useRef<HTMLSelectElement>(null)
   const trainingStartRef = useRef<HTMLInputElement>(null)
   const batchRef = useRef<HTMLSelectElement>(null)
@@ -226,7 +233,12 @@ export function AssessmentStep({
       <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <Link href={`/coach/members?player=${encodeURIComponent(item.id)}`}>View member record</Link>
-        <button className={styles.primaryButton} type="submit" disabled={busy}>
+        <button
+          className={styles.primaryButton}
+          type="submit"
+          data-blocked={classificationIncomplete ? "true" : undefined}
+          disabled={busy || classificationIncomplete}
+        >
           {busy
             ? "Saving…"
             : feedback?.offerRetry

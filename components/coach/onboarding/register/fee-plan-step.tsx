@@ -97,6 +97,13 @@ export function FeePlanStep({
   }
 
   const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
+  /*
+   * Nothing can be derived from an empty fee, so "Review fee timeline" is held
+   * back rather than offered and then refused. A malformed amount is NOT held
+   * back -- `parseRupeesToPaise` rejecting "35oo" is worth saying out loud, and a
+   * button that silently will not press says nothing.
+   */
+  const awaitingFee = !preview && monthlyFee.trim() === ""
 
   if (!financeActive) {
     return (
@@ -378,7 +385,12 @@ export function FeePlanStep({
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
           {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
         </button>
-        <button className={styles.primaryButton} type="submit" disabled={busy}>
+        <button
+          className={styles.primaryButton}
+          type="submit"
+          data-blocked={awaitingFee ? "true" : undefined}
+          disabled={busy || awaitingFee}
+        >
           {busy
             ? preview ? "Completing…" : "Building timeline…"
             : retryAction === "submit"

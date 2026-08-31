@@ -75,4 +75,71 @@ describe("onboarding reset guidance", () => {
     expect(html).toContain("Reset session assignment")
     expect(html).toContain("training start date can be changed")
   })
+
+  it("holds back the fee timeline until an amount is entered, and says so visually", () => {
+    const html = render(player())
+    const submit = /<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]
+    expect(submit).toBeDefined()
+    expect(html).toContain("Review fee timeline")
+    expect(submit).toContain("disabled")
+    // The faded fill is keyed off this, and `cursor: wait` is not -- a coach must
+    // not be shown a spinner cursor for something only they can unblock.
+    expect(submit).toContain('data-blocked="true"')
+  })
+})
+
+const { AssessmentStep } = await import("@/components/coach/onboarding/register/assessment-step")
+
+/*
+ * The same rule across every step: an action whose prerequisites are unmet is held
+ * back and drawn as unavailable, rather than offered and then refused. Each step's
+ * submit handler keeps its own validation -- these pin the affordance.
+ */
+describe("onboarding stage gating", () => {
+  function assessment(overrides: Record<string, unknown> = {}) {
+    return renderToStaticMarkup(
+      <AssessmentStep
+        item={{
+          academyPlan: null,
+          batch: null,
+          feePlanRecorded: false,
+          fullName: "Aditi Rao",
+          id: "player-2",
+          level: null,
+          recordRevision: 1,
+          trainingStartOn: null,
+          ...overrides,
+        } as never}
+        onSuccess={() => {}}
+      />,
+    )
+  }
+
+  it("holds back the assessment until every classification field is set", () => {
+    const submit = /<button[^>]*type="submit"[^>]*>/u.exec(assessment())?.[0]
+    expect(submit).toBeDefined()
+    expect(submit).toContain("disabled")
+    expect(submit).toContain('data-blocked="true"')
+  })
+
+  it("releases it once the date, level, batch and plan are all present", () => {
+    const html = assessment({
+      academyPlan: "weekend-standard",
+      batch: "Weekend",
+      level: "Intermediate",
+      trainingStartOn: "2026-07-01",
+    })
+    const submit = /<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]
+    expect(submit).not.toContain("disabled")
+    expect(submit).not.toContain("data-blocked")
+  })
+
+  it("still holds it back when only the training start date is missing", () => {
+    const html = assessment({
+      academyPlan: "weekend-standard",
+      batch: "Weekend",
+      level: "Intermediate",
+    })
+    expect(/<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]).toContain('data-blocked="true"')
+  })
 })

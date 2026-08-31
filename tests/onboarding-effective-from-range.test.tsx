@@ -172,4 +172,14 @@ describe("effective-from picker", () => {
     expect(enabled).toBeDefined()
     expect(enabled).not.toContain("disabled")
   })
+
+  it("marks the blocked submit so it reads as unavailable, not as busy", () => {
+    const outOfRange = renderStep("2026-12-01")
+    expect(/<button[^>]*type="submit"[^>]*>/u.exec(outOfRange)?.[0])
+      .toContain('data-blocked="true"')
+
+    const inRange = renderStep("2026-07-01")
+    expect(/<button[^>]*type="submit"[^>]*>/u.exec(inRange)?.[0])
+      .not.toContain("data-blocked")
+  })
 })
