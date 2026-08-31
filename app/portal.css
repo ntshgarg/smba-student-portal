@@ -14156,6 +14156,18 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-register-holiday-mark {
   display: block;
+  /*
+   * Load-bearing. The visually-hidden reason inside this element is
+   * `position: absolute`, and without a positioned ancestor its containing
+   * block is the document rather than anything inside the register's
+   * horizontally scrolling viewport. `overflow` only clips descendants whose
+   * containing block lies inside the scroller, so the hidden span escaped the
+   * clip and its static position -- roughly 250px + (day-of-year x 58px) into
+   * a 21420px-wide table -- stretched the DOCUMENT to about 13.5k pixels. The
+   * accessibility gate caught it as `document-horizontal-overflow` at every
+   * viewport. Positioning this wrapper puts the span back inside the scroller.
+   */
+  position: relative;
   margin-top: 2px;
   color: var(--navy);
 }
