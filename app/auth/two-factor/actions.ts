@@ -225,7 +225,14 @@ export async function confirmTotpSetup(
   const requestHeaders = await headers()
 
   try {
-    await getAuth().api.verifyTOTP({ body: { code, trustDevice: true }, headers: requestHeaders })
+    // Same convention, other half: an action grants nothing its form did not
+    // ask for. The enrolment form has no trust-this-device control, and
+    // `trustDevice` makes the two-factor plugin's /sign-in/username after-hook
+    // return early for trustDeviceMaxAge (30 days, better-auth.ts:156),
+    // skipping the second factor entirely. The only place this portal offers
+    // that is the explicit opt-in checkbox on the sign-in challenge
+    // (verifyTotpSignIn, below).
+    await getAuth().api.verifyTOTP({ body: { code, trustDevice: false }, headers: requestHeaders })
   } catch {
     const security = requestSecurityContext(requestHeaders)
     writeAuthSecurityEvent({
