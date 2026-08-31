@@ -36,15 +36,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      # The commit Vercel actually deployed, not the default branch. Production
-      # alerts checks out `main` because for a production deploy that IS the
-      # deployed commit; here it is a different one, and taking `main` would
-      # smoke a preview of this branch using another branch's smoke script.
-      - name: Check out the deployed commit
+      # NEVER check out github.event.deployment.sha. deployment_status always
+      # runs in the base repository with full access to repository secrets, no
+      # matter who wrote the commit being deployed, and for a fork pull request
+      # that commit is written by someone with no write access here. Checking it
+      # out and then running a file from it -- `scripts/operations/check-
+      # production.mjs` below -- hands VERCEL_AUTOMATION_BYPASS_SECRET to a
+      # stranger. The four conditions in the `if:` above all describe Vercel;
+      # none of them describes the author of the commit.
+      #
+      # Pinning the ref is the mitigation, not gating the trigger: GitHub offers
+      # no branch filter for deployment_status, and a filter that demanded the
+      # commit be on main would turn the job off for the pull-request previews
+      # it exists to smoke. So the *script* comes from trusted code and the
+      # *preview* is reached over HTTP as data, which is what a smoke test is.
+      # The cost is that a pull request changing the smoke script is smoked with
+      # main's copy of it; that is a correctness tradeoff, not a security one.
+      - name: Check out the trusted smoke script
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.deployment.sha }}
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -107,10 +119,15 @@ jobs:
       - name: Verify the preview answers
         if: steps.bypass.outputs.configured == 'true'
         env:
+          PREVIEW_ORIGIN: ${{ steps.target.outputs.origin }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
-          node scripts/operations/check-production.mjs \
-            "${{ steps.target.outputs.origin }}" \
+          # Through the environment, never through a template expression. An
+          # expression is pasted into this script before bash ever sees it, so
+          # payload-derived text would land as shell source in the one step that
+          # holds the bypass secret -- and "$( )" still substitutes inside double
+          # quotes. As an environment variable it is only ever data.
+          node scripts/operations/check-production.mjs "$PREVIEW_ORIGIN" \
             --attempts 6 --delay-ms 5000
           echo "### Preview verified" >> "$GITHUB_STEP_SUMMARY"
           echo "Health, homepage and login all answered on the deployed preview." >> "$GITHUB_STEP_SUMMARY"
