@@ -94,6 +94,18 @@
   --text-placeholder: #6b7480;
   --line: #d7dbde;
   --border: var(--line);
+  /* WCAG 1.4.11 asks 3:1 of a control's *boundary*, and --line is 1.28:1 on --ivory —
+     on a field whose fill is 1.06:1 against the page, that border is the whole control.
+     Decorative hairlines (card edges, dividers, table rules) are not component boundaries
+     and keep --line; the boundary of an input, select, textarea or segmented button reads
+     --line-control. Two surfaces had to clear 3:1 at once, because .login-field swaps its
+     fill to --white on hover/focus: #767f88 is 3.73:1 on --ivory, 3.96:1 on the composited
+     field fill rgb(252,252,250), 4.07:1 on --white, and still 3.42:1 on --ivory-deep and
+     3.37:1 on --mist. --line-disabled below is the nearest existing value and was measured
+     first: it holds on --ivory at 3.09:1 but falls to 2.83:1 on --ivory-deep and 2.79:1 on
+     --mist, so reusing it would have failed on two surfaces and collapsed the enabled and
+     disabled boundaries into one colour. */
+  --line-control: #767f88;
   --line-disabled: #858d94;
   --white: #ffffff;
   --paper: #fbfaf7;

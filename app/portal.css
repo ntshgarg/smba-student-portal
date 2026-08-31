@@ -1532,7 +1532,7 @@
   min-height: 58px;
   margin-top: 10px;
   padding: 0 var(--space-copy);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: 0;
   background: color-mix(in srgb, var(--white) 68%, transparent);
   color: var(--navy);
