@@ -14,13 +14,18 @@ import {
   createSessionSeriesAction,
   endSessionAssignmentAction,
   endSessionSeriesAction,
+  markAcademyHolidaysAction,
+  previewAcademyHolidaysAction,
   publishReportAction,
   replaceSessionOccurrenceAction,
+  retractAcademyHolidayAction,
   saveAttendanceRegisterAction,
   saveMemberAction,
   saveReportDraftAction,
 } from "@/app/coach/actions"
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
+import type { AcademyHolidayRecord } from "@/lib/sessions/holiday-types"
+import type { HolidayImpact } from "@/lib/sessions/holidays"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
 import { isAcademyMember, joinPlayerMembers } from "@/lib/coach/member-utils"
 import type {
@@ -73,6 +78,7 @@ type AttendancePortalContextValue = {
 }
 
 type SessionPortalContextValue = {
+  academyHolidays: AcademyHolidayRecord[]
   sessionAssignments: SessionAssignment[]
   sessionOccurrences: TrainingSessionOccurrence[]
   sessionSeries: TrainingSessionSeries[]
@@ -95,6 +101,13 @@ type SessionPortalContextValue = {
   endSessionSeries: (
     seriesId: string,
   ) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
+  markAcademyHolidays: (input: {
+    dateKeys: string[]
+    label: string
+  }) => Promise<OperationalActionResult<ReturnTypeSnapshot & MarkHolidaysSummary>>
+  previewAcademyHolidays: (
+    dateKeys: string[],
+  ) => Promise<OperationalActionResult<HolidayImpact>>
   replaceSessionOccurrence: (input: {
     occurrenceId: string
     dateKey: string
@@ -102,6 +115,16 @@ type SessionPortalContextValue = {
     durationMinutes: number
     venue: string
   }) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
+  retractAcademyHoliday: (
+    dateKey: string,
+  ) => Promise<OperationalActionResult<ReturnTypeSnapshot & { restoredSessions: number }>>
+}
+
+type MarkHolidaysSummary = {
+  closedDates: string[]
+  skippedDates: string[]
+  cancelledSessions: number
+  adjustmentsFlaggedForReview: number
 }
 
 type ReportPortalContextValue = {
@@ -111,6 +134,7 @@ type ReportPortalContextValue = {
 }
 
 type ReturnTypeSnapshot = {
+  academyHolidays: AcademyHolidayRecord[]
   sessionAssignments: SessionAssignment[]
   sessionOccurrences: TrainingSessionOccurrence[]
   sessionSeries: TrainingSessionSeries[]
@@ -125,6 +149,7 @@ const ReportPortalContext = createContext<ReportPortalContextValue | null>(null)
 
 const EMPTY_ATTENDANCE_ADJUSTMENTS: AttendanceAdjustmentRecord[] = []
 const EMPTY_ATTENDANCE_RECORDS: SessionAttendanceRecords = {}
+const EMPTY_ACADEMY_HOLIDAYS: AcademyHolidayRecord[] = []
 const EMPTY_MEMBERS: OperationalAcademyMember[] = []
 const EMPTY_REPORTS: CoachMonthlyReportRecord[] = []
 const EMPTY_SESSION_ASSIGNMENTS: SessionAssignment[] = []
@@ -144,6 +169,7 @@ function replaceReport(
 
 export function CoachPortalProvider({
   children,
+  initialAcademyHolidays = EMPTY_ACADEMY_HOLIDAYS,
   initialAttendanceAdjustments = EMPTY_ATTENDANCE_ADJUSTMENTS,
   initialAttendanceRecords = EMPTY_ATTENDANCE_RECORDS,
   initialMembers = EMPTY_MEMBERS,
@@ -154,6 +180,7 @@ export function CoachPortalProvider({
   initialTrainingProfiles = EMPTY_TRAINING_PROFILES,
 }: {
   children: React.ReactNode
+  initialAcademyHolidays?: AcademyHolidayRecord[]
   initialAttendanceAdjustments?: AttendanceAdjustmentRecord[]
   initialAttendanceRecords?: SessionAttendanceRecords
   initialMembers?: OperationalAcademyMember[]
@@ -164,6 +191,7 @@ export function CoachPortalProvider({
   initialTrainingProfiles?: PlayerTrainingProfile[]
 }) {
   const router = useRouter()
+  const [academyHolidays, setAcademyHolidays] = useState(initialAcademyHolidays)
   const [attendanceAdjustments, setAttendanceAdjustments] = useState(initialAttendanceAdjustments)
   const [attendanceRecords, setAttendanceRecords] = useState(initialAttendanceRecords)
   const [sessionAssignments, setSessionAssignments] = useState(initialSessionAssignments)
@@ -254,15 +282,26 @@ export function CoachPortalProvider({
     return result
   }, [router])
 
+  /*
+   * Every session mutation returns the same window snapshot, and each used to
+   * unpack it field by field. Adding a field then meant editing five call
+   * sites, and missing one showed up only as a stale calendar. Applying it in
+   * one place makes that structural.
+   */
+  const applySessionSnapshot = useCallback((snapshot: ReturnTypeSnapshot) => {
+    setAcademyHolidays(snapshot.academyHolidays)
+    setSessionAssignments(snapshot.sessionAssignments)
+    setSessionOccurrences(snapshot.sessionOccurrences)
+    setSessionSeries(snapshot.sessionSeries)
+  }, [])
+
   const createSessionSeries = useCallback(async (input: CreateSessionSeriesInput) => {
     const result = await createSessionSeriesAction(input)
     if (!result.ok) return result
     const created = result.data
-    setSessionAssignments(created.sessionAssignments)
-    setSessionOccurrences(created.sessionOccurrences)
-    setSessionSeries(created.sessionSeries)
+    applySessionSnapshot(created)
     return result
-  }, [])
+  }, [applySessionSnapshot])
 
   const assignSession = useCallback(async (input: {
     effectiveFrom: string
@@ -273,12 +312,10 @@ export function CoachPortalProvider({
     const result = await assignSessionAction(input)
     if (!result.ok) return result
     const snapshot = result.data
-    setSessionAssignments(snapshot.sessionAssignments)
-    setSessionOccurrences(snapshot.sessionOccurrences)
-    setSessionSeries(snapshot.sessionSeries)
+    applySessionSnapshot(snapshot)
     router.refresh()
     return result
-  }, [router])
+  }, [applySessionSnapshot, router])
 
   const endSession = useCallback(async (input: {
     assignmentId: string
@@ -287,33 +324,27 @@ export function CoachPortalProvider({
     const result = await endSessionAssignmentAction(input)
     if (!result.ok) return result
     const snapshot = result.data
-    setSessionAssignments(snapshot.sessionAssignments)
-    setSessionOccurrences(snapshot.sessionOccurrences)
-    setSessionSeries(snapshot.sessionSeries)
+    applySessionSnapshot(snapshot)
     router.refresh()
     return result
-  }, [router])
+  }, [applySessionSnapshot, router])
 
   const endSeries = useCallback(async (seriesId: string) => {
     const result = await endSessionSeriesAction(seriesId)
     if (!result.ok) return result
     const snapshot = result.data
-    setSessionAssignments(snapshot.sessionAssignments)
-    setSessionOccurrences(snapshot.sessionOccurrences)
-    setSessionSeries(snapshot.sessionSeries)
+    applySessionSnapshot(snapshot)
     router.refresh()
     return result
-  }, [router])
+  }, [applySessionSnapshot, router])
 
   const cancelOccurrence = useCallback(async (occurrenceId: string) => {
     const result = await cancelSessionOccurrenceAction(occurrenceId)
     if (!result.ok) return result
     const snapshot = result.data
-    setSessionAssignments(snapshot.sessionAssignments)
-    setSessionOccurrences(snapshot.sessionOccurrences)
-    setSessionSeries(snapshot.sessionSeries)
+    applySessionSnapshot(snapshot)
     return result
-  }, [])
+  }, [applySessionSnapshot])
 
   const replaceOccurrence = useCallback(async (input: {
     occurrenceId: string
@@ -325,11 +356,32 @@ export function CoachPortalProvider({
     const result = await replaceSessionOccurrenceAction(input)
     if (!result.ok) return result
     const snapshot = result.data
-    setSessionAssignments(snapshot.sessionAssignments)
-    setSessionOccurrences(snapshot.sessionOccurrences)
-    setSessionSeries(snapshot.sessionSeries)
+    applySessionSnapshot(snapshot)
     return result
-  }, [])
+  }, [applySessionSnapshot])
+
+  const previewHolidays = useCallback(
+    (dateKeys: string[]) => previewAcademyHolidaysAction(dateKeys),
+    [],
+  )
+
+  const markHolidays = useCallback(async (input: { dateKeys: string[]; label: string }) => {
+    const result = await markAcademyHolidaysAction(input)
+    if (!result.ok) return result
+    applySessionSnapshot(result.data)
+    // Unlike cancelling one session, a closure can move attendance figures and
+    // flag make-ups for review, so the rest of the page is refetched too.
+    router.refresh()
+    return result
+  }, [applySessionSnapshot, router])
+
+  const retractHoliday = useCallback(async (dateKey: string) => {
+    const result = await retractAcademyHolidayAction(dateKey)
+    if (!result.ok) return result
+    applySessionSnapshot(result.data)
+    router.refresh()
+    return result
+  }, [applySessionSnapshot, router])
 
   const saveReportDraft = useCallback(async (input: SaveReportDraftInput) => {
     const result = await saveReportDraftAction(input)
@@ -400,22 +452,30 @@ export function CoachPortalProvider({
     voidAdjustment,
   ])
   const sessionValue = useMemo<SessionPortalContextValue>(() => ({
+    academyHolidays,
     assignSession,
     cancelSessionOccurrence: cancelOccurrence,
     createSessionSeries,
     endSessionAssignment: endSession,
     endSessionSeries: endSeries,
+    markAcademyHolidays: markHolidays,
+    previewAcademyHolidays: previewHolidays,
     replaceSessionOccurrence: replaceOccurrence,
+    retractAcademyHoliday: retractHoliday,
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,
   }), [
+    academyHolidays,
     assignSession,
     cancelOccurrence,
     createSessionSeries,
     endSeries,
     endSession,
+    markHolidays,
+    previewHolidays,
     replaceOccurrence,
+    retractHoliday,
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,

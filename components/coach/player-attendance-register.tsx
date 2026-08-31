@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Check, CircleAlert, CircleMinus, RefreshCw, X } from "lucide-react"
+import { ArrowLeft, CalendarOff, Check, CircleAlert, CircleMinus, RefreshCw, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
@@ -46,6 +46,7 @@ export function PlayerAttendanceRegister({
     attendanceRecords,
   } = useAttendancePortal()
   const {
+    academyHolidays,
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,
@@ -98,6 +99,7 @@ export function PlayerAttendanceRegister({
       .map((occurrence) => [`${occurrence.seriesId}:${occurrence.occurrenceDate}`, occurrence]),
   )
   const occurrenceById = new Map(sessionOccurrences.map((occurrence) => [occurrence.id, occurrence]))
+  const holidayByDate = new Map(academyHolidays.map((holiday) => [holiday.dateKey, holiday]))
   const yearStart = `${activeYear}-01-01`
   const nextYearStart = `${activeYear + 1}-01-01`
   const playerById = new Map(players.map((player) => [player.member.id, player]))
@@ -282,6 +284,7 @@ export function PlayerAttendanceRegister({
                 <span><i className="is-absent" aria-hidden="true"><CircleMinus /></i>Absent</span>
                 <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
                 <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
+                <span><i className="is-holiday" aria-hidden="true"><CalendarOff /></i>Holiday</span>
                 <span><i className="is-makeup" aria-hidden="true"><RefreshCw /></i>Rescheduled</span>
                 <span><i className="is-review" aria-hidden="true"><CircleAlert /></i>Needs review</span>
               </div>
@@ -358,6 +361,7 @@ export function PlayerAttendanceRegister({
                           const available = categorySeries.some((series) => (
                             occurrenceBySeriesDate.get(`${series.id}:${date.key}`)?.status === "scheduled"
                           ))
+                          const holiday = holidayByDate.get(date.key)
                           return (
                             <th
                               key={date.key}
@@ -367,10 +371,25 @@ export function PlayerAttendanceRegister({
                               className={[
                                 date.key === todayKey ? "is-today" : "",
                                 !available ? "is-unavailable" : "",
+                                holiday ? "is-holiday" : "",
                               ].filter(Boolean).join(" ") || undefined}
+                              /*
+                               * The struck-out column already existed; what it
+                               * could not do is say why. Without this the header
+                               * announces a bare date and reads exactly like a
+                               * Sunday, a weekday this batch does not train, and
+                               * a date before the player joined.
+                               */
+                              title={holiday ? `${date.label}: closed for ${holiday.label}` : undefined}
                             >
                               <span>{date.day}</span>
                               <strong>{date.date}</strong>
+                              {holiday ? (
+                                <small className="coach-register-holiday-mark">
+                                  <span className="sr-only">Closed for {holiday.label}</span>
+                                  <CalendarOff aria-hidden="true" />
+                                </small>
+                              ) : null}
                             </th>
                           )
                         })}
@@ -455,9 +474,12 @@ export function PlayerAttendanceRegister({
                               const completionAdjustment = completionAdjustments[0]
                               const completionCount = completionAdjustments.length
                               const completionRequiresReview = completionAdjustments.some((item) => item.reviewRequiredAt)
-                              const ordinaryState = unavailable
-                                ? "not eligible for a scheduled session"
-                                : future ? "future session" : choice ?? "not recorded"
+                              const holiday = holidayByDate.get(date.key)
+                              const ordinaryState = holiday
+                                ? `academy closed for ${holiday.label}`
+                                : unavailable
+                                  ? "not eligible for a scheduled session"
+                                  : future ? "future session" : choice ?? "not recorded"
                               const adjustmentState = adjustment?.reviewRequiredAt
                                 ? "missed session reconciled, requires review"
                                 : adjustment ? "missed session reconciled" : null
@@ -476,6 +498,7 @@ export function PlayerAttendanceRegister({
                                   className={[
                                     date.key === todayKey ? "is-today" : "",
                                     unavailable ? "is-unavailable" : "",
+                                    holiday ? "is-holiday" : "",
                                   ].filter(Boolean).join(" ") || undefined}
                                 >
                                   {adjustment ? (
@@ -512,7 +535,7 @@ export function PlayerAttendanceRegister({
                                           "not available" mark in this cell and — is "not recorded", so
                                           absent takes the ring of CircleMinus rather than a second cross
                                           or a bare Minus. aria-label stays the accessible name. */}
-                                      {unavailable ? <X aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : completionCount ? null : <span aria-hidden="true">—</span>}
+                                      {holiday ? <CalendarOff aria-hidden="true" /> : unavailable ? <X aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : completionCount ? null : <span aria-hidden="true">—</span>}
                                       {completionCount ? <span className="coach-register-makeup-count" aria-hidden="true">+{completionCount}</span> : null}
                                       {completionRequiresReview ? <CircleAlert aria-hidden="true" /> : null}
                                     </span>

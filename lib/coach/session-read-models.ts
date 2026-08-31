@@ -23,6 +23,7 @@ import {
   calendarWindowForMonth,
 } from "@/lib/sessions/domain"
 import {
+  listAcademyHolidaysInWindow,
   listSessionAssignmentsForSeries,
   listSessionAssignments,
   listSessionAssignmentsForPlayers,
@@ -34,6 +35,7 @@ import {
   listSessionSeries,
   listStartedScheduledOccurrenceKeys,
 } from "@/lib/sessions/database"
+import type { AcademyHolidayRecord } from "@/lib/sessions/holiday-types"
 import type {
   SessionAssignment,
   SessionAttendanceRecords,
@@ -42,6 +44,11 @@ import type {
 } from "@/lib/sessions/types"
 
 export type CoachSessionWindowSnapshot = {
+  // Every coach surface that loads occurrences over a window also needs to know
+  // which of those dates the academy was closed on, or a holiday renders as an
+  // ordinary gap. Carrying it here means the calendar and the register cannot
+  // disagree about the same day.
+  academyHolidays: AcademyHolidayRecord[]
   sessionAssignments: SessionAssignment[]
   sessionOccurrences: TrainingSessionOccurrence[]
   sessionSeries: TrainingSessionSeries[]
@@ -138,7 +145,12 @@ function getCoachSessionSnapshotForWindow({
     sessionOccurrences,
   )
 
-  return { sessionAssignments, sessionOccurrences, sessionSeries }
+  return {
+    academyHolidays: listAcademyHolidaysInWindow(from, to),
+    sessionAssignments,
+    sessionOccurrences,
+    sessionSeries,
+  }
 }
 
 export function getCoachCalendarMonthSnapshot(month: string): CoachCalendarMonthSnapshot {
@@ -215,6 +227,9 @@ export function getCoachAttendanceAdjustmentsSnapshot({
 
   return {
     ...players,
+    // Adjustments are read by id, not over a date window, and this screen never
+    // draws a calendar. Nothing here can show a closure, so nothing loads one.
+    academyHolidays: [],
     attendanceAdjustments,
     attendanceRecords,
     selectedPlayerId,
@@ -248,6 +263,9 @@ export function getCoachScheduleRosterSnapshot(
 
 export function getCoachScheduleMutationSnapshot(): CoachSessionWindowSnapshot {
   return {
+    // Deliberately empty, matching `sessionOccurrences` above: this snapshot
+    // answers "what schedules exist now", not "what happens on which day".
+    academyHolidays: [],
     sessionAssignments: listSessionAssignments(),
     sessionOccurrences: [],
     sessionSeries: listSessionSeries(),
@@ -330,6 +348,7 @@ export function getCoachAttendanceRegisterSnapshot(
 
   return {
     ...listAttendanceRegisterPlayerRecords(playerIds),
+    academyHolidays: listAcademyHolidaysInWindow(yearStart, `${selection.year}-12-31`),
     attendanceAdjustments: listAttendanceRegisterAdjustments({
       from: yearStart,
       seriesIds: categorySeriesIds,

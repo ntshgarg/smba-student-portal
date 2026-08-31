@@ -591,6 +591,16 @@ export const sessionOccurrences = sqliteTable("session_occurrences", {
   status: text("status", { enum: ["scheduled", "cancelled"] }).notNull().default("scheduled"),
   replacementForOccurrenceId: text("replacement_for_occurrence_id")
     .references((): AnySQLiteColumn => sessionOccurrences.id),
+  /*
+   * Set only when a holiday cancelled this row, and cleared when that holiday is
+   * retracted. This is what makes retraction safe: without it, reviving a
+   * holiday's date would also revive sessions the coach had cancelled
+   * individually for unrelated reasons, silently putting back a session nobody
+   * asked for. It is intentionally not a foreign key onto a deleted row -- the
+   * holiday row goes away on retraction and this column goes null in the same
+   * transaction.
+   */
+  holidayId: text("holiday_id").references((): AnySQLiteColumn => academyHolidays.id),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 }, (table) => [
   uniqueIndex("session_occurrences_series_date_idx")
@@ -607,6 +617,44 @@ export const sessionOccurrences = sqliteTable("session_occurrences", {
   // `session_occurrences_series_idx` on series_id alone and re-checks the month
   // over the series' whole history.
   index("session_occurrences_series_date_lookup_idx").on(table.seriesId, table.occurrenceDate),
+  // Retracting a holiday revives by `holiday_id`, and the column is null for
+  // every ordinary cancellation, so this stays small.
+  index("session_occurrences_holiday_idx").on(table.holidayId),
+])
+
+/*
+ * A day the academy is closed. Deliberately a record of its own rather than a
+ * third `status` on the occurrence, for three reasons the alternatives cannot
+ * meet.
+ *
+ * It has to be undoable. Cancellation is one-way everywhere else -- backfill.ts
+ * calls a cancelled row "a tombstone that must not be revived" -- so a holiday
+ * expressed only as cancellation could be declared and never retracted. Holding
+ * the closure separately means retracting it is deleting this row and reviving
+ * the occurrences it cancelled, and `holidayId` below records exactly which
+ * those were, so a retraction cannot revive a session that was already off for
+ * some unrelated reason.
+ *
+ * It has to be date-keyed, not occurrence-keyed. The staff register
+ * (`staff_attendance_records`) never reads `session_occurrences` at all, so a
+ * holiday modelled per-occurrence would leave every junior coach's row looking
+ * unmarked rather than closed.
+ *
+ * It has to carry a reason. The register already draws a struck-out column for
+ * a fully cancelled day, but that same hatch means "no session", "not enrolled
+ * yet" and "your plan skips this weekday", so without a label a holiday is
+ * indistinguishable from a Sunday to both the coach and the parent.
+ */
+export const academyHolidays = sqliteTable("academy_holidays", {
+  id: text("id").primaryKey(),
+  dateKey: text("date_key").notNull(),
+  label: text("label").notNull(),
+  declaredByAccountId: text("declared_by_account_id").notNull().references(() => accounts.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  // One closure per date. The whole academy shuts or it does not; a partial
+  // closure is an ordinary cancellation and should stay one.
+  uniqueIndex("academy_holidays_date_idx").on(table.dateKey),
 ])
 
 export const sessionAssignments = sqliteTable("session_assignments", {

@@ -42,6 +42,28 @@ const REPORT_REFERENCE_DATE = "2026-07-31"
 const FINANCE_TRACKING_MONTH = "2026-07"
 const CURRENT_FEE_PERIOD = "2026-08"
 const FINANCE_REFERENCE_DATE = "2026-08-03"
+/*
+ * The one date the academy is closed on, so the register's holiday column and
+ * the player calendar's closed day exist in a rendered fixture at all. Almost
+ * every constraint on the date is satisfied by the real holiday:
+ *
+ * - inside the schedule window, so there are sessions on it to suspend;
+ * - clear of the hand-cancelled lifecycle examples on 2026-08-05 and of the
+ *   replacement on 2026-08-12, which the counts below keep separate;
+ * - after the last attendance mark (REPORT_REFERENCE_DATE) and the last make-up
+ *   completion (CANONICAL_DATE), so no closure lands on a day already carrying
+ *   attendance and nothing gets flagged for review;
+ * - two days before SMBA_ACCESSIBILITY_CLOCK in
+ *   .github/workflows/ui-accessibility.yml, near enough that the register opens
+ *   with the closed column inside its initial window, and inside the August the
+ *   player calendar route (`?attendance=register&year=2026&month=08`) asks for.
+ *
+ * Being a Saturday it suspends the three weekend series rather than the ten
+ * weekday ones -- the smallest cut the fixture can take and still render the
+ * markup, since a closed column is struck out either way.
+ */
+const FIXTURE_HOLIDAY_DATE = "2026-08-15"
+const FIXTURE_HOLIDAY_LABEL = "Independence Day"
 const REGRESSION_DIRECTORY = path.resolve(process.cwd(), ".data/regression")
 const DEFAULT_SOURCE = path.resolve(process.cwd(), ".data/regression/fixture-source.db")
 const CLEAN_TARGET = path.resolve(process.cwd(), ".data/academy-clean.db")
@@ -73,6 +95,7 @@ const REQUIRED_CURRENT_COLUMNS = {
   refunds: ["purpose", "withdrawal_effective_on", "charge_adjustment_id"],
 } as const
 const CLEAN_OPERATIONAL_TABLES = [
+  "academy_holidays",
   "player_enrollments",
   "batch_memberships",
   "attendance_records",
@@ -569,6 +592,7 @@ async function applicationModules(target: string) {
     memberService,
     announcementService,
     credentialService,
+    holidayService,
   ] = await Promise.all([
     import("../../lib/db/client"),
     import("../../lib/auth/account-service"),
@@ -580,6 +604,7 @@ async function applicationModules(target: string) {
     import("../../lib/coach/member-service"),
     import("../../lib/announcements/service"),
     import("../../lib/auth/credential-service"),
+    import("../../lib/sessions/holidays"),
   ])
   return {
     database: initializeDatabase(),
@@ -592,6 +617,7 @@ async function applicationModules(target: string) {
     memberService,
     announcementService,
     credentialService,
+    holidayService,
   }
 }
 
@@ -1048,9 +1074,16 @@ async function seedAttendanceAdjustmentExamples(target: string) {
 
 async function seedScheduleLifecycleExamples(target: string) {
   const read = openReadonly(target)
+  /*
+   * Only the hand-cancelled examples this stage owns. A closure cancels every
+   * session standing on its date -- see seedAcademyHoliday -- so counting those
+   * in would make an already-seeded fixture look partial and abort the rebuild.
+   * `holiday_id` is what separates the two, and it is the same distinction the
+   * verification below and retractAcademyHoliday both rely on.
+   */
   const existing = read.prepare(`
     select
-      sum(case when status = 'cancelled' then 1 else 0 end) as cancelled,
+      sum(case when status = 'cancelled' and holiday_id is null then 1 else 0 end) as cancelled,
       sum(case when replacement_for_occurrence_id is not null then 1 else 0 end) as replacements
     from session_occurrences
   `).get() as { cancelled: number; replacements: number }
@@ -1121,6 +1154,29 @@ async function seedScheduleLifecycleExamples(target: string) {
     referenceDate: CANONICAL_DATE,
     startTime: "11:30",
     venue: candidates[1].venue,
+  })
+}
+
+/**
+ * Close FIXTURE_HOLIDAY_DATE, so every profile carries one academy holiday.
+ *
+ * Runs after the lifecycle examples rather than before them: those pick the two
+ * earliest scheduled sessions from 2026-08-05 onwards, and a closure that ran
+ * first would take its date's sessions out of that candidate set. Ordered this
+ * way the two stages cannot interfere whatever date either one moves to.
+ */
+async function seedAcademyHoliday(target: string) {
+  const read = openReadonly(target)
+  const existing = tableCount(read, "academy_holidays")
+  read.close()
+  if (existing) return
+  const { database, holidayService } = await applicationModules(target)
+  holidayService.markAcademyHolidays({
+    coachId: COACH_ID,
+    database,
+    dateKeys: [FIXTURE_HOLIDAY_DATE],
+    label: FIXTURE_HOLIDAY_LABEL,
+    now: new Date(`${CANONICAL_DATE}T09:00:00+05:30`),
   })
 }
 
@@ -1852,6 +1908,7 @@ async function seedLoaded(target: string) {
   await seedAssignmentsAndAttendance(target)
   await seedAttendanceAdjustmentExamples(target)
   await seedScheduleLifecycleExamples(target)
+  await seedAcademyHoliday(target)
   seedStaffAttendanceExamples(target)
   await seedReports(target)
   await seedFinancials(target)
@@ -1881,6 +1938,7 @@ function summaryFor(target: string) {
   try {
     const scalar = (sql: string) => (db.prepare(sql).get() as { count: number }).count
     return {
+      academyHolidays: safeTableCount(db, "academy_holidays"),
       accounts: tableCount(db, "accounts"),
       assignments: tableCount(db, "session_assignments"),
       assignmentWeekdays: tableCount(db, "session_assignment_weekdays"),
@@ -2025,6 +2083,17 @@ function logicalChecksum(db: Database.Database) {
     join session_occurrences o on o.id = a.source_occurrence_id
     order by m.identifier, sourceDate, completedOn
   `).all()
+  // The label is what the register column and the player calendar cell read out,
+  // so it belongs in the checksum beside the suspensions it caused -- the
+  // cancelled rows alone appear in sessionLifecycle but say nothing about why.
+  const holidays = tableExists(db, "academy_holidays") ? db.prepare(`
+    select h.date_key as dateKey, h.label,
+      (
+        select count(*) from session_occurrences o where o.holiday_id = h.id
+      ) as suspendedSessions
+    from academy_holidays h
+    order by h.date_key
+  `).all() : []
   const announcements = tableExists(db, "broadcasts") ? db.prepare(`
     select b.title, b.content, b.published_at as publishedAt,
       b.expires_on as expiresOn, b.pinned,
@@ -2112,6 +2181,7 @@ function logicalChecksum(db: Database.Database) {
     attendance,
     registrations,
     sessionLifecycle,
+    holidays,
     reports,
     adjustments,
     announcements,
@@ -2210,9 +2280,17 @@ function verify(target: string, expectedStage?: Stage) {
       if (summary.series !== schedules.length || summary.recurrenceRules !== 56) {
         problems.push("Schedule stage must contain ten weekday and three weekend series.")
       }
+      /*
+       * Grouped over every occurrence and counting only the scheduled ones,
+       * rather than filtered down to scheduled rows first. A closed date has no
+       * scheduled row left at all, so filtering would drop it from this map
+       * entirely and the window would then be one dated group short -- reported
+       * as a missing day, which is the opposite of what a closure is.
+       */
       const dateCounts = db.prepare(`
-        select occurrence_date as dateKey, count(*) as count
-        from session_occurrences where status = 'scheduled'
+        select occurrence_date as dateKey,
+          sum(case when status = 'scheduled' then 1 else 0 end) as count
+        from session_occurrences
         group by occurrence_date order by occurrence_date
       `).all() as Array<{ count: number; dateKey: string }>
       const actualDateCounts = new Map(dateCounts.map((row) => [row.dateKey, row.count]))
@@ -2242,14 +2320,50 @@ function verify(target: string, expectedStage?: Stage) {
         problems.push(`Schedule window contains ${actualDateCounts.size} dated occurrence groups instead of ${expectedDateGroups}.`)
       }
       if (stage === "loaded") {
+        // Hand-cancelled only. A closure is a different fact about a different
+        // day, counted on its own terms below.
         const lifecycle = db.prepare(`
           select
-            sum(case when status = 'cancelled' then 1 else 0 end) as cancelled,
+            sum(case when status = 'cancelled' and holiday_id is null then 1 else 0 end) as cancelled,
             sum(case when replacement_for_occurrence_id is not null then 1 else 0 end) as replacements
           from session_occurrences
         `).get() as { cancelled: number; replacements: number }
         if (lifecycle.cancelled !== 2 || lifecycle.replacements !== 1) {
           problems.push(`${selectedProfile.key} requires one cancellation and one replacement lifecycle example.`)
+        }
+        /*
+         * Neither holiday surface -- the register's closed column, the player
+         * calendar's closed day -- renders unless a date is actually closed, so
+         * the accessibility gate only audits that markup while this holds.
+         */
+        const holidayWeekday = new Date(`${FIXTURE_HOLIDAY_DATE}T00:00:00.000Z`).getUTCDay()
+        const expectedSuspended = holidayWeekday === 0 || holidayWeekday === 6 ? 3 : 10
+        const closures = db.prepare(`
+          select h.date_key as dateKey, h.label,
+            (
+              select count(*) from session_occurrences o where o.holiday_id = h.id
+            ) as suspended,
+            (
+              select count(*) from session_occurrences o
+              where o.occurrence_date = h.date_key and o.status = 'scheduled'
+            ) as stillScheduled
+          from academy_holidays h
+          order by h.date_key
+        `).all() as Array<{
+          dateKey: string
+          label: string
+          stillScheduled: number
+          suspended: number
+        }>
+        if (closures.length !== 1
+          || closures[0].dateKey !== FIXTURE_HOLIDAY_DATE
+          || closures[0].label !== FIXTURE_HOLIDAY_LABEL
+          || closures[0].suspended !== expectedSuspended
+          || closures[0].stillScheduled !== 0) {
+          problems.push(
+            `${selectedProfile.key} requires ${FIXTURE_HOLIDAY_DATE} closed as ${FIXTURE_HOLIDAY_LABEL},`
+            + ` suspending its ${expectedSuspended} sessions.`,
+          )
         }
       }
     }

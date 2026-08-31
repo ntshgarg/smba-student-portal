@@ -4,6 +4,7 @@ import { and, asc, eq, gte, inArray, lte, ne } from "drizzle-orm"
 
 import { initializeDatabase } from "@/lib/db/client"
 import {
+  academyHolidays,
   sessionAssignments,
   sessionAssignmentWeekdays,
   sessionAttendanceRecords,
@@ -16,6 +17,7 @@ import {
   compareSessionSlots,
 } from "@/lib/sessions/domain"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
+import type { AcademyHolidayRecord } from "@/lib/sessions/holiday-types"
 import type {
   SessionAssignment,
   SessionAttendanceRecords,
@@ -69,6 +71,22 @@ function occurrenceRecords(
     replacementForOccurrenceId: occurrence.replacementForOccurrenceId,
   }))
   return resolveOccurrenceEligibilityDates(db, occurrences)
+}
+
+/**
+ * Closures overlapping a window, for surfaces that already load occurrences over
+ * the same range. Kept separate from the occurrence read because the register
+ * spans a whole year and a closure is one small row per date, not per session.
+ */
+export function listAcademyHolidaysInWindow(from: string, to: string): AcademyHolidayRecord[] {
+  return initializeDatabase().select({
+    dateKey: academyHolidays.dateKey,
+    id: academyHolidays.id,
+    label: academyHolidays.label,
+  }).from(academyHolidays).where(and(
+    gte(academyHolidays.dateKey, from),
+    lte(academyHolidays.dateKey, to),
+  )).orderBy(asc(academyHolidays.dateKey)).all()
 }
 
 export function listSessionOccurrences(from: string, to: string): TrainingSessionOccurrence[] {

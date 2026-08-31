@@ -6,6 +6,7 @@ import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { initializeDatabase } from "@/lib/db/client"
 import {
+  academyHolidays,
   attendanceAdjustments,
   playerEnrollments,
   sessionAssignments,
@@ -36,6 +37,19 @@ export function getPlayerAttendanceRecord(
   const from = `${years[0]}-01-01`
   const to = `${years[years.length - 1]}-12-31`
 
+  /*
+   * Read before the early return below. A player with no assignment still sees
+   * a calendar, and the academy being closed is true of the academy, not of
+   * their roster.
+   */
+  const holidays = database.select({
+    dateKey: academyHolidays.dateKey,
+    label: academyHolidays.label,
+  }).from(academyHolidays).where(and(
+    gte(academyHolidays.dateKey, from),
+    lte(academyHolidays.dateKey, to),
+  )).orderBy(asc(academyHolidays.dateKey)).all()
+
   const assignmentRows = database.select().from(sessionAssignments)
     .where(eq(sessionAssignments.accountId, accountId))
     .orderBy(asc(sessionAssignments.effectiveFrom), asc(sessionAssignments.id))
@@ -55,6 +69,7 @@ export function getPlayerAttendanceRecord(
       referenceInstant: referenceInstant.toISOString(),
       joinedOn: enrollment.trainingStartOn,
       years,
+      holidays,
       sessions: [],
       assignments: [],
       occurrences: [],
@@ -106,6 +121,7 @@ export function getPlayerAttendanceRecord(
     referenceInstant: referenceInstant.toISOString(),
     joinedOn: enrollment.trainingStartOn,
     years,
+    holidays,
     sessions: seriesRows.map((series) => {
       const slot = recurrenceRows.find((row) => row.seriesId === series.id)
       return {

@@ -44,6 +44,7 @@ export default async function PlayerAttendanceRegisterPage({
   return (
     <CoachPortalProvider
       key={providerKey}
+      initialAcademyHolidays={snapshot.academyHolidays}
       initialAttendanceAdjustments={snapshot.attendanceAdjustments}
       initialAttendanceRecords={snapshot.attendanceRecords}
       initialMembers={snapshot.members}

@@ -37,9 +37,11 @@ function calendarDayLabel(day: PlayerAttendanceCalendarDay) {
     ? day.sessions.map((session) => (
         session.sessionLabel + ": " + session.stateLabel
       )).join("; ")
-    : day.inLoadedYear
-      ? "not scheduled"
-      : "outside the available attendance record"
+    : day.holidayLabel
+      ? "academy closed for " + day.holidayLabel
+      : day.inLoadedYear
+        ? "not scheduled"
+        : "outside the available attendance record"
   const completionDetails = day.completionCount
     ? "; " + day.completionCount + " completed rescheduled "
       + (day.completionCount === 1 ? "session" : "sessions")
@@ -368,6 +370,7 @@ export function PlayerAttendanceCard({
                 <span><i className="is-scheduled" aria-hidden="true" />Scheduled</span>
                 <span><i className="is-makeup" aria-hidden="true" />Rescheduled</span>
                 <span><i className="is-unavailable" aria-hidden="true" />Not scheduled</span>
+                <span><i className="is-holiday" aria-hidden="true" />Holiday</span>
               </div>
               <p>Select the month above or use the arrows.</p>
             </div>
@@ -415,6 +418,7 @@ export function PlayerAttendanceCard({
                             day.inLoadedYear ? "" : "is-outside-record",
                             day.isToday ? "is-today" : "",
                             !day.sessions.length ? "is-not-scheduled" : "",
+                            day.holidayLabel ? "is-holiday" : "",
                             day.sessions.length > 1 ? "has-multiple-sessions" : "",
                             singleState ? "is-" + singleState : "",
                           ].filter(Boolean).join(" ")

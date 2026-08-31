@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   CalendarDays,
+  CalendarOff,
   ChevronDown,
   Clock3,
   MapPin,
@@ -15,6 +16,7 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Fragment, useEffect, useRef, useState } from "react"
 
+import { HolidayComposer } from "@/components/coach/calendar/holiday-composer"
 import {
   useMemberPortal,
   useSessionPortal,
@@ -25,6 +27,7 @@ import {
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
+import type { AcademyHolidayRecord } from "@/lib/sessions/holiday-types"
 import {
   assignmentCoversOccurrence,
   calendarWindowForMonth,
@@ -119,8 +122,10 @@ export function SessionCalendar({
 }) {
   const { players } = useMemberPortal()
   const {
+    academyHolidays,
     cancelSessionOccurrence,
     replaceSessionOccurrence,
+    retractAcademyHoliday,
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,
@@ -141,7 +146,12 @@ export function SessionCalendar({
   const scheduledDayCount = dayOccurrences.filter((occurrence) => occurrence.status === "scheduled").length
   const cancelledDayCount = dayOccurrences.length - scheduledDayCount
   const seriesById = new Map(sessionSeries.map((series) => [series.id, series]))
+  const holidayByDate = new Map(academyHolidays.map((holiday) => [holiday.dateKey, holiday]))
+  const selectedHoliday = holidayByDate.get(selectedDate) ?? null
 
+  const [holidayComposerOpen, setHolidayComposerOpen] = useState(false)
+  const [retractingHoliday, setRetractingHoliday] = useState(false)
+  const [holidayFeedback, setHolidayFeedback] = useState<ActionFeedback | null>(null)
   const [mobileView, setMobileView] = useState<"month" | "day">("day")
   const [expandedOccurrenceId, setExpandedOccurrenceId] = useState<string | null>(null)
   const [replacement, setReplacement] = useState<ReplacementDraft>({
@@ -265,7 +275,18 @@ export function SessionCalendar({
           <span className="eyebrow">Training operations</span>
           <h1>Session Calendar</h1>
         </div>
+        <button type="button" onClick={() => setHolidayComposerOpen(true)}>
+          <CalendarOff aria-hidden="true" /> Mark holiday
+        </button>
       </header>
+
+      {holidayComposerOpen ? (
+        <HolidayComposer
+          onClose={() => setHolidayComposerOpen(false)}
+          selectedDate={selectedDate}
+          today={today}
+        />
+      ) : null}
 
       <section className={`coach-calendar-workspace is-${mobileView}`} aria-label="Session calendar workspace">
         <div className="coach-calendar-month-pane">
@@ -300,6 +321,7 @@ export function SessionCalendar({
           </div>
 
           <MonthGrid
+            holidayByDate={holidayByDate}
             month={selectedMonth}
             occurrences={monthOccurrences}
             selectedDate={selectedDate}
@@ -328,6 +350,58 @@ export function SessionCalendar({
             </div>
             <strong>{dayOccurrenceSummary(scheduledDayCount, cancelledDayCount)}</strong>
           </div>
+
+          {selectedHoliday ? (
+            <div className="coach-day-holiday">
+              <div>
+                <span>Academy closed</span>
+                <strong>{selectedHoliday.label}</strong>
+              </div>
+              {/*
+                * Removing a holiday puts back only the sessions that holiday
+                * cancelled, so a session called off separately beforehand stays
+                * off. The server refuses outright if something has since been
+                * scheduled onto the freed date.
+                */}
+              <button
+                type="button"
+                disabled={retractingHoliday}
+                onClick={() => {
+                  if (retractingHoliday) return
+                  const confirmed = window.confirm(
+                    `Remove the ${selectedHoliday.label} holiday on ${formatDateKey(selectedDate)}? The sessions it cancelled will be restored.`,
+                  )
+                  if (!confirmed) return
+                  setRetractingHoliday(true)
+                  setHolidayFeedback(null)
+                  void retractAcademyHoliday(selectedDate)
+                    .then((result) => {
+                      if (!result.ok) {
+                        setHolidayFeedback({ message: result.message, tone: "error" })
+                      }
+                    })
+                    .catch((error: unknown) => {
+                      const failure = describeSaveFailure({
+                        error,
+                        fallbackMessage: "The holiday could not be removed",
+                        retained: "The holiday is unchanged",
+                        subject: "Removing the holiday",
+                      })
+                      setHolidayFeedback({ message: failure.message, tone: "error" })
+                    })
+                    .finally(() => setRetractingHoliday(false))
+                }}
+              >
+                {retractingHoliday ? "Removing…" : "Remove holiday"}
+              </button>
+            </div>
+          ) : null}
+
+          <InlineNotice
+            message={holidayFeedback?.message}
+            tone={holidayFeedback?.tone}
+            reserveSpace={false}
+          />
 
           {!dayOccurrences.length ? (
             <div className="coach-calendar-empty coach-day-view-empty">
@@ -597,12 +671,14 @@ function OccurrenceDetails({
 }
 
 function MonthGrid({
+  holidayByDate,
   month,
   occurrences,
   onSelect,
   selectedDate,
   today,
 }: {
+  holidayByDate: Map<string, AcademyHolidayRecord>
   month: string
   occurrences: TrainingSessionOccurrence[]
   onSelect: (dateKey: string) => void
@@ -619,19 +695,34 @@ function MonthGrid({
       {dates.map((dateKey) => {
         const count = occurrences.filter((occurrence) => occurrence.occurrenceDate === dateKey && occurrence.status === "scheduled").length
         const isSelected = dateKey === selectedDate
-        const label = `${formatDateKey(dateKey)}, ${count} ${count === 1 ? "session" : "sessions"}`
+        const holiday = holidayByDate.get(dateKey)
+        /*
+         * Named in the accessible label rather than left to the tint. A closed
+         * day has no scheduled sessions, so without this it announces "0
+         * sessions" -- the same as a Sunday, which is the confusion the whole
+         * feature exists to remove.
+         */
+        const label = holiday
+          ? `${formatDateKey(dateKey)}, closed for ${holiday.label}`
+          : `${formatDateKey(dateKey)}, ${count} ${count === 1 ? "session" : "sessions"}`
         return (
           <button
             key={dateKey}
             type="button"
-            className={[count ? "has-sessions" : "", isSelected ? "is-selected" : ""].filter(Boolean).join(" ") || undefined}
+            className={[
+              count ? "has-sessions" : "",
+              holiday ? "is-holiday" : "",
+              isSelected ? "is-selected" : "",
+            ].filter(Boolean).join(" ") || undefined}
             aria-current={dateKey === today ? "date" : undefined}
             aria-label={label}
             aria-pressed={isSelected}
             onClick={() => onSelect(dateKey)}
           >
             <strong>{Number(dateKey.slice(-2))}</strong>
-            {count ? <small>{count} {count === 1 ? "session" : "sessions"}</small> : null}
+            {holiday
+              ? <small className="coach-month-holiday">Holiday</small>
+              : count ? <small>{count} {count === 1 ? "session" : "sessions"}</small> : null}
           </button>
         )
       })}

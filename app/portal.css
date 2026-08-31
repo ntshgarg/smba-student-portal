@@ -13849,3 +13849,352 @@ tr.is-expanded .coach-member-row-action button svg {
     font-size: 16px;
   }
 }
+
+/* Academy closures -------------------------------------------------------- */
+
+/*
+ * A holiday needs its own visual identity rather than borrowing the register's
+ * "not available" hatch, because that hatch already carries three unrelated
+ * meanings -- no session generated, player not yet enrolled, plan skips this
+ * weekday. Reusing it is exactly the ambiguity this feature exists to remove,
+ * so a closure gets the navy keyline and the CalendarOff glyph everywhere it
+ * appears. The glyph is load-bearing, not decoration: --navy against the muted
+ * fills below is under 3:1 in places, so colour alone would fail WCAG 1.4.1.
+ */
+
+.coach-holiday-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: none;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  place-items: center;
+  padding: 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: color-mix(in srgb, var(--navy) 70%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.coach-holiday-backdrop[open] {
+  display: grid;
+}
+
+.coach-holiday-backdrop::backdrop {
+  background: transparent;
+}
+
+.coach-holiday-panel {
+  position: relative;
+  width: min(100%, 620px);
+  padding: clamp(28px, 5vw, 44px);
+  background: var(--white);
+  box-shadow: 0 32px 90px rgba(3, 15, 28, 0.34);
+}
+
+.coach-holiday-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--navy);
+}
+
+.coach-holiday-close svg {
+  width: 18px;
+}
+
+.coach-holiday-heading h2 {
+  margin-top: 6px;
+  color: var(--navy);
+  font-size: clamp(30px, 4vw, 40px);
+  font-weight: 520;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.coach-holiday-heading p {
+  margin-top: var(--space-copy);
+  max-width: 52ch;
+  color: var(--steel);
+  font-size: var(--type-operational-body);
+  line-height: 1.55;
+}
+
+.coach-holiday-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-copy);
+  margin-top: var(--space-group);
+}
+
+.coach-holiday-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.coach-holiday-fields span {
+  color: var(--navy);
+  font-size: var(--type-utility-label);
+  font-weight: 760;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.coach-holiday-fields input {
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--navy);
+  font-size: 0.875rem;
+}
+
+.coach-holiday-hint {
+  margin-top: var(--space-tight);
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+}
+
+.coach-holiday-impact {
+  margin-top: var(--space-group);
+  padding: var(--space-copy);
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.coach-holiday-impact h3 {
+  color: var(--navy);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.coach-holiday-note {
+  margin-top: var(--space-tight);
+  color: var(--steel);
+  font-size: var(--type-operational-body);
+  line-height: 1.5;
+}
+
+.coach-holiday-warnings {
+  display: grid;
+  gap: 12px;
+  margin-top: var(--space-copy);
+  list-style: none;
+}
+
+.coach-holiday-warnings li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: var(--space-copy);
+  border-left: 3px solid var(--makeup);
+  background: var(--makeup-soft);
+}
+
+.coach-holiday-warnings svg {
+  width: 18px;
+  color: var(--makeup-dark);
+}
+
+.coach-holiday-warnings strong {
+  display: block;
+  color: var(--navy);
+  font-size: var(--type-operational-body);
+}
+
+.coach-holiday-warnings p {
+  margin-top: 4px;
+  color: var(--makeup-dark);
+  font-size: var(--type-utility-meta);
+  line-height: 1.5;
+}
+
+.coach-holiday-dates {
+  margin-top: var(--space-copy);
+  max-height: 190px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.coach-holiday-dates li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-copy);
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+}
+
+.coach-holiday-dates strong {
+  color: var(--navy);
+  font-weight: 620;
+}
+
+.coach-holiday-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: var(--space-group);
+}
+
+.coach-holiday-actions button {
+  display: inline-flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 20px;
+  border: 1px solid var(--navy);
+  background: var(--white);
+  color: var(--navy);
+  font-size: var(--type-operational-action);
+  font-weight: 760;
+}
+
+.coach-holiday-actions .coach-holiday-confirm {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.coach-holiday-actions button:disabled {
+  border-color: var(--line-disabled);
+  background: var(--mist);
+  color: var(--steel);
+}
+
+.coach-holiday-actions svg {
+  width: 17px;
+}
+
+/* The selected day, when the academy is closed on it. */
+.coach-day-holiday {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-copy);
+  margin-top: var(--space-copy);
+  padding: 14px var(--space-copy);
+  border-left: 3px solid var(--navy);
+  background: var(--mist);
+}
+
+.coach-day-holiday span {
+  display: block;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.coach-day-holiday strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--navy);
+  font-size: 1rem;
+}
+
+.coach-day-holiday button {
+  min-height: 44px;
+  padding: 0 var(--space-copy);
+  border: 1px solid var(--navy);
+  background: transparent;
+  color: var(--navy);
+  font-size: var(--type-operational-action);
+  font-weight: 760;
+}
+
+.coach-day-holiday button:disabled {
+  border-color: var(--line-disabled);
+  color: var(--steel);
+}
+
+/* Month grid. */
+.coach-month-grid button.is-holiday {
+  border-color: var(--navy);
+  background: var(--mist);
+}
+
+.coach-month-grid button.is-holiday .coach-month-holiday {
+  color: var(--navy);
+  font-weight: 760;
+}
+
+/*
+ * Register column. `is-unavailable` already paints the hatch for every cell in
+ * a closed column, so a holiday only has to say which of the four things that
+ * hatch means it is.
+ *
+ * It says so with a glyph in the cell rather than a rule down the column edge.
+ * A keyline here is drawn per cell, not per column, so a three-day closure drew
+ * six vertical bars the length of the grid -- and the register is already dense
+ * enough that any added line reads as noise. The glyph replaces the X the cell
+ * was drawing anyway, so the column gets no heavier than it already was, and it
+ * survives the header scrolling out of view (`thead th` is not sticky).
+ */
+.coach-register-table .coach-register-date-row th.is-holiday {
+  background: var(--mist);
+  color: var(--navy);
+}
+
+.coach-register-table .coach-register-date-row th.is-holiday > strong {
+  color: var(--navy);
+}
+
+.coach-register-holiday-mark {
+  display: block;
+  /*
+   * Load-bearing. The visually-hidden reason inside this element is
+   * `position: absolute`, and without a positioned ancestor its containing
+   * block is the document rather than anything inside the register's
+   * horizontally scrolling viewport. `overflow` only clips descendants whose
+   * containing block lies inside the scroller, so the hidden span escaped the
+   * clip and its static position -- roughly 250px + (day-of-year x 58px) into
+   * a 21420px-wide table -- stretched the DOCUMENT to about 13.5k pixels. The
+   * accessibility gate caught it as `document-horizontal-overflow` at every
+   * viewport. Positioning this wrapper puts the span back inside the scroller.
+   */
+  position: relative;
+  margin-top: 2px;
+  color: var(--navy);
+}
+
+.coach-register-holiday-mark svg {
+  width: 12px;
+}
+
+.player-attendance-legend i.is-holiday {
+  border-color: var(--navy);
+  background: var(--mist);
+  color: var(--navy);
+}
+
+/*
+ * A closed day on the player's own calendar. `is-not-scheduled` already applies
+ * to it -- a holiday cancels every session -- so this only has to distinguish
+ * it from an ordinary rest day. The name is carried in the cell's accessible
+ * label and title rather than the tint, since the grid has no room for text.
+ */
+.player-attendance-calendar-day.is-holiday {
+  border-color: var(--navy);
+  background: var(--mist);
+  color: var(--navy);
+}
+
+.player-attendance-legend i.is-holiday {
+  border-color: var(--navy);
+  background: var(--mist);
+}

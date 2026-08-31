@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   listAttendanceAdjustments: vi.fn(),
   listAttendanceRegisterPlayerRecords: vi.fn(),
   listCoachMonthlyReports: vi.fn(),
+  listAcademyHolidaysInWindow: vi.fn(),
   listOperationalPlayerRecords: vi.fn(),
   listSessionAssignments: vi.fn(),
   listSessionAssignmentsForPlayers: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock("@/lib/coach/database", () => ({
 }))
 vi.mock("@/lib/db/client", () => ({ initializeDatabase: mocks.initializeDatabase }))
 vi.mock("@/lib/sessions/database", () => ({
+  listAcademyHolidaysInWindow: mocks.listAcademyHolidaysInWindow,
   listSessionAssignments: mocks.listSessionAssignments,
   listSessionAssignmentsForPlayers: mocks.listSessionAssignmentsForPlayers,
   listSessionAssignmentsForSeries: mocks.listSessionAssignmentsForSeries,
@@ -121,6 +123,7 @@ describe("route-scoped coach session read models", () => {
     vi.clearAllMocks()
     const adjustmentQuery = emptyAdjustmentQuery()
     mocks.initializeDatabase.mockReturnValue({ select: vi.fn(() => adjustmentQuery) })
+    mocks.listAcademyHolidaysInWindow.mockReturnValue([])
     mocks.listSessionSeries.mockReturnValue(series)
     mocks.listSessionAssignments.mockReturnValue([assignment])
     mocks.listSessionAssignmentsForPlayers.mockReturnValue([assignment])
