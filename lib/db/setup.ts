@@ -22,12 +22,27 @@ type PrepareDatabaseOptions = {
  * left production serving old code against a new schema. Preparing a remote
  * database is therefore confined to production, unless an environment declares
  * that the database it points at is its own and disposable.
+ *
+ * The gate keys on whether the target database is remote, not on which host is
+ * running. An earlier `VERCEL !== "1" -> false` first line exempted every shell
+ * and CI runner outright, and shouldUseTurso() is satisfied off Vercel by
+ * TURSO_DATABASE_URL plus SMBA_USE_TURSO=true alone -- so a laptop or a
+ * workflow step holding the production Turso variables could apply the working
+ * tree's migrations to the live academy and seed it, which is exactly the
+ * 22 August 2026 incident. A local file database is unaffected: shouldUseTurso()
+ * is false there, so the gate never fires for a DB_FILE_NAME run.
  */
 export function remoteDatabasePreparationBlocked() {
-  if (process.env.VERCEL !== "1") return false
-  if (process.env.VERCEL_ENV === "production") return false
+  // Nothing remote is at stake; a DB_FILE_NAME database is the caller's own.
+  if (!shouldUseTurso()) return false
+  // The environment declares the remote database it names is its own and
+  // disposable. The one deliberate opt-out, on or off Vercel.
   if (process.env.SMBA_ALLOW_REMOTE_DB_MIGRATION === "true") return false
-  return shouldUseTurso()
+  // Production's own deploy is the build that is supposed to migrate it.
+  // VERCEL_ENV is only trusted alongside VERCEL=1: on its own it is an
+  // ordinary shell variable anyone can export.
+  if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production") return false
+  return true
 }
 
 /**

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   getCurrentIdentity: vi.fn(),
+  hasPinCredential: vi.fn(),
   redirect: vi.fn(),
   setPinCredential: vi.fn(),
 }))
@@ -12,6 +13,10 @@ vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
 }))
 vi.mock("@/lib/auth/credential-service", () => ({
+  // setupPinAction now imports hasPinCredential (SEC-4). This factory replaces
+  // the whole module, so anything the action imports and is not listed here
+  // resolves to undefined and throws at call time.
+  hasPinCredential: mocks.hasPinCredential,
   setPinCredential: mocks.setPinCredential,
   validatePin: (pin: string) => /^\d{6}$/u.test(pin) ? null : "Enter exactly 6 digits.",
 }))
@@ -32,6 +37,7 @@ describe("optional PIN setup", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getCurrentIdentity.mockResolvedValue({ role: "player", subjectId: "player-one" })
+    mocks.hasPinCredential.mockReturnValue(false)
     mocks.setPinCredential.mockResolvedValue({ created: true })
   })
 

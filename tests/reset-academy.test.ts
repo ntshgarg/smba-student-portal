@@ -77,15 +77,45 @@ function academyDatabase({ owner = true }: { owner?: boolean } = {}) {
   return { directory, file }
 }
 
-async function run(file: string, args: string[] = []) {
-  return execute("npx", ["tsx", script, ...args], {
-    env: {
-      ...process.env,
-      DB_FILE_NAME: file,
-      NODE_OPTIONS: "--conditions=react-server",
-      NODE_PATH: "./node_modules/next/dist/compiled",
-    },
-  })
+/*
+ * The two remote-reset variables are pinned to "absent" rather than inherited,
+ * because the script now refuses outright when TURSO_DATABASE_URL is set
+ * without SMBA_CONFIRM_REMOTE_RESET. A developer shell that happens to hold
+ * Turso credentials -- exactly the shell the guard exists for -- would
+ * otherwise collapse every case below into that one refusal. Cases that want
+ * the remote shape ask for it through `overrides`.
+ */
+async function run(
+  file: string,
+  args: string[] = [],
+  overrides: Record<string, string | undefined> = {},
+) {
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    DB_FILE_NAME: file,
+    NODE_OPTIONS: "--conditions=react-server",
+    NODE_PATH: "./node_modules/next/dist/compiled",
+    SMBA_CONFIRM_REMOTE_RESET: undefined,
+    SMBA_USE_TURSO: undefined,
+    TURSO_AUTH_TOKEN: undefined,
+    TURSO_DATABASE_URL: undefined,
+    ...overrides,
+  }
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) delete env[key]
+  }
+
+  return execute("npx", ["tsx", script, ...args], { env: env as NodeJS.ProcessEnv })
+}
+
+/*
+ * `--confirm` alone no longer empties anything: the owner's Academy ID is a
+ * compile-time constant, so the database has to be named as well. Every
+ * destructive invocation below goes through this, which means the argument
+ * list a passing test proves is the argument list an operator has to type.
+ */
+function emptyArgs(file: string, academyId = "SMBA-ADMIN-0001") {
+  return ["--confirm", academyId, "--confirm-target", file]
 }
 
 function accountCount(file: string) {
@@ -101,13 +131,15 @@ describe("resetting an academy in place", () => {
     const { stdout } = await run(file)
 
     expect(stdout).toContain("Dry run. Nothing was changed.")
-    expect(stdout).toContain("--confirm SMBA-ADMIN-0001")
+    // The whole command, not half of it: an operator who copies this line has
+    // to be handed the argument list that actually works.
+    expect(stdout).toContain(`--confirm SMBA-ADMIN-0001 --confirm-target ${file}`)
     expect(accountCount(file)).toBe(3)
   }, 60_000)
 
   it("keeps only the platform owner once confirmed", async () => {
     const { file } = academyDatabase()
-    const { stdout } = await run(file, ["--confirm", "SMBA-ADMIN-0001"])
+    const { stdout } = await run(file, emptyArgs(file))
 
     expect(stdout).toContain("Academy emptied")
     expect(accountCount(file)).toBe(1)
@@ -136,7 +168,7 @@ describe("resetting an academy in place", () => {
     ).run(OWNER_ID, "hashed-pin", NOW.getTime(), NOW.getTime())
     seeded.close()
 
-    await run(file, ["--confirm", "SMBA-ADMIN-0001"])
+    await run(file, emptyArgs(file))
 
     const sqlite = new Database(file, { readonly: true })
     const factors = sqlite.prepare("select count(*) as total from auth_two_factors").get() as { total: number }
@@ -158,15 +190,40 @@ describe("resetting an academy in place", () => {
   it("refuses when --confirm names a different academy", async () => {
     const { file } = academyDatabase()
 
-    await expect(run(file, ["--confirm", "SMBA-ADMIN-0002"]))
+    await expect(run(file, emptyArgs(file, "SMBA-ADMIN-0002")))
       .rejects.toThrow(/Refusing to reset a database other than the one you named/u)
     expect(accountCount(file)).toBe(3)
+  }, 60_000)
+
+  /*
+   * The gap --confirm on its own cannot close. `SMBA-ADMIN-0001` is
+   * PLATFORM_ADMIN_ACADEMY_ID, and the script throws when the owner's username
+   * is anything else -- so the same six words empty a scratch fixture and the
+   * live academy, and the operator who types them has demonstrated only that
+   * they can read a constant. The database has to be named too.
+   */
+  it("refuses when --confirm-target is absent, however correct --confirm is", async () => {
+    const { file } = academyDatabase()
+
+    await expect(run(file, ["--confirm", "SMBA-ADMIN-0001"]))
+      .rejects.toThrow(`This database is ${file}`)
+    expect(accountCount(file)).toBe(3)
+  }, 60_000)
+
+  it("refuses when --confirm-target names a database this is not", async () => {
+    const { file } = academyDatabase()
+    const other = academyDatabase()
+
+    await expect(run(file, ["--confirm", "SMBA-ADMIN-0001", "--confirm-target", other.file]))
+      .rejects.toThrow(`This database is ${file}`)
+    expect(accountCount(file)).toBe(3)
+    expect(accountCount(other.file)).toBe(3)
   }, 60_000)
 
   it("refuses when there is no platform owner to keep", async () => {
     const { file } = academyDatabase({ owner: false })
 
-    await expect(run(file, ["--confirm", "SMBA-ADMIN-0001"]))
+    await expect(run(file, emptyArgs(file)))
       .rejects.toThrow(/Expected exactly one approved platform owner, found 0/u)
     expect(accountCount(file)).toBe(2)
   }, 60_000)
@@ -177,7 +234,7 @@ describe("resetting an academy in place", () => {
     sqlite.exec("create table academy_notes (id text primary key)")
     sqlite.close()
 
-    await expect(run(file, ["--confirm", "SMBA-ADMIN-0001"]))
+    await expect(run(file, emptyArgs(file)))
       .rejects.toThrow(/not classified by this script: academy_notes/u)
     expect(accountCount(file)).toBe(3)
   }, 60_000)
@@ -186,7 +243,7 @@ describe("resetting an academy in place", () => {
 describe("verifying an academy is empty", () => {
   it("passes on an emptied academy even after live traffic writes to it", async () => {
     const { file } = academyDatabase()
-    await run(file, ["--confirm", "SMBA-ADMIN-0001"])
+    await run(file, emptyArgs(file))
 
     // The site stays live through a reset, so a visitor reaching the login page
     // writes rows straight afterwards. Those must not read as survivors.
@@ -205,5 +262,53 @@ describe("verifying an academy is empty", () => {
     const { file } = academyDatabase()
 
     await expect(run(file, ["--verify"])).rejects.toThrow(/still present/u)
+  }, 60_000)
+})
+
+/*
+ * `npm run db:reset:academy` loads .env.local (package.json:9). An operator
+ * whose .env.local holds the production Turso credentials is one unset variable
+ * -- SMBA_USE_TURSO -- away from emptying the live academy, and nothing about
+ * the command mentions that variable. So the refusal is keyed on the
+ * credentials being *present*, not on them being switched on.
+ */
+describe("refusing to run beside remote credentials", () => {
+  const REMOTE = "libsql://academy-live.turso.io"
+
+  it("refuses a correctly confirmed reset while Turso credentials are in scope", async () => {
+    const { file } = academyDatabase()
+
+    await expect(run(file, emptyArgs(file), { TURSO_DATABASE_URL: REMOTE }))
+      .rejects.toThrow(/requires SMBA_CONFIRM_REMOTE_RESET=1/u)
+    // Refused before initializeDatabase() opened anything, so the local
+    // fixture is untouched as well as the remote academy.
+    expect(accountCount(file)).toBe(3)
+  }, 60_000)
+
+  it("refuses the read-only modes too, because that token can still write", async () => {
+    const { file } = academyDatabase()
+
+    await expect(run(file, [], { TURSO_DATABASE_URL: REMOTE }))
+      .rejects.toThrow(/requires SMBA_CONFIRM_REMOTE_RESET=1/u)
+    await expect(run(file, ["--verify"], { TURSO_DATABASE_URL: REMOTE }))
+      .rejects.toThrow(/requires SMBA_CONFIRM_REMOTE_RESET=1/u)
+  }, 60_000)
+
+  /*
+   * Once opted in, --confirm-target has to name what the client will actually
+   * open. shouldUseTurso() needs SMBA_USE_TURSO=true as well as the URL, so
+   * with the URL alone the run still lands on the local file -- and telling the
+   * operator to type the remote URL there would make the confirmation describe
+   * a database this run never touches.
+   */
+  it("names the database it will open, not the credentials lying beside it", async () => {
+    const { file } = academyDatabase()
+    const { stdout } = await run(file, [], {
+      SMBA_CONFIRM_REMOTE_RESET: "1",
+      TURSO_DATABASE_URL: REMOTE,
+    })
+
+    expect(stdout).toContain(`--confirm-target ${file}`)
+    expect(stdout).not.toContain(REMOTE)
   }, 60_000)
 })

@@ -98,6 +98,12 @@ export async function requestCurrentRecoveryEmail(
   formData: FormData,
 ): Promise<RecoveryEmailEnrollmentState> {
   const identity = await currentIdentity()
+  // A server action is a public endpoint: it re-states every precondition
+  // /account/recovery-email/setup checks (setup/page.tsx:25) instead of relying
+  // on it. Enrolment is first-time only — repointing a verified address is a
+  // step-up operation and must go through requestRecoveryEmailChange, which asks
+  // for the current password and, for privileged roles, a fresh second factor.
+  if (getRecoveryEmail(identity.subjectId)) redirect("/account/security")
   const email = String(formData.get("email") ?? "")
   try {
     const sent = await requestRecoveryEmailVerification({
@@ -121,6 +127,12 @@ export async function confirmCurrentRecoveryEmail(
   formData: FormData,
 ): Promise<RecoveryEmailEnrollmentState> {
   const identity = await currentIdentity()
+  // Same precondition as the request half. This does not break the legitimate
+  // request-then-confirm pair: requestRecoveryEmailVerification only writes an
+  // authEmailChallenges row, and authRecoveryEmails is written (always with
+  // verifiedAt set) by the confirm below — so getRecoveryEmail is still null
+  // when a genuine first-time enrolment reaches this line.
+  if (getRecoveryEmail(identity.subjectId)) redirect("/account/security")
   const email = String(formData.get("email") ?? "")
   const code = String(formData.get("code") ?? "").replace(/\s+/gu, "")
   const confirmed = confirmRecoveryEmailVerification({

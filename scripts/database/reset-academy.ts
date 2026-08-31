@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm"
 
 import { PLATFORM_ADMIN_ACADEMY_ID } from "../../lib/auth/identity"
-import { initializeDatabase } from "../../lib/db/client"
+import { initializeDatabase, shouldUseTurso } from "../../lib/db/client"
 
 /**
  * Empties an academy in place, leaving one platform owner and nothing else.
@@ -11,10 +11,23 @@ import { initializeDatabase } from "../../lib/db/client"
  * removed so the incoming head coach starts from the one-time secure setup
  * rather than inheriting somebody else's roster.
  *
- * This deletes production data and nothing puts it back. It refuses to run
- * without `--confirm <ACADEMY_ID>` naming the owner it is about to keep, so the
- * command cannot be pasted at the wrong database and do something irreversible
- * before anybody reads it.
+ * This deletes production data and nothing puts it back, so it refuses to run
+ * unless the operator names both halves of what they are about to do:
+ *
+ *     --confirm <ACADEMY_ID>        the owner it is about to keep
+ *     --confirm-target <URL|FILE>   the database it is about to empty
+ *
+ * `--confirm` cannot carry that on its own. The owner's Academy ID is required
+ * to equal PLATFORM_ADMIN_ACADEMY_ID -- a compile-time constant this script
+ * throws without -- so it is byte-identical on every database this can run
+ * against, and typing it proves only that the operator can read a constant.
+ * Which database is emptied is decided entirely by ambient environment, so the
+ * environment's answer has to be typed back too.
+ *
+ * A remote target is refused outright unless SMBA_CONFIRM_REMOTE_RESET is set:
+ * package.json runs this with --env-file-if-exists=.env.local, and a developer
+ * file holding production Turso credentials would otherwise leave the live
+ * academy one unset variable away from an irreversible wipe.
  */
 
 /** Never touched: migration state, and the batch rows every academy needs. */
@@ -87,9 +100,43 @@ const RUNTIME_NOISE = new Set([
 ])
 
 const confirmIndex = process.argv.indexOf("--confirm")
+const confirmTargetIndex = process.argv.indexOf("--confirm-target")
 const verifyOnly = process.argv.includes("--verify")
 const confirmedAcademyId = confirmIndex < 0 ? null : process.argv[confirmIndex + 1]?.trim() ?? ""
+const confirmedTarget = confirmTargetIndex < 0
+  ? null
+  : process.argv[confirmTargetIndex + 1]?.trim() ?? ""
 const dryRun = confirmedAcademyId === null
+
+/*
+ * The database this run will actually open, spelled the way an operator has to
+ * type it back. Resolved through shouldUseTurso() rather than off
+ * TURSO_DATABASE_URL alone, because the client only reaches Turso when
+ * SMBA_USE_TURSO=true (or VERCEL=1) as well -- naming a remote URL while
+ * quietly opening the local file would make the confirmation a lie.
+ */
+const target = shouldUseTurso()
+  ? process.env.TURSO_DATABASE_URL?.trim() ?? ""
+  : process.env.DB_FILE_NAME?.trim() || ".data/smba.db"
+
+/*
+ * package.json runs this with --env-file-if-exists=.env.local, so a developer
+ * file holding production Turso credentials puts the live academy one unset
+ * variable away from an irreversible wipe -- and that variable, SMBA_USE_TURSO,
+ * is precisely the one nothing here would prompt anybody to think about.
+ * Refuse on the credentials being present at all rather than on them being
+ * switched on, and refuse before initializeDatabase() opens anything. `--verify`
+ * and the dry run are covered too: the token those steps hold is write-capable,
+ * so pointing this script at a remote academy is the decision being confirmed,
+ * not the deletion alone.
+ */
+if (process.env.TURSO_DATABASE_URL && !process.env.SMBA_CONFIRM_REMOTE_RESET) {
+  throw new Error(
+    "Remote Turso credentials are present in this environment. Emptying a remote "
+    + "academy requires SMBA_CONFIRM_REMOTE_RESET=1 as well as --confirm and "
+    + "--confirm-target.",
+  )
+}
 
 const database = initializeDatabase()
 
@@ -217,7 +264,11 @@ function main() {
 
   if (dryRun) {
     console.log("\nDry run. Nothing was changed.")
-    console.log(`To empty this academy, re-run with:  --confirm ${owner.academyId}`)
+    console.log(`This database is ${target}.`)
+    console.log(
+      `To empty this academy, re-run with:  --confirm ${owner.academyId} `
+      + `--confirm-target ${target}`,
+    )
     for (const table of tables) {
       const count = before.get(table) ?? 0
       if (!count) continue
@@ -233,6 +284,20 @@ function main() {
     throw new Error(
       `--confirm was given "${confirmedAcademyId}" but this database's platform owner is `
       + `${owner.academyId}. Refusing to reset a database other than the one you named.`,
+    )
+  }
+
+  /*
+   * owner.academyId is PLATFORM_ADMIN_ACADEMY_ID, a compile-time constant this
+   * script throws without -- so on its own it is the same token on every
+   * database and confirms nothing about *which* one is about to be emptied. The
+   * target is chosen by ambient environment, and `npm run db:reset:academy`
+   * loads .env.local, so make the operator name the database out loud as well.
+   */
+  if (confirmedTarget !== target) {
+    throw new Error(
+      `This database is ${target}.\n`
+      + `Re-run with:  --confirm ${owner.academyId} --confirm-target ${target}`,
     )
   }
 
