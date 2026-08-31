@@ -81,10 +81,13 @@ describe("onboarding reset guidance", () => {
     const submit = /<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]
     expect(submit).toBeDefined()
     expect(html).toContain("Review fee timeline")
-    expect(submit).toContain("disabled")
+    expect(submit).toContain('aria-disabled="true"')
+    // Held by aria-disabled, NOT the disabled attribute: a disabled button leaves
+    // the tab order, so the coach cannot reach it to learn why it is held.
+    expect(submit).not.toMatch(/\sdisabled/u)
     // The faded fill is keyed off this, and `cursor: wait` is not -- a coach must
     // not be shown a spinner cursor for something only they can unblock.
-    expect(submit).toContain('data-blocked="true"')
+    expect(submit).toContain('aria-disabled="true"')
   })
 })
 
@@ -118,8 +121,8 @@ describe("onboarding stage gating", () => {
   it("holds back the assessment until every classification field is set", () => {
     const submit = /<button[^>]*type="submit"[^>]*>/u.exec(assessment())?.[0]
     expect(submit).toBeDefined()
-    expect(submit).toContain("disabled")
-    expect(submit).toContain('data-blocked="true"')
+    expect(submit).toContain('aria-disabled="true"')
+    expect(submit).not.toMatch(/\sdisabled/u)
   })
 
   it("releases it once the date, level, batch and plan are all present", () => {
@@ -130,8 +133,7 @@ describe("onboarding stage gating", () => {
       trainingStartOn: "2026-07-01",
     })
     const submit = /<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]
-    expect(submit).not.toContain("disabled")
-    expect(submit).not.toContain("data-blocked")
+    expect(submit).not.toContain("aria-disabled")
   })
 
   it("still holds it back when only the training start date is missing", () => {
@@ -140,6 +142,6 @@ describe("onboarding stage gating", () => {
       batch: "Weekend",
       level: "Intermediate",
     })
-    expect(/<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]).toContain('data-blocked="true"')
+    expect(/<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]).toContain('aria-disabled="true"')
   })
 })

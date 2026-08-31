@@ -388,8 +388,8 @@ export function FeePlanStep({
         <button
           className={styles.primaryButton}
           type="submit"
-          data-blocked={awaitingFee ? "true" : undefined}
-          disabled={busy || awaitingFee}
+          aria-disabled={awaitingFee || undefined}
+          disabled={busy}
         >
           {busy
             ? preview ? "Completing…" : "Building timeline…"

@@ -320,8 +320,8 @@ export function SessionStep({
         <button
           className={styles.primaryButton}
           type="submit"
-          data-blocked={submitBlocked ? "true" : undefined}
-          disabled={busy || submitBlocked}
+          aria-disabled={submitBlocked || undefined}
+          disabled={busy}
         >
           {busy
             ? "Assigning…"

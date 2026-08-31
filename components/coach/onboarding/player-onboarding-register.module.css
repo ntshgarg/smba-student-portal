@@ -571,17 +571,30 @@
   opacity: 0.58;
 }
 
-/* `cursor: wait` above is right for the busy state -- something is in flight and
-   will finish. It is wrong for an action held back by the form's own contents,
-   which will not finish until the coach changes something, so a blocked action
-   gets `not-allowed` and a faded fill instead of the spinner cursor.
+/* Two states, two mechanisms, following app/portal.css:1861 -- `:disabled` with
+   `cursor: wait` means busy, something is in flight and will finish;
+   `aria-disabled` means refused, and nothing will change until the coach does.
+   Pointing a spinner at an action only they can unblock reads as a hang.
+
+   aria-disabled rather than the disabled attribute on purpose: a disabled button
+   leaves the tab order, so a keyboard or screen-reader user cannot reach it to
+   discover why they are stuck. Held this way the click still reaches the submit
+   handler, which names the missing field and focuses it.
+
+   THE RULE, which this codebase has now reached three times independently (here,
+   app/portal.css:1861, and the type="number" comment in register/fee-plan-step.tsx):
+   hold an action back when the requirement is visible without explanation -- an
+   empty field, a closed list, a date range. Leave it live when the input needs
+   explaining, such as a typo: a button that silently will not press says nothing,
+   and native constraint validation blocks submit before the handler that would
+   have said something.
 
    Faded to 60% navy rather than by opacity, so the fill is a known value: white
-   label text on it measures 4.63:1 and the boundary 4.25:1 on --ivory, both past
-   WCAG 1.4.3 and 1.4.11. Disabled controls are exempt from those, but a button a
-   coach is meant to read and act on should not need the exemption. */
-.formActions > .primaryButton[data-blocked="true"]:disabled,
-.primaryButton[data-blocked="true"]:disabled {
+   label text measures 4.63:1 on it and the boundary 4.25:1 on --ivory, both past
+   WCAG 1.4.3 and 1.4.11. Disabled controls are exempt; a control a coach must read
+   and act on should not need the exemption. */
+.formActions > .primaryButton[aria-disabled="true"],
+.primaryButton[aria-disabled="true"] {
   border-color: color-mix(in srgb, var(--navy) 60%, var(--white));
   background: color-mix(in srgb, var(--navy) 60%, var(--white));
   color: var(--white);

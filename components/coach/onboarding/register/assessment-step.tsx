@@ -236,8 +236,8 @@ export function AssessmentStep({
         <button
           className={styles.primaryButton}
           type="submit"
-          data-blocked={classificationIncomplete ? "true" : undefined}
-          disabled={busy || classificationIncomplete}
+          aria-disabled={classificationIncomplete || undefined}
+          disabled={busy}
         >
           {busy
             ? "Saving…"
