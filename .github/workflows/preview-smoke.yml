@@ -12,6 +12,12 @@ name: Preview smoke
 # Preview deployments are behind Vercel SSO, so this can only reach one when
 # VERCEL_AUTOMATION_BYPASS_SECRET is set. Until it is, the job says loudly that
 # it verified nothing and passes; once it is, a failing smoke fails the job.
+#
+# The same is true of a preview this repository does not trust. Sending the
+# bypass secret is sending it *to* the deployment, and a fork pull request's
+# preview is running the fork author's own application code, which reads its own
+# inbound request headers. So the deployed commit is classified first, and an
+# untrusted one reports not verified instead of being smoked with a credential.
 
 on:
   deployment_status:
@@ -46,17 +52,117 @@ jobs:
       # none of them describes the author of the commit.
       #
       # Pinning the ref is the mitigation, not gating the trigger: GitHub offers
-      # no branch filter for deployment_status, and a filter that demanded the
-      # commit be on main would turn the job off for the pull-request previews
-      # it exists to smoke. So the *script* comes from trusted code and the
-      # *preview* is reached over HTTP as data, which is what a smoke test is.
-      # The cost is that a pull request changing the smoke script is smoked with
-      # main's copy of it; that is a correctness tradeoff, not a security one.
+      # no branch filter for deployment_status, and a filter on the trigger
+      # would turn the job off for the pull-request previews it exists to smoke.
+      # So the *script* comes from trusted code. The cost is that a pull request
+      # changing the smoke script is smoked with main's copy of it; that is a
+      # correctness tradeoff, not a security one.
+      #
+      # This is only half of it, and the half about the runner. The other half
+      # is below: reaching the preview "as data" describes the response, not the
+      # request, and the request carries the bypass secret to a deployment
+      # running the fork author's code. Trusted code is necessary here; it is
+      # not sufficient.
       - name: Check out the trusted smoke script
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
+
+      # Which previews may be handed the bypass secret. The four conditions in
+      # the job `if:` all describe Vercel; none describes the author of the
+      # commit, and nothing in the deployment_status payload is trustworthy for
+      # that, so it is settled against the GitHub API instead.
+      #
+      # "Is the commit the head of a branch of THIS repository" is the question,
+      # not "does the commit exist here": GitHub replicates a fork pull
+      # request's head commit into this repository under refs/pull/N/head, so it
+      # is readable and comparable and proves nothing. Putting a commit at the
+      # head of a branch here needs write access.
+      #
+      # Being already on the default branch is accepted too, which covers a
+      # commit whose branch has since moved on or been merged and deleted.
+      # Ancestry alone would not do: a same-repository pull request branch is
+      # `diverged` from main the moment main gains one commit, and refusing
+      # those would switch the job off for nearly every preview it exists for.
+      #
+      # An API failure classifies as untrusted rather than failing the job, for
+      # the reason the bypass report below gives: a red check no commit can fix
+      # teaches people to ignore the check. Failing closed still holds -- the
+      # secret is not sent.
+      - name: Classify the deployed commit as trusted code or not
+        id: trust
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const deployedSha = context.payload.deployment?.sha ?? ""
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+
+            const untrusted = (reason) => {
+              core.warning(`Preview not verified: ${reason}.`)
+              core.setOutput("trusted", "false")
+              core.setOutput("reason", reason)
+            }
+            const trusted = (reason) => {
+              core.notice(`Deployed commit is trusted code: ${reason}.`)
+              core.setOutput("trusted", "true")
+              core.setOutput("reason", reason)
+            }
+
+            if (!/^[a-f0-9]{40}$/u.test(deployedSha)) {
+              untrusted("the deployment carries no full commit SHA")
+              return
+            }
+
+            const defaultBranch = context.payload.repository.default_branch
+            try {
+              const heads = await github.rest.repos.listBranchesForHeadCommit({
+                commit_sha: deployedSha,
+                owner,
+                repo,
+              })
+              if (heads.data.length > 0) {
+                trusted(`${deployedSha} is the head of ${heads.data.map((head) => head.name).join(", ")}`)
+                return
+              }
+
+              const comparison = await github.rest.repos.compareCommitsWithBasehead({
+                basehead: `${deployedSha}...${defaultBranch}`,
+                owner,
+                repo,
+              })
+              if (["ahead", "identical"].includes(comparison.data.status)) {
+                trusted(`${deployedSha} is already on ${defaultBranch}`)
+                return
+              }
+            } catch (error) {
+              untrusted(`the deployed commit could not be classified (${error.message})`)
+              return
+            }
+
+            untrusted(
+              `${deployedSha} is on no branch of ${owner}/${repo} and is not on ${defaultBranch}, `
+              + "so it is a fork or otherwise untrusted commit",
+            )
+
+      - name: Report that an untrusted preview was not verified
+        if: steps.trust.outputs.trusted != 'true'
+        env:
+          TRUST_REASON: ${{ steps.trust.outputs.reason }}
+        run: |
+          echo "::warning title=Preview not verified::The deployed commit is not trusted code, so the preview was not smoked. Sending it the Vercel protection bypass secret would put that secret in a request header the deployment can read."
+          {
+            echo "### Preview NOT verified"
+            echo
+            echo "This deployment was **not** smoke tested, and no credential was"
+            echo "sent to it. Reason: ${TRUST_REASON}."
+            echo
+            echo "A fork pull request's preview runs the fork author's own"
+            echo "application code. Reaching it requires the Vercel protection"
+            echo "bypass secret, and that secret arrives as a request header the"
+            echo "deployment reads. It is smoked once the change is merged."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Use Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -89,6 +195,7 @@ jobs:
       # fix teaches people to ignore the check. A real smoke failure still fails.
       - name: Check the bypass secret is configured
         id: bypass
+        if: steps.trust.outputs.trusted == 'true'
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
@@ -99,7 +206,7 @@ jobs:
           fi
 
       - name: Report that nothing was verified
-        if: steps.bypass.outputs.configured != 'true'
+        if: steps.trust.outputs.trusted == 'true' && steps.bypass.outputs.configured != 'true'
         run: |
           echo "::warning title=Preview not verified::VERCEL_AUTOMATION_BYPASS_SECRET is not set, so the preview deployment was not checked. Enable Protection Bypass for Automation on the Vercel project and store the secret under that name."
           {
@@ -117,9 +224,15 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify the preview answers
-        if: steps.bypass.outputs.configured == 'true'
+        if: steps.trust.outputs.trusted == 'true' && steps.bypass.outputs.configured == 'true'
         env:
           PREVIEW_ORIGIN: ${{ steps.target.outputs.origin }}
+          # The classification again, as data this time. The `if:` above decides
+          # whether this step runs; this decides whether check-production.mjs is
+          # willing to put the secret on the wire. Deleting the `if:` does not
+          # reopen the leak, and neither does deleting the whole step above --
+          # an absent output renders empty, which is not "true".
+          SMBA_DEPLOYMENT_TRUSTED: ${{ steps.trust.outputs.trusted }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           # Through the environment, never through a template expression. An
