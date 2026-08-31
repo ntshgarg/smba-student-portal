@@ -1302,7 +1302,7 @@
 .form-field select {
   width: 100%;
   min-height: 46px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-xs);
   background: transparent;
   box-shadow: none;
