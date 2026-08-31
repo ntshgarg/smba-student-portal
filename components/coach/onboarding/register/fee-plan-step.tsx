@@ -133,6 +133,7 @@ export function FeePlanStep({
       <div className={styles.recoveryPanel}>
         <strong>Fee completion opens on {formatDateKey(item.trainingStartOn)}.</strong>
         <p>The future training date is saved. Assessment and session setup can be prepared now, but fees and the permanent date lock wait until training begins.</p>
+        <p>Resetting the session assignment reopens the assessment, which is the only step where the training start date can be changed.</p>
         <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
           {busy
@@ -367,6 +368,12 @@ export function FeePlanStep({
         </section>
       ) : null}
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <p className={styles.feeNote}>
+        Changing the training start date means resetting the session assignment. That reopens
+        the assessment, which is the only step where the date can be edited — the register
+        shows one step per player, so there is no other way back to it. Resetting stops being
+        possible once academy records exist against the assignment.
+      </p>
       <div className={styles.formActions}>
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
           {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
