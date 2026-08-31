@@ -23,3 +23,7 @@
 
 # Agent worktrees and local settings live here; never commit them.
 /.claude
+
+# End-to-end flow harnesses write live owner and head-coach credentials, PINs
+# and TOTP seeds into flowtest/state.json; never commit them.
+/flowtest
