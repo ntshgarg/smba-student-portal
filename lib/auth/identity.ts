@@ -54,18 +54,28 @@ export type StudentIdentity = {
 }
 
 /*
- * Format characters (ZWSP, ZWNJ, soft hyphen, the bidi overrides) and the
- * non-whitespace controls render as nothing at all, so a name carrying one is
- * indistinguishable on screen from the same name without it. Left in, they
- * split one person into two accounts, carry into the CSV exports, and let a
- * rejected applicant re-enter the queue as a stranger.
+ * Characters with no width and no effect on the letters either side: soft
+ * hyphen, zero-width space, the bidi marks, embeddings, overrides and isolates,
+ * the word joiner and its neighbours, the byte-order mark, the Mongolian vowel
+ * separator. A name carrying one is indistinguishable on screen from the same
+ * name without it, so left in they split one person into two accounts, ride into
+ * the CSV exports, and let a rejected applicant re-enter the queue as a stranger.
  *
- * Controls become a space rather than vanishing: `\p{Cc}` covers tab and
- * newline, and deleting those would glue two names into one word. Every
- * remaining run of whitespace is collapsed afterwards, so neither substitution
- * can leave a double space behind.
+ * ZWJ (U+200D) and ZWNJ (U+200C) are NOT in this set, and that is the whole
+ * point of enumerating rather than reaching for \p{Cf}. In Indic scripts they
+ * are letters' business: <consonant, virama, ZWJ> is how Malayalam writes a
+ * chillu, and ZWNJ is how Devanagari keeps a halant visible instead of forming a
+ * conjunct. Dropping them rewrites `ഗോപാല്‍` to `ഗോപാല്` and `क्‌षमा` to `क्षमा` --
+ * different letters, in the name this academy prints and exports. They are
+ * folded in the comparison key below instead, where changing the spelling costs
+ * nothing.
+ *
+ * Controls become a space rather than vanishing: \p{Cc} covers tab and newline,
+ * and deleting those would glue two names into one word. Every remaining run of
+ * whitespace is collapsed afterwards, so neither substitution can leave a double
+ * space behind.
  */
-const INVISIBLE_CHARACTERS = /[\p{Cf}᠎]/gu
+const INVISIBLE_CHARACTERS = /[­᠎​‎‏‪-‮⁠-⁤⁦-⁯﻿]/gu
 const CONTROL_CHARACTERS = /\p{Cc}/gu
 
 export function normalizeFullName(value: string) {
@@ -74,6 +84,32 @@ export function normalizeFullName(value: string) {
     .replace(CONTROL_CHARACTERS, " ")
     .trim()
     .replace(/\s+/gu, " ")
+}
+
+/*
+ * A Malayalam chillu written as <consonant, virama, ZWJ> and the atomic letter
+ * are the same letter on screen, and NFKC does not unify them -- so the two
+ * spellings of one name hashed apart and the duplicate the key exists to catch
+ * walked straight through. Applied before the joiners are dropped, because the
+ * ZWJ is what identifies the sequence.
+ */
+const MALAYALAM_CHILLU_FORMS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/ണ്‍/gu, "ൺ"],
+  [/ന്‍/gu, "ൻ"],
+  [/ര്‍/gu, "ർ"],
+  [/ല്‍/gu, "ൽ"],
+  [/ള്‍/gu, "ൾ"],
+  [/ക്‍/gu, "ൿ"],
+]
+
+const JOINERS = /[‌‍]/gu
+
+function foldJoiners(value: string) {
+  const folded = MALAYALAM_CHILLU_FORMS.reduce(
+    (text, [pattern, atomic]) => text.replace(pattern, atomic),
+    value,
+  )
+  return folded.replace(JOINERS, "")
 }
 
 /**
@@ -93,10 +129,15 @@ export function normalizeFullName(value: string) {
  * different hash. The existing idempotence test missed it because it uses ASCII.
  */
 export function normalizedNameKey(value: string) {
-  // Normalised twice on purpose: dropping a format character can leave a base
-  // letter adjacent to a combining mark that the first pass could not compose
-  // through it, and those only join on the pass after the strip.
-  return normalizeFullName(value.normalize("NFKC"))
+  /*
+   * Normalised again at the end rather than only at the start. Dropping a
+   * joiner can leave a base letter next to a combining mark it had been keeping
+   * apart, and case folding can itself denormalise -- either way the pair only
+   * composes on the pass after, and a key that is not a fixed point of its own
+   * function hashes the same name two ways the second time it is computed.
+   */
+  return normalizeFullName(foldJoiners(value.normalize("NFKC")))
+    .toLocaleLowerCase("en-IN")
     .normalize("NFKC")
     .toLocaleLowerCase("en-IN")
 }
