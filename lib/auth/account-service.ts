@@ -188,7 +188,7 @@ export async function requestRegistration(input: {
    */
   const normalizedName = normalizedNameKey(fullName)
   if (normalizedName.length < 2 || normalizedName.length > 80) {
-    operationalActionError("INVALID_INPUT", "Enter the player's full name.", "fullName")
+    operationalActionError("INVALID_INPUT", "Enter the player’s full name.", "fullName")
   }
   const identity = registrationIdentity(fullName, input.email)
   if (!identity) {

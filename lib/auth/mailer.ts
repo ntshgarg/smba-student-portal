@@ -1,8 +1,8 @@
 import "server-only"
 
 import {
-  disposableAccessibilityDatabase,
-  isAccessibilityGateProfile,
+  disposableRigDatabase,
+  isDisposableRigProfile,
 } from "@/lib/accessibility-gate"
 
 export type RecoveryEmailVerificationMessage = {
@@ -69,8 +69,8 @@ function memoryAuthMailerAllowed() {
   // Both conditions come from lib/accessibility-gate.ts rather than being spelled
   // out here, because lib/clock.ts gates its render-clock pin on the same two and
   // the pair used to exist twice, verbatim.
-  return isAccessibilityGateProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)
-    && disposableAccessibilityDatabase()
+  return isDisposableRigProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)
+    && disposableRigDatabase()
 }
 
 function escapeHtml(value: string) {

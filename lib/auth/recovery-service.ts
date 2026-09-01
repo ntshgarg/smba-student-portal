@@ -474,7 +474,7 @@ export async function requestRegistrationVerification(input: {
   const email = normalizeEmailAddress(input.email)
   if (!email) throw new Error("Enter a valid email address.")
   const fullName = input.fullName.trim()
-  if (!fullName) throw new Error("Enter the player's full name.")
+  if (!fullName) throw new Error("Enter the player’s full name.")
   const hashedSubject = subjectHash(input.subjectKey)
   /*
    * One ceiling gates the requester, and it is the only thing that can refuse

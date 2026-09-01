@@ -1,9 +1,9 @@
 import "server-only"
 
 import {
-  accessibilityGateProfiles,
-  disposableAccessibilityDatabase,
-  isAccessibilityGateProfile,
+  disposableRigProfiles,
+  disposableRigDatabase,
+  isDisposableRigProfile,
 } from "@/lib/accessibility-gate"
 import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 
@@ -70,16 +70,16 @@ function pinnedAccessibilityInstant() {
   if (process.env.VERCEL) {
     throw new Error("SMBA_ACCESSIBILITY_CLOCK must never be set on a Vercel deployment.")
   }
-  if (!isAccessibilityGateProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)) {
+  if (!isDisposableRigProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)) {
     throw new Error(
       "SMBA_ACCESSIBILITY_CLOCK requires SMBA_ACCESSIBILITY_PROFILE to name an"
-      + ` accessibility gate profile (${accessibilityGateProfiles.join(", ")}).`,
+      + ` disposable rig profile (${disposableRigProfiles.join(", ")}).`,
     )
   }
-  if (!disposableAccessibilityDatabase()) {
+  if (!disposableRigDatabase()) {
     throw new Error(
       "SMBA_ACCESSIBILITY_CLOCK requires DB_FILE_NAME to be a disposable"
-      + " accessibility database under the operating system temporary root.",
+      + " regression-rig database under the operating system temporary root.",
     )
   }
   const instant = Date.parse(configured)
