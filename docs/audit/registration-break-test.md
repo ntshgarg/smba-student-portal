@@ -10,8 +10,11 @@ the real service functions. Scratch test files were deleted; nothing outside thi
 `note`, and are listed at the end so they are not re-discovered from scratch.
 
 **All seven are fixed** (`637d348`, `b9be603`, `074961e`, `664103f`), each pinned by a regression in
-`tests/registration-attack-regressions.test.ts` that fails against the code as it stood. Fifteen of
-the sixteen new tests fail without those commits; the sixteenth pins a property that already held.
+`tests/registration-attack-regressions.test.ts` that fails against the code as it stood.
+
+A second sweep then attacked the fixes themselves, and found that two of them made things worse.
+See **Round two** below — `074961e` in particular is superseded by `a299df2` and should not be read
+as the current design.
 
 ---
 
@@ -234,3 +237,85 @@ Reproduced but judged `minor` or `note`. Not fixed, not forgotten:
 | Status lookup re-mints the activation claim, clobbering an outstanding receipt | mechanically real, no privilege gained |
 | `auth_email_challenges` and `auth_login_attempts` grow without bound | nothing prunes |
 | A client-supplied `x-forwarded-for` picks the rate-limit bucket when no platform header is present | not reachable on Vercel |
+
+
+---
+
+# Round two — attacking the fixes
+
+The seven fixes above were handed to the same treatment: five lenses over HEAD, each finding
+verified by someone told to reject it. Three of the fixes were wrong.
+
+## The per-IP bucket was halved, not namespaced — `major`, confirmed twice
+
+`requestThrottleKeys` passed the caller's raw address hash through, and `attemptKeys` writes
+`ip:<hash>` from whatever it is handed — the same row the sign-in paths read. So every
+unauthenticated recovery and registration request was already spending the twenty-per-fifteen-minutes
+budget that decides whether anyone behind that address can sign in. `074961e` added a *second*
+`recordLoginFailure`, making one send cost two of those twenty.
+
+```
+first send that blocked the IP: 10
+ip row after 12 sends: failedCount=20 blockedUntil=…
+```
+
+Ten sends from an academy's wifi or a carrier NAT locked out every unrelated person on it. Fixed in
+`a299df2` by namespacing the address half, which also closes the pre-existing shared-bucket finding
+listed as downgraded above.
+
+## The per-address ceiling was a worse lock than the one it replaced — `major`
+
+```
+5 junk-name sends, one IP        -> victim refused on BOTH doors, 15 min, renewable forever
+victim probes, 45 simulated min  -> 2 codes in 16 attempts, attacker cost 8 of 20 ip slots
+codes that landed                -> bound to the junk identities; victim's confirm returns null
+no attacker at all               -> 3 children + 2 resends = 5 sends, the 6th silently dropped
+```
+
+The comment asserting *"neither is spendable by a stranger on the victim's behalf"* was false for the
+delivery ceiling, and the one promising the victim a *"still-valid code already sitting"* in their
+inbox was false for anyone the attacker named differently.
+
+This is not a threshold that needed raising. Any ceiling counting sends to an address is spendable by
+whoever generates the volume, so it is always a lock on whoever owns that address. `a299df2` removes
+it. What bounds a flood now is the cooldown, scoped to the address rather than the identity: one code
+per inbox per minute, however many names and origins try. Between an inbox that can be flooded and a
+family that cannot register a child, the flood is the lesser harm — and the form says a code can take
+a minute, unconditionally, so the wait is explained without admitting who is registered.
+
+## Stripping format characters rewrote Indic names — `major`
+
+`ഗോപാല്‍` became `ഗോപാല്` and `क्‌षमा` became `क्षमा` — in the *stored and displayed* name, not just the
+key. ZWJ and ZWNJ are letters' business in these scripts: `<consonant, virama, ZWJ>` is how Malayalam
+writes a chillu. And the fix missed its own goal, because the ZWJ chillu and the atomic chillu render
+identically, NFKC does not unify them, and they still hashed apart.
+
+`a26ed79` enumerates the invisible set instead of taking a Unicode category wholesale, keeps both
+joiners in the display name, folds them plus the six Malayalam chillu sequences in the key, and is
+verified idempotent across 13,575 samples.
+
+## Also fixed
+
+- **The status door offered a password form to an account that already had one** (`73d7e40`),
+  resurrecting its consumed claim and overwriting the token hash the original browser held.
+- **CI could never have run the registration E2E** (`62ad894`): the memory mail transport is gated on
+  a named rig profile and a rig-named database, and the job set neither, so `/register` dead-ended on
+  *"Authentication email delivery is temporarily unavailable."*
+- **The E2E suite drove a flow that no longer exists** (`92441ef`): all six tests failed against a
+  production build. `b491b51` repointed the button labels and nobody ran it.
+
+## Verified green after round two
+
+Registration 6/6, authentication 5/5, onboarding 1/1, both accessibility profiles (clean at 0
+advisories, admin at its recorded 147), 1362 unit tests, `tsc` and `eslint`.
+
+## Still open
+
+- **The timing channel survives.** A delivered send is floor-plus-delivery (~208ms observed); a
+  suppressed one is the floor alone (~128ms). One timed request still separates "a code went out"
+  from "suppressed". Closing it means taking mail off the request path.
+- **A rejected registration can never be un-rejected**, and the identity key stays on the rejected
+  row, so a mis-click on Reject is unrecoverable through the product.
+- **A distributed flood is bounded only by the address cooldown** — 15 codes per inbox per 15
+  minutes. Below that needs bot detection at the edge, which the plan listed as optional.
+- The rest of the downgraded table above re-verified as still true and unchanged.
