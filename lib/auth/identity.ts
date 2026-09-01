@@ -57,8 +57,18 @@ export function normalizeFullName(value: string) {
   return value.trim().replace(/\s+/gu, " ")
 }
 
+/**
+ * The comparison key for a name, never the stored or displayed form -- how a
+ * person spells their own name is theirs, and NFKC would quietly rewrite it.
+ *
+ * NFKC matters here rather than being ceremony: Devanagari composes with
+ * combining marks, so `शर्मा` pasted out of a message and `शर्मा` typed fresh can
+ * be different byte sequences that render identically. Without normalising them
+ * to one form, two registrations for the same player hash to two keys and the
+ * duplicate this key exists to catch walks straight through.
+ */
 export function normalizedNameKey(value: string) {
-  return normalizeFullName(value).toLocaleLowerCase("en-IN")
+  return normalizeFullName(value).normalize("NFKC").toLocaleLowerCase("en-IN")
 }
 
 export function normalizeAcademyId(value: string) {

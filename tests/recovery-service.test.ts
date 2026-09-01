@@ -36,6 +36,7 @@ import type {
   AuthMailer,
   PasswordRecoveryMessage,
   RecoveryEmailVerificationMessage,
+  RegistrationVerificationMessage,
 } from "@/lib/auth/mailer"
 import { authEmailRequired, validateAuthEmailConfiguration } from "@/lib/auth/mailer"
 import type { SmbaDatabase } from "@/lib/db/client"
@@ -52,6 +53,7 @@ let database: SmbaDatabase
 class CapturingMailer implements AuthMailer {
   authenticatorRecovery: AuthenticatorRecoveryMessage[] = []
   passwordRecovery: PasswordRecoveryMessage[] = []
+  registration: RegistrationVerificationMessage[] = []
   verification: RecoveryEmailVerificationMessage[] = []
 
   async sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage) {
@@ -65,6 +67,10 @@ class CapturingMailer implements AuthMailer {
   async sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage) {
     this.verification.push(message)
   }
+
+  async sendRegistrationVerification(message: RegistrationVerificationMessage) {
+    this.registration.push(message)
+  }
 }
 
 class FailingMailer implements AuthMailer {
@@ -77,6 +83,10 @@ class FailingMailer implements AuthMailer {
   }
 
   async sendRecoveryEmailVerification() {
+    throw new Error("simulated delivery failure")
+  }
+
+  async sendRegistrationVerification() {
     throw new Error("simulated delivery failure")
   }
 }

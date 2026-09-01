@@ -18,6 +18,21 @@ export const accounts = sqliteTable("accounts", {
   normalizedName: text("normalized_name").notNull(),
   registrationRequestFingerprint: text("registration_request_fingerprint"),
   registrationRequestKey: text("registration_request_key"),
+  /*
+   * The identity a registration is deduplicated on: an HMAC of the normalised
+   * contact address and the normalised name. Stored as a digest rather than as a
+   * second normalised copy of the address, because docs/audit/security.md 6.3
+   * wants the addresses this schema already holds encrypted -- adding another
+   * plaintext copy purely to index it would enlarge exactly the footprint that
+   * finding is about, and nothing needs to read the address back out of the key.
+   *
+   * Null on every account created before this existed, and on any account a coach
+   * enters by hand, which is why the unique index below is partial.
+   */
+  registrationIdentityKey: text("registration_identity_key"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  dateOfBirth: text("date_of_birth"),
   requestedRole: text("requested_role", { enum: ["player", "coach", "platform_admin"] }).notNull(),
   role: text("role", { enum: ["player", "coach", "platform_admin"] }),
   approvalStatus: text("approval_status", {
@@ -38,6 +53,9 @@ export const accounts = sqliteTable("accounts", {
   uniqueIndex("accounts_registration_request_key_idx")
     .on(table.registrationRequestKey)
     .where(sql`${table.registrationRequestKey} is not null`),
+  uniqueIndex("accounts_registration_identity_key_idx")
+    .on(table.registrationIdentityKey)
+    .where(sql`${table.registrationIdentityKey} is not null`),
 ])
 
 export const academyIdAllocations = sqliteTable("academy_id_allocations", {

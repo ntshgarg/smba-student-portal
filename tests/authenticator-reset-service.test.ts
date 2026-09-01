@@ -19,6 +19,7 @@ import type {
   AuthMailer,
   PasswordRecoveryMessage,
   RecoveryEmailVerificationMessage,
+  RegistrationVerificationMessage,
 } from "@/lib/auth/mailer"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
 import {
@@ -52,6 +53,10 @@ class CapturingMailer implements AuthMailer {
   }
 
   async sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage) {
+    void message
+  }
+
+  async sendRegistrationVerification(message: RegistrationVerificationMessage) {
     void message
   }
 }

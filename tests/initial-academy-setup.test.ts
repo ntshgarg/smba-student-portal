@@ -55,6 +55,7 @@ async function verifiedHeadSetupEmail(setupToken: string) {
       async sendRecoveryEmailVerification(message) {
         verificationCode = message.code
       },
+      async sendRegistrationVerification() {},
     },
     subjectKey,
   }, { database, now: NOW })

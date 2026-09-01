@@ -33,6 +33,15 @@ import {
   extendActivationClaim,
   saveActivationClaim,
 } from "@/lib/auth/credential-service"
+import {
+  confirmRegistrationVerification,
+  genericAcceptedResponse,
+  normalizeEmailAddress,
+  registrationSubjectKey,
+  requestRegistrationVerification,
+} from "@/lib/auth/recovery-service"
+import { authRecoveryEmails } from "@/lib/db/schema"
+import type { AuthMailer } from "@/lib/auth/mailer"
 import { getAcademyDateKey } from "@/lib/format"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
@@ -54,6 +63,211 @@ export function registerAccount(fullName: string, requestedRole: AccountRole) {
   }).run()
 
   return id
+}
+
+const REGISTRATION_MIN_PHONE_DIGITS = 8
+const REGISTRATION_MAX_PHONE_DIGITS = 15
+/** Older than this and the date is a typo, not a birthday. */
+const REGISTRATION_MAX_AGE_YEARS = 120
+
+export type RegistrationStanding = "new" | "pending" | "approved" | "rejected"
+
+type RegistrationSecurity = {
+  ipHash?: string | null
+  userAgent?: string | null
+}
+
+/**
+ * The identity a registration is deduplicated on. One address may own several
+ * players -- a parent registering three children is ordinary -- so the name is
+ * part of the key rather than the address alone.
+ *
+ * Both halves are normalised first, and the separator is a space, which the
+ * address validator forbids inside an address. Without that the boundary would
+ * slide: ("ab", "c@d.ee") and ("a", "bc@d.ee") would otherwise hash alike.
+ */
+export function registrationIdentity(fullName: string, email: string) {
+  const normalizedEmail = normalizeEmailAddress(email)
+  const normalizedName = normalizedNameKey(fullName)
+  if (!normalizedEmail || normalizedName.length < 2 || normalizedName.length > 80) return null
+  return {
+    normalizedEmail,
+    normalizedName,
+    subjectKey: registrationSubjectKey(normalizedEmail, normalizedName),
+  }
+}
+
+export function normalizeRegistrationPhone(value: string) {
+  const trimmed = value.trim().replace(/[\s()-]/gu, "")
+  const digits = trimmed.replace(/^\+/u, "")
+  if (!/^\d+$/u.test(digits)) return null
+  if (digits.length < REGISTRATION_MIN_PHONE_DIGITS) return null
+  if (digits.length > REGISTRATION_MAX_PHONE_DIGITS) return null
+  return trimmed
+}
+
+export function validateRegistrationDateOfBirth(value: string, referenceDateKey: string) {
+  const trimmed = value.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(trimmed)) return null
+  // Round-tripping through Date catches 2026-02-30, which the regex accepts.
+  const parsed = new Date(`${trimmed}T00:00:00Z`)
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== trimmed) return null
+  if (trimmed > referenceDateKey) return null
+  const earliest = Number(referenceDateKey.slice(0, 4)) - REGISTRATION_MAX_AGE_YEARS
+  if (Number(trimmed.slice(0, 4)) < earliest) return null
+  return trimmed
+}
+
+function registrationStandingFor(identityKey: string, database: SmbaDatabaseExecutor) {
+  const existing = database.select({
+    academyId: authMethods.identifier,
+    approvalStatus: accounts.approvalStatus,
+    archivedAt: accounts.archivedAt,
+    fullName: accounts.fullName,
+    id: accounts.id,
+  }).from(accounts)
+    .leftJoin(authMethods, and(
+      eq(authMethods.accountId, accounts.id),
+      eq(authMethods.method, "academy_id"),
+      isNull(authMethods.revokedAt),
+    ))
+    .where(eq(accounts.registrationIdentityKey, identityKey))
+    .get()
+  // An archived account is treated as absent rather than surfaced, so archiving
+  // does not become a way to read whether someone was ever registered.
+  if (!existing || existing.archivedAt) return null
+  return {
+    academyId: existing.approvalStatus === "approved" ? existing.academyId : null,
+    accountId: existing.id,
+    fullName: existing.fullName,
+    standing: existing.approvalStatus as RegistrationStanding,
+  }
+}
+
+/**
+ * Step one of registration: send a code, write no account.
+ *
+ * The returned value is identical whether or not this identity is already
+ * registered -- same shape, same timing floor -- because the caller is
+ * unauthenticated and the form would otherwise be an oracle for which
+ * name-and-address pairs exist. The difference travels in the email.
+ */
+export async function requestRegistration(input: {
+  dateOfBirth: string
+  email: string
+  fullName: string
+  mailer?: AuthMailer
+  phone: string
+  requestedRole: AccountRole
+  security?: RegistrationSecurity
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}) {
+  const startedAt = Date.now()
+  if (input.requestedRole !== "player" && input.requestedRole !== "coach") {
+    operationalActionError("INVALID_INPUT", "Choose a valid account type.", "requestedRole")
+  }
+  const fullName = normalizeFullName(input.fullName)
+  const identity = registrationIdentity(fullName, input.email)
+  if (!identity) {
+    operationalActionError("INVALID_INPUT", "Enter a valid name and email address.", "email")
+  }
+  if (!normalizeRegistrationPhone(input.phone)) {
+    operationalActionError("INVALID_INPUT", "Enter a valid contact mobile number.", "phone")
+  }
+  if (!validateRegistrationDateOfBirth(input.dateOfBirth, getAcademyDateKey(now))) {
+    operationalActionError("INVALID_INPUT", "Enter a valid date of birth.", "dateOfBirth")
+  }
+  const existing = registrationStandingFor(identity.subjectKey, database)
+  await requestRegistrationVerification({
+    academyId: existing?.academyId ?? null,
+    email: identity.normalizedEmail,
+    fullName: existing?.fullName ?? fullName,
+    mailer: input.mailer,
+    security: input.security,
+    standing: existing?.standing ?? "new",
+    subjectKey: identity.subjectKey,
+  }, { database, now })
+  return genericAcceptedResponse(startedAt)
+}
+
+export type RegistrationConfirmation =
+  | { accountId: string; standing: "new" }
+  | { academyId: string | null; standing: RegistrationStanding }
+
+/**
+ * Step two: the code is correct, so either surface the request that already
+ * exists or write the one that does not. Both branches happen inside the
+ * transaction that burns the challenge.
+ */
+export function confirmRegistration(input: {
+  code: string
+  createId?: () => string
+  dateOfBirth: string
+  email: string
+  fullName: string
+  phone: string
+  requestedRole: AccountRole
+  security?: RegistrationSecurity
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}): RegistrationConfirmation | null {
+  const createId = input.createId ?? randomUUID
+  const fullName = normalizeFullName(input.fullName)
+  const identity = registrationIdentity(fullName, input.email)
+  if (!identity) return null
+  const phone = normalizeRegistrationPhone(input.phone)
+  const dateOfBirth = validateRegistrationDateOfBirth(input.dateOfBirth, getAcademyDateKey(now))
+  if (!phone || !dateOfBirth) return null
+  if (input.requestedRole !== "player" && input.requestedRole !== "coach") return null
+
+  return confirmRegistrationVerification({
+    code: input.code,
+    onVerified: (tx, email): RegistrationConfirmation => {
+      const existing = registrationStandingFor(identity.subjectKey, tx)
+      if (existing) {
+        return { academyId: existing.academyId, standing: existing.standing }
+      }
+      const accountId = createId()
+      tx.insert(accounts).values({
+        id: accountId,
+        fullName,
+        normalizedName: identity.normalizedName,
+        registrationIdentityKey: identity.subjectKey,
+        contactEmail: email,
+        contactPhone: phone,
+        dateOfBirth,
+        requestedRole: input.requestedRole,
+        approvalStatus: "pending",
+        createdAt: now,
+        updatedAt: now,
+      }).run()
+      /*
+       * The address is already verified, so record it now rather than asking for
+       * it again after approval. completeAccountActivation requires a verified
+       * recovery email before a password can be set; satisfying that here is what
+       * removes the enrolment step from activation entirely.
+       */
+      tx.insert(authRecoveryEmails).values({
+        accountId,
+        email,
+        verifiedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }).run()
+      return { accountId, standing: "new" }
+    },
+    security: input.security,
+    subjectKey: identity.subjectKey,
+  }, { database, now })
 }
 
 export function registerPublicAccountRequest(
