@@ -242,6 +242,116 @@ describe("what a coach sees before approving", () => {
     })
   }
 
+  /*
+   * The identity is the address and the name together, so a second request under
+   * a differently spelled name is a new identity and the unique index lets it
+   * through -- deliberately, because siblings really do share one address. These
+   * pin what the coach is shown so they can judge the case the key cannot.
+   */
+  function workspaceWithMany(
+    requests: Partial<OnboardingPendingRequest>[],
+    players: Parameters<typeof derivePlayerOnboardingWorkspace>[0]["players"] = [],
+  ) {
+    return derivePlayerOnboardingWorkspace({
+      assignments: [],
+      feePlans: [],
+      pendingRequests: requests.map((request, index) => ({
+        contactEmail: null,
+        contactPhone: null,
+        createdAt: "2026-08-09T10:00:00.000Z",
+        dateOfBirth: null,
+        fullName: `Player ${index}`,
+        id: `request-${index}`,
+        requestedRole: "player" as const,
+        ...request,
+      })),
+      players,
+      referenceDate: "2026-08-10",
+    })
+  }
+
+  function caseNamed(
+    workspace: ReturnType<typeof derivePlayerOnboardingWorkspace>,
+    fullName: string,
+  ) {
+    return workspace.cases.find((item) => item.fullName === fullName)
+  }
+
+  it("names the other request waiting on the same contact address", () => {
+    // Case differs between the two addresses, which must not hide the match.
+    const workspace = workspaceWithMany([
+      { contactEmail: "shah@example.com", fullName: "Myra Shah" },
+      { contactEmail: "Shah@Example.com", fullName: "Myra R Shah" },
+    ])
+
+    expect(caseNamed(workspace, "Myra Shah")?.duplicateSignals).toEqual([
+      { academyId: null, fullName: "Myra R Shah", reason: "same-contact", standing: "pending" },
+    ])
+    expect(caseNamed(workspace, "Myra R Shah")?.duplicateSignals).toEqual([
+      { academyId: null, fullName: "Myra Shah", reason: "same-contact", standing: "pending" },
+    ])
+  })
+
+  it("names an approved member on the same address, with their Academy ID", () => {
+    const [item] = workspaceWithMany(
+      [{ contactEmail: "shah@example.com", fullName: "Myra R Shah" }],
+      [{
+        academyId: "SMBA-PL-0002",
+        academyPlan: "weekday-3-day",
+        batch: "Weekday",
+        contactEmail: "shah@example.com",
+        dateOfBirth: "2014-01-05",
+        fullName: "Myra Shah",
+        id: "player-approved",
+        level: "Beginner",
+        primaryContact: { name: "Rakesh Shah", phone: "+919000000001", relationship: "Parent" },
+        recordRevision: 0,
+        trainingStartOn: "2026-08-01",
+      }],
+    ).cases
+
+    expect(item?.duplicateSignals).toEqual([{
+      academyId: "SMBA-PL-0002",
+      fullName: "Myra Shah",
+      reason: "same-contact",
+      standing: "approved",
+    }])
+  })
+
+  it("catches the same child re-registered from a second address", () => {
+    // Gmail dots and +tags are deliberately not folded into the identity, so one
+    // inbox can hold two identities. Name plus date of birth is what is left.
+    const workspace = workspaceWithMany([
+      { contactEmail: "r.a.kesh@gmail.com", dateOfBirth: "2014-01-05", fullName: "Myra Shah" },
+      { contactEmail: "rakesh@gmail.com", dateOfBirth: "2014-01-05", fullName: "  myra   shah " },
+    ])
+
+    expect(caseNamed(workspace, "Myra Shah")?.duplicateSignals).toEqual([{
+      academyId: null,
+      fullName: "  myra   shah ",
+      reason: "same-name-and-birthday",
+      standing: "pending",
+    }])
+  })
+
+  it("says nothing about two players who merely share a birthday", () => {
+    const workspace = workspaceWithMany([
+      { contactEmail: "shah@example.com", dateOfBirth: "2014-01-05", fullName: "Myra Shah" },
+      { contactEmail: "rao@example.com", dateOfBirth: "2014-01-05", fullName: "Anaya Rao" },
+    ])
+
+    expect(caseNamed(workspace, "Myra Shah")?.duplicateSignals).toEqual([])
+  })
+
+  it("says nothing about a request with no contact details to compare", () => {
+    const workspace = workspaceWithMany([
+      { fullName: "Myra Shah" },
+      { fullName: "Anaya Rao" },
+    ])
+
+    expect(caseNamed(workspace, "Myra Shah")?.duplicateSignals).toEqual([])
+  })
+
   it("carries the verified contact details onto the request case", () => {
     const [item] = workspaceWith({
       contactEmail: "shah@example.com",

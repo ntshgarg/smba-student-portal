@@ -318,6 +318,10 @@ export function getPlayerOnboardingWorkspace(
     academyPlan: playerEnrollments.academyPlan,
     academyIdSerial: academyIdAllocations.serial,
     approvedAt: accounts.approvedAt,
+    // Read for the duplicate hint on the approval screen only. A returning
+    // member registers under a new identity, so nothing else would notice.
+    contactEmail: accounts.contactEmail,
+    dateOfBirth: accounts.dateOfBirth,
     batch: playerEnrollments.batch,
     contactName: playerEnrollments.primaryContactName,
     contactPhone: playerEnrollments.primaryContactPhone,

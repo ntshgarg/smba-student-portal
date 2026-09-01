@@ -156,6 +156,22 @@ function setRegistrationCode(code: string) {
 }
 
 /**
+ * Backdates every challenge for an address so the one-code-per-inbox-per-minute
+ * cooldown has lapsed. Registering a second player on one address is ordinary,
+ * and a test should not have to wait a real minute to do it.
+ */
+function backdateAddressCooldown(email: string) {
+  const database = new Database(databasePath, { fileMustExist: true })
+  try {
+    database.prepare(`
+      UPDATE auth_email_challenges SET created_at = ? WHERE email = ?
+    `).run(Date.now() - 10 * 60 * 1000, email)
+  } finally {
+    database.close()
+  }
+}
+
+/**
  * Marks a player onboarded without walking the wizard. The wizard itself is
  * covered by the onboarding suite; what this suite needs is the state that opens
  * the password step, because a player may not set one until assessment, sessions
@@ -228,10 +244,10 @@ async function openRegistration(page: Page) {
 }
 
 /** Everything step one needs. The role select is left at its default, Player. */
-async function fillRegistrationDetails(page: Page, fullName: string) {
+async function fillRegistrationDetails(page: Page, fullName: string, email = contactEmailFor(fullName)) {
   await page.getByLabel("Full name").fill(fullName)
   await page.getByLabel("Date of birth").fill(DATE_OF_BIRTH)
-  await page.getByLabel("Contact email").fill(contactEmailFor(fullName))
+  await page.getByLabel("Contact email").fill(email)
   await page.getByLabel("Contact mobile").fill(CONTACT_PHONE)
 }
 
@@ -244,8 +260,8 @@ async function submitRegistrationCode(page: Page, code = "424242") {
   await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
 }
 
-async function completeRegistration(page: Page, fullName: string) {
-  await fillRegistrationDetails(page, fullName)
+async function completeRegistration(page: Page, fullName: string, email?: string) {
+  await fillRegistrationDetails(page, fullName, email)
   await page.getByRole("button", { name: "Send code" }).click()
   await submitRegistrationCode(page)
 }
@@ -641,4 +657,40 @@ test("a assistant coach is approved from Academy onboarding and activates staff 
   await page.getByRole("button", { name: "Set up PIN" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/coach"), { timeout: 20_000 })
   await expect(page.getByRole("heading", { name: "Personal roll-call ledger" })).toBeVisible()
+})
+
+test("a second name on one address is approved knowingly, not silently", async ({ browser, page }) => {
+  const sibling = "Shared Address Sibling"
+  const retyped = "Shared Address Sibling Junior"
+  const sharedEmail = "shared.address@example.test"
+
+  /*
+   * The registration identity is the contact address and the name together, so
+   * these two are different identities and the unique index lets both through --
+   * deliberately, because siblings really do share one address. What the index
+   * cannot judge is whether they are one child typed twice. The coach can, and
+   * this is the screen where it has to be visible before either is approved.
+   */
+  await openRegistration(page)
+  await completeRegistration(page, sibling, sharedEmail)
+  backdateAddressCooldown(sharedEmail)
+
+  await openRegistration(page)
+  await completeRegistration(page, retyped, sharedEmail)
+
+  expect(accountCount(sibling)).toBe(1)
+  expect(accountCount(retyped)).toBe(1)
+
+  const second = registrationRows(retyped)[0]
+  const coach = await loginAsHeadCoach(browser)
+  await coach.page.goto(`/coach/onboarding?player=${encodeURIComponent(second.id)}`, {
+    waitUntil: "domcontentloaded",
+  })
+  const note = coach.page.getByRole("note")
+  await expect(note).toContainText("may be this person")
+  await expect(note).toContainText(sibling)
+  await expect(note).toContainText("same contact email")
+  // A note, not a gate: approval is still one click away.
+  await expect(coach.page.getByRole("button", { name: "Approve & continue" })).toBeEnabled()
+  await coach.context.close()
 })
