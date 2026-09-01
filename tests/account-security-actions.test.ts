@@ -114,7 +114,7 @@ describe("role-aware PIN management", () => {
     expect(mocks.removePinCredential).not.toHaveBeenCalled()
   })
 
-  it("keeps PIN removal available to a junior coach after password confirmation", async () => {
+  it("keeps PIN removal available to a assistant coach after password confirmation", async () => {
     mocks.getCurrentIdentity.mockResolvedValue({ role: "coach", subjectId: "junior-one" })
     mocks.getCoachAccessProfile.mockReturnValue({ accessLevel: "junior_coach" })
 

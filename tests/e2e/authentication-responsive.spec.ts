@@ -138,7 +138,7 @@ test("registration, activation and recovery surfaces remain contained in all thr
   }
 })
 
-test("password login routes head coach, junior coach, and player independently", async ({ browser }, testInfo) => {
+test("password login routes head coach, assistant coach, and player independently", async ({ browser }, testInfo) => {
   const baseURL = String(testInfo.project.use.baseURL)
   await verifyLoginRoute(browser, baseURL, "SMBA-HC-0001", "/coach", testInfo)
   await verifyLoginRoute(browser, baseURL, "SMBA-JC-0001", "/coach", testInfo)

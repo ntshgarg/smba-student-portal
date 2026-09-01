@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { buildJuniorCoachAttendanceCalendar } from "@/components/coach/junior-coach-attendance-calendar"
 
-describe("Junior coach attendance month calendar", () => {
+describe("Assistant coach attendance month calendar", () => {
   it("builds a Monday-first grid and preserves each daily attendance state", () => {
     const calendar = buildJuniorCoachAttendanceCalendar({
       joinedOn: "2026-08-01",

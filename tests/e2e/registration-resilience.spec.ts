@@ -494,7 +494,7 @@ test("a player completes code-free browser activation, optional PIN, and passwor
   await loginAsActivatedPlayer(browser, academyId!, { password })
 })
 
-test("a junior coach is approved from Academy onboarding and activates staff access", async ({ browser, page }) => {
+test("a assistant coach is approved from Academy onboarding and activates staff access", async ({ browser, page }) => {
   const fullName = "Browser Claim Junior Coach"
   const password = "A durable junior password!"
   const pin = "975310"

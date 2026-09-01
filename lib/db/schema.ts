@@ -655,7 +655,7 @@ export const sessionOccurrences = sqliteTable("session_occurrences", {
  *
  * It has to be date-keyed, not occurrence-keyed. The staff register
  * (`staff_attendance_records`) never reads `session_occurrences` at all, so a
- * holiday modelled per-occurrence would leave every junior coach's row looking
+ * holiday modelled per-occurrence would leave every assistant coach's row looking
  * unmarked rather than closed.
  *
  * It has to carry a reason. The register already draws a struck-out column for

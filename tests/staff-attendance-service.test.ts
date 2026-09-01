@@ -161,7 +161,7 @@ describe("coach access profiles", () => {
     expect(getCoachAccessProfile(SECOND_JUNIOR_ID, { database })).toBeNull()
   })
 
-  it("rejects junior coaches at every head-only non-finance mutation boundary", () => {
+  it("rejects assistant coaches at every head-only non-finance mutation boundary", () => {
     const denied = "Head coach access"
     const now = new Date("2026-08-08T06:30:00.000Z")
 

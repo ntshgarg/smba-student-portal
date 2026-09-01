@@ -44,7 +44,7 @@ export async function requireCoachPage() {
 }
 
 // A refusal that only changes the address bar is indistinguishable from a
-// mis-click: the junior coach asked for a page, landed on their dashboard, and
+// mis-click: the assistant coach asked for a page, landed on their dashboard, and
 // nothing said why. The destination is told to explain the refusal instead.
 export const HEAD_COACH_ONLY_NOTICE = "head-coach-only"
 

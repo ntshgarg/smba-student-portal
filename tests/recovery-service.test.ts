@@ -437,7 +437,7 @@ describe("password recovery", () => {
     expect(mailer.passwordRecovery).toHaveLength(0)
   })
 
-  it("recovers a junior coach without an authenticator and leaves PIN recreation optional", async () => {
+  it("recovers a assistant coach without an authenticator and leaves PIN recreation optional", async () => {
     const accountId = "junior-recovery"
     await createActiveAccount({
       accessLevel: "junior_coach",

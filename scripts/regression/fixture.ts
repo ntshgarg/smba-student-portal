@@ -1194,7 +1194,7 @@ function seedStaffAttendanceExamples(target: string) {
         select id from accounts
         where role = 'coach' and approval_status = 'approved' and full_name = ?
       `).get(definition.fullName) as { id: string } | undefined
-      if (!account) throw new Error(`Approved junior coach ${definition.fullName} is unavailable.`)
+      if (!account) throw new Error(`Approved assistant coach ${definition.fullName} is unavailable.`)
       return { ...definition, id: account.id }
     })
     const dates = Array.from({ length: 20 }, (_, index) => {

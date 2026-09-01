@@ -106,7 +106,7 @@ describe("protected coach publication downloads", () => {
     expect(mocks.getCoachPublishedReportDetail).not.toHaveBeenCalled()
   })
 
-  it("rejects junior coaches before reading report data", async () => {
+  it("rejects assistant coaches before reading report data", async () => {
     mocks.requireHeadAdminAccess.mockImplementationOnce(() => {
       throw new Error("Head coach access is required.")
     })

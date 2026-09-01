@@ -10,7 +10,7 @@ import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 // The accessibility gate audits a fixture whose dates are frozen with an
 // application that renders against the runner's clock, and the gap between the
 // two widens by a day every day. `scripts/regression/fixture.ts:1135-1140` seeds
-// the junior coach's ledger with 20 staff-attendance days ending at
+// the assistant coach's ledger with 20 staff-attendance days ending at
 // FIXTURE_ANCHOR_DATE (2026-08-03), and
 // `components/coach/junior-coach-attendance-calendar.ts:52-57` calls a cell
 // "unavailable" only while its date key sorts after the reference date -- so

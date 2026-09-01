@@ -62,7 +62,7 @@ describe("reveal visibility floor", () => {
     expect(html).not.toMatch(opacityGate)
   })
 
-  it("serves the junior coach attendance card visibly", () => {
+  it("serves the assistant coach attendance card visibly", () => {
     const html = renderToStaticMarkup(
       <JuniorCoachAttendanceCard attendance={attendance} />,
     )

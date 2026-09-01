@@ -72,7 +72,7 @@ type SaveFeedback = ActionFeedback & {
 }
 
 /**
- * Shorter than the player register's deadline: one day of junior coaches is a
+ * Shorter than the player register's deadline: one day of assistant coaches is a
  * handful of changes with fewer validation queries each, so a healthy save
  * settles sooner. Still far above a slow-network round trip. It is a deadline,
  * not a cancellation — see `withSaveDeadline`.
