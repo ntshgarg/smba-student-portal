@@ -56,6 +56,10 @@ export function RegistrationStatusForm() {
     setPending(true)
     const formData = new FormData(event.currentTarget)
     const onCodeStep = state.step === "code"
+    // Clear the previous answer before asking again. Leaving it up meant a
+    // stale "we couldn't send your request" sat beside the spinner for the whole
+    // of the next attempt, so a retry looked like it had already failed.
+    setState((current) => ({ ...current, error: null, errorField: null }))
     formData.set("email", values.email)
     formData.set("fullName", values.fullName)
 
