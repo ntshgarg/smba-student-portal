@@ -123,7 +123,8 @@ test("a refused sign-in and a method switch both keep the Academy ID", async ({ 
 test("registration, activation and recovery surfaces remain contained in all three views", async ({ page }) => {
   const surfaces = [
     { heading: "Join the portal.", path: "/register" },
-    { heading: "Open your account.", path: "/activate" },
+    // A browser with no receipt now gets the status lookup rather than a dead end.
+    { heading: "Check your status.", path: "/activate" },
     { heading: "Reset your password.", path: "/recover" },
     { heading: "This recovery link is unavailable.", path: "/recover/reset" },
     { heading: "Recover protected access.", path: "/auth/two-factor/recovery" },

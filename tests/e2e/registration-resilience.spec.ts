@@ -5,6 +5,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs"
+import { createHmac } from "node:crypto"
 import path from "node:path"
 
 import type { Browser, Page, Route, TestInfo } from "@playwright/test"
@@ -21,11 +22,13 @@ const configuredDatabasePath = process.env.SMBA_REGISTRATION_RESILIENCE_DB
 
 type RegistrationRow = {
   approvalStatus: string
+  contactEmail: string | null
+  contactPhone: string | null
+  dateOfBirth: string | null
   fullName: string
   id: string
   normalizedName: string
-  registrationRequestFingerprint: string | null
-  registrationRequestKey: string | null
+  registrationIdentityKey: string | null
   requestedRole: string
   role: string | null
 }
@@ -99,8 +102,10 @@ function registrationRows(fullName: string) {
       id,
       full_name AS fullName,
       normalized_name AS normalizedName,
-      registration_request_fingerprint AS registrationRequestFingerprint,
-      registration_request_key AS registrationRequestKey,
+      contact_email AS contactEmail,
+      contact_phone AS contactPhone,
+      date_of_birth AS dateOfBirth,
+      registration_identity_key AS registrationIdentityKey,
       requested_role AS requestedRole,
       role,
       approval_status AS approvalStatus
@@ -119,19 +124,51 @@ function academyIdFor(accountId: string) {
   )?.identifier ?? null)
 }
 
-function markRecoveryEmailVerified(accountId: string, email: string) {
+const recoverySecret = process.env.BETTER_AUTH_SECRET
+if (!recoverySecret) {
+  throw new Error("BETTER_AUTH_SECRET is required to open a registration challenge with a known code.")
+}
+
+/**
+ * Rewrites the newest open registration challenge so a known code opens it.
+ * Registration writes no account until an emailed code comes back, and this
+ * suite has no mailbox -- the same reason markRecoveryEmailVerified writes the
+ * verified address directly rather than waiting for one to arrive.
+ */
+function setRegistrationCode(code: string) {
   const database = new Database(databasePath, { fileMustExist: true })
   try {
-    const now = Date.now()
-    database.prepare(`
-      INSERT INTO auth_recovery_emails (
-        account_id, email, verified_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(account_id) DO UPDATE SET
-        email = excluded.email,
-        verified_at = excluded.verified_at,
-        updated_at = excluded.updated_at
-    `).run(accountId, email, now, now, now)
+    const challenge = database.prepare(`
+      SELECT id, subject_hash AS subjectHash FROM auth_email_challenges
+      WHERE purpose = 'verify_email' AND account_id IS NULL AND consumed_at IS NULL
+      ORDER BY created_at DESC LIMIT 1
+    `).get() as { id: string; subjectHash: string } | undefined
+    if (!challenge) throw new Error("No open registration challenge to set a code on.")
+    const secretHash = createHmac("sha256", recoverySecret!)
+      .update(`email-verify_email:${challenge.subjectHash}:${challenge.id}:${code}`)
+      .digest("hex")
+    database.prepare(
+      "UPDATE auth_email_challenges SET secret_hash = ?, failed_attempts = 0 WHERE id = ?",
+    ).run(secretHash, challenge.id)
+  } finally {
+    database.close()
+  }
+}
+
+/**
+ * Marks a player onboarded without walking the wizard. The wizard itself is
+ * covered by the onboarding suite; what this suite needs is the state that opens
+ * the password step, because a player may not set one until assessment, sessions
+ * and fees are done.
+ */
+function completePlayerOnboarding(accountId: string) {
+  const database = new Database(databasePath, { fileMustExist: true })
+  try {
+    const changes = database.prepare(`
+      UPDATE player_enrollments SET onboarding_completed_at = ?, updated_at = ?
+      WHERE account_id = ?
+    `).run(Date.now(), Date.now(), accountId).changes
+    if (changes !== 1) throw new Error(`No enrollment row to complete for ${accountId}.`)
   } finally {
     database.close()
   }
@@ -177,9 +214,40 @@ async function attachDatabaseEvidence(
   })
 }
 
+const DATE_OF_BIRTH = "2014-03-11"
+const CONTACT_PHONE = "+919000000001"
+
+/** One address per player: the identity is the address and the name together. */
+function contactEmailFor(fullName: string) {
+  return `${fullName.replaceAll(" ", ".").toLowerCase()}@example.test`
+}
+
 async function openRegistration(page: Page) {
   await page.goto("/register", { waitUntil: "networkidle" })
   await expect(page.getByRole("heading", { name: "Join the portal." })).toBeVisible()
+}
+
+/** Everything step one needs. The role select is left at its default, Player. */
+async function fillRegistrationDetails(page: Page, fullName: string) {
+  await page.getByLabel("Full name").fill(fullName)
+  await page.getByLabel("Date of birth").fill(DATE_OF_BIRTH)
+  await page.getByLabel("Contact email").fill(contactEmailFor(fullName))
+  await page.getByLabel("Contact mobile").fill(CONTACT_PHONE)
+}
+
+/** Step two: open the challenge with a known code and confirm it. */
+async function submitRegistrationCode(page: Page, code = "424242") {
+  await page.getByLabel("6-digit code").waitFor()
+  setRegistrationCode(code)
+  await page.getByLabel("6-digit code").fill(code)
+  await page.getByRole("button", { name: "Verify" }).click()
+  await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
+}
+
+async function completeRegistration(page: Page, fullName: string) {
+  await fillRegistrationDetails(page, fullName)
+  await page.getByRole("button", { name: "Send code" }).click()
+  await submitRegistrationCode(page)
 }
 
 async function expectOnePendingPlayer(fullName: string) {
@@ -187,11 +255,14 @@ async function expectOnePendingPlayer(fullName: string) {
   expect(registrationRows(fullName)).toEqual([
     expect.objectContaining({
       approvalStatus: "pending",
+      // The identity anchor is a digest of the verified address and the name.
+      // The UUID this suite used to pin was a value the browser chose, which a
+      // reload replaced -- which is why one person could queue many requests.
+      contactEmail: contactEmailFor(fullName),
+      contactPhone: CONTACT_PHONE,
+      dateOfBirth: DATE_OF_BIRTH,
       fullName,
-      registrationRequestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u),
-      registrationRequestKey: expect.stringMatching(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
-      ),
+      registrationIdentityKey: expect.stringMatching(/^registration:[0-9a-f]{64}$/u),
       requestedRole: "player",
       role: null,
     }),
@@ -219,7 +290,7 @@ test("empty validation associates the error and focuses Full name without writin
   const fullNameField = page.getByLabel("Full name")
   await page.getByRole("button", { name: "Send code" }).click()
 
-  await expect(page.locator("#full-name-error")).toHaveText("Enter your full name.")
+  await expect(page.locator("#full-name-error")).toHaveText("Enter the player’s full name.")
   await expect(fullNameField).toHaveAttribute("aria-describedby", "full-name-error")
   await expect(fullNameField).toHaveAttribute("aria-invalid", "true")
   await expect(fullNameField).toBeFocused()
@@ -237,13 +308,17 @@ test("two immediate form submissions create exactly one pending account", async 
   expect(accountCount(fullName)).toBe(0)
 
   await openRegistration(page)
-  await page.getByLabel("Full name").fill(fullName)
+  await fillRegistrationDetails(page, fullName)
   await page.locator("form").evaluate((form: HTMLFormElement) => {
     form.requestSubmit()
     form.requestSubmit()
   })
 
-  await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
+  // Both submits are the send step, which writes no account at all -- the
+  // duplicate this used to guard against cannot exist before a code comes back.
+  // What it still proves is that a double submit leaves exactly one challenge to
+  // answer, so confirming once produces exactly one pending row.
+  await submitRegistrationCode(page)
   await expectOnePendingPlayer(fullName)
   await page.screenshot({
     fullPage: true,
@@ -275,7 +350,7 @@ test("repeated 503s preserve the exact name, write nothing, and retry once", asy
   const fullNameField = page.getByLabel("Full name")
   const submit = page.getByRole("button", { name: "Send code" })
   const formError = page.locator("#registration-form-error")
-  await fullNameField.fill(fullName)
+  await fillRegistrationDetails(page, fullName)
   for (let failure = 1; failure <= 2; failure += 1) {
     await submit.click()
     await expect(formError).toHaveCount(0)
@@ -295,7 +370,7 @@ test("repeated 503s preserve the exact name, write nothing, and retry once", asy
 
   await page.unroute("**/register")
   await submit.click()
-  await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
+  await submitRegistrationCode(page)
   await expectOnePendingPlayer(fullName)
   await page.screenshot({
     fullPage: true,
@@ -323,7 +398,7 @@ test("an aborted committed response retries idempotently", async ({ page }, test
 
   await openRegistration(page)
   const fullNameField = page.getByLabel("Full name")
-  await fullNameField.fill(fullName)
+  await fillRegistrationDetails(page, fullName)
   await page.getByRole("button", { name: "Send code" }).click()
 
   await expect(page.locator("#registration-form-error"))
@@ -331,7 +406,14 @@ test("an aborted committed response retries idempotently", async ({ page }, test
   await expect(fullNameField).toHaveValue(fullName)
   expect(intercepted).toBe(true)
   expect(upstreamStatus).toBe(200)
-  await expect.poll(() => accountCount(fullName)).toBe(1)
+  /*
+   * The send committed upstream -- a challenge exists -- but nothing the browser
+   * did wrote an account, and nothing it does next can write a second one: the
+   * retry supersedes that challenge rather than opening a parallel request. This
+   * used to poll for an account row here, because the old flow created one on
+   * this very submit and the whole test was about not creating two.
+   */
+  expect(accountCount(fullName)).toBe(0)
 
   await page.screenshot({
     fullPage: true,
@@ -340,7 +422,11 @@ test("an aborted committed response retries idempotently", async ({ page }, test
 
   await page.unroute("**/register")
   await page.getByRole("button", { name: "Send code" }).click()
-  await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
+  // The retry lands inside the one-code-per-address minute, so no second code
+  // goes out and the challenge the aborted response already committed is the one
+  // that answers. That is the point: a retry resumes a request, it does not open
+  // a second one.
+  await submitRegistrationCode(page)
   await expectOnePendingPlayer(fullName)
   await page.screenshot({
     fullPage: true,
@@ -436,9 +522,7 @@ test("a player completes code-free browser activation, optional PIN, and passwor
   const password = "A durable browser password!"
   const pin = "246810"
   await openRegistration(page)
-  await page.getByLabel("Full name").fill(fullName)
-  await page.getByRole("button", { name: "Send code" }).click()
-  await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
+  await completeRegistration(page, fullName)
   await page.getByRole("link", { name: "View activation status" }).click()
   await expect(page.getByRole("heading", { name: "Approval is pending." })).toBeVisible()
 
@@ -448,7 +532,9 @@ test("a player completes code-free browser activation, optional PIN, and passwor
   })
   const wrongBrowserPage = await wrongBrowser.newPage()
   await wrongBrowserPage.goto("/activate", { waitUntil: "domcontentloaded" })
-  await expect(wrongBrowserPage.getByRole("heading", { name: "Open your account." })).toBeVisible()
+  // A browser with no receipt is no longer a dead end: it gets the lookup that
+  // reaches the same status from a name, an address and a code.
+  await expect(wrongBrowserPage.getByRole("heading", { name: "Check your status." })).toBeVisible()
   await wrongBrowser.close()
 
   const account = registrationRows(fullName)[0]
@@ -469,13 +555,29 @@ test("a player completes code-free browser activation, optional PIN, and passwor
   expect(academyId).toMatch(/^SMBA-PL-[0-9]{4}$/u)
   expect(credentialEvidence(account.id).activationCodeCount).toBe(0)
 
+  /*
+   * Approval is not the last gate for a player. Assessment, sessions and fees
+   * come first, and until they are done this browser -- receipt and all -- is
+   * told to wait rather than handed a password form the server would refuse.
+   * The wizard that finishes them is the onboarding suite's subject.
+   */
   await page.goto("/activate", { waitUntil: "domcontentloaded" })
-  await expect(page.getByRole("heading", { name: "Verify your recovery email." })).toBeVisible()
-  await expect(page.getByLabel("Your Academy ID")).toHaveValue(academyId!)
-  await expect(page.getByText("Save this ID. You will use it every time you sign in.")).toBeVisible()
-  markRecoveryEmailVerified(account.id, "browser-claim-player@example.com")
+  await expect(page.getByRole("heading", { name: "Approved." })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Waiting for your coach." })).toBeVisible()
+  await expect(page.getByLabel("Create password")).toHaveCount(0)
+
+  completePlayerOnboarding(account.id)
+  /*
+   * No recovery-email step here any more. Registration verified this address
+   * before the account existed and recorded it, which is the precondition
+   * completeAccountActivation was already checking -- so the enrolment screen
+   * this suite used to walk through is unreachable by construction.
+   */
   await page.reload({ waitUntil: "domcontentloaded" })
   await expect(page.getByRole("heading", { name: "Create your password." })).toBeVisible()
+  expect(readDatabase((database) => (database.prepare(
+    "SELECT count(*) AS count FROM auth_recovery_emails WHERE account_id = ? AND verified_at IS NOT NULL",
+  ).get(account.id) as { count: number }).count)).toBe(1)
   await expect(page.getByLabel("Academy ID")).toHaveValue(academyId!)
   await page.getByLabel("Create password").fill(password)
   await page.getByLabel("Confirm password").fill(password)
@@ -499,10 +601,8 @@ test("a assistant coach is approved from Academy onboarding and activates staff 
   const password = "A durable junior password!"
   const pin = "975310"
   await openRegistration(page)
-  await page.getByLabel("Account type").selectOption("coach")
-  await page.getByLabel("Full name").fill(fullName)
-  await page.getByRole("button", { name: "Send code" }).click()
-  await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
+  await page.getByLabel("I am registering a").selectOption("coach")
+  await completeRegistration(page, fullName)
   await page.getByRole("link", { name: "View activation status" }).click()
   await expect(page.getByRole("heading", { name: "Approval is pending." })).toBeVisible()
 
@@ -523,11 +623,15 @@ test("a assistant coach is approved from Academy onboarding and activates staff 
   await expect.poll(() => registrationRows(fullName)[0]?.approvalStatus).toBe("approved")
   const academyId = academyIdFor(account.id)
   expect(academyId).toMatch(/^SMBA-JC-[0-9]{4}$/u)
+  /*
+   * An assistant coach has no enrollment row and no onboarding to finish, so
+   * approval is the whole gate for them -- straight to the password step, with
+   * the address registration already verified standing in for the enrolment
+   * screen this used to walk through.
+   */
   await page.goto("/activate", { waitUntil: "domcontentloaded" })
-  await expect(page.getByRole("heading", { name: "Verify your recovery email." })).toBeVisible()
-  await expect(page.getByLabel("Your Academy ID")).toHaveValue(academyId!)
-  markRecoveryEmailVerified(account.id, "browser-claim-junior@example.com")
-  await page.reload({ waitUntil: "domcontentloaded" })
+  await expect(page.getByRole("heading", { name: "Create your password." })).toBeVisible()
+  await expect(page.getByLabel("Academy ID")).toHaveValue(academyId!)
   await page.getByLabel("Create password").fill(password)
   await page.getByLabel("Confirm password").fill(password)
   await page.getByRole("button", { name: "Continue" }).click()
