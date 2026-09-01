@@ -43,7 +43,12 @@ export default async function RegisterPage() {
         <div className="login-copy registration-copy">
           <p className="eyebrow">Request access</p>
           <h1 id="registration-title">Join the portal.</h1>
-          <p>Tell us who you are. Your coach will review the request before access is opened.</p>
+          {/*
+            Worded to hold for both steps. "Tell us who you are" sat above the
+            code field too, telling someone who had already told us exactly that
+            to do it again -- the form below is two steps, this heading is not.
+          */}
+          <p>Your coach reviews every request before access is opened.</p>
         </div>
 
         <RegistrationForm />
