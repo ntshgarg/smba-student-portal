@@ -138,6 +138,44 @@ describe("production credential lifecycle", () => {
       .not.toContain(pendingToken)
   })
 
+  it("holds back the password step until the coach has finished onboarding", async () => {
+    const playerId = "onboarding-player"
+    const { activationToken } = createApprovedPlayer(playerId, "Onboarding Player")
+    database.insert(schema.playerEnrollments).values({
+      accountId: playerId,
+      status: "unassigned",
+      trainingStartOn: "2026-09-01",
+      updatedAt: NOW,
+    }).run()
+
+    /*
+     * The rule -- a player may only set a password once assessment, sessions and
+     * fees are done -- used to be enforced on one door only. The status lookup
+     * withheld the password step, while the receipt held by the browser they
+     * registered in walked straight through to it.
+     */
+    expect(getActivationClaimStatus(activationToken, { database, now: NOW })).toMatchObject({
+      accountId: playerId,
+      state: "onboarding",
+    })
+    await expect(completeAccountActivation({
+      token: activationToken,
+      password: PASSWORD,
+    }, { database, now: NOW })).resolves.toBeNull()
+    expect(database.select().from(schema.authUsers)
+      .where(eq(schema.authUsers.id, playerId)).get()).toBeUndefined()
+
+    database.update(schema.playerEnrollments).set({ onboardingCompletedAt: NOW, updatedAt: NOW })
+      .where(eq(schema.playerEnrollments.accountId, playerId)).run()
+
+    expect(getActivationClaimStatus(activationToken, { database, now: NOW }))
+      .toMatchObject({ state: "approved" })
+    await expect(completeAccountActivation({
+      token: activationToken,
+      password: PASSWORD,
+    }, { database, now: NOW })).resolves.toMatchObject({ accountId: playerId })
+  })
+
   it("activates an approved account once with only a hashed browser claim", async () => {
     const playerId = "credential-player-one"
     const { academyId, activationToken } = createApprovedPlayer(playerId, "Mira Rao")

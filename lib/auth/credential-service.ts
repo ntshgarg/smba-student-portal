@@ -24,6 +24,7 @@ import {
   authRuntimeSessions,
   authUsers,
   coachProfiles,
+  playerEnrollments,
 } from "@/lib/db/schema"
 import { authSubjectHash, writeAuthSecurityEvent } from "@/lib/auth/security-context"
 
@@ -77,7 +78,7 @@ export function validateNewPassword(password: string) {
 
 export type ActivationClaimStatus =
   | { state: "missing" | "expired" | "rejected" }
-  | { accountId: string; fullName: string; state: "pending" }
+  | { accountId: string; fullName: string; state: "pending" | "onboarding" }
   | {
     academyId: string
     accountId: string
@@ -149,8 +150,10 @@ export function getActivationClaimStatus(token: string | null | undefined, {
     archivedAt: accounts.archivedAt,
     consumedAt: authActivationClaims.consumedAt,
     credentialStatus: authCredentialStates.status,
+    enrolledAccountId: playerEnrollments.accountId,
     expiresAt: authActivationClaims.expiresAt,
     fullName: accounts.fullName,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
     role: accounts.role,
   }).from(authActivationClaims)
     .innerJoin(accounts, eq(accounts.id, authActivationClaims.accountId))
@@ -160,6 +163,7 @@ export function getActivationClaimStatus(token: string | null | undefined, {
       isNull(authMethods.revokedAt),
     ))
     .leftJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
+    .leftJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .where(eq(authActivationClaims.tokenHash, activationClaimHash(token)))
     .get()
 
@@ -168,6 +172,18 @@ export function getActivationClaimStatus(token: string | null | undefined, {
   if (row.approvalStatus === "rejected") return { state: "rejected" }
   if (row.approvalStatus === "pending") {
     return { accountId: row.accountId, fullName: row.fullName, state: "pending" }
+  }
+  /*
+   * A player may only set a password once the coach has finished onboarding
+   * them. That rule used to live on one door only -- the status lookup withheld
+   * the password step, while the receipt held by the browser they registered in
+   * walked straight through. Enforcing it here puts it in front of both, and in
+   * front of `completeAccountActivation`, which refuses anything that is not
+   * "approved". An assistant coach has no enrollment row and no onboarding to
+   * finish, so approval is the whole gate for them.
+   */
+  if (row.enrolledAccountId && !row.onboardingCompletedAt) {
+    return { accountId: row.accountId, fullName: row.fullName, state: "onboarding" }
   }
   if (!row.academyId || (row.role !== "coach" && row.role !== "player")) {
     return { state: "missing" }
