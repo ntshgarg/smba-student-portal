@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 
 import { ActivationForm } from "@/components/activation-form"
+import { RegistrationStatusForm } from "@/components/registration-status-form"
 import { RecoveryEmailEnrollmentForm } from "@/components/recovery-email-enrollment-form"
 import { sessionProvider } from "@/lib/data"
 import { publicSiteUrl } from "@/lib/config"
@@ -58,7 +59,7 @@ export default async function ActivatePage() {
             {approved ? emailVerified ? "Create your password." : "Verify your recovery email."
               : status.state === "pending" ? "Approval is pending."
                 : status.state === "rejected" ? "Request not approved."
-                  : "Open your account."}
+                  : "Check your status."}
           </h1>
           <p>
             {approved ? emailVerified
@@ -67,7 +68,7 @@ export default async function ActivatePage() {
               : status.state === "pending" ? `Your coach is reviewing ${status.fullName}’s request.`
                 : status.state === "rejected" ? "This registration request was not approved."
                   : status.state === "expired" ? "This registration receipt has expired."
-                    : "Use the browser where you submitted your registration request."}
+                    : "Enter the name and email you registered with and we’ll send a code."}
           </p>
         </div>
 
@@ -86,21 +87,15 @@ export default async function ActivatePage() {
               />
             </>
           ) : (
-          <div className="registration-confirmation" role="status">
-            {status.state === "pending" ? (
-              <>
-                <h2>Waiting for your coach.</h2>
-                <p>Return here after approval to create your password.</p>
-                <Link href="/activate">Check again</Link>
-              </>
-            ) : (
-              <>
-                <h2>Start with a new request.</h2>
-                <p>The secure browser receipt is missing, expired, or no longer usable.</p>
-                <Link href="/register">Request registration</Link>
-              </>
-            )}
-          </div>
+          /*
+           * No usable receipt in this browser. That used to be a dead end -- the
+           * cookie was the only link between a person and their request, so
+           * clearing it or switching device left "request registration" as the
+           * only thing on screen, and some of the duplicate queue is people who
+           * took it. Name, email and a fresh code reach the same status from
+           * anywhere.
+           */
+          <RegistrationStatusForm />
         )}
 
         <Link className="login-back" href="/login">

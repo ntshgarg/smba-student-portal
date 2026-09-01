@@ -13,9 +13,7 @@ import {
 import {
   findApprovedAccountByAcademyId,
   confirmRegistration,
-  registerPublicAccountRequest,
   requestRegistration,
-  type RegistrationStanding,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
 import { getAuth } from "@/lib/auth/better-auth"
@@ -38,7 +36,6 @@ import {
 } from "@/lib/auth/security-context"
 import { clearDatabaseSession } from "@/lib/auth/session"
 import {
-  EMPTY_REGISTRATION_VALUES,
   type RegistrationField,
   type RegistrationFormState,
   type RegistrationValues,

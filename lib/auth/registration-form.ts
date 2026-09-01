@@ -55,3 +55,30 @@ export const EMPTY_REGISTRATION_STATE: RegistrationFormState = {
   step: "details",
   values: EMPTY_REGISTRATION_VALUES,
 }
+
+/**
+ * State for the status lookup on /activate. Deliberately a different shape from
+ * the registration form: it collects two fields rather than five, and it never
+ * creates anything, so it carries no role or date of birth to lose.
+ */
+export type RegistrationStatusState = {
+  academyId: string | null
+  error: string | null
+  errorField: "code" | "email" | "fullName" | null
+  fullName: string | null
+  onboardingCompleted: boolean
+  standing: RegistrationStanding | null
+  step: "details" | "code" | "done"
+  values: { email: string; fullName: string }
+}
+
+export const EMPTY_REGISTRATION_STATUS_STATE: RegistrationStatusState = {
+  academyId: null,
+  error: null,
+  errorField: null,
+  fullName: null,
+  onboardingCompleted: false,
+  standing: null,
+  step: "details",
+  values: { email: "", fullName: "" },
+}

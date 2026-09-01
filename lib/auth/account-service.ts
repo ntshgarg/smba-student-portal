@@ -1,6 +1,6 @@
 import "server-only"
 
-import { createHash, randomInt, randomUUID } from "node:crypto"
+import { randomInt, randomUUID } from "node:crypto"
 
 import { and, eq, isNull } from "drizzle-orm"
 
@@ -32,7 +32,6 @@ import {
   playerEnrollments,
 } from "@/lib/db/schema"
 import {
-  createActivationClaimToken,
   extendActivationClaim,
   saveActivationClaim,
 } from "@/lib/auth/credential-service"
@@ -47,8 +46,6 @@ import { authRecoveryEmails } from "@/lib/db/schema"
 import type { AuthMailer } from "@/lib/auth/mailer"
 import type { RegistrationStanding } from "@/lib/auth/registration-form"
 import { getAcademyDateKey } from "@/lib/format"
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 
 export function registerAccount(fullName: string, requestedRole: AccountRole) {
   const db = initializeDatabase()
@@ -301,101 +298,136 @@ export function confirmRegistration(input: {
   }, { database, now })
 }
 
-export function registerPublicAccountRequest(
-  input: {
-    activationToken: string
-    fullName: string
-    requestKey: string
-    requestedRole: AccountRole
-  },
-  {
-    createId = randomUUID,
-    database = initializeDatabase(),
-    now = new Date(),
-  }: {
-    createId?: () => string
-    database?: SmbaDatabase
-    now?: Date
-  } = {},
-) {
-  const fullName = normalizeFullName(input.fullName)
-  const requestKey = input.requestKey.trim()
-  if (input.requestedRole !== "player" && input.requestedRole !== "coach") {
-    operationalActionError("INVALID_INPUT", "Choose a valid account type.", "requestedRole")
-  }
-
-  if (!UUID_PATTERN.test(requestKey)) {
-    operationalActionError(
-      "INVALID_INPUT",
-      "Refresh the page before sending this registration request.",
-      "registrationRequestKey",
-    )
-  }
-  if (fullName.length < 2 || fullName.length > 80) {
-    operationalActionError(
-      "INVALID_INPUT",
-      "Enter your full name.",
-      "fullName",
-    )
-  }
-  const requestFingerprint = createHash("sha256").update(JSON.stringify({
-    fullName,
-    requestedRole: input.requestedRole,
-    version: 2,
-  })).digest("hex")
-
-  return database.transaction((tx) => {
-    const existing = tx.select({
-      id: accounts.id,
-      requestFingerprint: accounts.registrationRequestFingerprint,
-    }).from(accounts)
-      .where(eq(accounts.registrationRequestKey, requestKey))
-      .get()
-
-    if (existing) {
-      if (existing.requestFingerprint !== requestFingerprint) {
-        operationalActionError(
-          "CONFLICT",
-          "This registration request has changed. Refresh the page before trying again.",
-          "registrationRequestKey",
-        )
-      }
-      saveActivationClaim({
-        accountId: existing.id,
-        token: input.activationToken,
-      }, { database: tx, now })
-      return { accountId: existing.id, reused: true }
-    }
-
-    const accountId = createId()
-    tx.insert(accounts).values({
-      id: accountId,
-      fullName,
-      normalizedName: normalizedNameKey(fullName),
-      registrationRequestFingerprint: requestFingerprint,
-      registrationRequestKey: requestKey,
-      requestedRole: input.requestedRole,
-      approvalStatus: "pending",
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-
-    saveActivationClaim({ accountId, token: input.activationToken }, { database: tx, now })
-
-    return { accountId, reused: false }
-  }, { behavior: "immediate" })
+export type RegistrationStatusView = {
+  academyId: string | null
+  /** For the caller to mint an activation claim with. Never send it to a client. */
+  accountId: string | null
+  fullName: string | null
+  onboardingCompleted: boolean
+  standing: RegistrationStanding
 }
 
-export function registerPublicPlayerRequest(input: {
-  activationToken?: string
+/**
+ * Send a code so someone can look up where their request stands, from any device.
+ *
+ * Until this existed the only link between a person and their request was the
+ * activation cookie, so clearing it or switching phone left them with no way to
+ * ask -- and the only button on screen was "request registration". A share of the
+ * duplicate queue is that, not abuse.
+ *
+ * An identity with no request behind it is treated exactly like one that has a
+ * request: same response, same code, same timing. The email says there is nothing
+ * on file, which only the holder of the address ever reads.
+ */
+export async function requestRegistrationStatus(input: {
+  email: string
   fullName: string
-  requestKey: string
-}, options?: Parameters<typeof registerPublicAccountRequest>[1]) {
-  return registerPublicAccountRequest({
-    ...input,
-    activationToken: input.activationToken ?? createActivationClaimToken(),
-    requestedRole: "player",
-  }, options)
+  mailer?: AuthMailer
+  security?: RegistrationSecurity
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}) {
+  const startedAt = Date.now()
+  const fullName = normalizeFullName(input.fullName)
+  const identity = registrationIdentity(fullName, input.email)
+  if (!identity) {
+    operationalActionError("INVALID_INPUT", "Enter the name and email you registered with.", "email")
+  }
+  const existing = registrationStandingFor(identity.subjectKey, database)
+  try {
+    await requestRegistrationVerification({
+      academyId: existing?.academyId ?? null,
+      email: identity.normalizedEmail,
+      fullName: existing?.fullName ?? fullName,
+      mailer: input.mailer,
+      security: input.security,
+      standing: existing?.standing ?? "new",
+      subjectKey: identity.subjectKey,
+    }, { database, now })
+  } catch (error) {
+    throw new OperationalActionError(
+      "BUSINESS_RULE",
+      error instanceof Error ? error.message : "We could not send a code just now.",
+      "email",
+    )
+  }
+  return genericAcceptedResponse(startedAt)
+}
+
+/**
+ * Verify the code and report where the request stands. Writes nothing: this is
+ * the read-only twin of confirmRegistration, and an identity with no request
+ * behind it reports "new" rather than creating one.
+ */
+export function confirmRegistrationStatus(input: {
+  activationToken?: string
+  code: string
+  email: string
+  fullName: string
+  security?: RegistrationSecurity
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}): RegistrationStatusView | null {
+  const fullName = normalizeFullName(input.fullName)
+  const identity = registrationIdentity(fullName, input.email)
+  if (!identity) return null
+
+  return confirmRegistrationVerification({
+    code: input.code,
+    onVerified: (tx): RegistrationStatusView => {
+      const existing = registrationStandingFor(identity.subjectKey, tx)
+      if (!existing) {
+        return {
+          academyId: null,
+          accountId: null,
+          fullName: null,
+          onboardingCompleted: false,
+          standing: "new",
+        }
+      }
+      /*
+       * A player may only set a password once the coach has finished onboarding
+       * them -- assessment, session and fee plan. An assistant coach has no
+       * onboarding to finish, so approval is the whole gate for them.
+       */
+      const enrollment = tx.select({ onboardingCompletedAt: playerEnrollments.onboardingCompletedAt })
+        .from(playerEnrollments)
+        .where(eq(playerEnrollments.accountId, existing.accountId))
+        .get()
+      const onboardingCompleted = enrollment
+        ? Boolean(enrollment.onboardingCompletedAt)
+        : existing.standing === "approved"
+      /*
+       * A claim is minted here when the password step is actually reachable, so a
+       * person who has lost the browser they registered in can still activate.
+       * Email verification is the same proof password recovery already accepts,
+       * and the claim is written inside the transaction that burned the code.
+       */
+      if (input.activationToken && existing.standing === "approved" && onboardingCompleted) {
+        saveActivationClaim(
+          { accountId: existing.accountId, token: input.activationToken },
+          { database: tx, now },
+        )
+      }
+      return {
+        academyId: existing.academyId,
+        accountId: existing.accountId,
+        fullName: existing.fullName,
+        onboardingCompleted,
+        standing: existing.standing,
+      }
+    },
+    security: input.security,
+    subjectKey: identity.subjectKey,
+  }, { database, now })
 }
 
 export function findApprovedAccountByAcademyId(value: string) {

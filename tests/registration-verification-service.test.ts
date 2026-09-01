@@ -392,6 +392,38 @@ describe("an identity that is already registered", () => {
   })
 })
 
+describe("the only way an account can be created", () => {
+  it("has no unverified path left to call", async () => {
+    /*
+     * `registerPublicAccountRequest` and `registerPublicPlayerRequest` used to
+     * create a pending account straight from the form, keyed on a UUID the
+     * browser chose. tests/public-registration-idempotency.test.ts pinned that
+     * behaviour and went with them: a reload minted a fresh key, so the
+     * idempotency it proved never actually prevented the duplicates it was
+     * written for. Leaving the exports behind would leave a live route to an
+     * account with no verified address, which is the whole thing this replaces.
+     */
+    const service = await import("@/lib/auth/account-service")
+    expect(service).not.toHaveProperty("registerPublicAccountRequest")
+    expect(service).not.toHaveProperty("registerPublicPlayerRequest")
+  })
+
+  it("still writes exactly one account when a code is confirmed twice in a row", async () => {
+    // The double-click case the old request key existed for. The challenge is
+    // consumed by the first confirmation, so the second finds nothing to burn.
+    const mailer = await send()
+    const code = mailer.registration[0]!.code
+
+    const first = confirm(code)
+    const second = confirm(code)
+
+    expect(first).not.toBeNull()
+    expect(second).toBeNull()
+    expect(accountRows()).toHaveLength(1)
+    assertDatabaseHealthy()
+  })
+})
+
 describe("siblings on one address", () => {
   it("registers two differently-named players against one email", async () => {
     const first = await send()
