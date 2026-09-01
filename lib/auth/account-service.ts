@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomInt, randomUUID } from "node:crypto"
 
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNotNull, isNull } from "drizzle-orm"
 
 import {
   ACADEMY_ID_SERIAL_RANGES,
@@ -271,6 +271,19 @@ export function confirmRegistration(input: {
           standing: existing.standing,
         }
       }
+      /*
+       * An archived row reads as absent everywhere else in this file, so it must
+       * not still own the identity in the index. `archiveMemberRecord` releases
+       * the key, and this releases any that predates that or arrives another
+       * way: without it the insert below collides, throws a raw constraint error
+       * past the action's error handling, and rolls back leaving the code
+       * unspent -- so a returning ex-member retried forever and never got in.
+       */
+      tx.update(accounts).set({ registrationIdentityKey: null, updatedAt: now })
+        .where(and(
+          eq(accounts.registrationIdentityKey, identity.subjectKey),
+          isNotNull(accounts.archivedAt),
+        )).run()
       const accountId = createId()
       tx.insert(accounts).values({
         id: accountId,
