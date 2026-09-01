@@ -224,7 +224,7 @@ describe("registration confirm", () => {
     const mailer = await send()
     const result = confirm(mailer.registration[0]!.code)
 
-    expect(result).toEqual({ accountId: expect.any(String), standing: "new" })
+    expect(result).toEqual({ academyId: null, accountId: expect.any(String), standing: "new" })
     const rows = accountRows()
     expect(rows).toHaveLength(1)
     expect(rows[0]!.approvalStatus).toBe("pending")
@@ -353,7 +353,7 @@ describe("an identity that is already registered", () => {
 
     expect(mailer.registration.at(-1)!.standing).toBe("pending")
     expect(confirm(mailer.registration.at(-1)!.code, {}, later))
-      .toEqual({ academyId: null, standing: "pending" })
+      .toEqual({ academyId: null, accountId: null, standing: "pending" })
     expect(accountRows()).toHaveLength(1)
   })
 
@@ -363,7 +363,7 @@ describe("an identity that is already registered", () => {
     const mailer = await send({ fullName: "  arjun   SHARMA " }, later)
 
     expect(confirm(mailer.registration.at(-1)!.code, { fullName: "  arjun   SHARMA " }, later))
-      .toEqual({ academyId: null, standing: "pending" })
+      .toEqual({ academyId: null, accountId: null, standing: "pending" })
     expect(accountRows()).toHaveLength(1)
   })
 
@@ -377,7 +377,7 @@ describe("an identity that is already registered", () => {
 
     expect(mailer.registration.at(-1)!.standing).toBe("rejected")
     expect(confirm(mailer.registration.at(-1)!.code, {}, later))
-      .toEqual({ academyId: null, standing: "rejected" })
+      .toEqual({ academyId: null, accountId: null, standing: "rejected" })
     expect(accountRows()).toHaveLength(1)
   })
 

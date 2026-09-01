@@ -28,7 +28,9 @@ const mocks = vi.hoisted(() => ({
   recordLoginFailure: vi.fn(),
   recordLoginSuccess: vi.fn(),
   redirect: vi.fn(),
+  confirmRegistration: vi.fn(),
   registerPublicAccountRequest: vi.fn(),
+  requestRegistration: vi.fn(),
   signInPin: vi.fn(),
   signInUsername: vi.fn(),
   writeAuthSecurityEvent: vi.fn(),
@@ -49,8 +51,10 @@ vi.mock("next/headers", () => ({
 vi.mock("better-auth/crypto", () => ({ hashPassword: mocks.hashPassword }))
 
 vi.mock("@/lib/auth/account-service", () => ({
+  confirmRegistration: mocks.confirmRegistration,
   findApprovedAccountByAcademyId: mocks.findApprovedAccountByAcademyId,
   registerPublicAccountRequest: mocks.registerPublicAccountRequest,
+  requestRegistration: mocks.requestRegistration,
 }))
 
 vi.mock("@/lib/auth/session", () => ({
@@ -71,6 +75,7 @@ vi.mock("@/lib/auth/better-auth", () => ({
 
 vi.mock("@/lib/auth/credential-service", () => ({
   ACTIVATION_CLAIM_COOKIE: "smba_activation_claim",
+  ACTIVATION_CLAIM_LIFETIME_MS: 30 * 24 * 60 * 60 * 1000,
   completeAccountActivation: mocks.completeAccountActivation,
   createActivationClaimToken: vi.fn(() => "test-activation-token-value-with-more-than-forty-characters"),
   loginIsBlocked: mocks.loginIsBlocked,
@@ -91,30 +96,37 @@ vi.mock("@/lib/auth/post-auth-destination", () => ({
 
 import {
   activateAccount,
+  confirmRegistrationCode,
   loginWithAcademyId,
   loginWithPin,
-  submitRegistration,
+  requestRegistrationCode,
   type RegistrationFormState,
 } from "@/app/login/actions"
 import { OperationalActionError } from "@/lib/actions/operational-result"
+import { EMPTY_REGISTRATION_VALUES } from "@/lib/auth/registration-form"
 
-const REQUEST_KEY = "11111111-1111-4111-8111-111111111111"
 const initialState: RegistrationFormState = {
+  academyId: null,
   error: null,
   errorField: null,
-  requestedRole: "player",
-  submitted: false,
+  standing: null,
+  step: "details",
+  values: EMPTY_REGISTRATION_VALUES,
 }
 
-function registrationData(
-  fullName: string,
-  requestedRole?: string,
-  registrationRequestKey = REQUEST_KEY,
-) {
+const VALID_DETAILS = {
+  dateOfBirth: "2014-03-11",
+  email: "rakesh@example.com",
+  fullName: "Mira Rao",
+  phone: "+91 98765 43210",
+  requestedRole: "player",
+}
+
+function registrationData(overrides: Record<string, string> = {}) {
   const formData = new FormData()
-  formData.set("fullName", fullName)
-  formData.set("registrationRequestKey", registrationRequestKey)
-  if (requestedRole) formData.set("requestedRole", requestedRole)
+  for (const [field, value] of Object.entries({ ...VALID_DETAILS, ...overrides })) {
+    formData.set(field, value)
+  }
   return formData
 }
 
@@ -135,80 +147,152 @@ function loginData(secretName: "password" | "pin", secret: string) {
 describe("public registration action", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.requestRegistration.mockResolvedValue({ accepted: true })
+    mocks.confirmRegistration.mockReturnValue({
+      academyId: null,
+      accountId: "account-1",
+      standing: "new",
+    })
   })
 
-  it("registers a valid public request as a player", async () => {
-    const result = await submitRegistration(
-      initialState,
-      registrationData("  Mira   Rao  "),
+  it("sends a code without creating anything, and advances to the code step", async () => {
+    const result = await requestRegistrationCode(initialState, registrationData())
+
+    expect(result.step).toBe("code")
+    expect(result.error).toBeNull()
+    expect(mocks.requestRegistration).toHaveBeenCalledOnce()
+    // No account is written at this point, so no claim cookie may be set either --
+    // a cookie here would imply a registration that does not exist yet.
+    expect(mocks.cookieSet).not.toHaveBeenCalled()
+  })
+
+  it("normalizes the name before the service ever sees it", async () => {
+    await requestRegistrationCode(initialState, registrationData({ fullName: "  Mira   Rao  " }))
+
+    expect(mocks.requestRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ fullName: "Mira Rao" }),
+    )
+  })
+
+  it("forwards an assistant-coach request under the existing coach role", async () => {
+    await requestRegistrationCode(initialState, registrationData({ requestedRole: "coach" }))
+
+    expect(mocks.requestRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ requestedRole: "coach" }),
+    )
+  })
+
+  it("refuses a role nobody may request rather than forwarding it", async () => {
+    await requestRegistrationCode(initialState, registrationData({ requestedRole: "platform_admin" }))
+
+    // Anything that is not exactly "coach" collapses to "player", so a posted
+    // platform_admin cannot ride in through the form.
+    expect(mocks.requestRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ requestedRole: "player" }),
+    )
+  })
+
+  it("keeps every entered value when the service refuses the details", async () => {
+    mocks.requestRegistration.mockRejectedValueOnce(
+      new OperationalActionError("INVALID_INPUT", "Enter a valid date of birth.", "dateOfBirth"),
     )
 
-    expect(result).toEqual({ error: null, errorField: null, requestedRole: "player", submitted: true })
-    expect(mocks.registerPublicAccountRequest).toHaveBeenCalledOnce()
-    expect(mocks.registerPublicAccountRequest).toHaveBeenCalledWith({
-      activationToken: "test-activation-token-value-with-more-than-forty-characters",
-      fullName: "Mira Rao",
-      requestKey: REQUEST_KEY,
-      requestedRole: "player",
+    const result = await requestRegistrationCode(initialState, registrationData())
+
+    expect(result).toMatchObject({
+      error: "Enter a valid date of birth.",
+      errorField: "dateOfBirth",
+      step: "details",
     })
-    expect(mocks.cookieSet).toHaveBeenCalledWith("smba_activation_claim", expect.any(String), expect.any(Object))
+    expect(result.values.fullName).toBe("Mira Rao")
+    expect(result.values.email).toBe("rakesh@example.com")
   })
 
-  it("registers a junior-coach request for head-coach approval", async () => {
-    const result = await submitRegistration(
-      initialState,
-      registrationData("Riya Coach", "coach"),
+  it("shows a throttle trip as a recoverable error and does not advance", async () => {
+    mocks.requestRegistration.mockRejectedValueOnce(
+      new OperationalActionError(
+        "BUSINESS_RULE",
+        "Wait a few minutes before requesting another code.",
+        "email",
+      ),
     )
 
-    expect(result).toEqual({ error: null, errorField: null, requestedRole: "coach", submitted: true })
-    expect(mocks.registerPublicAccountRequest).toHaveBeenCalledWith({
-      activationToken: "test-activation-token-value-with-more-than-forty-characters",
-      fullName: "Riya Coach",
-      requestKey: REQUEST_KEY,
-      requestedRole: "coach",
-    })
-  })
+    const result = await requestRegistrationCode(initialState, registrationData())
 
-  it("does not persist invalid registration requests", async () => {
-    await expect(
-      submitRegistration(initialState, registrationData("A")),
-    ).resolves.toEqual({
-      error: "Enter your full name.",
-      errorField: "fullName",
-      requestedRole: "player",
-      submitted: false,
-    })
-    expect(mocks.registerPublicAccountRequest).not.toHaveBeenCalled()
-
-  })
-
-  it("returns request-key conflicts as recoverable form errors", async () => {
-    mocks.registerPublicAccountRequest.mockImplementationOnce(() => {
-      throw new OperationalActionError(
-        "CONFLICT",
-        "This registration request has changed. Refresh the page before trying again.",
-        "registrationRequestKey",
-      )
-    })
-
-    await expect(
-      submitRegistration(initialState, registrationData("Mira Rao")),
-    ).resolves.toEqual({
-      error: "This registration request has changed. Refresh the page before trying again.",
-      errorField: null,
-      requestedRole: "player",
-      submitted: false,
-    })
+    expect(result.step).toBe("details")
+    expect(result.error).toContain("Wait a few minutes")
   })
 
   it("does not hide unexpected persistence failures", async () => {
-    mocks.registerPublicAccountRequest.mockImplementationOnce(() => {
-      throw new Error("database unavailable")
+    mocks.requestRegistration.mockRejectedValueOnce(new Error("database unavailable"))
+
+    await expect(requestRegistrationCode(initialState, registrationData()))
+      .rejects.toThrow("database unavailable")
+  })
+
+  it("creates the account and sets the claim cookie once the code is right", async () => {
+    const result = await confirmRegistrationCode(
+      { ...initialState, step: "code" },
+      registrationData({ code: "123456" }),
+    )
+
+    expect(result).toMatchObject({ academyId: null, standing: "new", step: "done" })
+    expect(mocks.cookieSet).toHaveBeenCalledWith(
+      "smba_activation_claim",
+      expect.any(String),
+      expect.any(Object),
+    )
+  })
+
+  it("surfaces an existing request without creating a second one", async () => {
+    mocks.confirmRegistration.mockReturnValueOnce({
+      academyId: null,
+      accountId: null,
+      standing: "pending",
     })
 
-    await expect(
-      submitRegistration(initialState, registrationData("Mira Rao")),
-    ).rejects.toThrow("database unavailable")
+    const result = await confirmRegistrationCode(
+      { ...initialState, step: "code" },
+      registrationData({ code: "123456" }),
+    )
+
+    expect(result).toMatchObject({ standing: "pending", step: "done" })
+    // Nothing was created, so nothing may be claimed.
+    expect(mocks.cookieSet).not.toHaveBeenCalled()
+  })
+
+  it("returns the Academy ID only once the request is approved", async () => {
+    mocks.confirmRegistration.mockReturnValueOnce({
+      academyId: "SMBA-PL-0019",
+      accountId: null,
+      standing: "approved",
+    })
+
+    const result = await confirmRegistrationCode(
+      { ...initialState, step: "code" },
+      registrationData({ code: "123456" }),
+    )
+
+    expect(result).toMatchObject({ academyId: "SMBA-PL-0019", standing: "approved" })
+  })
+
+  it("answers every unusable code with one message, and stays on the code step", async () => {
+    // Wrong, expired, already spent, attempts exhausted and throttled all arrive
+    // here as null. Distinguishing them would reveal whether a challenge exists
+    // for this identity -- the same disclosure the send step refuses to make.
+    mocks.confirmRegistration.mockReturnValue(null)
+
+    const result = await confirmRegistrationCode(
+      { ...initialState, step: "code" },
+      registrationData({ code: "000000" }),
+    )
+
+    expect(result).toMatchObject({
+      error: "That code is invalid or expired.",
+      errorField: "code",
+      step: "code",
+    })
+    expect(mocks.cookieSet).not.toHaveBeenCalled()
   })
 })
 

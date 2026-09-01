@@ -29,17 +29,34 @@ describe("authentication error focus", () => {
     expect(login).not.toContain("[state.error]")
   })
 
-  it("returns focus and associates registration errors with the name field", () => {
+  it("returns focus and associates a registration error with the field it belongs to", () => {
     const registration = source("components/registration-form.tsx")
 
-    expect(registration).toContain("const fullNameRef = useRef<HTMLInputElement>(null)")
-    expect(registration).toContain("ref={fullNameRef}")
-    expect(registration).toMatch(/if \(state\.error && state\.errorField === "fullName"\) fullNameRef\.current\?\.focus\(\)/)
-    expect(registration).toContain('aria-describedby={fullNameError ? "full-name-error" : undefined}')
-    expect(registration).toContain('aria-invalid={fullNameError ? true : undefined}')
+    /*
+     * The form used to hold one field and focused it by name. It now holds five
+     * across two steps, so the assertion is that EVERY field has a ref and that
+     * the focus lookup covers all of them -- a new field added without one would
+     * strand a screen-reader user on an error with nothing focused, which is the
+     * regression the single-field version was written to prevent.
+     */
+    for (const ref of [
+      "codeRef",
+      "dateOfBirthRef",
+      "emailRef",
+      "fullNameRef",
+      "phoneRef",
+    ]) {
+      expect(registration).toContain(`const ${ref} = useRef<HTMLInputElement>(null)`)
+      expect(registration).toContain(`ref={${ref}}`)
+      expect(registration).toContain(`${ref},`)
+    }
+
+    expect(registration).toContain("if (state.error && target?.current) target.current.focus()")
+    expect(registration).toContain('aria-invalid={fieldError("fullName") ? true : undefined}')
     expect(registration).toContain('id="full-name-error"')
+    expect(registration).toContain('id="registration-code-error"')
     expect(registration).toContain('id="registration-form-error"')
-    expect(registration).toContain("value={fullName}")
+    expect(registration).toContain("value={values.fullName}")
     expect(registration).toContain('method="post"')
     expect(registration).toContain("submitButtonRef.current?.focus()")
   })

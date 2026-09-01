@@ -14,7 +14,10 @@ import {
   type AccountRole,
 } from "@/lib/auth/identity"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
-import { operationalActionError } from "@/lib/actions/operational-result"
+import {
+  OperationalActionError,
+  operationalActionError,
+} from "@/lib/actions/operational-result"
 import {
   initializeDatabase,
   type SmbaDatabase,
@@ -42,6 +45,7 @@ import {
 } from "@/lib/auth/recovery-service"
 import { authRecoveryEmails } from "@/lib/db/schema"
 import type { AuthMailer } from "@/lib/auth/mailer"
+import type { RegistrationStanding } from "@/lib/auth/registration-form"
 import { getAcademyDateKey } from "@/lib/format"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
@@ -70,7 +74,7 @@ const REGISTRATION_MAX_PHONE_DIGITS = 15
 /** Older than this and the date is a typo, not a birthday. */
 const REGISTRATION_MAX_AGE_YEARS = 120
 
-export type RegistrationStanding = "new" | "pending" | "approved" | "rejected"
+export type { RegistrationStanding } from "@/lib/auth/registration-form"
 
 type RegistrationSecurity = {
   ipHash?: string | null
@@ -183,21 +187,40 @@ export async function requestRegistration(input: {
     operationalActionError("INVALID_INPUT", "Enter a valid date of birth.", "dateOfBirth")
   }
   const existing = registrationStandingFor(identity.subjectKey, database)
-  await requestRegistrationVerification({
-    academyId: existing?.academyId ?? null,
-    email: identity.normalizedEmail,
-    fullName: existing?.fullName ?? fullName,
-    mailer: input.mailer,
-    security: input.security,
-    standing: existing?.standing ?? "new",
-    subjectKey: identity.subjectKey,
-  }, { database, now })
+  try {
+    await requestRegistrationVerification({
+      academyId: existing?.academyId ?? null,
+      email: identity.normalizedEmail,
+      fullName: existing?.fullName ?? fullName,
+      mailer: input.mailer,
+      security: input.security,
+      standing: existing?.standing ?? "new",
+      subjectKey: identity.subjectKey,
+    }, { database, now })
+  } catch (error) {
+    /*
+     * Throttle trips, the resend cooldown and a mail-delivery failure all arrive
+     * as plain Errors, and all three are things the person in front of the form
+     * can recover from by waiting or trying another address. Retyping them as
+     * OperationalActionError here means the action can tell "show this" from
+     * "let this reach the error boundary" structurally, rather than by matching
+     * message text -- which had already gone wrong once, since a regex for
+     * "unavailable" also swallows "database unavailable".
+     */
+    throw new OperationalActionError(
+      "BUSINESS_RULE",
+      error instanceof Error ? error.message : "We could not send a code just now.",
+      "email",
+    )
+  }
   return genericAcceptedResponse(startedAt)
 }
 
-export type RegistrationConfirmation =
-  | { accountId: string; standing: "new" }
-  | { academyId: string | null; standing: RegistrationStanding }
+export type RegistrationConfirmation = {
+  academyId: string | null
+  accountId: string | null
+  standing: RegistrationStanding
+}
 
 /**
  * Step two: the code is correct, so either surface the request that already
@@ -205,6 +228,7 @@ export type RegistrationConfirmation =
  * transaction that burns the challenge.
  */
 export function confirmRegistration(input: {
+  activationToken?: string
   code: string
   createId?: () => string
   dateOfBirth: string
@@ -234,7 +258,11 @@ export function confirmRegistration(input: {
     onVerified: (tx, email): RegistrationConfirmation => {
       const existing = registrationStandingFor(identity.subjectKey, tx)
       if (existing) {
-        return { academyId: existing.academyId, standing: existing.standing }
+        return {
+          academyId: existing.academyId,
+          accountId: null,
+          standing: existing.standing,
+        }
       }
       const accountId = createId()
       tx.insert(accounts).values({
@@ -263,7 +291,10 @@ export function confirmRegistration(input: {
         createdAt: now,
         updatedAt: now,
       }).run()
-      return { accountId, standing: "new" }
+      if (input.activationToken) {
+        saveActivationClaim({ accountId, token: input.activationToken }, { database: tx, now })
+      }
+      return { academyId: null, accountId, standing: "new" as const }
     },
     security: input.security,
     subjectKey: identity.subjectKey,
