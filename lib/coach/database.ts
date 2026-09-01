@@ -292,7 +292,10 @@ export function getPlayerOnboardingWorkspace(
 ): PlayerOnboardingWorkspace {
   const db = initializeDatabase()
   const pendingRequests = db.select({
+    contactEmail: accounts.contactEmail,
+    contactPhone: accounts.contactPhone,
     createdAt: accounts.createdAt,
+    dateOfBirth: accounts.dateOfBirth,
     fullName: accounts.fullName,
     id: accounts.id,
     requestedRole: accounts.requestedRole,

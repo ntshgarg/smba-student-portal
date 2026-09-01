@@ -23,7 +23,10 @@ export type PlayerOnboardingSummary = {
 export type PlayerOnboardingStage = "request" | "assessment" | "session" | "feePlan"
 
 export type OnboardingPendingRequest = {
+  contactEmail: string | null
+  contactPhone: string | null
   createdAt: string
+  dateOfBirth: string | null
   fullName: string
   id: string
   requestedRole: "player" | "coach"
@@ -50,6 +53,14 @@ export type PlayerOnboardingCase = {
   activatedAt?: string | null
   academyId: string | null
   approvedAt?: string | null
+  /*
+   * Null on every request made before registration collected them, and on any
+   * account a coach enters by hand -- so the approval screen renders what it has
+   * rather than assuming all three are present.
+   */
+  contactEmail?: string | null
+  contactPhone?: string | null
+  dateOfBirth?: string | null
   academyPlan: AcademyPlan | null
   batch: TrainingBatch | null
   feePlanRecorded: boolean
@@ -265,6 +276,9 @@ export function derivePlayerOnboardingWorkspace({
     activatedAt: null,
     academyId: null,
     approvedAt: null,
+    contactEmail: request.contactEmail ?? null,
+    contactPhone: request.contactPhone ?? null,
+    dateOfBirth: request.dateOfBirth ?? null,
       academyPlan: null,
       batch: null,
       feePlanRecorded: false,

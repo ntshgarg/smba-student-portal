@@ -126,12 +126,19 @@ describe("coach player onboarding summary", () => {
       assignments: [assignment({ playerId: "fee-player" })],
       feePlans: [],
       pendingRequests: [{
+        contactEmail: "shah@example.com",
+        contactPhone: "+919000000001",
         createdAt: "2026-08-09T10:00:00.000Z",
+        dateOfBirth: "2014-01-05",
         fullName: "Myra Shah",
         id: "request-player",
         requestedRole: "player",
       }, {
+        // A request predating the contact fields still has to classify.
+        contactEmail: null,
+        contactPhone: null,
         createdAt: "2026-08-09T11:00:00.000Z",
+        dateOfBirth: null,
         fullName: "Arjun Kumar",
         id: "request-coach",
         requestedRole: "coach",
@@ -206,5 +213,59 @@ describe("the two zeroes an onboarding summary can report", () => {
     const cleared = summary({ assignments: [assignment()], feePlans: [feePlan()] })
     expect(cleared.total).toBe(0)
     expect(cleared.onboarded).toBe(1)
+  })
+})
+
+describe("what a coach sees before approving", () => {
+  /*
+   * The approval screen used to carry a name, a request type and a date. Two
+   * people of the same name were indistinguishable on it, which is half of why
+   * duplicate requests were hard to spot from the coach's side.
+   */
+  function workspaceWith(request: Partial<OnboardingPendingRequest>) {
+    return derivePlayerOnboardingWorkspace({
+      assignments: [],
+      feePlans: [],
+      pendingRequests: [{
+        contactEmail: null,
+        contactPhone: null,
+        createdAt: "2026-08-09T10:00:00.000Z",
+        dateOfBirth: null,
+        fullName: "Myra Shah",
+        id: "request-1",
+        requestedRole: "player",
+        ...request,
+      }],
+      players: [],
+      referenceDate: "2026-08-10",
+    })
+  }
+
+  it("carries the verified contact details onto the request case", () => {
+    const [item] = workspaceWith({
+      contactEmail: "shah@example.com",
+      contactPhone: "+919000000001",
+      dateOfBirth: "2014-01-05",
+    }).cases
+
+    expect(item).toMatchObject({
+      contactEmail: "shah@example.com",
+      contactPhone: "+919000000001",
+      dateOfBirth: "2014-01-05",
+      stage: "request",
+    })
+  })
+
+  it("still classifies a request made before those fields existed", () => {
+    // Requests already in the queue have none of them, and a coach entering
+    // someone by hand never will. The stage must not depend on their presence.
+    const [item] = workspaceWith({}).cases
+
+    expect(item).toMatchObject({
+      contactEmail: null,
+      contactPhone: null,
+      dateOfBirth: null,
+      stage: "request",
+    })
   })
 })

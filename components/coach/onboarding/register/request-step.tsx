@@ -106,10 +106,28 @@ export function RequestStep({
 
   return (
     <div className={styles.requestStep} aria-busy={Boolean(busy)}>
+      {/*
+        * A name, a type and a date was everything an approval used to rest on --
+        * two people of the same name were indistinguishable here. The contact
+        * details now arrive with the request, verified, so the coach can tell
+        * them apart and reach the person without asking for the number later.
+        *
+        * All three are optional: requests made before registration collected them
+        * still sit in this queue, and a coach entering someone by hand has none.
+        */}
       <dl className={styles.requestFacts}>
         <div><dt>{item.requestedRole === "coach" ? "Junior coach" : "Player"}</dt><dd>{item.fullName}</dd></div>
         <div><dt>Request type</dt><dd>{item.requestedRole === "coach" ? "Coaching staff" : "Academy membership"}</dd></div>
         <div><dt>Received</dt><dd>{item.requestedAt ? shortDate(item.requestedAt) : "Recently"}</dd></div>
+        {item.dateOfBirth ? (
+          <div><dt>Date of birth</dt><dd>{shortDate(item.dateOfBirth)}</dd></div>
+        ) : null}
+        {item.contactEmail ? (
+          <div><dt>Contact email</dt><dd>{item.contactEmail}</dd></div>
+        ) : null}
+        {item.contactPhone ? (
+          <div><dt>Contact mobile</dt><dd>{item.contactPhone}</dd></div>
+        ) : null}
       </dl>
       <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
