@@ -923,9 +923,18 @@
   margin: 0;
 }
 
+/*
+ * The urgency is carried by the heading rather than by a bar down the side --
+ * red type is how the rest of this workspace marks the thing to read first, and
+ * an accent rail is a stock tell. Never colour alone: the block is role="alert"
+ * and its heading says "Resolve before completion" in words.
+ */
 .previewBlockers {
-  border-left: 3px solid var(--red);
   color: var(--navy);
+}
+
+.previewBlockers strong {
+  color: var(--red);
 }
 
 .previewBlockers ul {
