@@ -87,15 +87,25 @@ export default async function ActivatePage() {
               />
             </>
           ) : (
-          /*
-           * No usable receipt in this browser. That used to be a dead end -- the
-           * cookie was the only link between a person and their request, so
-           * clearing it or switching device left "request registration" as the
-           * only thing on screen, and some of the duplicate queue is people who
-           * took it. Name, email and a fresh code reach the same status from
-           * anywhere.
-           */
-          <RegistrationStatusForm />
+          status.state === "pending" ? (
+            // This browser still holds a usable receipt, so it already knows whose
+            // request this is. Asking for the name and address again would be
+            // busywork; the lookup below is for the browsers that do not.
+            <div className="registration-confirmation" role="status">
+              <h2>Waiting for your coach.</h2>
+              <p>Return here after approval to create your password.</p>
+              <Link href="/activate">Check again</Link>
+            </div>
+          ) : (
+            /*
+             * No usable receipt here. That used to be a dead end -- the cookie was
+             * the only link between a person and their request, so clearing it or
+             * switching device left "request registration" as the only thing on
+             * screen, and some of the duplicate queue is people who took it. Name,
+             * email and a fresh code reach the same status from anywhere.
+             */
+            <RegistrationStatusForm />
+          )
         )}
 
         <Link className="login-back" href="/login">
