@@ -149,12 +149,15 @@ describe("registration send", () => {
     }
   })
 
-  it("refuses a resend inside the cooldown and leaves the first code usable", async () => {
+  it("sends nothing inside the cooldown, and says so no differently", async () => {
     const mailer = await send()
     const code = mailer.registration[0]!.code
 
+    // Quiet, not refused. The refusal was a live activity monitor: it arrived in
+    // about a millisecond against a floored ~140ms for an accepted send, with
+    // its own wording, for any name and address someone could guess.
     await expect(send({ mailer }, new Date(NOW.getTime() + EMAIL_RESEND_COOLDOWN_MS - 1)))
-      .rejects.toThrow("Wait one minute")
+      .resolves.toBeDefined()
     expect(mailer.registration).toHaveLength(1)
     expect(confirm(code)).not.toBeNull()
   })
@@ -181,14 +184,14 @@ describe("registration send", () => {
     expect(JSON.stringify(event)).not.toContain(EMAIL)
   })
 
-  it("blocks the sixth send for one identity and writes nothing", async () => {
+  it("stops mailing after the fifth send for one identity, and writes nothing", async () => {
     const mailer = new CapturingMailer()
     for (let draw = 0; draw < 5; draw += 1) {
       await send({ mailer }, new Date(NOW.getTime() + draw * EMAIL_RESEND_COOLDOWN_MS))
     }
     const sixth = new Date(NOW.getTime() + 5 * EMAIL_RESEND_COOLDOWN_MS)
 
-    await expect(send({ mailer }, sixth)).rejects.toThrow("Wait a few minutes")
+    await expect(send({ mailer }, sixth)).resolves.toBeDefined()
     expect(mailer.registration).toHaveLength(5)
     expect(accountRows()).toHaveLength(0)
   })

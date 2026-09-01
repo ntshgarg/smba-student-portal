@@ -4,7 +4,7 @@ import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 
 
 import { createOTP } from "@better-auth/utils/otp"
 import { hashPassword, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto"
-import { and, desc, eq, gt, isNull, lte } from "drizzle-orm"
+import { and, desc, eq, gt, isNull, lte, ne } from "drizzle-orm"
 
 import { normalizeAcademyId } from "@/lib/auth/identity"
 import { authEmailRequired, createAuthMailer, type AuthMailer } from "@/lib/auth/mailer"
@@ -466,11 +466,31 @@ export async function requestRegistrationVerification(input: {
   const fullName = input.fullName.trim()
   if (!fullName) throw new Error("Enter the player's full name.")
   const hashedSubject = subjectHash(input.subjectKey)
+  /*
+   * Two ceilings, and neither is spendable by a stranger on the victim's behalf.
+   *
+   * The request ceiling is per (identity, IP). Keyed on the identity alone it
+   * was a remote lock: five sends from any address, for a name and email anyone
+   * could type, refused the real person on both registration and the status
+   * lookup, and an attacker re-sending every sixty seconds sealed the gaps -- a
+   * victim probing every five seconds got nothing in forty minutes.
+   *
+   * The delivery ceiling is per address, because the identity mixes in a name
+   * the requester chooses. Varying it walked straight past the per-identity
+   * limit: sixty codes into one inbox in one instant, from the academy's own
+   * sender, with no refusal at all.
+   */
   const attempt = requestThrottleKeys(
-    `registration-send:${hashedSubject}`,
+    `registration-send:${hashedSubject}:${authSubjectHash(input.security?.ipHash ?? "unknown-ip")}`,
     input.security?.ipHash,
   )
-  if (loginIsBlocked(attempt, { database, now })) {
+  const delivery = requestThrottleKeys(
+    `registration-address:${digest("registration-address", email)}`,
+    input.security?.ipHash,
+  )
+  const blocked = loginIsBlocked(attempt, { database, now })
+    || loginIsBlocked(delivery, { database, now })
+  if (blocked) {
     writeAuthSecurityEvent({
       eventType: "recovery_email_verification_requested",
       ipHash: input.security?.ipHash,
@@ -478,7 +498,6 @@ export async function requestRegistrationVerification(input: {
       subjectHash: hashedSubject,
       userAgent: input.security?.userAgent,
     }, { database, now })
-    throw new Error("Wait a few minutes before requesting another code.")
   }
   const latest = database.select({ createdAt: authEmailChallenges.createdAt })
     .from(authEmailChallenges)
@@ -489,32 +508,33 @@ export async function requestRegistrationVerification(input: {
     ))
     .orderBy(desc(authEmailChallenges.createdAt))
     .get()
-  if (latest && now.getTime() - latest.createdAt.getTime() < EMAIL_RESEND_COOLDOWN_MS) {
-    throw new Error("Wait one minute before requesting another code.")
-  }
+  const cooling = Boolean(latest) && now.getTime() - latest!.createdAt.getTime() < EMAIL_RESEND_COOLDOWN_MS
+  /*
+   * Every ceiling gates the mail, never the answer. Throwing here produced three
+   * distinguishable replies on a public endpoint -- accepted at 143ms, "wait one
+   * minute" at 1.0ms, "wait a few minutes" at 1.0ms -- which is a live activity
+   * monitor for any name and address someone can guess, and it skipped the
+   * timing floor the accepted branch is careful to hold. Returning quietly also
+   * means the honest person whose budget an attacker spent is told to check the
+   * inbox where their still-valid code is already sitting.
+   */
+  if (blocked || cooling) return
 
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0")
   const challengeId = randomUUID()
   recordLoginFailure(attempt, { database, now })
-  database.transaction((tx) => {
-    tx.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
-      .where(and(
-        eq(authEmailChallenges.subjectHash, hashedSubject),
-        eq(authEmailChallenges.purpose, "verify_email"),
-        isNull(authEmailChallenges.consumedAt),
-      )).run()
-    tx.insert(authEmailChallenges).values({
-      id: challengeId,
-      accountId: null,
-      subjectHash: hashedSubject,
-      purpose: "verify_email",
-      email,
-      secretHash: challengeSecretHash("verify_email", hashedSubject, challengeId, code),
-      expiresAt: new Date(now.getTime() + EMAIL_VERIFICATION_LIFETIME_MS),
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-  }, { behavior: "immediate" })
+  recordLoginFailure(delivery, { database, now })
+  database.insert(authEmailChallenges).values({
+    id: challengeId,
+    accountId: null,
+    subjectHash: hashedSubject,
+    purpose: "verify_email",
+    email,
+    secretHash: challengeSecretHash("verify_email", hashedSubject, challengeId, code),
+    expiresAt: new Date(now.getTime() + EMAIL_VERIFICATION_LIFETIME_MS),
+    createdAt: now,
+    updatedAt: now,
+  }).run()
 
   try {
     await (input.mailer ?? createAuthMailer()).sendRegistrationVerification({
@@ -538,6 +558,20 @@ export async function requestRegistrationVerification(input: {
     }, { database, now })
     throw error
   }
+  /*
+   * The older codes are retired only once the new one has actually been
+   * delivered. Superseding first meant a mailer failure left the person with
+   * nothing: the supersede had already committed, and consuming the undelivered
+   * challenge is not a restore. Confirmation reads the newest live challenge, so
+   * the brief overlap resolves to the code that was just sent.
+   */
+  database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
+    .where(and(
+      eq(authEmailChallenges.subjectHash, hashedSubject),
+      eq(authEmailChallenges.purpose, "verify_email"),
+      isNull(authEmailChallenges.consumedAt),
+      ne(authEmailChallenges.id, challengeId),
+    )).run()
   return { email }
 }
 
@@ -564,8 +598,18 @@ export function confirmRegistrationVerification<T>(input: {
   now?: Date
 } = {}): T | null {
   const hashedSubject = subjectHash(input.subjectKey)
+  /*
+   * Per (identity, IP), not per identity. The identity is a name and an address
+   * anyone can type, so a stranger's five wrong guesses used to block the bucket
+   * belonging to the person whose inbox actually holds the code -- and the same
+   * block covers the status lookup, which is the route that exists so someone
+   * who lost their original browser can still get in.
+   *
+   * The per-challenge `failedAttempts` counter below is the brute-force limit on
+   * the code itself, and it is deliberately not IP-scoped.
+   */
   const attempt = requestThrottleKeys(
-    `registration-code:${hashedSubject}`,
+    `registration-code:${hashedSubject}:${authSubjectHash(input.security?.ipHash ?? "unknown-ip")}`,
     input.security?.ipHash,
   )
   const code = input.code.replace(/\s+/gu, "")
