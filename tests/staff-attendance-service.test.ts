@@ -114,7 +114,7 @@ describe("coach access profiles", () => {
     expect(() => requireHeadAdminAccess(FIRST_JUNIOR_ID, { database }))
       .toThrow("Head coach access")
     expect(() => requireJuniorCoachAccess(HEAD_COACH_ID, { database }))
-      .toThrow("Junior coach access")
+      .toThrow("Assistant coach access")
   })
 
   it("lists active juniors for the head only and rejects non-coach profiles", () => {
@@ -319,7 +319,7 @@ describe("junior-coach staff attendance", () => {
       changes: [
         { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-04", choice: "absent", expectedChoice: "cleared" },
       ],
-    })).toThrow("selected junior coach is unavailable")
+    })).toThrow("selected assistant coach is unavailable")
   })
 
   it("persists one auditable record per date and excludes cleared days from summaries", () => {

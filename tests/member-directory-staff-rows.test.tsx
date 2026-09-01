@@ -40,7 +40,7 @@ describe("coaching staff in the Member Directory", () => {
     const html = summary(junior)
     expect(html).toContain("Kavya Iyer")
     expect(html).toContain("SMBA-JC-6442")
-    expect(html).toContain("Junior coach")
+    expect(html).toContain("Assistant coach")
     expect(html).toContain("Coaching staff")
   })
 
@@ -87,7 +87,7 @@ describe("coaching staff in the Member Directory", () => {
 
   it("distinguishes the head coach from a junior coach", () => {
     expect(staffAccessLabel("head_admin")).toBe("Head coach")
-    expect(staffAccessLabel("junior_coach")).toBe("Junior coach")
+    expect(staffAccessLabel("junior_coach")).toBe("Assistant coach")
     expect(summary({ ...junior, accessLevel: "head_admin" })).toContain("Head coach")
   })
 })

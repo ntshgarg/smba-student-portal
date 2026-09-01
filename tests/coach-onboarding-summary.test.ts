@@ -5,6 +5,7 @@ import {
   derivePlayerOnboardingWorkspace,
   type OnboardingAssignment,
   type OnboardingFeePlan,
+  type OnboardingPendingRequest,
   type OnboardingPlayer,
 } from "@/lib/coach/onboarding"
 

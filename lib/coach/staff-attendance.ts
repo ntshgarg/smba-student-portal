@@ -112,10 +112,10 @@ function requireAttendanceReadAccess({
     .map((row) => row.accountId))
   coachAccountIds.forEach((coachAccountId) => {
     if (!eligible.has(coachAccountId)) {
-      throw new Error("Junior coach access is required.")
+      throw new Error("Assistant coach access is required.")
     }
     if (requester.accessLevel !== "head_admin" && requester.accountId !== coachAccountId) {
-      throw new Error("Junior coaches can only view their own attendance.")
+      throw new Error("Assistant coaches can only view their own attendance.")
     }
   })
 }
@@ -453,7 +453,7 @@ export function saveStaffAttendanceRecords({
       if (!juniorCoach) {
         operationalActionError(
           "NOT_FOUND",
-          "The selected junior coach is unavailable.",
+          "The selected assistant coach is unavailable.",
           "changes",
         )
       }

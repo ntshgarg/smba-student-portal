@@ -116,7 +116,7 @@ export function RequestStep({
         * still sit in this queue, and a coach entering someone by hand has none.
         */}
       <dl className={styles.requestFacts}>
-        <div><dt>{item.requestedRole === "coach" ? "Junior coach" : "Player"}</dt><dd>{item.fullName}</dd></div>
+        <div><dt>{item.requestedRole === "coach" ? "Assistant coach" : "Player"}</dt><dd>{item.fullName}</dd></div>
         <div><dt>Request type</dt><dd>{item.requestedRole === "coach" ? "Coaching staff" : "Academy membership"}</dd></div>
         <div><dt>Received</dt><dd>{item.requestedAt ? shortDate(item.requestedAt) : "Recently"}</dd></div>
         {item.dateOfBirth ? (

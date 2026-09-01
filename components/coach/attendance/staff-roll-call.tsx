@@ -303,7 +303,7 @@ export function StaffRollCall({
         <div className="attendance-record-section-heading staff-roll-call-heading">
           <div>
             <span>Daily staff record</span>
-            <h2>Junior coaches</h2>
+            <h2>Assistant coaches</h2>
           </div>
           <strong>{juniorCoaches.length}</strong>
         </div>
@@ -311,7 +311,7 @@ export function StaffRollCall({
         {!juniorCoaches.length ? (
           <div className="attendance-record-empty is-roster">
             <UsersRound aria-hidden="true" />
-            <h3>No junior coaches yet.</h3>
+            <h3>No assistant coaches yet.</h3>
             <p>Provisioned staff will appear here for daily roll call.</p>
           </div>
         ) : (
@@ -333,7 +333,7 @@ export function StaffRollCall({
                       <strong>{coach.fullName}</strong>
                       <small>{unavailable
                         ? futureDate ? "Future date" : `Joined ${formatDateKey(coach.joinedOn)}`
-                        : "Junior coach"}</small>
+                        : "Assistant coach"}</small>
                     </div>
                   </div>
                   <div

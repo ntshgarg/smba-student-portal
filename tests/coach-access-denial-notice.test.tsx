@@ -84,7 +84,7 @@ describe("head coach access denial", () => {
     const html = renderToStaticMarkup(<CoachAccessNotice />)
 
     expect(html).toContain("Head coach access only")
-    expect(html).toContain("not part of the junior coach workspace")
+    expect(html).toContain("not part of the assistant coach workspace")
     expect(html).toContain("back on your dashboard")
     // Announced to assistive technology rather than only painted.
     expect(html).toContain('role="status"')

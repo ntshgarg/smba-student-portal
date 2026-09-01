@@ -134,7 +134,7 @@ describe("Player Onboarding Next-Step Register", () => {
     )
 
     expect(html).toContain("Review Arjun’s staff request")
-    expect(html).toContain("Junior coach")
+    expect(html).toContain("Assistant coach")
     expect(html).toContain("Coaching staff")
     expect(html).toContain("Approve staff access")
     expect(html).not.toContain("court assessment")
