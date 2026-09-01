@@ -207,6 +207,7 @@ describe("registration send", () => {
   it.each([
     ["an invalid address", { email: "not-an-address" }],
     ["a name that normalizes away", { fullName: "   " }],
+    ["a one-character name", { fullName: "A" }],
     ["a phone with letters", { phone: "98765abcde" }],
     ["a date that does not exist", { dateOfBirth: "2026-02-30" }],
     ["a future date of birth", { dateOfBirth: "2030-01-01" }],

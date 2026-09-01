@@ -537,7 +537,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       await page.locator(".whatsapp-status-blocked").waitFor({ state: "visible", timeout: 12_000 })
       break
     case "register-validation-error":
-      await clickRequired(page.getByRole("button", { name: "Request registration" }), action)
+      await clickRequired(page.getByRole("button", { name: "Send code" }), action)
       await pageAlert(page).waitFor({ state: "visible", timeout: 12_000 })
       break
     case "report-checklist-collapse": {

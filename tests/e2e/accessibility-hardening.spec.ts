@@ -62,13 +62,13 @@ test("authentication failures restore focus to the invalid field", async ({ page
   await page.goto("/register", { waitUntil: "networkidle" })
   const fullName = page.getByLabel("Full name")
 
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByRole("button", { name: "Send code" }).click()
   await expect(page.locator("#full-name-error")).toBeVisible()
   await expect(fullName).toHaveAttribute("aria-describedby", "full-name-error")
   await expect(fullName).toHaveAttribute("aria-invalid", "true")
   await expect(fullName).toBeFocused()
 
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByRole("button", { name: "Send code" }).click()
   await expect(fullName).toBeFocused()
 })
 

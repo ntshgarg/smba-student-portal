@@ -173,9 +173,19 @@ export async function requestRegistration(input: {
     operationalActionError("INVALID_INPUT", "Choose a valid account type.", "requestedRole")
   }
   const fullName = normalizeFullName(input.fullName)
+  /*
+   * Name and address are checked apart even though the key needs both, so the
+   * error lands on the field that is actually wrong. Collapsing them into one
+   * message blamed the address for an empty name -- the first field on the form
+   * -- and sent focus past everything the person had not filled in yet.
+   */
+  const normalizedName = normalizedNameKey(fullName)
+  if (normalizedName.length < 2 || normalizedName.length > 80) {
+    operationalActionError("INVALID_INPUT", "Enter the player's full name.", "fullName")
+  }
   const identity = registrationIdentity(fullName, input.email)
   if (!identity) {
-    operationalActionError("INVALID_INPUT", "Enter a valid name and email address.", "email")
+    operationalActionError("INVALID_INPUT", "Enter a valid email address.", "email")
   }
   if (!normalizeRegistrationPhone(input.phone)) {
     operationalActionError("INVALID_INPUT", "Enter a valid contact mobile number.", "phone")
@@ -333,9 +343,13 @@ export async function requestRegistrationStatus(input: {
 } = {}) {
   const startedAt = Date.now()
   const fullName = normalizeFullName(input.fullName)
+  const normalizedName = normalizedNameKey(fullName)
+  if (normalizedName.length < 2 || normalizedName.length > 80) {
+    operationalActionError("INVALID_INPUT", "Enter the name the request was made in.", "fullName")
+  }
   const identity = registrationIdentity(fullName, input.email)
   if (!identity) {
-    operationalActionError("INVALID_INPUT", "Enter the name and email you registered with.", "email")
+    operationalActionError("INVALID_INPUT", "Enter the email you registered with.", "email")
   }
   const existing = registrationStandingFor(identity.subjectKey, database)
   try {

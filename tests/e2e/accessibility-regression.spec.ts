@@ -704,13 +704,53 @@ async function scanContextStates({
   for (const state of states) await auditMatrixState(page, state, results, testInfo)
 }
 
+/**
+ * Rewrites the newest unclaimed registration challenge so a known code opens it.
+ * Registration no longer writes an account until an emailed code comes back, and
+ * this suite has no mailbox -- the same reason verifyRecoveryEmail writes the
+ * verified address directly rather than waiting for one to arrive.
+ */
+function setRegistrationCode(code: string) {
+  const database = new Database(databasePath)
+  try {
+    const challenge = database.prepare(`
+      select id, subject_hash from auth_email_challenges
+      where purpose = 'verify_email' and account_id is null and consumed_at is null
+      order by created_at desc limit 1
+    `).get() as { id: string; subject_hash: string } | undefined
+    if (!challenge) throw new Error("No open registration challenge to set a code on.")
+    const secretHash = recoveryDigest(
+      "email-verify_email",
+      `${challenge.subject_hash}:${challenge.id}:${code}`,
+    )
+    database.prepare(
+      "update auth_email_challenges set secret_hash = ?, failed_attempts = 0 where id = ?",
+    ).run(secretHash, challenge.id)
+  } finally {
+    database.close()
+  }
+}
+
 async function registerActivationContext(browser: Browser, fullName: string) {
   const context = await newContext(browser)
   const page = await context.newPage()
   await page.goto("/register", { waitUntil: "domcontentloaded" })
   await page.getByLabel("Full name").fill(fullName)
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByLabel("Date of birth").fill("2014-03-11")
+  // One address per player: the identity key is the address and the name
+  // together, so sharing an address across these fixtures would collapse them
+  // into one request.
+  await page.getByLabel("Contact email").fill(`${fullName.replaceAll(" ", ".").toLowerCase()}@example.test`)
+  await page.getByLabel("Contact mobile").fill("+919000000001")
+  await page.getByRole("button", { name: "Send code" }).click()
+  await page.getByLabel("6-digit code").waitFor()
+
+  const code = "424242"
+  setRegistrationCode(code)
+  await page.getByLabel("6-digit code").fill(code)
+  await page.getByRole("button", { name: "Verify" }).click()
   await page.getByRole("heading", { name: "Registration received." }).waitFor()
+
   await page.getByRole("link", { name: "View activation status" }).click()
   await page.waitForURL((url) => url.pathname === "/activate")
   return { context, page }

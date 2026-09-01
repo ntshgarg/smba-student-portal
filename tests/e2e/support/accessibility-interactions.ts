@@ -138,12 +138,16 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "register-error": {
-      await page.getByRole("button", { name: "Request registration" }).click()
+      // The submit is "Send code" now: registration writes nothing until the
+      // emailed code comes back, so the first press asks for one.
+      await page.getByRole("button", { name: "Send code" }).click()
       await page.locator('[role="alert"]').first().waitFor({ state: "visible" })
       break
     }
     case "register-junior-coach": {
-      await page.getByLabel("Account type").selectOption("coach")
+      // The id and the option value both stay `coach` -- only the label and the
+      // word a person reads changed.
+      await page.getByLabel("I am registering a").selectOption("coach")
       break
     }
     case "report-preview-open": {

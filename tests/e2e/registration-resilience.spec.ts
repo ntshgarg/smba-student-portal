@@ -217,7 +217,7 @@ test("empty validation associates the error and focuses Full name without writin
 
   await openRegistration(page)
   const fullNameField = page.getByLabel("Full name")
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByRole("button", { name: "Send code" }).click()
 
   await expect(page.locator("#full-name-error")).toHaveText("Enter your full name.")
   await expect(fullNameField).toHaveAttribute("aria-describedby", "full-name-error")
@@ -273,7 +273,7 @@ test("repeated 503s preserve the exact name, write nothing, and retry once", asy
 
   await openRegistration(page)
   const fullNameField = page.getByLabel("Full name")
-  const submit = page.getByRole("button", { name: "Request registration" })
+  const submit = page.getByRole("button", { name: "Send code" })
   const formError = page.locator("#registration-form-error")
   await fullNameField.fill(fullName)
   for (let failure = 1; failure <= 2; failure += 1) {
@@ -324,7 +324,7 @@ test("an aborted committed response retries idempotently", async ({ page }, test
   await openRegistration(page)
   const fullNameField = page.getByLabel("Full name")
   await fullNameField.fill(fullName)
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByRole("button", { name: "Send code" }).click()
 
   await expect(page.locator("#registration-form-error"))
     .toContainText("We couldn’t send your request")
@@ -339,7 +339,7 @@ test("an aborted committed response retries idempotently", async ({ page }, test
   })
 
   await page.unroute("**/register")
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByRole("button", { name: "Send code" }).click()
   await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
   await expectOnePendingPlayer(fullName)
   await page.screenshot({
@@ -437,7 +437,7 @@ test("a player completes code-free browser activation, optional PIN, and passwor
   const pin = "246810"
   await openRegistration(page)
   await page.getByLabel("Full name").fill(fullName)
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByRole("button", { name: "Send code" }).click()
   await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
   await page.getByRole("link", { name: "View activation status" }).click()
   await expect(page.getByRole("heading", { name: "Approval is pending." })).toBeVisible()
@@ -501,7 +501,7 @@ test("a junior coach is approved from Academy onboarding and activates staff acc
   await openRegistration(page)
   await page.getByLabel("Account type").selectOption("coach")
   await page.getByLabel("Full name").fill(fullName)
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByRole("button", { name: "Send code" }).click()
   await expect(page.getByRole("heading", { name: "Registration received." })).toBeVisible()
   await page.getByRole("link", { name: "View activation status" }).click()
   await expect(page.getByRole("heading", { name: "Approval is pending." })).toBeVisible()
