@@ -129,8 +129,16 @@ export function RegistrationForm() {
     <form className="login-form" method="post" onSubmit={(event) => void submit(event)} noValidate>
       {onCodeStep ? (
         <>
+          {/*
+            Shown to everyone, always. Codes are limited to one per address per
+            minute so a stranger cannot flood an inbox, which means a parent
+            registering a second child in the same sitting can land on a wait
+            they did not ask for. Saying it up front explains that without the
+            page having to admit anything about who is already registered.
+          */}
           <p className="login-helper">
-            If that address can be registered, we’ve sent a code to {state.values.email}.
+            If that address can be registered, we’ve sent a code to {state.values.email}. It can
+            take a minute to arrive — if nothing comes, go back and send again.
           </p>
           <div className="login-field">
             <label htmlFor="registration-code">6-digit code</label>

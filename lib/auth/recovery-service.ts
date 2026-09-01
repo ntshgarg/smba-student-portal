@@ -136,9 +136,19 @@ function challengeSecretHash(
   return digest(`email-${purpose}`, `${subject}:${challengeId}:${value.trim()}`)
 }
 
+/*
+ * The address half is namespaced as well as the subject half, and that matters
+ * more than it looks. `attemptKeys` writes `ip:<hash>` from whatever it is
+ * handed, and the sign-in paths hand it the raw hash from `requestSecurityContext`
+ * -- so passing the raw hash through here put every unauthenticated recovery and
+ * registration request into the same twenty-per-fifteen-minutes bucket that
+ * governs whether anyone behind that address can sign in at all. Ten sends from
+ * an academy's wifi, or from a carrier NAT, locked out every unrelated person on
+ * it. A registration flood should throttle registration and nothing else.
+ */
 function requestThrottleKeys(subject: string, ipHash?: string | null) {
   return {
-    ipHash: ipHash ?? authSubjectHash("recovery-request:unknown-ip"),
+    ipHash: authSubjectHash(`recovery-request:${ipHash ?? "unknown-ip"}`),
     subjectHash: authSubjectHash(subject),
   }
 }
@@ -467,29 +477,30 @@ export async function requestRegistrationVerification(input: {
   if (!fullName) throw new Error("Enter the player's full name.")
   const hashedSubject = subjectHash(input.subjectKey)
   /*
-   * Two ceilings, and neither is spendable by a stranger on the victim's behalf.
+   * One ceiling gates the requester, and it is the only thing that can refuse
+   * anybody: per (identity, IP) at five, and -- through the namespaced address
+   * half of the key -- per IP at twenty. Both halves are spent by the person
+   * making the request and by nobody else.
    *
-   * The request ceiling is per (identity, IP). Keyed on the identity alone it
-   * was a remote lock: five sends from any address, for a name and email anyone
-   * could type, refused the real person on both registration and the status
-   * lookup, and an attacker re-sending every sixty seconds sealed the gaps -- a
-   * victim probing every five seconds got nothing in forty minutes.
+   * There is deliberately NO ceiling scoped to the contact address alone. One
+   * was added here and it was worse than the problem it solved: five sends under
+   * junk names from a single IP silently closed both registration and the status
+   * lookup for that address for fifteen minutes, renewable indefinitely, while
+   * both doors answered "accepted" -- and the codes that did land were bound to
+   * the junk identities, so the address's real owner could not use them either.
+   * It also fired with no attacker at all: one family address, three children and
+   * two resends is five sends, and the sixth was silently dropped.
    *
-   * The delivery ceiling is per address, because the identity mixes in a name
-   * the requester chooses. Varying it walked straight past the per-identity
-   * limit: sixty codes into one inbox in one instant, from the academy's own
-   * sender, with no refusal at all.
+   * That is not a bug in the threshold. Any ceiling counting sends to an address
+   * is spendable by whoever generates the volume, so it is always a lock on the
+   * person who owns that address. Between an inbox that can be flooded and a
+   * family that cannot register a child, the flood is the lesser harm.
    */
   const attempt = requestThrottleKeys(
     `registration-send:${hashedSubject}:${authSubjectHash(input.security?.ipHash ?? "unknown-ip")}`,
     input.security?.ipHash,
   )
-  const delivery = requestThrottleKeys(
-    `registration-address:${digest("registration-address", email)}`,
-    input.security?.ipHash,
-  )
   const blocked = loginIsBlocked(attempt, { database, now })
-    || loginIsBlocked(delivery, { database, now })
   if (blocked) {
     writeAuthSecurityEvent({
       eventType: "recovery_email_verification_requested",
@@ -499,12 +510,19 @@ export async function requestRegistrationVerification(input: {
       userAgent: input.security?.userAgent,
     }, { database, now })
   }
+  /*
+   * The cooldown is scoped to the address rather than the identity, which is
+   * what actually bounds a flood: at most one registration code per inbox per
+   * minute however many names are tried and however many addresses they are
+   * tried from. A parent registering a second child inside that minute waits and
+   * sends again -- the form says so unconditionally, so the wait is explained
+   * without the page having to admit anything about who is registered.
+   */
   const latest = database.select({ createdAt: authEmailChallenges.createdAt })
     .from(authEmailChallenges)
     .where(and(
-      eq(authEmailChallenges.subjectHash, hashedSubject),
+      eq(authEmailChallenges.email, email),
       eq(authEmailChallenges.purpose, "verify_email"),
-      isNull(authEmailChallenges.consumedAt),
     ))
     .orderBy(desc(authEmailChallenges.createdAt))
     .get()
@@ -514,16 +532,13 @@ export async function requestRegistrationVerification(input: {
    * distinguishable replies on a public endpoint -- accepted at 143ms, "wait one
    * minute" at 1.0ms, "wait a few minutes" at 1.0ms -- which is a live activity
    * monitor for any name and address someone can guess, and it skipped the
-   * timing floor the accepted branch is careful to hold. Returning quietly also
-   * means the honest person whose budget an attacker spent is told to check the
-   * inbox where their still-valid code is already sitting.
+   * timing floor the accepted branch is careful to hold.
    */
   if (blocked || cooling) return
 
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0")
   const challengeId = randomUUID()
   recordLoginFailure(attempt, { database, now })
-  recordLoginFailure(delivery, { database, now })
   database.insert(authEmailChallenges).values({
     id: challengeId,
     accountId: null,
