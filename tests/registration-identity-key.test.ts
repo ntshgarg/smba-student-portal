@@ -56,6 +56,34 @@ describe("registration identity key", () => {
       const identity = registrationIdentity(" Arjun   Sharma ", " Rakesh@Example.com ")!
       expect(key(identity.normalizedName, identity.normalizedEmail)).toBe(identity.subjectKey)
     })
+
+    it("is idempotent for a name NFKC expands into a space", () => {
+      /*
+       * The ASCII case above passed while this one did not. Whitespace was
+       * collapsed before NFKC, and NFKC introduces spaces -- a spacing diaeresis
+       * decomposes to U+0020 plus a combining mark -- so the key kept a double
+       * space the second pass then removed, and hashed two ways.
+       */
+      const identity = registrationIdentity("Anaïs ¨ Rao", "rakesh@example.com")!
+      expect(identity.normalizedName).not.toMatch(/\s{2}/u)
+      expect(key(identity.normalizedName, identity.normalizedEmail)).toBe(identity.subjectKey)
+    })
+
+    for (const [label, character] of Object.entries({
+      "a bidi override": "‮",
+      "a soft hyphen": "­",
+      "a word joiner": "⁠",
+      "a zero-width joiner": "‍",
+      "a zero-width non-joiner": "‌",
+      "a zero-width space": "​",
+    })) {
+      it(`ignores ${label}, which renders as nothing at all`, () => {
+        // Left in the key these are two accounts whose names are identical on
+        // screen -- and a way back into the queue for a rejected applicant.
+        expect(key(`Arjun${character} Sharma`, "rakesh@example.com"))
+          .toBe(key("Arjun Sharma", "rakesh@example.com"))
+      })
+    }
   })
 
   describe("keeps apart what is not the same person", () => {

@@ -53,8 +53,27 @@ export type StudentIdentity = {
   previewMode?: true
 }
 
+/*
+ * Format characters (ZWSP, ZWNJ, soft hyphen, the bidi overrides) and the
+ * non-whitespace controls render as nothing at all, so a name carrying one is
+ * indistinguishable on screen from the same name without it. Left in, they
+ * split one person into two accounts, carry into the CSV exports, and let a
+ * rejected applicant re-enter the queue as a stranger.
+ *
+ * Controls become a space rather than vanishing: `\p{Cc}` covers tab and
+ * newline, and deleting those would glue two names into one word. Every
+ * remaining run of whitespace is collapsed afterwards, so neither substitution
+ * can leave a double space behind.
+ */
+const INVISIBLE_CHARACTERS = /[\p{Cf}᠎]/gu
+const CONTROL_CHARACTERS = /\p{Cc}/gu
+
 export function normalizeFullName(value: string) {
-  return value.trim().replace(/\s+/gu, " ")
+  return value
+    .replace(INVISIBLE_CHARACTERS, "")
+    .replace(CONTROL_CHARACTERS, " ")
+    .trim()
+    .replace(/\s+/gu, " ")
 }
 
 /**
@@ -66,9 +85,20 @@ export function normalizeFullName(value: string) {
  * be different byte sequences that render identically. Without normalising them
  * to one form, two registrations for the same player hash to two keys and the
  * duplicate this key exists to catch walks straight through.
+ *
+ * NFKC runs first rather than last. It can *introduce* spaces -- the spacing
+ * diacritics decompose to a space plus a combining mark, so `¨` becomes
+ * `U+0020 U+0308` -- and a space created after the collapse is never collapsed.
+ * That made the key non-idempotent: feeding its own output back produced a
+ * different hash. The existing idempotence test missed it because it uses ASCII.
  */
 export function normalizedNameKey(value: string) {
-  return normalizeFullName(value).normalize("NFKC").toLocaleLowerCase("en-IN")
+  // Normalised twice on purpose: dropping a format character can leave a base
+  // letter adjacent to a combining mark that the first pass could not compose
+  // through it, and those only join on the pass after the strip.
+  return normalizeFullName(value.normalize("NFKC"))
+    .normalize("NFKC")
+    .toLocaleLowerCase("en-IN")
 }
 
 export function normalizeAcademyId(value: string) {
