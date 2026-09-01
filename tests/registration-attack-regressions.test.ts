@@ -14,12 +14,15 @@ import type {
   RecoveryEmailVerificationMessage,
   RegistrationVerificationMessage,
 } from "@/lib/auth/mailer"
+import { loginIsBlocked } from "@/lib/auth/credential-service"
+import { normalizeAcademyId } from "@/lib/auth/identity"
 import { EMAIL_RESEND_COOLDOWN_MS } from "@/lib/auth/recovery-service"
+import { authSubjectHash } from "@/lib/auth/security-context"
 import type { SmbaDatabase } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
 import { accounts } from "@/lib/db/schema"
 
-const { confirmRegistration, requestRegistration } = await import("@/lib/auth/account-service")
+const { confirmRegistration, requestRegistration, requestRegistrationStatus } = await import("@/lib/auth/account-service")
 
 /**
  * One test per loophole an adversarial sweep of this flow actually found and an
@@ -212,82 +215,106 @@ describe("a name that renders one way and hashes another", () => {
 })
 
 describe("one inbox, many names", () => {
-  it("stops at five codes to one address however the name is varied", async () => {
+  it("sends one code a minute to an address, however many names and addresses try", async () => {
     const mailer = new CapturingMailer()
     const names = [NAME, "Arjun Sharma Jr", "Arjun Sharmaa", "Arjun K Sharma", "Arjun Sharma X", "A Sharma"]
 
+    // Inside one minute, from six different origins. The per-identity ceiling
+    // mixes in a name the requester chooses, so varying it walked straight past
+    // it: sixty codes into one inbox in one instant, from the academy's own
+    // sender. The cooldown is scoped to the address, so the flood is one code.
     for (const [index, fullName] of names.entries()) {
-      await send({ fullName, mailer, security: { ipHash: ATTACKER_IP } },
-        new Date(NOW.getTime() + index * EMAIL_RESEND_COOLDOWN_MS))
+      await send({ fullName, mailer, security: { ipHash: `flood-${index}` } },
+        new Date(NOW.getTime() + index * 1_000))
     }
 
-    // The per-identity ceiling mixes in a name the requester chooses, so varying
-    // it walked straight past: sixty codes into one inbox in one instant, from
-    // the academy's own sender. The address ceiling is the one that binds.
-    expect(mailer.registration).toHaveLength(5)
-    expect(new Set(mailer.registration.map((message) => message.to))).toEqual(new Set([EMAIL]))
+    expect(mailer.registration).toHaveLength(1)
+    expect(mailer.registration[0]!.to).toBe(EMAIL)
   })
 
-  it("does not let one attacker's IP spend the ceiling for everyone else", async () => {
+  it("does not hold one address closed for another", async () => {
     const mailer = new CapturingMailer()
     for (let draw = 0; draw < 6; draw += 1) {
-      await send({ mailer, security: { ipHash: ATTACKER_IP } },
-        new Date(NOW.getTime() + draw * EMAIL_RESEND_COOLDOWN_MS))
+      await send({ mailer, security: { ipHash: ATTACKER_IP } }, new Date(NOW.getTime() + draw * 1_000))
     }
-    const later = new Date(NOW.getTime() + 6 * EMAIL_RESEND_COOLDOWN_MS)
 
     const otherAddress = await send({
       email: "second.family@example.com",
       fullName: "Meera Iyer",
       mailer,
       security: { ipHash: VICTIM_IP },
-    }, later)
+    }, new Date(NOW.getTime() + 7_000))
 
     expect(otherAddress.registration.at(-1)!.to).toBe("second.family@example.com")
+  })
+
+  it("lets one family register three players from one address", async () => {
+    const mailer = new CapturingMailer()
+    const children = ["Arjun Sharma", "Isha Sharma", "Rohan Sharma"]
+
+    /*
+     * The ceiling this replaced counted total sends to an address, so a parent
+     * with three children and two mistyped resends silently got nothing on the
+     * sixth attempt -- accepted, no mail, no explanation. A minute apart is the
+     * only cost now, and the form says so before anyone waits.
+     */
+    let minute = 0
+    const at = () => new Date(NOW.getTime() + (minute += 1) * EMAIL_RESEND_COOLDOWN_MS)
+    // Two mistyped resends before the third child, which is what took the old
+    // address budget to its limit of five and silently dropped everything after.
+    await registerOnce({ fullName: children[0]!, mailer, security: { ipHash: VICTIM_IP } }, at())
+    await send({ fullName: children[1]!, mailer, security: { ipHash: VICTIM_IP } }, at())
+    await send({ fullName: children[1]!, mailer, security: { ipHash: VICTIM_IP } }, at())
+    await send({ fullName: children[1]!, mailer, security: { ipHash: VICTIM_IP } }, at())
+    await registerOnce({ fullName: children[1]!, mailer, security: { ipHash: VICTIM_IP } }, at())
+    await registerOnce({ fullName: children[2]!, mailer, security: { ipHash: VICTIM_IP } }, at())
+
+    expect(accountRows().map((row) => row.fullName).sort()).toEqual([...children].sort())
   })
 })
 
 describe("a stranger who knows only a name and an email", () => {
-  it("cannot leave the person who owns the inbox with no way forward", async () => {
+  it("cannot stop the person who owns the inbox from getting their own code", async () => {
     const attacker = new CapturingMailer()
-    for (let draw = 0; draw < 5; draw += 1) {
-      await send({ mailer: attacker, security: { ipHash: ATTACKER_IP } },
-        new Date(NOW.getTime() + draw * EMAIL_RESEND_COOLDOWN_MS))
+    for (let draw = 0; draw < 10; draw += 1) {
+      await send({ fullName: `Decoy Number ${draw}`, mailer: attacker, security: { ipHash: ATTACKER_IP } },
+        new Date(NOW.getTime() + draw * 1_000))
     }
-    const later = new Date(NOW.getTime() + 6 * EMAIL_RESEND_COOLDOWN_MS)
+    const later = new Date(NOW.getTime() + EMAIL_RESEND_COOLDOWN_MS + 1_000)
 
     /*
-     * Every one of the attacker's codes went to the victim's own inbox -- that is
-     * all a stranger with a name and an address can make happen. Asking again
-     * inside the window mails nothing, on purpose, but it is no longer a
-     * refusal: the newest code is live and the victim can simply use it.
+     * The ceiling this replaced was scoped to the address, which is the half a
+     * stranger knows: five junk-name sends from one IP closed registration *and*
+     * the status lookup for fifteen minutes, renewably, while both doors said
+     * "accepted" -- and the codes that landed were bound to the junk identities,
+     * so the address's real owner could not use them either.
      *
-     * Keyed on the identity alone this was a remote lock instead. Five sends
-     * from anywhere refused the real person on registration *and* on the status
-     * lookup, and an attacker re-sending every minute sealed the gaps: a victim
-     * probing every five seconds got nothing in forty minutes.
+     * Now the only ceiling that refuses anyone is the one they spend themselves.
      */
-    expect(attacker.registration.every((message) => message.to === EMAIL)).toBe(true)
-    await expect(send({ mailer: attacker, security: { ipHash: VICTIM_IP } }, later))
-      .resolves.toBeDefined()
-    expect(attacker.registration).toHaveLength(5)
-
-    expect(confirm(attacker.registration.at(-1)!.code, { security: { ipHash: VICTIM_IP } }, later))
+    const victim = await send({ mailer: attacker, security: { ipHash: VICTIM_IP } }, later)
+    expect(victim.registration.at(-1)!.to).toBe(EMAIL)
+    expect(confirm(victim.registration.at(-1)!.code, { security: { ipHash: VICTIM_IP } }, later))
       .toMatchObject({ standing: "new" })
   })
 
-  it("cannot hold the address closed once the window has passed", async () => {
+  it("cannot hold the status lookup closed either", async () => {
+    await registerOnce({ security: { ipHash: VICTIM_IP } })
     const attacker = new CapturingMailer()
-    for (let draw = 0; draw < 5; draw += 1) {
-      await send({ mailer: attacker, security: { ipHash: ATTACKER_IP } },
-        new Date(NOW.getTime() + draw * EMAIL_RESEND_COOLDOWN_MS))
+    for (let draw = 0; draw < 10; draw += 1) {
+      await send({ fullName: `Decoy Number ${draw}`, mailer: attacker, security: { ipHash: ATTACKER_IP } },
+        new Date(NOW.getTime() + draw * 1_000))
     }
-    const afterWindow = new Date(NOW.getTime() + 20 * 60 * 1000)
+    const later = new Date(NOW.getTime() + EMAIL_RESEND_COOLDOWN_MS + 1_000)
 
-    const victim = await send({ security: { ipHash: VICTIM_IP } }, afterWindow)
-    expect(victim.registration).toHaveLength(1)
-    expect(confirm(victim.registration[0]!.code, { security: { ipHash: VICTIM_IP } }, afterWindow))
-      .toMatchObject({ standing: "new" })
+    const lookup = new CapturingMailer()
+    await requestRegistrationStatus({
+      email: EMAIL,
+      fullName: NAME,
+      mailer: lookup,
+      security: { ipHash: VICTIM_IP },
+    }, { database, now: later })
+
+    expect(lookup.registration.at(-1)!.to).toBe(EMAIL)
   })
 
   it("cannot block the confirm bucket of the person whose inbox holds the code", async () => {
@@ -336,5 +363,65 @@ describe("when the mail does not go out", () => {
     // committed, and consuming the undelivered challenge is not a restore.
     expect(confirm(working, {}, later)).toMatchObject({ standing: "new" })
     assertDatabaseHealthy()
+  })
+})
+
+describe("what a registration flood must not reach", () => {
+  it("never spends the bucket that decides whether anyone can sign in", async () => {
+    const mailer = new CapturingMailer()
+    const unrelated = {
+      ipHash: ATTACKER_IP,
+      subjectHash: authSubjectHash(normalizeAcademyId("SMBA-PL-0004")),
+    }
+
+    /*
+     * `attemptKeys` writes `ip:<hash>` from whatever it is handed, and the
+     * sign-in paths hand it the raw hash from requestSecurityContext -- so the
+     * registration throttle passing that same raw hash through put an
+     * unauthenticated endpoint in charge of the twenty-per-fifteen-minutes
+     * budget that governs password and PIN sign-in. One send used to cost two of
+     * those twenty, so ten sends from an academy's wifi or a carrier NAT locked
+     * out every unrelated person behind it.
+     */
+    // Distinct addresses so no address cooldown participates, and inside one
+    // window so the count actually accumulates -- 24 sends used to charge that
+    // shared bucket 48 times against a threshold of 20.
+    for (let draw = 0; draw < 24; draw += 1) {
+      await send({
+        email: `family-${draw}@example.com`,
+        fullName: `Player Number ${draw}`,
+        mailer,
+        security: { ipHash: ATTACKER_IP },
+      }, new Date(NOW.getTime() + draw * 1_000))
+    }
+
+    expect(loginIsBlocked(unrelated, { database, now: new Date(NOW.getTime() + 25_000) })).toBe(false)
+  })
+})
+
+describe("a name in a script where the joiners are letters", () => {
+  it("keeps ZWJ and ZWNJ in the name the academy stores and prints", async () => {
+    // <la, virama, ZWJ> is how Malayalam writes a chillu, and ZWNJ is how
+    // Devanagari keeps a halant visible instead of forming a conjunct. Stripping
+    // them rewrote the name to a different word in the CSV exports and on the
+    // coach's screen.
+    const chillu = "ഗോപാല്‍ Menon"
+    await registerOnce({ fullName: chillu, email: "menon@example.com" })
+
+    expect(accountRows()[0]!.fullName).toBe(chillu)
+  })
+
+  it("still treats the two spellings of one Malayalam name as one person", async () => {
+    await registerOnce({ fullName: "ഗോപാല്‍ Menon", email: "menon@example.com" })
+
+    // The ZWJ chillu and the atomic chillu render identically and NFKC does not
+    // unify them, so without folding them in the key the duplicate walks through.
+    const again = await registerOnce(
+      { fullName: "ഗോപാൽ Menon", email: "menon@example.com" },
+      new Date(NOW.getTime() + EMAIL_RESEND_COOLDOWN_MS),
+    )
+
+    expect(again).toMatchObject({ standing: "pending" })
+    expect(accountRows()).toHaveLength(1)
   })
 })
