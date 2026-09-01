@@ -42,6 +42,7 @@ export async function requestRegistrationStatusCode(
     error: null,
     errorField: null,
     fullName: null,
+    activated: false,
     onboardingCompleted: false,
     standing: null,
     step: "details",
@@ -81,6 +82,7 @@ export async function confirmRegistrationStatusCode(
     error: null,
     errorField: null,
     fullName: null,
+    activated: false,
     onboardingCompleted: false,
     standing: null,
     step: "code",
@@ -97,7 +99,7 @@ export async function confirmRegistrationStatusCode(
   })
   if (!result) return { ...base, error: INVALID_CODE_MESSAGE, errorField: "code" }
 
-  if (result.standing === "approved" && result.onboardingCompleted) {
+  if (result.standing === "approved" && result.onboardingCompleted && !result.activated) {
     // The claim was written inside the code's own transaction, so the cookie is
     // handing over a receipt that already exists rather than creating authority.
     const cookieStore = await cookies()
@@ -117,6 +119,7 @@ export async function confirmRegistrationStatusCode(
   return {
     ...base,
     academyId: result.academyId,
+    activated: result.activated,
     fullName: result.fullName,
     onboardingCompleted: result.onboardingCompleted,
     standing: result.standing,

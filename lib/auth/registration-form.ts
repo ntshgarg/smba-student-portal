@@ -63,6 +63,8 @@ export const EMPTY_REGISTRATION_STATE: RegistrationFormState = {
  */
 export type RegistrationStatusState = {
   academyId: string | null
+  /** Already has a password: offer sign-in, never the setup form. */
+  activated: boolean
   error: string | null
   errorField: "code" | "email" | "fullName" | null
   fullName: string | null
@@ -74,6 +76,7 @@ export type RegistrationStatusState = {
 
 export const EMPTY_REGISTRATION_STATUS_STATE: RegistrationStatusState = {
   academyId: null,
+  activated: false,
   error: null,
   errorField: null,
   fullName: null,

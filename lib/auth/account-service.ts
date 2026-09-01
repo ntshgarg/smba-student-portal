@@ -124,6 +124,7 @@ function registrationStandingFor(identityKey: string, database: SmbaDatabaseExec
     academyId: authMethods.identifier,
     approvalStatus: accounts.approvalStatus,
     archivedAt: accounts.archivedAt,
+    credentialStatus: authCredentialStates.status,
     fullName: accounts.fullName,
     id: accounts.id,
   }).from(accounts)
@@ -132,6 +133,7 @@ function registrationStandingFor(identityKey: string, database: SmbaDatabaseExec
       eq(authMethods.method, "academy_id"),
       isNull(authMethods.revokedAt),
     ))
+    .leftJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
     .where(eq(accounts.registrationIdentityKey, identityKey))
     .get()
   // An archived account is treated as absent rather than surfaced, so archiving
@@ -140,6 +142,11 @@ function registrationStandingFor(identityKey: string, database: SmbaDatabaseExec
   return {
     academyId: existing.approvalStatus === "approved" ? existing.academyId : null,
     accountId: existing.id,
+    // Approval status alone cannot tell an approved account from one that has
+    // already been activated, and the status door needs to: minting a claim for
+    // an activated account resurrects its consumed row and offers a password
+    // form that can never succeed.
+    activated: existing.credentialStatus === "active",
     fullName: existing.fullName,
     standing: existing.approvalStatus as RegistrationStanding,
   }
@@ -325,6 +332,8 @@ export type RegistrationStatusView = {
   academyId: string | null
   /** For the caller to mint an activation claim with. Never send it to a client. */
   accountId: string | null
+  /** Already has a password. The status door must offer sign-in, not setup. */
+  activated: boolean
   fullName: string | null
   onboardingCompleted: boolean
   standing: RegistrationStanding
@@ -415,6 +424,7 @@ export function confirmRegistrationStatus(input: {
         return {
           academyId: null,
           accountId: null,
+          activated: false,
           fullName: null,
           onboardingCompleted: false,
           standing: "new",
@@ -438,7 +448,17 @@ export function confirmRegistrationStatus(input: {
        * Email verification is the same proof password recovery already accepts,
        * and the claim is written inside the transaction that burned the code.
        */
-      if (input.activationToken && existing.standing === "approved" && onboardingCompleted) {
+      const activatable = existing.standing === "approved"
+        && onboardingCompleted
+        && !existing.activated
+      /*
+       * Never for an account that already has a password. saveActivationClaim
+       * upserts with `consumedAt: null`, so minting here un-spent the claim that
+       * activation had burned, overwrote the token hash the original browser
+       * held, and handed this one a password form that completeAccountActivation
+       * refuses -- a dead end offered to someone who only needs to sign in.
+       */
+      if (input.activationToken && activatable) {
         saveActivationClaim(
           { accountId: existing.accountId, token: input.activationToken },
           { database: tx, now },
@@ -447,6 +467,7 @@ export function confirmRegistrationStatus(input: {
       return {
         academyId: existing.academyId,
         accountId: existing.accountId,
+        activated: existing.activated,
         fullName: existing.fullName,
         onboardingCompleted,
         standing: existing.standing,

@@ -77,20 +77,27 @@ export function RegistrationStatusForm() {
      * on purpose -- the alternative is telling whoever holds this mailbox which
      * name-and-address pairs are registered.
      */
-    const heading = {
-      approved: "Approved.",
-      new: "Nothing to show yet.",
-      pending: "Approval is pending.",
-      rejected: "Request not approved.",
-    }[state.standing ?? "new"]
-    const body = {
-      approved: state.onboardingCompleted
-        ? "Your account is ready. Create a password below."
-        : "Your coach is setting up training. You’ll be able to sign in once that is finished.",
-      new: "We have no request under this name and email. Check the spelling, or send a new request.",
-      pending: "Your coach is reviewing this request. We’ll keep it here until they decide.",
-      rejected: "Please speak to your coach at the academy.",
-    }[state.standing ?? "new"]
+    const heading = state.standing === "approved" && state.activated
+      ? "Your account is ready."
+      : {
+        approved: "Approved.",
+        new: "Nothing to show yet.",
+        pending: "Approval is pending.",
+        rejected: "Request not approved.",
+      }[state.standing ?? "new"]
+    const body = state.standing === "approved" && state.activated
+      // Setting a password again is not possible and never was: the claim was
+      // spent at activation. Offering the form anyway sent someone who only
+      // needed to sign in around a loop that always failed.
+      ? "This account already has a password. Sign in with the Academy ID below."
+      : {
+        approved: state.onboardingCompleted
+          ? "Your account is ready. Create a password below."
+          : "Your coach is setting up training. You’ll be able to sign in once that is finished.",
+        new: "We have no request under this name and email. Check the spelling, or send a new request.",
+        pending: "Your coach is reviewing this request. We’ll keep it here until they decide.",
+        rejected: "Please speak to your coach at the academy.",
+      }[state.standing ?? "new"]
 
     return (
       <div className="registration-confirmation" role="status">
@@ -108,9 +115,13 @@ export function RegistrationStatusForm() {
             <p className="login-helper">Save this ID. You will use it every time you sign in.</p>
           </div>
         ) : null}
-        {state.standing === "approved" && state.onboardingCompleted && state.academyId ? (
-          <ActivationForm academyId={state.academyId} />
-        ) : null}
+        {state.standing === "approved" && state.onboardingCompleted && state.academyId
+          && !state.activated ? (
+            <ActivationForm academyId={state.academyId} />
+          ) : null}
+        {state.standing === "approved" && state.activated
+          ? <Link href="/login">Sign in</Link>
+          : null}
         {state.standing === "new" ? <Link href="/register">Request registration</Link> : null}
       </div>
     )
