@@ -642,8 +642,9 @@
 
 /*
  * A note, not a blocker. Registering several players on one address is ordinary,
- * so this borrows the muted keyline of .previewWarnings rather than the red of
- * .previewBlockers -- the coach is being told something, not stopped.
+ * so this takes the same plain keyline as .requestFacts directly above it rather
+ * than an accent bar -- the coach is being told something, not stopped, and the
+ * prose already reads as different from the fact grid it follows.
  */
 .duplicateSignal {
   display: grid;
@@ -651,7 +652,6 @@
   margin-top: 12px;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--steel);
   color: var(--navy);
   font-size: 0.75rem;
   line-height: 1.45;
