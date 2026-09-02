@@ -141,3 +141,44 @@ describe("recordClientErrorReport", () => {
       .run(NOW.getTime() - 90 * 24 * 60 * 60_000).changes).toBe(1)
   })
 })
+
+describe("what an unauthenticated caller cannot make this table do", () => {
+  it("stops inserting once the window ceiling is reached, whatever the caller varies", () => {
+    /*
+     * The comment above DUPLICATE_WINDOW_MS used to promise that the table could
+     * only grow by the number of distinct fault shapes per window. It could not
+     * keep that promise: the fingerprint is taken over `summary`, which the
+     * caller supplies, so a unique summary per request meant a unique
+     * fingerprint per request and the duplicate check never fired. Measured on a
+     * live build before the fix: ten identical posts added one row, ten posts
+     * differing only in `summary` added ten.
+     *
+     * The endpoint is unauthenticated by design -- a browser that has just
+     * crashed cannot prove who it is -- so the bound must not depend on anything
+     * the caller chooses.
+     */
+    const outcomes = Array.from({ length: 250 }, (_, index) => recordClientErrorReport({
+      accountId: null,
+      report: { ...report, summary: `TypeError: unique fault ${index}` },
+    }, { database, now: NOW }))
+
+    expect(outcomes.filter((outcome) => outcome === "recorded")).toHaveLength(100)
+    expect(outcomes.filter((outcome) => outcome === "suppressed")).toHaveLength(150)
+    expect(storedReports()).toHaveLength(100)
+  })
+
+  it("accepts a genuine fault again once the window has passed", () => {
+    for (let index = 0; index < 120; index += 1) {
+      recordClientErrorReport({
+        accountId: null,
+        report: { ...report, summary: `TypeError: unique fault ${index}` },
+      }, { database, now: NOW })
+    }
+    const later = new Date(NOW.getTime() + 11 * 60_000)
+
+    expect(recordClientErrorReport({
+      accountId: null,
+      report: { ...report, summary: "TypeError: a real one, later" },
+    }, { database, now: later })).toBe("recorded")
+  })
+})

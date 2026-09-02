@@ -215,21 +215,36 @@ describe("a name that renders one way and hashes another", () => {
 })
 
 describe("one inbox, many names", () => {
-  it("sends one code a minute to an address, however many names and addresses try", async () => {
-    const mailer = new CapturingMailer()
-    const names = [NAME, "Arjun Sharma Jr", "Arjun Sharmaa", "Arjun K Sharma", "Arjun Sharma X", "A Sharma"]
+  it("never lets one requester's junk names silence the address's real owner", async () => {
+    const attacker = new CapturingMailer()
 
-    // Inside one minute, from six different origins. The per-identity ceiling
-    // mixes in a name the requester chooses, so varying it walked straight past
-    // it: sixty codes into one inbox in one instant, from the academy's own
-    // sender. The cooldown is scoped to the address, so the flood is one code.
-    for (const [index, fullName] of names.entries()) {
-      await send({ fullName, mailer, security: { ipHash: `flood-${index}` } },
-        new Date(NOW.getTime() + index * 1_000))
+    /*
+     * The cooldown was scoped to the address alone, which bounded floods and was
+     * a lock: a stranger sending under a fresh junk name every sixty seconds
+     * silently suppressed every registration and status lookup for the real
+     * owner, indefinitely. Reproduced at 241 attacker requests against 24 victim
+     * attempts across both doors -- the victim received nothing.
+     *
+     * It is scoped to (address, identity) now, so a junk identity's send can
+     * only ever cool that junk identity.
+     */
+    for (let draw = 0; draw < 8; draw += 1) {
+      await send({ fullName: `Zz Qq${draw}`, mailer: attacker, security: { ipHash: ATTACKER_IP } },
+        new Date(NOW.getTime() + draw * 1_000))
     }
 
+    const victim = await send({ mailer: attacker, security: { ipHash: VICTIM_IP } },
+      new Date(NOW.getTime() + 9_000))
+    expect(victim.registration.at(-1)!.to).toBe(EMAIL)
+    expect(confirm(victim.registration.at(-1)!.code, { security: { ipHash: VICTIM_IP } },
+      new Date(NOW.getTime() + 9_000))).toMatchObject({ standing: "new" })
+  })
+
+  it("still cools a genuine resend for the same identity", async () => {
+    const mailer = await send()
+    await send({ mailer }, new Date(NOW.getTime() + EMAIL_RESEND_COOLDOWN_MS - 1))
+
     expect(mailer.registration).toHaveLength(1)
-    expect(mailer.registration[0]!.to).toBe(EMAIL)
   })
 
   it("does not hold one address closed for another", async () => {

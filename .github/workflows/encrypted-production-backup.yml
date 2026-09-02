@@ -1,9 +1,14 @@
 name: Encrypted production backup
 
 on:
-  schedule:
-    # Daily 08:17 India Standard Time. The unusual minute reduces runner congestion.
-    - cron: "47 2 * * *"
+  # The nightly schedule is off. This job's only destination was
+  # actions/upload-artifact, and on a public repository that means any GitHub
+  # account can download the snapshot -- which held children's names, dates of
+  # birth and guardian phone numbers, plus password hashes and plaintext TOTP
+  # secrets. Fifteen snapshots were live and have been deleted.
+  #
+  # Do not re-enable the schedule until the "Store encrypted snapshot" step
+  # below points at storage where a read is authenticated, logged and revocable.
   workflow_dispatch:
 
 concurrency:

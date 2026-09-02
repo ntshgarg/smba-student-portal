@@ -130,6 +130,16 @@ export async function changePasswordAction(
     }
   }
 
+  /*
+   * The PIN is a second way in, and it was surviving both remediations someone
+   * reaches for after a stolen cookie: it can be minted from a session alone
+   * (app/auth/pin/actions.ts) and neither changing the password nor logging
+   * other devices out removed it. So the attacker's door stayed open and the
+   * success message below was not true. The emailed reset path already does
+   * exactly this.
+   */
+  removePinCredential(identity.subjectId)
+
   writeAuthSecurityEvent({
     accountId: identity.subjectId,
     eventType: "password_changed",
@@ -138,13 +148,19 @@ export async function changePasswordAction(
     userAgent: confirmation.security.userAgent,
   })
   revalidatePath("/account/security")
-  return { error: null, success: "Password changed. Other signed-in devices were logged out." }
+  return {
+    error: null,
+    success: "Password changed. Other devices were logged out and any PIN was removed.",
+  }
 }
 
 export async function revokeOtherSessionsAction() {
   const identity = await requireIdentity()
   const requestHeaders = await headers()
   await getAuth().api.revokeOtherSessions({ headers: requestHeaders })
+  // Same reason as changePasswordAction: a PIN outlives a session revocation
+  // unless it is removed here too.
+  removePinCredential(identity.subjectId)
   const security = requestSecurityContext(requestHeaders)
   writeAuthSecurityEvent({
     accountId: identity.subjectId,

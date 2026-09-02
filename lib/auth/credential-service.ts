@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, createHmac, randomBytes, randomUUID, scryptSync } from "node:crypto"
 
-import { and, eq, gt, isNull } from "drizzle-orm"
+import { and, eq, gt, isNull, like, or } from "drizzle-orm"
 import { hashPassword, verifyPassword } from "better-auth/crypto"
 
 import {
@@ -612,9 +612,22 @@ export async function verifyPinLogin(input: {
     : null
 }
 
+/*
+ * The subject half is keyed on the pair, not the account alone. Keyed on the
+ * account, five wrong guesses from anywhere refused the person holding the real
+ * password -- verified against a live build: five failures from five addresses
+ * left the victim's own correct password answering "Wait a few minutes", with
+ * the attacker's own address counters sitting at one each. That is an
+ * unauthenticated lockout of any account, the head coach included, renewable
+ * indefinitely.
+ *
+ * Guessing is still bounded: a single attacker gets five tries per address, and
+ * the per-address ceiling of twenty caps how many accounts one address can
+ * probe. What no longer happens is one client's failures refusing another's.
+ */
 function attemptKeys(subjectHash: string, ipHash: string) {
   return [
-    { key: `subject:${subjectHash}`, threshold: 5 },
+    { key: `subject:${subjectHash}:${ipHash}`, threshold: 5 },
     { key: `ip:${ipHash}`, threshold: 20 },
   ]
 }
@@ -677,13 +690,24 @@ export function recordLoginFailure(input: {
   }, { behavior: "immediate" })
 }
 
+/**
+ * Clears every failure recorded against this account, from any address.
+ *
+ * The subject key carries the requester's address now, so a single equality
+ * would leave a block standing on a row the successful client never wrote --
+ * proving you hold the password has to end the lockout, not just the lockout
+ * you happened to cause. The hash is hex, so it carries no LIKE wildcards.
+ */
 export function recordLoginSuccess(subjectHash: string, {
   database = initializeDatabase(),
 }: {
   database?: SmbaDatabaseExecutor
 } = {}) {
   database.delete(authLoginAttempts)
-    .where(eq(authLoginAttempts.key, `subject:${subjectHash}`))
+    .where(or(
+      eq(authLoginAttempts.key, `subject:${subjectHash}`),
+      like(authLoginAttempts.key, `subject:${subjectHash}:%`),
+    ))
     .run()
 }
 

@@ -183,9 +183,32 @@ describe("CI security controls", () => {
       workflow.indexOf("SMBA_DATABASE_SNAPSHOT_SOURCE"),
     )
     expect(workflow).toContain("ref: ${{ github.event.repository.default_branch }}")
-    expect(workflow).toContain('- cron: "47 2 * * *"')
-    expect(workflow).toContain("smba-production-backup-${{ github.run_id }}-${{ github.run_attempt }}")
-    expect(workflow).toContain("retention-days: 35")
+  })
+
+  it("does not publish a production snapshot where a read is unauthenticated", () => {
+    /*
+     * This ran nightly and uploaded the snapshot with actions/upload-artifact.
+     * The repository is public, and on a public repository `actions:read` is
+     * granted to any authenticated GitHub account -- so a full copy of the
+     * academy was downloadable by anyone with a free account for 35 days at a
+     * time. Fifteen were live when this was found: children's names, dates of
+     * birth and guardian mobile numbers, password and PIN hashes, and TOTP
+     * secrets and backup codes in plaintext.
+     *
+     * The schedule is off until the destination is somewhere a read is
+     * authenticated, logged and revocable. This test is what stops it coming
+     * back by itself.
+     */
+    for (const path of [
+      ".github/workflows/encrypted-production-backup.yml",
+      ".github/workflows/empty-academy.yml",
+    ]) {
+      const workflow = readRepositoryFile(path)
+      const uploadsASnapshot = /uses: actions\/upload-artifact/u.test(workflow)
+        && /smba-production|pre-reset-snapshot/u.test(workflow)
+      const runsOnASchedule = /^\s*(schedule:|- cron:)/mu.test(workflow)
+      expect(uploadsASnapshot && runsOnASchedule).toBe(false)
+    }
   })
 
   it("gives the stored restore only Actions read access and step-scoped passphrase", () => {

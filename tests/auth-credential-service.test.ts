@@ -280,6 +280,40 @@ describe("production credential lifecycle", () => {
     })
   })
 
+  it("never lets a stranger's failures refuse the client holding the real credential", () => {
+    /*
+     * The subject counter used to be keyed on the account alone, so five wrong
+     * guesses from anywhere refused the person who actually knew the password.
+     * Reproduced against a live build: five failures from five addresses left
+     * the victim's own correct password answering "Wait a few minutes", with
+     * each attacker address sitting at one failure. Any account, the head coach
+     * included, locked out by an unauthenticated stranger for fifteen minutes,
+     * renewable indefinitely.
+     */
+    const victim = { subjectHash: "victim-account", ipHash: "victim-home" }
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      recordLoginFailure({
+        ipHash: `attacker-${attempt}`,
+        subjectHash: "victim-account",
+      }, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+
+    expect(loginIsBlocked(victim, { database, now: NOW })).toBe(false)
+  })
+
+  it("still stops one client guessing one account, and clears that block on success", () => {
+    const guesser = { subjectHash: "victim-account", ipHash: "one-attacker" }
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      recordLoginFailure(guesser, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+    expect(loginIsBlocked(guesser, { database, now: NOW })).toBe(true)
+
+    // Proving you hold the password ends the lockout everywhere, not only on the
+    // address that caused it -- otherwise the block outlives the proof.
+    recordLoginSuccess(guesser.subjectHash, { database })
+    expect(loginIsBlocked(guesser, { database, now: NOW })).toBe(false)
+  })
+
   it("blocks repeated subject and IP failures and clears only the successful subject", () => {
     const subject = { subjectHash: "player-a", ipHash: "shared-ip" }
     for (let attempt = 0; attempt < 5; attempt += 1) {
