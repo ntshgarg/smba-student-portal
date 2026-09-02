@@ -20,7 +20,8 @@ rounds are done. **Round 3's audit was still running when this checkpoint was wr
 |---|---|---|
 | 1 | 17 findings (1 P0, 2 P1, 4 P2, 10 P3) | 7 — the P0, both P1s, three P2s, security headers |
 | 2 | **2 P0 and 1 P1, all three caused by round 1's own fixes** | 5 — including all three regressions |
-| 3 | *in flight* — task `w60lj1s9h` | — |
+| 3 | **partial** — 3 of 4 lenses stalled. The one that ran found a P1. | 1 |
+| 3 (retry) | *in flight* — task `w7lhy1p61` | — |
 
 ### Round 2 is the important story
 
@@ -77,7 +78,25 @@ Both are repaired in `aa01e11`, with regressions that fail against the code as i
   telemetry).
 - Spent throttle rows are cleared instead of accumulating for ever.
 
-**Verification:** 1387 unit tests across 196 files, `tsc` and `eslint` clean. No browser or CI run
+**Round 3 audit — `47bfcc9`**
+
+Only one of four lenses completed; the other three stalled and were relaunched as task
+`w7lhy1p61`. The lens that did run found a **P1** on a surface no earlier round had looked at:
+
+`onRequestError` inserts a row for every server-side throw with no authentication, no duplicate
+window and no ceiling — and provoking a throw needs no account, because a server action id is a
+build-time constant in the JavaScript the signed-out `/login` page already loads. Measured against
+a live build with no cookie: **~150 rows per second**. Worse than the storage: the security monitor
+alerts when application errors in the last hour reach a threshold that **defaults to 1**, so
+holding the count in the hundreds keeps it permanently red and buries the credential-stuffing and
+email-delivery signals it exists to raise.
+
+Round 1 had deleted `app/api/auth/[...all]` *because* of this exact mechanism, and closed only that
+one door onto it. The client-side twin already had both bounds and its comment claims the two paths
+are treated alike — the hashing had been copied across, the bound had not. Now bounded, with
+refused authorizations no longer recorded as faults at all.
+
+**Verification:** 1392 unit tests across 197 files, `tsc` and `eslint` clean. No browser or CI run
 yet on this branch.
 
 ---
@@ -104,11 +123,11 @@ and an afternoon, and a denial is recoverable where a takeover is not.
 
 ## For whoever picks this up
 
-**1. Collect round 3.** The audit was running when this was written:
+**1. Collect the round 3 retry.** Three lenses stalled the first time and were relaunched:
 
 ```bash
 # results land here; parse result.dimensions[].report / .verdicts
-cat /private/tmp/claude-502/-Users-nitishg-smba-student-portal/12afb116-e749-47b6-8e01-a25f28b94cc7/tasks/w60lj1s9h.output
+cat /private/tmp/claude-502/-Users-nitishg-smba-student-portal/12afb116-e749-47b6-8e01-a25f28b94cc7/tasks/w7lhy1p61.output
 ```
 
 It carries a **ship-readiness** lens that does not hunt bugs — it answers "what does a competent
