@@ -158,9 +158,18 @@ export async function revokeOtherSessionsAction() {
   const identity = await requireIdentity()
   const requestHeaders = await headers()
   await getAuth().api.revokeOtherSessions({ headers: requestHeaders })
-  // Same reason as changePasswordAction: a PIN outlives a session revocation
-  // unless it is removed here too.
-  removePinCredential(identity.subjectId)
+  /*
+   * This deliberately does NOT remove the PIN, though the first attempt at
+   * closing the stolen-cookie hole made it do so. This action is gated on a
+   * session and nothing else, so deleting a credential here handed the thief the
+   * very thing the deletion was meant to deny: `setupPinAction` refuses to mint
+   * a PIN while one exists, so removing the victim's let a stolen cookie replace
+   * it with the attacker's own. Verified end to end -- the new PIN signed in
+   * from a client holding no cookie and no password.
+   *
+   * PIN removal stays where a credential is proved: changePasswordAction, which
+   * confirms the current password, and removePinAction.
+   */
   const security = requestSecurityContext(requestHeaders)
   writeAuthSecurityEvent({
     accountId: identity.subjectId,

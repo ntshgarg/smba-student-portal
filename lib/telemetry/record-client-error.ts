@@ -30,7 +30,7 @@ const DUPLICATE_WINDOW_MS = 10 * 60_000
  * ten minutes; anything past this is either an incident or an attacker, and in
  * both cases the rows after the first hundred tell nobody anything new.
  */
-const WINDOW_INSERT_CEILING = 100
+const WINDOW_INSERT_CEILING = 50
 
 export function recordClientErrorReport(input: {
   accountId: string | null
@@ -57,10 +57,22 @@ export function recordClientErrorReport(input: {
     .get()
   if (duplicate) return "suppressed" as const
 
+  /*
+   * Counted per route, not globally. A single global ceiling closed the growth
+   * hole and opened a quieter one: a stranger could fill the window with junk
+   * and every genuine report from every real browser was dropped for ten
+   * minutes -- the telemetry an operator would consult during an incident,
+   * silenced by the attacker causing it. Per route, saturating one surface
+   * leaves the others reporting, and a real incident is confined to the route
+   * it happens on.
+   */
   const windowStart = new Date(now.getTime() - DUPLICATE_WINDOW_MS)
   const recentCount = database.select({ id: clientErrorReports.id })
     .from(clientErrorReports)
-    .where(gte(clientErrorReports.occurredAt, windowStart))
+    .where(and(
+      gte(clientErrorReports.occurredAt, windowStart),
+      eq(clientErrorReports.routePath, input.report.routePath),
+    ))
     .all().length
   if (recentCount >= WINDOW_INSERT_CEILING) return "suppressed" as const
 

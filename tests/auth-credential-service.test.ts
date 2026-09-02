@@ -280,6 +280,44 @@ describe("production credential lifecycle", () => {
     })
   })
 
+  it("bounds guessing against one account however many addresses it comes from", () => {
+    /*
+     * The first attempt at the lockout fix keyed every ceiling on the caller's
+     * address -- which, on any deployment reading a forwarded header, the caller
+     * writes. Rotating it bought a fresh five-guess budget every five guesses:
+     * measured against a live build, 76 guesses per second with nothing refusing
+     * them, which takes a six-digit PIN in hours. A denial of service traded for
+     * a takeover.
+     */
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      recordLoginFailure({
+        ipHash: `rotated-address-${attempt}`,
+        subjectHash: "victim-account",
+      }, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+
+    expect(loginIsBlocked({
+      ipHash: "another-fresh-address",
+      subjectHash: "victim-account",
+    }, { database, now: NOW })).toBe(true)
+  })
+
+  it("clears spent rows rather than keeping one per failure for ever", () => {
+    const stale = new Date(NOW.getTime() - 60 * 60 * 1000)
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      recordLoginFailure({
+        ipHash: `old-address-${attempt}`,
+        subjectHash: `old-account-${attempt}`,
+      }, { database, now: stale })
+    }
+    expect(database.select().from(schema.authLoginAttempts).all().length).toBeGreaterThan(30)
+
+    recordLoginFailure({ ipHash: "fresh", subjectHash: "fresh" }, { database, now: NOW })
+
+    // Only the three keys the fresh failure wrote survive; the spent window is gone.
+    expect(database.select().from(schema.authLoginAttempts).all()).toHaveLength(3)
+  })
+
   it("never lets a stranger's failures refuse the client holding the real credential", () => {
     /*
      * The subject counter used to be keyed on the account alone, so five wrong

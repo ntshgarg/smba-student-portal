@@ -162,9 +162,29 @@ describe("what an unauthenticated caller cannot make this table do", () => {
       report: { ...report, summary: `TypeError: unique fault ${index}` },
     }, { database, now: NOW }))
 
-    expect(outcomes.filter((outcome) => outcome === "recorded")).toHaveLength(100)
-    expect(outcomes.filter((outcome) => outcome === "suppressed")).toHaveLength(150)
-    expect(storedReports()).toHaveLength(100)
+    expect(outcomes.filter((outcome) => outcome === "recorded")).toHaveLength(50)
+    expect(outcomes.filter((outcome) => outcome === "suppressed")).toHaveLength(200)
+    expect(storedReports()).toHaveLength(50)
+  })
+
+  it("does not let one saturated route mute the reports from every other one", () => {
+    /*
+     * A single global ceiling closed the growth hole and opened a quieter one:
+     * a stranger filled the window with junk and every genuine report from every
+     * real browser was dropped for ten minutes -- the telemetry an operator
+     * would consult during an incident, silenced by whoever caused it.
+     */
+    for (let index = 0; index < 200; index += 1) {
+      recordClientErrorReport({
+        accountId: null,
+        report: { ...report, routePath: "/coach", summary: `flood ${index}` },
+      }, { database, now: NOW })
+    }
+
+    expect(recordClientErrorReport({
+      accountId: null,
+      report: { ...report, routePath: "/player/reports", summary: "a real fault elsewhere" },
+    }, { database, now: NOW })).toBe("recorded")
   })
 
   it("accepts a genuine fault again once the window has passed", () => {

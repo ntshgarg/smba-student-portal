@@ -16,6 +16,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  getSession: vi.fn(),
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   hasPinCredential: vi.fn(),
@@ -29,6 +30,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}))
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }))
+// setupPinAction reads the session's age: minting a first PIN is a
+// session-only operation, so it must be a session that just proved a credential
+// rather than a cookie someone kept.
+vi.mock("@/lib/auth/better-auth", () => ({
+  getAuth: () => ({ api: { getSession: mocks.getSession } }),
+}))
 vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
 }))
@@ -55,6 +63,7 @@ function pinData(pin: string) {
 describe("PIN setup is first-time only", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.getSession.mockResolvedValue({ session: { createdAt: new Date() } })
     mocks.getCurrentIdentity.mockResolvedValue({ role: "player", subjectId: "player-one" })
     mocks.getCoachAccessProfile.mockReturnValue({ accessLevel: "junior_coach" })
     mocks.hasPinCredential.mockReturnValue(false)
@@ -110,6 +119,7 @@ describe("PIN setup is first-time only", () => {
 describe("PIN setup refuses an admin preview session", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.getSession.mockResolvedValue({ session: { createdAt: new Date() } })
     mocks.getCurrentIdentity.mockResolvedValue({
       previewMode: true,
       role: "player",
@@ -133,6 +143,41 @@ describe("PIN setup refuses an admin preview session", () => {
   it("routes the skip control back to the admin workspace too", async () => {
     await expect(skipPinSetupAction()).rejects.toThrow("NEXT_REDIRECT:/admin")
 
+    expect(mocks.setPinCredential).not.toHaveBeenCalled()
+  })
+})
+
+describe("a stolen cookie cannot install a PIN", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getCurrentIdentity.mockResolvedValue({ role: "player", subjectId: "player-one" })
+    mocks.getCoachAccessProfile.mockReturnValue({ accessLevel: "junior_coach" })
+    mocks.hasPinCredential.mockReturnValue(false)
+    mocks.setPinCredential.mockResolvedValue({ created: true })
+  })
+
+  it("refuses to mint a first PIN on a session that did not just prove a credential", async () => {
+    /*
+     * A PIN is a complete sign-in factor and this action asks for no password.
+     * What made that defensible was only that it refuses while a PIN exists --
+     * and that broke the moment another session-only action removed one: the
+     * thief deleted the victim's PIN and minted their own, which then signed in
+     * from a client holding no cookie and no password.
+     */
+    mocks.getSession.mockResolvedValue({
+      session: { createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    })
+
+    await expect(setupPinAction({ error: null, errorField: null }, pinData("246810")))
+      .resolves.toEqual({ error: "Sign in again to set a PIN.", errorField: null })
+    expect(mocks.setPinCredential).not.toHaveBeenCalled()
+  })
+
+  it("refuses when the session cannot be read at all", async () => {
+    mocks.getSession.mockResolvedValue(null)
+
+    await expect(setupPinAction({ error: null, errorField: null }, pinData("246810")))
+      .resolves.toMatchObject({ error: "Sign in again to set a PIN." })
     expect(mocks.setPinCredential).not.toHaveBeenCalled()
   })
 })

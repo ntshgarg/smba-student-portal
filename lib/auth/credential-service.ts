@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, createHmac, randomBytes, randomUUID, scryptSync } from "node:crypto"
 
-import { and, eq, gt, isNull, like, or } from "drizzle-orm"
+import { and, eq, gt, isNull, like, lt, or } from "drizzle-orm"
 import { hashPassword, verifyPassword } from "better-auth/crypto"
 
 import {
@@ -613,21 +613,30 @@ export async function verifyPinLogin(input: {
 }
 
 /*
- * The subject half is keyed on the pair, not the account alone. Keyed on the
- * account, five wrong guesses from anywhere refused the person holding the real
- * password -- verified against a live build: five failures from five addresses
- * left the victim's own correct password answering "Wait a few minutes", with
- * the attacker's own address counters sitting at one each. That is an
- * unauthenticated lockout of any account, the head coach included, renewable
- * indefinitely.
+ * Three ceilings, and the account-wide one is load-bearing.
  *
- * Guessing is still bounded: a single attacker gets five tries per address, and
- * the per-address ceiling of twenty caps how many accounts one address can
- * probe. What no longer happens is one client's failures refusing another's.
+ * It was originally the only one: `subject:<hash>` at five. That made an
+ * unauthenticated lockout trivial -- five wrong guesses from anywhere refused
+ * the person holding the real password -- so it was replaced by the pair below.
+ * Replacing it was a worse mistake than the bug it fixed. Every remaining key
+ * then named the caller's own address, which on any deployment reading a
+ * forwarded header is a value the caller writes: rotating it bought a fresh
+ * budget every five guesses. Measured against a live build, 76 guesses per
+ * second with nothing refusing them, which takes a six-digit PIN in hours.
+ *
+ * So the account key comes back, at a threshold a person never reaches and an
+ * attacker pays fifty requests per fifteen minutes to hold. That is a real
+ * residual: someone determined can still deny one account, ten times more
+ * expensively than before. It is the smaller harm. A cap that no request
+ * attribute can rotate is the only thing standing between a six-digit PIN and
+ * an afternoon, and a denial is recoverable where a takeover is not.
  */
+const ACCOUNT_WIDE_FAILURE_THRESHOLD = 50
+
 function attemptKeys(subjectHash: string, ipHash: string) {
   return [
     { key: `subject:${subjectHash}:${ipHash}`, threshold: 5 },
+    { key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD },
     { key: `ip:${ipHash}`, threshold: 20 },
   ]
 }
@@ -662,6 +671,20 @@ export function recordLoginFailure(input: {
   now?: Date
 } = {}) {
   database.transaction((tx) => {
+    /*
+     * Rows past their window are spent: nothing reads them, and they cannot come
+     * back because a stale window resets the count. Left alone the table grew
+     * one row per unauthenticated failure and never shrank, on a database that
+     * is Turso in production. Cleared here rather than on a schedule so the
+     * cost lands on the writer producing the rows.
+     */
+    tx.delete(authLoginAttempts).where(and(
+      lt(authLoginAttempts.windowStartedAt, new Date(now.getTime() - LOGIN_WINDOW_MS)),
+      or(
+        isNull(authLoginAttempts.blockedUntil),
+        lt(authLoginAttempts.blockedUntil, now),
+      ),
+    )).run()
     for (const { key, threshold } of attemptKeys(input.subjectHash, input.ipHash)) {
       const current = tx.select().from(authLoginAttempts)
         .where(eq(authLoginAttempts.key, key)).get()

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  getSession: vi.fn(),
   getCurrentIdentity: vi.fn(),
   hasPinCredential: vi.fn(),
   redirect: vi.fn(),
@@ -9,6 +10,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}))
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }))
+// setupPinAction reads the session's age: minting a first PIN is a
+// session-only operation, so it must be a session that just proved a credential
+// rather than a cookie someone kept.
+vi.mock("@/lib/auth/better-auth", () => ({
+  getAuth: () => ({ api: { getSession: mocks.getSession } }),
+}))
 vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
 }))
@@ -36,6 +44,7 @@ function pinData(pin: string, confirmPin: string) {
 describe("optional PIN setup", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.getSession.mockResolvedValue({ session: { createdAt: new Date() } })
     mocks.getCurrentIdentity.mockResolvedValue({ role: "player", subjectId: "player-one" })
     mocks.hasPinCredential.mockReturnValue(false)
     mocks.setPinCredential.mockResolvedValue({ created: true })

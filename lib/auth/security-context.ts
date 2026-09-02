@@ -17,8 +17,18 @@ function digest(value: string) {
   return createHmac("sha256", auditKey()).update(value).digest("hex")
 }
 
-function firstHeaderValue(value: string | null) {
-  return value?.split(",")[0]?.trim() || null
+/*
+ * The LAST hop, not the first.
+ *
+ * A proxy that appends writes `x-forwarded-for: <what the client claimed>, <the
+ * address the proxy actually saw>`, so the leftmost value is the client's own
+ * claim and the rightmost is the only one a proxy vouched for. Reading the
+ * leftmost handed every caller its own throttle bucket. A proxy that overwrites
+ * emits a single value, where the two are the same.
+ */
+function trustedHeaderValue(value: string | null) {
+  const hops = value?.split(",").map((hop) => hop.trim()).filter(Boolean) ?? []
+  return hops.at(-1) || null
 }
 
 /*
@@ -43,7 +53,7 @@ function forwardedIpHeader() {
 
 export function requestSecurityContext(requestHeaders: Pick<Headers, "get">) {
   const header = forwardedIpHeader()
-  const ipAddress = (header ? firstHeaderValue(requestHeaders.get(header)) : null)
+  const ipAddress = (header ? trustedHeaderValue(requestHeaders.get(header)) : null)
     ?? "unknown"
   const userAgent = requestHeaders.get("user-agent")?.slice(0, 240) || null
 
