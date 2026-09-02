@@ -46,6 +46,14 @@ jobs:
       - name: Validate migrations
         run: npm run db:check
 
+      # Nothing in the merge gate could fail on a new advisory, so a dependency
+      # could turn vulnerable between Dependabot's weekly runs and no check
+      # would say so. `high` is the threshold rather than `moderate` because the
+      # gate has to stay actionable: a gate that is red for weeks is one people
+      # learn to merge past.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high --omit=dev
+
   unit:
     name: Unit and operational tests
     runs-on: ubuntu-24.04
