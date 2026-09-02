@@ -37,7 +37,7 @@ export default async function CoachLayout({ children }: { children: React.ReactN
   if (access.accessLevel === "junior_coach") {
     return (
       <>
-        {identity.previewMode ? <AdminPreviewBanner label={`${identity.fullName} · Junior coach`} /> : null}
+        {identity.previewMode ? <AdminPreviewBanner label={`${identity.fullName} · Assistant coach`} /> : null}
         <UnsavedWorkProvider>
           <CoachShell coach={coach}>{children}</CoachShell>
         </UnsavedWorkProvider>

@@ -83,7 +83,7 @@ describe("Financials Phase 3 record export routes", () => {
     mocks.requireHeadAdminAccess.mockReturnValue({ accessLevel: "head_admin" })
   })
 
-  it("rejects an authenticated junior coach before querying record exports", async () => {
+  it("rejects an authenticated assistant coach before querying record exports", async () => {
     mocks.requireHeadAdminAccess.mockImplementation(() => {
       throw new Error("Head coach access is required.")
     })

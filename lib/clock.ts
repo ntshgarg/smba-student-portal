@@ -1,16 +1,16 @@
 import "server-only"
 
 import {
-  accessibilityGateProfiles,
-  disposableAccessibilityDatabase,
-  isAccessibilityGateProfile,
+  disposableRigProfiles,
+  disposableRigDatabase,
+  isDisposableRigProfile,
 } from "@/lib/accessibility-gate"
 import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 
 // The accessibility gate audits a fixture whose dates are frozen with an
 // application that renders against the runner's clock, and the gap between the
 // two widens by a day every day. `scripts/regression/fixture.ts:1135-1140` seeds
-// the junior coach's ledger with 20 staff-attendance days ending at
+// the assistant coach's ledger with 20 staff-attendance days ending at
 // FIXTURE_ANCHOR_DATE (2026-08-03), and
 // `components/coach/junior-coach-attendance-calendar.ts:52-57` calls a cell
 // "unavailable" only while its date key sorts after the reference date -- so
@@ -70,16 +70,16 @@ function pinnedAccessibilityInstant() {
   if (process.env.VERCEL) {
     throw new Error("SMBA_ACCESSIBILITY_CLOCK must never be set on a Vercel deployment.")
   }
-  if (!isAccessibilityGateProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)) {
+  if (!isDisposableRigProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)) {
     throw new Error(
       "SMBA_ACCESSIBILITY_CLOCK requires SMBA_ACCESSIBILITY_PROFILE to name an"
-      + ` accessibility gate profile (${accessibilityGateProfiles.join(", ")}).`,
+      + ` disposable rig profile (${disposableRigProfiles.join(", ")}).`,
     )
   }
-  if (!disposableAccessibilityDatabase()) {
+  if (!disposableRigDatabase()) {
     throw new Error(
       "SMBA_ACCESSIBILITY_CLOCK requires DB_FILE_NAME to be a disposable"
-      + " accessibility database under the operating system temporary root.",
+      + " regression-rig database under the operating system temporary root.",
     )
   }
   const instant = Date.parse(configured)

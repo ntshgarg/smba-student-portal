@@ -9,6 +9,7 @@ import {
   normalizeFullName,
   normalizedNameKey,
 } from "@/lib/auth/identity"
+import { normalizeEmailAddress, registrationSubjectKey } from "@/lib/auth/recovery-service"
 import type {
   ArchiveMemberInput,
   ArchiveMemberResult,
@@ -278,8 +279,10 @@ export function updateMemberRecord({
     const current = tx.select({
       academyPlan: playerEnrollments.academyPlan,
       batch: playerEnrollments.batch,
+      contactEmail: accounts.contactEmail,
       level: playerEnrollments.level,
       recordRevision: playerEnrollments.recordRevision,
+      registrationIdentityKey: accounts.registrationIdentityKey,
     }).from(accounts)
       .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
       .where(and(
@@ -297,6 +300,31 @@ export function updateMemberRecord({
         "STALE_RECORD",
         "This member changed elsewhere. Close and reopen the record before saving again.",
       )
+    }
+
+    /*
+     * The registration identity key travels with the name. It is derived from
+     * (contact email, name), so a coach fixing a typo used to strand it on the
+     * old spelling: that player's own status lookup then answered "nothing on
+     * file", and the only button on that screen registered them a second time --
+     * the exact duplicate the key exists to prevent.
+     *
+     * The collision is checked here rather than caught off the unique index,
+     * because by the time the account UPDATE runs the enrollment row has already
+     * been written, and returning a failure from inside the transaction commits.
+     */
+    const currentEmail = current.contactEmail ? normalizeEmailAddress(current.contactEmail) : null
+    const renamedIdentityKey = current.registrationIdentityKey && currentEmail
+      ? registrationSubjectKey(currentEmail, normalizedNameKey(validated.value.fullName))
+      : current.registrationIdentityKey
+    if (renamedIdentityKey && renamedIdentityKey !== current.registrationIdentityKey) {
+      const taken = tx.select({ id: accounts.id }).from(accounts)
+        .where(eq(accounts.registrationIdentityKey, renamedIdentityKey))
+        .get()
+      if (taken) {
+        const message = "Another registration already uses that name with this contact email."
+        return memberFailure("VALIDATION", message, { fullName: message })
+      }
     }
 
     const activeAssignments = tx.select({
@@ -353,6 +381,7 @@ export function updateMemberRecord({
     const accountUpdate = tx.update(accounts).set({
       fullName: validated.value.fullName,
       normalizedName: normalizedNameKey(validated.value.fullName),
+      registrationIdentityKey: renamedIdentityKey,
       updatedAt: now,
     }).where(eq(accounts.id, input.memberId)).run()
     if (accountUpdate.changes !== 1) {
@@ -428,9 +457,20 @@ export function archiveMemberRecord({
       }
     }
 
+    /*
+     * The identity key is released, not kept. `registrationStandingFor` reports
+     * an archived account as absent so that archiving cannot be used to probe
+     * who was ever registered -- but the partial unique index had no matching
+     * exemption, so a returning player's registration took the create branch and
+     * collided with the row still holding their key. That threw a raw
+     * SqliteError out of the server action, the transaction rolled back leaving
+     * the code unspent, and every retry failed the same way: a permanent, silent
+     * dead end for anyone who had once left the academy.
+     */
     const accountUpdate = tx.update(accounts).set({
       archivedAt: now,
       archivedByAccountId: coachId,
+      registrationIdentityKey: null,
       updatedAt: now,
     }).where(and(eq(accounts.id, input.memberId), isNull(accounts.archivedAt))).run()
     const enrollmentUpdate = tx.update(playerEnrollments).set({

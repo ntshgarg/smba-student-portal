@@ -140,8 +140,8 @@ export function StaffAttendanceRegister({
 
           {!juniorCoaches.length ? (
             <div className="coach-register-empty-category">
-              <h2>No junior coaches yet.</h2>
-              <p>Provisioned junior coaches will appear here for daily attendance.</p>
+              <h2>No assistant coaches yet.</h2>
+              <p>Provisioned assistant coaches will appear here for daily attendance.</p>
             </div>
           ) : (
             <div
@@ -150,12 +150,12 @@ export function StaffAttendanceRegister({
               onScroll={handleRegisterScroll}
               tabIndex={0}
               role="region"
-              aria-label={`Scrollable junior coach attendance register for ${activeYear}`}
+              aria-label={`Scrollable assistant coach attendance register for ${activeYear}`}
             >
               <table
                 className="coach-register-table staff-register-table"
                 style={tableStyle}
-                aria-label={`Junior coach attendance register for ${activeYear}`}
+                aria-label={`Assistant coach attendance register for ${activeYear}`}
                 aria-colcount={dates.length + 1}
               >
                 <colgroup>
@@ -228,7 +228,7 @@ export function StaffAttendanceRegister({
                     <tr key={coach.accountId}>
                       <th className="coach-register-name-column" scope="row" aria-colindex={1}>
                         <strong>{coach.fullName}</strong>
-                        <small>Junior coach</small>
+                        <small>Assistant coach</small>
                       </th>
                       {leadingDateCount ? (
                         <td

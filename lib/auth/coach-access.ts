@@ -97,7 +97,7 @@ export function requireJuniorCoachAccess(
 ): JuniorCoachProfile {
   const profile = requireCoachAccessProfile(accountId, options)
   if (profile.accessLevel !== "junior_coach") {
-    throw new Error("Junior coach access is required.")
+    throw new Error("Assistant coach access is required.")
   }
   return { ...profile, accessLevel: "junior_coach" }
 }

@@ -123,7 +123,8 @@ test("a refused sign-in and a method switch both keep the Academy ID", async ({ 
 test("registration, activation and recovery surfaces remain contained in all three views", async ({ page }) => {
   const surfaces = [
     { heading: "Join the portal.", path: "/register" },
-    { heading: "Open your account.", path: "/activate" },
+    // A browser with no receipt now gets the status lookup rather than a dead end.
+    { heading: "Check your status.", path: "/activate" },
     { heading: "Reset your password.", path: "/recover" },
     { heading: "This recovery link is unavailable.", path: "/recover/reset" },
     { heading: "Recover protected access.", path: "/auth/two-factor/recovery" },
@@ -138,7 +139,7 @@ test("registration, activation and recovery surfaces remain contained in all thr
   }
 })
 
-test("password login routes head coach, junior coach, and player independently", async ({ browser }, testInfo) => {
+test("password login routes head coach, assistant coach, and player independently", async ({ browser }, testInfo) => {
   const baseURL = String(testInfo.project.use.baseURL)
   await verifyLoginRoute(browser, baseURL, "SMBA-HC-0001", "/coach", testInfo)
   await verifyLoginRoute(browser, baseURL, "SMBA-JC-0001", "/coach", testInfo)

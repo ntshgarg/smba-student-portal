@@ -9,7 +9,7 @@ import {
 import type { AcademyStaffMember } from "@/lib/coach/types"
 
 /*
- * The Member Directory listed players only, so an approved junior coach existed
+ * The Member Directory listed players only, so an approved assistant coach existed
  * nowhere a head coach could look them up -- the staff roll call held their name
  * and nothing else. These rows put them in the directory. Four of its six
  * columns describe training, which a coach has none of, so what those cells say
@@ -40,7 +40,7 @@ describe("coaching staff in the Member Directory", () => {
     const html = summary(junior)
     expect(html).toContain("Kavya Iyer")
     expect(html).toContain("SMBA-JC-6442")
-    expect(html).toContain("Junior coach")
+    expect(html).toContain("Assistant coach")
     expect(html).toContain("Coaching staff")
   })
 
@@ -85,9 +85,9 @@ describe("coaching staff in the Member Directory", () => {
     expect(pending).toContain("Not yet activated")
   })
 
-  it("distinguishes the head coach from a junior coach", () => {
+  it("distinguishes the head coach from a assistant coach", () => {
     expect(staffAccessLabel("head_admin")).toBe("Head coach")
-    expect(staffAccessLabel("junior_coach")).toBe("Junior coach")
+    expect(staffAccessLabel("junior_coach")).toBe("Assistant coach")
     expect(summary({ ...junior, accessLevel: "head_admin" })).toContain("Head coach")
   })
 })

@@ -6,7 +6,7 @@ import { formatJoinedDate } from "@/components/coach/members/directory/shared"
 import type { AcademyStaffMember } from "@/lib/coach/types"
 
 export function staffAccessLabel(accessLevel: AcademyStaffMember["accessLevel"]) {
-  return accessLevel === "head_admin" ? "Head coach" : "Junior coach"
+  return accessLevel === "head_admin" ? "Head coach" : "Assistant coach"
 }
 
 /*

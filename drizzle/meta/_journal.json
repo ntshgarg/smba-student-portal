@@ -225,6 +225,13 @@
       "when": 1788078607796,
       "tag": "0031_academy_holidays",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1788256648640,
+      "tag": "0032_registration_identity",
+      "breakpoints": true
     }
   ]
 }

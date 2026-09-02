@@ -119,7 +119,7 @@ describe("protected Financials document downloads", () => {
     mocks.createPlayerFeeStatementPdf.mockResolvedValue(Buffer.from("%PDF-private-statement"))
   })
 
-  it("rejects an authenticated junior coach before reading a financial document", async () => {
+  it("rejects an authenticated assistant coach before reading a financial document", async () => {
     mocks.requireHeadAdminAccess.mockImplementationOnce(() => {
       throw new Error("Head coach access is required.")
     })
@@ -134,7 +134,7 @@ describe("protected Financials document downloads", () => {
 
   // The gate is now shared with six sibling routes, so each route has to be
   // shown refusing on its own rather than inheriting a sibling's coverage.
-  it("rejects an authenticated junior coach before reading a fee statement", async () => {
+  it("rejects an authenticated assistant coach before reading a fee statement", async () => {
     mocks.requireHeadAdminAccess.mockImplementationOnce(() => {
       throw new Error("Head coach access is required.")
     })

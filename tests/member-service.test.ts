@@ -17,6 +17,7 @@ describe("member directory service", () => {
   let sessionService: typeof import("@/lib/sessions/service")
   let database: ReturnType<typeof import("@/lib/db/client")["initializeDatabase"]>
   let schema: typeof import("@/lib/db/schema")
+  let registrationSubjectKey: typeof import("@/lib/auth/recovery-service")["registrationSubjectKey"]
 
   beforeAll(async () => {
     vi.useFakeTimers()
@@ -24,6 +25,7 @@ describe("member directory service", () => {
     accountService = await import("@/lib/auth/account-service")
     coachDatabase = await import("@/lib/coach/database")
     memberService = await import("@/lib/coach/member-service")
+    ;({ registrationSubjectKey } = await import("@/lib/auth/recovery-service"))
     sessionService = await import("@/lib/sessions/service")
     schema = await import("@/lib/db/schema")
     const { prepareDatabase } = await import("@/lib/db/setup")
@@ -292,5 +294,67 @@ describe("member directory service", () => {
       .where(eq(schema.monthlyReports.accountId, playerId)).all()).toHaveLength(1)
     expect(coachDatabase.listApprovedPlayerRecords().members
       .some((member) => member.id === playerId)).toBe(false)
+  })
+
+  it("carries the registration identity with a corrected name, and releases it on archive", () => {
+    const coach = accountService.findApprovedAccountByAcademyId("SMBA#0001")
+    if (!coach) throw new Error("Seed coach was not created.")
+    const contactEmail = "identity.family@example.com"
+    const memberId = accountService.registerAccount("Kiran Menonn", "player")
+    const originalKey = registrationSubjectKey(contactEmail, "kiran menonn")
+    database.update(schema.accounts).set({ contactEmail, registrationIdentityKey: originalKey })
+      .where(eq(schema.accounts.id, memberId)).run()
+    accountService.approveRegistration(memberId, coach.accountId, { chooseAcademyIdIndex: () => 0 })
+    const revision = () => database.select({ value: schema.playerEnrollments.recordRevision })
+      .from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, memberId)).get()!.value
+    const identityKey = () => database.select({ value: schema.accounts.registrationIdentityKey })
+      .from(schema.accounts).where(eq(schema.accounts.id, memberId)).get()!.value
+    const update = (fullName: string) => memberService.updateMemberRecord({
+      coachId: coach.accountId,
+      database,
+      input: {
+        memberId,
+        expectedRevision: revision(),
+        profile: {
+          fullName,
+          trainingStartOn: "2026-08-03",
+          primaryContact: { name: "Latha Menon", relationship: "Parent", phone: "+91 98765 43210" },
+        },
+        training: { academyPlan: "weekday-3-day" as const, batch: "Weekday" as const, level: "Beginner" as const },
+      },
+    })
+
+    /*
+     * A coach fixing a typo used to strand the key on the old spelling. That
+     * player's own status lookup then answered "nothing on file", and the only
+     * button on that screen registered them a second time -- the exact duplicate
+     * the key exists to prevent.
+     */
+    expect(update("Kiran Menon")).toMatchObject({ ok: true })
+    expect(identityKey()).toBe(registrationSubjectKey(contactEmail, "kiran menon"))
+
+    // A second player already holding the corrected identity is a conflict the
+    // coach is told about, not a constraint error out of the transaction.
+    const rivalId = accountService.registerAccount("Kiran Menon", "player")
+    database.update(schema.accounts)
+      .set({ contactEmail, registrationIdentityKey: registrationSubjectKey(contactEmail, "kiran menonn") })
+      .where(eq(schema.accounts.id, rivalId)).run()
+    expect(update("Kiran Menonn")).toMatchObject({ ok: false, code: "VALIDATION" })
+    expect(identityKey()).toBe(registrationSubjectKey(contactEmail, "kiran menon"))
+
+    /*
+     * Archiving releases the key. `registrationStandingFor` reports an archived
+     * account as absent so archiving cannot be used to probe who was ever
+     * registered, but the partial unique index has no such exemption -- leaving
+     * the key here made a returning member's registration collide with it, throw
+     * a raw constraint error, and roll back with the code unspent, forever.
+     */
+    expect(memberService.archiveMemberRecord({
+      coachId: coach.accountId,
+      database,
+      input: { memberId, expectedRevision: revision() },
+    })).toEqual({ ok: true, memberId })
+    expect(identityKey()).toBeNull()
   })
 })

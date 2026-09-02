@@ -136,7 +136,12 @@ const feeRegisterRowArbitrary: fc.Arbitrary<FinanceRegisterRow> = fc.record({
 describe("normalization and CSV properties", () => {
   it("normalizes names and name keys idempotently", () => {
     fc.assert(fc.property(
-      fc.string({ maxLength: 256 }),
+      // Full Unicode, not the default printable ASCII. The ASCII generator held
+      // this green while the property was false: whitespace was collapsed before
+      // NFKC, and NFKC *introduces* spaces -- a spacing diaeresis decomposes to a
+      // space plus a combining mark -- so the key was not idempotent for any name
+      // carrying one. Format characters survived the same way.
+      fc.string({ maxLength: 256, unit: "grapheme" }),
       (value) => {
         const normalized = normalizeFullName(value)
         const key = normalizedNameKey(value)

@@ -12,12 +12,14 @@ import {
 } from "@/lib/auth/identity"
 import {
   findApprovedAccountByAcademyId,
-  registerPublicAccountRequest,
+  confirmRegistration,
+  requestRegistration,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
 import { getAuth } from "@/lib/auth/better-auth"
 import {
   ACTIVATION_CLAIM_COOKIE,
+  ACTIVATION_CLAIM_LIFETIME_MS,
   completeAccountActivation,
   createActivationClaimToken,
   loginIsBlocked,
@@ -33,6 +35,11 @@ import {
   writeAuthSecurityEvent,
 } from "@/lib/auth/security-context"
 import { clearDatabaseSession } from "@/lib/auth/session"
+import {
+  type RegistrationField,
+  type RegistrationFormState,
+  type RegistrationValues,
+} from "@/lib/auth/registration-form"
 import { publicSiteUrl } from "@/lib/config"
 
 const GENERIC_LOGIN_ERROR = `${ACADEMY_ID_LABEL} or password is incorrect. If this is your first visit, activate your account.`
@@ -60,11 +67,32 @@ export type ActivationFormState = {
   errorField: "password" | "confirmPassword" | null
 }
 
-export type RegistrationFormState = {
-  error: string | null
-  errorField: "fullName" | "requestedRole" | null
-  requestedRole: "coach" | "player"
-  submitted: boolean
+export type { RegistrationFormState } from "@/lib/auth/registration-form"
+
+/** One message for every way a code can be unusable -- see confirmRegistrationCode. */
+const INVALID_CODE_MESSAGE = "That code is invalid or expired."
+
+function registrationValuesFrom(formData: FormData): RegistrationValues {
+  return {
+    dateOfBirth: String(formData.get("dateOfBirth") ?? "").trim(),
+    email: String(formData.get("email") ?? "").trim(),
+    fullName: normalizeFullName(String(formData.get("fullName") ?? "")),
+    phone: String(formData.get("phone") ?? "").trim(),
+    requestedRole: formData.get("requestedRole") === "coach" ? "coach" : "player",
+  }
+}
+
+function registrationFieldFrom(field: string | undefined): RegistrationField | null {
+  switch (field) {
+    case "dateOfBirth":
+    case "email":
+    case "fullName":
+    case "phone":
+    case "requestedRole":
+      return field
+    default:
+      return null
+  }
 }
 
 export async function loginWithAcademyId(
@@ -253,56 +281,110 @@ export async function activateAccount(
   redirect("/auth/pin/setup")
 }
 
-export async function submitRegistration(
+/**
+ * Step one: send a code. No account is written here -- the challenge carries a
+ * null accountId until the code comes back, which is what stops an unverified
+ * visitor spending rows on a public endpoint.
+ *
+ * The returned state is deliberately the same shape whether or not this identity
+ * is already registered. `requestRegistration` holds every answer open for the
+ * same floor before returning, so the form cannot be used to discover which
+ * name-and-address pairs exist. Whoever can read the address is told the
+ * difference in the email.
+ */
+export async function requestRegistrationCode(
   _previousState: RegistrationFormState,
   formData: FormData,
 ): Promise<RegistrationFormState> {
-  const fullName = normalizeFullName(String(formData.get("fullName") ?? ""))
-  const registrationRequestKey = String(formData.get("registrationRequestKey") ?? "")
-  const requestedRole = formData.get("requestedRole") === "coach" ? "coach" : "player"
-
-  if (fullName.length < 2) {
-    return { error: "Enter your full name.", errorField: "fullName", requestedRole, submitted: false }
-  }
-  if (fullName.length > 80) {
-    return {
-      error: "Keep your name to 80 characters or fewer.",
-      errorField: "fullName",
-      requestedRole,
-      submitted: false,
-    }
+  const values = registrationValuesFrom(formData)
+  const requestHeaders = await headers()
+  const base: RegistrationFormState = {
+    academyId: null,
+    error: null,
+    errorField: null,
+    standing: null,
+    step: "details",
+    values,
   }
 
   try {
-    const activationToken = createActivationClaimToken()
-    registerPublicAccountRequest({
-      activationToken,
-      fullName,
-      requestKey: registrationRequestKey,
-      requestedRole,
+    await requestRegistration({
+      dateOfBirth: values.dateOfBirth,
+      email: values.email,
+      fullName: values.fullName,
+      phone: values.phone,
+      requestedRole: values.requestedRole,
+      security: requestSecurityContext(requestHeaders),
     })
+    return { ...base, step: "code" }
+  } catch (error) {
+    if (error instanceof OperationalActionError) {
+      return { ...base, error: error.message, errorField: registrationFieldFrom(error.field) }
+    }
+    /*
+     * Everything recoverable is retyped as OperationalActionError by
+     * requestRegistration, so anything still a plain Error here is unexpected and
+     * must reach the error boundary rather than be flattened into a form message
+     * that invites a pointless retry.
+     */
+    throw error
+  }
+}
+
+/**
+ * Step two. Every way a code can be unusable -- wrong, expired, already spent,
+ * attempts exhausted, throttled, never issued -- returns the identical message,
+ * because distinguishing them would say whether a challenge exists for this
+ * identity, which is the same disclosure the send step refuses to make.
+ */
+export async function confirmRegistrationCode(
+  _previousState: RegistrationFormState,
+  formData: FormData,
+): Promise<RegistrationFormState> {
+  const values = registrationValuesFrom(formData)
+  const requestHeaders = await headers()
+  const base: RegistrationFormState = {
+    academyId: null,
+    error: null,
+    errorField: null,
+    standing: null,
+    step: "code",
+    values,
+  }
+
+  const activationToken = createActivationClaimToken()
+  const result = confirmRegistration({
+    activationToken,
+    code: String(formData.get("code") ?? ""),
+    dateOfBirth: values.dateOfBirth,
+    email: values.email,
+    fullName: values.fullName,
+    phone: values.phone,
+    requestedRole: values.requestedRole,
+    security: requestSecurityContext(requestHeaders),
+  })
+  if (!result) return { ...base, error: INVALID_CODE_MESSAGE, errorField: "code" }
+
+  if (result.standing === "new") {
+    /*
+     * The activation claim still rides a cookie so the existing /activate page
+     * keeps working unchanged. It is no longer the only way back -- name, email
+     * and a fresh code reach the same status from any device -- so losing it is
+     * survivable in a way it was not before.
+     */
     const cookieStore = await cookies()
     cookieStore.set(ACTIVATION_CLAIM_COOKIE, activationToken, {
       httpOnly: true,
-      maxAge: 90 * 24 * 60 * 60,
+      // Matched to ACTIVATION_CLAIM_LIFETIME_MS. The previous 90 days outlived
+      // the claim row by two months, so a cookie could survive in the browser
+      // and still resolve `expired`.
+      maxAge: ACTIVATION_CLAIM_LIFETIME_MS / 1000,
       path: "/",
       sameSite: "lax",
       secure: secureAuthCookiesRequired(),
     })
-    return { error: null, errorField: null, requestedRole, submitted: true }
-  } catch (error) {
-    if (error instanceof OperationalActionError) {
-      return {
-        error: error.message,
-        errorField: error.field === "fullName" || error.field === "requestedRole"
-          ? error.field
-          : null,
-        requestedRole,
-        submitted: false,
-      }
-    }
-    throw error
   }
+  return { ...base, academyId: result.academyId ?? null, standing: result.standing, step: "done" }
 }
 
 export async function clearSession() {

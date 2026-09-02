@@ -36,7 +36,7 @@ describe("financial collections export route", () => {
     requireHeadAdminAccess.mockReturnValue({ accessLevel: "head_admin" })
   })
 
-  it("rejects an authenticated junior coach before querying finance", async () => {
+  it("rejects an authenticated assistant coach before querying finance", async () => {
     requireHeadAdminAccess.mockImplementationOnce(() => {
       throw new Error("Head coach access is required.")
     })

@@ -158,7 +158,7 @@ describe("marking a holiday", () => {
     expect(markHoliday([NEXT_MONDAY]).cancelledSessions).toBe(1)
   })
 
-  it("refuses a junior coach", () => {
+  it("refuses a assistant coach", () => {
     const juniorId = addAccount("Junior Coach", "coach")
     database.insert(schema.academyIdAllocations)
       .values({ accountId: juniorId, createdAt: NOW }).run()

@@ -161,6 +161,11 @@
       "tag": "0031_academy_holidays",
       "when": 1788078607796,
       "sha256": "923c787c07a73ddec6e319129929eb7318407d4992218c407b074cd1a691dd68"
+    },
+    {
+      "tag": "0032_registration_identity",
+      "when": 1788256648640,
+      "sha256": "bc9633d4d49871702c32c6dca4d718e0ec886d0c8240d429ac14e95ed3beeb42"
     }
   ]
 }

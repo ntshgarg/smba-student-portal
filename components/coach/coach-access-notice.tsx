@@ -6,7 +6,7 @@ export function CoachAccessNotice() {
       <CircleAlert aria-hidden="true" />
       <span>
         <strong>Head coach access only.</strong>{" "}
-        The page you asked for is not part of the junior coach workspace, so you
+        The page you asked for is not part of the assistant coach workspace, so you
         are back on your dashboard.
       </span>
     </aside>

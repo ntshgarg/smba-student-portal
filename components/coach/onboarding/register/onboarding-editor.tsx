@@ -18,7 +18,7 @@ function editorCopy(item: PlayerOnboardingCase) {
       if (item.requestedRole === "coach") {
         return {
           title: `Review ${firstName}’s staff request`,
-          body: "Approve the junior coach to create their Academy ID and activate staff access.",
+          body: "Approve the assistant coach to create their Academy ID and activate staff access.",
         }
       }
       return {

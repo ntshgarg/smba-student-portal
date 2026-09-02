@@ -198,7 +198,7 @@ describe("unsaved-work committed surfaces", () => {
     browser.dispatch("beforeunload", committedNavigation)
     expect(committedNavigation.preventDefault).not.toHaveBeenCalled()
 
-    // The coach marks another junior coach. `isDirty` was already true and never
+    // The coach marks another assistant coach. `isDirty` was already true and never
     // went false, so the surface re-registers with the value it had at commit.
     releaseSurface?.()
     registerSurfaces[0]?.()

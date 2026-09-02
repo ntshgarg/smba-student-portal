@@ -52,7 +52,7 @@ export function PlayerOnboardingCard({
       <div className={styles.layout}>
         <CoachDashboardSummary
           detail={notStarted
-            ? "Players and junior coaches request access themselves. Their requests arrive here for approval, assessment, session and Fee Plan."
+            ? "Players and assistant coaches request access themselves. Their requests arrive here for approval, assessment, session and Fee Plan."
             : "Approve staff access and move players through assessment, session and Fee Plan."}
         >
           {summary.total

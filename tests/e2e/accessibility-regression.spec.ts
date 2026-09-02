@@ -704,13 +704,53 @@ async function scanContextStates({
   for (const state of states) await auditMatrixState(page, state, results, testInfo)
 }
 
+/**
+ * Rewrites the newest unclaimed registration challenge so a known code opens it.
+ * Registration no longer writes an account until an emailed code comes back, and
+ * this suite has no mailbox -- the same reason completePlayerOnboarding writes
+ * the enrollment state directly rather than driving the coach's wizard.
+ */
+function setRegistrationCode(code: string) {
+  const database = new Database(databasePath)
+  try {
+    const challenge = database.prepare(`
+      select id, subject_hash from auth_email_challenges
+      where purpose = 'verify_email' and account_id is null and consumed_at is null
+      order by created_at desc limit 1
+    `).get() as { id: string; subject_hash: string } | undefined
+    if (!challenge) throw new Error("No open registration challenge to set a code on.")
+    const secretHash = recoveryDigest(
+      "email-verify_email",
+      `${challenge.subject_hash}:${challenge.id}:${code}`,
+    )
+    database.prepare(
+      "update auth_email_challenges set secret_hash = ?, failed_attempts = 0 where id = ?",
+    ).run(secretHash, challenge.id)
+  } finally {
+    database.close()
+  }
+}
+
 async function registerActivationContext(browser: Browser, fullName: string) {
   const context = await newContext(browser)
   const page = await context.newPage()
   await page.goto("/register", { waitUntil: "domcontentloaded" })
   await page.getByLabel("Full name").fill(fullName)
-  await page.getByRole("button", { name: "Request registration" }).click()
+  await page.getByLabel("Date of birth").fill("2014-03-11")
+  // One address per player: the identity key is the address and the name
+  // together, so sharing an address across these fixtures would collapse them
+  // into one request.
+  await page.getByLabel("Contact email").fill(`${fullName.replaceAll(" ", ".").toLowerCase()}@example.test`)
+  await page.getByLabel("Contact mobile").fill("+919000000001")
+  await page.getByRole("button", { name: "Send code" }).click()
+  await page.getByLabel("6-digit code").waitFor()
+
+  const code = "424242"
+  setRegistrationCode(code)
+  await page.getByLabel("6-digit code").fill(code)
+  await page.getByRole("button", { name: "Verify" }).click()
   await page.getByRole("heading", { name: "Registration received." }).waitFor()
+
   await page.getByRole("link", { name: "View activation status" }).click()
   await page.waitForURL((url) => url.pathname === "/activate")
   return { context, page }
@@ -727,20 +767,24 @@ function expireRegistration(fullName: string) {
   }
 }
 
-function verifyRecoveryEmail(fullName: string) {
+/**
+ * Marks an approved player onboarded. Approval is not the last gate for a
+ * player -- assessment, sessions and fees come first -- and the password form is
+ * held back until they are done, so a state that audits it has to get past them.
+ * The wizard that does it for real is the onboarding suite's subject.
+ */
+function completePlayerOnboarding(fullName: string) {
   const database = new Database(databasePath)
   try {
-    const account = database.prepare("select id from accounts where full_name = ?").get(fullName) as { id: string } | undefined
+    const account = database.prepare("select id from accounts where full_name = ?")
+      .get(fullName) as { id: string } | undefined
     if (!account) throw new Error(`Approved account ${fullName} was not found.`)
     const now = Date.now()
-    database.prepare(`
-      insert into auth_recovery_emails (account_id, email, verified_at, created_at, updated_at)
-      values (?, ?, ?, ?, ?)
-      on conflict(account_id) do update set
-        email = excluded.email,
-        verified_at = excluded.verified_at,
-        updated_at = excluded.updated_at
-    `).run(account.id, "accessibility@example.test", now, now, now)
+    const changes = database.prepare(`
+      update player_enrollments set onboarding_completed_at = ?, updated_at = ?
+      where account_id = ?
+    `).run(now, now, account.id).changes
+    if (changes !== 1) throw new Error(`No enrollment row to complete for ${fullName}.`)
   } finally {
     database.close()
   }
@@ -796,29 +840,24 @@ async function auditCleanActivationStates(
     results,
     testInfo,
   })
+  /*
+   * Two states left this walkthrough rather than being renamed. The
+   * recovery-email enrolment form and its six-digit code were audited here
+   * because activation used to be where an address was first verified;
+   * registration now verifies one before the account exists and records it, so
+   * neither screen is reachable. What sits between approval and the password
+   * form instead is the onboarding wait, and it is audited in their place.
+   */
   await auditDynamicState({
     actor: "guest",
-    description: "Approved activation recovery-email form",
-    id: "activation-approved-email",
+    description: "Approved activation waiting on coach onboarding",
+    id: "activation-onboarding",
     page: approved.page,
     results,
     testInfo,
   })
+  completePlayerOnboarding(names.approved)
   await approved.page.setViewportSize(accessibilityViewports[0])
-  await approved.page.getByRole("textbox", { name: "Recovery email" })
-    .fill("accessibility@example.test")
-  await approved.page.getByRole("button", { name: "Send verification code" }).click()
-  await approved.page.getByText("Check your email", { exact: true })
-    .waitFor({ state: "visible" })
-  await auditDynamicState({
-    actor: "guest",
-    description: "Six-digit activation email verification",
-    id: "activation-email-code",
-    page: approved.page,
-    results,
-    testInfo,
-  })
-  verifyRecoveryEmail(names.approved)
   await approved.page.reload({ waitUntil: "domcontentloaded" })
   await auditDynamicState({
     actor: "guest",

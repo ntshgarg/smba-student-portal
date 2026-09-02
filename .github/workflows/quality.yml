@@ -119,12 +119,19 @@ jobs:
           node scripts/regression/verify-failure-evidence.mjs output/failure-evidence-sentinel --clean
 
       - name: Prepare disposable registration database
-        run: cp .data/academy-clean.db /tmp/smba-ci-registration.db
+        run: cp .data/academy-clean.db /tmp/smba-registration-rig.db
 
+      # SMBA_ACCESSIBILITY_PROFILE and the rig-named database under the temp root
+      # are what lib/accessibility-gate.ts checks before lib/auth/mailer.ts will
+      # use the in-memory transport in a production build. Without them this
+      # server falls through to Resend, has no API key, and every registration
+      # dead-ends on "Authentication email delivery is temporarily unavailable."
+      # -- which made the whole E2E step unrunnable regardless of the spec.
       - name: Start isolated registration workspace
         env:
           BETTER_AUTH_SECURE_COOKIES: "false"
-          DB_FILE_NAME: /tmp/smba-ci-registration.db
+          DB_FILE_NAME: /tmp/smba-registration-rig.db
+          SMBA_ACCESSIBILITY_PROFILE: registration
           SMBA_REQUIRE_COACH_TOTP: "false"
         run: |
           npx next start -p 3101 > /tmp/smba-ci-registration-server.log 2>&1 &
@@ -143,7 +150,7 @@ jobs:
       - name: Run registration and activation E2E
         env:
           SMBA_REGISTRATION_RESILIENCE_BASE_URL: http://127.0.0.1:3101
-          SMBA_REGISTRATION_RESILIENCE_DB: /tmp/smba-ci-registration.db
+          SMBA_REGISTRATION_RESILIENCE_DB: /tmp/smba-registration-rig.db
         run: npm run regression:registration
 
       - name: Show registration server log after a failure

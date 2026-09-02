@@ -4,7 +4,7 @@ import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 
 
 import { createOTP } from "@better-auth/utils/otp"
 import { hashPassword, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto"
-import { and, desc, eq, gt, isNull, lte } from "drizzle-orm"
+import { and, desc, eq, gt, isNull, lte, ne } from "drizzle-orm"
 
 import { normalizeAcademyId } from "@/lib/auth/identity"
 import { authEmailRequired, createAuthMailer, type AuthMailer } from "@/lib/auth/mailer"
@@ -74,8 +74,22 @@ function equalDigest(left: string, right: string) {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer)
 }
 
-function normalizeRecoveryEmail(value: string) {
-  const normalized = value.trim().toLocaleLowerCase("en-US")
+/**
+ * One normaliser for every address the product compares, so a recovery address
+ * and a registration contact address can never disagree about what "the same
+ * inbox" means.
+ *
+ * Case and surrounding space are folded, and NFKC collapses the byte
+ * representations that render identically. Gmail's dots and `+tags` are
+ * deliberately NOT stripped. Both directions fail, but not symmetrically:
+ * over-normalising merges two genuinely distinct addresses at a provider that
+ * does not alias them, and locks a real family out with no route forward, while
+ * under-normalising only lets someone hold `a+1@` and `a+2@` -- which the coach
+ * reviewing every request sees. Fold Gmail specifically if deliberate abuse ever
+ * shows up; until then the quieter failure is the right one.
+ */
+export function normalizeEmailAddress(value: string) {
+  const normalized = value.trim().normalize("NFKC").toLocaleLowerCase("en-US")
   if (normalized.length < 3 || normalized.length > 254) return null
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized)) return null
   return normalized
@@ -95,6 +109,20 @@ export function recoverySubjectKeyForHeadSetup(setupToken: string) {
   return `head-setup:${digest("head-setup-token", setupToken.trim())}`
 }
 
+/**
+ * A registration has no account to key against -- that is the whole point, since
+ * the row is only written once the code is confirmed -- so the subject is the
+ * identity itself: the normalised contact address and the normalised name.
+ *
+ * One address may own several players and the name separates them, so the pair
+ * is the key rather than the address alone. Both halves arrive already
+ * normalised; hashing raw input here would let " Arjun " and "arjun" open two
+ * challenges for one person.
+ */
+export function registrationSubjectKey(normalizedEmail: string, normalizedName: string) {
+  return `registration:${digest("registration-identity", `${normalizedEmail} ${normalizedName}`)}`
+}
+
 function subjectHash(subjectKey: string) {
   return digest("recovery-subject", subjectKey)
 }
@@ -108,11 +136,30 @@ function challengeSecretHash(
   return digest(`email-${purpose}`, `${subject}:${challengeId}:${value.trim()}`)
 }
 
+/*
+ * The address half is namespaced as well as the subject half, and that matters
+ * more than it looks. `attemptKeys` writes `ip:<hash>` from whatever it is
+ * handed, and the sign-in paths hand it the raw hash from `requestSecurityContext`
+ * -- so passing the raw hash through here put every unauthenticated recovery and
+ * registration request into the same twenty-per-fifteen-minutes bucket that
+ * governs whether anyone behind that address can sign in at all. Ten sends from
+ * an academy's wifi, or from a carrier NAT, locked out every unrelated person on
+ * it. A registration flood should throttle registration and nothing else.
+ */
 function requestThrottleKeys(subject: string, ipHash?: string | null) {
   return {
-    ipHash: ipHash ?? authSubjectHash("recovery-request:unknown-ip"),
+    ipHash: authSubjectHash(`recovery-request:${ipHash ?? "unknown-ip"}`),
     subjectHash: authSubjectHash(subject),
   }
+}
+
+/**
+ * Hold every public answer open for the same floor before returning, so the work
+ * done on one branch and skipped on another cannot be read off the clock. Shared
+ * with registration, which needs the identical property for the same reason.
+ */
+export async function genericAcceptedResponse(startedAt: number) {
+  return genericRecoveryResponse(startedAt)
 }
 
 async function genericRecoveryResponse(startedAt: number) {
@@ -171,7 +218,7 @@ export async function requestRecoveryEmailVerification(input: {
   database?: SmbaDatabase
   now?: Date
 } = {}) {
-  const email = normalizeRecoveryEmail(input.email)
+  const email = normalizeEmailAddress(input.email)
   if (!email) throw new Error("Enter a valid recovery email address.")
   const fullName = input.accountId
     ? accountName(input.accountId, database)
@@ -279,7 +326,7 @@ export function confirmRecoveryEmailVerification(input: {
   database?: SmbaDatabase
   now?: Date
 } = {}) {
-  const email = normalizeRecoveryEmail(input.email)
+  const email = normalizeEmailAddress(input.email)
   const hashedSubject = subjectHash(input.subjectKey)
   const attempt = requestThrottleKeys(
     `recovery-email-code:${hashedSubject}`,
@@ -397,6 +444,235 @@ export function consumeVerifiedSetupRecoveryEmail(input: {
   return challenge.email
 }
 
+/**
+ * Send a registration code. Deliberately shaped like
+ * {@link requestRecoveryEmailVerification} -- same throttle, same 60s cooldown,
+ * same supersede-then-insert -- with one difference: there is no account yet, so
+ * `accountId` stays null and the subject is the identity itself.
+ *
+ * `standing` is resolved by the caller and handed straight to the mailer. It is
+ * the half of the answer the browser never sees: the public response is the same
+ * whether or not this identity is already registered, so probing the form tells
+ * an attacker nothing, while the person who can actually read the address is
+ * told plainly where their request stands.
+ */
+export async function requestRegistrationVerification(input: {
+  academyId?: string | null
+  email: string
+  fullName: string
+  mailer?: AuthMailer
+  security?: SecurityMetadata
+  standing: "new" | "pending" | "approved" | "rejected"
+  subjectKey: string
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}) {
+  const email = normalizeEmailAddress(input.email)
+  if (!email) throw new Error("Enter a valid email address.")
+  const fullName = input.fullName.trim()
+  if (!fullName) throw new Error("Enter the player’s full name.")
+  const hashedSubject = subjectHash(input.subjectKey)
+  /*
+   * One ceiling gates the requester, and it is the only thing that can refuse
+   * anybody: per (identity, IP) at five, and -- through the namespaced address
+   * half of the key -- per IP at twenty. Both halves are spent by the person
+   * making the request and by nobody else.
+   *
+   * There is deliberately NO ceiling scoped to the contact address alone. One
+   * was added here and it was worse than the problem it solved: five sends under
+   * junk names from a single IP silently closed both registration and the status
+   * lookup for that address for fifteen minutes, renewable indefinitely, while
+   * both doors answered "accepted" -- and the codes that did land were bound to
+   * the junk identities, so the address's real owner could not use them either.
+   * It also fired with no attacker at all: one family address, three children and
+   * two resends is five sends, and the sixth was silently dropped.
+   *
+   * That is not a bug in the threshold. Any ceiling counting sends to an address
+   * is spendable by whoever generates the volume, so it is always a lock on the
+   * person who owns that address. Between an inbox that can be flooded and a
+   * family that cannot register a child, the flood is the lesser harm.
+   */
+  const attempt = requestThrottleKeys(
+    `registration-send:${hashedSubject}:${authSubjectHash(input.security?.ipHash ?? "unknown-ip")}`,
+    input.security?.ipHash,
+  )
+  const blocked = loginIsBlocked(attempt, { database, now })
+  if (blocked) {
+    writeAuthSecurityEvent({
+      eventType: "recovery_email_verification_requested",
+      ipHash: input.security?.ipHash,
+      outcome: "blocked",
+      subjectHash: hashedSubject,
+      userAgent: input.security?.userAgent,
+    }, { database, now })
+  }
+  /*
+   * The cooldown is scoped to the address rather than the identity, which is
+   * what actually bounds a flood: at most one registration code per inbox per
+   * minute however many names are tried and however many addresses they are
+   * tried from. A parent registering a second child inside that minute waits and
+   * sends again -- the form says so unconditionally, so the wait is explained
+   * without the page having to admit anything about who is registered.
+   */
+  const latest = database.select({ createdAt: authEmailChallenges.createdAt })
+    .from(authEmailChallenges)
+    .where(and(
+      eq(authEmailChallenges.email, email),
+      eq(authEmailChallenges.purpose, "verify_email"),
+    ))
+    .orderBy(desc(authEmailChallenges.createdAt))
+    .get()
+  const cooling = Boolean(latest) && now.getTime() - latest!.createdAt.getTime() < EMAIL_RESEND_COOLDOWN_MS
+  /*
+   * Every ceiling gates the mail, never the answer. Throwing here produced three
+   * distinguishable replies on a public endpoint -- accepted at 143ms, "wait one
+   * minute" at 1.0ms, "wait a few minutes" at 1.0ms -- which is a live activity
+   * monitor for any name and address someone can guess, and it skipped the
+   * timing floor the accepted branch is careful to hold.
+   */
+  if (blocked || cooling) return
+
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0")
+  const challengeId = randomUUID()
+  recordLoginFailure(attempt, { database, now })
+  database.insert(authEmailChallenges).values({
+    id: challengeId,
+    accountId: null,
+    subjectHash: hashedSubject,
+    purpose: "verify_email",
+    email,
+    secretHash: challengeSecretHash("verify_email", hashedSubject, challengeId, code),
+    expiresAt: new Date(now.getTime() + EMAIL_VERIFICATION_LIFETIME_MS),
+    createdAt: now,
+    updatedAt: now,
+  }).run()
+
+  try {
+    await (input.mailer ?? createAuthMailer()).sendRegistrationVerification({
+      academyId: input.academyId ?? null,
+      code,
+      expiresInMinutes: EMAIL_VERIFICATION_LIFETIME_MS / 60_000,
+      fullName,
+      standing: input.standing,
+      to: email,
+    })
+  } catch (error) {
+    database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
+      .where(eq(authEmailChallenges.id, challengeId)).run()
+    writeAuthSecurityEvent({
+      eventType: "recovery_email_verification_requested",
+      ipHash: input.security?.ipHash,
+      metadata: { reason: "email_delivery" },
+      outcome: "failure",
+      subjectHash: hashedSubject,
+      userAgent: input.security?.userAgent,
+    }, { database, now })
+    throw error
+  }
+  /*
+   * The older codes are retired only once the new one has actually been
+   * delivered. Superseding first meant a mailer failure left the person with
+   * nothing: the supersede had already committed, and consuming the undelivered
+   * challenge is not a restore. Confirmation reads the newest live challenge, so
+   * the brief overlap resolves to the code that was just sent.
+   */
+  database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
+    .where(and(
+      eq(authEmailChallenges.subjectHash, hashedSubject),
+      eq(authEmailChallenges.purpose, "verify_email"),
+      isNull(authEmailChallenges.consumedAt),
+      ne(authEmailChallenges.id, challengeId),
+    )).run()
+  return { email }
+}
+
+/**
+ * Verify a registration code and burn the challenge. Returns the verified
+ * address, or null for every failure alike -- wrong, expired, exhausted,
+ * blocked and never-existed are one answer, so the caller has nothing to leak.
+ *
+ * Takes an injected `database` so the caller can hand it a transaction: the
+ * challenge must be consumed in the same transaction that writes the account, or
+ * a crash between the two either burns a code with no account to show for it or
+ * leaves a spent code reusable.
+ */
+export function confirmRegistrationVerification<T>(input: {
+  code: string
+  onVerified: (tx: SmbaDatabaseExecutor, email: string) => T
+  security?: SecurityMetadata
+  subjectKey: string
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}): T | null {
+  const hashedSubject = subjectHash(input.subjectKey)
+  /*
+   * Per (identity, IP), not per identity. The identity is a name and an address
+   * anyone can type, so a stranger's five wrong guesses used to block the bucket
+   * belonging to the person whose inbox actually holds the code -- and the same
+   * block covers the status lookup, which is the route that exists so someone
+   * who lost their original browser can still get in.
+   *
+   * The per-challenge `failedAttempts` counter below is the brute-force limit on
+   * the code itself, and it is deliberately not IP-scoped.
+   */
+  const attempt = requestThrottleKeys(
+    `registration-code:${hashedSubject}:${authSubjectHash(input.security?.ipHash ?? "unknown-ip")}`,
+    input.security?.ipHash,
+  )
+  const code = input.code.replace(/\s+/gu, "")
+  if (!/^\d{6}$/u.test(code)) return null
+  if (loginIsBlocked(attempt, { database, now })) return null
+  const challenge = database.select().from(authEmailChallenges)
+    .where(and(
+      eq(authEmailChallenges.subjectHash, hashedSubject),
+      eq(authEmailChallenges.purpose, "verify_email"),
+      isNull(authEmailChallenges.consumedAt),
+      gt(authEmailChallenges.expiresAt, now),
+    ))
+    .orderBy(desc(authEmailChallenges.createdAt))
+    .get()
+  if (!challenge || challenge.failedAttempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS) return null
+  const suppliedHash = challengeSecretHash("verify_email", hashedSubject, challenge.id, code)
+  if (!equalDigest(challenge.secretHash, suppliedHash)) {
+    const failedAttempts = challenge.failedAttempts + 1
+    database.update(authEmailChallenges).set({
+      failedAttempts,
+      // The fifth miss burns the challenge outright rather than leaving a
+      // guessable row behind for the next attempt to resume against.
+      consumedAt: failedAttempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS ? now : null,
+      updatedAt: now,
+    }).where(eq(authEmailChallenges.id, challenge.id)).run()
+    recordLoginFailure(attempt, { database, now })
+    return null
+  }
+  /*
+   * One transaction for the burn and whatever the caller writes off the back of
+   * it. `onVerified` runs inside it deliberately: an account created without the
+   * challenge being consumed leaves a spent code still usable, and a challenge
+   * consumed without the account leaves someone holding a code that will never
+   * work again. Neither half is recoverable from the outside, so they commit or
+   * fail together.
+   */
+  const result = database.transaction((tx) => {
+    tx.update(authEmailChallenges).set({
+      consumedAt: now,
+      verifiedAt: now,
+      updatedAt: now,
+    }).where(eq(authEmailChallenges.id, challenge.id)).run()
+    return input.onVerified(tx, challenge.email)
+  }, { behavior: "immediate" })
+  recordLoginSuccess(attempt.subjectHash, { database })
+  return result
+}
+
 export function getVerifiedSetupRecoveryEmail(input: {
   receiptToken: string | null | undefined
   subjectKey: string
@@ -444,7 +720,7 @@ export async function requestPasswordRecovery(input: {
   const intent = input.intent ?? "password"
   const failureEvent = intent === "authenticator" ? "totp_reset_failed" : "password_recovery_failed"
   const academyId = normalizeAcademyId(input.academyId)
-  const email = normalizeRecoveryEmail(input.email)
+  const email = normalizeEmailAddress(input.email)
   // Perform the same keyed hashing for every request before deciding whether a
   // matching account exists. The public response remains intentionally generic.
   const publicSubject = authSubjectHash(`${academyId}:${email ?? input.email.trim()}`)

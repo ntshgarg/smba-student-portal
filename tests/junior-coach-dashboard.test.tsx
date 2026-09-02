@@ -41,7 +41,7 @@ const attendance: JuniorCoachAttendanceView = {
   years: [2025, 2026, 2027],
 }
 
-describe("junior coach dashboard", () => {
+describe("assistant coach dashboard", () => {
   beforeEach(() => {
     navigation.search = ""
     vi.clearAllMocks()

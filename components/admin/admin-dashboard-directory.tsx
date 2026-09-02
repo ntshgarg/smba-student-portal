@@ -15,7 +15,7 @@ type AdminPreviewTarget = {
 
 function roleLabel(target: AdminPreviewTarget) {
   if (target.role === "player") return "Player"
-  return target.accessLevel === "head_admin" ? "Head coach" : "Junior coach"
+  return target.accessLevel === "head_admin" ? "Head coach" : "Assistant coach"
 }
 
 function searchText(target: AdminPreviewTarget) {
@@ -24,7 +24,7 @@ function searchText(target: AdminPreviewTarget) {
     ? "member student"
     : target.accessLevel === "head_admin"
       ? "coach head coach"
-      : "coach junior coach sub coach"
+      : "coach assistant coach junior coach sub coach"
   return `${target.fullName} ${target.academyId} ${role} ${aliases}`.toLocaleLowerCase("en")
 }
 

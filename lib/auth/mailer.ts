@@ -1,8 +1,8 @@
 import "server-only"
 
 import {
-  disposableAccessibilityDatabase,
-  isAccessibilityGateProfile,
+  disposableRigDatabase,
+  isDisposableRigProfile,
 } from "@/lib/accessibility-gate"
 
 export type RecoveryEmailVerificationMessage = {
@@ -26,16 +26,34 @@ export type AuthenticatorRecoveryMessage = {
   to: string
 }
 
+/**
+ * `standing` is the half of the registration answer the browser must not carry.
+ * The public response to a code request is identical whether or not the identity
+ * is already registered -- otherwise anyone could probe which name-and-address
+ * pairs exist -- so the difference is delivered here, to the one party who has
+ * proved they can read the address.
+ */
+export type RegistrationVerificationMessage = {
+  academyId?: string | null
+  code: string
+  expiresInMinutes: number
+  fullName: string
+  standing: "new" | "pending" | "approved" | "rejected"
+  to: string
+}
+
 export interface AuthMailer {
   sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage): Promise<void>
   sendPasswordRecovery(message: PasswordRecoveryMessage): Promise<void>
   sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage): Promise<void>
+  sendRegistrationVerification(message: RegistrationVerificationMessage): Promise<void>
 }
 
 export type CapturedAuthEmail =
   | ({ kind: "authenticator-recovery" } & AuthenticatorRecoveryMessage)
   | ({ kind: "recovery-email-verification" } & RecoveryEmailVerificationMessage)
   | ({ kind: "password-recovery" } & PasswordRecoveryMessage)
+  | ({ kind: "registration-verification" } & RegistrationVerificationMessage)
 
 const memoryOutbox: CapturedAuthEmail[] = []
 
@@ -51,8 +69,8 @@ function memoryAuthMailerAllowed() {
   // Both conditions come from lib/accessibility-gate.ts rather than being spelled
   // out here, because lib/clock.ts gates its render-clock pin on the same two and
   // the pair used to exist twice, verbatim.
-  return isAccessibilityGateProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)
-    && disposableAccessibilityDatabase()
+  return isDisposableRigProfile(process.env.SMBA_ACCESSIBILITY_PROFILE)
+    && disposableRigDatabase()
 }
 
 function escapeHtml(value: string) {
@@ -100,6 +118,10 @@ class MemoryAuthMailer implements AuthMailer {
 
   async sendPasswordRecovery(message: PasswordRecoveryMessage) {
     memoryOutbox.push({ ...message, kind: "password-recovery" })
+  }
+
+  async sendRegistrationVerification(message: RegistrationVerificationMessage) {
+    memoryOutbox.push({ ...message, kind: "registration-verification" })
   }
 }
 
@@ -163,6 +185,32 @@ class ResendAuthMailer implements AuthMailer {
       subject: "Reset your SMBA password",
       text: `Hello ${message.fullName},\n\nOpen this secure link to reset your SMBA password:\n${message.resetUrl}\n\nIt expires in ${message.expiresInMinutes} minutes. If you did not request this, you can ignore this email.`,
       html: `<p>Hello ${name},</p><p>Use the secure link below to reset your SMBA password.</p><p><a href="${resetUrl}">Reset password</a></p><p>It expires in ${message.expiresInMinutes} minutes. If you did not request this, you can ignore this email.</p>`,
+    })
+  }
+
+  async sendRegistrationVerification(message: RegistrationVerificationMessage) {
+    const name = escapeHtml(message.fullName)
+    const code = escapeHtml(message.code)
+    /*
+     * The standing line is the only place the answer differs. Whoever holds this
+     * address has proved it; the browser that asked has proved nothing, so it is
+     * told the same sentence either way.
+     */
+    const standing = {
+      approved: message.academyId
+        ? `Your request has already been approved. Your Academy ID is ${message.academyId}.`
+        : "Your request has already been approved.",
+      new: null,
+      pending: "A request for this name and address is already with your coach for review.",
+      rejected: "A request for this name and address was not approved. Please speak to your coach at the academy.",
+    }[message.standing]
+    const standingText = standing ? `\n\n${standing}` : ""
+    const standingHtml = standing ? `<p>${escapeHtml(standing)}</p>` : ""
+    await this.send({
+      to: message.to,
+      subject: "Your SMBA registration code",
+      text: `Hello ${message.fullName},\n\nYour SMBA registration code is ${message.code}. It expires in ${message.expiresInMinutes} minutes.${standingText}\n\nIf you did not request this, you can ignore this email.`,
+      html: `<p>Hello ${name},</p><p>Enter this code to continue your SMBA registration.</p><p><strong style="font-size:28px;letter-spacing:0.18em">${code}</strong></p><p>It expires in ${message.expiresInMinutes} minutes.</p>${standingHtml}<p>If you did not request this, you can ignore this email.</p>`,
     })
   }
 }

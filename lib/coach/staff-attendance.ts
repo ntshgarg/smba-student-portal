@@ -112,10 +112,10 @@ function requireAttendanceReadAccess({
     .map((row) => row.accountId))
   coachAccountIds.forEach((coachAccountId) => {
     if (!eligible.has(coachAccountId)) {
-      throw new Error("Junior coach access is required.")
+      throw new Error("Assistant coach access is required.")
     }
     if (requester.accessLevel !== "head_admin" && requester.accountId !== coachAccountId) {
-      throw new Error("Junior coaches can only view their own attendance.")
+      throw new Error("Assistant coaches can only view their own attendance.")
     }
   })
 }
@@ -205,7 +205,7 @@ export function listJuniorCoachAttendanceRegisterProfiles({
 }
 
 /**
- * Reads a whole set of junior coaches' attendance in three queries instead of
+ * Reads a whole set of assistant coaches' attendance in three queries instead of
  * three per coach. The map is keyed by coach account ID and pre-seeded in the
  * requested order, so a coach with no records in the range yields an empty array
  * rather than `undefined`.
@@ -293,7 +293,7 @@ function staffAttendanceCellKey(coachAccountId: string, dateKey: string) {
 }
 
 /**
- * `getCoachAccessProfile`'s predicate set, narrowed to junior coaches and
+ * `getCoachAccessProfile`'s predicate set, narrowed to assistant coaches and
  * widened to a whole change set: one read for every coach instead of two per
  * change. Both inner joins are 1:1 (see `requireAttendanceReadAccess`), so the
  * read yields at most one row per account and an account absent from the map is
@@ -453,7 +453,7 @@ export function saveStaffAttendanceRecords({
       if (!juniorCoach) {
         operationalActionError(
           "NOT_FOUND",
-          "The selected junior coach is unavailable.",
+          "The selected assistant coach is unavailable.",
           "changes",
         )
       }

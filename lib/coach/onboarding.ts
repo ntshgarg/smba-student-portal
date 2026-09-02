@@ -22,8 +22,29 @@ export type PlayerOnboardingSummary = {
 
 export type PlayerOnboardingStage = "request" | "assessment" | "session" | "feePlan"
 
+/**
+ * Someone already in the academy who might be this request again.
+ *
+ * The registration identity is the contact address and the name together, so a
+ * second request under a differently spelled name -- or a differently spelled
+ * address -- is a new identity and the unique index lets it through. That is
+ * deliberate: one address may own several players, and folding Gmail's dots
+ * would merge two genuinely distinct addresses elsewhere. It leaves one case the
+ * key cannot judge and a coach can, so the coach is shown it rather than the
+ * request being blocked or silently merged.
+ */
+export type OnboardingDuplicateSignal = {
+  academyId: string | null
+  fullName: string
+  reason: "same-contact" | "same-name-and-birthday"
+  standing: "pending" | "approved"
+}
+
 export type OnboardingPendingRequest = {
+  contactEmail: string | null
+  contactPhone: string | null
   createdAt: string
+  dateOfBirth: string | null
   fullName: string
   id: string
   requestedRole: "player" | "coach"
@@ -31,6 +52,8 @@ export type OnboardingPendingRequest = {
 
 export type OnboardingWorkspacePlayer = OnboardingPlayer & {
   academyId: string
+  contactEmail?: string | null
+  dateOfBirth?: string | null
   activatedAt?: string | null
   approvedAt?: string | null
   fullName: string
@@ -50,6 +73,16 @@ export type PlayerOnboardingCase = {
   activatedAt?: string | null
   academyId: string | null
   approvedAt?: string | null
+  /*
+   * Null on every request made before registration collected them, and on any
+   * account a coach enters by hand -- so the approval screen renders what it has
+   * rather than assuming all three are present.
+   */
+  contactEmail?: string | null
+  contactPhone?: string | null
+  dateOfBirth?: string | null
+  /** Only ever populated for a request awaiting a decision. */
+  duplicateSignals?: OnboardingDuplicateSignal[]
   academyPlan: AcademyPlan | null
   batch: TrainingBatch | null
   feePlanRecorded: boolean
@@ -245,6 +278,61 @@ export function derivePlayerOnboardingSummary({
   return summary
 }
 
+/**
+ * Case and surrounding space only. This is a hint for a person to read, not the
+ * identity key, so it deliberately does not reach for the full normaliser --
+ * which lives in a server-only module this one is imported into client trees
+ * from, and which folds cases a coach would want to see separately anyway.
+ */
+function comparableAddress(email: string | null | undefined) {
+  return email?.trim().toLocaleLowerCase("en-IN") || null
+}
+
+function comparableName(fullName: string) {
+  return fullName.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-IN")
+}
+
+type DuplicateCandidate = {
+  academyId: string | null
+  contactEmail?: string | null
+  dateOfBirth?: string | null
+  fullName: string
+  id: string
+  standing: "pending" | "approved"
+}
+
+/**
+ * Everyone already here who shares this request's address, or its name and date
+ * of birth under a different address. Both are the same person often enough to
+ * be worth surfacing and rarely enough that the coach should decide: siblings
+ * genuinely share one address, and two players genuinely can share a birthday.
+ */
+function duplicateSignalsFor(
+  request: DuplicateCandidate,
+  candidates: readonly DuplicateCandidate[],
+): OnboardingDuplicateSignal[] {
+  const address = comparableAddress(request.contactEmail)
+  const name = comparableName(request.fullName)
+  return candidates.flatMap((candidate) => {
+    if (candidate.id === request.id) return []
+    const reason: OnboardingDuplicateSignal["reason"] | null =
+      address && comparableAddress(candidate.contactEmail) === address
+        ? "same-contact"
+        : request.dateOfBirth
+          && candidate.dateOfBirth === request.dateOfBirth
+          && comparableName(candidate.fullName) === name
+          ? "same-name-and-birthday"
+          : null
+    if (!reason) return []
+    return [{
+      academyId: candidate.academyId,
+      fullName: candidate.fullName,
+      reason,
+      standing: candidate.standing,
+    }]
+  })
+}
+
 const STAGE_ORDER: Record<PlayerOnboardingStage, number> = {
   request: 0,
   assessment: 1,
@@ -261,10 +349,39 @@ export function derivePlayerOnboardingWorkspace({
 }: OnboardingWorkspaceInput): PlayerOnboardingWorkspace {
   const assignmentsByPlayer = groupByPlayer(assignments)
   const feePlansByPlayer = groupByPlayer(feePlans)
+  const duplicateCandidates: DuplicateCandidate[] = [
+    ...pendingRequests.map((request) => ({
+      academyId: null,
+      contactEmail: request.contactEmail,
+      dateOfBirth: request.dateOfBirth,
+      fullName: request.fullName,
+      id: request.id,
+      standing: "pending" as const,
+    })),
+    ...players.map((player) => ({
+      academyId: player.academyId,
+      contactEmail: player.contactEmail,
+      dateOfBirth: player.dateOfBirth,
+      fullName: player.fullName,
+      id: player.id,
+      standing: "approved" as const,
+    })),
+  ]
   const requestCases: PlayerOnboardingCase[] = pendingRequests.map((request) => ({
     activatedAt: null,
     academyId: null,
     approvedAt: null,
+    contactEmail: request.contactEmail ?? null,
+    contactPhone: request.contactPhone ?? null,
+    dateOfBirth: request.dateOfBirth ?? null,
+    duplicateSignals: duplicateSignalsFor({
+      academyId: null,
+      contactEmail: request.contactEmail,
+      dateOfBirth: request.dateOfBirth,
+      fullName: request.fullName,
+      id: request.id,
+      standing: "pending",
+    }, duplicateCandidates),
       academyPlan: null,
       batch: null,
       feePlanRecorded: false,

@@ -206,7 +206,7 @@ export function LoginForm() {
         : <PinLoginForm academyId={academyId} onAcademyIdChange={setAcademyId} />}
       <nav className="login-register-link" aria-label="Account access">
         <span className="login-register-prompt">First visit?</span>
-        <Link href="/activate">Activate your account</Link>
+        <Link href="/activate">Check status or activate</Link>
         <span className="login-register-separator" aria-hidden="true"> · </span>
         <Link href="/register">Request registration</Link>
         <span className="login-register-separator" aria-hidden="true"> · </span>

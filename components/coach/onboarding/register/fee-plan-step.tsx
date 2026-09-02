@@ -25,6 +25,31 @@ import styles from "../player-onboarding-register.module.css"
 import type { SaveFeedback } from "./shared"
 
 /**
+ * The two notices a fee preview can carry, split out so they can be rendered on
+ * their own. Inside the step they are only reachable after a preview action
+ * comes back, which no static render can drive -- so the block that decides
+ * whether a coach may complete onboarding had no test of any kind.
+ */
+export function FeePreviewWarnings({ warnings }: { warnings: readonly string[] }) {
+  if (!warnings.length) return null
+  return (
+    <div className={styles.previewWarnings}>
+      {warnings.map((warning) => <p key={warning}>{warning}</p>)}
+    </div>
+  )
+}
+
+export function FeePreviewBlockers({ blockers }: { blockers: readonly string[] }) {
+  if (!blockers.length) return null
+  return (
+    <div className={styles.previewBlockers} role="alert">
+      <strong>Resolve before completion</strong>
+      <ul>{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
+    </div>
+  )
+}
+
+/**
  * Reset and the fee submit share one notice, so the retry prompt names which of
  * the two the coach should repeat.
  */
@@ -340,16 +365,9 @@ export function FeePlanStep({
               </article>
             ))}
           </div>
-          {preview.warnings.length ? (
-            <div className={styles.previewWarnings}>
-              {preview.warnings.map((warning) => <p key={warning}>{warning}</p>)}
-            </div>
-          ) : null}
+          <FeePreviewWarnings warnings={preview.warnings} />
           {preview.blockers.length ? (
-            <div className={styles.previewBlockers} role="alert">
-              <strong>Resolve before completion</strong>
-              <ul>{preview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
-            </div>
+            <FeePreviewBlockers blockers={preview.blockers} />
           ) : (
             <label className={styles.finalConfirmation}>
               <input

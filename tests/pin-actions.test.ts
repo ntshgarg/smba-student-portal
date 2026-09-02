@@ -58,7 +58,7 @@ describe("optional PIN setup", () => {
     expect(mocks.redirect).toHaveBeenCalledWith("/player")
   })
 
-  it("skips credential creation and routes a junior coach to the restricted workspace", async () => {
+  it("skips credential creation and routes a assistant coach to the restricted workspace", async () => {
     mocks.getCurrentIdentity.mockResolvedValue({ role: "coach", subjectId: "junior-one" })
     await skipPinSetupAction()
     expect(mocks.setPinCredential).not.toHaveBeenCalled()
