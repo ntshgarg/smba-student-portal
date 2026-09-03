@@ -107,20 +107,32 @@ export function saveOnboardingAssessment({
       )
     }
 
+    /*
+     * Every assignment the player has ever held, open or ended. Ending one does
+     * not unmake the days it rostered the player for, and those days are what
+     * this guard protects: attendance may only be marked for a day an assignment
+     * covers (assignmentCoversOccurrence requires effectiveFrom <=
+     * eligibilityDate), so the earliest effectiveFrom across all of them is the
+     * floor no recorded day sits below.
+     *
+     * Filtering to `effectiveTo is null` left that floor unguarded for a player
+     * whose only assignment had been ended from the calendar. The date could
+     * then move past days already carrying session_attendance_records rows, and
+     * because eligibility is `eligibilityDate >= trainingStartOn` those rows
+     * stopped counting -- present days vanishing from the player's month, with
+     * no warning to the coach, no audit trail, and the rows still in the table.
+     */
     const assignments = tx.select({
       effectiveFrom: sessionAssignments.effectiveFrom,
     }).from(sessionAssignments)
-      .where(and(
-        eq(sessionAssignments.accountId, input.playerId),
-        isNull(sessionAssignments.effectiveTo),
-      ))
+      .where(eq(sessionAssignments.accountId, input.playerId))
       .orderBy(asc(sessionAssignments.effectiveFrom))
       .all()
     const earliestAssignment = assignments[0]
     if (earliestAssignment && input.trainingStartOn > earliestAssignment.effectiveFrom) {
       operationalActionError(
         "BUSINESS_RULE",
-        "Reset the unfinished session assignment before moving the training start date later.",
+        "Reset the player’s session assignment before moving the training start date later.",
         "trainingStartOn",
       )
     }
@@ -131,7 +143,7 @@ export function saveOnboardingAssessment({
     )) {
       operationalActionError(
         "BUSINESS_RULE",
-        "Reset the unfinished session assignment before changing the assessment.",
+        "Reset the player’s session assignment before changing the assessment.",
         "academyPlan",
       )
     }
