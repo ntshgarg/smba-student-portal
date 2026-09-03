@@ -48,7 +48,14 @@ export function StepRail({
 
         return (
           <li
-            className={complete ? styles.completeStep : index === currentIndex ? styles.currentStep : ""}
+            /*
+              * "You are here" outranks "this is done". A coach who has gone back
+              * to a finished step is standing on it, and marking it only as
+              * complete left the rail with nothing showing where they were. The
+              * marker inside still carries the tick, so a revisited step reads as
+              * both: done, and current.
+              */
+            className={index === currentIndex ? styles.currentStep : complete ? styles.completeStep : ""}
             key={stage.key}
             aria-current={index === currentIndex ? "step" : undefined}
           >
