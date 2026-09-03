@@ -150,8 +150,15 @@ export function AssessmentStep({
       else if (nextFieldErrors.academyPlan) planRef.current?.focus()
       return
     }
+    /*
+     * Reachable from two places now. Told to "assign the matching session next"
+     * on a case that already has one, a coach goes looking for work that is
+     * done -- and the remount drops them on Fee Plan, which says otherwise.
+     */
     guard.navigateAfterCommit(() => onSuccess({
-      message: `${item.fullName}’s assessment is saved. Assign the matching session next.`,
+      message: item.assignedSession
+        ? `${item.fullName}’s assessment is saved. Their session assignment is unchanged.`
+        : `${item.fullName}’s assessment is saved. Assign the matching session next.`,
     }))
   }
 
@@ -179,11 +186,27 @@ export function AssessmentStep({
           {errors.trainingStartOn ? <small id={`onboarding-${item.id}-training-start-error`}>{errors.trainingStartOn}</small> : null}
         </label>
       </div>
+      {/*
+        * The server refuses a level, batch or plan change while an assignment is
+        * open (lib/coach/onboarding-service.ts:127-137) and offers reset as the
+        * remedy. Leaving the selects live meant the coach discovered that only
+        * after submitting -- and `updateLevel` blanks batch and plan on the way,
+        * so a refused attempt also emptied two fields they then had to retype.
+        * The date beside them stays editable, because moving it earlier is
+        * exactly what the server does allow.
+        */}
+      {item.assignedSession ? (
+        <p className={styles.classificationLockNote} role="note">
+          Level, batch and Training plan are fixed while a session is assigned. To change
+          them, reset the session assignment on the Fee Plan step.
+        </p>
+      ) : null}
       <div className={styles.threeFieldGrid}>
         <label>
           <span>Level</span>
           <select
             ref={levelRef}
+            disabled={Boolean(item.assignedSession)}
             name="level"
             value={level}
             aria-invalid={Boolean(errors.level)}
@@ -199,6 +222,7 @@ export function AssessmentStep({
           <span>Batch</span>
           <select
             ref={batchRef}
+            disabled={Boolean(item.assignedSession)}
             name="batch"
             value={batch}
             aria-invalid={Boolean(errors.batch)}
@@ -216,7 +240,7 @@ export function AssessmentStep({
             ref={planRef}
             name="academyPlan"
             value={trainingPlan}
-            disabled={!level || !batch}
+            disabled={!level || !batch || Boolean(item.assignedSession)}
             aria-invalid={Boolean(errors.academyPlan)}
             aria-describedby={errors.academyPlan ? `onboarding-${item.id}-plan-error` : undefined}
             onChange={(event) => {

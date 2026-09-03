@@ -42,6 +42,22 @@ function suggestedEffectiveDate(
  * submit and never names where the bound comes from. Let any date be picked, then say
  * which bound it crosses and where that bound is changed.
  */
+/**
+ * True when the bound the chosen date crosses is the player's own training start
+ * rather than the series'. That is the one the coach can move, and it lives on
+ * the Assessment step -- so this is what decides whether the note offers a way
+ * back to it.
+ */
+export function trainingStartIsTheBlockingBound(
+  item: PlayerOnboardingCase,
+  series: TrainingSessionSeries | null,
+  effectiveFrom: string,
+) {
+  if (!series || !effectiveFrom) return false
+  if (effectiveFrom >= firstDayForSeries(item, series)) return false
+  return (item.trainingStartOn ?? "") > series.startsOn
+}
+
 export function effectiveFromViolation(
   item: PlayerOnboardingCase,
   series: TrainingSessionSeries | null,
@@ -91,11 +107,13 @@ type SessionStepFeedback = SaveFeedback & {
 
 export function SessionStep({
   item,
+  onGoToStage,
   onSuccess,
   referenceDate,
   sessionSeries,
 }: {
   item: PlayerOnboardingCase
+  onGoToStage?: (stage: "assessment" | "feePlan") => void
   onSuccess: (input: { message: string }) => void
   referenceDate: string
   sessionSeries: TrainingSessionSeries[]
@@ -122,6 +140,7 @@ export function SessionStep({
   const weekdaysInvalid = feedback?.tone === "error" && feedback.field === "weekdays"
   const selectedSeries = options.find((series) => series.id === seriesId) ?? null
   const rangeViolation = effectiveFromViolation(item, selectedSeries, effectiveFrom)
+  const trainingStartBlocks = trainingStartIsTheBlockingBound(item, selectedSeries, effectiveFrom)
   // The legend already states the count this plan needs, so an unmet count is
   // visible without being told. The submit handler keeps its message for the
   // paths this cannot reach.
@@ -226,6 +245,46 @@ export function SessionStep({
     }))
   }
 
+  /*
+   * Revisiting a step whose work is already done. Before the rail was navigable
+   * this branch was unreachable, and without it the step renders as if nothing
+   * were assigned: `options[0]` is normally the series the player is already on,
+   * so the form arrives pre-filled and plausible, and its submit is refused with
+   * a raw CONFLICT ("The player is already assigned to this session") carrying
+   * field "playerId", which nothing here maps onto a control.
+   *
+   * There is no update path -- assignSessionRecords only inserts -- so the truth
+   * is that changing the schedule means undoing this one. Say what is assigned
+   * and name the control that undoes it rather than offering a form that cannot
+   * work.
+   */
+  if (item.assignedSession) {
+    return (
+      <div className={styles.recoveryPanel}>
+        <strong>
+          {item.fullName} is already assigned to {item.assignedSession.programme}
+          {" · "}{item.assignedSession.batch}, from{" "}
+          {formatDateKey(item.assignedSession.effectiveFrom)}.
+        </strong>
+        <p>
+          A schedule cannot be swapped in place. To move this player to a different one, open
+          Fee Plan and reset the session assignment — that clears this assignment and reopens
+          the assessment. Resetting stops being possible once attendance, fees or charges exist
+          against it.
+        </p>
+        {onGoToStage ? (
+          <button
+            className={styles.primaryButton}
+            onClick={() => onGoToStage("feePlan")}
+            type="button"
+          >
+            Go to Fee Plan <ArrowRight aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
   if (!options.length) {
     const createHref = `/coach/schedules/new?programme=${encodeURIComponent(item.level ?? "")}&batch=${encodeURIComponent(item.batch ?? "")}&player=${encodeURIComponent(item.id)}&from=assignment`
     return (
@@ -307,9 +366,32 @@ export function SessionStep({
       </div>
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {rangeViolation ? (
-        <p className={styles.backdateNote} id={rangeNoteId} role="alert">
-          {rangeViolation}
-        </p>
+        <>
+          <p className={styles.backdateNote} id={rangeNoteId} role="alert">
+            {rangeViolation}
+          </p>
+          {/*
+            * Outside the paragraph on purpose. The message has always named
+            * Assessment as the place to fix this, and until the rail became
+            * navigable that was advice about a screen the coach could not open.
+            * But the paragraph is a `role="alert"` -- implicitly atomic -- and is
+            * also the date input's `aria-describedby` target, and both consumers
+            * flatten their subtree to text: a button inside was announced as
+            * prose on every recomputation, and again as part of the field's
+            * description. As a sibling it stays a button.
+            */}
+          {trainingStartBlocks && onGoToStage ? (
+            <p className={styles.backdateFix}>
+              <button
+                className={styles.inlineStepLink}
+                onClick={() => onGoToStage("assessment")}
+                type="button"
+              >
+                Go to Assessment
+              </button>
+            </p>
+          ) : null}
+        </>
       ) : effectiveFrom < referenceDate ? (
         <p className={styles.backdateNote}>
           This start date also makes earlier scheduled sessions eligible for attendance.
