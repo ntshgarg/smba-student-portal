@@ -210,24 +210,56 @@ export function resetOnboardingSessionAssignment({
       )
     }
 
-    const dependencyExists = Boolean(
-      tx.select({ id: sessionAttendanceRecords.id }).from(sessionAttendanceRecords)
-        .where(eq(sessionAttendanceRecords.accountId, playerId)).get()
-      || tx.select({ id: attendanceAdjustments.id }).from(attendanceAdjustments)
-        .where(eq(attendanceAdjustments.playerId, playerId)).get()
-      || tx.select({ id: feeAgreements.id }).from(feeAgreements)
-        .where(eq(feeAgreements.playerAccountId, playerId)).get()
-      || tx.select({ id: financialCharges.id }).from(financialCharges)
-        .where(eq(financialCharges.playerAccountId, playerId)).get()
-      || tx.select({ id: payments.id }).from(payments)
-        .where(eq(payments.playerAccountId, playerId)).get()
-      || tx.select({ id: monthlyReports.id }).from(monthlyReports)
-        .where(eq(monthlyReports.accountId, playerId)).get()
-    )
-    if (dependencyExists) {
+    /*
+     * Naming the records matters more than counting them. "This assignment
+     * already has academy records" told a coach that something, somewhere,
+     * blocked them -- so a player held up by thirteen marked attendances read
+     * identically to one held up by a single fee, and neither pointed anywhere.
+     * The refusal is correct (deleting the assignment would orphan these rows);
+     * it just has to say what it is protecting.
+     */
+    const blockingRecords = [
+      {
+        label: "marked attendance",
+        rows: tx.select({ id: sessionAttendanceRecords.id }).from(sessionAttendanceRecords)
+          .where(eq(sessionAttendanceRecords.accountId, playerId)).all().length,
+      },
+      {
+        label: "attendance correction",
+        rows: tx.select({ id: attendanceAdjustments.id }).from(attendanceAdjustments)
+          .where(eq(attendanceAdjustments.playerId, playerId)).all().length,
+      },
+      {
+        label: "Fee Plan",
+        rows: tx.select({ id: feeAgreements.id }).from(feeAgreements)
+          .where(eq(feeAgreements.playerAccountId, playerId)).all().length,
+      },
+      {
+        label: "fee",
+        rows: tx.select({ id: financialCharges.id }).from(financialCharges)
+          .where(eq(financialCharges.playerAccountId, playerId)).all().length,
+      },
+      {
+        label: "payment",
+        rows: tx.select({ id: payments.id }).from(payments)
+          .where(eq(payments.playerAccountId, playerId)).all().length,
+      },
+      {
+        label: "monthly report",
+        rows: tx.select({ id: monthlyReports.id }).from(monthlyReports)
+          .where(eq(monthlyReports.accountId, playerId)).all().length,
+      },
+    ].filter(({ rows }) => rows > 0)
+
+    if (blockingRecords.length) {
+      const named = blockingRecords
+        .map(({ label, rows }) => `${rows} ${label}${rows === 1 ? "" : "s"}`)
+        .join(", ")
+        .replace(/, ([^,]*)$/u, " and $1")
       operationalActionError(
         "BUSINESS_RULE",
-        "This assignment already has academy records and cannot be reset.",
+        `This player already has ${named} on record, and resetting would leave `
+          + "them attached to nothing. Change the schedule from the Calendar instead.",
         "playerId",
       )
     }
