@@ -21,7 +21,7 @@ rounds are done. **Round 3's audit was still running when this checkpoint was wr
 | 1 | 17 findings (1 P0, 2 P1, 4 P2, 10 P3) | 7 — the P0, both P1s, three P2s, security headers |
 | 2 | **2 P0 and 1 P1, all three caused by round 1's own fixes** | 5 — including all three regressions |
 | 3 | **partial** — 3 of 4 lenses stalled. The one that ran found a P1. | 1 |
-| 3 (retry) | *in flight* — task `w7lhy1p61` | — |
+| 3 (retry) | the relaunch **also stalled**; the three lenses were run by hand instead | — |
 
 ### Round 2 is the important story
 
@@ -96,8 +96,35 @@ one door onto it. The client-side twin already had both bounds and its comment c
 are treated alike — the hashing had been copied across, the bound had not. Now bounded, with
 refused authorizations no longer recorded as faults at all.
 
-**Verification:** 1392 unit tests across 197 files, `tsc` and `eslint` clean. No browser or CI run
-yet on this branch.
+**Verification:** 1392 unit tests across 197 files, `tsc` and `eslint` clean.
+
+### Round 3 regression — run by hand, against a live production build
+
+The relaunched audit stalled a second time, so these were driven directly rather than delegated.
+Every line below is measured, not reasoned:
+
+| check | before | now |
+|---|---|---|
+| PIN guessing, a fresh forged address per guess | unbounded — 76/sec, 6-digit space in hours | **50 refusals, then blocked** |
+| Original P1: 5 stranger failures from 5 addresses, then the owner's real PIN | owner refused | **owner signs in** (`x-action-redirect`) |
+| 5 wrong from one address, then a 6th | — | **blocked** |
+| A successful sign-in after a block | block survived | **0 throttle rows left** |
+| 200 malformed anonymous posts to `/login` | ~200 rows, one per request | **1 row** |
+| 20 unauthenticated hits on a coach page | 20 rows | **0 rows** — a refusal is a decision, not a fault |
+| A genuine unique fault | recorded | **still recorded** |
+| Day-old cookie mints a PIN | succeeded, then signed in with it | **"Sign in again to set a PIN"** |
+| Fresh session mints a PIN (activation) | worked | **still works** |
+
+**The residual is real and was measured too:** once the account-wide ceiling of 50 trips, the
+owner's own correct PIN is refused for fifteen minutes. Fifty requests to deny one account,
+renewable. That is the deliberate trade recorded above.
+
+### An earlier P0 has been resolved by the owner
+
+The env files are now `0600` (were `0644`), and `.env.local` no longer carries the production
+Turso credentials — it holds only `DB_FILE_NAME` and the site origin. Both are gitignored and
+neither has ever been tracked. The precondition that made plaintext PII exploitable is materially
+better than when the first audit was written.
 
 ---
 
@@ -123,16 +150,9 @@ and an afternoon, and a denial is recoverable where a takeover is not.
 
 ## For whoever picks this up
 
-**1. Collect the round 3 retry.** Three lenses stalled the first time and were relaunched:
-
-```bash
-# results land here; parse result.dimensions[].report / .verdicts
-cat /private/tmp/claude-502/-Users-nitishg-smba-student-portal/12afb116-e749-47b6-8e01-a25f28b94cc7/tasks/w7lhy1p61.output
-```
-
-It carries a **ship-readiness** lens that does not hunt bugs — it answers "what does a competent
-attacker get today, what should block the launch, and is this safe enough to serve real families".
-Read that first.
+**1. The round 3 regression is done** — see the table above. What has *not* been re-run is a fresh
+adversarial sweep of round 3's own code. Two rounds running, a fix was worse than the bug it
+replaced, so that sweep is still owed before this merges.
 
 **2. Assume round 3's fixes are wrong too.** Two rounds running, a fix has been worse than the bug.
 Do not merge a round without re-attacking it.
@@ -169,3 +189,57 @@ Three options, unchanged:
 2. **Private object storage** (R2/S3 with OIDC short-lived credentials) — needs a bucket and a
    secret; the workflow change is small.
 3. **Leave it off** — acceptable for a few days, not for a term.
+
+
+---
+
+## Ship-readiness — my assessment
+
+Written after three rounds and a hand-run regression. This is a judgement, not a measurement, and
+the reasoning is here so it can be argued with.
+
+### What a competent attacker gets today, in the order I would try it
+
+1. **Deny one named account for fifteen minutes**, renewably, for fifty requests. Minutes of
+   effort. Recoverable, no data disclosed.
+2. **Deny registration and status lookup for an address they know** — bounded per requester now, so
+   it costs a distributed sender rather than one machine. Hours of effort for a modest nuisance.
+3. **Nothing else that three rounds could find.** No player-to-player IDOR — this was attacked
+   hardest and held: every report id, all 82 server actions replayed with a player's cookie, coach
+   routes with the victim's ids, a validly-signed forged preview cookie, and every UUID in the RSC
+   payloads checked for ownership. No privilege escalation. No SQL injection. No XSS. Nothing
+   unauthenticated that reads data.
+
+### What worries me is the deployment, not the code
+
+1. **There is no backup.** The nightly job is off and nothing replaced it. One encrypted snapshot
+   from 2 September sits on a laptop. For a system holding children's enrolment, attendance and fee
+   records, that is the largest risk on this page and it is not a security finding at all.
+2. **All PII is plaintext, so one token is the whole database.** Token hygiene is now good — 0600,
+   gitignored, no longer duplicated into the dev env file — but there is no second line.
+3. **Nothing is ever erased.** An archived child keeps their date of birth, contacts and the
+   coach's written assessment indefinitely.
+4. **The monitor's threshold is 1 application error per hour**, and the thing feeding it just
+   changed. Expect noise; tune it deliberately rather than by muting.
+
+### Verdict
+
+**The application code is in reasonable shape to serve a small, known set of families.** The
+findings that remain are a denial-of-service trade I made on purpose, and a set of hardening items
+that reduce blast radius rather than close a live hole.
+
+**Two things should be done before it serves anyone, and neither is about the code:**
+
+1. **Restore a backup.** Turso point-in-time restore if the plan has it; otherwise private object
+   storage. Until then a mistake is unrecoverable.
+2. **Run CI on this branch and merge it.** Everything above is verified locally and has never been
+   through the browser, accessibility or e2e suites. `main` auto-deploys, so the branch is the gate.
+
+**And one thing should be scheduled, not rushed:** encryption at rest, per `docs/audit/security.md`
+§7. It is a three-deploy project. It is the right next piece of work and it is not an emergency,
+because the realistic path to that data is a leaked database token and that token is now handled
+properly.
+
+**What I would not claim:** that this is secure. Three rounds found seventeen, then three, then one
+more, and twice my own fix was worse than the bug it replaced. The honest reading is that the rate
+of discovery is falling, not that the well is dry.
