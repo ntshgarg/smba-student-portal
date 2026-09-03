@@ -1,6 +1,16 @@
 import type { Instrumentation } from "next"
 
-export function register() {}
+export function register() {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return
+  // Said once at boot rather than never: without a forwarded header this
+  // deployment cannot tell its callers apart, and every per-address login
+  // ceiling silently stops applying.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { warnIfCallersAreIndistinguishable } = require("./lib/auth/security-context") as {
+    warnIfCallersAreIndistinguishable: () => void
+  }
+  warnIfCallersAreIndistinguishable()
+}
 
 export const onRequestError: Instrumentation.onRequestError = (...input) => {
   if (process.env.NEXT_RUNTIME === "edge") return

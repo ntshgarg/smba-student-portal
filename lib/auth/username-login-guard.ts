@@ -117,15 +117,24 @@ export const usernameLoginHooks = {
     const returned = context.context.returned
     if (!returned || isAPIError(returned)) {
       /*
-       * Only for an Academy ID that names a real account. The ID space is
-       * `SMBA-(HC|JC|PL)-\d{4}` and enumerable, so recording a per-subject row
-       * for one that resolves to nothing let an anonymous caller mint two
-       * throttle rows and an audit event per invented ID -- measured at 400 rows
-       * from 200 IDs, indefinitely sustainable, burying the signals
-       * check-security-signals.mjs exists to raise. A guess at an account that
-       * does not exist has no budget to spend.
+       * Recorded for every syntactically valid Academy ID, whether or not it
+       * names an account, and that is deliberate.
+       *
+       * Skipping the write for an unresolvable ID was tried, to stop an
+       * anonymous caller minting a throttle row per invented ID. It fixed
+       * nothing -- this hook is only reached for IDs that already resolved, so
+       * the branch never ran -- and it armed a trap: a real account would start
+       * answering "wait a few minutes" from the sixth attempt while an invented
+       * one answered "incorrect" for ever, which enumerates the whole roster at
+       * six credential-free requests per ID. Six-thousand children's Academy IDs
+       * are sequential.
+       *
+       * The row growth it aimed at is real but bounded: the ID space is
+       * `SMBA-(HC|JC|PL)-\d{4}`, the rows live fifteen minutes, and the sweep
+       * over them is indexed. A bounded, self-clearing cost is the right trade
+       * against an unbounded disclosure.
        */
-      if (auditBase.accountId) recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+      recordLoginFailure({ ipHash: security.ipHash, subjectHash })
       writeAuthSecurityEvent({
         ...auditBase,
         eventType: "login_failed",

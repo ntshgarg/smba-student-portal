@@ -313,27 +313,28 @@ describe("production credential lifecycle", () => {
     expect(loginIsBlocked(shared, { database, now: NOW })).toBe(true)
   })
 
-  it("taxes a flood in the shared bucket without ever refusing anyone", async () => {
+  it("keeps the two answers identical whether the Academy ID names anybody", () => {
     /*
-     * Refusing is not available when the bucket is shared, so the only lever is
-     * time. Measured before this: 39 requests a second, which puts five common
-     * PINs against a hundred-child roster inside a few seconds.
+     * Skipping the failure write for an unresolvable ID was tried, to stop an
+     * anonymous caller minting a throttle row per invented ID. It armed an
+     * enumeration oracle: a real account would start answering "wait a few
+     * minutes" from the sixth attempt while an invented one answered "incorrect"
+     * for ever, which reads the whole roster at six credential-free requests per
+     * ID -- and Academy IDs are sequential.
+     *
+     * So both are counted, and this pins that they reach the same state.
      */
-    const { UNKNOWN_IP_HASH } = await import("@/lib/auth/security-context")
-    const { unknownBucketDelayMs } = await import("@/lib/auth/credential-service")
+    const real = { subjectHash: subjectFor("a-real-account"), ipHash: "one-address" }
+    const invented = { subjectHash: subjectFor("no-such-account"), ipHash: "one-address" }
 
-    expect(unknownBucketDelayMs(UNKNOWN_IP_HASH, { database, now: NOW })).toBe(0)
-
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      recordLoginFailure({
-        ipHash: UNKNOWN_IP_HASH,
-        subjectHash: subjectFor(`sprayed-${attempt}`),
-      }, { database, now: new Date(NOW.getTime() + attempt) })
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      recordLoginFailure(real, { database, now: new Date(NOW.getTime() + attempt) })
+      recordLoginFailure(invented, { database, now: new Date(NOW.getTime() + attempt) })
     }
 
-    expect(unknownBucketDelayMs(UNKNOWN_IP_HASH, { database, now: NOW })).toBeGreaterThan(0)
-    // An attributable caller is never taxed for somebody else's flood.
-    expect(unknownBucketDelayMs("a-real-address-hash", { database, now: NOW })).toBe(0)
+    expect(loginIsBlocked(real, { database, now: NOW }))
+      .toBe(loginIsBlocked(invented, { database, now: NOW }))
+    expect(loginIsBlocked(real, { database, now: NOW })).toBe(true)
   })
 
   it("bounds guessing against one account however many addresses it comes from", () => {

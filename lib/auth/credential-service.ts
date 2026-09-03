@@ -638,10 +638,10 @@ export async function verifyPinLogin(input: {
  * there is no caller to be per.
  *
  * What this does not fix, and cannot here: with no attributable address there is
- * nothing to bound one machine guessing five secrets against every account in
- * turn. That is metered by `unknownBucketDelayMs` below, which slows rather than
- * refuses -- a bucket the whole world shares may take everyone's time, never
- * anyone's access.
+ * nothing to bound one machine guessing fifty secrets against every account in
+ * turn. A delay was tried and removed -- see the note on the boot warning in
+ * lib/auth/security-context.ts. The answer is configuration, not code: name a
+ * forwarded header the proxy actually writes and the real ceilings work.
  */
 const ACCOUNT_WIDE_FAILURE_THRESHOLD = 50
 
@@ -654,42 +654,6 @@ function attemptKeys(subjectHash: string, ipHash: string) {
     { key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD },
     { key: `ip:${ipHash}`, threshold: 20 },
   ]
-}
-
-/*
- * How long a caller in the shared "unknown" bucket waits before an answer.
- *
- * With no attributable address, nothing can bound one machine guessing five
- * secrets against every account in turn -- measured at 39 requests a second, so
- * five common PINs against a hundred-child roster takes seconds. Refusing is not
- * available: a bucket the whole world shares must never deny anybody.
- *
- * Taking their time is available. The delay rises with how much failure that
- * shared bucket has seen recently and is capped, so a spray runs at a few
- * attempts a second instead of forty while an honest person mistyping once pays
- * nothing. It is a tax, not a gate, and it is second best -- naming a forwarded
- * header the proxy actually writes is what makes the real ceilings work.
- */
-const UNKNOWN_BUCKET_DELAY_STEP_MS = 250
-const UNKNOWN_BUCKET_DELAY_CAP_MS = 2_000
-
-export function unknownBucketDelayMs(ipHash: string, {
-  database = initializeDatabase(),
-  now = new Date(),
-}: {
-  database?: SmbaDatabaseExecutor
-  now?: Date
-} = {}) {
-  if (ipHash !== UNKNOWN_IP_HASH) return 0
-  const windowStart = new Date(now.getTime() - LOGIN_WINDOW_MS)
-  const recentFailures = database.select({ failedCount: authLoginAttempts.failedCount })
-    .from(authLoginAttempts)
-    .where(gt(authLoginAttempts.windowStartedAt, windowStart))
-    .all()
-    .reduce((total, row) => total + row.failedCount, 0)
-  // Free for the first handful, so one mistyped password costs nobody anything.
-  if (recentFailures <= 10) return 0
-  return Math.min((recentFailures - 10) * UNKNOWN_BUCKET_DELAY_STEP_MS, UNKNOWN_BUCKET_DELAY_CAP_MS)
 }
 
 export function loginIsBlocked(input: {

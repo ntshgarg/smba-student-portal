@@ -23,7 +23,6 @@ import {
   completeAccountActivation,
   createActivationClaimToken,
   loginIsBlocked,
-  unknownBucketDelayMs,
   recordLoginFailure,
   validateNewPassword,
 } from "@/lib/auth/credential-service"
@@ -45,10 +44,6 @@ import { publicSiteUrl } from "@/lib/config"
 
 const GENERIC_LOGIN_ERROR = `${ACADEMY_ID_LABEL} or password is incorrect. If this is your first visit, activate your account.`
 const GENERIC_PIN_ERROR = `${ACADEMY_ID_LABEL} or PIN is incorrect. Use your password if PIN login is unavailable.`
-function sleep(ms: number) {
-  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : undefined
-}
-
 const RATE_LIMITED_LOGIN_ERROR = "We couldn\u2019t sign you in. Wait a few minutes before trying again."
 const ACTIVATED_WITHOUT_SESSION_ERROR = "Your account is ready, but we couldn\u2019t sign you in. Open the sign-in page and use your new password."
 
@@ -129,14 +124,6 @@ export async function loginWithAcademyId(
   const requestHeaders = await headers()
   const security = requestSecurityContext(requestHeaders)
   const subjectHash = authSubjectHash(academyId)
-  /*
-   * When no address is attributable every caller shares one bucket, and a bucket
-   * the whole world shares must never refuse anybody -- so the only lever left
-   * against one machine spraying five secrets at every account in turn is time.
-   * Free until the shared bucket has seen real failure, capped, and never paid
-   * by a caller whose address is attributable.
-   */
-  await sleep(unknownBucketDelayMs(security.ipHash))
   if (loginIsBlocked({ ipHash: security.ipHash, subjectHash })) {
     writeAuthSecurityEvent({
       eventType: "login_rate_limited",

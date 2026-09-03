@@ -10,7 +10,6 @@ import { ACADEMY_ID_LABEL, normalizeAcademyId } from "@/lib/auth/identity"
 import { findApprovedAccountByAcademyId } from "@/lib/auth/account-service"
 import {
   loginIsBlocked,
-  unknownBucketDelayMs,
   recordLoginFailure,
   recordLoginSuccess,
   verifyPinLogin,
@@ -58,11 +57,6 @@ export function smbaPinLogin() {
           subjectHash,
           userAgent: security.userAgent,
         }
-        // The PIN door shares the password door's budget, so it shares its tax
-        // too: with no attributable address, spraying is slowed rather than
-        // refused, because a shared bucket must never deny anybody.
-        const delayMs = unknownBucketDelayMs(security.ipHash)
-        if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
         if (loginIsBlocked({ ipHash: security.ipHash, subjectHash })) {
           writeAuthSecurityEvent({
             ...auditBase,

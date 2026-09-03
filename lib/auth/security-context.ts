@@ -59,6 +59,32 @@ function forwardedIpHeader() {
 }
 
 /**
+ * Says out loud, once, when this deployment cannot tell its callers apart.
+ *
+ * Every ceiling that depends on an address stops applying in that state, and
+ * what is left is one ceiling per account: fifty guesses each, with no cap at
+ * all across accounts, so one machine can spray every Academy ID in the roster.
+ * A delay was tried as a substitute and removed -- measured, it slowed honest
+ * users to two seconds a sign-in and did nothing to an attacker, who simply
+ * opened thirty connections at once and went fourteen times faster.
+ *
+ * There is no code that fixes this, because the missing thing is information:
+ * which hop is the client. So the deployment is told, rather than quietly
+ * running weaker than its comments claim. Vercel supplies the header itself, so
+ * production never sees this.
+ */
+export function warnIfCallersAreIndistinguishable() {
+  if (forwardedIpHeader()) return
+  console.warn(
+    "SMBA_FORWARDED_IP_HEADER is not set and this is not Vercel, so every caller"
+    + " shares one rate-limit bucket. Per-address login ceilings do not apply:"
+    + " an account is protected only by its own 50-failure ceiling, and nothing"
+    + " caps guessing spread across accounts. Set it to the header the proxy in"
+    + " front of this deployment writes.",
+  )
+}
+
+/**
  * The hash every caller gets when no address could be established.
  *
  * Exported so the login throttle can recognise it: a ceiling that refuses an
