@@ -37,6 +37,7 @@ const workspace: PlayerOnboardingWorkspace = {
     {
       academyId: null,
       academyPlan: null,
+      assignedSession: null,
       batch: null,
       feePlanRecorded: false,
       fullName: "Myra Shah",
@@ -52,6 +53,7 @@ const workspace: PlayerOnboardingWorkspace = {
     {
       academyId: "SMBA#0014",
       academyPlan: null,
+      assignedSession: null,
       batch: null,
       feePlanRecorded: false,
       fullName: "Rohan Kulkarni",
@@ -110,6 +112,7 @@ describe("Player Onboarding Next-Step Register", () => {
       cases: [{
         academyId: null,
         academyPlan: null,
+        assignedSession: null,
         batch: null,
         feePlanRecorded: false,
         fullName: "Arjun Kumar",
@@ -145,6 +148,7 @@ describe("Player Onboarding Next-Step Register", () => {
       cases: [{
         academyId: "SMBA#0014",
         academyPlan: "weekday-3-day",
+        assignedSession: null,
         batch: "Weekday",
         feePlanRecorded: false,
         fullName: "Rohan Kulkarni",

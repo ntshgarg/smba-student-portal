@@ -165,7 +165,7 @@ export function FeePlanStep({
       <div className={styles.recoveryPanel}>
         <strong>Fee completion opens on {formatDateKey(item.trainingStartOn)}.</strong>
         <p>The future training date is saved. Assessment and session setup can be prepared now, but fees and the permanent date lock wait until training begins.</p>
-        <p>Resetting the session assignment reopens the assessment, which is the only step where the training start date can be changed.</p>
+        <p>To change the training start date, go back to Assessment on the step list. Resetting the session assignment is only needed to change the level, batch or Training plan.</p>
         <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
           {busy
@@ -393,11 +393,20 @@ export function FeePlanStep({
         </section>
       ) : null}
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      {/*
+        * This used to read "there is no other way back to it", which was true
+        * while the step list was a picture. It is navigation now, so moving the
+        * training start earlier costs nothing -- the server refuses only a move
+        * *later* under an open assignment. Reset is still the only route for the
+        * level, batch and Training plan, and still stops being possible once
+        * academy records exist, so the warning stays; it just no longer claims to
+        * be the only door.
+        */}
       <p className={styles.feeNote}>
-        Changing the training start date means resetting the session assignment. That reopens
-        the assessment, which is the only step where the date can be edited — the register
-        shows one step per player, so there is no other way back to it. Resetting stops being
-        possible once academy records exist against the assignment.
+        To move the training start date earlier, go back to Assessment on the step list —
+        no reset needed. Resetting is for changing the level, batch or Training plan, and
+        it clears the session assignment. It stops being possible once academy records
+        exist against that assignment.
       </p>
       <div className={styles.formActions}>
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>

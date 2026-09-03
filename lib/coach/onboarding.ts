@@ -84,6 +84,18 @@ export type PlayerOnboardingCase = {
   /** Only ever populated for a request awaiting a decision. */
   duplicateSignals?: OnboardingDuplicateSignal[]
   academyPlan: AcademyPlan | null
+  /**
+   * The open session assignment, when there is one. Null at the "session" stage
+   * by construction -- that stage exists because no current assignment was
+   * found -- so this is only ever set on a case the coach has stepped BACK to.
+   * Without it the Session step cannot tell "assign one" from "one already
+   * exists" and renders a pristine form whose submit the server refuses.
+   */
+  assignedSession: {
+    batch: TrainingBatch
+    effectiveFrom: string
+    programme: TrainingProgramme
+  } | null
   batch: TrainingBatch | null
   feePlanRecorded: boolean
   fullName: string
@@ -383,6 +395,7 @@ export function derivePlayerOnboardingWorkspace({
       standing: "pending",
     }, duplicateCandidates),
       academyPlan: null,
+      assignedSession: null,
       batch: null,
       feePlanRecorded: false,
     fullName: request.fullName,
@@ -408,11 +421,23 @@ export function derivePlayerOnboardingWorkspace({
     )
     if (!stage) return []
 
+    // Only an open assignment counts. An ended one is exactly why a case can sit
+    // at the "session" stage, and presenting it as current would block the
+    // assignment the coach is there to make.
+    const openAssignment = playerAssignments.find((assignment) => !assignment.effectiveTo) ?? null
+
     return [{
       activatedAt: player.activatedAt,
       academyId: player.academyId,
       approvedAt: player.approvedAt,
       academyPlan: player.academyPlan,
+      assignedSession: openAssignment
+        ? {
+          batch: openAssignment.batch,
+          effectiveFrom: openAssignment.effectiveFrom,
+          programme: openAssignment.programme,
+        }
+        : null,
       batch: player.batch,
       feePlanRecorded: playerFeePlans.length > 0,
       fullName: player.fullName,
