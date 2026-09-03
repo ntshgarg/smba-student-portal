@@ -166,6 +166,11 @@
       "tag": "0032_registration_identity",
       "when": 1788256648640,
       "sha256": "bc9633d4d49871702c32c6dca4d718e0ec886d0c8240d429ac14e95ed3beeb42"
+    },
+    {
+      "tag": "0033_login_attempt_window_index",
+      "when": 1788414865886,
+      "sha256": "a07419fb829e053e10fd197fe773aad0cb08b08711d76715401169bc6b24ab5d"
     }
   ]
 }

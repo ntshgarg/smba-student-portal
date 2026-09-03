@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, createHmac, randomBytes, randomUUID, scryptSync } from "node:crypto"
 
-import { and, eq, gt, isNull } from "drizzle-orm"
+import { and, eq, gt, isNull, like, lt, or } from "drizzle-orm"
 import { hashPassword, verifyPassword } from "better-auth/crypto"
 
 import {
@@ -26,7 +26,11 @@ import {
   coachProfiles,
   playerEnrollments,
 } from "@/lib/db/schema"
-import { authSubjectHash, writeAuthSecurityEvent } from "@/lib/auth/security-context"
+import {
+  UNKNOWN_IP_HASH,
+  authSubjectHash,
+  writeAuthSecurityEvent,
+} from "@/lib/auth/security-context"
 
 const MIN_PASSWORD_LENGTH = 12
 const MAX_PASSWORD_LENGTH = 128
@@ -612,9 +616,42 @@ export async function verifyPinLogin(input: {
     : null
 }
 
+
+/*
+ * Which ceilings apply depends on whether the caller's address means anything.
+ *
+ * When it does -- a platform header on Vercel, or a proxy header the deployment
+ * names -- three keys: five guesses per account per address, fifty per account
+ * from everywhere, twenty per address across all accounts.
+ *
+ * When it does not, `ipHash` is one constant shared by every caller on earth,
+ * and that changes what the keys MEAN rather than merely weakening them. The
+ * previous round kept the pair key in that case, not noticing that
+ * `subject:<hash>:<constant>` is simply a second account-wide key with a
+ * threshold of five: so denial cost five requests rather than the fifty its own
+ * comment claimed, and the fifty-key could never be reached because the five-key
+ * blocked first. The comment and the behaviour disagreed by an order of
+ * magnitude. Measured: five wrong passwords refused the holder of the right one.
+ *
+ * So in the shared case only the account-wide key applies. A ceiling nobody can
+ * be told apart on must never be cheap, and it must never be per-caller when
+ * there is no caller to be per.
+ *
+ * What this does not fix, and cannot here: with no attributable address there is
+ * nothing to bound one machine guessing fifty secrets against every account in
+ * turn. A delay was tried and removed -- see the note on the boot warning in
+ * lib/auth/security-context.ts. The answer is configuration, not code: name a
+ * forwarded header the proxy actually writes and the real ceilings work.
+ */
+const ACCOUNT_WIDE_FAILURE_THRESHOLD = 50
+
 function attemptKeys(subjectHash: string, ipHash: string) {
+  if (ipHash === UNKNOWN_IP_HASH) {
+    return [{ key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD }]
+  }
   return [
-    { key: `subject:${subjectHash}`, threshold: 5 },
+    { key: `subject:${subjectHash}:${ipHash}`, threshold: 5 },
+    { key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD },
     { key: `ip:${ipHash}`, threshold: 20 },
   ]
 }
@@ -649,6 +686,20 @@ export function recordLoginFailure(input: {
   now?: Date
 } = {}) {
   database.transaction((tx) => {
+    /*
+     * Rows past their window are spent: nothing reads them, and they cannot come
+     * back because a stale window resets the count. Left alone the table grew
+     * one row per unauthenticated failure and never shrank, on a database that
+     * is Turso in production. Cleared here rather than on a schedule so the
+     * cost lands on the writer producing the rows.
+     */
+    tx.delete(authLoginAttempts).where(and(
+      lt(authLoginAttempts.windowStartedAt, new Date(now.getTime() - LOGIN_WINDOW_MS)),
+      or(
+        isNull(authLoginAttempts.blockedUntil),
+        lt(authLoginAttempts.blockedUntil, now),
+      ),
+    )).run()
     for (const { key, threshold } of attemptKeys(input.subjectHash, input.ipHash)) {
       const current = tx.select().from(authLoginAttempts)
         .where(eq(authLoginAttempts.key, key)).get()
@@ -677,13 +728,32 @@ export function recordLoginFailure(input: {
   }, { behavior: "immediate" })
 }
 
+/**
+ * Clears every failure recorded against this account, from any address.
+ *
+ * The subject key carries the requester's address now, so a single equality
+ * would leave a block standing on a row the successful client never wrote --
+ * proving you hold the password has to end the lockout, not just the lockout
+ * you happened to cause. The hash is hex, so it carries no LIKE wildcards.
+ */
 export function recordLoginSuccess(subjectHash: string, {
   database = initializeDatabase(),
 }: {
   database?: SmbaDatabaseExecutor
 } = {}) {
+  // The LIKE below interpolates this value. Every caller today routes it through
+  // authSubjectHash, so it is 64 hex characters and carries no wildcard -- but
+  // that was an assertion in a comment and nothing enforced it. A future caller
+  // passing a raw academy ID or an email would let a "%" clear every other
+  // account's counters.
+  if (!/^[0-9a-f]{64}$/u.test(subjectHash)) {
+    throw new Error("recordLoginSuccess requires a hashed subject.")
+  }
   database.delete(authLoginAttempts)
-    .where(eq(authLoginAttempts.key, `subject:${subjectHash}`))
+    .where(or(
+      eq(authLoginAttempts.key, `subject:${subjectHash}`),
+      like(authLoginAttempts.key, `subject:${subjectHash}:%`),
+    ))
     .run()
 }
 

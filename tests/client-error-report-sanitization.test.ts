@@ -295,3 +295,38 @@ describe("clientErrorSignature", () => {
     expect(signature).not.toContain("aarav.guardian@example.com")
   })
 })
+
+describe("what the redactor had no rule for", () => {
+  it("redacts an Indian mobile number in every shape a person types it", () => {
+    // A guardian's mobile is the highest-value field in this product and the
+    // redactor had no phone rule at all.
+    for (const phone of [
+      "+91 98765 43210", "+91-98765-43210", "+919876543210",
+      "09876543210", "9876543210", "98765 43210",
+    ]) {
+      expect(sanitizeFailureText(`call ${phone} now`)).not.toContain("98765")
+      expect(sanitizeFailureText(`call ${phone} now`)).toContain("<redacted-phone>")
+    }
+  })
+
+  it("redacts bearer-shaped material", () => {
+    // Assembled rather than written out: a JWT literal in a tracked file is
+    // exactly the shape tests/repo-hygiene.test.ts refuses to let into the repo.
+    const jwt = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiJ0ZXN0LXVzZXIifQ", "abcdefghijklmnop"].join(".")
+    expect(sanitizeFailureText(`Authorization: Bearer ${jwt}`)).toContain("<redacted-token>")
+    expect(sanitizeFailureText(`hash ${"a1b2c3d4".repeat(8)}`)).toContain("<redacted-token>")
+  })
+
+  it("redacts the Academy ID spellings the uppercase rule misses", () => {
+    expect(sanitizeFailureText("smba-pl-0004 failed")).toContain("<redacted-academy-id>")
+    expect(sanitizeFailureText("SMBA#0001 failed")).toContain("<redacted-academy-id>")
+  })
+
+  it("leaves ordinary prose and long padding alone", () => {
+    // A token rule that eats any long run also eats the text a truncation test
+    // is measuring, which is how the first attempt at this broke that test.
+    expect(sanitizeFailureText("x".repeat(500))).toHaveLength(500)
+    expect(sanitizeFailureText("the coach could not open the register"))
+      .toBe("the coach could not open the register")
+  })
+})

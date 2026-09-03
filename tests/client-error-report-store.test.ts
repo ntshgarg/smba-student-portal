@@ -141,3 +141,61 @@ describe("recordClientErrorReport", () => {
       .run(NOW.getTime() - 90 * 24 * 60 * 60_000).changes).toBe(1)
   })
 })
+
+describe("what an unauthenticated caller cannot make this table do", () => {
+  it("bounds what one caller can mint by varying only the message", () => {
+    /*
+     * The fingerprint used to carry `summary` verbatim, so a unique message per
+     * request gave a unique fingerprint per request and the duplicate window
+     * never fired -- ten identical posts added one row, ten differing only in
+     * summary added ten. It contributes a 256-way bucket now, which keeps two
+     * genuinely different faults apart while capping what a caller can force.
+     */
+    const outcomes = Array.from({ length: 2_000 }, (_, index) => recordClientErrorReport({
+      accountId: null,
+      report: { ...report, summary: `TypeError: unique fault ${index}` },
+    }, { database, now: NOW }))
+
+    expect(outcomes.filter((outcome) => outcome === "recorded").length).toBeLessThanOrEqual(256)
+  })
+
+  it("never silences one reporter because of another's noise", () => {
+    /*
+     * A count ceiling was tried here twice -- globally, then per reporter -- and
+     * was wrong both times: fifty cheap posts silenced every anonymous browser's
+     * crash reports for ten minutes, which is the telemetry an operator reads
+     * during the incident the attacker is causing. That is the shared-bucket
+     * pathology the login throttle had, and it is no more defensible here.
+     */
+    for (let index = 0; index < 500; index += 1) {
+      recordClientErrorReport({
+        accountId: null,
+        report: { ...report, routePath: `/flood-${index}`, summary: `flood ${index}` },
+      }, { database, now: NOW })
+    }
+
+    expect(recordClientErrorReport({
+      accountId: INITIAL_COACH_ACCOUNT_ID,
+      report: { ...report, routePath: "/player/reports", summary: "a real fault elsewhere" },
+    }, { database, now: NOW })).toBe("recorded")
+    expect(recordClientErrorReport({
+      accountId: null,
+      report: { ...report, routePath: "/login", summary: "an anonymous fault too" },
+    }, { database, now: NOW })).toBe("recorded")
+  })
+
+  it("accepts a genuine fault again once the window has passed", () => {
+    for (let index = 0; index < 120; index += 1) {
+      recordClientErrorReport({
+        accountId: null,
+        report: { ...report, summary: `TypeError: unique fault ${index}` },
+      }, { database, now: NOW })
+    }
+    const later = new Date(NOW.getTime() + 11 * 60_000)
+
+    expect(recordClientErrorReport({
+      accountId: null,
+      report: { ...report, summary: "TypeError: a real one, later" },
+    }, { database, now: later })).toBe("recorded")
+  })
+})

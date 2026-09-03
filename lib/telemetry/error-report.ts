@@ -168,6 +168,29 @@ export function describeReportedError(error: unknown): {
   }
 }
 
+/*
+ * `summary` and `digest` are free-form and caller-supplied, so putting them in
+ * the fingerprint verbatim meant a unique summary per request gave a unique
+ * fingerprint per request and the duplicate window never fired -- ten identical
+ * posts added one row, ten differing only in summary added ten.
+ *
+ * They cannot simply be dropped either: two different TypeErrors on one route
+ * are two faults, and an operator needs to see both.
+ *
+ * So they contribute a bucket rather than themselves. 256 buckets keeps genuinely
+ * different messages apart in almost every real case, while capping what a caller
+ * can mint at 256 rows per shape per window instead of one per request.
+ */
+const SUMMARY_BUCKETS = 256
+
+function summaryBucket(value: string) {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % SUMMARY_BUCKETS
+  }
+  return String(hash)
+}
+
 /** The string the route handler hashes. Only its hash is ever stored. */
 export function clientErrorSignature(report: ClientErrorReport): string {
   return [
@@ -175,8 +198,7 @@ export function clientErrorSignature(report: ClientErrorReport): string {
     report.boundary,
     report.routePath,
     report.errorName,
-    report.digest ?? "-",
-    report.summary,
+    summaryBucket(`${report.digest ?? "-"}|${report.summary}`),
   ].join("|")
 }
 

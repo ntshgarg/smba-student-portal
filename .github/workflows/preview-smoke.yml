@@ -123,7 +123,20 @@ jobs:
                 repo,
               })
               if (heads.data.length > 0) {
-                trusted(`${deployedSha} is the head of ${heads.data.map((head) => head.name).join(", ")}`)
+                const names = heads.data.map((head) => head.name)
+                /*
+                 * "Head of a branch here" means a human with write access put it
+                 * there -- except for the branches a bot pushes on its own.
+                 * Dependabot's branches are heads of this repository and carry
+                 * code nobody has reviewed yet, which is exactly the code that
+                 * should not be handed the automation bypass secret.
+                 */
+                const botBranches = names.filter((name) => /^(?:dependabot|renovate)\//u.test(name))
+                if (botBranches.length === names.length) {
+                  untrusted(`${deployedSha} is only the head of unreviewed bot branches (${names.join(", ")})`)
+                  return
+                }
+                trusted(`${deployedSha} is the head of ${names.join(", ")}`)
                 return
               }
 

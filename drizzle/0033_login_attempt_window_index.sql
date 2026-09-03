@@ -1,0 +1,1 @@
+CREATE INDEX `auth_login_attempts_window_idx` ON `auth_login_attempts` (`window_started_at`);

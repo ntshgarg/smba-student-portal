@@ -511,17 +511,27 @@ export async function requestRegistrationVerification(input: {
     }, { database, now })
   }
   /*
-   * The cooldown is scoped to the address rather than the identity, which is
-   * what actually bounds a flood: at most one registration code per inbox per
-   * minute however many names are tried and however many addresses they are
-   * tried from. A parent registering a second child inside that minute waits and
-   * sends again -- the form says so unconditionally, so the wait is explained
-   * without the page having to admit anything about who is registered.
+   * Scoped to (address, identity), and it has been both ways now. Scoped to the
+   * address alone it bounded floods nicely and was a lock: anyone who knew an
+   * address could send under a junk name every sixty seconds and silently
+   * suppress every registration and status lookup for its real owner, forever.
+   * Reproduced at 241 attacker requests against 24 victim attempts across both
+   * doors -- the victim received nothing.
+   *
+   * So the cooldown now only ever refuses a resend for the same identity, which
+   * is a thing only that requester can trigger. What bounds a flood is the
+   * requester's own budget: five per identity and twenty per address per
+   * fifteen minutes. A distributed sender can still exceed that, and closing
+   * that properly needs bot detection at the edge rather than another ceiling
+   * here -- every ceiling scoped to the victim's address is a lock on the
+   * victim.
    */
   const latest = database.select({ createdAt: authEmailChallenges.createdAt })
     .from(authEmailChallenges)
     .where(and(
       eq(authEmailChallenges.email, email),
+      eq(authEmailChallenges.subjectHash, hashedSubject),
+      isNull(authEmailChallenges.consumedAt),
       eq(authEmailChallenges.purpose, "verify_email"),
     ))
     .orderBy(desc(authEmailChallenges.createdAt))

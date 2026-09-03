@@ -360,6 +360,7 @@ export const authLoginAttempts = sqliteTable("auth_login_attempts", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 }, (table) => [
   index("auth_login_attempts_blocked_idx").on(table.blockedUntil),
+  index("auth_login_attempts_window_idx").on(table.windowStartedAt),
 ])
 
 export const authSecurityEvents = sqliteTable("auth_security_events", {

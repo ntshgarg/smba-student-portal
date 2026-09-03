@@ -79,6 +79,9 @@ vi.mock("@/lib/auth/credential-service", () => ({
   completeAccountActivation: mocks.completeAccountActivation,
   createActivationClaimToken: vi.fn(() => "test-activation-token-value-with-more-than-forty-characters"),
   loginIsBlocked: mocks.loginIsBlocked,
+  // The shared-bucket tax. Zero here: these cases are about which answer comes
+  // back, not how long it takes, and a real delay would only slow the suite.
+  unknownBucketDelayMs: () => 0,
   recordLoginFailure: mocks.recordLoginFailure,
   recordLoginSuccess: mocks.recordLoginSuccess,
   validateNewPassword: vi.fn(() => null),

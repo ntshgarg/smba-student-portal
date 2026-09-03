@@ -22,6 +22,57 @@ const nextConfig: NextConfig = {
   // of rewriting them into the Next.js server bundle.
   serverExternalPackages: ["libsql", "pdfkit"],
 
+  /*
+   * No response carried a single security header before this -- not the sign-in
+   * page, not the coach workspace. These are the cheap half of defence in depth:
+   * they do not fix a bug, they narrow what a bug could become.
+   *
+   * frame-ancestors 'none' is the one that matters most here: without it any
+   * site could frame the portal and trick a signed-in coach into clicking
+   * through an approval or a fee change.
+   *
+   * The CSP is deliberately report-friendly rather than strict-dynamic: Next
+   * injects inline bootstrap scripts, so 'unsafe-inline' stays for now. Tighten
+   * it with a nonce once there is a report endpoint to prove nothing breaks.
+   */
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "X-Frame-Options", value: "DENY" },
+        { key: "Referrer-Policy", value: "same-origin" },
+        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+        {
+          key: "Strict-Transport-Security",
+          value: "max-age=31536000; includeSubDomains",
+        },
+        {
+          key: "Content-Security-Policy",
+          value: [
+            "default-src 'self'",
+            "base-uri 'self'",
+            "object-src 'none'",
+            "frame-ancestors 'none'",
+            "form-action 'self'",
+            "img-src 'self' data: blob:",
+            "style-src 'self' 'unsafe-inline'",
+            // 'unsafe-eval' in development only. React's dev build uses eval()
+            // to rebuild callstacks across the server/client boundary, so
+            // without it every page logs "eval() is not supported in this
+            // environment" and the debugging features stop working. It is never
+            // sent in production, which is the build that matters here.
+            process.env.NODE_ENV === "production"
+              ? "script-src 'self' 'unsafe-inline'"
+              : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+            "connect-src 'self'",
+            "font-src 'self' data:",
+          ].join("; "),
+        },
+      ],
+    }]
+  },
+
   // No `outputFileTracingIncludes` for ./drizzle/**. The only thing that reads a
   // migration is `prepareDatabase` in lib/db/setup.ts, whose own comment says
   // "Deployment, development and test setup only. Request code must use

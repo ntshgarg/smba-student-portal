@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import path from "node:path"
 
 import Database from "better-sqlite3"
@@ -110,6 +111,15 @@ afterEach(() => {
   sqlite.close()
   delete process.env.BETTER_AUTH_SECRET
 })
+
+/**
+ * `recordLoginSuccess` asserts its argument is a 64-character hex digest,
+ * because it interpolates it into a LIKE. These cases used readable labels, so
+ * they hash them the way every production caller already does.
+ */
+function subjectFor(label: string) {
+  return createHash("sha256").update(label).digest("hex")
+}
 
 describe("production credential lifecycle", () => {
   it("reports browser-bound activation states without exposing the stored token", () => {
@@ -280,8 +290,127 @@ describe("production credential lifecycle", () => {
     })
   })
 
+  it("does not make the shared bucket a cheap lockout when no address is attributable", async () => {
+    /*
+     * When nothing identifies the caller, `subject:<hash>:<ipHash>` is not a
+     * per-address key at all -- ipHash is one constant for every caller on
+     * earth, so it is a second account-wide key with a threshold of five. An
+     * earlier round kept it there and the effect was that denying any account
+     * cost five requests, not the fifty its own comment claimed, and the fifty
+     * key could never fire because the five key blocked first.
+     */
+    const { UNKNOWN_IP_HASH } = await import("@/lib/auth/security-context")
+    const shared = { subjectHash: subjectFor("victim-account"), ipHash: UNKNOWN_IP_HASH }
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      recordLoginFailure(shared, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+    expect(loginIsBlocked(shared, { database, now: NOW })).toBe(false)
+
+    for (let attempt = 10; attempt < 50; attempt += 1) {
+      recordLoginFailure(shared, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+    expect(loginIsBlocked(shared, { database, now: NOW })).toBe(true)
+  })
+
+  it("keeps the two answers identical whether the Academy ID names anybody", () => {
+    /*
+     * Skipping the failure write for an unresolvable ID was tried, to stop an
+     * anonymous caller minting a throttle row per invented ID. It armed an
+     * enumeration oracle: a real account would start answering "wait a few
+     * minutes" from the sixth attempt while an invented one answered "incorrect"
+     * for ever, which reads the whole roster at six credential-free requests per
+     * ID -- and Academy IDs are sequential.
+     *
+     * So both are counted, and this pins that they reach the same state.
+     */
+    const real = { subjectHash: subjectFor("a-real-account"), ipHash: "one-address" }
+    const invented = { subjectHash: subjectFor("no-such-account"), ipHash: "one-address" }
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      recordLoginFailure(real, { database, now: new Date(NOW.getTime() + attempt) })
+      recordLoginFailure(invented, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+
+    expect(loginIsBlocked(real, { database, now: NOW }))
+      .toBe(loginIsBlocked(invented, { database, now: NOW }))
+    expect(loginIsBlocked(real, { database, now: NOW })).toBe(true)
+  })
+
+  it("bounds guessing against one account however many addresses it comes from", () => {
+    /*
+     * The first attempt at the lockout fix keyed every ceiling on the caller's
+     * address -- which, on any deployment reading a forwarded header, the caller
+     * writes. Rotating it bought a fresh five-guess budget every five guesses:
+     * measured against a live build, 76 guesses per second with nothing refusing
+     * them, which takes a six-digit PIN in hours. A denial of service traded for
+     * a takeover.
+     */
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      recordLoginFailure({
+        ipHash: `rotated-address-${attempt}`,
+        subjectHash: subjectFor("victim-account"),
+      }, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+
+    expect(loginIsBlocked({
+      ipHash: "another-fresh-address",
+      subjectHash: subjectFor("victim-account"),
+    }, { database, now: NOW })).toBe(true)
+  })
+
+  it("clears spent rows rather than keeping one per failure for ever", () => {
+    const stale = new Date(NOW.getTime() - 60 * 60 * 1000)
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      recordLoginFailure({
+        ipHash: `old-address-${attempt}`,
+        subjectHash: subjectFor(`old-account-${attempt}`),
+      }, { database, now: stale })
+    }
+    expect(database.select().from(schema.authLoginAttempts).all().length).toBeGreaterThan(30)
+
+    recordLoginFailure({ ipHash: "fresh", subjectHash: subjectFor("fresh") }, { database, now: NOW })
+
+    // Only the three keys the fresh failure wrote survive; the spent window is gone.
+    expect(database.select().from(schema.authLoginAttempts).all()).toHaveLength(3)
+  })
+
+  it("never lets a stranger's failures refuse the client holding the real credential", () => {
+    /*
+     * The subject counter used to be keyed on the account alone, so five wrong
+     * guesses from anywhere refused the person who actually knew the password.
+     * Reproduced against a live build: five failures from five addresses left
+     * the victim's own correct password answering "Wait a few minutes", with
+     * each attacker address sitting at one failure. Any account, the head coach
+     * included, locked out by an unauthenticated stranger for fifteen minutes,
+     * renewable indefinitely.
+     */
+    const victim = { subjectHash: subjectFor("victim-account"), ipHash: "victim-home" }
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      recordLoginFailure({
+        ipHash: `attacker-${attempt}`,
+        subjectHash: subjectFor("victim-account"),
+      }, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+
+    expect(loginIsBlocked(victim, { database, now: NOW })).toBe(false)
+  })
+
+  it("still stops one client guessing one account, and clears that block on success", () => {
+    const guesser = { subjectHash: subjectFor("victim-account"), ipHash: "one-attacker" }
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      recordLoginFailure(guesser, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+    expect(loginIsBlocked(guesser, { database, now: NOW })).toBe(true)
+
+    // Proving you hold the password ends the lockout everywhere, not only on the
+    // address that caused it -- otherwise the block outlives the proof.
+    recordLoginSuccess(guesser.subjectHash, { database })
+    expect(loginIsBlocked(guesser, { database, now: NOW })).toBe(false)
+  })
+
   it("blocks repeated subject and IP failures and clears only the successful subject", () => {
-    const subject = { subjectHash: "player-a", ipHash: "shared-ip" }
+    const subject = { subjectHash: subjectFor("player-a"), ipHash: "shared-ip" }
     for (let attempt = 0; attempt < 5; attempt += 1) {
       recordLoginFailure(subject, { database, now: new Date(NOW.getTime() + attempt) })
     }
@@ -293,7 +422,7 @@ describe("production credential lifecycle", () => {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       recordLoginFailure({
         ipHash: "saturated-ip",
-        subjectHash: `player-${attempt}`,
+        subjectHash: subjectFor(`player-${attempt}`),
       }, { database, now: new Date(NOW.getTime() + attempt) })
     }
     expect(loginIsBlocked({

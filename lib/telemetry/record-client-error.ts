@@ -13,10 +13,9 @@ import {
 } from "@/lib/telemetry/error-report"
 
 // Repeat occurrences of one fault inside this window are counted as the same
-// report and dropped. This is what stops the endpoint growing the table in
-// proportion to request volume: however many reports arrive, the table can only
-// grow by the number of distinct fault shapes per window.
+// report and dropped.
 const DUPLICATE_WINDOW_MS = 10 * 60_000
+
 
 export function recordClientErrorReport(input: {
   accountId: string | null
@@ -42,6 +41,21 @@ export function recordClientErrorReport(input: {
     ))
     .get()
   if (duplicate) return "suppressed" as const
+
+  /*
+   * The duplicate window above is the only bound, and that is the point.
+   *
+   * A count ceiling was tried twice here and was wrong both times. Globally, and
+   * then per reporter, it was a mute button any stranger could hold: fifty cheap
+   * posts silenced every anonymous browser's crash reports for ten minutes --
+   * the telemetry an operator reads during the incident the attacker is causing.
+   * That is the same shared-bucket pathology the login throttle had, and it is
+   * no more defensible here.
+   *
+   * With the caller's free text out of the fingerprint, the window bounds growth
+   * by the number of distinct fault shapes, which is what its comment always
+   * claimed. Volume is bounded by the route's own per-address rate limit.
+   */
 
   database.insert(clientErrorReports).values({
     id: randomUUID(),
