@@ -45,6 +45,10 @@ export function StepRail({
           && index > 0
           && index <= reachedIndex
           && index !== currentIndex
+        // Once the coach has stepped back, the steps between them and the live
+        // edge are ahead of where they stand. Calling those "go back" is simply
+        // wrong, and the aria-label is the only name a screen reader gets.
+        const goingBack = index < currentIndex
 
         return (
           <li
@@ -61,7 +65,7 @@ export function StepRail({
           >
             {navigable ? (
               <button
-                aria-label={`Go back to ${stage.label}`}
+                aria-label={`${goingBack ? "Go back to" : "Go forward to"} ${stage.label}`}
                 onClick={() => onSelect?.(stage.key)}
                 type="button"
               >

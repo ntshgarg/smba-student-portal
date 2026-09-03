@@ -113,7 +113,7 @@ export function SessionStep({
   sessionSeries,
 }: {
   item: PlayerOnboardingCase
-  onGoToStage?: (stage: "assessment") => void
+  onGoToStage?: (stage: "assessment" | "feePlan") => void
   onSuccess: (input: { message: string }) => void
   referenceDate: string
   sessionSeries: TrainingSessionSeries[]
@@ -245,6 +245,46 @@ export function SessionStep({
     }))
   }
 
+  /*
+   * Revisiting a step whose work is already done. Before the rail was navigable
+   * this branch was unreachable, and without it the step renders as if nothing
+   * were assigned: `options[0]` is normally the series the player is already on,
+   * so the form arrives pre-filled and plausible, and its submit is refused with
+   * a raw CONFLICT ("The player is already assigned to this session") carrying
+   * field "playerId", which nothing here maps onto a control.
+   *
+   * There is no update path -- assignSessionRecords only inserts -- so the truth
+   * is that changing the schedule means undoing this one. Say what is assigned
+   * and name the control that undoes it rather than offering a form that cannot
+   * work.
+   */
+  if (item.assignedSession) {
+    return (
+      <div className={styles.recoveryPanel}>
+        <strong>
+          {item.fullName} is already assigned to {item.assignedSession.programme}
+          {" · "}{item.assignedSession.batch}, from{" "}
+          {formatDateKey(item.assignedSession.effectiveFrom)}.
+        </strong>
+        <p>
+          A schedule cannot be swapped in place. To move this player to a different one, open
+          Fee Plan and reset the session assignment — that clears this assignment and reopens
+          the assessment. Resetting stops being possible once attendance, fees or charges exist
+          against it.
+        </p>
+        {onGoToStage ? (
+          <button
+            className={styles.primaryButton}
+            onClick={() => onGoToStage("feePlan")}
+            type="button"
+          >
+            Go to Fee Plan <ArrowRight aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
   if (!options.length) {
     const createHref = `/coach/schedules/new?programme=${encodeURIComponent(item.level ?? "")}&batch=${encodeURIComponent(item.batch ?? "")}&player=${encodeURIComponent(item.id)}&from=assignment`
     return (
@@ -326,25 +366,32 @@ export function SessionStep({
       </div>
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {rangeViolation ? (
-        <p className={styles.backdateNote} id={rangeNoteId} role="alert">
-          {rangeViolation}
+        <>
+          <p className={styles.backdateNote} id={rangeNoteId} role="alert">
+            {rangeViolation}
+          </p>
           {/*
-            * The message has always named Assessment as the place to fix this.
-            * Until the rail became navigable that was advice about a screen the
-            * coach could not open, which is how a session starting before the
-            * player's seeded start date became unassignable rather than merely
-            * awkward. Offer the step itself.
+            * Outside the paragraph on purpose. The message has always named
+            * Assessment as the place to fix this, and until the rail became
+            * navigable that was advice about a screen the coach could not open.
+            * But the paragraph is a `role="alert"` -- implicitly atomic -- and is
+            * also the date input's `aria-describedby` target, and both consumers
+            * flatten their subtree to text: a button inside was announced as
+            * prose on every recomputation, and again as part of the field's
+            * description. As a sibling it stays a button.
             */}
           {trainingStartBlocks && onGoToStage ? (
-            <button
-              className={styles.inlineStepLink}
-              onClick={() => onGoToStage("assessment")}
-              type="button"
-            >
-              Go to Assessment
-            </button>
+            <p className={styles.backdateFix}>
+              <button
+                className={styles.inlineStepLink}
+                onClick={() => onGoToStage("assessment")}
+                type="button"
+              >
+                Go to Assessment
+              </button>
+            </p>
           ) : null}
-        </p>
+        </>
       ) : effectiveFrom < referenceDate ? (
         <p className={styles.backdateNote}>
           This start date also makes earlier scheduled sessions eligible for attendance.

@@ -28,7 +28,7 @@ vi.mock("@/components/unsaved-work-guard", () => ({
 
 const { OnboardingEditor } = await import("@/components/coach/onboarding/register/onboarding-editor")
 const { StepRail } = await import("@/components/coach/onboarding/register/step-rail")
-const { trainingStartIsTheBlockingBound } = await import(
+const { SessionStep, trainingStartIsTheBlockingBound } = await import(
   "@/components/coach/onboarding/register/session-step"
 )
 
@@ -83,6 +83,7 @@ function playerCase(overrides: Partial<PlayerOnboardingCase> = {}): PlayerOnboar
     primaryContact: null,
     recordRevision: 2,
     requestedAt: "2026-09-03T04:00:00.000Z",
+    assignedSession: null,
     requestedRole: "player",
     stage: "session",
     trainingStartOn: "2026-09-03",
@@ -110,7 +111,23 @@ describe("moving back through onboarding before it is finished", () => {
     // Assessment is behind the case, so it is a way back.
     expect(html).toContain('aria-label="Go back to Assessment"')
     // Fee Plan is ahead of it: nothing there can be filled in yet.
-    expect(html).not.toContain('aria-label="Go back to Fee Plan"')
+    expect(html).not.toContain("Fee Plan\"")
+  })
+
+  it("does not call a step ahead of the coach a way back", () => {
+    /*
+     * Once the coach steps back, the steps between them and the live edge are
+     * ahead of where they stand. The aria-label is the only name a screen reader
+     * gets -- it overrides the visible "03 Session" -- so calling a forward jump
+     * "go back" is not a nuance, it is the wrong word for the only name there is.
+     */
+    const html = renderToStaticMarkup(
+      <StepRail current="assessment" onSelect={() => undefined} reachedStage="feePlan" />,
+    )
+
+    expect(html).toContain('aria-label="Go forward to Session"')
+    expect(html).toContain('aria-label="Go forward to Fee Plan"')
+    expect(html).not.toContain("Go back to")
   })
 
   it("never offers a way back to the request, because approval cannot be undone", () => {
@@ -123,7 +140,7 @@ describe("moving back through onboarding before it is finished", () => {
 
     expect(html).toContain('aria-label="Go back to Assessment"')
     expect(html).toContain('aria-label="Go back to Session"')
-    expect(html).not.toContain('aria-label="Go back to New requests"')
+    expect(html).not.toContain("New requests\"")
   })
 
   it("shows nothing to go back to while the case is still a request", () => {
@@ -137,7 +154,7 @@ describe("moving back through onboarding before it is finished", () => {
       trainingStartOn: null,
     }))
 
-    expect(html).not.toContain("aria-label=\"Go back to")
+    expect(html).not.toContain("aria-label=\"Go ")
   })
 
   it("renders the rail as inert when no way back is supplied", () => {
@@ -149,6 +166,46 @@ describe("moving back through onboarding before it is finished", () => {
 
     expect(html).not.toContain("<button")
     expect(html).toContain("Assessment")
+  })
+})
+
+describe("revisiting a step whose work is already done", () => {
+  it("says what is assigned instead of offering a form the server will refuse", () => {
+    /*
+     * assignSessionRecords only ever INSERTs, and the step seeds itself from the
+     * first eligible series -- normally the one the player is already on. So a
+     * pristine, plausible-looking form arrived here with a submit that could only
+     * fail, carrying a raw CONFLICT on a field this step does not map.
+     */
+    const html = renderToStaticMarkup(
+      <SessionStep
+        item={playerCase({
+          assignedSession: { batch: "Weekday", effectiveFrom: "2026-07-01", programme: "Advanced" },
+          stage: "feePlan",
+        })}
+        onSuccess={() => undefined}
+        referenceDate="2026-09-03"
+        sessionSeries={[SERIES]}
+      />,
+    )
+
+    expect(html).toContain("is already assigned to")
+    expect(html).not.toContain('name="effectiveFrom"')
+  })
+
+  it("still offers the assignment form when the only assignment has ended", () => {
+    // An ended assignment is exactly why a case sits at the session stage.
+    const html = renderToStaticMarkup(
+      <SessionStep
+        item={playerCase({ assignedSession: null, stage: "session" })}
+        onSuccess={() => undefined}
+        referenceDate="2026-09-03"
+        sessionSeries={[SERIES]}
+      />,
+    )
+
+    expect(html).toContain('name="effectiveFrom"')
+    expect(html).not.toContain("is already assigned to")
   })
 })
 

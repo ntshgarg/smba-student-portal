@@ -34,6 +34,14 @@ function editorCopy(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
         body: "Confirm the court assessment before assigning a recurring session.",
       }
     case "session":
+      // Revisited, this step reports an assignment rather than offering to make
+      // one; a heading still saying "assign" describes work that is done.
+      if (item.assignedSession) {
+        return {
+          title: `${firstName}’s court time is set`,
+          body: "The assigned schedule, and what it takes to change it.",
+        }
+      }
       return {
         title: `Assign ${firstName}’s court time`,
         body: "Choose a matching recurring schedule and the player’s attendance days.",

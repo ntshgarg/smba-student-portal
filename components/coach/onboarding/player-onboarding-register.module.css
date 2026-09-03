@@ -368,7 +368,13 @@
  */
 .stepRail li > button {
   width: 100%;
-  padding: 0;
+  /*
+   * Vertical padding rather than none: at 28px the marker alone left the target
+   * well under the 44px the rest of this workspace holds to, with a 15px rail
+   * gap as the only separation between two adjacent ones.
+   */
+  padding: var(--space-tight) 0;
+  margin: calc(-1 * var(--space-tight)) 0;
   border: 0;
   background: none;
   font: inherit;
@@ -376,13 +382,26 @@
   cursor: pointer;
 }
 
+/*
+ * A pressable step has to look pressable before it is hovered -- on the live
+ * edge the only other cue is the folio number, which the inert steps beyond it
+ * carry too. The underline is on the label, so it survives the marker's own
+ * complete/current colouring.
+ */
+.stepRail li > button strong {
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+
 .stepRail li > button:hover strong,
 .stepRail li > button:focus-visible strong {
   color: var(--navy);
+  text-decoration-color: currentcolor;
 }
 
 .stepRail li > button:hover span {
-  border-color: var(--navy);
+  border-color: currentcolor;
 }
 
 .stepRail li span {
@@ -1231,16 +1250,30 @@
 
   .stepRail {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
+    /* 6px, not 4: the focus ring sits 5px outside the box, so at 4px a focused
+       step's ring crossed into the step beside it. */
+    gap: 6px;
     margin-bottom: 21px;
   }
 
-  .stepRail li {
+  /*
+   * The button has to restate the stacked layout. The desktop rule gives it the
+   * li's two-column grid, and this breakpoint only re-declares the li -- so a
+   * navigable step kept marker-beside-label, left-aligned, inside a 64.5px
+   * track, while every inert step beside it stacked and centred.
+   */
+  .stepRail li,
+  .stepRail li > button {
     display: grid;
     grid-template-columns: 1fr;
     justify-items: center;
     gap: 6px;
     text-align: center;
+  }
+
+  .stepRail li > button {
+    padding: 6px 0;
+    margin: -6px 0;
   }
 
   /* "Assessment" is the longest unbreakable label and the four-across track is
@@ -1369,10 +1402,19 @@
   line-height: 1.5;
 }
 
-/* The fix offered inside a blocking note, sitting on the sentence that names it. */
+/* The fix offered under a blocking note, as a sibling of it -- see the comment
+   at its use site for why it is not inside the alert. */
+.backdateFix {
+  margin: 4px 0 0;
+}
+
 .inlineStepLink {
-  margin-left: 6px;
-  padding: 0;
+  /*
+   * 8px of vertical padding, pulled back out with a negative margin, so the
+   * target clears the workspace's touch floor without moving the note.
+   */
+  padding: var(--space-tight) 0;
+  margin: calc(-1 * var(--space-tight)) 0;
   border: 0;
   background: none;
   color: var(--navy);

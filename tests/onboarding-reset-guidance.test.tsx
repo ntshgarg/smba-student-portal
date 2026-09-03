@@ -55,11 +55,19 @@ function render(item: never) {
 }
 
 describe("onboarding reset guidance", () => {
-  it("says resetting the assignment is what reopens the training start date", () => {
+  it("sends a date correction to the step list and keeps reset for the classification", () => {
+    /*
+     * This used to assert that reset "reopens" the assessment because that was
+     * the only door. The rail is navigation now, and the server refuses only a
+     * move *later* under an open assignment -- so telling a coach to destroy an
+     * assignment in order to move a date earlier would send them down a path
+     * that is both unnecessary and, once academy records exist, closed.
+     */
     const html = render(player())
     expect(html).toContain("Reset session assignment")
-    expect(html).toContain("reopens")
-    expect(html).toContain("training start date")
+    expect(html).toContain("go back to Assessment on the step list")
+    expect(html).toContain("level, batch or Training plan")
+    expect(html).not.toContain("no other way back")
   })
 
   it("names the condition that makes the reset stop working", () => {
@@ -73,7 +81,7 @@ describe("onboarding reset guidance", () => {
     const html = render(player({ trainingStartOn: "2026-12-01" }))
     expect(html).toContain("Fee completion opens on")
     expect(html).toContain("Reset session assignment")
-    expect(html).toContain("training start date can be changed")
+    expect(html).toContain("go back to Assessment on the step list")
   })
 
   it("holds back the fee timeline until an amount is entered, and says so visually", () => {
