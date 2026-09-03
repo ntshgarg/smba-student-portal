@@ -28,6 +28,7 @@
     "fixture:build:demo": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/regression/fixture.ts build --profile demo",
     "fixture:build:edge": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/regression/fixture.ts build --profile edge",
     "fixture:build:stress": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/regression/fixture.ts build --profile stress",
+    "fixture:build:walkthrough": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server SMBA_ALLOW_LOCAL_AUTH_SECRET=true tsx scripts/regression/build-walkthrough-fixture.ts",
     "fixture:build:all": "npm run fixture:build:clean && npm run fixture:build:demo && npm run fixture:build:edge && npm run fixture:build:stress",
     "fixture:verify:clean": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/regression/fixture.ts verify --target .data/academy-clean.db",
     "fixture:verify:demo": "NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/regression/fixture.ts verify --profile demo",
@@ -55,7 +56,8 @@
     "regression:capture": "playwright test -c tests/e2e/playwright.config.ts",
     "regression:capture:responsive": "SMBA_CAPTURE_VIEWPORT_SET=responsive playwright test -c tests/e2e/playwright.config.ts",
     "regression:start": "npm run fixture:start:stress",
-    "preview:seed:turso": "node --env-file=.env.local scripts/deployment/copy-preview-database.mjs .data/academy-stress.db"
+    "preview:seed:turso": "node --env-file=.env.local scripts/deployment/copy-preview-database.mjs .data/academy-stress.db",
+    "fixture:start:walkthrough": "SMBA_ALLOW_LOCAL_AUTH_SECRET=true BETTER_AUTH_SECURE_COOKIES=false SMBA_REQUIRE_COACH_TOTP=false SMBA_AUTH_MAIL_TRANSPORT=memory SMBA_REQUIRE_RECOVERY_EMAIL=false DB_FILE_NAME=.data/academy-walkthrough.db next dev -p 3022"
   },
   "dependencies": {
     "better-auth": "^1.7.1",
