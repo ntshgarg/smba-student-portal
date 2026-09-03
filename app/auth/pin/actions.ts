@@ -50,11 +50,18 @@ export async function setupPinAction(
     // action only ever performs first-time (or post-recovery) setup.
     redirect(destination(identity.role))
   }
-  const session = await getAuth().api.getSession({ headers: await headers() })
-  const sessionAge = session?.session?.createdAt
-    ? Date.now() - new Date(session.session.createdAt).getTime()
-    : Number.POSITIVE_INFINITY
-  if (sessionAge > PIN_SETUP_SESSION_MAX_AGE_MS) {
+  const session = await getAuth().api.getSession({ headers: await headers() }).catch(() => null)
+  /*
+   * Computed so that anything unexpected refuses. The first version subtracted
+   * an unparseable date and got NaN, and `NaN > MAX_AGE` is false -- so a
+   * control whose entire job is to say no degraded to "yes" on bad input, in an
+   * action that mints a complete sign-in factor without asking for a password.
+   */
+  const createdAt = session?.session?.createdAt
+    ? new Date(session.session.createdAt).getTime()
+    : Number.NaN
+  const sessionAge = Date.now() - createdAt
+  if (!Number.isFinite(sessionAge) || sessionAge < 0 || sessionAge > PIN_SETUP_SESSION_MAX_AGE_MS) {
     return {
       error: "Sign in again to set a PIN.",
       errorField: null,

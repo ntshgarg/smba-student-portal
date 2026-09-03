@@ -41,15 +41,30 @@ function trustedHeaderValue(value: string | null) {
  * `x-vercel-forwarded-for` itself and that is read first -- but "safe by
  * accident on one host" is not a control.
  *
- * So the header is opt-in. Unset, every caller shares the "unknown" bucket,
- * which throttles correctly; it is coarse, and being coarse is the safe
- * direction. Set it to the one header the proxy in front of this deployment
- * overwrites (never appends).
+ * So the header is opt-in. Unset, every caller lands in one shared bucket -- and
+ * "coarse is the safe direction" was wrong about that, badly. A bucket everyone
+ * shares must never be allowed to refuse anybody: twenty failed logins against
+ * twenty different accounts denied the whole portal, every coach and every
+ * player, for fifteen minutes and renewably. `UNKNOWN_IP_HASH` below is how the
+ * throttle tells the two cases apart.
+ *
+ * Set it to the one header the proxy in front of this deployment writes. On a
+ * chain deeper than one hop -- a CDN in front of nginx -- the last value is the
+ * CDN's egress address, which is shared by every visitor, so that configuration
+ * is the shared case too and must be treated as untrusted.
  */
 function forwardedIpHeader() {
   return process.env.SMBA_FORWARDED_IP_HEADER?.trim().toLowerCase()
     || (process.env.VERCEL === "1" ? "x-vercel-forwarded-for" : null)
 }
+
+/**
+ * The hash every caller gets when no address could be established.
+ *
+ * Exported so the login throttle can recognise it: a ceiling that refuses an
+ * account must never be applied to a bucket that may hold the whole internet.
+ */
+export const UNKNOWN_IP_HASH = digest("ip:unknown")
 
 export function requestSecurityContext(requestHeaders: Pick<Headers, "get">) {
   const header = forwardedIpHeader()

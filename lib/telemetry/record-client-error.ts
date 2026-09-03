@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, randomUUID } from "node:crypto"
 
-import { and, eq, gte } from "drizzle-orm"
+import { and, eq, gte, isNull } from "drizzle-orm"
 
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import { clientErrorReports } from "@/lib/db/schema"
@@ -58,20 +58,27 @@ export function recordClientErrorReport(input: {
   if (duplicate) return "suppressed" as const
 
   /*
-   * Counted per route, not globally. A single global ceiling closed the growth
-   * hole and opened a quieter one: a stranger could fill the window with junk
-   * and every genuine report from every real browser was dropped for ten
-   * minutes -- the telemetry an operator would consult during an incident,
-   * silenced by the attacker causing it. Per route, saturating one surface
-   * leaves the others reporting, and a real incident is confined to the route
-   * it happens on.
+   * Counted per reporter, not per route.
+   *
+   * Per route was unreachable by construction: `routePath` is whatever the
+   * caller sends, so inventing a fresh one each time gave every request its own
+   * ceiling -- 200 rows in under four seconds from one client. And globally it
+   * was worse than unreachable: a stranger filling the window silenced every
+   * genuine report from every real browser, which is the telemetry an operator
+   * reads during the incident the attacker is causing.
+   *
+   * Keyed on the account -- or, for a signed-out browser, on nothing the caller
+   * chooses -- a flood costs the flooder their own budget and leaves everybody
+   * else reporting.
    */
   const windowStart = new Date(now.getTime() - DUPLICATE_WINDOW_MS)
   const recentCount = database.select({ id: clientErrorReports.id })
     .from(clientErrorReports)
     .where(and(
       gte(clientErrorReports.occurredAt, windowStart),
-      eq(clientErrorReports.routePath, input.report.routePath),
+      input.accountId
+        ? eq(clientErrorReports.accountId, input.accountId)
+        : isNull(clientErrorReports.accountId),
     ))
     .all().length
   if (recentCount >= WINDOW_INSERT_CEILING) return "suppressed" as const

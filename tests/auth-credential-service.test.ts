@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import path from "node:path"
 
 import Database from "better-sqlite3"
@@ -110,6 +111,15 @@ afterEach(() => {
   sqlite.close()
   delete process.env.BETTER_AUTH_SECRET
 })
+
+/**
+ * `recordLoginSuccess` asserts its argument is a 64-character hex digest,
+ * because it interpolates it into a LIKE. These cases used readable labels, so
+ * they hash them the way every production caller already does.
+ */
+function subjectFor(label: string) {
+  return createHash("sha256").update(label).digest("hex")
+}
 
 describe("production credential lifecycle", () => {
   it("reports browser-bound activation states without exposing the stored token", () => {
@@ -292,13 +302,13 @@ describe("production credential lifecycle", () => {
     for (let attempt = 0; attempt < 50; attempt += 1) {
       recordLoginFailure({
         ipHash: `rotated-address-${attempt}`,
-        subjectHash: "victim-account",
+        subjectHash: subjectFor("victim-account"),
       }, { database, now: new Date(NOW.getTime() + attempt) })
     }
 
     expect(loginIsBlocked({
       ipHash: "another-fresh-address",
-      subjectHash: "victim-account",
+      subjectHash: subjectFor("victim-account"),
     }, { database, now: NOW })).toBe(true)
   })
 
@@ -307,12 +317,12 @@ describe("production credential lifecycle", () => {
     for (let attempt = 0; attempt < 30; attempt += 1) {
       recordLoginFailure({
         ipHash: `old-address-${attempt}`,
-        subjectHash: `old-account-${attempt}`,
+        subjectHash: subjectFor(`old-account-${attempt}`),
       }, { database, now: stale })
     }
     expect(database.select().from(schema.authLoginAttempts).all().length).toBeGreaterThan(30)
 
-    recordLoginFailure({ ipHash: "fresh", subjectHash: "fresh" }, { database, now: NOW })
+    recordLoginFailure({ ipHash: "fresh", subjectHash: subjectFor("fresh") }, { database, now: NOW })
 
     // Only the three keys the fresh failure wrote survive; the spent window is gone.
     expect(database.select().from(schema.authLoginAttempts).all()).toHaveLength(3)
@@ -328,11 +338,11 @@ describe("production credential lifecycle", () => {
      * included, locked out by an unauthenticated stranger for fifteen minutes,
      * renewable indefinitely.
      */
-    const victim = { subjectHash: "victim-account", ipHash: "victim-home" }
+    const victim = { subjectHash: subjectFor("victim-account"), ipHash: "victim-home" }
     for (let attempt = 0; attempt < 5; attempt += 1) {
       recordLoginFailure({
         ipHash: `attacker-${attempt}`,
-        subjectHash: "victim-account",
+        subjectHash: subjectFor("victim-account"),
       }, { database, now: new Date(NOW.getTime() + attempt) })
     }
 
@@ -340,7 +350,7 @@ describe("production credential lifecycle", () => {
   })
 
   it("still stops one client guessing one account, and clears that block on success", () => {
-    const guesser = { subjectHash: "victim-account", ipHash: "one-attacker" }
+    const guesser = { subjectHash: subjectFor("victim-account"), ipHash: "one-attacker" }
     for (let attempt = 0; attempt < 5; attempt += 1) {
       recordLoginFailure(guesser, { database, now: new Date(NOW.getTime() + attempt) })
     }
@@ -353,7 +363,7 @@ describe("production credential lifecycle", () => {
   })
 
   it("blocks repeated subject and IP failures and clears only the successful subject", () => {
-    const subject = { subjectHash: "player-a", ipHash: "shared-ip" }
+    const subject = { subjectHash: subjectFor("player-a"), ipHash: "shared-ip" }
     for (let attempt = 0; attempt < 5; attempt += 1) {
       recordLoginFailure(subject, { database, now: new Date(NOW.getTime() + attempt) })
     }
@@ -365,7 +375,7 @@ describe("production credential lifecycle", () => {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       recordLoginFailure({
         ipHash: "saturated-ip",
-        subjectHash: `player-${attempt}`,
+        subjectHash: subjectFor(`player-${attempt}`),
       }, { database, now: new Date(NOW.getTime() + attempt) })
     }
     expect(loginIsBlocked({

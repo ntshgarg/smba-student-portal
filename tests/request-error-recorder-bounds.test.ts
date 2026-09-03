@@ -60,51 +60,50 @@ describe("what an anonymous caller cannot make the error recorder do", () => {
     expect(events()).toHaveLength(1)
   })
 
-  it("bounds a caller who varies the fault so every request is a new shape", async () => {
-    for (let attempt = 0; attempt < 200; attempt += 1) {
-      await recordRequestError(new Error(`boom ${attempt}`), {} as never, context("/login"))
-    }
-
-    // Per route, so one saturated surface does not silence the rest.
-    expect(events().length).toBeLessThanOrEqual(50)
-  })
-
-  it("bounds a caller who also varies the route, which they choose", async () => {
+  it("never drops a fault nobody has seen this window, however much noise precedes it", async () => {
     /*
-     * routePath is simply the route the action was posted to, so anything
-     * counted per route can be spread across routes to defeat it. The global
-     * ceiling is the one that actually holds.
+     * A global ceiling was tried here and it was a kill switch a stranger owned:
+     * five hundred cheap inserts silenced every genuine fault on every route for
+     * ten minutes -- including the faults caused by whatever they did next.
+     * Bounding cost must never cost visibility, so the dedupe is the only bound.
      */
     for (let attempt = 0; attempt < 2_000; attempt += 1) {
-      await recordRequestError(
-        new Error(`boom ${attempt}`),
-        {} as never,
-        context(`/invented-route-${attempt}`),
-      )
+      await recordRequestError(new Error(`noise ${attempt}`), {} as never, context("/login"))
     }
 
-    expect(events().length).toBeLessThanOrEqual(500)
+    await recordRequestError(
+      new Error("TypeError: ledger is undefined"),
+      {} as never,
+      context("/coach/financials"),
+    )
+
+    const recorded = events()
+    expect(recorded.some((row) => row.routePath === "/coach/financials")).toBe(true)
   })
 
-  it("does not spend a row on a refusal that worked exactly as designed", async () => {
-    // Provoking one of these needs no credential, which makes them the cheapest
-    // rows to force -- and none of them is a fault worth alerting anybody about.
-    for (const refusal of [
-      "NEXT_REDIRECT;replace;/login;307;",
-      "Head coach access is required.",
-      "Authentication required.",
-    ]) {
-      await recordRequestError(new Error(refusal), {} as never, context("/coach"))
+  it("does not spend a row on the framework's own control flow", async () => {
+    // A redirect is not a fault, and provoking one needs no credential -- which
+    // makes them the cheapest rows in the table to force.
+    for (const digest of ["NEXT_REDIRECT;replace;/login;307;", "NEXT_NOT_FOUND"]) {
+      await recordRequestError(new Error(digest), {} as never, context("/coach"))
     }
 
     expect(events()).toHaveLength(0)
   })
 
-  it("still records a genuine fault once the noise has been turned away", async () => {
-    await recordRequestError(new Error("NEXT_REDIRECT;replace;/login;307;"), {} as never, context("/coach"))
-    await recordRequestError(new Error("TypeError: ledger is undefined"), {} as never, context("/coach"))
+  it("records a genuine fault whose message merely mentions a refusal", async () => {
+    /*
+     * The first version of the filter matched those words anywhere in the
+     * message, so a real fault that happened to mention them was thrown away --
+     * and a caller who could influence an error message had a "do not record me"
+     * switch. It matches the framework's digest shape now, anchored.
+     */
+    await recordRequestError(
+      new Error("TypeError: cannot read 'Authentication required' banner"),
+      {} as never,
+      context("/coach"),
+    )
 
     expect(events()).toHaveLength(1)
-    expect(events()[0]!.routePath).toBe("/coach")
   })
 })

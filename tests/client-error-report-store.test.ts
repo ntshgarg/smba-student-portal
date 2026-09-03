@@ -167,13 +167,24 @@ describe("what an unauthenticated caller cannot make this table do", () => {
     expect(storedReports()).toHaveLength(50)
   })
 
-  it("does not let one saturated route mute the reports from every other one", () => {
+  it("cannot be evaded by inventing a route, because the route is the caller's to choose", () => {
     /*
-     * A single global ceiling closed the growth hole and opened a quieter one:
-     * a stranger filled the window with junk and every genuine report from every
-     * real browser was dropped for ten minutes -- the telemetry an operator
-     * would consult during an incident, silenced by whoever caused it.
+     * Counted per route this was unreachable by construction: `routePath` is
+     * whatever the caller sends, so a fresh one each time gave every request its
+     * own ceiling -- 200 rows in under four seconds from one client.
      */
+    const outcomes = Array.from({ length: 250 }, (_, index) => recordClientErrorReport({
+      accountId: null,
+      report: { ...report, routePath: `/invented-${index}`, summary: `flood ${index}` },
+    }, { database, now: NOW }))
+
+    expect(outcomes.filter((outcome) => outcome === "recorded")).toHaveLength(50)
+    expect(storedReports()).toHaveLength(50)
+  })
+
+  it("does not let one flooding reporter silence a different one", () => {
+    // A ceiling shared by everyone is a mute button a stranger owns. Keyed on
+    // the reporter, a flood costs the flooder their own budget.
     for (let index = 0; index < 200; index += 1) {
       recordClientErrorReport({
         accountId: null,
@@ -182,7 +193,7 @@ describe("what an unauthenticated caller cannot make this table do", () => {
     }
 
     expect(recordClientErrorReport({
-      accountId: null,
+      accountId: INITIAL_COACH_ACCOUNT_ID,
       report: { ...report, routePath: "/player/reports", summary: "a real fault elsewhere" },
     }, { database, now: NOW })).toBe("recorded")
   })

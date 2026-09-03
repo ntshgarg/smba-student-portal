@@ -23,17 +23,20 @@ import { operationalEvents } from "@/lib/db/schema"
  * counted per route can be spread across routes to defeat it.
  */
 const DUPLICATE_WINDOW_MS = 10 * 60_000
-const ROUTE_WINDOW_CEILING = 50
-const GLOBAL_WINDOW_CEILING = 500
 
 /*
  * A refused authorization is a decision, not a fault. Recording one costs a
  * durable row for something working exactly as designed -- and these are the
  * cheapest rows to force, because provoking a refusal needs no credential.
  */
-// Unanchored on purpose: a real Next redirect arrives as a bare `digest` of
-// "NEXT_REDIRECT;...", but a thrown Error reaches here as "Error:NEXT_REDIRECT;...".
-const DECIDED_REFUSALS = /NEXT_REDIRECT|NEXT_NOT_FOUND|access is required|Authentication required/u
+/*
+ * Anchored, and matched against the framework's own digest shape rather than
+ * against prose. Unanchored it did both halves of the wrong thing: a genuine
+ * fault whose message happened to contain "Authentication required" was thrown
+ * away, and any path reaching here without a digest turned it into a
+ * "do not record me" switch a caller could type into an error message.
+ */
+const FRAMEWORK_CONTROL_FLOW = /^(?:Error:)?NEXT_(?:REDIRECT|NOT_FOUND)(?:[;:]|$)/u
 
 export const recordRequestError: Instrumentation.onRequestError = async (
   error,
@@ -46,21 +49,12 @@ export const recordRequestError: Instrumentation.onRequestError = async (
       : error instanceof Error
         ? `${error.name}:${error.message}`
         : String(error)
-    if (DECIDED_REFUSALS.test(digest)) return
+    if (FRAMEWORK_CONTROL_FLOW.test(digest)) return
     const fingerprint = createHash("sha256").update(digest).digest("hex")
 
     const database = initializeDatabase()
     const routePath = context.routePath.slice(0, 240)
     const windowStart = new Date(Date.now() - DUPLICATE_WINDOW_MS)
-    const recent = database.select({ id: operationalEvents.id })
-      .from(operationalEvents)
-      .where(and(
-        gte(operationalEvents.occurredAt, windowStart),
-        eq(operationalEvents.eventType, "application_error"),
-      ))
-      .all()
-    if (recent.length >= GLOBAL_WINDOW_CEILING) return
-
     const sameShape = database.select({ id: operationalEvents.id })
       .from(operationalEvents)
       .where(and(
@@ -71,14 +65,22 @@ export const recordRequestError: Instrumentation.onRequestError = async (
       .get()
     if (sameShape) return
 
-    const sameRoute = database.select({ id: operationalEvents.id })
-      .from(operationalEvents)
-      .where(and(
-        gte(operationalEvents.occurredAt, windowStart),
-        eq(operationalEvents.routePath, routePath),
-      ))
-      .all()
-    if (sameRoute.length >= ROUTE_WINDOW_CEILING) return
+    /*
+     * The dedupe above is the bound, and it is deliberately the only one.
+     *
+     * A global ceiling was tried and it was a kill switch a stranger owned:
+     * five hundred cheap inserts, under a request a second, silenced every
+     * genuine production fault on every route for ten minutes -- including the
+     * faults caused by whatever they did next. That is the same failure the
+     * client-side twin was redesigned away from, and this path had copied the
+     * shape rather than the lesson.
+     *
+     * What is left bounds the table without ever hiding a fault: one row per
+     * (fingerprint, route) per window. A caller can only add rows by producing
+     * genuinely distinct faults on distinct real routes, and a shape nobody has
+     * seen this window is always admitted -- which is the one property an
+     * operator needs during an incident.
+     */
 
     database.insert(operationalEvents).values({
       id: randomUUID(),

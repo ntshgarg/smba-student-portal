@@ -26,7 +26,11 @@ import {
   coachProfiles,
   playerEnrollments,
 } from "@/lib/db/schema"
-import { authSubjectHash, writeAuthSecurityEvent } from "@/lib/auth/security-context"
+import {
+  UNKNOWN_IP_HASH,
+  authSubjectHash,
+  writeAuthSecurityEvent,
+} from "@/lib/auth/security-context"
 
 const MIN_PASSWORD_LENGTH = 12
 const MAX_PASSWORD_LENGTH = 128
@@ -633,12 +637,36 @@ export async function verifyPinLogin(input: {
  */
 const ACCOUNT_WIDE_FAILURE_THRESHOLD = 50
 
+/*
+ * The per-address ceiling is dropped when the address is the shared "unknown"
+ * bucket, and that omission is the whole point of this function.
+ *
+ * `ip:<hash>` refuses *every* account from that address. That is correct for a
+ * real client address and catastrophic for a synthetic one: with no forwarded
+ * header configured -- the default, and what an earlier comment here
+ * recommended as "the safe direction" -- every caller in the world shares one
+ * hash, so twenty failed logins against twenty different accounts denied the
+ * entire portal, coaches and players alike, for fifteen minutes and renewably
+ * at about one request a minute. Reproduced against a live build.
+ *
+ * A deployment behind a CDN in front of nginx lands in the same shape: the last
+ * forwarded hop is the CDN's egress address, shared by every visitor. Such a
+ * deployment should leave SMBA_FORWARDED_IP_HEADER unset rather than name a
+ * header whose last hop is not the client.
+ *
+ * What is left when it is dropped: five guesses per account per address, and
+ * fifty per account from everywhere. Password spraying across many accounts
+ * from one unidentifiable address is bounded only by the per-account ceiling --
+ * which is the honest cost of not being able to tell callers apart, and is a
+ * far smaller harm than handing a stranger an off switch for the portal.
+ */
 function attemptKeys(subjectHash: string, ipHash: string) {
-  return [
+  const keys = [
     { key: `subject:${subjectHash}:${ipHash}`, threshold: 5 },
     { key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD },
-    { key: `ip:${ipHash}`, threshold: 20 },
   ]
+  if (ipHash !== UNKNOWN_IP_HASH) keys.push({ key: `ip:${ipHash}`, threshold: 20 })
+  return keys
 }
 
 export function loginIsBlocked(input: {
@@ -726,6 +754,14 @@ export function recordLoginSuccess(subjectHash: string, {
 }: {
   database?: SmbaDatabaseExecutor
 } = {}) {
+  // The LIKE below interpolates this value. Every caller today routes it through
+  // authSubjectHash, so it is 64 hex characters and carries no wildcard -- but
+  // that was an assertion in a comment and nothing enforced it. A future caller
+  // passing a raw academy ID or an email would let a "%" clear every other
+  // account's counters.
+  if (!/^[0-9a-f]{64}$/u.test(subjectHash)) {
+    throw new Error("recordLoginSuccess requires a hashed subject.")
+  }
   database.delete(authLoginAttempts)
     .where(or(
       eq(authLoginAttempts.key, `subject:${subjectHash}`),
