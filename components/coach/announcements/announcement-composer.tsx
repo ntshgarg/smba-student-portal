@@ -284,17 +284,16 @@ function ReviewDialog({
 
         {values.channels.some(announcementChannelIsPublic) ? (
           /*
-           * Shown only for the public channel, so it stays meaningful. The
-           * second sentence matters as much as the first: withdrawal is the
-           * emergency stop a coach reaches for when they realise a message
-           * named a child, and it does not take effect at once -- the public
-           * endpoint is served with `stale-while-revalidate`, so a copy can keep
-           * being handed out for a few minutes after it is pulled.
+           * Shown only for the public channel, so it stays meaningful rather
+           * than becoming furniture. Two sentences: what happens, and what to do
+           * about it. The second clause is the part a coach cannot guess --
+           * withdrawing takes it off our page, but a search engine or an archive
+           * that already read it keeps its own copy, and nothing we publish
+           * reaches that.
            */
           <p className={styles.publicWarning} role="note">
-            <strong>This will be public.</strong> Anyone on the internet can read it, and other
-            sites may keep a copy. If you withdraw it, it can take a few minutes to disappear
-            everywhere — so check names and photos before you publish.
+            <strong>This will be public.</strong> Anyone on the internet can read it, and copies
+            may stay online even after you withdraw it. Check names and photos first.
           </p>
         ) : null}
 
@@ -579,11 +578,14 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                 </span>
               </label>
             </div>
-            <small
-              id="announcement-channels-help"
-              className={errors.channels ? styles.slipChannelMessage : styles.slipChannelHelp}
-            >
-              {errors.channels ?? "Homepage posts are public and can be cached elsewhere."}
+            {/*
+              * Nothing here but the error. The sentence that used to sit here --
+              * "Homepage posts are public" -- is now under the Homepage box
+              * itself, where the choice is actually made; saying it twice made
+              * the group read as a warning rather than as two options.
+              */}
+            <small id="announcement-channels-help" className={styles.slipChannelMessage}>
+              {errors.channels ?? ""}
             </small>
           </fieldset>
 

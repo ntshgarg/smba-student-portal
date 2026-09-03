@@ -299,18 +299,6 @@
  * nobody. Same position as the error, deliberately quieter: it is standing
  * information, not a problem.
  */
-.slipChannelHelp {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: center;
-  justify-self: end;
-  padding: 4px clamp(12px, 2vw, 20px);
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  line-height: 1.45;
-  text-align: right;
-}
-
 /* The audience under each choice: who actually reads this channel. */
 .slipChannelAudience {
   display: block;
