@@ -1,5 +1,7 @@
 import "server-only"
 
+import { isIP } from "node:net"
+
 import { createHmac, randomUUID } from "node:crypto"
 
 import { authSecurityEvents } from "@/lib/db/schema"
@@ -28,7 +30,15 @@ function digest(value: string) {
  */
 function trustedHeaderValue(value: string | null) {
   const hops = value?.split(",").map((hop) => hop.trim()).filter(Boolean) ?? []
-  return hops.at(-1) || null
+  const lastHop = hops.at(-1) || null
+  /*
+   * It has to look like an address. The value was taken as an opaque string, so
+   * any junk minted its own throttle bucket: rotating "not-an-ip-3" through the
+   * header grew two rows per request with no bound, and walked past the
+   * five-guess per-address ceiling entirely. Anything unparseable falls back to
+   * the shared bucket, which is honest -- we could not identify that caller.
+   */
+  return lastHop && isIP(lastHop) ? lastHop : null
 }
 
 /*

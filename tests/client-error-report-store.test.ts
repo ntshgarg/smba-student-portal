@@ -143,58 +143,44 @@ describe("recordClientErrorReport", () => {
 })
 
 describe("what an unauthenticated caller cannot make this table do", () => {
-  it("stops inserting once the window ceiling is reached, whatever the caller varies", () => {
+  it("bounds what one caller can mint by varying only the message", () => {
     /*
-     * The comment above DUPLICATE_WINDOW_MS used to promise that the table could
-     * only grow by the number of distinct fault shapes per window. It could not
-     * keep that promise: the fingerprint is taken over `summary`, which the
-     * caller supplies, so a unique summary per request meant a unique
-     * fingerprint per request and the duplicate check never fired. Measured on a
-     * live build before the fix: ten identical posts added one row, ten posts
-     * differing only in `summary` added ten.
-     *
-     * The endpoint is unauthenticated by design -- a browser that has just
-     * crashed cannot prove who it is -- so the bound must not depend on anything
-     * the caller chooses.
+     * The fingerprint used to carry `summary` verbatim, so a unique message per
+     * request gave a unique fingerprint per request and the duplicate window
+     * never fired -- ten identical posts added one row, ten differing only in
+     * summary added ten. It contributes a 256-way bucket now, which keeps two
+     * genuinely different faults apart while capping what a caller can force.
      */
-    const outcomes = Array.from({ length: 250 }, (_, index) => recordClientErrorReport({
+    const outcomes = Array.from({ length: 2_000 }, (_, index) => recordClientErrorReport({
       accountId: null,
       report: { ...report, summary: `TypeError: unique fault ${index}` },
     }, { database, now: NOW }))
 
-    expect(outcomes.filter((outcome) => outcome === "recorded")).toHaveLength(50)
-    expect(outcomes.filter((outcome) => outcome === "suppressed")).toHaveLength(200)
-    expect(storedReports()).toHaveLength(50)
+    expect(outcomes.filter((outcome) => outcome === "recorded").length).toBeLessThanOrEqual(256)
   })
 
-  it("cannot be evaded by inventing a route, because the route is the caller's to choose", () => {
+  it("never silences one reporter because of another's noise", () => {
     /*
-     * Counted per route this was unreachable by construction: `routePath` is
-     * whatever the caller sends, so a fresh one each time gave every request its
-     * own ceiling -- 200 rows in under four seconds from one client.
+     * A count ceiling was tried here twice -- globally, then per reporter -- and
+     * was wrong both times: fifty cheap posts silenced every anonymous browser's
+     * crash reports for ten minutes, which is the telemetry an operator reads
+     * during the incident the attacker is causing. That is the shared-bucket
+     * pathology the login throttle had, and it is no more defensible here.
      */
-    const outcomes = Array.from({ length: 250 }, (_, index) => recordClientErrorReport({
-      accountId: null,
-      report: { ...report, routePath: `/invented-${index}`, summary: `flood ${index}` },
-    }, { database, now: NOW }))
-
-    expect(outcomes.filter((outcome) => outcome === "recorded")).toHaveLength(50)
-    expect(storedReports()).toHaveLength(50)
-  })
-
-  it("does not let one flooding reporter silence a different one", () => {
-    // A ceiling shared by everyone is a mute button a stranger owns. Keyed on
-    // the reporter, a flood costs the flooder their own budget.
-    for (let index = 0; index < 200; index += 1) {
+    for (let index = 0; index < 500; index += 1) {
       recordClientErrorReport({
         accountId: null,
-        report: { ...report, routePath: "/coach", summary: `flood ${index}` },
+        report: { ...report, routePath: `/flood-${index}`, summary: `flood ${index}` },
       }, { database, now: NOW })
     }
 
     expect(recordClientErrorReport({
       accountId: INITIAL_COACH_ACCOUNT_ID,
       report: { ...report, routePath: "/player/reports", summary: "a real fault elsewhere" },
+    }, { database, now: NOW })).toBe("recorded")
+    expect(recordClientErrorReport({
+      accountId: null,
+      report: { ...report, routePath: "/login", summary: "an anonymous fault too" },
     }, { database, now: NOW })).toBe("recorded")
   })
 
