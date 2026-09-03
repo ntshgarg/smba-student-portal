@@ -42,6 +42,22 @@ function suggestedEffectiveDate(
  * submit and never names where the bound comes from. Let any date be picked, then say
  * which bound it crosses and where that bound is changed.
  */
+/**
+ * True when the bound the chosen date crosses is the player's own training start
+ * rather than the series'. That is the one the coach can move, and it lives on
+ * the Assessment step -- so this is what decides whether the note offers a way
+ * back to it.
+ */
+export function trainingStartIsTheBlockingBound(
+  item: PlayerOnboardingCase,
+  series: TrainingSessionSeries | null,
+  effectiveFrom: string,
+) {
+  if (!series || !effectiveFrom) return false
+  if (effectiveFrom >= firstDayForSeries(item, series)) return false
+  return (item.trainingStartOn ?? "") > series.startsOn
+}
+
 export function effectiveFromViolation(
   item: PlayerOnboardingCase,
   series: TrainingSessionSeries | null,
@@ -91,11 +107,13 @@ type SessionStepFeedback = SaveFeedback & {
 
 export function SessionStep({
   item,
+  onGoToStage,
   onSuccess,
   referenceDate,
   sessionSeries,
 }: {
   item: PlayerOnboardingCase
+  onGoToStage?: (stage: "assessment") => void
   onSuccess: (input: { message: string }) => void
   referenceDate: string
   sessionSeries: TrainingSessionSeries[]
@@ -122,6 +140,7 @@ export function SessionStep({
   const weekdaysInvalid = feedback?.tone === "error" && feedback.field === "weekdays"
   const selectedSeries = options.find((series) => series.id === seriesId) ?? null
   const rangeViolation = effectiveFromViolation(item, selectedSeries, effectiveFrom)
+  const trainingStartBlocks = trainingStartIsTheBlockingBound(item, selectedSeries, effectiveFrom)
   // The legend already states the count this plan needs, so an unmet count is
   // visible without being told. The submit handler keeps its message for the
   // paths this cannot reach.
@@ -309,6 +328,22 @@ export function SessionStep({
       {rangeViolation ? (
         <p className={styles.backdateNote} id={rangeNoteId} role="alert">
           {rangeViolation}
+          {/*
+            * The message has always named Assessment as the place to fix this.
+            * Until the rail became navigable that was advice about a screen the
+            * coach could not open, which is how a session starting before the
+            * player's seeded start date became unassignable rather than merely
+            * awkward. Offer the step itself.
+            */}
+          {trainingStartBlocks && onGoToStage ? (
+            <button
+              className={styles.inlineStepLink}
+              onClick={() => onGoToStage("assessment")}
+              type="button"
+            >
+              Go to Assessment
+            </button>
+          ) : null}
         </p>
       ) : effectiveFrom < referenceDate ? (
         <p className={styles.backdateNote}>

@@ -352,7 +352,8 @@
   list-style: none;
 }
 
-.stepRail li {
+.stepRail li,
+.stepRail li > button {
   display: grid;
   grid-template-columns: 29px minmax(0, 1fr);
   align-items: center;
@@ -360,7 +361,31 @@
   color: var(--steel);
 }
 
-.stepRail li > span {
+/*
+ * A step the case has already reached is a button back to it. It must read as
+ * part of the rail rather than as a control bolted onto it, so it borrows the
+ * li's own grid and keeps none of the button chrome.
+ */
+.stepRail li > button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stepRail li > button:hover strong,
+.stepRail li > button:focus-visible strong {
+  color: var(--navy);
+}
+
+.stepRail li > button:hover span {
+  border-color: var(--navy);
+}
+
+.stepRail li span {
   display: grid;
   width: 28px;
   height: 28px;
@@ -374,7 +399,7 @@
   font-weight: var(--weight-emphasis);
 }
 
-.stepRail li > span svg {
+.stepRail li span svg {
   width: 13px;
   height: 13px;
 }
@@ -386,7 +411,7 @@
   text-transform: uppercase;
 }
 
-.stepRail .completeStep > span {
+.stepRail .completeStep span {
   border-color: var(--green);
   background: var(--green-soft);
   color: var(--green);
@@ -396,7 +421,7 @@
   color: var(--navy);
 }
 
-.stepRail .currentStep > span {
+.stepRail .currentStep span {
   border: 2px solid var(--red);
   color: var(--red);
 }
@@ -1226,7 +1251,7 @@
     letter-spacing: 0.03em;
   }
 
-  .stepRail li > span {
+  .stepRail li span {
     width: 27px;
     height: 27px;
   }
@@ -1331,4 +1356,33 @@
   .recoveryPanel .primaryButton {
     width: 100%;
   }
+}
+
+/* Shown when the coach has gone back to a step the case already passed. */
+.revisitNote {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border-left: 2px solid var(--red);
+  background: var(--paper);
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  line-height: 1.5;
+}
+
+/* The fix offered inside a blocking note, sitting on the sentence that names it. */
+.inlineStepLink {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--navy);
+  font: inherit;
+  font-weight: var(--weight-emphasis);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inlineStepLink:hover,
+.inlineStepLink:focus-visible {
+  color: var(--red);
 }

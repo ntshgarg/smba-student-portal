@@ -7,21 +7,66 @@ import type { PlayerOnboardingStage } from "@/lib/coach/onboarding"
 import styles from "../player-onboarding-register.module.css"
 import { folio, STAGES } from "./shared"
 
-export function StepRail({ current }: { current: PlayerOnboardingStage }) {
+/**
+ * The rail was a picture of progress: an `<ol>` of `<span>`/`<strong>` with
+ * nothing to press. Combined with the editor rendering only the step matching
+ * the server-derived stage, that made onboarding a one-way street -- once a step
+ * saved, its form stopped existing, and the Session step's own error text
+ * ("Change the training start date in Assessment to start earlier") named a
+ * screen the coach could no longer reach. The only way back was the destructive
+ * reset in Fee Plan, which is refused outright once any attendance, fee or
+ * charge row exists.
+ *
+ * So the rail is the navigation now. A step the case has already reached is a
+ * button; a step ahead of it stays inert, because nothing there can be filled in
+ * before the steps before it are. `request` is never a button: approval
+ * allocates an Academy ID and there is no path that gives one back.
+ */
+export function StepRail({
+  current,
+  onSelect,
+  reachedStage,
+}: {
+  current: PlayerOnboardingStage
+  onSelect?: (stage: PlayerOnboardingStage) => void
+  reachedStage: PlayerOnboardingStage
+}) {
   const currentIndex = STAGES.findIndex((stage) => stage.key === current)
+  const reachedIndex = STAGES.findIndex((stage) => stage.key === reachedStage)
 
   return (
     <ol className={styles.stepRail} aria-label="Academy onboarding progress">
       {STAGES.map((stage, index) => {
-        const complete = index < currentIndex
+        const complete = index < reachedIndex
+        const marker = <span>{complete ? <Check aria-hidden="true" /> : folio(index)}</span>
+        const label = <strong>{stage.label}</strong>
+        // Index 0 is `request`; see the note above on why it is never navigable.
+        const navigable = Boolean(onSelect)
+          && index > 0
+          && index <= reachedIndex
+          && index !== currentIndex
+
         return (
           <li
             className={complete ? styles.completeStep : index === currentIndex ? styles.currentStep : ""}
             key={stage.key}
             aria-current={index === currentIndex ? "step" : undefined}
           >
-            <span>{complete ? <Check aria-hidden="true" /> : folio(index)}</span>
-            <strong>{stage.label}</strong>
+            {navigable ? (
+              <button
+                aria-label={`Go back to ${stage.label}`}
+                onClick={() => onSelect?.(stage.key)}
+                type="button"
+              >
+                {marker}
+                {label}
+              </button>
+            ) : (
+              <>
+                {marker}
+                {label}
+              </>
+            )}
           </li>
         )
       })}
