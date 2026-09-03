@@ -616,57 +616,80 @@ export async function verifyPinLogin(input: {
     : null
 }
 
+
 /*
- * Three ceilings, and the account-wide one is load-bearing.
+ * Which ceilings apply depends on whether the caller's address means anything.
  *
- * It was originally the only one: `subject:<hash>` at five. That made an
- * unauthenticated lockout trivial -- five wrong guesses from anywhere refused
- * the person holding the real password -- so it was replaced by the pair below.
- * Replacing it was a worse mistake than the bug it fixed. Every remaining key
- * then named the caller's own address, which on any deployment reading a
- * forwarded header is a value the caller writes: rotating it bought a fresh
- * budget every five guesses. Measured against a live build, 76 guesses per
- * second with nothing refusing them, which takes a six-digit PIN in hours.
+ * When it does -- a platform header on Vercel, or a proxy header the deployment
+ * names -- three keys: five guesses per account per address, fifty per account
+ * from everywhere, twenty per address across all accounts.
  *
- * So the account key comes back, at a threshold a person never reaches and an
- * attacker pays fifty requests per fifteen minutes to hold. That is a real
- * residual: someone determined can still deny one account, ten times more
- * expensively than before. It is the smaller harm. A cap that no request
- * attribute can rotate is the only thing standing between a six-digit PIN and
- * an afternoon, and a denial is recoverable where a takeover is not.
+ * When it does not, `ipHash` is one constant shared by every caller on earth,
+ * and that changes what the keys MEAN rather than merely weakening them. The
+ * previous round kept the pair key in that case, not noticing that
+ * `subject:<hash>:<constant>` is simply a second account-wide key with a
+ * threshold of five: so denial cost five requests rather than the fifty its own
+ * comment claimed, and the fifty-key could never be reached because the five-key
+ * blocked first. The comment and the behaviour disagreed by an order of
+ * magnitude. Measured: five wrong passwords refused the holder of the right one.
+ *
+ * So in the shared case only the account-wide key applies. A ceiling nobody can
+ * be told apart on must never be cheap, and it must never be per-caller when
+ * there is no caller to be per.
+ *
+ * What this does not fix, and cannot here: with no attributable address there is
+ * nothing to bound one machine guessing five secrets against every account in
+ * turn. That is metered by `unknownBucketDelayMs` below, which slows rather than
+ * refuses -- a bucket the whole world shares may take everyone's time, never
+ * anyone's access.
  */
 const ACCOUNT_WIDE_FAILURE_THRESHOLD = 50
 
-/*
- * The per-address ceiling is dropped when the address is the shared "unknown"
- * bucket, and that omission is the whole point of this function.
- *
- * `ip:<hash>` refuses *every* account from that address. That is correct for a
- * real client address and catastrophic for a synthetic one: with no forwarded
- * header configured -- the default, and what an earlier comment here
- * recommended as "the safe direction" -- every caller in the world shares one
- * hash, so twenty failed logins against twenty different accounts denied the
- * entire portal, coaches and players alike, for fifteen minutes and renewably
- * at about one request a minute. Reproduced against a live build.
- *
- * A deployment behind a CDN in front of nginx lands in the same shape: the last
- * forwarded hop is the CDN's egress address, shared by every visitor. Such a
- * deployment should leave SMBA_FORWARDED_IP_HEADER unset rather than name a
- * header whose last hop is not the client.
- *
- * What is left when it is dropped: five guesses per account per address, and
- * fifty per account from everywhere. Password spraying across many accounts
- * from one unidentifiable address is bounded only by the per-account ceiling --
- * which is the honest cost of not being able to tell callers apart, and is a
- * far smaller harm than handing a stranger an off switch for the portal.
- */
 function attemptKeys(subjectHash: string, ipHash: string) {
-  const keys = [
+  if (ipHash === UNKNOWN_IP_HASH) {
+    return [{ key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD }]
+  }
+  return [
     { key: `subject:${subjectHash}:${ipHash}`, threshold: 5 },
     { key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD },
+    { key: `ip:${ipHash}`, threshold: 20 },
   ]
-  if (ipHash !== UNKNOWN_IP_HASH) keys.push({ key: `ip:${ipHash}`, threshold: 20 })
-  return keys
+}
+
+/*
+ * How long a caller in the shared "unknown" bucket waits before an answer.
+ *
+ * With no attributable address, nothing can bound one machine guessing five
+ * secrets against every account in turn -- measured at 39 requests a second, so
+ * five common PINs against a hundred-child roster takes seconds. Refusing is not
+ * available: a bucket the whole world shares must never deny anybody.
+ *
+ * Taking their time is available. The delay rises with how much failure that
+ * shared bucket has seen recently and is capped, so a spray runs at a few
+ * attempts a second instead of forty while an honest person mistyping once pays
+ * nothing. It is a tax, not a gate, and it is second best -- naming a forwarded
+ * header the proxy actually writes is what makes the real ceilings work.
+ */
+const UNKNOWN_BUCKET_DELAY_STEP_MS = 250
+const UNKNOWN_BUCKET_DELAY_CAP_MS = 2_000
+
+export function unknownBucketDelayMs(ipHash: string, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  if (ipHash !== UNKNOWN_IP_HASH) return 0
+  const windowStart = new Date(now.getTime() - LOGIN_WINDOW_MS)
+  const recentFailures = database.select({ failedCount: authLoginAttempts.failedCount })
+    .from(authLoginAttempts)
+    .where(gt(authLoginAttempts.windowStartedAt, windowStart))
+    .all()
+    .reduce((total, row) => total + row.failedCount, 0)
+  // Free for the first handful, so one mistyped password costs nobody anything.
+  if (recentFailures <= 10) return 0
+  return Math.min((recentFailures - 10) * UNKNOWN_BUCKET_DELAY_STEP_MS, UNKNOWN_BUCKET_DELAY_CAP_MS)
 }
 
 export function loginIsBlocked(input: {

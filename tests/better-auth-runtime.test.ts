@@ -317,9 +317,10 @@ describe("Better Auth runtime adapter", () => {
     })).rejects.toThrow()
   })
 
-  // The regression test for the PIN endpoint bypass. POST /api/auth/sign-in/pin
-  // is served publicly by app/api/auth/[...all]/route.ts, so it must spend the
-  // same account/IP budget the login form does. When the guard lived only in
+  // The regression test for the PIN endpoint bypass. `auth.api.signInPin` must
+  // spend the same account/IP budget the login form does. (The public HTTP
+  // router that also reached it is gone -- it faulted on every request and
+  // nothing in the app called it.) When the guard lived only in
   // `loginWithPin`, this endpoint recorded nothing: fifty wrong PINs left
   // auth_login_attempts empty and the account unlocked, which left a six-digit
   // PIN on a minor's account open to unlimited guessing with nothing written for
@@ -327,6 +328,12 @@ describe("Better Auth runtime adapter", () => {
   // instance, not a mock, because a mock is exactly what hid this.
   it("spends the shared account lockout on direct PIN sign-in attempts", async () => {
     clearLoginAttempts()
+    // Names the header a proxied deployment would set, because the five-per-
+    // address ceiling this case pins only exists where an address is
+    // attributable. With none configured every caller shares one bucket, and
+    // the only ceiling there is the account-wide fifty -- deliberately, since a
+    // bucket the whole world shares must never refuse anybody cheaply.
+    process.env.SMBA_FORWARDED_IP_HEADER = "x-forwarded-for"
     const { auth } = await import("@/lib/auth/better-auth").then(async (module) => ({
       auth: module.getAuth(),
     }))

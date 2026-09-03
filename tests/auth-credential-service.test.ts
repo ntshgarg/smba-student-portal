@@ -290,6 +290,52 @@ describe("production credential lifecycle", () => {
     })
   })
 
+  it("does not make the shared bucket a cheap lockout when no address is attributable", async () => {
+    /*
+     * When nothing identifies the caller, `subject:<hash>:<ipHash>` is not a
+     * per-address key at all -- ipHash is one constant for every caller on
+     * earth, so it is a second account-wide key with a threshold of five. An
+     * earlier round kept it there and the effect was that denying any account
+     * cost five requests, not the fifty its own comment claimed, and the fifty
+     * key could never fire because the five key blocked first.
+     */
+    const { UNKNOWN_IP_HASH } = await import("@/lib/auth/security-context")
+    const shared = { subjectHash: subjectFor("victim-account"), ipHash: UNKNOWN_IP_HASH }
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      recordLoginFailure(shared, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+    expect(loginIsBlocked(shared, { database, now: NOW })).toBe(false)
+
+    for (let attempt = 10; attempt < 50; attempt += 1) {
+      recordLoginFailure(shared, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+    expect(loginIsBlocked(shared, { database, now: NOW })).toBe(true)
+  })
+
+  it("taxes a flood in the shared bucket without ever refusing anyone", async () => {
+    /*
+     * Refusing is not available when the bucket is shared, so the only lever is
+     * time. Measured before this: 39 requests a second, which puts five common
+     * PINs against a hundred-child roster inside a few seconds.
+     */
+    const { UNKNOWN_IP_HASH } = await import("@/lib/auth/security-context")
+    const { unknownBucketDelayMs } = await import("@/lib/auth/credential-service")
+
+    expect(unknownBucketDelayMs(UNKNOWN_IP_HASH, { database, now: NOW })).toBe(0)
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      recordLoginFailure({
+        ipHash: UNKNOWN_IP_HASH,
+        subjectHash: subjectFor(`sprayed-${attempt}`),
+      }, { database, now: new Date(NOW.getTime() + attempt) })
+    }
+
+    expect(unknownBucketDelayMs(UNKNOWN_IP_HASH, { database, now: NOW })).toBeGreaterThan(0)
+    // An attributable caller is never taxed for somebody else's flood.
+    expect(unknownBucketDelayMs("a-real-address-hash", { database, now: NOW })).toBe(0)
+  })
+
   it("bounds guessing against one account however many addresses it comes from", () => {
     /*
      * The first attempt at the lockout fix keyed every ceiling on the caller's

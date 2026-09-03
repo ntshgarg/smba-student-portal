@@ -116,7 +116,16 @@ export const usernameLoginHooks = {
     // outcome this hook does not recognise can never clear a spent budget.
     const returned = context.context.returned
     if (!returned || isAPIError(returned)) {
-      recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+      /*
+       * Only for an Academy ID that names a real account. The ID space is
+       * `SMBA-(HC|JC|PL)-\d{4}` and enumerable, so recording a per-subject row
+       * for one that resolves to nothing let an anonymous caller mint two
+       * throttle rows and an audit event per invented ID -- measured at 400 rows
+       * from 200 IDs, indefinitely sustainable, burying the signals
+       * check-security-signals.mjs exists to raise. A guess at an account that
+       * does not exist has no budget to spend.
+       */
+      if (auditBase.accountId) recordLoginFailure({ ipHash: security.ipHash, subjectHash })
       writeAuthSecurityEvent({
         ...auditBase,
         eventType: "login_failed",
