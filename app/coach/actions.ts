@@ -97,7 +97,7 @@ function runOperationalAction<T>(operation: () => T): OperationalActionResult<T>
  * the compile-time `monthlyFeePaise` table in `lib/finance/config.ts`, and its
  * announcements are fetched in the browser from `/api/public/announcements`, which
  * is `force-dynamic` and so never written to the incremental cache. (That endpoint's
- * freshness comes solely from the `s-maxage=60, stale-while-revalidate=300` header
+ * freshness comes solely from the `s-maxage=60` header
  * it sets on every response; the `revalidatePath("/api/public/announcements")` in
  * `app/coach/announcements/actions.ts` is inert. Do not delete that header believing
  * a revalidation covers it.)

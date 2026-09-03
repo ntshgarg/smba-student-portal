@@ -352,7 +352,8 @@
   list-style: none;
 }
 
-.stepRail li {
+.stepRail li,
+.stepRail li > button {
   display: grid;
   grid-template-columns: 29px minmax(0, 1fr);
   align-items: center;
@@ -360,7 +361,50 @@
   color: var(--steel);
 }
 
-.stepRail li > span {
+/*
+ * A step the case has already reached is a button back to it. It must read as
+ * part of the rail rather than as a control bolted onto it, so it borrows the
+ * li's own grid and keeps none of the button chrome.
+ */
+.stepRail li > button {
+  width: 100%;
+  /*
+   * Vertical padding rather than none: at 28px the marker alone left the target
+   * well under the 44px the rest of this workspace holds to, with a 15px rail
+   * gap as the only separation between two adjacent ones.
+   */
+  padding: var(--space-tight) 0;
+  margin: calc(-1 * var(--space-tight)) 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/*
+ * A pressable step has to look pressable before it is hovered -- on the live
+ * edge the only other cue is the folio number, which the inert steps beyond it
+ * carry too. The underline is on the label, so it survives the marker's own
+ * complete/current colouring.
+ */
+.stepRail li > button strong {
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+
+.stepRail li > button:hover strong,
+.stepRail li > button:focus-visible strong {
+  color: var(--navy);
+  text-decoration-color: currentcolor;
+}
+
+.stepRail li > button:hover span {
+  border-color: currentcolor;
+}
+
+.stepRail li span {
   display: grid;
   width: 28px;
   height: 28px;
@@ -374,7 +418,7 @@
   font-weight: var(--weight-emphasis);
 }
 
-.stepRail li > span svg {
+.stepRail li span svg {
   width: 13px;
   height: 13px;
 }
@@ -386,7 +430,7 @@
   text-transform: uppercase;
 }
 
-.stepRail .completeStep > span {
+.stepRail .completeStep span {
   border-color: var(--green);
   background: var(--green-soft);
   color: var(--green);
@@ -396,7 +440,7 @@
   color: var(--navy);
 }
 
-.stepRail .currentStep > span {
+.stepRail .currentStep span {
   border: 2px solid var(--red);
   color: var(--red);
 }
@@ -1206,16 +1250,30 @@
 
   .stepRail {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
+    /* 6px, not 4: the focus ring sits 5px outside the box, so at 4px a focused
+       step's ring crossed into the step beside it. */
+    gap: 6px;
     margin-bottom: 21px;
   }
 
-  .stepRail li {
+  /*
+   * The button has to restate the stacked layout. The desktop rule gives it the
+   * li's two-column grid, and this breakpoint only re-declares the li -- so a
+   * navigable step kept marker-beside-label, left-aligned, inside a 64.5px
+   * track, while every inert step beside it stacked and centred.
+   */
+  .stepRail li,
+  .stepRail li > button {
     display: grid;
     grid-template-columns: 1fr;
     justify-items: center;
     gap: 6px;
     text-align: center;
+  }
+
+  .stepRail li > button {
+    padding: 6px 0;
+    margin: -6px 0;
   }
 
   /* "Assessment" is the longest unbreakable label and the four-across track is
@@ -1226,7 +1284,7 @@
     letter-spacing: 0.03em;
   }
 
-  .stepRail li > span {
+  .stepRail li span {
     width: 27px;
     height: 27px;
   }
@@ -1331,4 +1389,42 @@
   .recoveryPanel .primaryButton {
     width: 100%;
   }
+}
+
+/* Shown when the coach has gone back to a step the case already passed. */
+.revisitNote {
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border-left: 2px solid var(--red);
+  background: var(--paper);
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  line-height: 1.5;
+}
+
+/* The fix offered under a blocking note, as a sibling of it -- see the comment
+   at its use site for why it is not inside the alert. */
+.backdateFix {
+  margin: 4px 0 0;
+}
+
+.inlineStepLink {
+  /*
+   * 8px of vertical padding, pulled back out with a negative margin, so the
+   * target clears the workspace's touch floor without moving the note.
+   */
+  padding: var(--space-tight) 0;
+  margin: calc(-1 * var(--space-tight)) 0;
+  border: 0;
+  background: none;
+  color: var(--navy);
+  font: inherit;
+  font-weight: var(--weight-emphasis);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inlineStepLink:hover,
+.inlineStepLink:focus-visible {
+  color: var(--red);
 }
