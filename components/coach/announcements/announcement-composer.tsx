@@ -12,6 +12,8 @@ import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-fail
 import { formatDateKey } from "@/lib/format"
 
 import {
+  announcementChannelAudience,
+  announcementChannelIsPublic,
   announcementChannelLabel,
   type AnnouncementChannel,
 } from "./contracts"
@@ -262,7 +264,10 @@ function ReviewDialog({
         <div className={styles.reviewMeta}>
           <div className={styles.channelPills} role="group" aria-label="Announcement locations">
             {values.channels.map((channel) => (
-              <span key={channel}><Check aria-hidden="true" /> {announcementChannelLabel(channel)}</span>
+              <span key={channel}>
+                <Check aria-hidden="true" /> {announcementChannelLabel(channel)}
+                <small>{announcementChannelAudience(channel)}</small>
+              </span>
             ))}
           </div>
           {values.expiresOn ? (
@@ -276,6 +281,22 @@ function ReviewDialog({
             </p>
           ) : null}
         </div>
+
+        {values.channels.some(announcementChannelIsPublic) ? (
+          /*
+           * Shown only for the public channel, so it stays meaningful. The
+           * second sentence matters as much as the first: withdrawal is the
+           * emergency stop a coach reaches for when they realise a message
+           * named a child, and it does not take effect at once -- the public
+           * endpoint is served with `stale-while-revalidate`, so a copy can keep
+           * being handed out for a few minutes after it is pulled.
+           */
+          <p className={styles.publicWarning} role="note">
+            <strong>This will be public.</strong> Anyone on the internet can read it, and other
+            sites may keep a copy. If you withdraw it, it can take a few minutes to disappear
+            everywhere — so check names and photos before you publish.
+          </p>
+        ) : null}
 
         <InlineNotice
           className={styles.dialogNotice}
@@ -520,6 +541,13 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
             <legend className="sr-only">Send to destinations</legend>
             <span className={styles.slipDocketLabel} aria-hidden="true">Send to</span>
             <div className={styles.slipChannelChoices}>
+              {/*
+                * Each choice carries its audience, because the names do not.
+                * "Homepage" reads like the academy's own page -- somewhere
+                * families go -- and it is the public internet. A coach weighing
+                * whether a child's name belongs in a message is weighing it
+                * against that, so it belongs next to the box, not in a doc.
+                */}
               <label>
                 <input
                   checked={values.channels.includes("homepage")}
@@ -528,7 +556,12 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                   type="checkbox"
                   value="homepage"
                 />
-                <span>Homepage</span>
+                <span>
+                  Homepage
+                  <small className={styles.slipChannelAudience}>
+                    {announcementChannelAudience("homepage")}
+                  </small>
+                </span>
               </label>
               <label>
                 <input
@@ -538,14 +571,19 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                   type="checkbox"
                   value="player_dashboard"
                 />
-                <span>Player Dashboard</span>
+                <span>
+                  Player Dashboard
+                  <small className={styles.slipChannelAudience}>
+                    {announcementChannelAudience("player_dashboard")}
+                  </small>
+                </span>
               </label>
             </div>
             <small
               id="announcement-channels-help"
-              className={errors.channels ? styles.slipChannelMessage : "sr-only"}
+              className={errors.channels ? styles.slipChannelMessage : styles.slipChannelHelp}
             >
-              {errors.channels ?? "Choose one or both locations."}
+              {errors.channels ?? "Homepage posts are public and can be cached elsewhere."}
             </small>
           </fieldset>
 
