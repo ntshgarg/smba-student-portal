@@ -191,6 +191,9 @@ describe("revisiting a step whose work is already done", () => {
 
     expect(html).toContain("is already assigned to")
     expect(html).not.toContain('name="effectiveFrom"')
+    // Undoing the step from the step it undoes. Sending a coach two steps
+    // forward to clear the assignment they are looking at was a pure detour.
+    expect(html).toContain("Clear this assignment")
   })
 
   it("still offers the assignment form when the only assignment has ended", () => {

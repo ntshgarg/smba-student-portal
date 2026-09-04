@@ -383,15 +383,23 @@
 }
 
 /*
- * A pressable step has to look pressable before it is hovered -- on the live
- * edge the only other cue is the folio number, which the inert steps beyond it
- * carry too. The underline is on the label, so it survives the marker's own
- * complete/current colouring.
+ * A pressable step has to look pressable before it is hovered. The first attempt
+ * underlined the label in `--line`, which is the colour of a hairline rule --
+ * near-invisible against uppercase 9px text. The head coach, looking straight at
+ * a Fee Plan step with two live buttons above it, concluded the flow was a dead
+ * end. So the cue is the navy the rest of the workspace uses for "this is a
+ * control", carried on both the label and the marker.
  */
 .stepRail li > button strong {
+  color: var(--navy);
   text-decoration: underline;
-  text-decoration-color: var(--line);
+  text-decoration-color: var(--navy-soft);
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+
+.stepRail li > button span {
+  border-color: var(--navy);
 }
 
 .stepRail li > button:hover strong,

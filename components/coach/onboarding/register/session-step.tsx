@@ -4,7 +4,10 @@ import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useRef, useState } from "react"
 
-import { assignOnboardingSessionAction } from "@/app/coach/onboarding/actions"
+import {
+  assignOnboardingSessionAction,
+  resetOnboardingSessionAssignmentAction,
+} from "@/app/coach/onboarding/actions"
 import { InlineNotice } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
@@ -181,6 +184,39 @@ export function SessionStep({
     setFeedback(null)
   }
 
+  /*
+   * Undoing this step, from this step. The server refuses once the player has
+   * attendance, fees or a report on record and now names which -- so the coach
+   * learns what is protecting the assignment rather than that "records" exist.
+   */
+  async function resetAssignment() {
+    if (busy) return
+    setBusy(true)
+    setFeedback(null)
+    let result: Awaited<ReturnType<typeof resetOnboardingSessionAssignmentAction>>
+    try {
+      result = await resetOnboardingSessionAssignmentAction(item.id)
+    } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The session assignment could not be cleared",
+        retained: "Nothing has changed on this player",
+        subject: "Clearing the session assignment",
+      })
+      setFeedback({ message: failure.message, offerRetry: failure.offerRetry, tone: "error" })
+      return
+    } finally {
+      setBusy(false)
+    }
+    if (!result.ok) {
+      setFeedback({ message: result.message, tone: "error" })
+      return
+    }
+    onSuccess({
+      message: `${item.fullName}’s session assignment is cleared. Choose a schedule again.`,
+    })
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || !selectedSeries || !item.academyPlan) return
@@ -267,20 +303,20 @@ export function SessionStep({
           {formatDateKey(item.assignedSession.effectiveFrom)}.
         </strong>
         <p>
-          A schedule cannot be swapped in place. To move this player to a different one, open
-          Fee Plan and reset the session assignment — that clears this assignment and reopens
-          the assessment. Resetting stops being possible once attendance, fees or charges exist
-          against it.
+          A schedule cannot be swapped in place — clearing this assignment is what lets a
+          different one be made, and it reopens the assessment too. It stops being possible
+          once the player has attendance, fees or a report on record, because those would be
+          left attached to nothing.
         </p>
-        {onGoToStage ? (
-          <button
-            className={styles.primaryButton}
-            onClick={() => onGoToStage("feePlan")}
-            type="button"
-          >
-            Go to Fee Plan <ArrowRight aria-hidden="true" />
-          </button>
-        ) : null}
+        {/*
+          * The reset lives here as well as on Fee Plan. This is the step whose
+          * work it undoes, and sending a coach two steps forward to undo the
+          * step they are standing on was a detour with nothing to recommend it.
+          */}
+        <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+        <button disabled={busy} onClick={() => void resetAssignment()} type="button">
+          {busy ? "Clearing…" : "Clear this assignment"}
+        </button>
       </div>
     )
   }
