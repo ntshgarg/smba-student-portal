@@ -61,12 +61,17 @@ function readFixture(): FinanceFixture {
       where a.full_name = 'Finance Regression Player'
     `).get() as { academyId: string; trainingStartOn: string; playerId: string } | undefined
     if (!row) throw new Error("The finance regression player is unavailable.")
+    /*
+     * The month the fee plan opens in IS the month training starts. It used to be
+     * the month after, because the training start was stamped as the day the
+     * registration was approved while the schedule began later -- two dates for
+     * one fact, and the fee plan followed the later of them. They are one date
+     * now, chosen on the Session step with the schedule it belongs to.
+     */
     const today = row.trainingStartOn
-    const firstMonth = new Date(`${today.slice(0, 7)}-01T00:00:00.000Z`)
-    firstMonth.setUTCMonth(firstMonth.getUTCMonth() + 1)
     return {
       academyId: row.academyId,
-      firstFeeMonth: firstMonth.toISOString().slice(0, 7),
+      firstFeeMonth: today.slice(0, 7),
       playerId: row.playerId,
       today,
     }
@@ -144,6 +149,8 @@ async function recordCashPayment(page: Page, playerId: string, amount: string) {
 
 test("coach-to-player finance journey remains atomic, idempotent and private", async ({ browser, page }) => {
   const fixture = readFixture()
+  // The academy bills on IST, so the payable "now" is not the runner's UTC month.
+  const payableMonth = new Date(Date.now() + (5 * 60 + 30) * 60_000).toISOString().slice(0, 7)
   expectHealthyDatabase()
   expect(financeCounts(fixture.playerId)).toEqual({
     agreements: 0,
@@ -202,12 +209,45 @@ test("coach-to-player finance journey remains atomic, idempotent and private", a
   // The browser journey issues next month's full fee to avoid proration. Move
   // only that disposable charge into today's payment horizon to model the
   // month rollover without changing production clock or payment safeguards.
+  /*
+   * The monthly fee is issued for the month the fee plan opens in, which is the
+   * month training starts -- a month that has not arrived, because this journey
+   * is a player signing up for a batch that begins later. Paying it needs it to
+   * be due, so it is moved into the current month here.
+   *
+   * It used to be moved to `fixture.today`, which was the training start and
+   * happened to be the current month back when that date was stamped on the day
+   * the registration was approved. Now that the date is the day the player
+   * actually joins their schedule, that is the future, and a charge due in the
+   * future offers nothing to allocate against.
+   */
+  /*
+   * Brings the monthly fee forward so it can be paid. This journey is a player
+   * signing up for a batch that begins later, so the fee is issued for a month
+   * that has not arrived -- and a fee billed for a future month is not
+   * outstanding, so there is nothing to allocate a payment against.
+   *
+   * Two columns, for two different reasons. `billing_period` is what decides
+   * whether the fee is outstanding. `due_date` is what orders allocation
+   * (lib/finance/repository.ts:948), so it is borrowed from the registration fee
+   * rather than set to the first of the month: dated earlier, the monthly fee
+   * sorts first and swallows the whole payment, and the split this test is about
+   * never happens.
+   *
+   * `description` is deliberately left alone. It is a stored column written when
+   * the charge was issued, so the row keeps reading "Monthly training fee ·
+   * <issued month>" whatever these two say -- which is why the allocation labels
+   * below still use `fixture.firstFeeMonth`.
+   */
   writeDisposableDatabase((database) => {
     const update = database.prepare(`
       update financial_charges
-      set billing_period = ?, due_date = ?
+      set billing_period = ?, due_date = (
+        select due_date from financial_charges
+        where player_account_id = ? and type = 'registration'
+      )
       where player_account_id = ? and type = 'monthly_training'
-    `).run(fixture.today.slice(0, 7), fixture.today, fixture.playerId)
+    `).run(payableMonth, fixture.playerId, fixture.playerId)
     expect(update.changes).toBe(1)
   })
 
@@ -272,13 +312,13 @@ test("coach-to-player finance journey remains atomic, idempotent and private", a
   const playerContext = await (browser as Browser).newContext({ baseURL })
   const playerPage = await playerContext.newPage()
   await login(playerPage, fixture.academyId, "/player")
-  await playerPage.goto(`/player/financials?year=${fixture.today.slice(0, 4)}&month=${fixture.today.slice(0, 7)}`, {
+  await playerPage.goto(`/player/financials?year=${payableMonth.slice(0, 4)}&month=${payableMonth}`, {
     waitUntil: "networkidle",
   })
   await expect(playerPage.getByRole("heading", { name: "Your fee record." })).toBeVisible()
   await expect(playerPage.locator('[data-registration-state="paid"]')).toContainText("Paid")
   await expect(playerPage.locator(
-    `[data-fee-month-cell="${fixture.today.slice(0, 7)}"][data-fee-month-state="paid"]`,
+    `[data-fee-month-cell="${payableMonth}"][data-fee-month-state="paid"]`,
   )).toContainText("Paid")
   await expect(playerPage.locator("[data-fee-receipt-row]")).toHaveCount(2)
   await expect(playerPage.getByText("₹1,500", { exact: true })).toBeVisible()
