@@ -159,11 +159,23 @@
      win, and that is a separate piece of work from a unit substitution that provably
      moves nothing. The 169 other clamp() font sizes in these sheets stay for the same
      reason. */
-  --type-utility-label: 0.6875rem;
-  --type-utility-meta: 0.75rem;
-  --type-operational-body: 0.8125rem;
-  --type-operational-action: 0.75rem;
-  --type-operational-floor: 0.625rem;
+  /* Raised one pixel each on 2026-09-04. The scale had settled a step lower than
+     it should have: the floor was 10px and carried 102 of the 131 tokenised
+     sizes, so the size a coach reads most often across the workspace was the
+     smallest one the system had. Every step keeps its position relative to the
+     others -- floor below label below meta below body -- so this lifts the scale
+     rather than flattening it.
+
+     Each value stays a whole pixel at a 16px root (11/16, 12/16, 13/16, 14/16),
+     which tests/design-tokens.test.ts requires.
+
+     It reaches 131 of the 1,087 font-size declarations in these stylesheets. The
+     rest are still written out longhand and are a separate piece of work. */
+  --type-utility-label: 0.75rem;
+  --type-utility-meta: 0.8125rem;
+  --type-operational-body: 0.875rem;
+  --type-operational-action: 0.8125rem;
+  --type-operational-floor: 0.6875rem;
   /* The coach workspace page title. 5 of the 27 hand-authored base H1 recipes
      declare this exact clamp, every one of them beside the same 545 / -0.075em
      / 0.9. It is *not* the `.page-intro h1` size: the shared PageIntro
