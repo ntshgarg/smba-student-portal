@@ -383,15 +383,23 @@
 }
 
 /*
- * A pressable step has to look pressable before it is hovered -- on the live
- * edge the only other cue is the folio number, which the inert steps beyond it
- * carry too. The underline is on the label, so it survives the marker's own
- * complete/current colouring.
+ * A pressable step has to look pressable before it is hovered. The first attempt
+ * underlined the label in `--line`, which is the colour of a hairline rule --
+ * near-invisible against uppercase 9px text. The head coach, looking straight at
+ * a Fee Plan step with two live buttons above it, concluded the flow was a dead
+ * end. So the cue is the navy the rest of the workspace uses for "this is a
+ * control", carried on both the label and the marker.
  */
 .stepRail li > button strong {
+  color: var(--navy);
   text-decoration: underline;
-  text-decoration-color: var(--line);
+  text-decoration-color: var(--navy-soft);
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+
+.stepRail li > button span {
+  border-color: var(--navy);
 }
 
 .stepRail li > button:hover strong,
@@ -1392,14 +1400,40 @@
 }
 
 /* Shown when the coach has gone back to a step the case already passed. */
+/*
+ * The same treatment as .backdateNote, and for the same reason: this is the
+ * coach being told something about the state they are in, not chrome. A quiet
+ * steel note sat back into the page and was read past; the makeup family is
+ * what this workspace uses for "notice this before you act".
+ */
 .revisitNote {
   margin: 0 0 14px;
-  padding: 9px 12px;
-  border-left: 2px solid var(--red);
-  background: var(--paper);
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--makeup);
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+  font-size: 0.625rem;
+  font-weight: var(--weight-emphasis);
+  line-height: 1.4;
+}
+
+/*
+ * Why three fields are frozen. Same notice treatment as .revisitNote and
+ * .backdateNote -- it answers "why can I not touch this", which the coach needs
+ * before they try, not after the server refuses.
+ *
+ * This class was referenced from assessment-step.tsx without ever being declared
+ * here, so the note rendered with `class="undefined"` and no styling at all.
+ */
+.classificationLockNote {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--makeup);
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+  font-size: 0.625rem;
+  font-weight: var(--weight-emphasis);
+  line-height: 1.4;
 }
 
 /* The fix offered under a blocking note, as a sibling of it -- see the comment
