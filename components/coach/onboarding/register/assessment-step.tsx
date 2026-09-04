@@ -33,8 +33,7 @@ export function AssessmentStep({
   const [level, setLevel] = useState<TrainingProgramme | "">(item.level ?? "")
   const [batch, setBatch] = useState<TrainingBatch | "">(item.batch ?? "")
   const [trainingPlan, setTrainingPlan] = useState<AcademyPlan | "">(item.academyPlan ?? "")
-  const [trainingStartOn, setTrainingStartOn] = useState(item.trainingStartOn ?? "")
-  const [errors, setErrors] = useState<Partial<Record<"trainingStartOn" | "level" | "batch" | "academyPlan", string>>>({})
+  const [errors, setErrors] = useState<Partial<Record<"level" | "batch" | "academyPlan", string>>>({})
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const [busy, setBusy] = useState(false)
   /*
@@ -43,12 +42,18 @@ export function AssessmentStep({
    * the action is held back rather than offered and then refused. The submit
    * handler still validates: this is the affordance, not the check.
    */
-  const classificationIncomplete = !trainingStartOn || !level || !batch || !trainingPlan
+  const classificationIncomplete = !level || !batch || !trainingPlan
   const levelRef = useRef<HTMLSelectElement>(null)
-  const trainingStartRef = useRef<HTMLInputElement>(null)
   const batchRef = useRef<HTMLSelectElement>(null)
   const planRef = useRef<HTMLSelectElement>(null)
-  const isDirty = trainingStartOn !== (item.trainingStartOn ?? "")
+  /*
+   * Tracked the date and only the date before it moved, which meant a coach who
+   * changed the level and navigated away lost it silently. With the date gone
+   * the classification is all this step holds, so it is what the guard watches.
+   */
+  const isDirty = level !== (item.level ?? "")
+    || batch !== (item.batch ?? "")
+    || trainingPlan !== (item.academyPlan ?? "")
     || level !== (item.level ?? "")
     || batch !== (item.batch ?? "")
     || trainingPlan !== (item.academyPlan ?? "")
@@ -90,17 +95,13 @@ export function AssessmentStep({
     event.preventDefault()
     if (busy) return
     const nextErrors: typeof errors = {}
-    if (!/^\d{4}-\d{2}-\d{2}$/u.test(trainingStartOn)) {
-      nextErrors.trainingStartOn = "Choose the player’s training start date."
-    }
     if (!level) nextErrors.level = "Choose the assessed training level."
     if (!batch) nextErrors.batch = "Choose the player’s batch."
     if (!trainingPlan) nextErrors.academyPlan = "Choose the days-per-week Training plan."
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) {
       setFeedback({ message: "Review the highlighted assessment details.", tone: "error" })
-      if (nextErrors.trainingStartOn) trainingStartRef.current?.focus()
-      else if (nextErrors.level) levelRef.current?.focus()
+      if (nextErrors.level) levelRef.current?.focus()
       else if (nextErrors.batch) batchRef.current?.focus()
       else planRef.current?.focus()
       return
@@ -114,7 +115,6 @@ export function AssessmentStep({
       result = await saveOnboardingAssessmentAction({
         playerId: item.id,
         expectedRevision: item.recordRevision,
-        trainingStartOn,
         academyPlan: trainingPlan as AcademyPlan,
         batch: batch as TrainingBatch,
         level: level as TrainingProgramme,
@@ -137,15 +137,13 @@ export function AssessmentStep({
     }
     if (!result.ok) {
       const nextFieldErrors = {
-        trainingStartOn: result.field === "trainingStartOn" ? result.message : undefined,
         level: result.field === "level" ? result.message : undefined,
         batch: result.field === "batch" ? result.message : undefined,
         academyPlan: result.field === "academyPlan" ? result.message : undefined,
       }
       setErrors(nextFieldErrors)
       setFeedback({ message: result.message, tone: "error" })
-      if (nextFieldErrors.trainingStartOn) trainingStartRef.current?.focus()
-      else if (nextFieldErrors.level) levelRef.current?.focus()
+      if (nextFieldErrors.level) levelRef.current?.focus()
       else if (nextFieldErrors.batch) batchRef.current?.focus()
       else if (nextFieldErrors.academyPlan) planRef.current?.focus()
       return
@@ -164,28 +162,6 @@ export function AssessmentStep({
 
   return (
     <form className={styles.compactForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
-      <div className={styles.assessmentDateField}>
-        <label>
-          <span>Training start date</span>
-          <input
-            ref={trainingStartRef}
-            name="trainingStartOn"
-            type="date"
-            required
-            value={trainingStartOn}
-            aria-invalid={Boolean(errors.trainingStartOn)}
-            aria-describedby={`onboarding-${item.id}-training-start-help${errors.trainingStartOn ? ` onboarding-${item.id}-training-start-error` : ""}`}
-            onChange={(event) => {
-              setTrainingStartOn(event.target.value)
-              setErrors((current) => ({ ...current, trainingStartOn: undefined }))
-            }}
-          />
-          <small id={`onboarding-${item.id}-training-start-help`}>
-            Enter the start of the player’s current continuous training period. This becomes permanent when onboarding is completed.
-          </small>
-          {errors.trainingStartOn ? <small id={`onboarding-${item.id}-training-start-error`}>{errors.trainingStartOn}</small> : null}
-        </label>
-      </div>
       {/*
         * The server refuses a level, batch or plan change while an assignment is
         * open (lib/coach/onboarding-service.ts:127-137) and offers reset as the

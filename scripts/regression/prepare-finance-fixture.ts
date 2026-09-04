@@ -104,7 +104,6 @@ const updated = onboardingService.saveOnboardingAssessment({
     expectedRevision: 0,
     level: "Beginner",
     playerId,
-    trainingStartOn: today,
   },
   now,
 })
@@ -128,6 +127,8 @@ const seriesId = sessionService.createSessionSeriesRecords({
 })
 sessionService.assignSessionRecords({
   coachId: coach.id,
+  // The onboarding path: this is where the training start is confirmed now.
+  confirmTrainingStart: true,
   database,
   effectiveFrom: `${firstFeeMonth}-01`,
   now,

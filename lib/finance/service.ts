@@ -964,7 +964,9 @@ function buildOnboardingFinancePreview(
 
   const blockers: string[] = []
   const warnings: string[] = []
-  if (!enrollment.trainingStartConfirmedAt) blockers.push("Confirm the training start date in Assessment.")
+  if (!enrollment.trainingStartConfirmedAt) {
+    blockers.push("Set the training start date on the Session step.")
+  }
   if (trainingStartIsImplausiblyEarly(enrollment.trainingStartOn, academyDateKey)) {
     blockers.push(IMPLAUSIBLE_TRAINING_START_MESSAGE)
   }
@@ -1535,7 +1537,7 @@ export function redateConfirmedTrainingStart(
     if (!enrollment.onboardingCompletedAt) {
       financeError(
         "SETUP_REQUIRED",
-        "Correct the training start date in Assessment while onboarding is unfinished.",
+        "Correct the training start date on the Session step while onboarding is unfinished.",
         "trainingStartOn",
       )
     }

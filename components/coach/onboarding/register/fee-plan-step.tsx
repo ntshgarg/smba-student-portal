@@ -165,7 +165,7 @@ export function FeePlanStep({
       <div className={styles.recoveryPanel}>
         <strong>Fee completion opens on {formatDateKey(item.trainingStartOn)}.</strong>
         <p>The future training date is saved. Assessment and session setup can be prepared now, but fees and the permanent date lock wait until training begins.</p>
-        <p>To change the training start date, go back to Assessment on the step list. Resetting the session assignment is only needed to change the level, batch or Training plan.</p>
+        <p>To change the training start date, go back to Session on the step list — it is set there, with the schedule. Clearing the assignment is only needed to change the level, batch or Training plan.</p>
         <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
           {busy
@@ -403,10 +403,10 @@ export function FeePlanStep({
         * be the only door.
         */}
       <p className={styles.feeNote}>
-        To move the training start date earlier, go back to Assessment on the step list —
-        no reset needed. Resetting is for changing the level, batch or Training plan, and
-        it clears the session assignment. It stops being possible once academy records
-        exist against that assignment.
+        The training start date is set on the Session step, with the schedule it belongs
+        to — go back there to change it. Clearing the assignment is only for changing the
+        level, batch or Training plan, and it stops being possible once the player has
+        attendance, fees or a report on record.
       </p>
       <div className={styles.formActions}>
         <button type="button" disabled={busy} onClick={() => void resetAssignment()}>

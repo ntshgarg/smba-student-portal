@@ -30,7 +30,7 @@ describe("coach-confirmed onboarding assessment", () => {
     return playerId
   }
 
-  function assessment(playerId: string, expectedRevision: number, trainingStartOn: string) {
+  function assessment(playerId: string, expectedRevision: number) {
     return onboardingService.saveOnboardingAssessment({
       coachId,
       database,
@@ -40,10 +40,54 @@ describe("coach-confirmed onboarding assessment", () => {
         expectedRevision,
         level: "Beginner",
         playerId,
-        trainingStartOn,
       },
       now,
     })
+  }
+
+  /*
+   * The training start date is chosen here now, with the schedule that bounds
+   * it. `confirmTrainingStart` is what the onboarding Session step passes and
+   * the Schedules screen does not.
+   */
+  function assignWithStart(playerId: string, seriesId: string, effectiveFrom: string) {
+    return sessionsService.assignSessionRecords({
+      coachId,
+      confirmTrainingStart: true,
+      database,
+      effectiveFrom,
+      now,
+      playerId,
+      seriesId,
+      weekdays: [1, 2, 3],
+    })
+  }
+
+  /* A schedule offering the three weekdays a weekday-3-day plan needs. */
+  function series(startsOn: string, endsOn: string | null = null) {
+    const seriesId = id("series")
+    database.insert(schema.sessionSeries).values({
+      id: seriesId,
+      batch: "Weekday",
+      createdAt: now,
+      createdByAccountId: coachId,
+      endsOn,
+      programme: "Beginner",
+      startsOn,
+      status: "active",
+      title: "Assignment test series",
+      venue: "SMBA Court",
+    }).run()
+    for (const weekday of [1, 2, 3]) {
+      database.insert(schema.sessionRecurrenceRules).values({
+        id: id("recurrence"),
+        seriesId,
+        weekday,
+        startTime: "18:00",
+        durationMinutes: 90,
+      }).run()
+    }
+    return seriesId
   }
 
   function assignment(playerId: string, effectiveFrom: string) {
@@ -144,51 +188,82 @@ describe("coach-confirmed onboarding assessment", () => {
     fs.rmSync(temporaryDirectory, { force: true, recursive: true })
   })
 
-  it("accepts a coach-confirmed date before registration and permits a future start", () => {
-    const backdatedId = approvedPlayer("Backdated Assessment")
-    expect(assessment(backdatedId, 0, "2026-06-10")).toEqual({
-      playerId: backdatedId,
-      recordRevision: 1,
-      trainingStartOn: "2026-06-10",
-    })
+  it("confirms the training start when the session is assigned, not at assessment", () => {
+    /*
+     * The date used to be typed on the Assessment step, where the schedule it has
+     * to sit inside is not yet known -- so a coach could pick a day before the
+     * sessions existed. It buys nothing (assignment, attendance and the fee
+     * timeline are all floored at the schedule anyway) except a first monthly fee
+     * dated before the player's first ever session.
+     */
+    const playerId = approvedPlayer("Assigned Start")
+    expect(assessment(playerId, 0)).toEqual({ playerId, recordRevision: 1 })
     expect(database.select().from(schema.playerEnrollments)
-      .where(eq(schema.playerEnrollments.accountId, backdatedId)).get())
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get())
+      .toMatchObject({ trainingStartConfirmedAt: null })
+
+    assignWithStart(playerId, series("2026-07-01"), "2026-07-15")
+    expect(database.select().from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get())
       .toMatchObject({
         trainingStartConfirmedAt: now,
         trainingStartConfirmedByAccountId: coachId,
-        trainingStartOn: "2026-06-10",
+        trainingStartOn: "2026-07-15",
       })
-
-    const futureId = approvedPlayer("Future Assessment")
-    expect(assessment(futureId, 0, "2026-09-01")).toMatchObject({
-      trainingStartOn: "2026-09-01",
-    })
   })
 
-  it("refuses a confirmed date beyond the backfill window", () => {
-    const playerId = approvedPlayer("Implausible Assessment")
+  it("refuses a start before the schedule the player is joining", () => {
+    const playerId = approvedPlayer("Early Start")
+    assessment(playerId, 0)
 
-    expect(() => assessment(playerId, 0, "2023-08-18")).toThrow(expect.objectContaining({
-      code: "INVALID_INPUT",
-      field: "trainingStartOn",
-    }))
+    expect(() => assignWithStart(playerId, series("2026-07-01"), "2026-06-20"))
+      .toThrow(expect.objectContaining({ code: "BUSINESS_RULE", field: "effectiveFrom" }))
     expect(database.select().from(schema.playerEnrollments)
       .where(eq(schema.playerEnrollments.accountId, playerId)).get())
-      .toMatchObject({ recordRevision: 0, trainingStartConfirmedAt: null })
-    expect(assessment(playerId, 0, "2024-09-02")).toMatchObject({
-      trainingStartOn: "2024-09-02",
-    })
+      .toMatchObject({ trainingStartConfirmedAt: null })
   })
 
-  it("requires an unfinished assignment reset before moving the date later", () => {
-    const playerId = approvedPlayer("Reset Assignment")
-    assessment(playerId, 0, "2026-07-01")
-    assignment(playerId, "2026-07-15")
+  it("still refuses a start beyond the backfill window", () => {
+    // The schedule bound makes this hard to reach in practice, but it is the rule
+    // the rest of the codebase states and redateConfirmedTrainingStart enforces.
+    const playerId = approvedPlayer("Implausible Start")
+    assessment(playerId, 0)
 
-    expect(() => assessment(playerId, 1, "2026-08-01")).toThrow(expect.objectContaining({
-      code: "BUSINESS_RULE",
-      field: "trainingStartOn",
-    }))
+    expect(() => assignWithStart(playerId, series("2023-01-01"), "2023-08-18"))
+      .toThrow(expect.objectContaining({ code: "INVALID_INPUT", field: "effectiveFrom" }))
+  })
+
+  it("leaves the confirmed start alone when the flag is not passed", () => {
+    /*
+     * assignSessionRecords is shared with the Schedules screen, which passes no
+     * confirmTrainingStart. Without that split, adding a schedule to an onboarded
+     * player would silently rewrite the billing anchor every issued fee hangs
+     * off, bypassing redateConfirmedTrainingStart entirely.
+     */
+    const playerId = approvedPlayer("Schedules Screen Assign")
+    assessment(playerId, 0)
+
+    sessionsService.assignSessionRecords({
+      coachId,
+      database,
+      // Not the flagged path, so the old floor stands: the seeded approval date.
+      effectiveFrom: "2026-08-20",
+      now,
+      playerId,
+      seriesId: series("2026-07-01"),
+      weekdays: [1, 2, 3],
+    })
+
+    expect(database.select().from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, playerId)).get())
+      .toMatchObject({ trainingStartConfirmedAt: null })
+  })
+
+  it("clears the confirmed start when the assignment is reset", () => {
+    const playerId = approvedPlayer("Reset Assignment")
+    assessment(playerId, 0)
+    assignWithStart(playerId, series("2026-07-01"), "2026-07-15")
+
     expect(onboardingService.resetOnboardingSessionAssignment({
       coachId,
       database,
@@ -200,21 +275,15 @@ describe("coach-confirmed onboarding assessment", () => {
     expect(database.select().from(schema.playerEnrollments)
       .where(eq(schema.playerEnrollments.accountId, playerId)).get())
       .toMatchObject({
-        recordRevision: 2,
         status: "unassigned",
         trainingStartConfirmedAt: null,
         trainingStartConfirmedByAccountId: null,
-        trainingStartOn: "2026-07-01",
       })
-    expect(assessment(playerId, 2, "2026-08-01")).toMatchObject({
-      recordRevision: 3,
-      trainingStartOn: "2026-08-01",
-    })
   })
 
   it("refuses reset when academy records depend on the assignment", () => {
     const playerId = approvedPlayer("Dependent Assignment")
-    assessment(playerId, 0, "2026-08-01")
+    assessment(playerId, 0)
     assignment(playerId, "2026-08-01")
     database.insert(schema.feeAgreements).values({
       id: id("agreement"),
@@ -253,10 +322,20 @@ describe("coach-confirmed onboarding assessment", () => {
    * nothing recorded it -- the rows simply stopped being eligible, because
    * eligibility is `eligibilityDate >= trainingStartOn`.
    */
-  it("refuses to move the date past an ended assignment, keeping its attendance eligible", () => {
+  it("refuses a start later than an ended assignment, keeping its attendance eligible", () => {
+    /*
+     * The guard moved with the date it protects. Ending an assignment does not
+     * unmake the days it rostered the player for: eligibility is
+     * `eligibilityDate >= trainingStartOn`, so confirming a later start would
+     * make already-recorded present days vanish from the player's month, with the
+     * rows still in the table and nothing said to the coach.
+     */
     const playerId = approvedPlayer("Ended Assignment")
-    assessment(playerId, 0, "2026-07-01")
-    const { assignmentId, seriesId } = assignment(playerId, "2026-07-01")
+    assessment(playerId, 0)
+    const seriesId = series("2026-07-01")
+    assignWithStart(playerId, seriesId, "2026-07-01")
+    const assignmentId = database.select().from(schema.sessionAssignments)
+      .where(eq(schema.sessionAssignments.accountId, playerId)).get()!.id
     markAttendance(playerId, occurrence(seriesId, "2026-07-06"), "present")
     markAttendance(playerId, occurrence(seriesId, "2026-07-13"), "absent")
     expect(julyAttendance(playerId)).toMatchObject({
@@ -274,18 +353,12 @@ describe("coach-confirmed onboarding assessment", () => {
       effectiveTo: "2026-07-20",
       now,
     })
-    expect(database.select().from(schema.sessionAssignments)
-      .where(eq(schema.sessionAssignments.id, assignmentId)).get())
-      .toMatchObject({ effectiveTo: "2026-07-20" })
 
-    // Ending the assignment bumps the enrollment revision from 1 to 2.
-    expect(() => assessment(playerId, 2, "2026-08-01")).toThrow(expect.objectContaining({
-      code: "BUSINESS_RULE",
-      field: "trainingStartOn",
-    }))
+    expect(() => assignWithStart(playerId, series("2026-08-01"), "2026-08-01"))
+      .toThrow(expect.objectContaining({ code: "BUSINESS_RULE", field: "effectiveFrom" }))
     expect(database.select().from(schema.playerEnrollments)
       .where(eq(schema.playerEnrollments.accountId, playerId)).get())
-      .toMatchObject({ recordRevision: 2, trainingStartOn: "2026-07-01" })
+      .toMatchObject({ trainingStartOn: "2026-07-01" })
     expect(julyAttendance(playerId)).toMatchObject({
       absent: 1,
       attended: 1,
@@ -293,18 +366,11 @@ describe("coach-confirmed onboarding assessment", () => {
       percentage: 50,
       recorded: 2,
     })
-
-    // Moving the date earlier is not what invalidates attendance, and stays open.
-    expect(assessment(playerId, 2, "2026-06-15")).toMatchObject({
-      recordRevision: 3,
-      trainingStartOn: "2026-06-15",
-    })
-    expect(julyAttendance(playerId)).toMatchObject({ eligible: 2, recorded: 2 })
   })
 
   it("refuses to reclassify a player whose assignment has been ended", () => {
     const playerId = approvedPlayer("Ended Assignment Reclassification")
-    assessment(playerId, 0, "2026-07-01")
+    assessment(playerId, 0)
     const { assignmentId } = assignment(playerId, "2026-07-01")
     sessionsService.endSessionAssignment({
       assignmentId,
@@ -323,7 +389,6 @@ describe("coach-confirmed onboarding assessment", () => {
         expectedRevision: 2,
         level: "Beginner",
         playerId,
-        trainingStartOn: "2026-07-01",
       },
       now,
     })).toThrow(expect.objectContaining({
@@ -338,20 +403,18 @@ describe("coach-confirmed onboarding assessment", () => {
       playerId,
       now,
     })).toEqual({ playerId, removedAssignments: 1 })
-    expect(assessment(playerId, 3, "2026-08-01")).toMatchObject({
-      trainingStartOn: "2026-08-01",
-    })
+    expect(assessment(playerId, 3)).toEqual({ playerId, recordRevision: 4 })
   })
 
   it("keeps the confirmed date immutable after completion", () => {
     const playerId = approvedPlayer("Completed Assessment")
-    assessment(playerId, 0, "2026-08-01")
+    assessment(playerId, 0)
     database.update(schema.playerEnrollments).set({
       onboardingCompletedAt: now,
       onboardingCompletedByAccountId: coachId,
     }).where(eq(schema.playerEnrollments.accountId, playerId)).run()
 
-    expect(() => assessment(playerId, 1, "2026-08-02")).toThrow(expect.objectContaining({
+    expect(() => assessment(playerId, 1)).toThrow(expect.objectContaining({
       code: "BUSINESS_RULE",
       field: "trainingStartOn",
     }))

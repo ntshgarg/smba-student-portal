@@ -212,12 +212,29 @@ function completedOnboarding(
   })
 }
 
+/*
+ * The assessment is the classification and nothing else now. The training start
+ * date moved to the Session step, because it cannot be judged without knowing
+ * the schedule: a date before the series began buys nothing -- the assignment,
+ * attendance and the fee timeline are all floored at the series start anyway --
+ * and it silently dated the first monthly fee before the player's first ever
+ * session (lib/finance/service.ts:1810-1813 reads the raw enrollment value).
+ */
 function classificationIsComplete(player: OnboardingPlayer) {
-  return player.trainingStartConfirmedAt !== null
-    && player.level !== null
+  return player.level !== null
     && player.batch !== null
     && player.academyPlan !== null
     && academyPlanIsValid(player.academyPlan, player.level, player.batch)
+}
+
+/*
+ * Absent means "this caller did not ask", which is how `onboardingCompletedAt`
+ * is read a few lines below and how every test fixture that predates the field
+ * behaves. A present null is the real signal: a date nobody has confirmed.
+ */
+function trainingStartIsConfirmed(player: OnboardingPlayer) {
+  return player.trainingStartConfirmedAt === undefined
+    || player.trainingStartConfirmedAt !== null
 }
 
 function hasCurrentOrFutureAssignment(
@@ -247,7 +264,15 @@ function onboardingStage(
     ? player.onboardingCompletedAt !== null
     : completedOnboarding(assignments, feePlans)) return null
   if (!classificationIsComplete(player)) return "assessment"
-  if (!hasCurrentOrFutureAssignment(assignments, player, referenceDate)) return "session"
+  /*
+   * The date is confirmed by the same action that makes the assignment, so in
+   * practice these move together. The second clause is what keeps a player
+   * assigned from the Schedules screen -- which writes no date -- out of the Fee
+   * Plan step, where an unconfirmed start is refused anyway
+   * (lib/finance/service.ts:967).
+   */
+  if (!hasCurrentOrFutureAssignment(assignments, player, referenceDate)
+    || !trainingStartIsConfirmed(player)) return "session"
   return "feePlan"
 }
 

@@ -24,43 +24,40 @@ import type { SaveFeedback } from "./shared"
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-function firstDayForSeries(item: PlayerOnboardingCase, series: TrainingSessionSeries) {
-  return [item.trainingStartOn ?? "", series.startsOn].reduce((latest, value) => (
-    value > latest ? value : latest
-  ))
+/*
+ * The schedule is the only floor now. It used to be max(training start, series
+ * start), where the training start was a placeholder stamped on the enrollment
+ * row the day the registration was approved -- a date nobody chose, which
+ * silently forbade backdating to the day the schedule actually began. The date
+ * chosen here IS the training start, so flooring on the stored one would make
+ * the bound circular.
+ */
+function firstDayForSeries(_item: PlayerOnboardingCase, series: TrainingSessionSeries) {
+  return series.startsOn
 }
 
+/*
+ * Today, unless the schedule has not begun -- then its first day. A player
+ * cannot have started training before the sessions existed, and dating them from
+ * the schedule's own start is what a coach means by "they join this batch".
+ */
 function suggestedEffectiveDate(
   item: PlayerOnboardingCase,
   series: TrainingSessionSeries,
+  referenceDate: string,
 ) {
-  return firstDayForSeries(item, series)
+  const earliest = firstDayForSeries(item, series)
+  return referenceDate > earliest ? referenceDate : earliest
 }
 
 /**
- * The assignment window is [max(training start, series start) .. series end], and the
- * server enforces it (lib/sessions/service.ts:328). The picker deliberately does NOT
- * carry min/max: clamping it left a coach unable to move the calendar with nothing on
- * screen saying why, and the browser's own "Value must be ... or later" fires only on
- * submit and never names where the bound comes from. Let any date be picked, then say
- * which bound it crosses and where that bound is changed.
+ * The window is [series start .. series end], and the server enforces it
+ * (lib/sessions/service.ts). The picker deliberately does NOT carry min/max:
+ * clamping it left a coach unable to move the calendar with nothing on screen
+ * saying why, and the browser's own "Value must be ... or later" fires only on
+ * submit and never names where the bound comes from. Let any date be picked,
+ * then say which bound it crosses and what to do about it.
  */
-/**
- * True when the bound the chosen date crosses is the player's own training start
- * rather than the series'. That is the one the coach can move, and it lives on
- * the Assessment step -- so this is what decides whether the note offers a way
- * back to it.
- */
-export function trainingStartIsTheBlockingBound(
-  item: PlayerOnboardingCase,
-  series: TrainingSessionSeries | null,
-  effectiveFrom: string,
-) {
-  if (!series || !effectiveFrom) return false
-  if (effectiveFrom >= firstDayForSeries(item, series)) return false
-  return (item.trainingStartOn ?? "") > series.startsOn
-}
-
 export function effectiveFromViolation(
   item: PlayerOnboardingCase,
   series: TrainingSessionSeries | null,
@@ -69,11 +66,8 @@ export function effectiveFromViolation(
   if (!series || !effectiveFrom) return null
   const earliest = firstDayForSeries(item, series)
   if (effectiveFrom < earliest) {
-    return (item.trainingStartOn ?? "") > series.startsOn
-      ? `${item.fullName} starts training on ${formatDateKey(earliest)}, so a session cannot begin before it.`
-        + " Change the training start date in Assessment to start earlier."
-      : `${series.title} runs from ${formatDateKey(earliest)}, so a session cannot begin before it.`
-        + " Choose a schedule that starts earlier, or move this one's start date."
+    return `${series.title} runs from ${formatDateKey(earliest)}, so training cannot start before it.`
+      + " Choose a schedule that starts earlier, or move this one's start date."
   }
   if (series.endsOn && effectiveFrom > series.endsOn) {
     return `${series.title} ends on ${formatDateKey(series.endsOn)}, so a session cannot begin after it.`
@@ -110,13 +104,11 @@ type SessionStepFeedback = SaveFeedback & {
 
 export function SessionStep({
   item,
-  onGoToStage,
   onSuccess,
   referenceDate,
   sessionSeries,
 }: {
   item: PlayerOnboardingCase
-  onGoToStage?: (stage: "assessment" | "feePlan") => void
   onSuccess: (input: { message: string }) => void
   referenceDate: string
   sessionSeries: TrainingSessionSeries[]
@@ -132,7 +124,7 @@ export function SessionStep({
     firstSeries ? seriesWeekdays(firstSeries).slice(0, initialLimit) : [],
   )
   const [effectiveFrom, setEffectiveFrom] = useState(
-    firstSeries ? suggestedEffectiveDate(item, firstSeries) : referenceDate,
+    firstSeries ? suggestedEffectiveDate(item, firstSeries, referenceDate) : referenceDate,
   )
   const [feedback, setFeedback] = useState<SessionStepFeedback | null>(null)
   const [busy, setBusy] = useState(false)
@@ -140,10 +132,10 @@ export function SessionStep({
   const effectiveFromRef = useRef<HTMLInputElement>(null)
   const feedbackId = `onboarding-${item.id}-session-feedback`
   const rangeNoteId = `onboarding-${item.id}-effective-from-range`
+  const effectiveFromHelpId = `onboarding-${item.id}-effective-from-help`
   const weekdaysInvalid = feedback?.tone === "error" && feedback.field === "weekdays"
   const selectedSeries = options.find((series) => series.id === seriesId) ?? null
   const rangeViolation = effectiveFromViolation(item, selectedSeries, effectiveFrom)
-  const trainingStartBlocks = trainingStartIsTheBlockingBound(item, selectedSeries, effectiveFrom)
   // The legend already states the count this plan needs, so an unmet count is
   // visible without being told. The submit handler keeps its message for the
   // paths this cannot reach.
@@ -157,7 +149,7 @@ export function SessionStep({
   const initialSeriesId = firstSeries?.id ?? ""
   const initialWeekdays = firstSeries ? seriesWeekdays(firstSeries).slice(0, initialLimit) : []
   const initialEffectiveFrom = firstSeries
-    ? suggestedEffectiveDate(item, firstSeries)
+    ? suggestedEffectiveDate(item, firstSeries, referenceDate)
     : referenceDate
   const isDirty = seriesId !== initialSeriesId
     || weekdays.join(",") !== initialWeekdays.join(",")
@@ -171,7 +163,7 @@ export function SessionStep({
     const limit = item.academyPlan ? academyPlanAssignmentLimit(item.academyPlan) : 0
     setSeriesId(nextSeries.id)
     setWeekdays(seriesWeekdays(nextSeries).slice(0, limit))
-    setEffectiveFrom(suggestedEffectiveDate(item, nextSeries))
+    setEffectiveFrom(suggestedEffectiveDate(item, nextSeries, referenceDate))
     setFeedback(null)
   }
 
@@ -385,49 +377,49 @@ export function SessionStep({
           </div>
         </fieldset>
         <label>
-          <span>Effective from</span>
+          {/*
+            * One date, not two. This was "Effective from" beside a "Training
+            * start date" on the Assessment step, and the pair could never
+            * legitimately disagree: the assignment was floored at the start
+            * date, and a start date below the schedule bought nothing except a
+            * first monthly fee dated before the player's first ever session.
+            */}
+          <span>Training starts on</span>
           <input
             ref={effectiveFromRef}
             name="effectiveFrom"
             type="date"
             value={effectiveFrom}
             aria-invalid={rangeViolation ? true : undefined}
-            aria-describedby={rangeViolation ? rangeNoteId : undefined}
+            aria-describedby={rangeViolation ? rangeNoteId : effectiveFromHelpId}
             onChange={(event) => {
               setEffectiveFrom(event.target.value)
               setFeedback(null)
             }}
           />
+          <small id={effectiveFromHelpId}>
+            The player’s first day of training. This becomes permanent when onboarding is
+            completed, and the first month’s fee is worked out from it.
+          </small>
         </label>
       </div>
       <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {rangeViolation ? (
-        <>
-          <p className={styles.backdateNote} id={rangeNoteId} role="alert">
-            {rangeViolation}
-          </p>
-          {/*
-            * Outside the paragraph on purpose. The message has always named
-            * Assessment as the place to fix this, and until the rail became
-            * navigable that was advice about a screen the coach could not open.
-            * But the paragraph is a `role="alert"` -- implicitly atomic -- and is
-            * also the date input's `aria-describedby` target, and both consumers
-            * flatten their subtree to text: a button inside was announced as
-            * prose on every recomputation, and again as part of the field's
-            * description. As a sibling it stays a button.
-            */}
-          {trainingStartBlocks && onGoToStage ? (
-            <p className={styles.backdateFix}>
-              <button
-                className={styles.inlineStepLink}
-                onClick={() => onGoToStage("assessment")}
-                type="button"
-              >
-                Go to Assessment
-              </button>
-            </p>
-          ) : null}
-        </>
+        <p className={styles.backdateNote} id={rangeNoteId} role="alert">
+          {rangeViolation}
+        </p>
+      ) : effectiveFrom > referenceDate ? (
+        /*
+         * Said here rather than discovered two steps later. A fee cannot be
+         * issued before the training it bills for has begun -- the Fee Plan step
+         * refuses while the start date is in the future
+         * (lib/finance/service.ts:972) -- and joining a schedule that has not
+         * started yet is exactly how a coach reaches that state now.
+         */
+        <p className={styles.backdateNote}>
+          Training starts in the future, so the Fee Plan step opens on{" "}
+          {formatDateKey(effectiveFrom)}. Everything else can be completed today.
+        </p>
       ) : effectiveFrom < referenceDate ? (
         <p className={styles.backdateNote}>
           This start date also makes earlier scheduled sessions eligible for attendance.

@@ -55,10 +55,6 @@
   margin-top: 12px;
 }
 
-.assessmentDateField {
-  margin-bottom: var(--space-copy);
-}
-
 .dateTimeline {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -91,26 +87,6 @@
   font-size: 0.6875rem;
   font-weight: 700;
   line-height: 1.3;
-}
-
-.assessmentDateField > label {
-  display: grid;
-  max-width: 520px;
-  gap: 7px;
-}
-
-.assessmentDateField input {
-  min-height: 44px;
-}
-
-.assessmentDateField small {
-  color: var(--steel);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-
-.assessmentDateField [aria-invalid="true"] {
-  border-color: var(--red);
 }
 
 .stageSummary {
