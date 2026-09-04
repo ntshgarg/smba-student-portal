@@ -410,15 +410,13 @@ export function SessionStep({
         </p>
       ) : effectiveFrom > referenceDate ? (
         /*
-         * Said here rather than discovered two steps later. A fee cannot be
-         * issued before the training it bills for has begun -- the Fee Plan step
-         * refuses while the start date is in the future
-         * (lib/finance/service.ts:972) -- and joining a schedule that has not
-         * started yet is exactly how a coach reaches that state now.
+         * Said here rather than found on the fee screen. Onboarding completes
+         * today -- registration is charged on the day they sign up -- but no
+         * monthly fee is due until the training it bills for has begun.
          */
         <p className={styles.backdateNote}>
-          Training starts in the future, so the Fee Plan step opens on{" "}
-          {formatDateKey(effectiveFrom)}. Everything else can be completed today.
+          Training starts in the future. Onboarding can be completed today, and monthly
+          fees begin from {formatDateKey(effectiveFrom)}.
         </p>
       ) : effectiveFrom < referenceDate ? (
         <p className={styles.backdateNote}>

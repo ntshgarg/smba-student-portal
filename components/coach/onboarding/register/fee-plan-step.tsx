@@ -160,22 +160,6 @@ export function FeePlanStep({
     )
   }
 
-  if (item.trainingStartOn && item.trainingStartOn > referenceDate) {
-    return (
-      <div className={styles.recoveryPanel}>
-        <strong>Fee completion opens on {formatDateKey(item.trainingStartOn)}.</strong>
-        <p>The future training date is saved. Assessment and session setup can be prepared now, but fees and the permanent date lock wait until training begins.</p>
-        <p>To change the training start date, go back to Session on the step list — it is set there, with the schedule. Clearing the assignment is only needed to change the level, batch or Training plan.</p>
-        <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
-        <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
-          {busy
-            ? "Resetting…"
-            : retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
-        </button>
-      </div>
-    )
-  }
-
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy || !item.level || !item.batch || !item.academyPlan) return

@@ -181,6 +181,6 @@ describe("effective-from picker", () => {
     const html = renderStep("2026-07-01", "2026-11-01")
     const input = /<input[^>]*name="effectiveFrom"[^>]*>/u.exec(html)?.[0]
     expect(input).toContain('value="2026-11-01"')
-    expect(html).toContain("Fee Plan step opens on")
+    expect(html).toContain("monthly fees begin from")
   })
 })

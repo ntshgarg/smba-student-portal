@@ -74,12 +74,18 @@ describe("onboarding reset guidance", () => {
     expect(render(player())).toContain("attendance, fees or a report on record")
   })
 
-  it("also signposts it on the future-training-date panel, which offers the same reset", () => {
-    // That panel renders instead of the fee form and carries its own reset button.
+  it("offers the ordinary fee form for a start date that has not arrived", () => {
+    /*
+     * There used to be a panel here instead, refusing completion until the date
+     * arrived. It duplicated a warning the preview already raises, and once the
+     * start date became the day a player joins their schedule it turned every
+     * signup into a future batch into a return visit. The fee form is the whole
+     * of this step now, whenever training begins.
+     */
     const html = render(player({ trainingStartOn: "2026-12-01" }))
-    expect(html).toContain("Fee completion opens on")
+    expect(html).not.toContain("Fee completion opens on")
+    expect(html).toContain("Review fee timeline")
     expect(html).toContain("Reset session assignment")
-    expect(html).toContain("go back to Session on the step list")
   })
 
   it("holds back the fee timeline until an amount is entered, and says so visually", () => {
