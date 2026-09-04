@@ -122,6 +122,22 @@
   --section-space-lg: var(--space-section-sm);
   --page-scroll-padding: 88px;
   --portal-header-height: 82px;
+  /* How wide the content column is allowed to get.
+   *
+   * It was a flat 1240px, so every route stopped growing there and a 2560px
+   * monitor showed a 1240px column inside roughly two-thirds empty margin --
+   * "everything looks small", which is what it is: the layout has no opinion
+   * about anything wider than a laptop.
+   *
+   * The floor is the old value, and 78vw only overtakes it around 1590px, so
+   * every laptop and 1440p screen renders byte-identically to before and the
+   * change is confined to monitors that actually have the room. The ceiling
+   * stops a 4K screen turning card rows into unreadably long sweeps.
+   *
+   * Consumers keep their own `min(100% - <gutter>, ...)` wrapper, which is what
+   * guarantees the gutter and keeps `vw` -- which counts the scrollbar -- from
+   * ever pushing content wider than its parent. */
+  --shell-max: clamp(1240px, 78vw, 2080px);
   /* The five size tokens, and the 743 loose `font-size` declarations elsewhere, are
      `rem` rather than `px`. Browser *zoom* already scales a px type scale correctly;
      what a px type scale defeats is the other control — the reader's default font
@@ -327,7 +343,7 @@ h3 {
 }
 
 .page-shell {
-  width: min(100% - 48px, 1240px);
+  width: min(100% - 48px, var(--shell-max));
   margin-inline: auto;
 }
 
@@ -498,7 +514,7 @@ h3 {
   }
 
   .page-shell {
-    width: min(100% - 32px, 1240px);
+    width: min(100% - 32px, var(--shell-max));
   }
 
   .not-found {
