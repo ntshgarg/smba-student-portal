@@ -964,14 +964,30 @@ function buildOnboardingFinancePreview(
 
   const blockers: string[] = []
   const warnings: string[] = []
-  if (!enrollment.trainingStartConfirmedAt) blockers.push("Confirm the training start date in Assessment.")
+  if (!enrollment.trainingStartConfirmedAt) {
+    blockers.push("Set the training start date on the Session step.")
+  }
   if (trainingStartIsImplausiblyEarly(enrollment.trainingStartOn, academyDateKey)) {
     blockers.push(IMPLAUSIBLE_TRAINING_START_MESSAGE)
   }
   if (enrollment.onboardingCompletedAt) blockers.push("This player’s onboarding is already complete.")
-  if (enrollment.trainingStartOn > academyDateKey) {
-    blockers.push(`Fee completion opens on ${enrollment.trainingStartOn}.`)
-  }
+  /*
+   * A future training start is a warning, not a blocker. It used to be both: this
+   * refused completion outright until the day arrived, on top of the
+   * "the Fee Plan begins in X" warning further down that already describes the
+   * same state and lets it through.
+   *
+   * The duplicate cost nothing while the start date was seeded to the approval
+   * day and so was never in the future. Once the date became the day the player
+   * actually joins their schedule, every signup into a batch that has not begun
+   * hit it -- so a coach could take a player through assessment and session in
+   * September and then had to come back in October to settle a registration fee
+   * that was due on the day they signed up.
+   *
+   * Nothing is billed early by allowing this: `feePlanPeriod > academyPeriod`
+   * issues no monthly charge, and the months before training start are never in
+   * the timeline at all.
+   */
   if (enrollment.academyPlan !== input.academyPlan
     || enrollment.level !== input.level
     || enrollment.batch !== input.batch) {
@@ -1535,7 +1551,7 @@ export function redateConfirmedTrainingStart(
     if (!enrollment.onboardingCompletedAt) {
       financeError(
         "SETUP_REQUIRED",
-        "Correct the training start date in Assessment while onboarding is unfinished.",
+        "Correct the training start date on the Session step while onboarding is unfinished.",
         "trainingStartOn",
       )
     }

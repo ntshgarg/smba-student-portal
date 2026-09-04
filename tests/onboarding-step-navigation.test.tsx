@@ -28,7 +28,7 @@ vi.mock("@/components/unsaved-work-guard", () => ({
 
 const { OnboardingEditor } = await import("@/components/coach/onboarding/register/onboarding-editor")
 const { StepRail } = await import("@/components/coach/onboarding/register/step-rail")
-const { SessionStep, trainingStartIsTheBlockingBound } = await import(
+const { SessionStep } = await import(
   "@/components/coach/onboarding/register/session-step"
 )
 
@@ -42,17 +42,9 @@ import type { TrainingSessionSeries } from "@/lib/sessions/types"
  * moment the Assessment saved, the only screen carrying the training start date
  * stopped existing.
  *
- * That is what made a real case unworkable. Approval seeds trainingStartOn to
- * the approval date (lib/auth/account-service.ts:630), the session window is
- * floored at max(trainingStartOn, series.startsOn) (lib/sessions/service.ts:327),
- * and the head coach could not assign a player to an Elite series that began on
- * 1 September because the seeded start said 3 September. The Session step's own
- * error named the fix -- "Change the training start date in Assessment" -- and
- * pointed at a screen with no route to it.
- *
- * Nothing under the UI needed loosening: the service layer has always accepted a
- * start date up to 24 months back, including one before the player registered
- * (tests/onboarding-assessment-service.test.ts). These pin the way back.
+ * The date that made that unworkable has since moved to the Session step, so the
+ * original symptom is gone at the root. The way back is still load-bearing: it is
+ * how a coach reaches a finished step to correct it at all.
  */
 
 const SERIES = {
@@ -212,34 +204,3 @@ describe("revisiting a step whose work is already done", () => {
   })
 })
 
-describe("what the session step does when the training start is what blocks the date", () => {
-  it("names the training start as the bound when the series starts earlier", () => {
-    // The reported case: series from 1 September, start date seeded to 3 September.
-    expect(trainingStartIsTheBlockingBound(
-      playerCase({ trainingStartOn: "2026-09-03" }),
-      SERIES,
-      "2026-09-01",
-    )).toBe(true)
-  })
-
-  it("does not name it when the series itself is the later bound", () => {
-    /*
-     * Then the fix is a different schedule or a different series start date, and
-     * offering Assessment would send the coach somewhere that cannot help.
-     */
-    expect(trainingStartIsTheBlockingBound(
-      playerCase({ trainingStartOn: "2026-08-01" }),
-      SERIES,
-      "2026-08-15",
-    )).toBe(false)
-  })
-
-  it("names nothing when the date sits inside the window", () => {
-    expect(trainingStartIsTheBlockingBound(
-      playerCase({ trainingStartOn: "2026-09-01" }),
-      SERIES,
-      "2026-09-10",
-    )).toBe(false)
-    expect(trainingStartIsTheBlockingBound(playerCase(), null, "2026-09-01")).toBe(false)
-  })
-})

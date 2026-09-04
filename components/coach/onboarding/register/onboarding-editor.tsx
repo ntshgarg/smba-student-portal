@@ -31,7 +31,7 @@ function editorCopy(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
     case "assessment":
       return {
         title: `Complete ${firstName}’s assessment`,
-        body: "Confirm the court assessment before assigning a recurring session.",
+        body: "Record the level, batch and Training plan. The start date is set with the schedule.",
       }
     case "session":
       // Revisited, this step reports an assignment rather than offering to make
@@ -44,7 +44,7 @@ function editorCopy(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
       }
       return {
         title: `Assign ${firstName}’s court time`,
-        body: "Choose a matching recurring schedule and the player’s attendance days.",
+        body: "Choose a matching recurring schedule, the attendance days, and the day training starts.",
       }
     case "feePlan":
       return {
@@ -133,7 +133,6 @@ export function OnboardingEditor({
         {viewStage === "session" ? (
           <SessionStep
             item={item}
-            onGoToStage={selectStage}
             onSuccess={onSuccess}
             referenceDate={referenceDate}
             sessionSeries={sessionSeries}

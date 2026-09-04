@@ -55,16 +55,17 @@ describe("effective-from range guidance", () => {
     expect(effectiveFromViolation(item, chosen, "2026-09-30")).toBeNull()
   })
 
-  it("names the training start date when that is the binding floor", () => {
-    const message = effectiveFromViolation(
-      playerCase("2026-08-01"),
-      series("2026-07-01", "2026-09-30"),
-      "2026-07-15",
-    )
-    expect(message).toContain("Aditi Rao")
-    expect(message).toContain("Assessment")
-    // The schedule is not the reason here, so it must not be blamed.
-    expect(message).not.toContain("Intermediate_Weekend_8-9_AM")
+  it("ignores the stored training start entirely, whatever it says", () => {
+    /*
+     * The stored value is the placeholder stamped on the enrollment row when the
+     * registration was approved -- a date nobody chose. It used to be half the
+     * floor, which meant a coach could never start a player earlier than the day
+     * they happened to approve them. The date chosen on this step IS the training
+     * start now, so the schedule is the only bound left.
+     */
+    const chosen = series("2026-07-01", "2026-09-30")
+    expect(effectiveFromViolation(playerCase("2026-08-01"), chosen, "2026-07-15")).toBeNull()
+    expect(effectiveFromViolation(playerCase("2026-09-30"), chosen, "2026-07-01")).toBeNull()
   })
 
   it("names the schedule when the schedule is the binding floor", () => {
@@ -74,7 +75,7 @@ describe("effective-from range guidance", () => {
       "2026-06-15",
     )
     expect(message).toContain("Intermediate_Weekend_8-9_AM")
-    expect(message).not.toContain("Assessment")
+    expect(message).toContain("training cannot start before it")
   })
 
   it("names the schedule's end when the date runs past it", () => {
@@ -112,7 +113,7 @@ describe("effective-from range guidance", () => {
  * review.
  */
 describe("effective-from picker", () => {
-  function renderStep(trainingStartOn: string) {
+  function renderStep(trainingStartOn: string, seriesStartsOn = "2026-07-01") {
     return renderToStaticMarkup(
       <SessionStep
         item={{
@@ -128,14 +129,14 @@ describe("effective-from picker", () => {
         referenceDate="2026-09-01"
         sessionSeries={[{
           batch: "Weekend",
-          endsOn: "2026-09-30",
+          endsOn: "2026-12-31",
           id: "series-1",
           programme: "Intermediate",
           slots: [
             { durationMinutes: 60, id: "slot-0", startTime: "08:00", weekday: 0 },
             { durationMinutes: 60, id: "slot-6", startTime: "08:00", weekday: 6 },
           ],
-          startsOn: "2026-07-01",
+          startsOn: seriesStartsOn,
           status: "active",
           title: "Intermediate_Weekend_8-9_AM",
           venue: "SMBA Court",
@@ -154,32 +155,32 @@ describe("effective-from picker", () => {
     expect(input).not.toContain("max=")
   })
 
-  it("explains an out-of-range starting value instead of silently refusing it", () => {
-    // The suggested date is max(training start, series start); a training start after the
-    // schedule ends puts the field out of range on first render.
+  it("opens with a date already inside the window, so it never greets a coach refusing", () => {
+    /*
+     * The seed used to be max(stored training start, series start), and the
+     * stored value is a placeholder nobody chose -- so a case could arrive on
+     * this step already out of range, submit disabled, before the coach had
+     * touched anything. It is max(today, series start) now: today for a running
+     * schedule, its first day for one that has not begun. `eligibleSeries` only
+     * offers schedules whose end is still ahead (session-step.tsx:95), so both
+     * are inside the window by construction.
+     */
     const html = renderStep("2026-12-01")
-    expect(html).toContain("cannot begin after it")
-    expect(html).toContain('aria-invalid="true"')
-  })
-  it("refuses to let the session be assigned until the date is inside the window", () => {
-    const outOfRange = renderStep("2026-12-01")
-    const button = /<button[^>]*type="submit"[^>]*>/u.exec(outOfRange)?.[0]
+    const input = /<input[^>]*name="effectiveFrom"[^>]*>/u.exec(html)?.[0]
+    expect(input).toBeDefined()
+    expect(input).toContain('value="2026-09-01"')
+    expect(input).not.toContain('aria-invalid="true"')
+
+    const button = /<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]
     expect(button).toBeDefined()
-    expect(button).toContain('aria-disabled="true"')
-
-    const inRange = renderStep("2026-07-01")
-    const enabled = /<button[^>]*type="submit"[^>]*>/u.exec(inRange)?.[0]
-    expect(enabled).toBeDefined()
-    expect(enabled).not.toContain("aria-disabled")
+    expect(button).not.toContain('aria-disabled="true"')
   })
 
-  it("marks the blocked submit so it reads as unavailable, not as busy", () => {
-    const outOfRange = renderStep("2026-12-01")
-    expect(/<button[^>]*type="submit"[^>]*>/u.exec(outOfRange)?.[0])
-      .toContain('aria-disabled="true"')
-
-    const inRange = renderStep("2026-07-01")
-    expect(/<button[^>]*type="submit"[^>]*>/u.exec(inRange)?.[0])
-      .not.toContain("aria-disabled")
+  it("dates a player onto a schedule that has not started from its first day", () => {
+    // Not from today: nobody trains before the sessions exist.
+    const html = renderStep("2026-07-01", "2026-11-01")
+    const input = /<input[^>]*name="effectiveFrom"[^>]*>/u.exec(html)?.[0]
+    expect(input).toContain('value="2026-11-01"')
+    expect(html).toContain("monthly fees begin from")
   })
 })

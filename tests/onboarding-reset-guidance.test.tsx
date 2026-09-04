@@ -21,14 +21,13 @@ vi.mock("@/components/unsaved-work-guard", () => ({
 const { FeePlanStep } = await import("@/components/coach/onboarding/register/fee-plan-step")
 
 /*
- * The step rail is navigation now (step-rail.tsx), so the Assessment step is
- * reachable again from any later step and a coach correcting a training start
- * date no longer has to destroy anything to do it. Reset remains the only way to
- * change the *classification* under an open assignment
- * (lib/coach/onboarding-service.ts:127-137), and it is still refused outright
- * once attendance, fee or charge rows exist (:201-221) -- so the signpost these
- * cases pin still matters. What changed is that it is no longer the only way
- * back; see tests/onboarding-step-navigation.test.tsx for the ordinary route.
+ * The training start date lives on the Session step now, with the schedule that
+ * bounds it, and the rail reaches that step from anywhere -- so correcting a date
+ * destroys nothing. Reset remains the only way to change the *classification*
+ * under an open assignment (lib/coach/onboarding-service.ts), and it is still
+ * refused once the player has attendance, fees or a report on record, so the
+ * signpost these cases pin still matters. It just no longer claims to be the
+ * only door, and no longer claims to be the door to the date.
  */
 function player(overrides: Record<string, unknown> = {}) {
   return {
@@ -55,17 +54,16 @@ function render(item: never) {
 }
 
 describe("onboarding reset guidance", () => {
-  it("sends a date correction to the step list and keeps reset for the classification", () => {
+  it("sends a date correction to the Session step and keeps reset for the classification", () => {
     /*
      * This used to assert that reset "reopens" the assessment because that was
-     * the only door. The rail is navigation now, and the server refuses only a
-     * move *later* under an open assignment -- so telling a coach to destroy an
-     * assignment in order to move a date earlier would send them down a path
-     * that is both unnecessary and, once academy records exist, closed.
+     * the only door to the date. The date is not on the assessment any more, so
+     * pointing a coach at a destructive reset to change it would send them down
+     * a path that is both unnecessary and, once records exist, closed.
      */
     const html = render(player())
     expect(html).toContain("Reset session assignment")
-    expect(html).toContain("go back to Assessment on the step list")
+    expect(html).toContain("set on the Session step")
     expect(html).toContain("level, batch or Training plan")
     expect(html).not.toContain("no other way back")
   })
@@ -73,15 +71,21 @@ describe("onboarding reset guidance", () => {
   it("names the condition that makes the reset stop working", () => {
     // resetOnboardingSessionAssignment refuses once dependent academy records exist,
     // so promising an unconditional way back would be a lie.
-    expect(render(player())).toContain("academy records")
+    expect(render(player())).toContain("attendance, fees or a report on record")
   })
 
-  it("also signposts it on the future-training-date panel, which offers the same reset", () => {
-    // That panel renders instead of the fee form and carries its own reset button.
+  it("offers the ordinary fee form for a start date that has not arrived", () => {
+    /*
+     * There used to be a panel here instead, refusing completion until the date
+     * arrived. It duplicated a warning the preview already raises, and once the
+     * start date became the day a player joins their schedule it turned every
+     * signup into a future batch into a return visit. The fee form is the whole
+     * of this step now, whenever training begins.
+     */
     const html = render(player({ trainingStartOn: "2026-12-01" }))
-    expect(html).toContain("Fee completion opens on")
+    expect(html).not.toContain("Fee completion opens on")
+    expect(html).toContain("Review fee timeline")
     expect(html).toContain("Reset session assignment")
-    expect(html).toContain("go back to Assessment on the step list")
   })
 
   it("holds back the fee timeline until an amount is entered, and says so visually", () => {
@@ -133,23 +137,28 @@ describe("onboarding stage gating", () => {
     expect(submit).not.toMatch(/\sdisabled/u)
   })
 
-  it("releases it once the date, level, batch and plan are all present", () => {
+  it("releases it once the level, batch and plan are all present", () => {
     const html = assessment({
       academyPlan: "weekend-standard",
       batch: "Weekend",
       level: "Intermediate",
-      trainingStartOn: "2026-07-01",
     })
     const submit = /<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]
     expect(submit).not.toContain("aria-disabled")
   })
 
-  it("still holds it back when only the training start date is missing", () => {
+  it("no longer waits on a training start date, which this step does not collect", () => {
+    /*
+     * The date moved to the Session step, where the schedule that bounds it is
+     * known. Holding the assessment back for it would block the only step that
+     * can supply the level and batch the schedule list is filtered by.
+     */
     const html = assessment({
       academyPlan: "weekend-standard",
       batch: "Weekend",
       level: "Intermediate",
     })
-    expect(/<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]).toContain('aria-disabled="true"')
+    expect(/<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]).not.toContain("aria-disabled")
+    expect(html).not.toContain('name="trainingStartOn"')
   })
 })

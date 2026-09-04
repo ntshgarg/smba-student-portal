@@ -3,7 +3,6 @@ import "server-only"
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm"
 
 import { operationalActionError } from "@/lib/actions/operational-result"
-import { isValidDateKey } from "@/lib/attendance/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import type { SmbaDatabase } from "@/lib/db/client"
 import {
@@ -18,16 +17,11 @@ import {
   sessionAssignmentWeekdays,
   sessionAttendanceRecords,
 } from "@/lib/db/schema"
-import { getAcademyDateKey } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanIsValid,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
-import {
-  IMPLAUSIBLE_TRAINING_START_MESSAGE,
-  trainingStartIsImplausiblyEarly,
-} from "@/lib/training/training-start"
 
 export type SaveOnboardingAssessmentInput = {
   academyPlan: AcademyPlan
@@ -35,7 +29,6 @@ export type SaveOnboardingAssessmentInput = {
   expectedRevision: number
   level: TrainingProgramme
   playerId: string
-  trainingStartOn: string
 }
 
 export function saveOnboardingAssessment({
@@ -52,16 +45,6 @@ export function saveOnboardingAssessment({
   requireHeadAdminAccess(coachId, { database })
   if (!input?.playerId?.trim()) {
     operationalActionError("NOT_FOUND", "Player account was not found.", "playerId")
-  }
-  if (!isValidDateKey(input.trainingStartOn)) {
-    operationalActionError("INVALID_INPUT", "Choose a valid training start date.", "trainingStartOn")
-  }
-  if (trainingStartIsImplausiblyEarly(input.trainingStartOn, getAcademyDateKey(now))) {
-    operationalActionError(
-      "INVALID_INPUT",
-      IMPLAUSIBLE_TRAINING_START_MESSAGE,
-      "trainingStartOn",
-    )
   }
   if (!academyPlanIsValid(input.academyPlan, input.level, input.batch)) {
     operationalActionError(
@@ -108,19 +91,12 @@ export function saveOnboardingAssessment({
     }
 
     /*
-     * Every assignment the player has ever held, open or ended. Ending one does
-     * not unmake the days it rostered the player for, and those days are what
-     * this guard protects: attendance may only be marked for a day an assignment
-     * covers (assignmentCoversOccurrence requires effectiveFrom <=
-     * eligibilityDate), so the earliest effectiveFrom across all of them is the
-     * floor no recorded day sits below.
-     *
-     * Filtering to `effectiveTo is null` left that floor unguarded for a player
-     * whose only assignment had been ended from the calendar. The date could
-     * then move past days already carrying session_attendance_records rows, and
-     * because eligibility is `eligibilityDate >= trainingStartOn` those rows
-     * stopped counting -- present days vanishing from the player's month, with
-     * no warning to the coach, no audit trail, and the rows still in the table.
+     * The date guard that used to stand here moved with the date itself, to
+     * lib/sessions/service.ts. What stays is the classification: an assignment
+     * is made against a specific programme and batch, so changing either out
+     * from under it would leave the player rostered onto a schedule their plan
+     * no longer matches. Clearing the assignment is the way through, and it is
+     * one press away on the Session step.
      */
     const assignments = tx.select({
       effectiveFrom: sessionAssignments.effectiveFrom,
@@ -128,14 +104,6 @@ export function saveOnboardingAssessment({
       .where(eq(sessionAssignments.accountId, input.playerId))
       .orderBy(asc(sessionAssignments.effectiveFrom))
       .all()
-    const earliestAssignment = assignments[0]
-    if (earliestAssignment && input.trainingStartOn > earliestAssignment.effectiveFrom) {
-      operationalActionError(
-        "BUSINESS_RULE",
-        "Reset the player’s session assignment before moving the training start date later.",
-        "trainingStartOn",
-      )
-    }
     if (assignments.length && (
       player.level !== input.level
       || player.batch !== input.batch
@@ -143,7 +111,7 @@ export function saveOnboardingAssessment({
     )) {
       operationalActionError(
         "BUSINESS_RULE",
-        "Reset the player’s session assignment before changing the assessment.",
+        "Clear the player’s session assignment on the Session step before changing the assessment.",
         "academyPlan",
       )
     }
@@ -153,9 +121,6 @@ export function saveOnboardingAssessment({
       batch: input.batch,
       level: input.level,
       recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
-      trainingStartConfirmedAt: now,
-      trainingStartConfirmedByAccountId: coachId,
-      trainingStartOn: input.trainingStartOn,
       updatedAt: now,
     }).where(and(
       eq(playerEnrollments.accountId, input.playerId),
@@ -172,7 +137,6 @@ export function saveOnboardingAssessment({
     return {
       playerId: input.playerId,
       recordRevision: input.expectedRevision + 1,
-      trainingStartOn: input.trainingStartOn,
     }
   }, { behavior: "immediate" })
 }

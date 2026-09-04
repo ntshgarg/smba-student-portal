@@ -77,6 +77,13 @@ export async function assignOnboardingSessionAction(input: {
   try {
     assignSessionRecords({
       coachId: coach.subjectId,
+      /*
+       * The onboarding Session step is where the training start date is chosen,
+       * so this call confirms it. The Schedules screen's own assign action does
+       * not, which is what keeps an established player's billing anchor from
+       * moving when a second schedule is added.
+       */
+      confirmTrainingStart: true,
       database: initializeDatabase(),
       ...input,
       now: new Date(),

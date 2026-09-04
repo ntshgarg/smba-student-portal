@@ -9,6 +9,11 @@ import {
   operationalActionError,
 } from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
+import { getAcademyDateKey } from "@/lib/format"
+import {
+  IMPLAUSIBLE_TRAINING_START_MESSAGE,
+  trainingStartIsImplausiblyEarly,
+} from "@/lib/training/training-start"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import type { SmbaDatabase } from "@/lib/db/client"
 import {
@@ -215,6 +220,7 @@ export function createSessionSeriesRecords({
 
 export function assignSessionRecords({
   coachId,
+  confirmTrainingStart = false,
   database,
   effectiveFrom,
   now,
@@ -223,6 +229,18 @@ export function assignSessionRecords({
   weekdays,
 }: {
   coachId: string
+  /*
+   * Set only by the onboarding Session step, which is now where the training
+   * start date is chosen. It makes `effectiveFrom` the player's confirmed start
+   * as well as the assignment's, in one transaction.
+   *
+   * Off by default because this function is shared with the Schedules screen
+   * (app/coach/actions.ts assignSessionAction), where a coach adding a second
+   * schedule to an established player must not silently rewrite the billing
+   * anchor every fee already hangs off -- that correction has its own audited
+   * path in redateConfirmedTrainingStart.
+   */
+  confirmTrainingStart?: boolean
   database: SmbaDatabase
   effectiveFrom: string
   now: Date
@@ -323,14 +341,67 @@ export function assignSessionRecords({
       "weekdays",
     )
   }
+  /*
+   * When this call is also confirming the training start, the stored
+   * trainingStartOn is the placeholder approval stamped on the enrollment row
+   * (lib/auth/account-service.ts) -- a date nobody chose. Flooring on it would
+   * make the bound circular: the coach could never set a start earlier than the
+   * day they happened to approve the registration, which is the whole thing this
+   * move exists to fix. The series is the real floor.
+   */
   const joinedOn = player.trainingStartOn
-  const earliestDate = joinedOn > series.startsOn ? joinedOn : series.startsOn
+  const earliestDate = !confirmTrainingStart && joinedOn > series.startsOn
+    ? joinedOn
+    : series.startsOn
   if (effectiveFrom < earliestDate) {
     operationalActionError(
       "BUSINESS_RULE",
-      `Assignment cannot begin before ${earliestDate}.`,
+      confirmTrainingStart
+        ? `${series.title} runs from ${series.startsOn}, so training cannot start before it.`
+        : `Assignment cannot begin before ${earliestDate}.`,
       "effectiveFrom",
     )
+  }
+  /*
+   * The plausibility bound survives the move. The series start already keeps the
+   * date sane in practice -- a schedule can begin at most MAX_SCHEDULE_TERM_DAYS
+   * before today -- but this is the rule the rest of the codebase states, and
+   * redateConfirmedTrainingStart enforces the same one after onboarding ends.
+   */
+  if (confirmTrainingStart
+    && trainingStartIsImplausiblyEarly(effectiveFrom, getAcademyDateKey(now))) {
+    operationalActionError(
+      "INVALID_INPUT",
+      IMPLAUSIBLE_TRAINING_START_MESSAGE,
+      "effectiveFrom",
+    )
+  }
+  /*
+   * Carried here with the date it guards. Every assignment the player has ever
+   * held, open or ended: ending one does not unmake the days it rostered them
+   * for, and attendance may only be marked for a day an assignment covers. So
+   * the earliest effectiveFrom across all of them is the floor no recorded day
+   * sits below, and confirming a start later than it would strand those rows --
+   * eligibility is `eligibilityDate >= trainingStartOn`, so present days would
+   * vanish from the player's month with the rows still in the table.
+   */
+  if (confirmTrainingStart) {
+    const heldAssignments = database.select({
+      effectiveFrom: sessionAssignments.effectiveFrom,
+    }).from(sessionAssignments)
+      .where(eq(sessionAssignments.accountId, playerId))
+      .all()
+    const earliestHeld = heldAssignments
+      .map((held) => held.effectiveFrom)
+      .sort()[0]
+    if (earliestHeld !== undefined && effectiveFrom > earliestHeld) {
+      operationalActionError(
+        "BUSINESS_RULE",
+        "Clear the player’s existing session assignment before starting them later "
+          + "— days already recorded against it sit before this date.",
+        "effectiveFrom",
+      )
+    }
   }
   if (series.endsOn && effectiveFrom > series.endsOn) {
     operationalActionError(
@@ -453,7 +524,27 @@ export function assignSessionRecords({
       recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
       status: "active",
       updatedAt: now,
-    }).where(eq(playerEnrollments.accountId, playerId)).run()
+      /*
+       * Same date, one field each: the day the assignment begins is the day the
+       * player starts training. They were two inputs on two steps and were never
+       * allowed to disagree -- the assignment was floored at the start date, and
+       * a start date below the series bought nothing but a first fee dated
+       * before the player's first session.
+       */
+      ...confirmTrainingStart
+        ? {
+          trainingStartConfirmedAt: now,
+          trainingStartConfirmedByAccountId: coachId,
+          trainingStartOn: effectiveFrom,
+        }
+        : {},
+    }).where(and(
+      eq(playerEnrollments.accountId, playerId),
+      // Never rewrite a completed player's billing anchor. Adding a schedule to
+      // an established player takes the no-op branch above, but the guard is
+      // stated rather than inferred from the caller.
+      ...confirmTrainingStart ? [isNull(playerEnrollments.onboardingCompletedAt)] : [],
+    )).run()
   }, { behavior: "immediate" })
 }
 

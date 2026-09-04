@@ -268,7 +268,7 @@ describe("onboarding finance issuance", () => {
     )).get()?.originalAmountPaise).toBe(350_000)
   })
 
-  it("keeps a future training start incomplete until the date arrives", () => {
+  it("completes a signup into a batch that has not started, billing nothing early", () => {
     const playerId = createAssessedPlayer({
       assignmentFrom: "2026-09-01",
       name: "Future Month Player",
@@ -286,16 +286,28 @@ describe("onboarding finance issuance", () => {
       database,
       now: onboardingNow,
     }
+    /*
+     * A future start used to be a blocker AND a warning. The blocker meant a
+     * coach who signed a player up in August for a September batch had to come
+     * back in September to settle a registration fee that was owed in August.
+     * The warning already describes the state exactly and lets it through, and
+     * nothing is billed early: no monthly charge is issued for a period the fee
+     * plan has not reached.
+     */
     const preview = finance.previewPlayerOnboardingFinance(terms, context)
-    expect(preview.blockers).toContain("Fee completion opens on 2026-09-01.")
-    expect(() => finance.completePlayerOnboardingFinance({
+    expect(preview.blockers).toEqual([])
+    expect(preview.warnings).toContain("No monthly charge is due now; the Fee Plan begins in 2026-09.")
+
+    finance.completePlayerOnboardingFinance({
       ...terms,
       previewFingerprint: preview.fingerprint,
-    }, context)).toThrow(expect.objectContaining({ code: "SETUP_REQUIRED" }))
-    expect(database.select().from(schema.financialCharges).where(eq(
+    }, context)
+
+    const charges = database.select().from(schema.financialCharges).where(eq(
       schema.financialCharges.playerAccountId,
       playerId,
-    )).all()).toHaveLength(0)
+    )).all()
+    expect(charges.map((charge) => charge.type)).toEqual(["registration"])
   })
 
   it("derives the first fee month instead of accepting a caller-selected month", () => {
