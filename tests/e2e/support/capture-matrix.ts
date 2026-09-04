@@ -18,7 +18,15 @@ export const criticalViewports: CaptureViewport[] = [
   { height: 932, label: "mobile-430", width: 430 },
 ]
 
+/*
+ * 2560 is here because nothing was ever looked at above 1440, which is how a
+ * content column capped at a flat 1240px sat unnoticed on large monitors: every
+ * gate rendered at a width where the cap is invisible, so "everything looks
+ * small on 4K" could not be seen, let alone regressed against. It captures a
+ * screenshot for human review and asserts nothing on its own.
+ */
 export const responsiveViewports: CaptureViewport[] = [
+  { height: 1440, label: "wide-2560", width: 2560 },
   { height: 900, label: "web-1440", width: 1440 },
   { height: 1024, label: "tablet-820", width: 820 },
   primaryViewport,

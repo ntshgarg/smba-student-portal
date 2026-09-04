@@ -1,5 +1,5 @@
 .section-shell {
-  width: min(100% - 48px, 1240px);
+  width: min(100% - 48px, var(--shell-max));
   margin-inline: auto;
 }
 
@@ -11,7 +11,8 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   min-height: 76px;
-  padding: 12px max(var(--space-group), calc((100vw - 1340px) / 2));
+  /* 100px wider than the shell -- see the note on the portal header. */
+  padding: 12px max(var(--space-group), calc((100vw - (var(--shell-max) + 100px)) / 2));
   border-bottom: 1px solid color-mix(in srgb, var(--navy) 10%, transparent);
   background: color-mix(in srgb, var(--ivory) 90%, transparent);
   backdrop-filter: blur(18px);
@@ -255,7 +256,7 @@
   flex-direction: column;
   justify-content: center;
   padding: clamp(80px, 10vw, 148px) clamp(var(--space-block), 6vw, 108px);
-  padding-left: max(var(--space-block), calc((100vw - 1240px) / 2));
+  padding-left: max(var(--space-block), calc((100vw - var(--shell-max)) / 2));
 }
 
 .public-eyebrow {
@@ -1858,7 +1859,7 @@
   }
 
   .section-shell {
-    width: min(100% - 32px, 1240px);
+    width: min(100% - 32px, var(--shell-max));
   }
 
   .site-header {

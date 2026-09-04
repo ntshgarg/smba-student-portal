@@ -61,6 +61,7 @@ export type CaptureViewport = {
     | "mobile-430"
     | "tablet-820"
     | "web-1440"
+    | "wide-2560"
   width: number
 }
 
