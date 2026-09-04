@@ -6399,14 +6399,11 @@ tr.is-expanded .coach-member-row-action button svg {
     padding: 28px 22px;
   }
 
-  .coach-member-detail-domains dl {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-member-detail-domains dl > div.is-wide {
-    grid-column: 1;
-  }
-
+  /* `.coach-member-detail-domains dl` and its `.is-wide` child are deliberately
+     absent here. A second `@media (max-width: 720px)` block further down this
+     file sets both to opposite values -- two columns, and `grid-column: 1 / -1`
+     -- and being later it is the one that renders. Restating them here only
+     looked like the rule and never was it. */
   .coach-member-form-grid {
     grid-template-columns: 1fr;
   }
@@ -12302,7 +12299,10 @@ tr.is-expanded .coach-member-row-action button svg {
     min-width: 0;
     min-height: 0;
     border: 0;
-    font-size: 0.5625rem;
+    /* No font-size. The operations typography floor near the end of this file
+       sets one for this selector with no media query, and being later it wins --
+       so the 0.5625rem that used to sit here never rendered. Restoring it would
+       shrink the heading below the floor that block exists to hold. */
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
@@ -12431,9 +12431,9 @@ tr.is-expanded .coach-member-row-action button svg {
     border-top: 1px solid var(--line);
   }
 
-  .player-attendance-recorder .attendance-roster-player strong {
-    font-size: 0.6875rem;
-  }
+  /* `.attendance-roster-player strong` had a 0.6875rem step here that the
+     operations typography floor later in this file already overrode. Same story
+     as the roster heading above. */
 
   .player-attendance-recorder .attendance-roster-choices {
     grid-template-columns: repeat(2, minmax(62px, 1fr));
@@ -13681,10 +13681,18 @@ tr.is-expanded .coach-member-row-action button svg {
   font-size: var(--type-utility-label);
 }
 
+/* The `button + button` half is spelled out because it is the only way both
+   halves of the joined Present/Absent control land on one declaration. The
+   mobile block above lists both, this block listed only the first, and being
+   later it re-raised that one alone -- so on a phone the pair rendered at two
+   different sizes, 11px beside 8px, in a control whose whole point is that the
+   two options look alike. */
 .player-attendance-recorder .attendance-roster-choices button,
 .player-attendance-recorder .attendance-roster-adjustment,
 .staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
-  > .staff-roll-call-choice-box button {
+  > .staff-roll-call-choice-box button,
+.staff-roll-call.staff-roll-call-ledger .staff-roll-call-list article
+  > .staff-roll-call-choice-box button + button {
   font-size: var(--type-utility-label);
   letter-spacing: 0.02em;
 }

@@ -1116,7 +1116,9 @@
   }
 
   .registrationEquation span {
-    font-size: 0.625rem;
+    /* No font-size: the shared finance-register type floor below carries one for
+       this selector outside any media query, so it wins on source order and the
+       0.625rem that used to be here never rendered. */
     letter-spacing: 0.03em;
     line-height: 1.25;
   }
