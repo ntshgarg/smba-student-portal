@@ -854,10 +854,25 @@
   margin-top: clamp(18px, 2vw, 28px);
 }
 
+/* The clamp bounds are rem, and the middle term is still vw. That pairing is the
+   per-site decision app/globals.css deferred when it left the 169 clamp() font
+   sizes alone: at the browser's default font size the two are the same number
+   -- 3rem is 48px, 4.125rem is 66px -- so this page renders byte-identically to
+   before at every width, and the moment a reader raises their own default the
+   floor overtakes the viewport term and the reader wins.
+
+   Fluid type is deliberate on the marketing surfaces (21 of the 85 font sizes in
+   app/public-home.css are clamp(px, vw, px)), and it was wrong here for a reason
+   narrower than "operational surfaces should not be fluid": a px-bounded clamp
+   answers the window and never the reader, so at a 32px root this heading held
+   still while the 148 rem-sized elements around it doubled. Worse one rule down
+   the page: .focusedLedger .sectionHeading h3, in financials.module.css, held at
+   24px over 28px `dd` values -- the heading rendering smaller than the charges
+   it labels. */
 .playerRecordHeader h1 {
   margin-top: 10px;
   color: var(--navy);
-  font-size: clamp(48px, 5.4vw, 66px);
+  font-size: clamp(3rem, 5.4vw, 4.125rem);
   font-weight: 560;
   letter-spacing: -0.067em;
   line-height: 0.94;
@@ -1438,7 +1453,7 @@
   }
 
   .playerRecordHeader h1 {
-    font-size: clamp(40px, 12vw, 48px);
+    font-size: clamp(2.5rem, 12vw, 3rem);
   }
 
   .playerRecordActions {
