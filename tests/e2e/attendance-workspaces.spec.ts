@@ -348,7 +348,16 @@ test("Staff Roll Call matches the player roster choice controls across responsiv
       .toBeLessThanOrEqual(1)
     expect(Math.abs(boxes[1].left - boxes[0].right)).toBeLessThanOrEqual(1)
     expect(boxes[0].boxShadow).toBe("none")
-    expect(boxes[0].fontSize).toBe("11px")
+    /*
+     * Both halves, not just the first. This assertion only ever read boxes[0],
+     * which is why it sat green while the pair rendered at 11px and 8px on every
+     * phone-width screen -- the mobile block styled both buttons, a later
+     * un-mediated rule re-raised only one, and the control whose whole point is
+     * that the two options look alike did not. Fixed in the commit that added
+     * this line; pinned here so it cannot come back unseen.
+     */
+    expect(boxes[1].fontSize).toBe(boxes[0].fontSize)
+    expect(boxes[0].fontSize).toBe("12px")
     if (viewport.width <= 760) {
       expect(Math.min(...boxes.map((box) => box.height))).toBeGreaterThanOrEqual(44)
     }

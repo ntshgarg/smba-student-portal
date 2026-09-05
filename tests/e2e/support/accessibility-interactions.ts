@@ -25,6 +25,22 @@ async function clickFirstVisible(locator: Locator) {
   return candidate
 }
 
+// `page.waitForLoadState("domcontentloaded")` was what these three used to wait
+// on, and it resolves the instant it is called: a link into another App Router
+// segment is a soft navigation, so no new document is created and the load state
+// of the one already on screen is long since `complete`. What can be waited on
+// is the URL, which the router pushes as it starts the transition -- so this
+// says "the router accepted the click", and nothing more. The DOM behind that
+// URL can still be the previous route's, or its loading fallback; `settle` in
+// accessibility-regression.spec.ts is what waits for the arriving route to land.
+async function clickIntoRoute(locator: Locator) {
+  const candidate = await firstVisible(locator)
+  const departed = new URL(candidate.page().url()).pathname
+  await candidate.click()
+  await candidate.page().waitForURL((url) => url.pathname !== departed, { timeout: 20_000 })
+  return candidate
+}
+
 // The audit only checks that closing a dialog restores focus when it can identify
 // the trigger, which it does through this attribute. Marking the trigger here
 // keeps that check available to every dialog state rather than just one.
@@ -91,8 +107,7 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "financial-player-open": {
-      await clickFirstVisible(page.getByRole("link", { name: /View fee record for/u }))
-      await page.waitForLoadState("domcontentloaded")
+      await clickIntoRoute(page.getByRole("link", { name: /View fee record for/u }))
       break
     }
     case "login-error": {
@@ -125,8 +140,7 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "player-announcement-open": {
-      await clickFirstVisible(page.getByRole("link", { name: /Read announcement:/u }))
-      await page.waitForLoadState("domcontentloaded")
+      await clickIntoRoute(page.getByRole("link", { name: /Read announcement:/u }))
       break
     }
     case "player-report-open": {
@@ -158,10 +172,9 @@ export async function executeAccessibilityInteraction(
       // Publications get random ids, so the detail page is reached by opening one
       // from the archive. A report with several revisions renders the most.
       const withHistory = page.getByRole("link", { name: /latest revision [2-9]/u })
-      await clickFirstVisible(await withHistory.count()
+      await clickIntoRoute(await withHistory.count()
         ? withHistory
         : page.getByRole("link", { name: /^Open report for/u }))
-      await page.waitForLoadState("domcontentloaded")
       break
     }
     case "search-admin-directory": {

@@ -131,13 +131,29 @@
    *
    * The floor is the old value, and 78vw only overtakes it around 1590px, so
    * every laptop and 1440p screen renders byte-identically to before and the
-   * change is confined to monitors that actually have the room. The ceiling
-   * stops a 4K screen turning card rows into unreadably long sweeps.
+   * change is confined to monitors that actually have the room.
+   *
+   * There was a 2080px ceiling here as well, on the reasoning that a 4K screen
+   * would otherwise turn card rows into unreadably long sweeps. It is gone,
+   * because it reintroduced the problem it sat beside: 2080px is reached at a
+   * 2667px viewport, so above that the column stopped growing again and a 3840px
+   * screen showed 2080px of content inside 880px of margin per side -- 54% of the
+   * glass, against the 78% every size between 1590 and 2667 already got. "Not
+   * proportionate" was precisely right, and a ceiling is what made it so.
+   *
+   * The head coach was shown 2080, 2560 and uncapped rendered at 3840 and chose
+   * uncapped, so the rule is now the same one at every width above 1590px rather
+   * than a rule with an exception. `max()` rather than a clamp with a very large
+   * third term: a ceiling nothing reaches is a ceiling someone later has to reason
+   * about.
    *
    * Consumers keep their own `min(100% - <gutter>, ...)` wrapper, which is what
    * guarantees the gutter and keeps `vw` -- which counts the scrollbar -- from
-   * ever pushing content wider than its parent. */
-  --shell-max: clamp(1240px, 78vw, 2080px);
+   * ever pushing content wider than its parent. The two header rules that hang off
+   * this (app/portal.css:1263, app/public-home.css:15) are written as an offset
+   * from --shell-max rather than as their own width, so they follow it out and the
+   * brand keeps its 60px and 50px overhang at every width. */
+  --shell-max: max(1240px, 78vw);
   /* The five size tokens, and the 743 loose `font-size` declarations elsewhere, are
      `rem` rather than `px`. Browser *zoom* already scales a px type scale correctly;
      what a px type scale defeats is the other control — the reader's default font
@@ -159,11 +175,23 @@
      win, and that is a separate piece of work from a unit substitution that provably
      moves nothing. The 169 other clamp() font sizes in these sheets stay for the same
      reason. */
-  --type-utility-label: 0.6875rem;
-  --type-utility-meta: 0.75rem;
-  --type-operational-body: 0.8125rem;
-  --type-operational-action: 0.75rem;
-  --type-operational-floor: 0.625rem;
+  /* Raised one pixel each on 2026-09-04. The scale had settled a step lower than
+     it should have: the floor was 10px and carried 102 of the 131 tokenised
+     sizes, so the size a coach reads most often across the workspace was the
+     smallest one the system had. Every step keeps its position relative to the
+     others -- floor below label below meta below body -- so this lifts the scale
+     rather than flattening it.
+
+     Each value stays a whole pixel at a 16px root (11/16, 12/16, 13/16, 14/16),
+     which tests/design-tokens.test.ts requires.
+
+     It reaches 131 of the 1,087 font-size declarations in these stylesheets. The
+     rest are still written out longhand and are a separate piece of work. */
+  --type-utility-label: 0.75rem;
+  --type-utility-meta: 0.8125rem;
+  --type-operational-body: 0.875rem;
+  --type-operational-action: 0.8125rem;
+  --type-operational-floor: 0.6875rem;
   /* The coach workspace page title. 5 of the 27 hand-authored base H1 recipes
      declare this exact clamp, every one of them beside the same 545 / -0.075em
      / 0.9. It is *not* the `.page-intro h1` size: the shared PageIntro
