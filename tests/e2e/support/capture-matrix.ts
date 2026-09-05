@@ -56,6 +56,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     critical: true,
     description: "Public mobile navigation open",
     id: "public-home-mobile-menu",
+    narrowOnly: true,
     route: "/",
     viewportOnly: true,
   },
@@ -82,6 +83,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     description: "Academy navigation anchor landing position",
     focusSelector: "#academy",
     id: "public-home-academy-anchor",
+    narrowOnly: true,
     route: "/",
     viewportOnly: true,
   },
@@ -91,6 +93,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     description: "Programs navigation anchor landing position",
     focusSelector: "#programs",
     id: "public-home-programs-anchor",
+    narrowOnly: true,
     route: "/",
     viewportOnly: true,
   },
@@ -100,6 +103,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     description: "Why SMBA navigation anchor landing position",
     focusSelector: "#why-smba",
     id: "public-home-why-anchor",
+    narrowOnly: true,
     route: "/",
     viewportOnly: true,
   },
@@ -109,6 +113,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     description: "Free-trial navigation anchor landing position",
     focusSelector: "#trial",
     id: "public-home-trial-anchor",
+    narrowOnly: true,
     route: "/",
     viewportOnly: true,
   },
@@ -118,6 +123,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     description: "Contact navigation anchor landing position",
     focusSelector: "#contact",
     id: "public-home-contact-anchor",
+    narrowOnly: true,
     route: "/",
     viewportOnly: true,
   },
@@ -402,6 +408,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     actor: "coach",
     description: "Member directory filters open",
     id: "coach-member-filters-open",
+    narrowOnly: true,
     route: "/coach/members",
   },
   {
@@ -410,6 +417,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     description: "Member directory with Level, Status, and Batch filters applied",
     focusSelector: ".coach-member-directory-controls",
     id: "coach-member-filter-applied",
+    narrowOnly: true,
     route: "/coach/members",
     scenarios: populatedScenarios,
     viewportOnly: true,
@@ -594,10 +602,30 @@ export const captureDefinitions: CaptureDefinition[] = [
   },
 ]
 
+/* The widest window at which every `narrowOnly` control still exists. The public
+ * navigation collapses to its toggle under `@media (max-width: 900px)` in
+ * app/public-home.css, and the Member Directory filter toggle lives under
+ * `@media (max-width: 980px)` at app/portal.css:11528. 900 satisfies both, and it
+ * sits between tablet-820 and web-1440 so it splits the responsive set exactly
+ * where the observed failures split it. */
+const NARROW_CONTROL_CEILING = 900
+
 export function viewportsForCapture(
   definition: CaptureDefinition,
   viewportSet: CaptureViewportSet = "mobile",
 ) {
-  if (viewportSet === "responsive") return responsiveViewports
+  if (viewportSet === "responsive") {
+    /* Without this, asking for the responsive set handed every definition all four
+     * widths regardless of what it was written for, so the six public-home nav
+     * captures and the two Member Directory filter captures ran at 1440 and 2560 --
+     * where their control does not render -- and each spent the full 180s case
+     * timeout waiting for it. Eight definitions failing by construction is why the
+     * responsive set was never wired into a workflow, and why nothing in CI has ever
+     * rendered a screen wider than 430px (.github/workflows/ui-accessibility.yml:191).
+     */
+    return definition.narrowOnly
+      ? responsiveViewports.filter((viewport) => viewport.width <= NARROW_CONTROL_CEILING)
+      : responsiveViewports
+  }
   return definition.critical ? criticalViewports : [primaryViewport]
 }
