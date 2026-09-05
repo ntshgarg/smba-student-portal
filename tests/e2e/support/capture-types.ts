@@ -30,6 +30,7 @@ export type CaptureAction =
   | "member-edit-open"
   | "member-filter-applied"
   | "member-filters-open"
+  | "onboarding-open-case"
   | "profile-menu-open"
   | "public-fee-weekday-advanced"
   | "public-fee-weekday-standard"

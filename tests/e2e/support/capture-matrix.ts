@@ -411,6 +411,30 @@ export const captureDefinitions: CaptureDefinition[] = [
     narrowOnly: true,
     route: "/coach/members",
   },
+  /*
+   * The onboarding flow had no capture at all -- 66 definitions over 27 routes and
+   * not one of them /coach/onboarding. That is why a type change split 25 label
+   * pairs across it, why the four step-rail markers sat on three different heights
+   * below 393px, and why the row arrow spent every width 4.5px right of its own tap
+   * square: nothing ever photographed the screen. Two definitions, because the
+   * queue and the inline case editor are different compositions and the editor has
+   * no route of its own to point at.
+   */
+  {
+    actor: "coach",
+    critical: true,
+    description: "Academy onboarding queue, all stages in one ordered list",
+    id: "coach-onboarding-queue",
+    route: "/coach/onboarding",
+  },
+  {
+    actions: ["onboarding-open-case"],
+    actor: "coach",
+    description: "Onboarding case editor expanded on a Session-stage player",
+    focusSelector: "ol[class*='stepRail']",
+    id: "coach-onboarding-case",
+    route: "/coach/onboarding",
+  },
   {
     actions: ["member-filter-applied"],
     actor: "coach",
