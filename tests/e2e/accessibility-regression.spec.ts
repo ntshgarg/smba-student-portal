@@ -4,7 +4,7 @@ import path from "node:path"
 
 import { base32 } from "@better-auth/utils/base32"
 import { createOTP } from "@better-auth/utils/otp"
-import type { Browser, BrowserContext, CDPSession, Page, TestInfo } from "@playwright/test"
+import type { Browser, BrowserContext, CDPSession, Page, Request, TestInfo } from "@playwright/test"
 import Database from "better-sqlite3"
 
 import { expect, test } from "./support/failure-evidence"
@@ -269,18 +269,208 @@ async function newContext(browser: Browser) {
   })
 }
 
+// How many frames the landmark has to go unmutated before the audit believes it,
+// and how long the whole wait may take. Six frames is ~100ms at 60Hz -- long
+// enough that a router commit lands inside the window rather than after it, and
+// measured at 99-103ms across a full stress run.
+const LANDMARK_STABLE_FRAMES = 6
+const LANDMARK_STABLE_TIMEOUT_MS = 8_000
+
+/*
+ * Why this suite tracks App Router fetches itself.
+ *
+ * `settle` used to end at `networkidle`, `document.title` and two animation
+ * frames, and every one of those is satisfied by the document the browser is
+ * already showing. Playwright records `networkidle` as a lifecycle event of the
+ * current document, so on a page that has finished loading `waitForLoadState`
+ * returns without waiting; a soft navigation creates no new document, so it
+ * never fires again. `document.title` is worse than useless here, because Next
+ * streams metadata in a boundary of its own: the title of the route being
+ * navigated to arrives ahead of that route's content, so the one signal that
+ * looks like it proves arrival is the signal that proves it has *not* arrived
+ * yet.
+ *
+ * Measured on the stress fixture, `coach-player-financial-record` finished
+ * settling 101ms after its click while the route landed at ~350ms, so three of
+ * its eight audits -- two axe passes and one text-resize sweep -- read
+ * `app/coach/financials/loading.tsx`, 13 elements and 105 characters, against
+ * the 350 elements the route actually renders.
+ *
+ * A DOM-quiescence wait alone would not close it. The fallback is perfectly
+ * still for the ~250ms it is up, and a route with no `loading.tsx` is worse
+ * still: React keeps the *previous* segment mounted for the whole transition, so
+ * the DOM the audit would be confirming as stable is the page the interaction
+ * navigated away from. The router's own fetch is the only signal that is about
+ * the route being navigated to, so it is the one waited on first.
+ */
+type RouterActivity = {
+  // Router fetches that have started and not yet been reported as done, by the
+  // instant each one started.
+  open: Map<Request, number>
+  // The last moment this page did anything a route change is made of: opened a
+  // router fetch, or moved the URL. The App Router pushes the destination URL as
+  // it starts a transition, so watching both closes the gap between the two --
+  // a `settle` that ran inside it would find nothing open and call the page
+  // quiet while its route was still on the way.
+  lastActiveAt: number
+}
+
+const routerActivity = new WeakMap<Page, RouterActivity>()
+
+function isRouterFetch(request: Request) {
+  const headers = request.headers()
+  // `RSC: 1` is set by the App Router's own fetches and by nothing else the
+  // portal issues. Read from the request rather than the URL because `_rsc` is a
+  // cache-busting search parameter, not a contract.
+  if (headers.rsc !== "1") return false
+  // A segment prefetch asks for the route tree and its loading boundary, never
+  // for the page underneath, so it cannot be the request that ends a transition
+  // -- waiting on one only ever delays the audit of a route that has already
+  // arrived by another fetch.
+  return !headers["next-router-segment-prefetch"]
+}
+
+function routerActivityFor(page: Page) {
+  const tracked = routerActivity.get(page)
+  if (tracked) return tracked
+  const activity: RouterActivity = { lastActiveAt: 0, open: new Map() }
+  routerActivity.set(page, activity)
+  page.on("request", (request) => {
+    if (!isRouterFetch(request)) return
+    activity.open.set(request, Date.now())
+    activity.lastActiveAt = Date.now()
+  })
+  page.on("requestfinished", (request) => activity.open.delete(request))
+  // Aborted counts as closed: the router cancels its outstanding prefetch when a
+  // click turns into a navigation, and leaving that one open would stall every
+  // later wait on the page.
+  page.on("requestfailed", (request) => activity.open.delete(request))
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) activity.lastActiveAt = Date.now()
+  })
+  return activity
+}
+
+// Playwright does not always report the end of a fetch the browser discards --
+// one `/coach` prefetch was watched opening and then emitting neither
+// `requestfinished` nor `requestfailed` for the remaining eight seconds of its
+// page's life. One of those is enough to hold the count above zero forever, and
+// the first draft of this paid for that: 54 of the first 101 settles of a stress
+// run sat out the whole timeout below, nine minutes of waiting on a request
+// nobody was going to answer.
+//
+// So age is the second half of the question. A fetch this old is not the one
+// carrying the route the audit is about to read: the navigation this exists for
+// lands in ~250ms against a local `next start`, and anything still open after
+// three seconds has either been discarded or is slow enough that the landmark
+// wait below is the honest check for it.
+const ROUTER_FETCH_MAX_AGE_MS = 3_000
+// How long after the last sign of a route change the page is taken to have
+// finished changing route. Not a floor on every settle: a page that has been
+// sitting on one route for longer than this is already quiet and pays nothing,
+// which is what keeps this affordable across the 444 settles a stress run makes.
+const ROUTER_QUIET_MS = 250
+const ROUTER_IDLE_TIMEOUT_MS = 10_000
+
+function openRouterFetchCount(activity: RouterActivity) {
+  const cutoff = Date.now() - ROUTER_FETCH_MAX_AGE_MS
+  for (const [request, startedAt] of activity.open) {
+    if (startedAt < cutoff) activity.open.delete(request)
+  }
+  return activity.open.size
+}
+
+async function waitForRouterIdle(page: Page) {
+  const activity = routerActivityFor(page)
+  const deadline = Date.now() + ROUTER_IDLE_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if (!openRouterFetchCount(activity)
+      && Date.now() - activity.lastActiveAt >= ROUTER_QUIET_MS) return
+    await page.waitForTimeout(25)
+  }
+}
+
+// The landmark the audit reads, held still.
+//
+// A MutationObserver rather than a per-frame reading of the landmark, which is
+// what this did first. Sampling meant walking the whole subtree and
+// materialising its text on every frame, and the pages that most need the wait
+// are the ones where that costs most -- the stress attendance registers run to
+// thousands of nodes. Paying it seven times over immediately before
+// `auditTextResizeLayout` puts load on the renderer at the exact moment that
+// pass is asking the browser to restyle the document twice, which is the
+// condition its own `text-resize-absorbed` race is known to surface under. The
+// observer costs nothing while nothing changes, and it notices changes a count
+// and a character total would both miss.
+async function waitForStableLandmark(page: Page) {
+  await page.evaluate(async ({ frames, timeout }) => {
+    const landmark = document.querySelector("main") ?? document.body
+    let mutated = false
+    const observer = new MutationObserver(() => { mutated = true })
+    observer.observe(landmark, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
+    try {
+      const nextFrame = () => new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve())
+      })
+      const deadline = performance.now() + timeout
+      let still = 0
+      while (still < frames && performance.now() < deadline) {
+        await nextFrame()
+        // Read and clear together: a mutation delivered during this frame has to
+        // reset the count rather than be carried into the next one.
+        if (mutated) {
+          mutated = false
+          still = 0
+        } else still += 1
+      }
+    } finally {
+      observer.disconnect()
+    }
+  }, { frames: LANDMARK_STABLE_FRAMES, timeout: LANDMARK_STABLE_TIMEOUT_MS })
+}
+
 async function settle(page: Page) {
   await page.waitForLoadState("domcontentloaded")
   await page.waitForLoadState("networkidle", { timeout: 2_000 }).catch(() => undefined)
   await page.waitForFunction(() => document.title.trim().length > 0, undefined, {
     timeout: 5_000,
   }).catch(() => undefined)
+  await waitForRouterIdle(page)
   await page.evaluate(async () => {
     await document.fonts.ready.catch(() => undefined)
     await new Promise<void>((resolve) => {
       window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()))
     })
   })
+  await waitForStableLandmark(page)
+}
+
+function assertNavigationRoute(page: Page, state: AccessibilityState) {
+  const expectedPath = state.expectedRoute ?? new URL(state.route, baseURL).pathname
+  const actualPath = new URL(page.url()).pathname
+  if (actualPath !== expectedPath) {
+    throw new Error(`Expected ${expectedPath}, but navigation resolved to ${actualPath}.`)
+  }
+}
+
+// Nothing checked where an interaction landed until this existed, so an
+// interaction that navigated somewhere else -- or, once a link is renamed,
+// nowhere at all -- would be audited as if it had worked, under the id of the
+// state it was supposed to reach.
+function assertInteractionRoute(page: Page, state: AccessibilityState) {
+  if (!state.interactionRoute) return
+  const actualPath = new URL(page.url()).pathname
+  if (!state.interactionRoute.test(actualPath)) {
+    throw new Error(
+      `The ${state.interaction} interaction was expected to land on`
+      + ` ${state.interactionRoute}, but it resolved to ${actualPath}.`,
+    )
+  }
 }
 
 async function auditCurrentPage({
@@ -383,12 +573,9 @@ async function auditMatrixState(
     try {
       await page.goto(state.route, { waitUntil: "domcontentloaded" })
       await settle(page)
-      const expectedPath = state.expectedRoute ?? new URL(state.route, baseURL).pathname
-      const actualPath = new URL(page.url()).pathname
-      if (actualPath !== expectedPath) {
-        throw new Error(`Expected ${expectedPath}, but navigation resolved to ${actualPath}.`)
-      }
+      assertNavigationRoute(page, state)
       if (state.interaction) await executeAccessibilityInteraction(page, state.interaction)
+      assertInteractionRoute(page, state)
       await auditCurrentPage({
         actor: state.actor,
         description: state.description,
@@ -443,27 +630,30 @@ async function auditTextResizeState(
       const client = await raiseBrowserTextSize()
       await page.goto(state.route, { waitUntil: "domcontentloaded" })
       await settle(page)
-      const expectedPath = state.expectedRoute ?? new URL(state.route, baseURL).pathname
-      const actualPath = new URL(page.url()).pathname
-      if (actualPath !== expectedPath) {
-        throw new Error(`Expected ${expectedPath}, but navigation resolved to ${actualPath}.`)
-      }
+      assertNavigationRoute(page, state)
       if (state.interaction) await executeAccessibilityInteraction(page, state.interaction)
+      assertInteractionRoute(page, state)
       // Same normalisation auditCurrentPage applies, and for the same reason: an
       // interaction that scrolled its trigger into view would otherwise leave
       // sticky chrome sitting over controls that are merely above the fold.
       //
       // Unconditional, and kept unconditional on purpose. Twelve of the sixteen
-      // states declare no interaction, so it looks like 41 of the 55 audits are
-      // paying a second `settle` for nothing -- but a repeated `settle` on the
-      // same document is nearly free: Playwright records `networkidle` as a
+      // states declare no interaction, so 41 of the 55 audits are paying a
+      // second `settle` for a document that has not moved.
+      //
+      // That used to be nearly free -- Playwright records `networkidle` as a
       // lifecycle event of the current document and `waitForLoadState` returns
-      // immediately once it has fired ("not waiting, networkidle event already
-      // fired"), so the 2s is a timeout rather than a cost, and what is left is
-      // `document.fonts.ready` and two animation frames. Dropping it would buy
-      // tens of milliseconds and give up the one wait that would catch content
-      // arriving after hydration -- on the pass whose whole value is that its
-      // measurements are trustworthy.
+      // immediately once it has fired, so the 2s was a timeout rather than a
+      // cost, and what was left was `document.fonts.ready` and two animation
+      // frames. It is no longer free: the router-idle and landmark-stability
+      // waits are real, and they are the reason this pass now costs a few
+      // hundred milliseconds per audit more than it did.
+      //
+      // Paid anyway, because those are exactly the waits this call was always
+      // there for. This is the pass whose whole value is that its three layout
+      // measurements are trustworthy, and the one state here that navigates --
+      // `coach-player-financial-record` -- is the one that was measuring a
+      // loading fallback.
       await page.evaluate(() => window.scrollTo(0, 0))
       await settle(page)
       const { advisories, findings } = await auditTextResizeLayout({ client, page, viewport })

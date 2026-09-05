@@ -48,6 +48,24 @@ export type AccessibilityInteraction =
   | "report-publication-open"
   | "search-admin-directory"
 
+// The interactions that click their way onto a different pathname. Every state
+// that uses one has to say where it lands, which
+// tests/accessibility-regression-gate.test.ts holds it to. An interaction that
+// navigates and is audited with nothing asserting where it went is how
+// `coach-player-financial-record` came to be audited against the route it left
+// rather than the one it opened, on three of its eight audits per run.
+//
+// `attendance-session-open` and `onboarding-first-open` are deliberately absent:
+// they navigate too, but only over the search string, so they land back on the
+// pathname the state already declares and there is nothing left for a second
+// check to say. What they share with the three below is the wait, and that lives
+// in `settle` rather than here.
+export const navigatingAccessibilityInteractions: readonly AccessibilityInteraction[] = [
+  "financial-player-open",
+  "player-announcement-open",
+  "report-publication-open",
+]
+
 // Deterministic ids the stress fixture builder assigns, so parameterised routes
 // can be deep-linked the same way the query-string routes below already are.
 // Report publications get random ids, so those routes are reached by interaction.
@@ -61,6 +79,17 @@ export type AccessibilityState = {
   id: string
   interaction?: AccessibilityInteraction
   expectedRoute?: string
+  // Where the interaction has to land. `expectedRoute` is checked before the
+  // interaction runs and so says nothing about an interaction that navigates --
+  // `coach-player-financial-record` clicks its way onto a second route and
+  // nothing asserted it arrived. A pattern rather than a path because these
+  // destinations carry a fixture-generated id in the pathname.
+  //
+  // This is a claim about the URL, not about the DOM under it -- the App Router
+  // pushes the destination URL at the same moment it shows the loading
+  // fallback, so a state can satisfy this while `main` still holds the previous
+  // route's skeleton. Waiting for the content is `settle`'s job.
+  interactionRoute?: RegExp
   profile: AccessibilityProfile
   route: string
 }
@@ -422,6 +451,7 @@ export const accessibilityStates: readonly AccessibilityState[] = [
     description: "Published report detail with a revision history",
     id: "coach-report-publication",
     interaction: "report-publication-open",
+    interactionRoute: /^\/coach\/reports\/publications\/[^/]+$/u,
     profile: "stress",
     route: "/coach/reports?period=2026-07",
   },
@@ -467,6 +497,7 @@ export const accessibilityStates: readonly AccessibilityState[] = [
     description: "Player financial record",
     id: "coach-player-financial-record",
     interaction: "financial-player-open",
+    interactionRoute: /^\/coach\/financials\/players\/[^/]+$/u,
     profile: "stress",
     route: "/coach/financials/records?view=fees&mode=monthly&period=2026-08",
   },
@@ -584,6 +615,7 @@ export const accessibilityStates: readonly AccessibilityState[] = [
     description: "Player announcement detail",
     id: "player-announcement-detail",
     interaction: "player-announcement-open",
+    interactionRoute: /^\/player\/announcements\/[^/]+$/u,
     profile: "stress",
     route: "/player/announcements",
   },
