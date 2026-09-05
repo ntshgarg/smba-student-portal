@@ -24,6 +24,7 @@ import {
 import {
   auditTextResizeLayout,
   BROWSER_DEFAULT_FONT_SIZES,
+  measureTextScaleResponse,
   isTextResizeResultId,
   resolveTextResizeStates,
   textResizeAbsorbedFindings,
@@ -53,6 +54,8 @@ function responsiveSample(): TextScaleSample {
       { baseline: 13, raised: 26, target: "td.coach-fee-amount" },
       { baseline: 11, raised: 22, target: "span.coach-fee-label" },
     ],
+    settleFrames: 4,
+    settled: true,
   }
 }
 
@@ -80,19 +83,42 @@ function pageAnswering({
   const reading = (side: "baseline" | "raised") => ({
     body: sample.body[side],
     root: sample.root[side],
-    sampled: sample.sampled.map((entry, index) => ({
-      index,
-      size: entry[side],
-      target: entry.target,
-    })),
+    sampled: sample.sampled.map((entry, index) => ({ index, size: entry[side] })),
+  })
+  const settled = (side: "baseline" | "raised") => ({
+    frames: sample.settleFrames,
+    reading: reading(side),
+    settled: sample.settled,
   })
   const script = [
-    { answer: () => rootFontSize as unknown, name: "settled-root-font-size" },
+    {
+      answer: () => ({
+        frames: 2,
+        reading: { body: rootFontSize, root: rootFontSize, sampled: [] },
+        settled: true,
+      }) as unknown,
+      name: "settled-root-font-size",
+    },
     { answer: () => layout as unknown, name: "layout" },
-    { answer: () => reading("raised") as unknown, name: "text-scale" },
-    { answer: () => BROWSER_DEFAULT_FONT_SIZES.standard as unknown, name: "settle" },
-    { answer: () => reading("baseline") as unknown, name: "text-scale" },
-    { answer: () => TEXT_RESIZE_FONT_SIZES.standard as unknown, name: "settle" },
+    {
+      answer: () => sample.sampled.map((entry, index) => ({ index, target: entry.target })),
+      name: "sample-tags",
+    },
+    { answer: () => settled("raised") as unknown, name: "settled-text-scale" },
+    { answer: () => settled("baseline") as unknown, name: "settled-text-scale" },
+    {
+      answer: () => ({
+        frames: 2,
+        reading: {
+          body: TEXT_RESIZE_FONT_SIZES.standard,
+          root: TEXT_RESIZE_FONT_SIZES.standard,
+          sampled: [],
+        },
+        settled: true,
+      }) as unknown,
+      name: "settle",
+    },
+    { answer: () => undefined as unknown, name: "clear-sample-tags" },
   ]
   const calls: string[] = []
   const sends: { fixed: number; standard: number }[] = []
@@ -231,6 +257,49 @@ describe("whether the page received the size the pass renders at", () => {
     expect(absorbed.message).toContain("0 of 1 sampled text elements moved")
   })
 
+  it("is not satisfied by one element in forty", () => {
+    // The threshold the two false failures cleared. `responsive > 0` asks whether the page
+    // contains a single scalable word, which a surface that had pinned every column it
+    // renders can answer yes to with one caption. It is also the reading a racing
+    // measurement produces -- one of forty, which is neither the none an absorbed render
+    // gives nor the most a healthy one does -- so the weakest form of the question was also
+    // the one that could not tell a defect from a dropped frame.
+    const scaled = (index: number) => ({
+      baseline: 12, raised: 24, target: `span.scaled-${index}`,
+    })
+    const pinned = (index: number) => ({
+      baseline: 13, raised: 13, target: `span.pinned-${index}`,
+    })
+    const of = (moved: number, total: number) => sample({
+      sampled: [
+        ...Array.from({ length: moved }, (_, index) => scaled(index)),
+        ...Array.from({ length: total - moved }, (_, index) => pinned(index)),
+      ],
+    })
+    expect(textResizeAbsorbedFindings(of(1, 40), 32, 16).map((item) => item.id))
+      .toEqual(["text-resize-absorbed"])
+    expect(textResizeAbsorbedFindings(of(13, 40), 32, 16).map((item) => item.id))
+      .toEqual(["text-resize-absorbed"])
+    // Exactly a third is enough, and an indivisible sample is decided in integers rather
+    // than against a fraction: 1 of 4 fails, 2 of 4 passes.
+    expect(textResizeAbsorbedFindings(of(14, 40), 32, 16)).toEqual([])
+    expect(textResizeAbsorbedFindings(of(1, 4), 32, 16).map((item) => item.id))
+      .toEqual(["text-resize-absorbed"])
+    expect(textResizeAbsorbedFindings(of(2, 4), 32, 16)).toEqual([])
+    // And the message says what was asked, so a reader is not left counting for themselves.
+    // The threshold closes the sentence rather than splitting the count from the elements
+    // named beside it: "1 of 40 moved (a, b, c did not), where at least a third have to."
+    expect(textResizeAbsorbedFindings(of(1, 40), 32, 16)[0].message)
+      .toContain("1 of 40 sampled text elements moved (span.pinned-0 at 13px,"
+        + " span.pinned-1 at 13px, span.pinned-2 at 13px did not),"
+        + " where at least a third have to.")
+    // The floor the covered states actually measure at. coach-player-financial-record moves
+    // 19 of 40 -- fluid clamp(px, vw, px) headings and a px-pinned summary block, on a page
+    // that renders that way today -- and a threshold it failed would be this check making a
+    // decision about that page rather than about itself.
+    expect(textResizeAbsorbedFindings(of(19, 40), 32, 16)).toEqual([])
+  })
+
   it("counts half a pixel as no movement at all", () => {
     // Same tolerance as the root reading, for the same reason: Blink rounds a computed
     // font-size onto a device-pixel grid, and text that genuinely doubled moves by whole
@@ -283,6 +352,8 @@ describe("whether the page received the size the pass renders at", () => {
         body: { baseline: 16, raised: 16 },
         root: { baseline: 16, raised: 32 },
         sampled: [{ baseline: 13, raised: 13, target: "td.coach-fee-amount" }],
+        settleFrames: 30,
+        settled: false,
       },
     })
     const audited = await auditTextResizeLayout({
@@ -292,8 +363,15 @@ describe("whether the page received the size the pass renders at", () => {
     })
     expect(audited.findings.map((item) => item.id)).toEqual(["text-resize-absorbed"])
     expect(audited.advisories).toEqual([])
-    expect(absorbed.calls)
-      .toEqual(["settled-root-font-size", "layout", "text-scale", "settle", "text-scale", "settle"])
+    expect(absorbed.calls).toEqual([
+      "settled-root-font-size",
+      "layout",
+      "sample-tags",
+      "settled-text-scale",
+      "settled-text-scale",
+      "settle",
+      "clear-sample-tags",
+    ])
   })
 
   it("files the advisories once the render is one the reader's setting reached", async () => {
@@ -316,8 +394,15 @@ describe("whether the page received the size the pass renders at", () => {
     // The probe runs after the layout walk, never before it: it lowers the browser
     // preference to take its second reading, and a walk handed a page that had just been
     // shrunk and regrown would be measuring the recovery rather than the render.
-    expect(live.calls)
-      .toEqual(["settled-root-font-size", "layout", "text-scale", "settle", "text-scale", "settle"])
+    expect(live.calls).toEqual([
+      "settled-root-font-size",
+      "layout",
+      "sample-tags",
+      "settled-text-scale",
+      "settled-text-scale",
+      "settle",
+      "clear-sample-tags",
+    ])
     // Down to the browser's shipped defaults and back up to the size this pass renders at,
     // in that order. The second half is not optional: the page is reused by every state
     // after this one, and one left at 16px would fail the next state's root reading for a
@@ -362,13 +447,24 @@ type ModelElement = {
 
 function chromiumFontSizeModel({
   bodyPx,
+  chrome = [],
   elements,
+  hasMain = true,
   layout = CLEAN_LAYOUT,
+  restyleFrames = 1,
   unrestyled = false,
 }: {
   bodyPx?: number
+  /** Rendered outside the main landmark: the skip link, the masthead, the navigation. */
+  chrome?: ModelElement[]
   elements: ModelElement[]
+  /** False for a document with no main landmark, which has to fall back to `body`. */
+  hasMain?: boolean
   layout?: LayoutAudit
+  /** Frames between the root arriving and the tree that inherits from it following. One is
+   *  what a quiet machine does; a loaded CI runner has been measured taking more, and that
+   *  is the whole reason nothing here waits a fixed number of frames. */
+  restyleFrames?: number
   /** Start with the root already at the raised size and the document still laid out at the
    *  browser default -- the state run 32967379162's own failure screenshots were taken in. */
   unrestyled?: boolean
@@ -388,9 +484,22 @@ function chromiumFontSizeModel({
   // worse than the silence this round is repairing.
   let renderedRoot = preference
   let renderedText = unrestyled ? BROWSER_DEFAULT_FONT_SIZES.standard : preference
+  // Frames the root has been at the target while the tree behind it has not caught up. The
+  // restyle lands once that reaches restyleFrames, which is how this model reproduces the
+  // run the fixed two-frame wait was one frame short of.
+  let lagging = 0
   const commitFrame = () => {
-    if (renderedRoot !== target()) renderedRoot = target()
-    else renderedText = target()
+    if (renderedRoot !== target()) {
+      renderedRoot = target()
+      lagging = 0
+      return
+    }
+    if (renderedText === target()) return
+    lagging += 1
+    if (lagging >= restyleFrames) {
+      renderedText = target()
+      lagging = 0
+    }
   }
 
   const bodyFontSize = () => bodyPx ?? renderedText
@@ -417,7 +526,9 @@ function chromiumFontSizeModel({
     attributesOf.set(fake, attributes)
     return fake
   }
-  const nodes = elements.map(node)
+  const mainNodes = elements.map(node)
+  const chromeNodes = chrome.map(node)
+  const nodes = [...chromeNodes, ...mainNodes]
 
   const rootStyle = {
     get fontSize() { return inlineRoot === null ? "" : `${inlineRoot}px` },
@@ -428,16 +539,23 @@ function chromiumFontSizeModel({
   }
   const documentElement = { style: rootStyle }
   const body = {}
+  const main = {}
 
   const globals = {
     CSS: { escape: (value: string) => value },
     document: {
       body,
-      createTreeWalker: () => {
+      // The walk is scoped, so this has to be too: the landmark yields the page's own
+      // content and `body` yields the chrome ahead of it as well, in document order.
+      createTreeWalker: (root: object) => {
+        const walked = root === main ? mainNodes : nodes
         let index = 0
-        return { nextNode: () => (index < nodes.length ? nodes[index++] : null) }
+        return { nextNode: () => (index < walked.length ? walked[index++] : null) }
       },
       documentElement,
+      querySelector: (selector: string) => (
+        hasMain && selector === "main, [role=main]" ? main : null
+      ),
       querySelectorAll: (selector: string) => {
         const attribute = selector.replace(/^\[|\]$/gu, "")
         return nodes.filter((candidate) => attributesOf.get(candidate)?.has(attribute))
@@ -616,6 +734,126 @@ describe("the probe, against a browser that answers the way the one in CI did", 
     expect(audited.findings[0].targets)
       .toEqual(["body", "td.coach-fee-amount", "span.coach-fee-label"])
     expect(audited.findings[0].message).toContain("td.coach-fee-amount at 13px")
+  })
+
+  it("waits out a restyle that arrives later than any fixed number of frames", async () => {
+    // The flake this round repairs, and the reason nothing below counts frames. The wait
+    // that shipped exited on the root and then waited two frames, which is a guess about how
+    // long the tree behind the root takes to follow. On a loaded CI runner the guess is
+    // sometimes short: measured against this state's own route with every core busy, 20 of
+    // 400 lower-and-read cycles read a root that had halved beside a `body` that had not,
+    // and in all 20 a second synchronous read and a forced layout both returned the stale
+    // size while the next animation frame returned the settled one. It reached CI twice, on
+    // #145 and #152 — neither of which touched a unit — and passed on re-run both times.
+    //
+    // Five frames of lag rather than three, so this fails for the old wait by a margin
+    // rather than by one frame, and passes for the new one because the new one asks the
+    // render whether it has stopped moving instead of assuming when it will.
+    const browser = chromiumFontSizeModel({ elements: remSizedPage(), restyleFrames: 5 })
+    const audited = await browser.run(() => auditTextResizeLayout({
+      client: browser.client,
+      page: browser.page,
+      viewport: accessibilityViewports[2],
+    }))
+    expect(audited.findings).toEqual([])
+    expect(browser.renderedTextFontSize).toBe(TEXT_RESIZE_FONT_SIZES.standard)
+  })
+
+  it("reads the page's own content, not the masthead in front of it", async () => {
+    // Document order from `body` gives the first forty text-writing elements, and on every
+    // signed-in route those start with the skip link, the masthead and the navigation --
+    // the same components on all sixteen states. The surface each state was chosen for
+    // begins after them, and on the fee record at tablet width the walk from `body` reached
+    // ten elements in total. Scoped to the landmark, the sample is the state.
+    const browser = chromiumFontSizeModel({
+      chrome: [
+        { className: "site-skip", localName: "a", px: 13, text: "Skip to content" },
+        { className: "site-brand", localName: "span", px: 18, text: "SMBA" },
+        { className: "site-nav-link", localName: "a", px: 13, text: "Financials" },
+        { className: "site-nav-link", localName: "a", px: 13, text: "Members" },
+      ],
+      elements: remSizedPage(),
+    })
+    const sample = await browser.run(() => measureTextScaleResponse({
+      client: browser.client,
+      page: browser.page,
+    }))
+    expect(sample.sampled.map((reading) => reading.target)).toEqual([
+      "td.coach-fee-amount",
+      "span.coach-fee-label",
+      "time.coach-fee-date",
+    ])
+  })
+
+  it("falls back to the document body when a state renders no main landmark", async () => {
+    // A state missing its landmark already has `main-landmark-count` against it from the
+    // ordinary pass. Erroring here would add a second, differently worded accusation for
+    // the same defect; measuring what it does render says the useful thing instead.
+    const browser = chromiumFontSizeModel({
+      chrome: [{ className: "site-brand", localName: "span", rem: 1.125, text: "SMBA" }],
+      elements: remSizedPage(),
+      hasMain: false,
+    })
+    const sample = await browser.run(() => measureTextScaleResponse({
+      client: browser.client,
+      page: browser.page,
+    }))
+    expect(sample.sampled.map((reading) => reading.target)).toEqual([
+      "span.site-brand",
+      "td.coach-fee-amount",
+      "span.coach-fee-label",
+      "time.coach-fee-date",
+    ])
+  })
+
+  it("spreads the sample across the landmark instead of stopping at its header", async () => {
+    // Document order front-loads a page's own header, and a fee table's rows begin after all
+    // of it -- so a window taken from the front reads the heading, the summary block and the
+    // toolbar, and never reaches the surface the state was chosen for. Measured against the
+    // stress fixture with the fee table's type pinned in px by an injected stylesheet, a
+    // sample of the first forty still read 57%-75% moved and the gate stayed green through
+    // the exact regression it exists to catch; the same pin under a spread sample read
+    // 8%-25% and fired.
+    const header = Array.from({ length: 20 }, (_, index) => ({
+      className: `record-summary-${index}`, localName: "dd", px: 22, text: `Summary ${index}`,
+    }))
+    const rows = Array.from({ length: 100 }, (_, index) => ({
+      className: `fee-cell-${index}`, localName: "td", rem: 0.8125, text: `${index}`,
+    }))
+    const browser = chromiumFontSizeModel({ elements: [...header, ...rows] })
+    const sample = await browser.run(() => measureTextScaleResponse({
+      client: browser.client,
+      page: browser.page,
+    }))
+    // 120 candidates, a stride of three, so the reach is the whole landmark rather than its
+    // first forty elements -- and the fee rows, which are the point, are most of the sample.
+    expect(sample.sampled).toHaveLength(40)
+    expect(sample.sampled.at(0)?.target).toBe("dd.record-summary-0")
+    expect(sample.sampled.at(-1)?.target).toBe("td.fee-cell-97")
+    expect(sample.sampled.filter((reading) => reading.target.startsWith("td."))).toHaveLength(33)
+    // And with the rows in rem the render passes, where a header-only window of the same
+    // page would have been two thirds pinned.
+    expect(textResizeAbsorbedFindings(sample, TEXT_RESIZE_FONT_SIZES.standard)).toEqual([])
+  })
+
+  it("spends the whole budget on a pinned page, and says that it did", async () => {
+    // The other half of waiting for `body` to move: when it never does, the reading is not
+    // taken early and hoped over -- it is taken after the full 30 frames, and the finding
+    // says so. A message that reported a pinned render and a two-frame wait in the same
+    // breath is what made the two false failures unreadable.
+    const browser = chromiumFontSizeModel({
+      bodyPx: BROWSER_DEFAULT_FONT_SIZES.standard,
+      elements: [{ className: "coach-fee-amount", inherits: true, localName: "td", text: "5,500" }],
+    })
+    const sample = await browser.run(() => measureTextScaleResponse({
+      client: browser.client,
+      page: browser.page,
+    }))
+    expect(sample.settled).toBe(false)
+    expect(sample.settleFrames).toBe(30)
+    const [absorbed] = textResizeAbsorbedFindings(sample, TEXT_RESIZE_FONT_SIZES.standard)
+    expect(absorbed.id).toBe("text-resize-absorbed")
+    expect(absorbed.message).toContain("30 frames and never arrived")
   })
 
   it("leaves no probe attributes on the page it measured", async () => {

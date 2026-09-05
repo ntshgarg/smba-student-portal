@@ -41,13 +41,55 @@ const ROOT_FONT_SIZE_TOLERANCE = 0.5
 // sheets goes 10px → 20px — and nothing that stayed put moves by half of one.
 const TEXT_SCALE_TOLERANCE = 0.5
 
-// How many rendered text elements the responsiveness probe reads. Bounded
-// because the walk is the cost: the full `body *` walk is the expensive one in
-// accessibility-audit.ts and on the stress fee table it is thousands of
-// elements. Forty is enough that a page whose text is inert cannot hide behind
-// a sample of one, and it is reached within the first screenful of any state
-// this pass covers.
+// How many rendered text elements the responsiveness probe reads, and how many
+// of the sample have to have answered the root for the render to count as one
+// the reader's setting reached.
+//
+// Forty is a sample rather than a budget now: the walk collects every candidate
+// in the landmark and then takes an even stride through them, so forty readings
+// span the whole surface instead of stopping at the first screenful. Collecting
+// them all is affordable — measured across all 55 audits of this pass against
+// the stress fixture, the slowest full landmark walk was 12ms, because it is
+// scoped to `main` and reads one rect per element rather than the whole
+// `getComputedStyle` walk accessibility-audit.ts pays for.
 const TEXT_SAMPLE_LIMIT = 40
+
+/*
+ * A third, and why not the half the review asked for.
+ *
+ * The threshold that shipped was `responsive > 0`: one scalable word anywhere in
+ * the sample cleared it, which is the weakest form of the question and the one a
+ * racing measurement could answer by accident. Raising it was right. Raising it
+ * to half was measured first, and half fails a state this repository renders
+ * today.
+ *
+ * The measurement, taken over all 55 audits against the stress fixture with the
+ * sample spread across each landmark: 54 of them move between 93% and 100% of
+ * their sample. The fifty-fifth is `coach-player-financial-record`, which moves
+ * 48% — and not because of where the sample was taken, since 49% of all 153
+ * candidates in that landmark move. Roughly half the settled player fee record
+ * genuinely does not answer the root: its heading is fluid `clamp(px, vw, px)`
+ * type, and the definition list, buttons and captions in its summary block are
+ * pinned in px. That is a real finding about that page, it predates this
+ * commit, and turning this gate red for it is a decision about the page rather
+ * than about the check — so it is reported rather than enforced here.
+ *
+ * A third sits between the two: `coach-player-financial-record` clears it by
+ * fifteen points, every other state clears it by sixty, and it still demands 14
+ * of 40 where the shipped threshold demanded 1. What it costs in strictness the
+ * spread sampling above returns in reach, and that trade was measured too. With
+ * the fee table's own type pinned in px by an injected stylesheet, a sample
+ * taken from the first forty elements in document order still reads 57%-75%
+ * moved — the header carries it, and the gate stays green through the exact
+ * regression it exists to catch. The same pin under a spread sample reads
+ * 8%-25%, and the gate fires. The two changes are one change.
+ *
+ * `body` is checked separately and is not subject to this at all, which matters
+ * because the two catch different things: `body { font-size: 16px }` does not
+ * stop `rem`-sized text from answering the root, so the sample would barely
+ * notice it, and the body reading is what fails it.
+ */
+const TEXT_RESPONSIVE_SHARE_DIVISOR = 3
 
 const TEXT_RESIZE_RESULT_SUFFIX = "#text-200"
 
@@ -223,56 +265,196 @@ export async function applyBrowserFontSizePreference(
 }
 
 /*
- * Why every font-size change below is followed by a wait.
+ * Why every font-size change below is followed by a wait, and why the wait is on
+ * the render rather than on the root.
  *
  * `Page.setFontSizes` resolves before the renderer has restyled anything. The
- * preference is delivered on the next animation frame, and until that frame has
- * run `getComputedStyle` on the root still reports the size from before the
- * call. Measured rather than reasoned, against Chrome for Testing
- * 151.0.7922.34 — the build .github/workflows/ui-accessibility.yml installs —
- * driven over raw CDP against the app's own stylesheets: a root read in the same
- * task as the call returned reported the old size on every attempt, and the
- * root, `body`, every rem-sized descendant and the document's own height had all
- * followed two animation frames later.
+ * preference is delivered on a later animation frame, and until that frame has
+ * run `getComputedStyle` still reports the sizes from before the call. Measured
+ * rather than reasoned, against Chrome for Testing 151.0.7922.34 — the build
+ * .github/workflows/ui-accessibility.yml installs — driven over raw CDP against
+ * the app's own stylesheets: a root read in the same task as the call returned
+ * reported the old size on every attempt.
  *
- * This is the whole of what went wrong the first time. The previous probe wrote
- * `font-size: 16px` onto the root and read it back inside a single
- * `page.evaluate`, with no frame in between, so both readings came back at the
- * raised size, and it correctly refused to accuse the page — on all 55 audits.
- * The mechanism it chose was not the problem; reading in the same task was.
+ * That is what went wrong the first time, and waiting for the root was the
+ * repair. It was not enough, because the root is not the thing being measured.
+ * The root and the document it styles arrive separately, and a wait that exits
+ * on the root can exit while the rest of the tree still holds the previous
+ * render:
  *
- * Two frames rather than one, because the root arrives before the tree that
- * inherits from it: a document whose root already read 16px reported `body` at
- * 32px in the same task, and only matched a frame later. The loop that precedes
- * them is a ceiling on the wait rather than an expectation of it — every
- * direction of every measurement taken settled within two frames — and it exits
- * on the size rather than on a fixed count so that a preference which never
- * arrives costs 30 frames and is then visible to the caller in the returned
- * reading rather than assumed to have landed.
+ *   - `getComputedStyle(document.documentElement).fontSize` resolves the root
+ *     against the new preference on demand, so the wait below sees it arrive;
+ *   - `getComputedStyle(document.body).fontSize` keeps reporting the *previous*
+ *     size in that same task, and keeps reporting it however many times it is
+ *     asked;
+ *   - forcing layout does not dislodge it either — `documentElement.offsetHeight`
+ *     returns a fresh height computed from the stale inherited sizes;
+ *   - one animation frame does, every time.
+ *
+ * Measured on the state this cost two false failures. 400 lower-and-read cycles
+ * against `coach-player-financial-record`, on a machine with every core busy,
+ * produced 20 readings in which the root had already halved and `body` had not.
+ * In all 20, a second synchronous read returned the stale size, a forced layout
+ * returned the stale size, and the frame after returned the settled one. That is
+ * the whole mechanism: an inherited restyle lands in a rendering lifecycle, and
+ * nothing a reader can do from script brings it forward.
+ *
+ * So the fixed two-frame wait that followed the root check was a guess about how
+ * many frames that takes, and on a loaded CI runner the guess is sometimes one
+ * frame short. It fired twice on unrelated pull requests — #145, which changed
+ * onboarding CSS and no type, and #152, which raised rem token values and
+ * changed no units — and passed on re-run both times, on the same state, with
+ * the same self-contradicting evidence: `body` reported at the raised size under
+ * *both* preferences, beside a root that had plainly moved, and one of forty
+ * sampled elements moved where a genuinely pinned page moves none and a healthy
+ * one moves most.
+ *
+ * What replaces the guess is a reading that has to hold still. The wait below
+ * reads the whole measurement — root, `body`, and every sampled element — once
+ * per animation frame, and returns only when the root has reached the size that
+ * was asked for and two consecutive frames have returned byte-identical numbers.
+ * A frame of lag now costs a frame instead of a false accusation, and no count
+ * of frames is assumed anywhere.
+ *
+ * `movedFrom` is the second half, and it is what makes a quiet reading provable
+ * rather than merely stable. A stale reading is stable too — it repeats until
+ * the frame that ends it — so quiescence alone would still admit one if the
+ * restyle landed a frame after this returned. When the caller knows what `body`
+ * measured at the other preference it passes that size in, and the wait also
+ * requires `body` to have left it. A page whose text answers the root leaves it
+ * within a frame or two. A page that has genuinely pinned `body` in an absolute
+ * unit never leaves it, spends the whole 30-frame budget, and is then reported —
+ * which is the finding this pass exists to produce, now reached by waiting the
+ * budget out rather than by reading early and hoping.
  */
-const FONT_SIZE_SETTLE_FRAMES = 2
-const FONT_SIZE_SETTLE_FRAME_LIMIT = 30
+const TEXT_RENDER_QUIESCENT_FRAMES = 2
+const TEXT_RENDER_SETTLE_FRAME_LIMIT = 30
 
-export async function settleBrowserFontSizePreference(page: Page, expectedStandard: number) {
-  return page.evaluate(async ({ expected, frames, limit, tolerance }) => {
-    const rootFontSize = () => (
-      Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
-    )
+/** One frame's answer to the whole question, read in a single task. */
+type TextScaleReadingFrame = {
+  body: number
+  root: number
+  sampled: { index: number; size: number }[]
+}
+
+type SettledTextScaleReading = {
+  /** How many animation frames the reading took to stop changing. */
+  frames: number
+  reading: TextScaleReadingFrame
+  /** False when the budget ran out first, which is evidence rather than an error. */
+  settled: boolean
+}
+
+/*
+ * `attribute` is the tag measureTextScaleResponse puts on the sampled elements;
+ * `null` reads the root and `body` alone, which is all the callers outside the
+ * probe have to settle. `movedFrom` is the `body` size measured at the other
+ * preference, or `null` when there is nothing to compare against yet.
+ */
+async function settleTextScaleReading(page: Page, {
+  attribute,
+  expectedRoot,
+  movedFrom,
+}: {
+  attribute: string | null
+  expectedRoot: number
+  movedFrom: number | null
+}): Promise<SettledTextScaleReading> {
+  return page.evaluate(async ({
+    attribute,
+    expectedRoot,
+    limit,
+    moveTolerance,
+    movedFrom,
+    quiescentFrames,
+    tolerance,
+  }) => {
+    const sizeOf = (element: Element) => Number.parseFloat(getComputedStyle(element).fontSize)
+    // The restore runs from a `finally`, which can be reached before a navigation has given
+    // this document a body. Falling back keeps a missing body from replacing whatever error
+    // brought us here with a null dereference.
+    const read = (): TextScaleReadingFrame => ({
+      body: sizeOf(document.body ?? document.documentElement),
+      root: sizeOf(document.documentElement),
+      sampled: attribute === null ? [] : [...document.querySelectorAll(`[${attribute}]`)].map(
+        (element) => ({ index: Number(element.getAttribute(attribute)), size: sizeOf(element) }),
+      ),
+    })
     const frame = () => new Promise<void>((resolve) => {
       window.requestAnimationFrame(() => resolve())
     })
-    for (let waited = 0; waited < limit; waited += 1) {
-      if (Math.abs(rootFontSize() - expected) <= tolerance) break
+    // Byte-identical rather than within a tolerance. A tolerance here would let
+    // a restyle that is still arriving count as one that has arrived, which is
+    // the entire failure being repaired.
+    const unchanged = (before: TextScaleReadingFrame | null, after: TextScaleReadingFrame) => (
+      before !== null
+      && before.body === after.body
+      && before.root === after.root
+      && before.sampled.length === after.sampled.length
+      && before.sampled.every((entry, position) => entry.index === after.sampled[position].index
+        && entry.size === after.sampled[position].size)
+    )
+
+    let previous: TextScaleReadingFrame | null = null
+    let repeated = 0
+    let reading = read()
+    for (let waited = 0; ; waited += 1) {
+      repeated = unchanged(previous, reading) ? repeated + 1 : 0
+      const rootArrived = Math.abs(reading.root - expectedRoot) <= tolerance
+      // Absolute, so the same wait serves the lowering the probe takes its second
+      // reading after and the raising that puts the preference back.
+      const bodyFollowed = movedFrom === null
+        || Math.abs(reading.body - movedFrom) > moveTolerance
+      if (rootArrived && bodyFollowed && repeated >= quiescentFrames) {
+        return { frames: waited, reading, settled: true }
+      }
+      if (waited >= limit) return { frames: waited, reading, settled: false }
+      previous = reading
       await frame()
+      reading = read()
     }
-    for (let waited = 0; waited < frames; waited += 1) await frame()
-    return rootFontSize()
   }, {
-    expected: expectedStandard,
-    frames: FONT_SIZE_SETTLE_FRAMES,
-    limit: FONT_SIZE_SETTLE_FRAME_LIMIT,
+    attribute,
+    expectedRoot,
+    limit: TEXT_RENDER_SETTLE_FRAME_LIMIT,
+    moveTolerance: TEXT_SCALE_TOLERANCE,
+    movedFrom,
+    quiescentFrames: TEXT_RENDER_QUIESCENT_FRAMES,
     tolerance: ROOT_FONT_SIZE_TOLERANCE,
   })
+}
+
+/*
+ * The root size the document actually settled at, for the callers that only need
+ * that one number: the check that opens auditTextResizeLayout, and the restore
+ * that closes the probe.
+ *
+ * It waits on `body` as well as on the root even though it returns neither of
+ * them together, because both callers hand the settled render to something else
+ * — the layout walk in one case, a failure screenshot in the other — and a
+ * render whose root has moved while its text has not is exactly the render
+ * neither of them should be given.
+ *
+ * `movedFrom` is the size `body` held before the preference was changed, and the
+ * restore at the end of the probe is the caller that has to supply it. Without
+ * it this can only ask whether the reading has stopped changing, and a render
+ * that has not begun restyling yet has also stopped changing — quiet for the
+ * opposite reason. The check that opens auditTextResizeLayout passes nothing
+ * because there is nothing to pass: it runs against a document that was parsed
+ * and styled under the raised preference, with no change in flight for it to
+ * mistake for a settled one.
+ */
+export async function settleBrowserFontSizePreference(
+  page: Page,
+  expectedStandard: number,
+  movedFrom: number | null = null,
+) {
+  const settled = await settleTextScaleReading(page, {
+    attribute: null,
+    expectedRoot: expectedStandard,
+    movedFrom,
+  })
+  return settled.reading.root
 }
 
 /** One reading of the same element at two root font sizes. */
@@ -282,6 +464,10 @@ export type TextScaleSample = {
   body: TextScaleReading
   root: TextScaleReading
   sampled: (TextScaleReading & { target: string })[]
+  /** Animation frames the lowered render was given before it was read. */
+  settleFrames: number
+  /** False when that budget ran out with the render still moving or still pinned. */
+  settled: boolean
 }
 
 // Carries the position of a sampled element from the first reading to the
@@ -328,6 +514,27 @@ const TEXT_SAMPLE_ATTRIBUTE = "data-text-resize-sample"
  * screenshot captures, and the one the next state inherits before it navigates —
  * is the render that was measured rather than the halved one.
  */
+/*
+ * Where the sample is taken from, and why not `document.body`.
+ *
+ * The walk used to start at `document.body`, which meant it took the first forty
+ * text-writing elements in document order — and on every signed-in route the
+ * first of those belong to the skip link, the masthead and the navigation, which
+ * are the same handful of components on all sixteen states. The surface each
+ * state was chosen for is what comes after them. On the fee record at tablet
+ * width that walk reached only ten elements at all, so a state picked for a table
+ * of amounts, dates and player names was being judged on ten mostly-chrome
+ * readings.
+ *
+ * The main landmark is the page's own content, it is where every state's
+ * distinguishing surface lives, and `main-landmark-count` in
+ * accessibility-audit.ts already fails any state that does not have exactly one —
+ * the ordinary pass asserts these very states clean at these very viewports — so
+ * this is not reaching for something that might not be there. `document.body`
+ * remains the fallback rather than an error, because a state whose main landmark
+ * is missing has a finding of its own from the ordinary pass and should not also
+ * collect a text-resize accusation for it.
+ */
 export async function measureTextScaleResponse({
   baselineFontSizes = BROWSER_DEFAULT_FONT_SIZES,
   client,
@@ -339,7 +546,10 @@ export async function measureTextScaleResponse({
   fontSizes?: { fixed: number; standard: number }
   page: Page
 }): Promise<TextScaleSample> {
-  const raised = await page.evaluate(({ attribute, limit }) => {
+  // Tagging is its own call now, ahead of both readings. The readings are taken
+  // by a wait that reads once per animation frame until the numbers hold still,
+  // and a walk that tagged as it read would have re-run that walk every frame.
+  const targets = await page.evaluate(({ attribute, limit }) => {
     // A shorter selectorFor than the audit's, and separate from it on purpose:
     // that one lives inside its own page.evaluate body and cannot be imported,
     // and this one only has to name an element in a failure message.
@@ -349,16 +559,15 @@ export async function measureTextScaleResponse({
       return className ? `${element.localName}.${CSS.escape(className)}` : element.localName
     }
 
-    // Elements holding text of their own, in document order, up to the limit.
-    // A direct text node is the test rather than `textContent`, because every
-    // ancestor of a paragraph also "contains" its words while carrying none of
-    // its own -- sampling those would measure the same declaration many times
-    // and crowd out the rest of the screen.
-    const sample: Element[] = []
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT)
-    while (sample.length < limit) {
-      const node = walker.nextNode()
-      if (!node) break
+    // Elements holding text of their own, in document order. A direct text node
+    // is the test rather than `textContent`, because every ancestor of a
+    // paragraph also "contains" its words while carrying none of its own --
+    // sampling those would measure the same declaration many times and crowd out
+    // the rest of the screen.
+    const scope = document.querySelector("main, [role=main]") ?? document.body
+    const candidates: Element[] = []
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_ELEMENT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const element = node as Element
       const writes = [...element.childNodes].some((child) => (
         child.nodeType === Node.TEXT_NODE && (child.textContent ?? "").trim().length > 0
@@ -366,68 +575,97 @@ export async function measureTextScaleResponse({
       if (!writes) continue
       const rect = element.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) continue
+      candidates.push(element)
+    }
+
+    // An even stride through the landmark rather than the first `limit` of it.
+    // Document order front-loads a page's own header -- the heading, the summary
+    // block, the toolbar -- and a fee table's rows begin after all of it, so a
+    // window taken from the front reads a state's chrome and never reaches the
+    // surface the state was chosen for. Striding keeps document order and keeps
+    // the sample deterministic; it only stops the sample from ending early.
+    const stride = Math.max(1, Math.floor(candidates.length / limit))
+    const sample: Element[] = []
+    for (let index = 0; index < candidates.length && sample.length < limit; index += stride) {
+      const element = candidates[index]
       element.setAttribute(attribute, String(sample.length))
       sample.push(element)
     }
-
-    const sizeOf = (element: Element) => Number.parseFloat(getComputedStyle(element).fontSize)
-    return {
-      body: sizeOf(document.body),
-      root: sizeOf(document.documentElement),
-      sampled: sample.map((element, index) => ({
-        index,
-        size: sizeOf(element),
-        target: selectorFor(element),
-      })),
-    }
+    return sample.map((element, index) => ({ index, target: selectorFor(element) }))
   }, { attribute: TEXT_SAMPLE_ATTRIBUTE, limit: TEXT_SAMPLE_LIMIT })
 
   try {
-    await client.send("Page.setFontSizes", { fontSizes: baselineFontSizes })
-    await settleBrowserFontSizePreference(page, baselineFontSizes.standard)
-    const dropped = await page.evaluate((attribute) => {
-      const sizeOf = (element: Element) => Number.parseFloat(getComputedStyle(element).fontSize)
-      const tagged = [...document.querySelectorAll(`[${attribute}]`)]
-      try {
-        return {
-          body: sizeOf(document.body),
-          root: sizeOf(document.documentElement),
-          sampled: tagged.map((element) => ({
-            index: Number(element.getAttribute(attribute)),
-            size: sizeOf(element),
-          })),
-        }
-      } finally {
-        for (const element of tagged) element.removeAttribute(attribute)
-      }
-    }, TEXT_SAMPLE_ATTRIBUTE)
+    const raised = await settleTextScaleReading(page, {
+      attribute: TEXT_SAMPLE_ATTRIBUTE,
+      expectedRoot: fontSizes.standard,
+      movedFrom: null,
+    })
+    // What `body` measured under the lowered preference, so the restore below can wait for
+    // it to come back up rather than for the reading to merely hold still. Declared out here
+    // because the restore lives in a `finally` that also runs when the reading it comes from
+    // never happened.
+    let loweredBody: number | null = null
+    try {
+      await client.send("Page.setFontSizes", { fontSizes: baselineFontSizes })
+      // `movedFrom` is the size `body` held a moment ago, so this wait cannot
+      // return the render that is still holding it. That is the whole repair:
+      // the previous version waited a fixed two frames on the root alone and
+      // then read, and on a loaded runner the read sometimes landed one frame
+      // before the document restyled.
+      const dropped = await settleTextScaleReading(page, {
+        attribute: TEXT_SAMPLE_ATTRIBUTE,
+        expectedRoot: baselineFontSizes.standard,
+        movedFrom: raised.reading.body,
+      })
+      loweredBody = dropped.reading.body
 
-    // Joined on the position the attribute carries rather than on array order,
-    // so an element that lost its box between the two readings drops out of the
-    // sample instead of shifting every reading after it by one.
-    const baselineByIndex = new Map(dropped.sampled.map((reading) => [reading.index, reading.size]))
-    return {
-      body: { baseline: dropped.body, raised: raised.body },
-      root: { baseline: dropped.root, raised: raised.root },
-      sampled: raised.sampled.flatMap((reading) => {
-        const baseline = baselineByIndex.get(reading.index)
-        if (baseline === undefined) return []
-        return [{ baseline, raised: reading.size, target: reading.target }]
-      }),
+      // Joined on the position the attribute carries rather than on array order,
+      // so an element that lost its box between the two readings drops out of the
+      // sample instead of shifting every reading after it by one.
+      const targetByIndex = new Map(targets.map((entry) => [entry.index, entry.target]))
+      const baselineByIndex = new Map(
+        dropped.reading.sampled.map((reading) => [reading.index, reading.size]),
+      )
+      return {
+        body: { baseline: dropped.reading.body, raised: raised.reading.body },
+        root: { baseline: dropped.reading.root, raised: raised.reading.root },
+        sampled: raised.reading.sampled.flatMap((reading) => {
+          const baseline = baselineByIndex.get(reading.index)
+          const target = targetByIndex.get(reading.index)
+          if (baseline === undefined || target === undefined) return []
+          return [{ baseline, raised: reading.size, target }]
+        }),
+        // Carried out so the finding can say how long the lowered render was
+        // given before it was judged. A reader who is told "0 of 40 moved" needs
+        // to know whether that was read after two frames or after thirty.
+        settleFrames: dropped.frames,
+        settled: dropped.settled,
+      }
+    } finally {
+      // Restored whatever happened, because the page is reused for every remaining
+      // state in the sweep and a preference left at the browser default would make
+      // the next state's root reading fail for a reason that has nothing to do
+      // with the next state.
+      await client.send("Page.setFontSizes", { fontSizes })
+      // Swallowed, and only this half of the restore is. The `send` above is what
+      // the next state depends on — it navigates, and a fresh document is styled
+      // from the preference rather than from this render — so the wait is about
+      // the page this leaves behind for a failure screenshot. A wait that threw
+      // here would replace whatever error brought us into the `finally` with a
+      // stack about a screenshot.
+      await settleBrowserFontSizePreference(page, fontSizes.standard, loweredBody)
+        .catch(() => undefined)
     }
   } finally {
-    // Restored whatever happened, because the page is reused for every remaining
-    // state in the sweep and a preference left at the browser default would make
-    // the next state's root reading fail for a reason that has nothing to do
-    // with the next state.
-    await client.send("Page.setFontSizes", { fontSizes })
-    // Swallowed, and only this half of the restore is. The `send` above is what
-    // the next state depends on — it navigates, and a fresh document is styled
-    // from the preference rather than from this render — so the wait is about
-    // the page this leaves behind for a failure screenshot. A wait that threw
-    // here would replace whatever error brought us into the `finally` with a
-    // stack about a screenshot.
-    await settleBrowserFontSizePreference(page, fontSizes.standard).catch(() => undefined)
+    // Its own call, because the readings no longer own the elements they read:
+    // the tag has to survive both of them and the restore above. Anything left
+    // behind would be visible to the ordinary pass on the next state and in
+    // every screenshot taken afterwards.
+    await page.evaluate((attribute) => {
+      for (const element of document.querySelectorAll(`[${attribute}]`)) {
+        element.removeAttribute(attribute)
+      }
+    }, TEXT_SAMPLE_ATTRIBUTE).catch(() => undefined)
   }
 }
 
@@ -441,8 +679,19 @@ export async function measureTextScaleResponse({
  * this pass has anything to catch. The sample answers the narrower case where
  * `body` scales but the surface under test does not.
  *
- * An empty sample is not a failure. A render with no visible element writing
- * text of its own is a broken page, and the ordinary pass owns that; calling it
+ * A share of the sample has to move, not one element of it. `responsive > 0` was
+ * the weakest question the sample can be asked: it clears on a single `<em>`
+ * anywhere in the landmark, so a surface that had pinned every column it renders
+ * and left one caption in `rem` would pass. It is also the threshold that made a
+ * racing measurement look like a finding rather than like noise — the two false
+ * failures this check produced both read one moved element out of forty, a count
+ * no real arrangement produces, since a genuinely absorbed render moves none and
+ * a healthy one moves most. TEXT_RESPONSIVE_SHARE_DIVISOR is where that share is
+ * set and why it is set there.
+ *
+ * An empty sample is not a failure, and a share of nothing is nothing, so the
+ * arithmetic already says so. A render with no visible element writing text of
+ * its own is a broken page, and the ordinary pass owns that; calling it
  * "absorbed" here would put a text-resize failure on a state whose problem is
  * that it rendered nothing.
  */
@@ -474,7 +723,10 @@ export function textResizeAbsorbedFindings(
   }
   const inert = sample.sampled.filter((reading) => !moved(reading))
   const responsive = sample.sampled.length - inert.length
-  if (moved(sample.body) && (responsive > 0 || sample.sampled.length === 0)) return []
+  // Multiplied rather than divided, so an indivisible sample is decided in
+  // integers and a sample of one still has to be the one that moved.
+  if (moved(sample.body)
+    && responsive * TEXT_RESPONSIVE_SHARE_DIVISOR >= sample.sampled.length) return []
   const named = inert.slice(0, 3).map((reading) => `${reading.target} at ${reading.raised}px`)
   return [{
     id: "text-resize-absorbed",
@@ -484,7 +736,13 @@ export function textResizeAbsorbedFindings(
       + ` did not: body computed to ${sample.body.raised}px at the raised root and`
       + ` ${sample.body.baseline}px at the default one, and ${responsive}`
       + ` of ${sample.sampled.length} sampled text elements moved`
-      + `${named.length ? ` (${named.join(", ")} did not)` : ""}. An absolute font-size on body —`
+      + `${named.length ? ` (${named.join(", ")} did not)` : ""}, where at least a third have to.`
+      + ` Both readings were taken from a`
+      + ` render that had stopped changing: the lowered one was read once per animation frame`
+      + ` until two consecutive frames returned identical numbers, which took`
+      + ` ${sample.settleFrames} ${sample.settleFrames === 1 ? "frame" : "frames"}`
+      + `${sample.settled ? "" : " and never arrived, so this is the render after the whole"
+        + " 30-frame budget"}. An absolute font-size on body —`
       + " or on anything the page's text inherits from — absorbs the reader's setting outright,"
       + " and the layout walk that follows would then be measuring the ordinary render this"
       + " matrix already audits at the default size and already asserts clean, and filing the"
