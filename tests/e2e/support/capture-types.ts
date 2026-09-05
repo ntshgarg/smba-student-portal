@@ -76,6 +76,11 @@ export type CaptureDefinition = {
   description: string
   focusSelector?: string
   id: string
+  /* This capture drives a control that only exists at narrow widths, so running it
+   * wide is not a stricter test -- the control is not in the DOM and the action waits
+   * for it until the case times out. Distinct from `viewportOnly`, which is about how
+   * much of the page is photographed rather than how wide the window is. */
+  narrowOnly?: boolean
   route: string
   scenarios?: CaptureScenario[]
   segmentPolicy?: SegmentPolicy
