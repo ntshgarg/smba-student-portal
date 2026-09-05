@@ -2399,9 +2399,15 @@
   color: var(--red);
 }
 
+/* rem bounds around a vw middle term, for the reason recorded beside
+   .playerRecordHeader h1 in financial-records.module.css: identical to the px
+   bounds at the browser's default font size, and the reader's own default wins
+   over the viewport the moment they raise it. 1.875rem is 30px, 2.625rem is
+   42px. The three declarations below and the <=720px pair further down are the
+   rest of this surface's fluid type. */
 .focusedLedger .ledgerHeader h2 {
   margin-top: 7px;
-  font-size: clamp(30px, 3.4vw, 42px);
+  font-size: clamp(1.875rem, 3.4vw, 2.625rem);
   line-height: 0.96;
 }
 
@@ -2426,10 +2432,13 @@
   font-size: 0.625rem;
 }
 
+/* 1.625rem is 26px, 2.125rem is 34px. Its <=720px sibling was already
+   1.5625rem, so above 720 this was the only width where the outstanding balance
+   -- the one number a coach opens this record to read -- ignored the setting. */
 .focusedLedger .ledgerBalance strong {
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(26px, 2.7vw, 34px);
+  font-size: clamp(1.625rem, 2.7vw, 2.125rem);
   font-weight: 520;
 }
 
@@ -2588,8 +2597,12 @@
   font-size: 0.625rem;
 }
 
+/* 1.5rem is 24px, 1.9375rem is 31px. This is the declaration that inverted the
+   hierarchy rather than merely freezing it: the floor held at 24px while the
+   `dd` values under it reached 28px at a 32px root, so "Charges and payments"
+   rendered smaller than the charges. */
 .focusedLedger .sectionHeading h3 {
-  font-size: clamp(24px, 2.4vw, 31px);
+  font-size: clamp(1.5rem, 2.4vw, 1.9375rem);
 }
 
 .focusedLedger .receiptList,
@@ -3406,7 +3419,7 @@
   }
 
   .focusedLedger .ledgerHeader h2 {
-    font-size: clamp(27px, 8vw, 32px);
+    font-size: clamp(1.6875rem, 8vw, 2rem);
   }
 
   .focusedLedger .ledgerHeader > div:first-child > p {
