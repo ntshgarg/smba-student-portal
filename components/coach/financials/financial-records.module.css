@@ -387,7 +387,7 @@
 
 .registrationFilters input:not([type="checkbox"]),
 .registrationFilters select {
-  font-size: 0.8125rem;
+  font-size: var(--type-operational-action);
 }
 
 .registrationFilters > button {
@@ -483,7 +483,7 @@
 
 .methodSummary dd {
   color: var(--navy);
-  font-size: 0.75rem;
+  font-size: var(--type-utility-label);
   font-weight: var(--weight-control);
 }
 
@@ -538,7 +538,7 @@
 }
 
 .recordsTable td > strong {
-  font-size: 0.8125rem;
+  font-size: var(--type-operational-body);
   font-weight: 740;
 }
 
@@ -833,7 +833,7 @@
   border-left: 2px solid var(--line);
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 0.8125rem;
+  font-size: var(--type-operational-body);
   font-style: italic;
   line-height: 1.45;
 }
