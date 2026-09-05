@@ -41,6 +41,7 @@ import {
   accessibilityProfiles,
   accessibilityStates,
   accessibilityViewports,
+  navigatingAccessibilityInteractions,
   statesForProfile,
   viewportsForState,
   type AccessibilityProfile,
@@ -104,6 +105,24 @@ describe("accessibility regression matrix", () => {
       const widths = viewportsForState(state).map((viewport) => viewport.width)
       expect(widths).toEqual(expect.arrayContaining([1440, 820, 390]))
       if (state.compact) expect(widths).toContain(320)
+    }
+  })
+
+  it("makes every interaction that changes route say where it lands", () => {
+    for (const state of accessibilityStates) {
+      if (!state.interaction) continue
+      if (!navigatingAccessibilityInteractions.includes(state.interaction)) {
+        expect(
+          state.interactionRoute,
+          `${state.id} declares an interactionRoute for ${state.interaction}, which does not navigate`,
+        ).toBeUndefined()
+        continue
+      }
+      expect(
+        state.interactionRoute,
+        `${state.id} runs ${state.interaction}, which navigates, and declares no interactionRoute`
+        + " -- without one the audit records whatever route the click actually reached under this id",
+      ).toBeInstanceOf(RegExp)
     }
   })
 
