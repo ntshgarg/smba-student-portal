@@ -39,7 +39,10 @@ export function StepRail({
       {STAGES.map((stage, index) => {
         const complete = index < reachedIndex
         const marker = <span>{complete ? <Check aria-hidden="true" /> : folio(index)}</span>
-        const label = <strong>{stage.label}</strong>
+        // The short form; see the note on `railLabel`. The full name still reaches
+        // a screen reader through the button's aria-label below, and each short
+        // form is a prefix of it, so speech input matches what is on screen.
+        const label = <strong>{stage.railLabel}</strong>
         // Index 0 is `request`; see the note above on why it is never navigable.
         const navigable = Boolean(onSelect)
           && index > 0

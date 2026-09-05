@@ -58,6 +58,10 @@
 .dateTimeline {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* The 18px below it had no partner above, so the descenders of the paragraph
+     that introduces this grid rested about 1px off its top rule while every other
+     block boundary in the editor holds 12-20px. Symmetric now. */
+  margin-top: 18px;
   margin-bottom: 18px;
   border: 1px solid var(--line);
 }
@@ -102,8 +106,29 @@
   display: grid;
   min-width: 0;
   min-height: 86px;
-  grid-template-columns: auto 1fr;
-  align-items: center;
+  /*
+   * `minmax(0, 1fr)`, not `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, so the
+   * caption track could never shrink below the min-content of its longest
+   * unbreakable word -- and "Assessment" is the only caption here that is one
+   * word. Below 350px it stopped shrinking, overran the cell and painted across
+   * the panel's right rule; at 320 about 2.8px of the final T sat outside the
+   * panel entirely. The other three captions are two words and wrapped instead,
+   * which is why only this one showed it.
+   *
+   * That overrun is new since 7396bf9. The caption is on --type-operational-floor,
+   * which went 10px -> 11px; measured at 320px it now ends 4.7px past the cell it
+   * had cleared by 2.9px before. The type raise did not cause the fragility, it
+   * spent the margin that was hiding it.
+   */
+  grid-template-columns: auto minmax(0, 1fr);
+  /*
+   * `baseline`, not `center`. When a caption wraps -- "New requests" does below
+   * 382px -- centring aligned the numeral against the middle of a two-line block,
+   * so it sat 6.9px off both of its own lines and off the single-line caption
+   * beside it. Baseline puts the numeral on the caption's first line at every
+   * width, wrapped or not.
+   */
+  align-items: baseline;
   gap: 13px;
   padding: var(--space-copy) 20px;
   border-right: 1px solid var(--line);
@@ -405,6 +430,18 @@
 .stepRail li span svg {
   width: 13px;
   height: 13px;
+}
+
+/*
+ * `place-items: center` centres the text's font box, and Newsreader italic lining
+ * figures leave almost all of their 3px descent empty -- so the visible digits sat
+ * about 1.5px above the middle while the tick, being a path with real geometry on
+ * both sides, sat dead centre. 3px of padding moves the content box's centre down
+ * half of it. Scoped away from `.completeStep`, which is the only state holding
+ * the tick rather than a number.
+ */
+.stepRail li:not(.completeStep) span {
+  padding-top: 3px;
 }
 
 .stepRail li strong {
@@ -1185,15 +1222,27 @@
     padding: 11px 10px;
   }
 
+  /*
+   * `padding-top: 3px` equalised the two boxes' TOPS, which is not the same as
+   * equalising their ink: the numeral is 24px on a 1.0 line-height and the name is
+   * 18px on 1.08, so matching tops left the numeral's baseline 8.0px below the
+   * name's and its cap-line 4.3px below -- aligned to neither. The row is a grid,
+   * so `align-self: baseline` puts the two on one baseline directly and the nudge
+   * that was approximating it is no longer needed.
+   */
   .folio {
     grid-area: folio;
-    align-self: start;
-    padding-top: 3px;
+    align-self: baseline;
     font-size: 1.5rem;
   }
 
   .identity {
     grid-area: identity;
+    /* Baseline alignment in grid only groups items that both ask for it. With the
+       folio alone on `baseline` there was no one to align to and it fell back to
+       `start`, which left its baseline 5px below the name's. Both on it now, and
+       the open button keeps its own `align-self: center`. */
+    align-self: baseline;
   }
 
   .identity strong {
@@ -1220,6 +1269,13 @@
     padding: 0;
     align-self: center;
     font-size: 0;
+    /* `font-size: 0` hides the word but does not remove it: "Open" / "Continue" /
+       "Close" is still an anonymous flex item, so the 9px gap from the shared rule
+       above kept sitting between a zero-width box and the icon. `justify-content:
+       center` then centred the pair, which put the arrow 4.5px -- exactly half the
+       gap -- right of the middle of its own 44px tap square, with 18.5px of space
+       on its left and 9.5px on its right. Every row, every width from 320 to 430. */
+    gap: 0;
   }
 
   .openButton svg {
@@ -1246,10 +1302,30 @@
    * navigable step kept marker-beside-label, left-aligned, inside a 64.5px
    * track, while every inert step beside it stacked and centred.
    */
+  /*
+   * `align-content: start` is the whole fix for the staggered markers, and it is
+   * not a tweak to the rule above -- it closes a hole the rule left open.
+   *
+   * `.stepRail` stretches all four `li` to one height, and the desktop rule at
+   * :331 gives them `align-items: center` which this block never re-declared. So
+   * each li had two auto rows stretched to fill 61.8px and centred its marker
+   * inside whichever row it landed in. "NEW REQUESTS" is the only label that
+   * wraps -- at 9px it needs a 73.1px track and gets less below 393px -- so its
+   * label row grew, its marker row shrank, and its marker rose while the other
+   * three stayed put. Markers at 930.4 / 937.6 / 934.0 / 934.0 at 390px: four
+   * circles on three lines, a quarter of a circle apart.
+   *
+   * The wrap is the trigger, not the button. With zero navigable steps on screen
+   * the spread is still 3.6px; the button doubles it to 7.2px because its own
+   * `padding: 6px 0; margin: -6px 0` adds a second stretched row. Both go with
+   * rows that no longer stretch. Verified 0px spread at 320, 390, 393 and 430,
+   * with and without a navigable step.
+   */
   .stepRail li,
   .stepRail li > button {
     display: grid;
     grid-template-columns: 1fr;
+    align-content: start;
     justify-items: center;
     gap: 6px;
     text-align: center;
@@ -1353,8 +1429,24 @@
     text-align: left;
   }
 
+  /*
+   * Dropping to two columns moves `em` onto a second grid row, and `align-items:
+   * center` from the base rule then centred the radio inside row 1 -- a two-line
+   * block of schedule name plus venue. The radio landed in the blank gap between
+   * those lines: 10.8px below the name's centre and 13.8px above the card's, level
+   * with no text on the card at all.
+   *
+   * `start` plus a 3px nudge puts it on the name, which is the line it selects.
+   * The nudge is half the difference between the name's 19.2px line box and the
+   * 13px control, so it is a centring on the first line rather than a fudge.
+   */
   .seriesChoices > label {
     grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .seriesChoices > label input {
+    margin-top: 3px;
   }
 
   .seriesChoices label em {
@@ -1437,4 +1529,24 @@
 .inlineStepLink:hover,
 .inlineStepLink:focus-visible {
   color: var(--red);
+}
+
+/*
+ * Below 340px the fact grid's two columns are 118px and "TRAINING START" is the
+ * only label long enough to wrap. Each cell is a plain block, so nothing ties the
+ * values across a row together: its value dropped 17.6px -- a whole line -- below
+ * ACTIVATED beside it, leaving about 20px of dead space under the neighbour.
+ *
+ * Reserving two lines on the label equalises where every value starts. Scoped to
+ * the widths where a label actually wraps, so nothing taller than 339px pays for
+ * it; the finding was clean from 340 up.
+ */
+@media (max-width: 339px) {
+  .dateTimeline dt {
+    /* Two of its own line boxes. The label's line-height resolves to 17.6px on an
+       11px font, so two lines is 3.2em -- an earlier 2.4em assumed a 1.2 ratio and
+       reserved only 26.4px against the 35.2px "Training start" actually takes,
+       which narrowed the drop from 17.6px to 8.7px instead of closing it. */
+    min-height: 3.2em;
+  }
 }

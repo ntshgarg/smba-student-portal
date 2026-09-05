@@ -157,7 +157,32 @@ describe("moving back through onboarding before it is finished", () => {
     )
 
     expect(html).not.toContain("<button")
-    expect(html).toContain("Assessment")
+    expect(html).toContain("Assess")
+  })
+
+  it("shows the short stage name but keeps the full one for a screen reader", () => {
+    /*
+     * The rail gives each stage a quarter of the screen, and at 320px that is 55px
+     * against 63.5px of unbreakable "ASSESSMENT" -- it crossed into the step beside
+     * it, and "NEW REQUESTS" only fitted by wrapping, which is what pulled the four
+     * markers onto three different heights below 393px.
+     *
+     * The short form is visible-text only. Each one is a prefix of the full stage
+     * name that the button's aria-label carries, so the accessible name still
+     * contains what is painted and speech input matches it (WCAG 2.5.3).
+     */
+    const html = renderToStaticMarkup(
+      <StepRail current="feePlan" onSelect={() => undefined} reachedStage="feePlan" />,
+    )
+
+    expect(html).toContain("<strong>Assess</strong>")
+    expect(html).toContain("<strong>Request</strong>")
+    expect(html).toContain('aria-label="Go back to Assessment"')
+    expect(html).not.toContain("<strong>Assessment</strong>")
+
+    for (const [visible, full] of [["Request", "New requests"], ["Assess", "Assessment"]]) {
+      expect(full.toLowerCase()).toContain(visible.toLowerCase())
+    }
   })
 })
 

@@ -466,6 +466,18 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
     case "member-filters-open":
       await clickRequired(page.getByRole("button", { name: /Filters/i }), action)
       break
+    case "onboarding-open-case": {
+      /* The editor expands inline inside the queue row rather than on its own
+         route, so there is no URL that reaches it and it can only be opened by
+         pressing a row. Third row rather than first: the demo fixture puts a
+         Session-stage case there, which is the only stage that renders the
+         schedule chooser and the training-start field. */
+      const rows = page.locator("a[href*='?player=']")
+      await rows.nth(2).waitFor({ state: "visible" })
+      await clickRequired(rows.nth(2), action)
+      await page.locator("ol[class*='stepRail']").first().waitFor({ state: "visible" })
+      break
+    }
     case "profile-menu-open":
       await clickRequired(
         page.getByRole("button", { name: /Open account menu for/i }),

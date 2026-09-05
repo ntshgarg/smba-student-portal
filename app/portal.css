@@ -7923,7 +7923,18 @@ tr.is-expanded .coach-member-row-action button svg {
 .inline-notice {
   display: inline-flex;
   min-height: 32px;
-  align-items: center;
+  /*
+   * `flex-start`, not `center`. The icon is a fixed 15px flex item and the message
+   * beside it wraps whenever it is longer than the column -- about 46 characters
+   * at 390px -- and centring then dropped the icon to the middle of the whole
+   * paragraph instead of leaving it beside the line it belongs to. On the longest
+   * of these, the training-start range error, it ended up 26.3px down: two lines
+   * below its own first word. The common two-line case was 8.9px.
+   *
+   * The 8.5px offset re-centres it on the first line rather than hanging it from
+   * the paragraph's top: half of the 1.45 line box at 12px, less half the icon.
+   */
+  align-items: flex-start;
   gap: var(--space-tight);
   color: var(--steel);
   font-size: 0.75rem;
@@ -7939,6 +7950,7 @@ tr.is-expanded .coach-member-row-action button svg {
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
+  margin-top: 1.5px;
   stroke-width: 1.8;
 }
 
