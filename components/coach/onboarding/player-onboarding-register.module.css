@@ -84,7 +84,7 @@
   margin-top: 5px;
   overflow-wrap: anywhere;
   color: var(--navy);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: 700;
   line-height: 1.3;
 }
@@ -397,7 +397,7 @@
   border-radius: var(--radius-circle);
   background: var(--white);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-style: italic;
   font-weight: var(--weight-emphasis);
 }
@@ -455,7 +455,7 @@
 .editorHeading p {
   margin-top: 5px;
   color: var(--steel);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: 620;
   line-height: 1.45;
 }
@@ -512,7 +512,7 @@
 
 .derivedFeeMonth small {
   color: var(--steel);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
   line-height: 1.35;
 }
 
@@ -562,7 +562,7 @@
 
 .threeFieldGrid label > small {
   color: var(--red-dark);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
   font-weight: 660;
   line-height: 1.35;
 }
@@ -931,7 +931,7 @@
 
 .previewLines small {
   color: var(--steel);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
   line-height: 1.3;
 }
 

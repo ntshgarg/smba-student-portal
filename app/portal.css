@@ -632,7 +632,7 @@
 .coach-adjustment-transfer small {
   margin-top: 3px;
   color: var(--steel);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
 }
 
 .coach-adjustment-review-reason {
@@ -4908,7 +4908,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 0;
   background: transparent;
   color: var(--red);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
   font-weight: 780;
   line-height: 1.45;
   text-align: right;
@@ -5011,7 +5011,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-report-player-list small {
   margin-top: 3px;
   color: var(--steel);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
 }
 
 .coach-report-player-list em {
@@ -5340,7 +5340,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-report-preview-heading > p {
   color: var(--red);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: var(--weight-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -6624,7 +6624,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-roster-assign label > span,
 .coach-occurrence-actions label > span {
   color: var(--steel);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -7116,7 +7116,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 1px solid color-mix(in srgb, var(--white) 20%, transparent);
   background: transparent;
   color: var(--white);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: 720;
   list-style: none;
   cursor: pointer;
@@ -7144,7 +7144,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 0;
   background: var(--navy);
   color: var(--white);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: 760;
 }
 
@@ -7418,7 +7418,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 1px solid color-mix(in srgb, var(--white) 18%, transparent);
   background: transparent;
   color: var(--white);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
 }
 
 .coach-roster-list button:disabled {
@@ -7497,7 +7497,7 @@ tr.is-expanded .coach-member-row-action button svg {
   border: 0;
   background: var(--white);
   color: var(--navy);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
   font-weight: 800;
 }
 
@@ -8911,7 +8911,7 @@ tr.is-expanded .coach-member-row-action button svg {
   gap: var(--space-tight);
   margin-top: 4px;
   color: var(--steel);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
   font-weight: 670;
 }
 
@@ -8942,13 +8942,13 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-published-report-version strong,
 .coach-published-report-updated time {
   color: var(--navy);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: 680;
 }
 
 .coach-published-report-version small {
   color: var(--steel);
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
   white-space: nowrap;
 }
 
@@ -9109,7 +9109,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-published-report-revisions nav time {
-  font-size: 0.625rem;
+  font-size: var(--type-operational-floor);
 }
 
 .coach-published-report-document {
@@ -9138,7 +9138,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-published-report-document-heading > strong {
   flex: 0 0 auto;
   color: var(--navy);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: 780;
 }
 
@@ -10437,7 +10437,7 @@ tr.is-expanded .coach-member-row-action button svg {
   margin-top: 4px;
   overflow-wrap: anywhere;
   color: var(--navy);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: 760;
   line-height: 1.35;
 }
@@ -11258,7 +11258,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-member-filter select {
-  font-size: 0.75rem;
+  font-size: var(--type-utility-label);
 }
 
 .coach-member-directory-summary {
@@ -11453,12 +11453,33 @@ tr.is-expanded .coach-member-row-action button svg {
   font-size: 0.75rem;
 }
 
+/* Held at 12px, and the only place in this sweep that was held rather than raised.
+   `.coach-member-contact small` sits beside `.coach-member-contact a` and
+   `.coach-member-access-actions p` beside its `> a` / `> button`; both links are on
+   var(--type-operational-action) at :13678, so #152 split these two exactly as it
+   split the other 25. Raising them means raising all five selectors, because the
+   other three are the same family of editor notices and moving two out relocates
+   the mismatch rather than removing it.
+
+   All five at 13px re-wraps `.coach-member-editor-notice` from two lines to three
+   at 390px. That is a mobile layout change inside mobile-member-directory-freeze,
+   whose changes are limited to functional defects and accessibility regressions --
+   a 1px legibility gain is neither -- and three of the five have no split to repair
+   at all, so they would be carried for symmetry alone. Verified in the 390px
+   before/after capture rather than argued from the stylesheet.
+
+   The token is still written out, and that is not cosmetic: 0.75rem is what
+   `.coach-member-access-actions span` renders at through var(--type-utility-label)
+   at :13662. A bare literal there is the same twinning that produced this whole
+   commit, so it is spelled as the token it equals -- byte-identical today, and it
+   moves with the scale instead of being left behind by it. The deferred raise is a
+   decision about 13px, not about the spelling of 12. */
 .coach-member-contact small,
 .coach-member-classification-lock,
 .coach-member-editor-notice,
 .coach-member-save-notice,
 .coach-member-access-actions p {
-  font-size: 0.75rem;
+  font-size: var(--type-utility-label);
 }
 
 .coach-member-form-grid input,
@@ -11467,7 +11488,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-member-form-grid small {
-  font-size: 0.6875rem;
+  font-size: var(--type-utility-label);
 }
 
 .coach-member-form-status {
@@ -11475,7 +11496,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-member-form-status small {
-  font-size: 0.6875rem;
+  font-size: var(--type-utility-label);
   line-height: 1.4;
 }
 
@@ -13080,7 +13101,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .admin-support-list span {
   color: var(--steel);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
 }
 
 .admin-support-actions {
@@ -13254,7 +13275,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .admin-preview-group-header h3 {
   color: var(--navy);
   font-family: var(--font-manrope), Arial, sans-serif;
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-style: normal;
   font-weight: 850;
   letter-spacing: var(--tracking-label);
@@ -13332,7 +13353,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .admin-preview-list article div > span {
   overflow-wrap: anywhere;
   color: #667387;
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: var(--weight-emphasis);
 }
 

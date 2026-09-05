@@ -57,7 +57,7 @@
 .ledgerMasthead h2 {
   margin: 0;
   color: var(--navy);
-  font-size: 0.6875rem;
+  font-size: var(--type-operational-floor);
   font-weight: var(--weight-label);
   letter-spacing: 0.09em;
   text-transform: uppercase;
