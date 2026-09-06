@@ -56,10 +56,28 @@ const TRUNCATED_SEGMENT = ":rest"
 // through the route column.
 const STATIC_ROUTE_SEGMENT = /^[a-z][a-z-]{0,31}$/u
 
-// Next.js production digests are opaque decimal or hex strings. Framework
-// control digests such as `NEXT_REDIRECT;push;/coach/players/<uuid>;307;` carry
-// a resolved URL, so only the opaque shape is accepted.
+// Next.js production digests are opaque decimal or hex strings.
 const OPAQUE_DIGEST = /^[0-9a-f]{1,64}$/u
+
+/*
+ * A framework control digest is `<CODE>;<arguments>`, and the arguments carry a
+ * resolved URL -- `NEXT_REDIRECT;push;/coach/players/<uuid>;307;`. The code
+ * itself carries nothing but which Next.js API threw, so the code is kept and
+ * everything after the first `;` is dropped.
+ *
+ * Discarding the whole digest is what made the September rejections cost a day
+ * to read: sixteen rows saying `Error` with a null digest, on six auth routes,
+ * where `NEXT_REDIRECT` in the column would have named the bug on sight. The
+ * codes are a fixed vocabulary, so keeping one reopens nothing -- this function
+ * still returns either a member of a closed set or a hex string, and never a
+ * value the caller chose.
+ */
+const FRAMEWORK_DIGEST_CODES: ReadonlySet<string> = new Set([
+  "BAILOUT_TO_CLIENT_SIDE_RENDERING",
+  "DYNAMIC_SERVER_USAGE",
+  "NEXT_HTTP_ERROR_FALLBACK",
+  "NEXT_REDIRECT",
+])
 
 // Storing a free-text error name would reopen the hole this table exists to
 // avoid, so an unrecognised name is recorded as "Error". The distinction is not
@@ -112,9 +130,15 @@ export function normalizeErrorName(value: unknown): string {
   return typeof value === "string" && REPORTABLE_ERROR_NAMES.has(value) ? value : "Error"
 }
 
+/** Idempotent: a code this returned once normalizes to itself on the server. */
 export function normalizeErrorDigest(value: unknown): string | null {
   if (typeof value !== "string") return null
-  const digest = value.trim().toLowerCase()
+  const trimmed = value.trim()
+
+  const code = trimmed.split(";", 1)[0]
+  if (FRAMEWORK_DIGEST_CODES.has(code)) return code
+
+  const digest = trimmed.toLowerCase()
   return OPAQUE_DIGEST.test(digest) ? digest : null
 }
 

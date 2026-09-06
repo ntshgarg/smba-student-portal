@@ -1,5 +1,6 @@
 "use client"
 
+import { unstable_rethrow } from "next/navigation"
 import { useActionState } from "react"
 
 import { describeSaveFailure } from "@/lib/client/network-failure"
@@ -20,8 +21,14 @@ import { reportClientError } from "@/lib/telemetry/report-client-error"
  * use, and folds it into the state the form is rendering, so the failure
  * arrives through the existing error markup instead of through a boundary.
  *
+ * It supplies that seam for faults only. A rejection Next.js threw on purpose --
+ * the `redirect()` every successful sign-in ends on, and the `notFound`,
+ * `forbidden` and `unauthorized` family -- is control flow the framework has to
+ * receive back, so it is rethrown untouched. See the catch block.
+ *
  * `pending` needs no handling of its own. React clears it when the action
- * settles, and the wrapped action always settles -- every path returns a state.
+ * settles, and both paths settle: a fault resolves with a folded state, and a
+ * framework control error rejects on to the boundary that owns it.
  */
 
 /** The one field every authentication action state has in common. */
@@ -60,6 +67,35 @@ export function resilientAction<State extends ActionErrorState>(
     try {
       return await action(state, payload)
     } catch (error) {
+      /*
+       * Not every rejection is a failure. A Server Action that finishes with
+       * `redirect()` -- which is how every action behind these forms reports
+       * success -- rejects the client-side promise on purpose:
+       * `serverActionReducer` calls `reject(createRedirectErrorForAction(...))`
+       * before it navigates, so that React re-throws at this `useActionState`
+       * and `RedirectBoundary` remounts the subtree the action has just
+       * invalidated (next 16.3.1, `client/components/router-reducer/reducers/
+       * server-action-reducer.js:240-263` and `client/components/
+       * redirect-boundary.js:60`). `notFound`, `forbidden` and `unauthorized`
+       * reach `HTTPAccessFallbackBoundary` the same way.
+       *
+       * Catching those was this wrapper's own bug, and it was self-concealing:
+       * the reducer navigates whether or not anyone catches the rejection, so
+       * sign-in still worked and nothing looked broken. What it cost was a
+       * `NEXT_REDIRECT` alert flashed into the form's `role="alert"` on the way
+       * out, a stale subtree carried into the next route, and a bogus
+       * `unhandled_rejection` row per successful sign-in, spending the
+       * reporter's eight-per-page budget on the framework's own control flow.
+       * Every row in `client_error_reports` on 2026-09-07 -- all sixteen of
+       * them, `Error` with a null digest, on the six auth routes whose actions
+       * end in `redirect()` and nowhere else -- has this shape.
+       *
+       * `unstable_rethrow` is the seam Next.js documents for exactly this and
+       * knows every code it owns; it must stay at the top of the block, before
+       * anything treats `error` as a fault.
+       */
+      unstable_rethrow(error)
+
       const failure = describeSaveFailure({
         error,
         fallbackMessage: `${subject} could not be sent`,

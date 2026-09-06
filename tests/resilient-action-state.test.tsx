@@ -1,3 +1,4 @@
+import { notFound, redirect } from "next/navigation"
 import type { ReactElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
@@ -434,6 +435,39 @@ describe("the wrapper's contract", () => {
       error: unreachable("Your sign-in", "Nothing was sent"),
       errorField: null,
     })
+  })
+
+  /*
+   * ST-2. Every authentication action reports success by redirecting, and a
+   * Server Action redirect reaches the browser as a *rejection*: the reducer
+   * calls `reject(createRedirectErrorForAction(...))` so React re-throws at the
+   * `useActionState` and `RedirectBoundary` remounts the subtree. Folding that
+   * into `error` swallowed the framework's own control flow -- it put
+   * "NEXT_REDIRECT" in the form's `role="alert"` and wrote an
+   * `unhandled_rejection` row for every successful sign-in.
+   *
+   * The errors are built by calling the real `redirect` and `notFound`, so the
+   * test fails rather than rots if Next.js changes the shape it throws.
+   */
+  function thrownBy(call: () => never) {
+    try {
+      call()
+    } catch (error) {
+      return error
+    }
+    throw new Error("expected the Next.js API to throw")
+  }
+
+  it.each([
+    { code: "NEXT_REDIRECT", name: "a redirect", throwIt: () => redirect("/coach") },
+    { code: "NEXT_HTTP_ERROR_FALLBACK", name: "a not-found", throwIt: () => notFound() },
+  ])("rethrows $name to the boundary that owns it", async ({ code, throwIt }) => {
+    const control = thrownBy(throwIt as () => never)
+    const action = resilientAction<CapturedState>(() => Promise.reject(control), copy)
+
+    await expect(action({ error: null }, new FormData())).rejects.toBe(control)
+    expect((control as { digest: string }).digest.startsWith(code)).toBe(true)
+    expect(reportClientError).not.toHaveBeenCalled()
   })
 
   it("reports a rejection that is not a transport failure instead of swallowing it", async () => {

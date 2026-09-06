@@ -92,7 +92,13 @@ const headCoach = {
   subjectId: "coach-head",
 }
 
-vi.mock("next/navigation", () => ({ redirect }))
+// Only `redirect` is stubbed. `resilientAction` calls the real
+// `unstable_rethrow` to tell a framework control error from a fault, and a
+// stub that answered for it would decide the thing under test.
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("next/navigation")>(),
+  redirect,
+}))
 vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: async () => headCoach },
 }))
