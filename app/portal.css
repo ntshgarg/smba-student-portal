@@ -12536,7 +12536,15 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .player-attendance-recorder .attendance-occurrence-list > button {
     min-height: 62px;
-    grid-template-columns: 52px minmax(0, 1fr) auto;
+    /* No `grid-template-columns` here. This narrowed the time track to 52px and
+       reintroduced, on every phone, the exact wrap the base rule above was
+       written to stop -- its comment measures a two-digit hour with a meridiem
+       at 68.53px, and nothing about that changes below 760px because the time
+       stays at 17px. Measured on this page: "10:00 am" needs 68.28px and even
+       "6:00 am" needs 60.06px, so all ten rows broke into "6:00" over "am" at
+       320, 390 and 430.
+       Inheriting the base 76px leaves the title 156px at 320px, which still
+       holds "Intermediate · Weekday". */
     padding-inline: 10px;
   }
 
