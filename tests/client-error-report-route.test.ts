@@ -99,7 +99,7 @@ describe("client error report endpoint", () => {
       accountId: "account-coach",
       report: {
         boundary: "coach_financials",
-        digest: null,
+        digest: "NEXT_REDIRECT",
         errorName: "Error",
         eventType: "client_error",
         routePath: "/coach/members/:id",

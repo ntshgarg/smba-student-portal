@@ -29,13 +29,30 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const { readFileSync } = require("node:fs")
             const checkFreshness = require("./.github/scripts/check-backup-freshness.js")
             const result = await checkFreshness({
+              // The 30-hour gate is muted while this workflow's nightly
+              // schedule is deliberately disabled, and lifts itself the moment
+              // the trigger comes back. Reading it here keeps the helper pure.
+              backupWorkflowSource: readFileSync(
+                ".github/workflows/encrypted-production-backup.yml",
+                "utf8",
+              ),
               defaultBranch: context.payload.repository.default_branch,
               github,
               owner: context.repo.owner,
               repo: context.repo.repo,
             })
+            if (result.muted) {
+              // Warning rather than failure, and never silence: the schedule is
+              // off on purpose, so this is a standing condition to keep visible,
+              // not an incident to page anyone about.
+              core.warning(result.backupRunId
+                ? `Backup freshness is muted: the nightly schedule in encrypted-production-backup.yml is disabled, and the last successful backup (run ${result.backupRunId}) is ${result.backupAgeHours} hours old. Production has no current snapshot. Re-enable the schedule once the destination is authenticated storage.`
+                : "Backup freshness is muted: the nightly schedule in encrypted-production-backup.yml is disabled and no successful backup exists at all.")
+              return
+            }
             core.notice(`Backup run ${result.backupRunId}, restore run ${result.restoreRunId}, artifact ${result.artifactId} are current.`)
 
   security-signals:
