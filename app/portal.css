@@ -6900,7 +6900,9 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-day-view-heading {
   display: flex;
-  align-items: end;
+  /* Same fault as `.coach-calendar-title-row` above: the count sat 8.66px below
+     the date's baseline at 1440 and 5.68px at 820. */
+  align-items: baseline;
   justify-content: space-between;
   gap: 18px;
   padding: clamp(var(--space-group), 3vw, 34px);
@@ -7071,7 +7073,15 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-calendar-title-row {
   display: flex;
-  align-items: end;
+  /* `end` bottom-aligned the boxes to 0.00px and the type to nothing: a 60px
+     serif month title carries 16px of descender space against the 11px count's
+     3.3px, so "236 sessions" hung 12.7px below the "August 2026" baseline at
+     1440 and 7.71px at 820. Two strings on one row read as one line and have to
+     share a baseline. Every other instance of this pattern in this file already
+     does -- `.coach-report-field > span`, `.report-month-title`,
+     `.report-year-title`, `.player-ticket-masthead` -- so this row was the
+     deviation. */
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--space-group);
   margin-top: 34px;
@@ -7367,6 +7377,32 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--steel);
   font-size: 0.5625rem;
   font-weight: 760;
+}
+
+/*
+ * The word goes away where the cell cannot hold it, and only there.
+ *
+ * Seven columns of a 768px grid give each day a 43.84px cell and a 22.84px
+ * caption box, and "sessions" alone is 38.98px. It has no break opportunity, so
+ * it ran 16.14px past its own box and 5.14px into the next day -- and because
+ * `.coach-month-grid > button` is `position: relative`, the neighbour's opaque
+ * background painted over the tail and every cell in the row read "10 session".
+ * In the last column there is no neighbour, so it spilled 5.13px past the grid's
+ * own border instead. The caption also broke between the number and the word
+ * from 761px to about 990px.
+ *
+ * Measured across the band, widest caption against narrowest cell: the caption
+ * needs 50.81px and the content box reaches it only at 980px (51.53px), which is
+ * 0.72px of slack -- too thin to rest on. At 1000px there is 2.82px, so the word
+ * comes back at 1000 and not before.
+ *
+ * Bounded below at 761px on purpose: `mobile-calendar-attendance-freeze` holds
+ * the Month View's typography below that, and this rule has no business there.
+ */
+@media (min-width: 761px) and (max-width: 999px) {
+  .coach-month-session-word {
+    display: none;
+  }
 }
 
 .coach-month-grid button.is-selected small {
@@ -7768,7 +7804,12 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-day-view-heading {
-    align-items: flex-start;
+    /* And the same fault in the other direction here. `flex-start` top-aligned
+       the boxes, and the count rides one type step above the eyebrow it shares
+       the row with -- 11px/17.6px against a frozen 10px/16px -- so it sat 4.70px
+       *higher* than the eyebrow at 390 and 320. On 10-11px type that is about
+       half a cap height. */
+    align-items: baseline;
     padding: var(--space-copy) var(--space-copy) 18px;
   }
 
