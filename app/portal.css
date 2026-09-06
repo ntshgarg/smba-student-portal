@@ -3714,7 +3714,19 @@
 .coach-register-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 0.5fr);
-  align-items: end;
+  /* `end` aligned the two columns' boxes, which is not the same as aligning
+     their type. The left column ends in a 48px title and the right in an 11px
+     caps link, and the descender space under the first is larger than under the
+     second -- so with their bottoms flush to 0.00px the last baselines sat
+     8.2px apart, which is the distance a reader actually sees.
+     `last baseline` is the obvious tool and it does not work here: the right
+     column is a column flex box whose last item is a <button>, and Chrome
+     synthesizes a button's baseline from its box rather than its text, so
+     asking for it moved the two 11px apart instead of 8.2px. What aligns is the
+     pair of eyebrows -- the first line of each column, and a <span> at both
+     ends, so nothing is synthesized. Two labelled blocks starting together also
+     reads better than a caps link hanging off a 48px title. */
+  align-items: baseline;
   gap: 44px;
   margin-top: clamp(50px, 7vw, 78px);
 }
