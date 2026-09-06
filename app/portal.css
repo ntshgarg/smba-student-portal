@@ -5024,7 +5024,12 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-category-filter {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  /* 6px buys 4px across four gaps, and the row was short by 0.078px. Five chips
+     need 361.016px against a 360.938px content box at 1440, so "Elite" started a
+     second row and the block grew 72px -> 123px, leaving 54.56px of row one
+     unused against the 54.64px it needed. The shortfall is 2.875px at its worst
+     (1280) and gone by 1600, so one pixel off each gap covers the whole band. */
+  gap: 6px;
   padding: 0 clamp(22px, 3vw, 36px) 28px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -5146,7 +5151,12 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-report-editor-heading {
   display: flex;
-  align-items: flex-start;
+  /* "July 2026" sat 6.00px below "Revision draft" at 390, 820, 1440 and 2560.
+     Both start at the same box top, but the left eyebrow is an inline span
+     baselining off a 16px/25.6px block strut while the right is a block span at
+     0.625rem/16px, so `flex-start` aligned the boxes and left the type 6px
+     apart. */
+  align-items: baseline;
   justify-content: space-between;
   gap: 30px;
 }
@@ -6135,6 +6145,15 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-report-queue-heading {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    /* Both halves of this matter. The grid aligns on the baseline, and the
+       toggle is given one to offer: it is a flex container, and with
+       `align-items: center` none of its items were baseline-aligned, so it
+       synthesized a baseline from its own 44px border box and the grid had
+       nothing real to reach. That is why `flex-start` left these two identical
+       11px labels 8.03px apart and asking for `baseline` alone only halved it.
+       `center` is worse still -- this column holds more than the eyebrow, so
+       centring the whole of it moved the label 21-39px. */
+    align-items: baseline;
     min-height: auto;
     gap: 12px 18px;
     padding: 0 22px 18px;
@@ -6143,7 +6162,14 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-report-queue-heading > .coach-report-queue-toggle {
     display: inline-flex;
     min-height: 44px;
-    align-items: center;
+    /* See the grid above: `center` here is what stopped this button exposing a
+       real baseline. The 44px minimum is the touch target and is untouched. */
+    align-items: baseline;
+    /* The chevron rides 2.50px above the label's optical centre as a result,
+       which is the price of the label being exactly on its baseline. Measured
+       rather than assumed: `align-self: center` on the svg makes it worse, not
+       better -- it centres in the 44px flex line while the baseline-aligned text
+       sits near the bottom of it, and the chevron ends up 11.50px out. */
     justify-content: flex-end;
     gap: 7px;
     max-width: none;
@@ -6747,7 +6773,16 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-weekly-slots {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* `auto-fit`, not a flat seven. A chip is a 24px checkbox, a 10px gap, its
+     label, 20px of padding and its border -- 132.38px for the longest,
+     "Wednesday" -- and seven equal columns give it 86.02px at 761 and 93.78px at
+     820. `.coach-slot-day` does not clip, so the label drew straight out of its
+     own chip and under the next chip's red checkbox: 35.36px past its border at
+     761, 27.59px at 820, and 15.44px over Thursday's checkbox at 768.
+     Fitting as many 133px columns as the row holds keeps all seven across on a
+     desktop, where they already fit, and drops to five or four in the band where
+     they do not. */
+  grid-template-columns: repeat(auto-fit, minmax(133px, 1fr));
   gap: var(--space-tight);
   margin: 36px 0 0;
   padding: 0;
@@ -7824,8 +7859,12 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-series-form {
+    /* 15px, not 16. This card bleeds to the viewport edge with `margin-inline:
+       -16px`, so its content starts at 16px of padding plus its own 1px border
+       -- x=17.00, against the back-row and page heading at x=16.00. Taking the
+       border out of the padding puts all three on one edge. */
     margin-inline: -16px;
-    padding: 30px var(--space-copy);
+    padding: 30px 15px;
   }
 
   .coach-series-form-grid {
@@ -9401,12 +9440,21 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-published-report-column-revision {
+    /* `letter-spacing: 0` matters as much as the font size. `font-size: 0` hides
+       this cell's own label so the `::after` can replace it, but tracking is a
+       length and a zero-sized character still carries it -- five hidden
+       characters pushed the replacement 7.05px right of the column it heads, at
+       740, 820, 900 and 980 alike, while the Player and Actions headers sat on
+       their columns to 0.00px. The `::after` puts the tracking back for the text
+       a reader actually sees. */
     font-size: 0;
+    letter-spacing: 0;
   }
 
   .coach-published-report-column-revision::after {
     content: "Revision / updated";
     font-size: var(--type-operational-floor);
+    letter-spacing: var(--tracking-label);
   }
 
   .coach-published-report-column-updated {
@@ -9426,9 +9474,27 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-published-report-version {
+    /* The rule above this band is drawn by two cells that each carry
+       `border-top`, and the grid's 14px column gap fell between them -- so every
+       card showed a 14.00px hole in an otherwise continuous 1px line, on all ten
+       rows at 320, 390 and 720 alike. The bar below it spans `1 / 4` and runs
+       unbroken, which is what the eye compares it against.
+       The pseudo-element bridges exactly the gap, anchored to this cell's right
+       edge, so it stays correct if the column widths move. */
+    position: relative;
     grid-column: 3;
     grid-row: 1;
     align-self: end;
+  }
+
+  .coach-published-report-version::after {
+    position: absolute;
+    top: -1px;
+    left: 100%;
+    width: 14px;
+    height: 1px;
+    background: var(--line);
+    content: "";
   }
 
   .coach-published-report-updated {
@@ -13971,7 +14037,11 @@ tr.is-expanded .coach-member-row-action button svg {
 /* Expanded workspaces share one compact alignment rhythm. */
 .coach-member-detail-heading,
 .coach-report-editor-heading {
-  align-items: flex-start;
+  /* Re-asserted here, after the rule above set it, because this later
+     declaration is the one that actually won -- the earlier `baseline` never
+     reached the element. Same reason: "July 2026" sat 6.00px under "Revision
+     draft" at 390, 820, 1440 and 2560. */
+  align-items: baseline;
 }
 
 .coach-member-detail-domains section,
@@ -14069,7 +14139,9 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .coach-report-editor-heading {
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
+    /* Grid here rather than flex, and `start` is the same box alignment under a
+       different name -- so the two eyebrows were 6px apart in this band too. */
+    align-items: baseline;
     gap: 14px;
   }
 
