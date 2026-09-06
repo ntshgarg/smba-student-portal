@@ -20,7 +20,12 @@ import {
 } from "@/lib/auth/recovery-service"
 import type { SmbaDatabase } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
-import { accounts, authEmailChallenges, authRecoveryEmails } from "@/lib/db/schema"
+import {
+  accounts,
+  authCredentialStates,
+  authEmailChallenges,
+  authRecoveryEmails,
+} from "@/lib/db/schema"
 
 const { confirmRegistration, requestRegistration } = await import("@/lib/auth/account-service")
 
@@ -228,7 +233,13 @@ describe("registration confirm", () => {
     const mailer = await send()
     const result = confirm(mailer.registration[0]!.code)
 
-    expect(result).toEqual({ academyId: null, accountId: expect.any(String), standing: "new" })
+    expect(result).toEqual({
+      academyId: null,
+      accountId: expect.any(String),
+      activated: false,
+      onboardingCompleted: false,
+      standing: "new",
+    })
     const rows = accountRows()
     expect(rows).toHaveLength(1)
     expect(rows[0]!.approvalStatus).toBe("pending")
@@ -357,7 +368,13 @@ describe("an identity that is already registered", () => {
 
     expect(mailer.registration.at(-1)!.standing).toBe("pending")
     expect(confirm(mailer.registration.at(-1)!.code, {}, later))
-      .toEqual({ academyId: null, accountId: null, standing: "pending" })
+      .toEqual({
+        academyId: null,
+        accountId: null,
+        activated: false,
+        onboardingCompleted: false,
+        standing: "pending",
+      })
     expect(accountRows()).toHaveLength(1)
   })
 
@@ -367,7 +384,13 @@ describe("an identity that is already registered", () => {
     const mailer = await send({ fullName: "  arjun   SHARMA " }, later)
 
     expect(confirm(mailer.registration.at(-1)!.code, { fullName: "  arjun   SHARMA " }, later))
-      .toEqual({ academyId: null, accountId: null, standing: "pending" })
+      .toEqual({
+        academyId: null,
+        accountId: null,
+        activated: false,
+        onboardingCompleted: false,
+        standing: "pending",
+      })
     expect(accountRows()).toHaveLength(1)
   })
 
@@ -381,7 +404,46 @@ describe("an identity that is already registered", () => {
 
     expect(mailer.registration.at(-1)!.standing).toBe("rejected")
     expect(confirm(mailer.registration.at(-1)!.code, {}, later))
-      .toEqual({ academyId: null, accountId: null, standing: "rejected" })
+      .toEqual({
+        academyId: null,
+        accountId: null,
+        activated: false,
+        onboardingCompleted: false,
+        standing: "rejected",
+      })
+    expect(accountRows()).toHaveLength(1)
+  })
+
+  /*
+   * "approved" is the standing from approval onwards and never changes again, so
+   * on its own it cannot separate someone still waiting on onboarding from
+   * someone who finished months ago and has a password. Re-registering is
+   * exactly what a person does when they have forgotten they already have an
+   * account, and the form used to answer them "you'll be able to sign in once
+   * onboarding is complete" -- a wait with nothing on the other end of it.
+   */
+  it("reports an account that already has a password as activated", async () => {
+    await registerOnce()
+    const account = accountRows()[0]!
+    database.update(accounts).set({ approvalStatus: "approved" })
+      .where(eq(accounts.id, account.id)).run()
+    database.insert(authCredentialStates).values({
+      accountId: account.id,
+      status: "active",
+      activatedAt: NOW,
+      updatedAt: NOW,
+    }).run()
+    const later = new Date(NOW.getTime() + EMAIL_RESEND_COOLDOWN_MS)
+    const mailer = await send({}, later)
+
+    expect(confirm(mailer.registration.at(-1)!.code, {}, later))
+      .toEqual({
+        academyId: null,
+        accountId: null,
+        activated: true,
+        onboardingCompleted: true,
+        standing: "approved",
+      })
     expect(accountRows()).toHaveLength(1)
   })
 

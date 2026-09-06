@@ -1664,6 +1664,31 @@
   font-weight: 800;
 }
 
+/* The class was in the markup from the start but never had a rule, so the label
+   and the ID ran together as "Academy IDSMBA-PL-9795". Stacked rather than laid
+   out in a row: an Academy ID is the one string on this card someone has to copy
+   down, and a label sitting on its own line above it survives a narrow screen
+   without ever wrapping into the value. */
+.registration-academy-id {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.registration-academy-id > span {
+  color: var(--steel);
+}
+
+/* Back to the body sans: `.registration-confirmation p` above puts this card's
+   prose in Newsreader, and an Academy ID is a code to be transcribed, not prose. */
+.registration-academy-id > strong {
+  color: var(--navy);
+  font-family: var(--font-manrope), Arial, sans-serif;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .login-submit {
   display: flex;
   min-height: 56px;

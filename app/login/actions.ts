@@ -300,8 +300,10 @@ export async function requestRegistrationCode(
   const requestHeaders = await headers()
   const base: RegistrationFormState = {
     academyId: null,
+    activated: false,
     error: null,
     errorField: null,
+    onboardingCompleted: false,
     standing: null,
     step: "details",
     values,
@@ -345,8 +347,10 @@ export async function confirmRegistrationCode(
   const requestHeaders = await headers()
   const base: RegistrationFormState = {
     academyId: null,
+    activated: false,
     error: null,
     errorField: null,
+    onboardingCompleted: false,
     standing: null,
     step: "code",
     values,
@@ -384,7 +388,14 @@ export async function confirmRegistrationCode(
       secure: secureAuthCookiesRequired(),
     })
   }
-  return { ...base, academyId: result.academyId ?? null, standing: result.standing, step: "done" }
+  return {
+    ...base,
+    academyId: result.academyId ?? null,
+    activated: result.activated,
+    onboardingCompleted: result.onboardingCompleted,
+    standing: result.standing,
+    step: "done",
+  }
 }
 
 export async function clearSession() {

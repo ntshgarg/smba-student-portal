@@ -152,6 +152,26 @@ function registrationStandingFor(identityKey: string, database: SmbaDatabaseExec
   }
 }
 
+/*
+ * A player may only set a password once the coach has finished onboarding
+ * them -- assessment, session and fee plan. An assistant coach has no
+ * onboarding to finish, so approval is the whole gate for them.
+ *
+ * Shared by the status door and the registration form: both have to answer
+ * "can this person sign in yet?", and when only one of them knew, the form
+ * told an already-activated player to wait for onboarding that had finished.
+ */
+function onboardingCompletedFor(
+  accountId: string,
+  standing: RegistrationStanding,
+  database: SmbaDatabaseExecutor,
+) {
+  const enrollment = database.select({
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
+  }).from(playerEnrollments).where(eq(playerEnrollments.accountId, accountId)).get()
+  return enrollment ? Boolean(enrollment.onboardingCompletedAt) : standing === "approved"
+}
+
 /**
  * Step one of registration: send a code, write no account.
  *
@@ -233,6 +253,9 @@ export async function requestRegistration(input: {
 export type RegistrationConfirmation = {
   academyId: string | null
   accountId: string | null
+  /** Already has a password. The form must offer sign-in, not a wait. */
+  activated: boolean
+  onboardingCompleted: boolean
   standing: RegistrationStanding
 }
 
@@ -275,6 +298,12 @@ export function confirmRegistration(input: {
         return {
           academyId: existing.academyId,
           accountId: null,
+          activated: existing.activated,
+          onboardingCompleted: onboardingCompletedFor(
+            existing.accountId,
+            existing.standing,
+            tx,
+          ),
           standing: existing.standing,
         }
       }
@@ -321,7 +350,13 @@ export function confirmRegistration(input: {
       if (input.activationToken) {
         saveActivationClaim({ accountId, token: input.activationToken }, { database: tx, now })
       }
-      return { academyId: null, accountId, standing: "new" as const }
+      return {
+        academyId: null,
+        accountId,
+        activated: false,
+        onboardingCompleted: false,
+        standing: "new" as const,
+      }
     },
     security: input.security,
     subjectKey: identity.subjectKey,
@@ -430,18 +465,11 @@ export function confirmRegistrationStatus(input: {
           standing: "new",
         }
       }
-      /*
-       * A player may only set a password once the coach has finished onboarding
-       * them -- assessment, session and fee plan. An assistant coach has no
-       * onboarding to finish, so approval is the whole gate for them.
-       */
-      const enrollment = tx.select({ onboardingCompletedAt: playerEnrollments.onboardingCompletedAt })
-        .from(playerEnrollments)
-        .where(eq(playerEnrollments.accountId, existing.accountId))
-        .get()
-      const onboardingCompleted = enrollment
-        ? Boolean(enrollment.onboardingCompletedAt)
-        : existing.standing === "approved"
+      const onboardingCompleted = onboardingCompletedFor(
+        existing.accountId,
+        existing.standing,
+        tx,
+      )
       /*
        * A claim is minted here when the password step is actually reachable, so a
        * person who has lost the browser they registered in can still activate.
