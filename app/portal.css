@@ -12628,6 +12628,10 @@ tr.is-expanded .coach-member-row-action button svg {
 
 /* Staff roll call — selected Daily Staff Ledger. */
 .staff-roll-call-ledger {
+  /* Two 66px buttons and the 1px border either side of them. Read by the
+     register head so its "Attendance status" label is the same width as the
+     control it names. */
+  --staff-choice-column: 134px;
   padding-bottom: 0;
   background: var(--paper);
 }
@@ -12649,7 +12653,27 @@ tr.is-expanded .coach-member-row-action button svg {
   margin-top: clamp(26px, 3.5vw, 38px);
 }
 
+.staff-roll-call-ledger .staff-roll-call-heading {
+  /* The eyebrow is 10px/16px and the count 9px/19.2px, so aligning their box
+     tops -- which is what `.attendance-record-section-heading` does with
+     `align-items: flex-start` -- left the count riding 4.00px above the
+     eyebrow's baseline. The two ends of this row read as one line of small
+     uppercase type, so they align on the baseline, not the box. */
+  align-items: baseline;
+}
+
 .staff-roll-call-ledger .staff-roll-call-heading > strong {
+  /* `display: block` is the load-bearing line. `.attendance-record-section-heading
+     > strong` is `display: grid` with `place-items: center`, which is right for
+     the bordered square number badge that rule was written for -- and this
+     override strips the border, the min-width and the min-height but inherited
+     the display. The `::after` below then became a second grid item rather than
+     inline text, so "2 staff" painted as "2" stacked over "STAFF": a two-row
+     track of 19.1875px each, a 39.55 x 38.38px box, exactly twice the 19.2px
+     line-height, at every width from 320 to 2560. Nothing forced it -- there is
+     853.94px of free space in this row at 1440 -- and the `::after` content is
+     written with a leading space, which only means anything in inline flow. */
+  display: block;
   min-width: 0;
   min-height: 0;
   border: 0;
@@ -12689,7 +12713,23 @@ tr.is-expanded .coach-member-row-action button svg {
   text-transform: uppercase;
 }
 
+/* D7: the folio values are `text-align: center` and this header was not, so
+   "No." sat 10-12px left of the numbers under it at every width. The rule below
+   already centres the last header over its column; the first was missed. */
+.staff-roll-call-register-head span:first-child {
+  text-align: center;
+}
+
+/* D8: centring this over the *track* is not centring it over the control, and
+   the control is `justify-self: end` in a track up to 21px wider than itself --
+   so the label sat 10.5px left of the Present/Absent box, centred on neither it
+   nor either of its edges. Giving the header the control's own width and ending
+   it in the same place puts the two on one axis.
+   The width is the choice box's: two 66px buttons plus its 1px border either
+   side. Kept as a variable so the two cannot drift apart silently. */
 .staff-roll-call-register-head span:last-child {
+  justify-self: end;
+  width: var(--staff-choice-column);
   text-align: center;
 }
 
@@ -12853,7 +12893,16 @@ tr.is-expanded .coach-member-row-action button svg {
   .staff-roll-call-ledger .attendance-record-date-row {
     display: grid;
     min-height: 88px;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+    /* 0.72fr gave the date 144.00px at 390 and it needs 146.86px on one line, so
+       the year dropped to a second line on its own -- at 375, 390 and 393, which
+       is most phones in use. The breakpoint was exactly 397px.
+       0.82fr clears it with room: 148.2px at 375, 155.0px at 390. What stops
+       this going further is the other track: the date input's own content width
+       is 163px, and 0.82fr still leaves it 180.8px at 375.
+       320px is not fixed by this and cannot be. The row has 274px of content
+       there, and 163px of input plus 147px of date is 310px before the gap --
+       the two do not fit on one line at that width whatever the ratio. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
     gap: 14px;
     padding: 15px var(--space-copy);
   }
@@ -12885,6 +12934,11 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .staff-roll-call-register-head {
     grid-template-columns: 44px minmax(0, 1fr);
+    /* The rows below take `gap: 0 10px` here and the head kept the 12px it is
+       given outside this block, so the two grids resolved to different tracks --
+       "Coach" started at x=83.00 and the names it heads at x=81.00. The desktop
+       rule holds both at 12px, which is what says they are meant to match. */
+    column-gap: 10px;
     padding: 0 10px;
   }
 
