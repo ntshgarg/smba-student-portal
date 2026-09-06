@@ -8,9 +8,20 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-/** The words the markup renders, with the tags taken out. */
-function textOf(html: string) {
-  return html.replace(/<[^>]*>/gu, "")
+/*
+ * React writes `<!-- -->` between adjacent text children, so the label a coach
+ * reads as one string arrives here in pieces. This takes those markers out and
+ * nothing else.
+ *
+ * Deliberately a literal replacement and not a tag-stripping regex. The first
+ * version of this was `html.replace(/<[^>]*>/gu, "")`, which CodeQL correctly
+ * flags as `js/incomplete-multi-character-sanitization` -- that pattern cannot
+ * be relied on to remove markup, because a crafted string reassembles into a tag
+ * as the regex consumes it. Nothing is being sanitized here, but a test is a bad
+ * place to keep an example of how to do it wrong.
+ */
+function withoutTextSeparators(html: string) {
+  return html.replaceAll("<!-- -->", "")
 }
 
 describe("academy-time dashboard greetings", () => {
@@ -74,11 +85,12 @@ describe("academy-time dashboard greetings", () => {
     expect(html).not.toContain("First batch")
     expect(html).not.toContain("Next batch")
     expect(html).toContain("6:00 am")
-    // The label still reads as one string; only its markup is in two parts, so
-    // this asserts the text a coach sees rather than the tags under it.
-    expect(textOf(html)).toContain("Beginner · Weekday · 6–7 am")
-    // And the range is the part that must not wrap inside itself.
-    expect(html).toContain('<span class="session-label-range">6–7 am</span>')
+    // One assertion for both halves: that the label still reads as a single
+    // string, and that its time range is the part carrying the class that stops
+    // it wrapping inside itself.
+    expect(withoutTextSeparators(html)).toContain(
+      'Beginner · Weekday · <span class="session-label-range">6–7 am</span>',
+    )
     expect(html).toContain("SMBA Court")
   })
 
