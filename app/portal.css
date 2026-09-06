@@ -7419,7 +7419,13 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-schedule-programme-heading {
   display: flex;
-  align-items: end;
+  /* The only two things on this row are a heading and its right-aligned count,
+     so they read as one line -- but `end` aligned their boxes and left the
+     30px/1 serif h3 and the 10px/16px meta 4.00px apart on the baseline, on all
+     five programme headings and at 820, 1440 and 2560 alike. The meta's cap
+     height is 7.25px, so it was sagging 55% of its own cap height toward the
+     divider below it. */
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--space-group);
   padding-bottom: 14px;
@@ -7954,7 +7960,13 @@ tr.is-expanded .coach-member-row-action button svg {
     align-items: center;
     justify-content: space-between;
     gap: 18px;
-    padding: 11px 2px;
+    /* `0`, not `2px`. This button draws the hairline the roster rows beneath it
+       sit against, and 2px of its own inline padding pushed its title to x=18.00
+       where those rows start at x=16.00 -- while its chevron landed 2.50px left
+       of theirs and 0.66px wider. One continuous list, two columns, both
+       stepping at every group boundary. The desktop equivalent uses `18px 0`,
+       which is why nothing there is out of register. */
+    padding: 11px 0;
     border: 0;
     border-top: 1px solid var(--line);
     background: transparent;
@@ -9853,18 +9865,22 @@ tr.is-expanded .coach-member-row-action button svg {
   line-height: 1.35;
 }
 
-/* The session label ends in a time range, and a greedy break split it two ways
-   at phone widths: "10-11" / "am" at 390px, and after the en dash once
-   `text-wrap: pretty` was tried -- an en dash is a legal break opportunity, so
-   no wrapping mode keeps the range whole. `sessionLabelParts` hands the range
-   over as its own element and this stops it breaking at all; the context before
-   it still wraps normally, which is what gives the line somewhere to break.
-   The five inherits are not decoration. `.coach-message-card span` styles every
-   span anywhere inside this card as an eyebrow -- uppercase, 11px, weight 800,
-   0.09em tracking -- so wrapping the range in a span rendered it "10-11 AM" in
-   caps beside its own sentence. They put the range back in the type its
-   sentence is set in. */
-.coach-welcome-session strong .session-label-range {
+/* The time range at the end of a session label, kept whole.
+ *
+ * A greedy break splits it two ways at narrow widths: "10-11" over "am", and
+ * after the en dash once `text-wrap: pretty` is tried -- an en dash is a legal
+ * break opportunity, so no wrapping mode keeps a range together.
+ * `sessionLabelParts` hands the range over as its own element and this stops it
+ * breaking at all; the context before it still wraps, which is what gives the
+ * line somewhere to go.
+ *
+ * The five inherits are not decoration. This started scoped to the coach hero,
+ * where `.coach-message-card span` styles every span anywhere inside that card
+ * as an eyebrow -- uppercase, 11px, weight 800, 0.09em tracking -- and the range
+ * rendered as "10-11 AM" in caps beside its own sentence. Unscoping the rule for
+ * its second user means the next surface to adopt it inherits that protection
+ * rather than rediscovering it. */
+.session-label-range {
   color: inherit;
   font-size: inherit;
   font-weight: inherit;

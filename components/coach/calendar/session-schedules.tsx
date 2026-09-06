@@ -31,7 +31,11 @@ import {
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
-import { formatSessionLabel } from "@/lib/format"
+import {
+  SESSION_LABEL_SEPARATOR,
+  formatSessionLabel,
+  sessionLabelParts,
+} from "@/lib/format"
 import { assignmentCoversOccurrence, distinctAssignmentWeekdays } from "@/lib/sessions/domain"
 import type {
   SessionAssignment,
@@ -585,7 +589,21 @@ export function SessionSchedules({
                 }
               }}>
                 <span>
-                  <strong>{seriesLabel(series)}</strong>
+                  <strong>{(() => {
+                    /* Same split the coach hero uses. The label ends in a clock
+                       range and the browser will break inside it -- at 320 this
+                       row read "Adult · Weekend · 10-" over "11 am", and four
+                       more orphaned a two-character meridiem onto a second line
+                       while up to 12px of the first sat empty. */
+                    const { context, range } = sessionLabelParts(seriesLabel(series))
+                    return range ? (
+                      <>
+                        {context}
+                        {SESSION_LABEL_SEPARATOR}
+                        <span className="session-label-range">{range}</span>
+                      </>
+                    ) : seriesLabel(series)
+                  })()}</strong>
                 </span>
                 <span><Users aria-hidden="true" /> {roster.length} {roster.length === 1 ? "player" : "players"} <ChevronDown aria-hidden="true" /></span>
               </button>
