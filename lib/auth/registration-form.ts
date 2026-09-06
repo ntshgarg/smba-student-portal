@@ -32,8 +32,11 @@ export type RegistrationStanding = "new" | "pending" | "approved" | "rejected"
  */
 export type RegistrationFormState = {
   academyId: string | null
+  /** Already has a password: offer sign-in, never "wait for your coach". */
+  activated: boolean
   error: string | null
   errorField: RegistrationField | null
+  onboardingCompleted: boolean
   standing: RegistrationStanding | null
   step: "details" | "code" | "done"
   values: RegistrationValues
@@ -49,8 +52,10 @@ export const EMPTY_REGISTRATION_VALUES: RegistrationValues = {
 
 export const EMPTY_REGISTRATION_STATE: RegistrationFormState = {
   academyId: null,
+  activated: false,
   error: null,
   errorField: null,
+  onboardingCompleted: false,
   standing: null,
   step: "details",
   values: EMPTY_REGISTRATION_VALUES,

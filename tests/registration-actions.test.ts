@@ -110,8 +110,10 @@ import { EMPTY_REGISTRATION_VALUES } from "@/lib/auth/registration-form"
 
 const initialState: RegistrationFormState = {
   academyId: null,
+  activated: false,
   error: null,
   errorField: null,
+  onboardingCompleted: false,
   standing: null,
   step: "details",
   values: EMPTY_REGISTRATION_VALUES,

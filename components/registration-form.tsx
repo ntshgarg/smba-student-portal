@@ -87,18 +87,34 @@ export function RegistrationForm() {
   }
 
   if (state.step === "done") {
-    const heading = {
-      approved: "Approved.",
-      new: "Registration received.",
-      pending: "Already in review.",
-      rejected: "Not approved.",
-    }[state.standing ?? "new"]
-    const body = {
-      approved: "Your coach is setting up training. You’ll be able to sign in once onboarding is complete.",
-      new: `Your coach will review this ${state.values.requestedRole === "coach" ? "assistant-coach" : "player"} request. You can check the status any time with this name and email.`,
-      pending: `${state.values.fullName}’s request is already with your coach. Nothing new was created.`,
-      rejected: "Please speak to your coach at the academy.",
-    }[state.standing ?? "new"]
+    /*
+     * "approved" is the standing from the moment a coach approves and never
+     * changes again, so it alone cannot tell a player still waiting on
+     * onboarding from one who finished it weeks ago and already has a password.
+     * Sending the second group away to wait was the whole defect: they had
+     * nothing to wait for, and re-registering is exactly what someone does when
+     * they have forgotten they already have an account. Worded to match the
+     * status door in components/registration-status-form.tsx.
+     */
+    const settled = state.standing === "approved" && state.activated
+    const heading = settled
+      ? "Your account is ready."
+      : {
+        approved: "Approved.",
+        new: "Registration received.",
+        pending: "Already in review.",
+        rejected: "Not approved.",
+      }[state.standing ?? "new"]
+    const body = settled
+      ? "This account already has a password. Sign in with the Academy ID below."
+      : {
+        approved: state.onboardingCompleted
+          ? "Your coach has finished setting up training. Create a password to sign in."
+          : "Your coach is setting up training. You’ll be able to sign in once that is finished.",
+        new: `Your coach will review this ${state.values.requestedRole === "coach" ? "assistant-coach" : "player"} request. You can check the status any time with this name and email.`,
+        pending: `${state.values.fullName}’s request is already with your coach. Nothing new was created.`,
+        rejected: "Please speak to your coach at the academy.",
+      }[state.standing ?? "new"]
 
     return (
       <div className="registration-confirmation" role="status">
@@ -111,7 +127,7 @@ export function RegistrationForm() {
         <p>{body}</p>
         {state.academyId ? (
           <p className="registration-academy-id">
-            <span>Academy ID</span>
+            <span className="operational-eyebrow">Academy ID</span>
             <strong>{state.academyId}</strong>
           </p>
         ) : null}
@@ -120,7 +136,9 @@ export function RegistrationForm() {
             Registering a different player? Go back and enter their full name.
           </p>
         ) : null}
-        <Link href="/activate">View activation status</Link>
+        {settled
+          ? <Link href="/login">Sign in</Link>
+          : <Link href="/activate">View activation status</Link>}
       </div>
     )
   }
