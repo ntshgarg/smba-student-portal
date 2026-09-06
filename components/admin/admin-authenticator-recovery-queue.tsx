@@ -1,5 +1,6 @@
 "use client"
 
+import { unstable_rethrow } from "next/navigation"
 import { useState, useTransition } from "react"
 import { ShieldAlert } from "lucide-react"
 
@@ -60,6 +61,13 @@ export function AdminAuthenticatorRecoveryQueue({
           : await rejectAuthenticatorResetRequestAction(requestId)
         setFeedback({ message: result.message, tone: result.ok ? "success" : "error" })
       } catch (error) {
+        // Both actions open with `requirePlatformOwner`, which redirects to
+        // /login once the owner's session has lapsed. That redirect reaches the
+        // browser as a rejection, so catching it here told an owner whose
+        // session had simply expired that the decision "could not be saved" and
+        // left them on a page every later click would refuse too.
+        unstable_rethrow(error)
+
         setFeedback({
           message: describeSaveFailure({
             error,

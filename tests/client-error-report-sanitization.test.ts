@@ -95,10 +95,23 @@ describe("normalizeErrorDigest", () => {
     expect(normalizeErrorDigest("  deadbeef  ")).toBe("deadbeef")
   })
 
-  it("rejects a framework control digest, which carries a resolved URL", () => {
-    expect(normalizeErrorDigest("NEXT_REDIRECT;push;/coach/members/SMBA-PL-0004;307;")).toBeNull()
+  it("keeps a framework control code and drops the URL it carries", () => {
+    expect(normalizeErrorDigest("NEXT_REDIRECT;push;/coach/members/SMBA-PL-0004;307;"))
+      .toBe("NEXT_REDIRECT")
+    expect(normalizeErrorDigest("NEXT_HTTP_ERROR_FALLBACK;404")).toBe("NEXT_HTTP_ERROR_FALLBACK")
+    expect(normalizeErrorDigest("BAILOUT_TO_CLIENT_SIDE_RENDERING"))
+      .toBe("BAILOUT_TO_CLIENT_SIDE_RENDERING")
+  })
+
+  it("normalizes a code it has already returned to itself", () => {
+    const once = normalizeErrorDigest("NEXT_REDIRECT;push;/coach/members/SMBA-PL-0004;307;")
+    expect(normalizeErrorDigest(once)).toBe(once)
+  })
+
+  it("rejects a control code it does not own, whatever is appended to it", () => {
     expect(normalizeErrorDigest("NEXT_NOT_FOUND")).toBeNull()
-    expect(normalizeErrorDigest("NEXT_HTTP_ERROR_FALLBACK;404")).toBeNull()
+    expect(normalizeErrorDigest("NEXT_REDIRECTION;push;/coach;307;")).toBeNull()
+    expect(normalizeErrorDigest("coach@example.com;NEXT_REDIRECT")).toBeNull()
   })
 
   it("rejects anything that is not the opaque shape", () => {
@@ -231,7 +244,7 @@ describe("parseClientErrorReport", () => {
       summary: "Could not save coach@example.com",
     })).toEqual({
       boundary: "coach_financials",
-      digest: null,
+      digest: "NEXT_REDIRECT",
       errorName: "Error",
       eventType: "client_error",
       routePath: "/coach/financials/:id",
