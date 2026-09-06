@@ -2882,8 +2882,28 @@
   background: var(--red);
 }
 
+/* The dash the cell actually paints. This was a plain white box, which said
+   nothing at all -- readable only as "the absence of the other swatches" -- and
+   that was survivable while it was the only unmarked state. It now sits beside
+   `is-future`, whose whole job is to be told apart from it, so the pair has to
+   show the two marks rather than one mark and a blank. Same construction as
+   `is-pending` below, which has drawn this dash on the junior-coach card all
+   along. */
 .player-attendance-legend i.is-unmarked {
-  background: var(--white);
+  background:
+    linear-gradient(var(--steel), var(--steel)) center / 7px 1px no-repeat,
+    var(--white);
+}
+
+/* The swatch for a session that has not happened yet. A dot rather than a paler
+   dash, because the cell it stands for is a dot: the two states have to differ
+   in shape and not only in weight, or a reader who cannot separate two greys is
+   back to where this started. */
+.player-attendance-legend i.is-future {
+  background:
+    radial-gradient(circle at center, var(--steel) 0 1.5px, transparent 1.6px)
+      center / 100% 100% no-repeat,
+    var(--white);
 }
 
 .player-attendance-legend i.is-pending {
