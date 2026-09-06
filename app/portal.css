@@ -3420,10 +3420,27 @@
 
 .coach-briefing-metric {
   display: grid;
+  /* Two declarations, one defect. `.coach-time-metric dd` is
+     `white-space: nowrap`, and "10:00 am" is wider than half this card below
+     about 430px -- so the value has to overflow something. What it must not do
+     is overflow one side only, which is what it did: 17px of clearance on the
+     left and 2.4px on the right at 360px, beside a count that was centred to
+     0.02px.
+     `grid-template-columns` caps the implicit column, which otherwise resolves
+     to `auto` -- max-content -- and grew the track past the cell.
+     `justify-self` on the value is what actually centres it, because
+     `text-align: center` does not: Chrome start-aligns a line box it cannot
+     fit, so the overflow all landed on the right. Centring the *item* splits it
+     evenly instead. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     "value"
     "label";
   gap: var(--space-tight);
+}
+
+.coach-briefing-metric dd {
+  justify-self: center;
 }
 
 .coach-briefing-metric dt {
@@ -9711,6 +9728,26 @@ tr.is-expanded .coach-member-row-action button svg {
   margin: 0;
   font-size: 1rem;
   line-height: 1.35;
+}
+
+/* The session label ends in a time range, and a greedy break split it two ways
+   at phone widths: "10-11" / "am" at 390px, and after the en dash once
+   `text-wrap: pretty` was tried -- an en dash is a legal break opportunity, so
+   no wrapping mode keeps the range whole. `sessionLabelParts` hands the range
+   over as its own element and this stops it breaking at all; the context before
+   it still wraps normally, which is what gives the line somewhere to break.
+   The five inherits are not decoration. `.coach-message-card span` styles every
+   span anywhere inside this card as an eyebrow -- uppercase, 11px, weight 800,
+   0.09em tracking -- so wrapping the range in a span rendered it "10-11 AM" in
+   caps beside its own sentence. They put the range back in the type its
+   sentence is set in. */
+.coach-welcome-session strong .session-label-range {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  white-space: nowrap;
 }
 
 .coach-welcome-scoreboard .coach-welcome-session p {

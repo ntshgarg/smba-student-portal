@@ -8,6 +8,11 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+/** The words the markup renders, with the tags taken out. */
+function textOf(html: string) {
+  return html.replace(/<[^>]*>/gu, "")
+}
+
 describe("academy-time dashboard greetings", () => {
   it.each([
     ["2026-08-10T06:29:00.000Z", "Good morning"],
@@ -69,7 +74,11 @@ describe("academy-time dashboard greetings", () => {
     expect(html).not.toContain("First batch")
     expect(html).not.toContain("Next batch")
     expect(html).toContain("6:00 am")
-    expect(html).toContain("Beginner · Weekday · 6–7 am")
+    // The label still reads as one string; only its markup is in two parts, so
+    // this asserts the text a coach sees rather than the tags under it.
+    expect(textOf(html)).toContain("Beginner · Weekday · 6–7 am")
+    // And the range is the part that must not wrap inside itself.
+    expect(html).toContain('<span class="session-label-range">6–7 am</span>')
     expect(html).toContain("SMBA Court")
   })
 

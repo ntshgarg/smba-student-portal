@@ -268,6 +268,9 @@ export function formatSessionTimeRange({
  * Human presentation for a session. Stored session titles remain immutable and
  * should never be parsed to build this label.
  */
+/** What `formatSessionLabel` joins its segments with. */
+export const SESSION_LABEL_SEPARATOR = " · "
+
 export function formatSessionLabel({
   batch,
   durationMinutes,
@@ -279,10 +282,35 @@ export function formatSessionLabel({
   programme: string
   startTime: string
 }) {
-  const context = `${programme.trim()} · ${batch.trim()}`
+  const context = [programme.trim(), batch.trim()].join(SESSION_LABEL_SEPARATOR)
   const timeRange = formatSessionTimeRange({ durationMinutes, startTime })
 
-  return timeRange ? `${context} · ${timeRange}` : context
+  return timeRange
+    ? [context, timeRange].join(SESSION_LABEL_SEPARATOR)
+    : context
+}
+
+/**
+ * A session label split at its last separator, so a view can render the time
+ * range as one unbreakable run.
+ *
+ * The range is the only segment that must not wrap inside itself: it carries an
+ * en dash and a meridiem, and both are break opportunities the browser will
+ * take on a narrow measure -- "10-11" above "am", or "10-" above "11 am". No
+ * `text-wrap` value prevents either, because neither break is wrong in general;
+ * it is wrong for a quantity. Splitting here rather than in the component keeps
+ * the knowledge of what the separator is in the file that writes it.
+ *
+ * A label with no range splits to an empty `range`, and the caller renders
+ * nothing extra.
+ */
+export function sessionLabelParts(label: string) {
+  const separatorAt = label.lastIndexOf(SESSION_LABEL_SEPARATOR)
+  if (separatorAt < 0) return { context: label, range: "" }
+  return {
+    context: label.slice(0, separatorAt),
+    range: label.slice(separatorAt + SESSION_LABEL_SEPARATOR.length),
+  }
 }
 
 /** Human session label for an occurrence stored as an absolute instant. */

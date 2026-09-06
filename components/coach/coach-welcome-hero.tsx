@@ -1,5 +1,7 @@
 import { ArrowDown } from "lucide-react"
 
+import { SESSION_LABEL_SEPARATOR, sessionLabelParts } from "@/lib/format"
+
 export function CoachWelcomeHero({
   coachName,
   dateLabel,
@@ -21,6 +23,12 @@ export function CoachWelcomeHero({
   sessionCount: number
   sessionPosition: "first" | "next"
 }) {
+  // Split before rendering rather than inside the markup: `upcomingSession` is
+  // nullable and the branch below already reads awkwardly enough.
+  const sessionTitle = upcomingSession
+    ? sessionLabelParts(upcomingSession.title)
+    : { context: "", range: "" }
+
   return (
     <section
       className="welcome-hero welcome-scoreboard coach-welcome-hero coach-welcome-scoreboard"
@@ -74,7 +82,13 @@ export function CoachWelcomeHero({
               </dl>
               <div className="coach-welcome-session">
                 <span>{sessionPosition === "first" ? "First on court" : "Next on court"}</span>
-                <strong>{upcomingSession.title}</strong>
+                <strong>{sessionTitle.range ? (
+                  <>
+                    {sessionTitle.context}
+                    {SESSION_LABEL_SEPARATOR}
+                    <span className="session-label-range">{sessionTitle.range}</span>
+                  </>
+                ) : upcomingSession.title}</strong>
                 <p>{upcomingSession.venue}</p>
               </div>
             </>
