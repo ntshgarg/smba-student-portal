@@ -1323,6 +1323,18 @@
     border-left: 1px solid var(--line);
   }
 
+  /* The gap moves onto the grid, because the thing that was holding these two
+     apart was a child's padding and this block takes it away. `.slipChannels` is
+     `max-content minmax(0, 1fr)` with no column-gap, and the base rule gives the
+     message `padding: 4px clamp(12px, 2vw, 20px)`; with `padding: 4px 0` below
+     the only separation left was whatever slack the row happened to have. At
+     360px there was none: "Send to" ended at x=82.10 and the first glyph of
+     "Choose where the announcement should appear." began at x=82.10, so the two
+     painted as one string. */
+  .slipChannels {
+    column-gap: 12px;
+  }
+
   .slipChannelMessage {
     grid-column: 2;
     grid-row: 1;

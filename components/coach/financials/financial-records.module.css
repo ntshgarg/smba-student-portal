@@ -232,16 +232,27 @@
 .registrationEquation {
   display: grid;
   grid-template-columns: repeat(2, minmax(140px, 1fr) auto) minmax(140px, 1fr);
-  align-items: center;
+  /* Two named rows, one for the labels and one for the figures, so the cells
+     below can share them. `align-items: center` re-centred whichever cell was
+     tallest, and "Net monthly fees" wraps to two lines at 390 and three at 320
+     while "Received" and "Outstanding" stay on one -- so the figure beside them
+     dropped 7.50px at 390 and 15.00px at 320. Three numbers that read as one
+     equation cannot sit on three baselines. */
+  grid-template-rows: auto auto;
+  align-items: start;
   gap: clamp(12px, 2vw, 28px);
+  row-gap: 4px;
   padding: var(--space-tight) clamp(var(--space-copy), 2vw, 22px);
 }
 
 .registrationEquation > div {
+  /* `subgrid` is what puts every label in the parent's first row and every
+     figure in its second, however many lines a label takes. */
   display: grid;
   min-width: 0;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
   justify-items: center;
-  gap: 4px;
   text-align: center;
 }
 

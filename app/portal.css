@@ -11884,10 +11884,21 @@ tr.is-expanded .coach-member-row-action button svg {
      pill, and the action. So the label comes back for these two only, and inline
      rather than as its own line, because the composition here is a fixed
      two-row named-area grid and a stacked label would move every row. */
+  /* Stacked, not inline, and the comment above explains why inline was chosen --
+     a stacked label "would move every row". It moves them by one line, and the
+     inline version was costing more than that: the sessions cell is 106.59px at
+     820 with 82.59px inside its padding, and the label eats 64.72px of that plus
+     a 5px margin, leaving the value 12.87px. So "1 active" split into "1" over
+     "active" in 12 rows of 12 at 980, 960, 900, 860, 820, 760 and 730, and "Not
+     assigned" ran 11.30px past the cell's padding at 820 and 17.63px into the
+     TRAINING FROM cell at 730.
+     A block label gives the value the whole 82.59px, which holds both. Confined
+     to this band: below 721 the rows lay out differently and nothing wrapped,
+     and at 1440 the track is wide enough for the inline form. */
   .coach-member-table tbody td.coach-member-sessions::before,
   .coach-member-table tbody td.coach-member-joined::before {
-    display: inline;
-    margin-right: 5px;
+    display: block;
+    margin-right: 0;
     color: var(--steel);
     content: attr(data-label);
     font-size: var(--type-operational-floor);
