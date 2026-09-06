@@ -2910,6 +2910,56 @@
   box-shadow: inset 0 0 0 2px var(--red);
 }
 
+/* The register's key, held in columns instead of left to wrap.
+ *
+ * `.player-attendance-legend` is `flex-wrap: wrap`, which gives the seven marks
+ * no column structure at all -- the row breaks wherever the labels happen to run
+ * out, so the key rags differently at every width and strands a single chip on a
+ * line of its own at two of them: 6 + 1 at 820px, and 3 + 3 + 1 at 430px. That
+ * orphan is most of what reads as untidy; it is not a spacing problem.
+ *
+ * Four columns rather than seven. Seven would keep the player register on one
+ * row, but this class is also the staff register's key, which carries four
+ * marks, and seven tracks would spread those four across the full width with
+ * three empty columns behind them. Four fits both: 4 + 3 here, one row there.
+ *
+ * It costs about 53px of height on a desktop register -- one row becomes two,
+ * plus the box. That is the trade the box was asked for.
+ *
+ * Scoped to the two full registers. The player dashboard card and the
+ * junior-coach card share `.player-attendance-legend` but sit in much narrower
+ * cards, where four tracks would be narrower than the labels.
+ */
+.staff-attendance-legend {
+  display: grid;
+  /* `max-content` rather than `1fr`. Four equal fractions of a 1114px register
+     put 278px under each mark and spread the seven of them across the full
+     width, which reads as scattered rather than tidy -- the alignment is there
+     but nothing looks related to anything. Content-width columns keep the marks
+     together at the start of the row and still line the swatches up column to
+     column, which is the whole point of leaving `flex-wrap` behind. */
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  justify-content: start;
+  gap: 10px 30px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+@media (max-width: 720px) {
+  .staff-attendance-legend {
+    /* Back to fractions here, and `justify-content` back to its default. Two
+       content-width columns need 227px at 320px and the box has 218px, so the
+       labels wrapped inside their own cells and the key grew to 162px tall --
+       taller than the ragged version it replaced. A phone column is narrow
+       enough that equal fractions cannot spread, which is the only thing
+       `max-content` was protecting against. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+    gap: 10px 14px;
+  }
+}
+
 .player-attendance-legend i.is-unavailable {
   background: repeating-linear-gradient(-45deg, #f3f2ef 0, #f3f2ef 4px, #d8d5cf 4px, #d8d5cf 5px);
 }
