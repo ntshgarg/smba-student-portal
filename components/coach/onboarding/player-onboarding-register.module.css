@@ -1132,7 +1132,16 @@
   }
 
   .row {
-    grid-template-columns: 38px minmax(145px, 1fr) 96px minmax(135px, 0.9fr) 112px;
+    /* The stamp track was a flat 96px and the widest chip, "New requests", is
+       115.97px, so `.stageStamp` -- which is `justify-self: start` and therefore
+       shrink-to-fit -- was capped below its own content and broke onto two
+       lines. That left its label 10px from the left border and 21.14px from the
+       right, an 11.14px asymmetry, beside "Session" and "Fee Plan" chips in the
+       same column sitting at a symmetric 10/10. Three chips hugging their label
+       and three not is the same badge reading as two shapes.
+       `max-content` takes the width of the widest chip rather than a number
+       that has to be kept in step with the longest label. */
+    grid-template-columns: 38px minmax(145px, 1fr) minmax(96px, max-content) minmax(135px, 0.9fr) 112px;
     gap: 10px;
   }
 
@@ -1542,6 +1551,29 @@
  * it; the finding was clean from 340 up.
  */
 @media (max-width: 339px) {
+  /*
+   * The numeral and its caption stop sharing a line here, because below this
+   * width they cannot. "Assessment" is the one caption that is a single
+   * unbreakable word: it needs 83.13px, and a 129px cell minus 24px of padding,
+   * a 29.56px numeral and a 13px gap leaves it 66.44px. It painted 16.69px past
+   * its own box, 4.69px past the cell and 3.69px past the panel's outer border,
+   * with about 2.8px of the final T outside the panel entirely.
+   *
+   * `minmax(0, 1fr)` on the caption track, added with the rest of this file's
+   * mobile work, is what lets the track shrink to 66.44px -- but a track that
+   * can shrink does not make an unbreakable word narrower, so the overrun
+   * survived it. Stacking is what actually fixes it: one column gives the
+   * caption the cell's full 105px and 21.87px to spare.
+   *
+   * `align-items` goes back to `start`, since a baseline shared between two rows
+   * of a single column means nothing.
+   */
+  .stageSummary > div {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 4px;
+  }
+
   .dateTimeline dt {
     /* Two of its own line boxes. The label's line-height resolves to 17.6px on an
        11px font, so two lines is 3.2em -- an earlier 2.4em assumed a 1.2 ratio and
