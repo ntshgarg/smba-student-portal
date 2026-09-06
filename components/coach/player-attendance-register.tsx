@@ -283,6 +283,7 @@ export function PlayerAttendanceRegister({
                 <span><i className="is-present" aria-hidden="true"><Check /></i>Present</span>
                 <span><i className="is-absent" aria-hidden="true"><CircleMinus /></i>Absent</span>
                 <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
+                <span><i className="is-future" aria-hidden="true" />Upcoming</span>
                 <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
                 <span><i className="is-holiday" aria-hidden="true"><CalendarOff /></i>Holiday</span>
                 <span><i className="is-makeup" aria-hidden="true"><RefreshCw /></i>Rescheduled</span>
@@ -475,6 +476,13 @@ export function PlayerAttendanceRegister({
                               const completionCount = completionAdjustments.length
                               const completionRequiresReview = completionAdjustments.some((item) => item.reviewRequiredAt)
                               const holiday = holidayByDate.get(date.key)
+                              // The one cell state with no mark of its own. `future` reached the
+                              // accessible name and stopped there, so an upcoming session and a
+                              // past one nobody has marked both painted the same grey em dash --
+                              // the single distinction this register exists to draw. Conditions
+                              // match the glyph branch below exactly, so this is true only where
+                              // the dash would otherwise have been.
+                              const upcoming = future && !choice && !unavailable && !holiday
                               const ordinaryState = holiday
                                 ? `academy closed for ${holiday.label}`
                                 : unavailable
@@ -525,7 +533,7 @@ export function PlayerAttendanceRegister({
                                     </Link>
                                   ) : (
                                     <span
-                                      className={`coach-register-cell-status${choice ? ` is-${choice}` : ""}${completionCount ? " has-makeup-completion" : ""}${completionRequiresReview ? " requires-review" : ""}`}
+                                      className={`coach-register-cell-status${choice ? ` is-${choice}` : ""}${upcoming && !completionCount ? " is-future" : ""}${completionCount ? " has-makeup-completion" : ""}${completionRequiresReview ? " requires-review" : ""}`}
                                       role="img"
                                       aria-label={cellLabel}
                                       title={`${sessionLabel} · ${date.label}: ${state}`}
@@ -535,7 +543,7 @@ export function PlayerAttendanceRegister({
                                           "not available" mark in this cell and — is "not recorded", so
                                           absent takes the ring of CircleMinus rather than a second cross
                                           or a bare Minus. aria-label stays the accessible name. */}
-                                      {holiday ? <CalendarOff aria-hidden="true" /> : unavailable ? <X aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : completionCount ? null : <span aria-hidden="true">—</span>}
+                                      {holiday ? <CalendarOff aria-hidden="true" /> : unavailable ? <X aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : completionCount ? null : upcoming ? <span aria-hidden="true">·</span> : <span aria-hidden="true">—</span>}
                                       {completionCount ? <span className="coach-register-makeup-count" aria-hidden="true">+{completionCount}</span> : null}
                                       {completionRequiresReview ? <CircleAlert aria-hidden="true" /> : null}
                                     </span>

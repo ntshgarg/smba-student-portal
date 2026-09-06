@@ -688,6 +688,15 @@ function MonthGrid({
   const window = calendarWindowForMonth(month)
   const dates = enumerateDateKeys(window.from, window.to)
   const leading = (new Date(`${window.from}T00:00:00.000Z`).getUTCDay() + 6) % 7
+  /*
+   * The blanks after the last day, which were never emitted. Leading blanks are
+   * rendered as bordered cells and trailing ones were not, so a month that does
+   * not end on a Sunday left its final row unclosed: August 2026 ends on a
+   * Monday, and at 1440 that row held only "31" and stopped at x=233.2 while the
+   * five rows above it ran to x=816.47 -- 583.27px of the grid's bottom edge
+   * with no border, no divider and no cell behind it.
+   */
+  const trailing = (7 - ((leading + dates.length) % 7)) % 7
   return (
     <div className="coach-month-grid">
       {weekdays.map((day) => <span key={day.value}>{day.short}</span>)}
@@ -722,10 +731,20 @@ function MonthGrid({
             <strong>{Number(dateKey.slice(-2))}</strong>
             {holiday
               ? <small className="coach-month-holiday">Holiday</small>
-              : count ? <small>{count} {count === 1 ? "session" : "sessions"}</small> : null}
+              : count ? (
+                <small>
+                  {count}
+                  {/* Its own element so the stylesheet can drop it in the band
+                      where the cell cannot hold it. The accessible name above
+                      carries the full "N sessions" either way, so nothing is
+                      lost to a screen reader when this is hidden. */}
+                  <span className="coach-month-session-word"> {count === 1 ? "session" : "sessions"}</span>
+                </small>
+              ) : null}
           </button>
         )
       })}
+      {Array.from({ length: trailing }, (_, index) => <i key={`trailing-${index}`} />)}
     </div>
   )
 }

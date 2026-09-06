@@ -232,16 +232,27 @@
 .registrationEquation {
   display: grid;
   grid-template-columns: repeat(2, minmax(140px, 1fr) auto) minmax(140px, 1fr);
-  align-items: center;
+  /* Two named rows, one for the labels and one for the figures, so the cells
+     below can share them. `align-items: center` re-centred whichever cell was
+     tallest, and "Net monthly fees" wraps to two lines at 390 and three at 320
+     while "Received" and "Outstanding" stay on one -- so the figure beside them
+     dropped 7.50px at 390 and 15.00px at 320. Three numbers that read as one
+     equation cannot sit on three baselines. */
+  grid-template-rows: auto auto;
+  align-items: start;
   gap: clamp(12px, 2vw, 28px);
+  row-gap: 4px;
   padding: var(--space-tight) clamp(var(--space-copy), 2vw, 22px);
 }
 
 .registrationEquation > div {
+  /* `subgrid` is what puts every label in the parent's first row and every
+     figure in its second, however many lines a label takes. */
   display: grid;
   min-width: 0;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
   justify-items: center;
-  gap: 4px;
   text-align: center;
 }
 
@@ -317,7 +328,11 @@
 .filters select {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  /* 42px plus this element's own 1px border either side is the 44px every other
+     control in the row measures. It was 44px here, so the search box came out
+     46px and -- with the row aligned on its bottoms -- carried the whole 2.00px
+     error onto its top edge and into its label's baseline. */
+  min-height: 42px;
   padding: 0 11px;
   border: 1px solid var(--line);
   border-radius: 0;

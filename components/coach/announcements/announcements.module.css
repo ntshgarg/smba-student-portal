@@ -87,8 +87,13 @@
 
 .noticeSlip {
   position: relative;
+  /* Left-aligned to the page, not centred in it. `margin-inline: auto` on a
+     940px cap kept the card under the heading only while the column was
+     narrower than the cap: at 990 the two were already 1px apart, at 1440 150px,
+     and at 2560 528.4px, with the back link and h1 still on the page's own edge.
+     The sibling archive page keeps both on one edge at every width. */
   width: min(100%, 940px);
-  margin: clamp(18px, 2.4vw, 26px) auto 0;
+  margin: clamp(18px, 2.4vw, 26px) 0 0;
   border: 1px solid color-mix(in srgb, var(--navy) 48%, var(--line));
   background: color-mix(in srgb, var(--white) 72%, var(--ivory));
   overflow: hidden;
@@ -315,7 +320,11 @@
  * meaningful rather than becoming furniture the coach reads past.
  */
 .publicWarning {
-  margin: 0;
+  /* The paragraph above ends exactly on this border -- 0px between the boxes,
+     so the descenders of "through" and "January" came within 1.47-1.49px of the
+     rule at every width, against 22px and 15px seams everywhere else in the same
+     dialog. The margin is the seam that was missing. */
+  margin: 14px 0 0;
   padding: 12px 14px;
   border: 1px solid var(--line);
   color: var(--navy);
@@ -785,7 +794,11 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 28px;
-  padding: clamp(var(--space-group), 3vw, 36px);
+  /* The same clamp every other section of this panel uses. 3vw against 34px
+     reached 36px on a wide screen while its siblings stopped at 34px, so the
+     toolbar's title started 2.0px right of every row title below it and its
+     button ended 2.0px inside the rail they all share. */
+  padding: clamp(var(--space-group), 3vw, 34px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -875,7 +888,10 @@
 
 .archiveFilters > form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto auto;
+  /* Three tracks, not four. The fourth resolved to 0px and still took its 12px
+     gap, so "Apply filters" ended 12.0px inside the rail that the search field,
+     the row buttons and the result bar all share. */
+  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto;
   align-items: end;
   gap: 12px;
   padding: 0 clamp(20px, 3vw, 34px) 20px;
@@ -1321,6 +1337,18 @@
   .slipChannelChoices label + label {
     border-top: 0;
     border-left: 1px solid var(--line);
+  }
+
+  /* The gap moves onto the grid, because the thing that was holding these two
+     apart was a child's padding and this block takes it away. `.slipChannels` is
+     `max-content minmax(0, 1fr)` with no column-gap, and the base rule gives the
+     message `padding: 4px clamp(12px, 2vw, 20px)`; with `padding: 4px 0` below
+     the only separation left was whatever slack the row happened to have. At
+     360px there was none: "Send to" ended at x=82.10 and the first glyph of
+     "Choose where the announcement should appear." began at x=82.10, so the two
+     painted as one string. */
+  .slipChannels {
+    column-gap: 12px;
   }
 
   .slipChannelMessage {

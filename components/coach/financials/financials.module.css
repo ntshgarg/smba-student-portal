@@ -1713,7 +1713,13 @@
 
 .rapidFinderToolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1.58fr);
+  /* `auto-fit` so the heading and the finder stop sharing a row before the
+     search field is too narrow to show its own placeholder. Two fixed columns
+     held down to 820, where the input's content box is 173.28px against a
+     256.36px placeholder -- 11 of its 33 characters hidden, and `text-overflow:
+     clip`, so no ellipsis said so. At 320 it lost 15 characters and read "Name,
+     Academy ID o". */
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   align-items: center;
   gap: clamp(30px, 5vw, 70px);
   padding: clamp(26px, 3vw, 36px) clamp(22px, 3vw, 34px);
@@ -1904,7 +1910,11 @@
 
 .rapidDeskHeader.balanceHeader p {
   max-width: 470px;
-  margin: 0 0 7px;
+  /* The 7px was the whole error. This subtitle and its headline are the two
+     halves of one header row and the row bottom-aligns them, so a bottom margin
+     lifted the paragraph's box 7px and its baseline with it -- 6.61px above the
+     h1's at 1440, and 7.77px at 901. Removing it lands them 0.39px apart. */
+  margin: 0;
 }
 
 .rapidCompletionNotice {

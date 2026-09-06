@@ -118,10 +118,20 @@
   min-height: 44px;
   align-items: center;
   justify-content: center;
+  /* The gap only has something to separate while the label is rendered. Below
+     720px the label goes and the gap stays, so it sat as leading space in front
+     of a lone arrow and pushed it 5.00px right of the circle's own centre --
+     19.50px of clearance on the left against 9.50px on the right. */
   gap: 10px;
   color: var(--navy);
   font-size: 0.6875rem;
   font-weight: var(--weight-label);
+}
+
+@media (max-width: 720px) {
+  .readLink:not(:has(> :not(svg))) {
+    gap: 0;
+  }
 }
 
 .publicOpen svg,

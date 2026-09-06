@@ -2882,8 +2882,28 @@
   background: var(--red);
 }
 
+/* The dash the cell actually paints. This was a plain white box, which said
+   nothing at all -- readable only as "the absence of the other swatches" -- and
+   that was survivable while it was the only unmarked state. It now sits beside
+   `is-future`, whose whole job is to be told apart from it, so the pair has to
+   show the two marks rather than one mark and a blank. Same construction as
+   `is-pending` below, which has drawn this dash on the junior-coach card all
+   along. */
 .player-attendance-legend i.is-unmarked {
-  background: var(--white);
+  background:
+    linear-gradient(var(--steel), var(--steel)) center / 7px 1px no-repeat,
+    var(--white);
+}
+
+/* The swatch for a session that has not happened yet. A dot rather than a paler
+   dash, because the cell it stands for is a dot: the two states have to differ
+   in shape and not only in weight, or a reader who cannot separate two greys is
+   back to where this started. */
+.player-attendance-legend i.is-future {
+  background:
+    radial-gradient(circle at center, var(--steel) 0 1.5px, transparent 1.6px)
+      center / 100% 100% no-repeat,
+    var(--white);
 }
 
 .player-attendance-legend i.is-pending {
@@ -2908,6 +2928,56 @@
 .player-attendance-legend i.is-review {
   border-color: var(--red);
   box-shadow: inset 0 0 0 2px var(--red);
+}
+
+/* The register's key, held in columns instead of left to wrap.
+ *
+ * `.player-attendance-legend` is `flex-wrap: wrap`, which gives the seven marks
+ * no column structure at all -- the row breaks wherever the labels happen to run
+ * out, so the key rags differently at every width and strands a single chip on a
+ * line of its own at two of them: 6 + 1 at 820px, and 3 + 3 + 1 at 430px. That
+ * orphan is most of what reads as untidy; it is not a spacing problem.
+ *
+ * Four columns rather than seven. Seven would keep the player register on one
+ * row, but this class is also the staff register's key, which carries four
+ * marks, and seven tracks would spread those four across the full width with
+ * three empty columns behind them. Four fits both: 4 + 3 here, one row there.
+ *
+ * It costs about 53px of height on a desktop register -- one row becomes two,
+ * plus the box. That is the trade the box was asked for.
+ *
+ * Scoped to the two full registers. The player dashboard card and the
+ * junior-coach card share `.player-attendance-legend` but sit in much narrower
+ * cards, where four tracks would be narrower than the labels.
+ */
+.staff-attendance-legend {
+  display: grid;
+  /* `max-content` rather than `1fr`. Four equal fractions of a 1114px register
+     put 278px under each mark and spread the seven of them across the full
+     width, which reads as scattered rather than tidy -- the alignment is there
+     but nothing looks related to anything. Content-width columns keep the marks
+     together at the start of the row and still line the swatches up column to
+     column, which is the whole point of leaving `flex-wrap` behind. */
+  grid-template-columns: repeat(4, minmax(0, max-content));
+  justify-content: start;
+  gap: 10px 30px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+@media (max-width: 720px) {
+  .staff-attendance-legend {
+    /* Back to fractions here, and `justify-content` back to its default. Two
+       content-width columns need 227px at 320px and the box has 218px, so the
+       labels wrapped inside their own cells and the key grew to 162px tall --
+       taller than the ragged version it replaced. A phone column is narrow
+       enough that equal fractions cannot spread, which is the only thing
+       `max-content` was protecting against. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+    gap: 10px 14px;
+  }
 }
 
 .player-attendance-legend i.is-unavailable {
@@ -3127,8 +3197,11 @@
 }
 
 .report-year-count {
-  align-self: end;
-  padding-bottom: var(--space-tight);
+  /* `end` pinned this to the bottom of a tall row and the 8px padding pushed it
+     further, so "1 coach report" sat 5.91px under a baseline "Season record" and
+     "2026" share exactly. Its box centre was 15.01px from theirs at 1440. */
+  align-self: baseline;
+  padding-bottom: 0;
   color: var(--steel);
   font-size: 0.625rem;
   font-weight: var(--weight-control);
@@ -3146,9 +3219,14 @@
 
 .report-month-trigger {
   min-height: 68px;
-  grid-template-columns: 48px minmax(0, 1fr) minmax(136px, auto) 40px;
+  /* The last track and the right padding both match `.report-year-trigger` now.
+     They did not: 40px plus 12px of padding here against 46px and none there
+     put the two chevrons 8.00px apart on every width from 320 to 2560, in two
+     rows of one list against the same right rule, and left the stacked meta
+     labels 6.00px short of a shared right edge at 1440. */
+  grid-template-columns: 48px minmax(0, 1fr) minmax(136px, auto) 46px;
   gap: clamp(12px, 2.3vw, 30px);
-  padding: 12px 12px 12px var(--space-copy);
+  padding: 12px 0 12px var(--space-copy);
   transition: background var(--duration-base) var(--ease-standard);
 }
 
@@ -3420,10 +3498,27 @@
 
 .coach-briefing-metric {
   display: grid;
+  /* Two declarations, one defect. `.coach-time-metric dd` is
+     `white-space: nowrap`, and "10:00 am" is wider than half this card below
+     about 430px -- so the value has to overflow something. What it must not do
+     is overflow one side only, which is what it did: 17px of clearance on the
+     left and 2.4px on the right at 360px, beside a count that was centred to
+     0.02px.
+     `grid-template-columns` caps the implicit column, which otherwise resolves
+     to `auto` -- max-content -- and grew the track past the cell.
+     `justify-self` on the value is what actually centres it, because
+     `text-align: center` does not: Chrome start-aligns a line box it cannot
+     fit, so the overflow all landed on the right. Centring the *item* splits it
+     evenly instead. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     "value"
     "label";
   gap: var(--space-tight);
+}
+
+.coach-briefing-metric dd {
+  justify-self: center;
 }
 
 .coach-briefing-metric dt {
@@ -3627,7 +3722,19 @@
 .coach-register-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 0.5fr);
-  align-items: end;
+  /* `end` aligned the two columns' boxes, which is not the same as aligning
+     their type. The left column ends in a 48px title and the right in an 11px
+     caps link, and the descender space under the first is larger than under the
+     second -- so with their bottoms flush to 0.00px the last baselines sat
+     8.2px apart, which is the distance a reader actually sees.
+     `last baseline` is the obvious tool and it does not work here: the right
+     column is a column flex box whose last item is a <button>, and Chrome
+     synthesizes a button's baseline from its box rather than its text, so
+     asking for it moved the two 11px apart instead of 8.2px. What aligns is the
+     pair of eyebrows -- the first line of each column, and a <span> at both
+     ends, so nothing is synthesized. Two labelled blocks starting together also
+     reads better than a caps link hanging off a 48px title. */
+  align-items: baseline;
   gap: 44px;
   margin-top: clamp(50px, 7vw, 78px);
 }
@@ -4090,7 +4197,12 @@
 .coach-member-filters {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  /* Four filters in three columns put Batch alone on a second row and left the
+     two dividers between Role, Level and Status only 52px tall against a 104px
+     panel -- 322.37px by 52px of empty panel beside them. `auto-fit` seats all
+     four on one row wherever they fit, which is every width this grid is shown
+     at, and still wraps rather than overflowing if a fifth is ever added. */
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .coach-member-filter-toggle {
@@ -4410,6 +4522,16 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-member-detail-domains dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* A label row and a value row the pairs can share. Without them "Registration
+     requested" wrapping to two lines pushed its own value 16.80px below the
+     one-line label's value beside it, at 390 and 320. */
+  grid-auto-rows: auto auto;
+}
+
+.coach-member-detail-domains dl > div {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
 }
 
 .coach-member-detail-domains dl > div.is-wide {
@@ -4428,7 +4550,9 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--navy);
   font-weight: 690;
   overflow-wrap: anywhere;
-  text-transform: capitalize;
+  /* No `capitalize`. These values arrive already cased, and capitalising them
+     rewrote what they say: "6-7 am" painted as "6-7 Am", and "3-day plan" as
+     "3-Day Plan" directly under a row that renders the same string correctly. */
 }
 
 .coach-member-contact-reveal {
@@ -4925,7 +5049,12 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-category-filter {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  /* 6px buys 4px across four gaps, and the row was short by 0.078px. Five chips
+     need 361.016px against a 360.938px content box at 1440, so "Elite" started a
+     second row and the block grew 72px -> 123px, leaving 54.56px of row one
+     unused against the 54.64px it needed. The shortfall is 2.875px at its worst
+     (1280) and gone by 1600, so one pixel off each gap covers the whole band. */
+  gap: 6px;
   padding: 0 clamp(22px, 3vw, 36px) 28px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -5047,7 +5176,12 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-report-editor-heading {
   display: flex;
-  align-items: flex-start;
+  /* "July 2026" sat 6.00px below "Revision draft" at 390, 820, 1440 and 2560.
+     Both start at the same box top, but the left eyebrow is an inline span
+     baselining off a 16px/25.6px block strut while the right is a block span at
+     0.625rem/16px, so `flex-start` aligned the boxes and left the type 6px
+     apart. */
+  align-items: baseline;
   justify-content: space-between;
   gap: 30px;
 }
@@ -6036,6 +6170,15 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-report-queue-heading {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    /* Both halves of this matter. The grid aligns on the baseline, and the
+       toggle is given one to offer: it is a flex container, and with
+       `align-items: center` none of its items were baseline-aligned, so it
+       synthesized a baseline from its own 44px border box and the grid had
+       nothing real to reach. That is why `flex-start` left these two identical
+       11px labels 8.03px apart and asking for `baseline` alone only halved it.
+       `center` is worse still -- this column holds more than the eyebrow, so
+       centring the whole of it moved the label 21-39px. */
+    align-items: baseline;
     min-height: auto;
     gap: 12px 18px;
     padding: 0 22px 18px;
@@ -6044,7 +6187,14 @@ tr.is-expanded .coach-member-row-action button svg {
   .coach-report-queue-heading > .coach-report-queue-toggle {
     display: inline-flex;
     min-height: 44px;
-    align-items: center;
+    /* See the grid above: `center` here is what stopped this button exposing a
+       real baseline. The 44px minimum is the touch target and is untouched. */
+    align-items: baseline;
+    /* The chevron rides 2.50px above the label's optical centre as a result,
+       which is the price of the label being exactly on its baseline. Measured
+       rather than assumed: `align-self: center` on the svg makes it worse, not
+       better -- it centres in the 44px flex line while the baseline-aligned text
+       sits near the bottom of it, and the chevron ends up 11.50px out. */
     justify-content: flex-end;
     gap: 7px;
     max-width: none;
@@ -6648,7 +6798,16 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-weekly-slots {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* `auto-fit`, not a flat seven. A chip is a 24px checkbox, a 10px gap, its
+     label, 20px of padding and its border -- 132.38px for the longest,
+     "Wednesday" -- and seven equal columns give it 86.02px at 761 and 93.78px at
+     820. `.coach-slot-day` does not clip, so the label drew straight out of its
+     own chip and under the next chip's red checkbox: 35.36px past its border at
+     761, 27.59px at 820, and 15.44px over Thursday's checkbox at 768.
+     Fitting as many 133px columns as the row holds keeps all seven across on a
+     desktop, where they already fit, and drops to five or four in the band where
+     they do not. */
+  grid-template-columns: repeat(auto-fit, minmax(133px, 1fr));
   gap: var(--space-tight);
   margin: 36px 0 0;
   padding: 0;
@@ -6801,7 +6960,9 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-day-view-heading {
   display: flex;
-  align-items: end;
+  /* Same fault as `.coach-calendar-title-row` above: the count sat 8.66px below
+     the date's baseline at 1440 and 5.68px at 820. */
+  align-items: baseline;
   justify-content: space-between;
   gap: 18px;
   padding: clamp(var(--space-group), 3vw, 34px);
@@ -6972,7 +7133,15 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-calendar-title-row {
   display: flex;
-  align-items: end;
+  /* `end` bottom-aligned the boxes to 0.00px and the type to nothing: a 60px
+     serif month title carries 16px of descender space against the 11px count's
+     3.3px, so "236 sessions" hung 12.7px below the "August 2026" baseline at
+     1440 and 7.71px at 820. Two strings on one row read as one line and have to
+     share a baseline. Every other instance of this pattern in this file already
+     does -- `.coach-report-field > span`, `.report-month-title`,
+     `.report-year-title`, `.player-ticket-masthead` -- so this row was the
+     deviation. */
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--space-group);
   margin-top: 34px;
@@ -7270,6 +7439,32 @@ tr.is-expanded .coach-member-row-action button svg {
   font-weight: 760;
 }
 
+/*
+ * The word goes away where the cell cannot hold it, and only there.
+ *
+ * Seven columns of a 768px grid give each day a 43.84px cell and a 22.84px
+ * caption box, and "sessions" alone is 38.98px. It has no break opportunity, so
+ * it ran 16.14px past its own box and 5.14px into the next day -- and because
+ * `.coach-month-grid > button` is `position: relative`, the neighbour's opaque
+ * background painted over the tail and every cell in the row read "10 session".
+ * In the last column there is no neighbour, so it spilled 5.13px past the grid's
+ * own border instead. The caption also broke between the number and the word
+ * from 761px to about 990px.
+ *
+ * Measured across the band, widest caption against narrowest cell: the caption
+ * needs 50.81px and the content box reaches it only at 980px (51.53px), which is
+ * 0.72px of slack -- too thin to rest on. At 1000px there is 2.82px, so the word
+ * comes back at 1000 and not before.
+ *
+ * Bounded below at 761px on purpose: `mobile-calendar-attendance-freeze` holds
+ * the Month View's typography below that, and this rule has no business there.
+ */
+@media (min-width: 761px) and (max-width: 999px) {
+  .coach-month-session-word {
+    display: none;
+  }
+}
+
 .coach-month-grid button.is-selected small {
   color: var(--steel);
 }
@@ -7284,7 +7479,13 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-schedule-programme-heading {
   display: flex;
-  align-items: end;
+  /* The only two things on this row are a heading and its right-aligned count,
+     so they read as one line -- but `end` aligned their boxes and left the
+     30px/1 serif h3 and the 10px/16px meta 4.00px apart on the baseline, on all
+     five programme headings and at 820, 1440 and 2560 alike. The meta's cap
+     height is 7.25px, so it was sagging 55% of its own cap height toward the
+     divider below it. */
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--space-group);
   padding-bottom: 14px;
@@ -7669,7 +7870,12 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-day-view-heading {
-    align-items: flex-start;
+    /* And the same fault in the other direction here. `flex-start` top-aligned
+       the boxes, and the count rides one type step above the eyebrow it shares
+       the row with -- 11px/17.6px against a frozen 10px/16px -- so it sat 4.70px
+       *higher* than the eyebrow at 390 and 320. On 10-11px type that is about
+       half a cap height. */
+    align-items: baseline;
     padding: var(--space-copy) var(--space-copy) 18px;
   }
 
@@ -7678,8 +7884,12 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-series-form {
+    /* 15px, not 16. This card bleeds to the viewport edge with `margin-inline:
+       -16px`, so its content starts at 16px of padding plus its own 1px border
+       -- x=17.00, against the back-row and page heading at x=16.00. Taking the
+       border out of the padding puts all three on one edge. */
     margin-inline: -16px;
-    padding: 30px var(--space-copy);
+    padding: 30px 15px;
   }
 
   .coach-series-form-grid {
@@ -7814,7 +8024,13 @@ tr.is-expanded .coach-member-row-action button svg {
     align-items: center;
     justify-content: space-between;
     gap: 18px;
-    padding: 11px 2px;
+    /* `0`, not `2px`. This button draws the hairline the roster rows beneath it
+       sit against, and 2px of its own inline padding pushed its title to x=18.00
+       where those rows start at x=16.00 -- while its chevron landed 2.50px left
+       of theirs and 0.66px wider. One continuous list, two columns, both
+       stepping at every group boundary. The desktop equivalent uses `18px 0`,
+       which is why nothing there is out of register. */
+    padding: 11px 0;
     border: 0;
     border-top: 1px solid var(--line);
     background: transparent;
@@ -9249,12 +9465,21 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-published-report-column-revision {
+    /* `letter-spacing: 0` matters as much as the font size. `font-size: 0` hides
+       this cell's own label so the `::after` can replace it, but tracking is a
+       length and a zero-sized character still carries it -- five hidden
+       characters pushed the replacement 7.05px right of the column it heads, at
+       740, 820, 900 and 980 alike, while the Player and Actions headers sat on
+       their columns to 0.00px. The `::after` puts the tracking back for the text
+       a reader actually sees. */
     font-size: 0;
+    letter-spacing: 0;
   }
 
   .coach-published-report-column-revision::after {
     content: "Revision / updated";
     font-size: var(--type-operational-floor);
+    letter-spacing: var(--tracking-label);
   }
 
   .coach-published-report-column-updated {
@@ -9274,9 +9499,27 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-published-report-version {
+    /* The rule above this band is drawn by two cells that each carry
+       `border-top`, and the grid's 14px column gap fell between them -- so every
+       card showed a 14.00px hole in an otherwise continuous 1px line, on all ten
+       rows at 320, 390 and 720 alike. The bar below it spans `1 / 4` and runs
+       unbroken, which is what the eye compares it against.
+       The pseudo-element bridges exactly the gap, anchored to this cell's right
+       edge, so it stays correct if the column widths move. */
+    position: relative;
     grid-column: 3;
     grid-row: 1;
     align-self: end;
+  }
+
+  .coach-published-report-version::after {
+    position: absolute;
+    top: -1px;
+    left: 100%;
+    width: 14px;
+    height: 1px;
+    background: var(--line);
+    content: "";
   }
 
   .coach-published-report-updated {
@@ -9711,6 +9954,30 @@ tr.is-expanded .coach-member-row-action button svg {
   margin: 0;
   font-size: 1rem;
   line-height: 1.35;
+}
+
+/* The time range at the end of a session label, kept whole.
+ *
+ * A greedy break splits it two ways at narrow widths: "10-11" over "am", and
+ * after the en dash once `text-wrap: pretty` is tried -- an en dash is a legal
+ * break opportunity, so no wrapping mode keeps a range together.
+ * `sessionLabelParts` hands the range over as its own element and this stops it
+ * breaking at all; the context before it still wraps, which is what gives the
+ * line somewhere to go.
+ *
+ * The five inherits are not decoration. This started scoped to the coach hero,
+ * where `.coach-message-card span` styles every span anywhere inside that card
+ * as an eyebrow -- uppercase, 11px, weight 800, 0.09em tracking -- and the range
+ * rendered as "10-11 AM" in caps beside its own sentence. Unscoping the rule for
+ * its second user means the next surface to adopt it inherits that protection
+ * rather than rediscovering it. */
+.session-label-range {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  white-space: nowrap;
 }
 
 .coach-welcome-scoreboard .coach-welcome-session p {
@@ -11177,7 +11444,11 @@ tr.is-expanded .coach-member-row-action button svg {
 
 @media (max-width: 340px) {
   .player-ticket-dashboard .player-ticket-masthead {
-    gap: 10px;
+    /* 4px, not 10. "Monthly reports" needs 157.05px, its period chip 80.63px,
+       and the masthead has 242.00px at 320 -- so a 10px gap left it 5.67px
+       short, the title broke over two lines and the chip beside it hung off the
+       first, while all four sibling mastheads on the page stayed 38.00px tall. */
+    gap: 4px;
   }
 
   .player-ticket-dashboard .player-ticket-context {
@@ -11642,10 +11913,21 @@ tr.is-expanded .coach-member-row-action button svg {
      pill, and the action. So the label comes back for these two only, and inline
      rather than as its own line, because the composition here is a fixed
      two-row named-area grid and a stacked label would move every row. */
+  /* Stacked, not inline, and the comment above explains why inline was chosen --
+     a stacked label "would move every row". It moves them by one line, and the
+     inline version was costing more than that: the sessions cell is 106.59px at
+     820 with 82.59px inside its padding, and the label eats 64.72px of that plus
+     a 5px margin, leaving the value 12.87px. So "1 active" split into "1" over
+     "active" in 12 rows of 12 at 980, 960, 900, 860, 820, 760 and 730, and "Not
+     assigned" ran 11.30px past the cell's padding at 820 and 17.63px into the
+     TRAINING FROM cell at 730.
+     A block label gives the value the whole 82.59px, which holds both. Confined
+     to this band: below 721 the rows lay out differently and nothing wrapped,
+     and at 1440 the track is wide enough for the inline form. */
   .coach-member-table tbody td.coach-member-sessions::before,
   .coach-member-table tbody td.coach-member-joined::before {
-    display: inline;
-    margin-right: 5px;
+    display: block;
+    margin-right: 0;
     color: var(--steel);
     content: attr(data-label);
     font-size: var(--type-operational-floor);
@@ -12417,7 +12699,15 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .player-attendance-recorder .attendance-occurrence-list > button {
     min-height: 62px;
-    grid-template-columns: 52px minmax(0, 1fr) auto;
+    /* No `grid-template-columns` here. This narrowed the time track to 52px and
+       reintroduced, on every phone, the exact wrap the base rule above was
+       written to stop -- its comment measures a two-digit hour with a meridiem
+       at 68.53px, and nothing about that changes below 760px because the time
+       stays at 17px. Measured on this page: "10:00 am" needs 68.28px and even
+       "6:00 am" needs 60.06px, so all ten rows broke into "6:00" over "am" at
+       320, 390 and 430.
+       Inheriting the base 76px leaves the title 156px at 320px, which still
+       holds "Intermediate · Weekday". */
     padding-inline: 10px;
   }
 
@@ -12501,6 +12791,10 @@ tr.is-expanded .coach-member-row-action button svg {
 
 /* Staff roll call — selected Daily Staff Ledger. */
 .staff-roll-call-ledger {
+  /* Two 66px buttons and the 1px border either side of them. Read by the
+     register head so its "Attendance status" label is the same width as the
+     control it names. */
+  --staff-choice-column: 134px;
   padding-bottom: 0;
   background: var(--paper);
 }
@@ -12522,7 +12816,27 @@ tr.is-expanded .coach-member-row-action button svg {
   margin-top: clamp(26px, 3.5vw, 38px);
 }
 
+.staff-roll-call-ledger .staff-roll-call-heading {
+  /* The eyebrow is 10px/16px and the count 9px/19.2px, so aligning their box
+     tops -- which is what `.attendance-record-section-heading` does with
+     `align-items: flex-start` -- left the count riding 4.00px above the
+     eyebrow's baseline. The two ends of this row read as one line of small
+     uppercase type, so they align on the baseline, not the box. */
+  align-items: baseline;
+}
+
 .staff-roll-call-ledger .staff-roll-call-heading > strong {
+  /* `display: block` is the load-bearing line. `.attendance-record-section-heading
+     > strong` is `display: grid` with `place-items: center`, which is right for
+     the bordered square number badge that rule was written for -- and this
+     override strips the border, the min-width and the min-height but inherited
+     the display. The `::after` below then became a second grid item rather than
+     inline text, so "2 staff" painted as "2" stacked over "STAFF": a two-row
+     track of 19.1875px each, a 39.55 x 38.38px box, exactly twice the 19.2px
+     line-height, at every width from 320 to 2560. Nothing forced it -- there is
+     853.94px of free space in this row at 1440 -- and the `::after` content is
+     written with a leading space, which only means anything in inline flow. */
+  display: block;
   min-width: 0;
   min-height: 0;
   border: 0;
@@ -12562,7 +12876,23 @@ tr.is-expanded .coach-member-row-action button svg {
   text-transform: uppercase;
 }
 
+/* D7: the folio values are `text-align: center` and this header was not, so
+   "No." sat 10-12px left of the numbers under it at every width. The rule below
+   already centres the last header over its column; the first was missed. */
+.staff-roll-call-register-head span:first-child {
+  text-align: center;
+}
+
+/* D8: centring this over the *track* is not centring it over the control, and
+   the control is `justify-self: end` in a track up to 21px wider than itself --
+   so the label sat 10.5px left of the Present/Absent box, centred on neither it
+   nor either of its edges. Giving the header the control's own width and ending
+   it in the same place puts the two on one axis.
+   The width is the choice box's: two 66px buttons plus its 1px border either
+   side. Kept as a variable so the two cannot drift apart silently. */
 .staff-roll-call-register-head span:last-child {
+  justify-self: end;
+  width: var(--staff-choice-column);
   text-align: center;
 }
 
@@ -12726,7 +13056,16 @@ tr.is-expanded .coach-member-row-action button svg {
   .staff-roll-call-ledger .attendance-record-date-row {
     display: grid;
     min-height: 88px;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+    /* 0.72fr gave the date 144.00px at 390 and it needs 146.86px on one line, so
+       the year dropped to a second line on its own -- at 375, 390 and 393, which
+       is most phones in use. The breakpoint was exactly 397px.
+       0.82fr clears it with room: 148.2px at 375, 155.0px at 390. What stops
+       this going further is the other track: the date input's own content width
+       is 163px, and 0.82fr still leaves it 180.8px at 375.
+       320px is not fixed by this and cannot be. The row has 274px of content
+       there, and 163px of input plus 147px of date is 310px before the gap --
+       the two do not fit on one line at that width whatever the ratio. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
     gap: 14px;
     padding: 15px var(--space-copy);
   }
@@ -12758,6 +13097,11 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .staff-roll-call-register-head {
     grid-template-columns: 44px minmax(0, 1fr);
+    /* The rows below take `gap: 0 10px` here and the head kept the 12px it is
+       given outside this block, so the two grids resolved to different tracks --
+       "Coach" started at x=83.00 and the names it heads at x=81.00. The desktop
+       rule holds both at 12px, which is what says they are meant to match. */
+    column-gap: 10px;
     padding: 0 10px;
   }
 
@@ -13733,7 +14077,11 @@ tr.is-expanded .coach-member-row-action button svg {
 /* Expanded workspaces share one compact alignment rhythm. */
 .coach-member-detail-heading,
 .coach-report-editor-heading {
-  align-items: flex-start;
+  /* Re-asserted here, after the rule above set it, because this later
+     declaration is the one that actually won -- the earlier `baseline` never
+     reached the element. Same reason: "July 2026" sat 6.00px under "Revision
+     draft" at 390, 820, 1440 and 2560. */
+  align-items: baseline;
 }
 
 .coach-member-detail-domains section,
@@ -13831,7 +14179,9 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .coach-report-editor-heading {
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
+    /* Grid here rather than flex, and `start` is the same box alignment under a
+       different name -- so the two eyebrows were 6px apart in this band too. */
+    align-items: baseline;
     gap: 14px;
   }
 
@@ -14234,7 +14584,14 @@ tr.is-expanded .coach-member-row-action button svg {
  * label and title rather than the tint, since the grid has no room for text.
  */
 .player-attendance-calendar-day.is-holiday {
+  /* `border-color` alone only reaches the two borders this cell actually draws.
+     The grid gives each cell a right and bottom border, so a holiday's top and
+     left edges are painted by its neighbours in --line and half the outline
+     stayed grey -- 249.5px navy of a 498.9px perimeter at 1440. An outline sits
+     outside the box and does not disturb the grid's own rules. */
   border-color: var(--navy);
+  outline: 1px solid var(--navy);
+  outline-offset: -1px;
   background: var(--mist);
   color: var(--navy);
 }
