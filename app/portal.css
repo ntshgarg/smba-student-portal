@@ -3197,8 +3197,11 @@
 }
 
 .report-year-count {
-  align-self: end;
-  padding-bottom: var(--space-tight);
+  /* `end` pinned this to the bottom of a tall row and the 8px padding pushed it
+     further, so "1 coach report" sat 5.91px under a baseline "Season record" and
+     "2026" share exactly. Its box centre was 15.01px from theirs at 1440. */
+  align-self: baseline;
+  padding-bottom: 0;
   color: var(--steel);
   font-size: 0.625rem;
   font-weight: var(--weight-control);
@@ -3216,9 +3219,14 @@
 
 .report-month-trigger {
   min-height: 68px;
-  grid-template-columns: 48px minmax(0, 1fr) minmax(136px, auto) 40px;
+  /* The last track and the right padding both match `.report-year-trigger` now.
+     They did not: 40px plus 12px of padding here against 46px and none there
+     put the two chevrons 8.00px apart on every width from 320 to 2560, in two
+     rows of one list against the same right rule, and left the stacked meta
+     labels 6.00px short of a shared right edge at 1440. */
+  grid-template-columns: 48px minmax(0, 1fr) minmax(136px, auto) 46px;
   gap: clamp(12px, 2.3vw, 30px);
-  padding: 12px 12px 12px var(--space-copy);
+  padding: 12px 0 12px var(--space-copy);
   transition: background var(--duration-base) var(--ease-standard);
 }
 
@@ -4189,7 +4197,12 @@
 .coach-member-filters {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  /* Four filters in three columns put Batch alone on a second row and left the
+     two dividers between Role, Level and Status only 52px tall against a 104px
+     panel -- 322.37px by 52px of empty panel beside them. `auto-fit` seats all
+     four on one row wherever they fit, which is every width this grid is shown
+     at, and still wraps rather than overflowing if a fifth is ever added. */
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .coach-member-filter-toggle {
@@ -4509,6 +4522,16 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-member-detail-domains dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* A label row and a value row the pairs can share. Without them "Registration
+     requested" wrapping to two lines pushed its own value 16.80px below the
+     one-line label's value beside it, at 390 and 320. */
+  grid-auto-rows: auto auto;
+}
+
+.coach-member-detail-domains dl > div {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
 }
 
 .coach-member-detail-domains dl > div.is-wide {
@@ -4527,7 +4550,9 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--navy);
   font-weight: 690;
   overflow-wrap: anywhere;
-  text-transform: capitalize;
+  /* No `capitalize`. These values arrive already cased, and capitalising them
+     rewrote what they say: "6-7 am" painted as "6-7 Am", and "3-day plan" as
+     "3-Day Plan" directly under a row that renders the same string correctly. */
 }
 
 .coach-member-contact-reveal {
@@ -11419,7 +11444,11 @@ tr.is-expanded .coach-member-row-action button svg {
 
 @media (max-width: 340px) {
   .player-ticket-dashboard .player-ticket-masthead {
-    gap: 10px;
+    /* 4px, not 10. "Monthly reports" needs 157.05px, its period chip 80.63px,
+       and the masthead has 242.00px at 320 -- so a 10px gap left it 5.67px
+       short, the title broke over two lines and the chip beside it hung off the
+       first, while all four sibling mastheads on the page stayed 38.00px tall. */
+    gap: 4px;
   }
 
   .player-ticket-dashboard .player-ticket-context {
@@ -14555,7 +14584,14 @@ tr.is-expanded .coach-member-row-action button svg {
  * label and title rather than the tint, since the grid has no room for text.
  */
 .player-attendance-calendar-day.is-holiday {
+  /* `border-color` alone only reaches the two borders this cell actually draws.
+     The grid gives each cell a right and bottom border, so a holiday's top and
+     left edges are painted by its neighbours in --line and half the outline
+     stayed grey -- 249.5px navy of a 498.9px perimeter at 1440. An outline sits
+     outside the box and does not disturb the grid's own rules. */
   border-color: var(--navy);
+  outline: 1px solid var(--navy);
+  outline-offset: -1px;
   background: var(--mist);
   color: var(--navy);
 }

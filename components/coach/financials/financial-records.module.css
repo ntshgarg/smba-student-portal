@@ -328,7 +328,11 @@
 .filters select {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  /* 42px plus this element's own 1px border either side is the 44px every other
+     control in the row measures. It was 44px here, so the search box came out
+     46px and -- with the row aligned on its bottoms -- carried the whole 2.00px
+     error onto its top edge and into its label's baseline. */
+  min-height: 42px;
   padding: 0 11px;
   border: 1px solid var(--line);
   border-radius: 0;

@@ -1144,7 +1144,11 @@
 .proof-card {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(84px, 0.38fr) minmax(0, 1fr);
+  /* `max-content` on the label track, because 84px is below what the labels
+     need: at 768 the column resolved to its floor and "Why SMBA" rendered
+     11.61px past its own right edge, closing an 18px gutter to 6.39px against
+     the heading beside it while the card on the same row kept all 33.70px. */
+  grid-template-columns: minmax(max-content, 0.38fr) minmax(0, 1fr);
   grid-template-rows: auto auto;
   column-gap: clamp(18px, 2vw, 26px);
   align-content: start;
@@ -1746,7 +1750,11 @@
     max-height: calc(100dvh - var(--public-mobile-header-height));
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 12px var(--space-group) calc(20px + env(safe-area-inset-bottom));
+    /* The side padding matches the header above it and the sections below it.
+       `--space-group` is 24px where everything else on a phone sits on 16px, so
+       the open menu's links and its red CTA were inset 8.00px further in on both
+       sides -- a 342px CTA stacked directly above a 358px one. */
+    padding: 12px var(--space-copy) calc(20px + env(safe-area-inset-bottom));
     border-bottom: 1px solid var(--line);
     background: var(--ivory);
     box-shadow: 0 24px 50px color-mix(in srgb, var(--navy) 11%, transparent);
