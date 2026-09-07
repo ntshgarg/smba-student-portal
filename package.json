@@ -60,17 +60,17 @@
     "fixture:start:walkthrough": "SMBA_ALLOW_LOCAL_AUTH_SECRET=true BETTER_AUTH_SECURE_COOKIES=false SMBA_REQUIRE_COACH_TOTP=false SMBA_AUTH_MAIL_TRANSPORT=memory SMBA_REQUIRE_RECOVERY_EMAIL=false DB_FILE_NAME=.data/academy-walkthrough.db next dev -p 3022"
   },
   "dependencies": {
-    "better-auth": "^1.7.1",
+    "better-auth": "^1.7.2",
     "better-sqlite3": "^12.11.1",
     "drizzle-orm": "^0.45.2",
     "libsql": "^0.5.29",
-    "lucide-react": "^1.33.0",
-    "next": "16.3.1",
-    "pdfkit": "^0.19.1",
+    "lucide-react": "^1.40.0",
+    "next": "16.3.4",
+    "pdfkit": "^0.20.2",
     "qrcode.react": "^4.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "zod": "^4.3.6"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
