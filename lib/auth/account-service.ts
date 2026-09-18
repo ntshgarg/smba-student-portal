@@ -670,6 +670,8 @@ export function approveRegistration(
 
     return {
       academyId,
+      accountId: registration.id,
+      contactEmail: registration.contactEmail,
       fullName: registration.fullName,
       role: registration.requestedRole,
     }

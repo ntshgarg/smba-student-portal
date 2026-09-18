@@ -63,10 +63,13 @@ export function RequestStep({
       setFeedback({ message: result.message, tone: "error" })
       return
     }
+    const baseMessage = item.requestedRole === "coach"
+      ? `${result.data.fullName} approved as ${result.data.academyId}. They can activate their staff account in the registration browser.`
+      : `${result.data.fullName} approved as ${result.data.academyId}. Continue with the court assessment.`
     onSuccess({
-      message: item.requestedRole === "coach"
-        ? `${result.data.fullName} approved as ${result.data.academyId}. They can activate their staff account in the registration browser.`
-        : `${result.data.fullName} approved as ${result.data.academyId}. Continue with the court assessment.`,
+      message: result.data.notificationDelivered
+        ? baseMessage
+        : `${baseMessage} Their Academy ID email couldn't be sent -- share ${result.data.academyId} with them directly.`,
       remove: item.requestedRole === "coach",
     })
   }

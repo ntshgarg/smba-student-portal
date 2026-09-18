@@ -13,6 +13,8 @@ import {
   type OperationalActionResult,
 } from "@/lib/actions/operational-result"
 import { requireHeadAdminAction } from "@/lib/auth/current-coach"
+import { createAuthMailer } from "@/lib/auth/mailer"
+import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { listCoachMonthlyReports } from "@/lib/coach/database"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
@@ -144,7 +146,7 @@ export async function approveRegistrationAction(
   requestedRole: "player" | "coach",
 ) {
   const coach = await requireCoach()
-  return runOperationalAction(() => {
+  const result = runOperationalAction(() => {
     if (typeof registrationId !== "string" || !registrationId.trim()) {
       throw new OperationalActionError(
         "NOT_FOUND",
@@ -163,6 +165,43 @@ export async function approveRegistrationAction(
     revalidateAcademyData()
     return approved
   })
+  if (!result.ok) return result
+
+  /*
+   * The Academy ID is already durably allocated by this point, so a failed
+   * notification email must not undo the approval -- it only means the coach
+   * has to relay the ID some other way. `notificationDelivered` lets the UI
+   * tell them that.
+   */
+  let notificationDelivered = true
+  try {
+    if (!result.data.contactEmail) {
+      throw new Error("This account has no contact email on file.")
+    }
+    await createAuthMailer().sendAcademyIdIssued({
+      academyId: result.data.academyId,
+      fullName: result.data.fullName,
+      role: result.data.role,
+      to: result.data.contactEmail,
+    })
+    writeAuthSecurityEvent({
+      accountId: result.data.accountId,
+      actorAccountId: coach.subjectId,
+      eventType: "academy_id_notification_sent",
+      outcome: "success",
+    })
+  } catch {
+    notificationDelivered = false
+    writeAuthSecurityEvent({
+      accountId: result.data.accountId,
+      actorAccountId: coach.subjectId,
+      eventType: "academy_id_notification_sent",
+      metadata: { reason: "email_delivery" },
+      outcome: "failure",
+    })
+  }
+
+  return { ...result, data: { ...result.data, notificationDelivered } }
 }
 
 export async function rejectRegistrationAction(registrationId: string) {

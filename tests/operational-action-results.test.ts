@@ -23,7 +23,9 @@ const mocks = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   saveSessionAttendanceRecords: vi.fn(),
   saveStaffAttendanceRecords: vi.fn(),
+  sendAcademyIdIssued: vi.fn(),
   voidAttendanceAdjustment: vi.fn(),
+  writeAuthSecurityEvent: vi.fn(),
 }))
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }))
@@ -33,6 +35,12 @@ vi.mock("@/lib/auth/account-service", () => ({
 }))
 vi.mock("@/lib/auth/current-coach", () => ({
   requireHeadAdminAction: mocks.requireHeadAdminAction,
+}))
+vi.mock("@/lib/auth/mailer", () => ({
+  createAuthMailer: () => ({ sendAcademyIdIssued: mocks.sendAcademyIdIssued }),
+}))
+vi.mock("@/lib/auth/security-context", () => ({
+  writeAuthSecurityEvent: mocks.writeAuthSecurityEvent,
 }))
 vi.mock("@/lib/attendance/adjustments", () => ({
   publishMakeupAttendanceAdjustment: mocks.publishMakeupAttendanceAdjustment,
@@ -291,6 +299,8 @@ describe("production-safe operational action results", () => {
   it("approves a junior-coach request with an explicit role guard", async () => {
     mocks.approveRegistration.mockReturnValue({
       academyId: "SMBA-JC-4827",
+      accountId: "registration-1",
+      contactEmail: "arjun@example.com",
       fullName: "Arjun Kumar",
       role: "coach",
     })
@@ -299,7 +309,10 @@ describe("production-safe operational action results", () => {
       ok: true,
       data: {
         academyId: "SMBA-JC-4827",
+        accountId: "registration-1",
+        contactEmail: "arjun@example.com",
         fullName: "Arjun Kumar",
+        notificationDelivered: true,
         role: "coach",
       },
     })
@@ -308,6 +321,48 @@ describe("production-safe operational action results", () => {
       "coach-1",
       { requestedRole: "coach" },
     )
+    expect(mocks.sendAcademyIdIssued).toHaveBeenCalledWith({
+      academyId: "SMBA-JC-4827",
+      fullName: "Arjun Kumar",
+      role: "coach",
+      to: "arjun@example.com",
+    })
+    expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith({
+      accountId: "registration-1",
+      actorAccountId: "coach-1",
+      eventType: "academy_id_notification_sent",
+      outcome: "success",
+    })
+  })
+
+  it("still approves the request when the notification email fails to send", async () => {
+    mocks.approveRegistration.mockReturnValue({
+      academyId: "SMBA-PL-1029",
+      accountId: "registration-2",
+      contactEmail: "player@example.com",
+      fullName: "Priya Raman",
+      role: "player",
+    })
+    mocks.sendAcademyIdIssued.mockRejectedValue(new Error("simulated delivery failure"))
+
+    await expect(approveRegistrationAction("registration-2", "player")).resolves.toEqual({
+      ok: true,
+      data: {
+        academyId: "SMBA-PL-1029",
+        accountId: "registration-2",
+        contactEmail: "player@example.com",
+        fullName: "Priya Raman",
+        notificationDelivered: false,
+        role: "player",
+      },
+    })
+    expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith({
+      accountId: "registration-2",
+      actorAccountId: "coach-1",
+      eventType: "academy_id_notification_sent",
+      metadata: { reason: "email_delivery" },
+      outcome: "failure",
+    })
   })
 })
 
