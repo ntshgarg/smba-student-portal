@@ -44,6 +44,8 @@ let database: SmbaDatabase
 class CapturingMailer implements AuthMailer {
   authenticatorRecovery: AuthenticatorRecoveryMessage[] = []
 
+  async sendAcademyIdIssued() {}
+
   async sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage) {
     this.authenticatorRecovery.push(message)
   }
