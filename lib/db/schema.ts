@@ -370,6 +370,7 @@ export const authSecurityEvents = sqliteTable("auth_security_events", {
   eventType: text("event_type", {
     enum: [
       "activation_issued",
+      "academy_id_notification_sent",
       "account_activated",
       "login_succeeded",
       "login_failed",

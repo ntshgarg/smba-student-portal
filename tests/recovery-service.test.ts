@@ -56,6 +56,8 @@ class CapturingMailer implements AuthMailer {
   registration: RegistrationVerificationMessage[] = []
   verification: RecoveryEmailVerificationMessage[] = []
 
+  async sendAcademyIdIssued() {}
+
   async sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage) {
     this.authenticatorRecovery.push(message)
   }
@@ -74,6 +76,10 @@ class CapturingMailer implements AuthMailer {
 }
 
 class FailingMailer implements AuthMailer {
+  async sendAcademyIdIssued() {
+    throw new Error("simulated delivery failure")
+  }
+
   async sendAuthenticatorRecovery() {
     throw new Error("simulated delivery failure")
   }

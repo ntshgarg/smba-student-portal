@@ -50,6 +50,7 @@ async function verifiedHeadSetupEmail(setupToken: string) {
     email: "head.coach@example.com",
     fullName: "Sathiya Moorthy",
     mailer: {
+      async sendAcademyIdIssued() {},
       async sendAuthenticatorRecovery() {},
       async sendPasswordRecovery() {},
       async sendRecoveryEmailVerification(message) {

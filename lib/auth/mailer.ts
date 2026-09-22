@@ -4,6 +4,14 @@ import {
   disposableRigDatabase,
   isDisposableRigProfile,
 } from "@/lib/accessibility-gate"
+import { absoluteSiteUrl } from "@/lib/config"
+
+export type AcademyIdIssuedMessage = {
+  academyId: string
+  fullName: string
+  role: "coach" | "player"
+  to: string
+}
 
 export type RecoveryEmailVerificationMessage = {
   code: string
@@ -43,6 +51,7 @@ export type RegistrationVerificationMessage = {
 }
 
 export interface AuthMailer {
+  sendAcademyIdIssued(message: AcademyIdIssuedMessage): Promise<void>
   sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage): Promise<void>
   sendPasswordRecovery(message: PasswordRecoveryMessage): Promise<void>
   sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage): Promise<void>
@@ -50,6 +59,7 @@ export interface AuthMailer {
 }
 
 export type CapturedAuthEmail =
+  | ({ kind: "academy-id-issued" } & AcademyIdIssuedMessage)
   | ({ kind: "authenticator-recovery" } & AuthenticatorRecoveryMessage)
   | ({ kind: "recovery-email-verification" } & RecoveryEmailVerificationMessage)
   | ({ kind: "password-recovery" } & PasswordRecoveryMessage)
@@ -108,6 +118,10 @@ export function validateAuthEmailConfiguration() {
 }
 
 class MemoryAuthMailer implements AuthMailer {
+  async sendAcademyIdIssued(message: AcademyIdIssuedMessage) {
+    memoryOutbox.push({ ...message, kind: "academy-id-issued" })
+  }
+
   async sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage) {
     memoryOutbox.push({ ...message, kind: "authenticator-recovery" })
   }
@@ -153,6 +167,21 @@ class ResendAuthMailer implements AuthMailer {
     if (!response.ok) {
       throw new Error("Authentication email delivery is temporarily unavailable.")
     }
+  }
+
+  async sendAcademyIdIssued(message: AcademyIdIssuedMessage) {
+    const name = escapeHtml(message.fullName)
+    const academyId = escapeHtml(message.academyId)
+    const activateUrl = escapeHtml(absoluteSiteUrl("/activate"))
+    const nextStep = message.role === "coach"
+      ? "Visit the link below to activate your staff account and set a password."
+      : "Visit the link below to activate your account and set a password."
+    await this.send({
+      to: message.to,
+      subject: "Your SMBA Academy ID",
+      text: `Hello ${message.fullName},\n\nYour SMBA Academy ID is ${message.academyId}. This is your permanent username -- use it to log in from now on.\n\n${nextStep}\n${activateUrl}\n\nIf you registered on this device, the page will recognize you automatically. On a different device, it will ask for your full name and email to look up your account.`,
+      html: `<p>Hello ${name},</p><p>Your SMBA Academy ID is:</p><p style="font-size:28px;letter-spacing:0.08em"><strong>${academyId}</strong></p><p>This is your permanent username -- use it to log in from now on.</p><p>${nextStep}</p><p><a href="${activateUrl}">Activate your account</a></p><p>If you registered on this device, the page will recognize you automatically. On a different device, it will ask for your full name and email to look up your account.</p>`,
+    })
   }
 
   async sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage) {
