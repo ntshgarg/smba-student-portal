@@ -148,7 +148,7 @@ function About() {
       <div className="about-image-wrap">
         <div className="about-image-frame">
           <Image
-            src="/images/coach-sathiya.jpeg"
+            src="/images/coach-sathiya-court.jpeg"
             alt="Coach Sathiya Moorthy"
             className="about-image"
             fill
