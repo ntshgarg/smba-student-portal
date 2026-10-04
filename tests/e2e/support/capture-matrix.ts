@@ -385,17 +385,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     route: "/coach/schedules",
     scenarios: scheduledScenarios,
   },
-  {
-    actions: ["schedule-roster-player-selected"],
-    actor: "coach",
-    critical: true,
-    description: "Roster assignment with an eligible player and weekday controls revealed",
-    focusSelector: ".coach-roster-assign",
-    id: "coach-schedule-roster-player-selected",
-    route: "/coach/schedules",
-    scenarios: scheduledScenarios,
-    viewportOnly: true,
-  },
+
   {
     actor: "coach",
     critical: true,

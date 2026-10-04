@@ -7656,6 +7656,17 @@ tr.is-expanded .coach-member-row-action button svg {
   margin-top: 10px;
 }
 
+/* The roster no longer has an add form under it, so an empty ending notice
+   would leave a blank band between the players and End schedule. The live
+   region stays in the page for screen readers; it just takes no room. */
+.coach-roster-end-notice[data-empty="true"] {
+  margin-top: 0;
+}
+
+.coach-roster-end-notice[data-empty="true"] .inline-notice {
+  min-height: 0;
+}
+
 .coach-series-end-action {
   display: inline-flex;
   width: 100%;

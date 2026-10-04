@@ -604,29 +604,6 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       if (await roster.getAttribute("aria-expanded") !== "true") await roster.click()
       break
     }
-    case "schedule-roster-player-selected": {
-      const programmes = page.locator(".coach-schedule-programme-toggle-heading button")
-      let selected = false
-      for (let programmeIndex = 0; programmeIndex < await programmes.count() && !selected; programmeIndex += 1) {
-        const programme = programmes.nth(programmeIndex)
-        if (await programme.getAttribute("aria-expanded") !== "true") await programme.click()
-        const group = programme.locator("xpath=ancestor::section[1]")
-        const schedules = group.locator(".coach-series-roster-card > button")
-        for (let scheduleIndex = 0; scheduleIndex < await schedules.count(); scheduleIndex += 1) {
-          const schedule = schedules.nth(scheduleIndex)
-          if (await schedule.getAttribute("aria-expanded") !== "true") await schedule.click()
-          const select = group.locator(".coach-roster-assign select").first()
-          const option = select.locator('option[value]:not([value=""])').first()
-          const playerId = await option.getAttribute("value")
-          if (!playerId) continue
-          await select.selectOption(playerId)
-          selected = true
-          break
-        }
-      }
-      if (!selected) throw new Error(`Capture action ${action} found no eligible player`)
-      break
-    }
     case "student-report-open": {
       const trigger = page.locator(".report-month-trigger").first()
       await trigger.waitFor({ state: "visible", timeout: 12_000 })

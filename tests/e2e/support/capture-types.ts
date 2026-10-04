@@ -49,7 +49,6 @@ export type CaptureAction =
   | "coach-published-report-open"
   | "schedule-create-weekend"
   | "schedule-programmes-collapse"
-  | "schedule-roster-player-selected"
   | "schedule-roster-open"
   | "student-report-open"
 
