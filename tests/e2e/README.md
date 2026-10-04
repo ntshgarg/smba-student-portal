@@ -177,7 +177,7 @@ carries the same account in a comment above it:
 
 The last two dated cases now read the reference date the page renders instead of
 naming a month. That does not make the calendar one immortal: the stress fixture
-schedules 2026-07-01 to 2026-09-30, and past its last occurrence nothing in it is
+schedules 2026-07-01 to 2027-03-31, and past its last occurrence nothing in it is
 upcoming, so "Replace session" is rendered for nobody. What deriving buys is that
 it stops failing on dates inside the window, and that when the window ends it
 fails on a named count with the reason attached rather than on a click that times

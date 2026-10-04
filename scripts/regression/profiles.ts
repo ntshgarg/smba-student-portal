@@ -9,7 +9,7 @@ import path from "node:path"
 // beside it.
 export const FIXTURE_ANCHOR_DATE = "2026-08-03"
 export const FIXTURE_SCHEDULE_START = "2026-07-01"
-export const FIXTURE_SCHEDULE_END = "2026-09-30"
+export const FIXTURE_SCHEDULE_END = "2027-03-31"
 
 export type FixtureProfileName = "demo" | "edge" | "stress"
 export type TrainingLevel = "Beginner" | "Intermediate" | "Advanced" | "Adult" | "Elite"

@@ -136,10 +136,10 @@ function nextDateKey(dateKey: string) {
  * app/coach/calendar/page.tsx:20 takes from academyNow(), so once the wall clock
  * passed that day the summary was not in the DOM to click. It now asks the app
  * which day it is and opens the day after, because the stress fixture schedules
- * 3 to 9 sessions on every one of the 92 dates from 2026-07-01 to 2026-09-30
+ * 3 to 9 sessions on every one of the 274 dates from 2026-07-01 to 2027-03-31
  * (scripts/regression/profiles.ts:11-12) and the earliest of them starts at
  * 06:00 IST -- so every session on tomorrow's card is still upcoming from any
- * instant inside today, whatever the hour. That buys until 2026-09-30, exactly
+ * instant inside today, whatever the hour. That buys until 2027-03-31, exactly
  * as the note said moving the constant would: past the fixture's last occurrence
  * nothing anywhere in it is upcoming and no locator can find a control the
  * server does not render. What deriving adds is that the case stops failing on
@@ -190,7 +190,7 @@ test("replacement validation stays inline in the production Server Action path",
   await expect(
     daySessions,
     `${upcomingDate} carries no session card. The stress fixture schedules`
-    + " 2026-07-01 to 2026-09-30 and nothing in it is upcoming after that,"
+    + " 2026-07-01 to 2027-03-31 and nothing in it is upcoming after that,"
     + " so this case cannot pass until the fixture window moves.",
   ).not.toHaveCount(0)
   await daySessions.first().click()
