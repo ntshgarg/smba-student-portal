@@ -11,7 +11,7 @@ import { CoachDashboardStack } from "@/components/coach/dashboard-card"
 import { FinancialsCard } from "@/components/coach/financials/financials-card"
 import { MembersCard } from "@/components/coach/members-card"
 import { PlayerOnboardingCard } from "@/components/coach/player-onboarding-card"
-import { ReportsCard } from "@/components/coach/reports-card"
+import { AssessmentsCard } from "@/components/coach/assessments-card"
 import { SessionsCard } from "@/components/coach/sessions-card"
 
 function renderDashboard() {
@@ -27,7 +27,7 @@ function renderDashboard() {
         total: 7,
       }} />
       <SessionsCard nextSessionLabel="Beginner · Weekday · 6–7 am" todaySessionCount={8} />
-      <ReportsCard activePlayerIds={["player-1", "player-2"]} completedCount={1} month="2026-07" />
+      <AssessmentsCard assessedCount={1} draftCount={0} playerCount={2} />
       <FinancialsCard
         active
         attentionCount={14}
@@ -84,8 +84,8 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain("12 schedules")
     expect(html).toContain("Training calendar")
     expect(html).toContain("8 today")
-    expect(html).toContain("1 of 2 published")
-    expect(html).toContain("1 outstanding")
+    expect(html).toContain("1 of 2 assessed")
+    expect(html).toContain("Assess a player whenever you choose.")
     expect(html).toContain("₹47,500 outstanding")
     expect(html).toContain("14 attention")
     expect(html).toContain("Notice board is clear")

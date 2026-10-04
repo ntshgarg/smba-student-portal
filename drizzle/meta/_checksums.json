@@ -171,6 +171,11 @@
       "tag": "0033_login_attempt_window_index",
       "when": 1788414865886,
       "sha256": "a07419fb829e053e10fd197fe773aad0cb08b08711d76715401169bc6b24ab5d"
+    },
+    {
+      "tag": "0034_player_assessments",
+      "when": 1791103675287,
+      "sha256": "b4c6703248ec47f89495541b680fca089b6f99decc01a57003f7cbac2e891a8e"
     }
   ]
 }

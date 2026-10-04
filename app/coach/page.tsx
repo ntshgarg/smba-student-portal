@@ -12,7 +12,7 @@ import {
 import { JuniorCoachWelcomeHero } from "@/components/coach/junior-coach-welcome-hero"
 import { MembersCard } from "@/components/coach/members-card"
 import { PlayerOnboardingCard } from "@/components/coach/player-onboarding-card"
-import { ReportsCard } from "@/components/coach/reports-card"
+import { AssessmentsCard } from "@/components/coach/assessments-card"
 import { SessionsCard } from "@/components/coach/sessions-card"
 import { CoachAccessNotice } from "@/components/coach/coach-access-notice"
 import {
@@ -20,18 +20,14 @@ import {
   requireCoachPage,
 } from "@/lib/auth/current-coach"
 import { countActiveCoachAnnouncements } from "@/lib/announcements/queries"
+import { listAssessmentHome } from "@/lib/assessments/queries"
 import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   getCoachSessionSnapshot,
   getPlayerOnboardingSummary,
   listOperationalPlayerRecords,
-  listCoachMonthlyReports,
 } from "@/lib/coach/database"
-import {
-  getCoachReportState,
-  getLatestCompletedReportMonth,
-} from "@/lib/coach/report-utils"
 import {
   getStaffAttendanceSummary,
   listStaffAttendanceRecords,
@@ -190,19 +186,8 @@ export default async function CoachDashboardPage({
     now,
   })
   const playerRecords = listOperationalPlayerRecords()
-  const activePlayerIds = playerRecords.trainingProfiles
-    .filter((profile) => profile.status === "active")
-    .map((profile) => profile.memberId)
-  const reportMonth = getLatestCompletedReportMonth(now)
-  // The card counts one month, and every other month's row was being read only
-  // to be dropped by the `report.month === reportMonth` test below -- with its
-  // 5,000-character draft and its published body attached.
-  const reports = listCoachMonthlyReports(reportMonth)
-  const completedReportCount = activePlayerIds.filter((playerId) => (
-    getCoachReportState(reports.find((report) => (
-      report.playerId === playerId && report.month === reportMonth
-    ))) === "published"
-  )).length
+  const assessments = listAssessmentHome(identity.subjectId)
+  const assessedCount = assessments.players.filter((player) => player.lastAssessedOn).length
   const onboardingSummary = getPlayerOnboardingSummary(today)
 
   return (
@@ -232,10 +217,10 @@ export default async function CoachDashboardPage({
           nextSessionLabel={nextSessionLabel}
           todaySessionCount={todaySessions.length}
         />
-        <ReportsCard
-          activePlayerIds={activePlayerIds}
-          completedCount={completedReportCount}
-          month={reportMonth}
+        <AssessmentsCard
+          assessedCount={assessedCount}
+          draftCount={assessments.drafts}
+          playerCount={assessments.players.length}
         />
         <FinancialsCard
           active={financeActive}
