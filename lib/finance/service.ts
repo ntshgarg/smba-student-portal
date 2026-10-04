@@ -29,6 +29,7 @@ import {
   sessionAssignments,
   sessionOccurrences,
   sessionSeries,
+  trainingChanges,
 } from "@/lib/db/schema"
 import { formatAcademyId } from "@/lib/auth/identity"
 import { DEFAULT_MONTHLY_DUE_DAY, REGISTRATION_FEE_PAISE } from "@/lib/finance/config"
@@ -720,7 +721,19 @@ function monthlyPreparationCandidates(
     ReturnType<typeof listMonthlyPreparationCandidates>[number]
   >()
   const currentPeriod = getAcademyDateKey(now).slice(0, 7)
+  // A player whose training changes on or before this month's 1st (a change
+  // scheduled from Members, lib/training/changes.ts) is billed once that change
+  // has happened, at the new plan's fee, not now at the old one.
+  const waitingForChange = new Set(database.select({ playerId: trainingChanges.playerAccountId })
+    .from(trainingChanges)
+    .where(and(
+      eq(trainingChanges.status, "scheduled"),
+      lte(trainingChanges.effectiveOn, `${period}-01`),
+    ))
+    .all()
+    .map((row) => row.playerId))
   listMonthlyPreparationCandidates(database, period).forEach((candidate) => {
+    if (waitingForChange.has(candidate.agreement.playerAccountId)) return
     const matchesCurrentEnrollment = candidate.agreement.academyPlan
         === candidate.enrollment.academyPlan
       && candidate.agreement.level === candidate.enrollment.level
@@ -771,6 +784,99 @@ function monthlyPreparationPreview(
       ? 0
       : listApprovedPlayerIds(database).length - candidates.length,
   }
+}
+
+/**
+ * Exported for lib/training/changes.ts, which sets a player's new fee in the
+ * same transaction that moves their schedule, so the two cannot drift apart.
+ * The caller is responsible for `requireCoach` and `requireFinanceActive`.
+ */
+export function createFeeAgreementInTransaction(
+  database: SmbaDatabaseExecutor,
+  input: CreateFeeAgreementInput,
+  context: { actorId: string; createId: () => string; now: Date },
+) {
+  return createAgreement(database, input, context)
+}
+
+/**
+ * Corrects a Fee Plan in place: its training profile and monthly amount. Only
+ * for "Correct this month" (lib/training/changes.ts), when the plan that is
+ * wrong began this same month, so there is no earlier month to keep and a
+ * replacement starting the same day is not possible. Issued charges are not
+ * touched here; the caller adjusts this month's charge separately.
+ */
+export function correctFeeAgreementInTransaction(
+  database: SmbaDatabaseExecutor,
+  input: {
+    academyPlan: CreateFeeAgreementInput["academyPlan"]
+    agreedMonthlyFeePaise: number
+    agreementId: string
+    batch: CreateFeeAgreementInput["batch"]
+    level: CreateFeeAgreementInput["level"]
+    reason: string
+  },
+  { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
+) {
+  const amountPaise = validateMoney(input.agreedMonthlyFeePaise)
+  const reason = requireText(input.reason, "reason", "A reason for the correction")
+  if (!academyPlanIsValid(input.academyPlan, input.level, input.batch)) {
+    financeError("INVALID_INPUT", "Choose a valid Academy Plan for this level and batch.")
+  }
+  const agreement = database.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, input.agreementId)).get()
+  if (!agreement || agreement.status !== "active") {
+    financeError("NOT_FOUND", "Choose an active Fee Plan.")
+  }
+  const player = requireActiveFinanceTarget(database, agreement.playerAccountId)
+  if (player.academyPlan !== input.academyPlan
+    || player.level !== input.level
+    || player.batch !== input.batch) {
+    financeError("INVALID_INPUT", "The Fee Plan must match the player’s current training profile.")
+  }
+  const update = database.update(feeAgreements).set({
+    academyPlan: input.academyPlan,
+    level: input.level,
+    batch: input.batch,
+    agreedMonthlyFeePaise: amountPaise,
+    recordRevision: sql`${feeAgreements.recordRevision} + 1`,
+    updatedByAccountId: actorId,
+    updatedAt: now,
+  }).where(and(
+    eq(feeAgreements.id, agreement.id),
+    eq(feeAgreements.recordRevision, agreement.recordRevision),
+  )).run()
+  if (update.changes !== 1) {
+    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before saving.")
+  }
+  insertAudit(database, {
+    actorId,
+    createId,
+    entityId: agreement.id,
+    entityType: "fee_agreement",
+    eventType: "fee_agreement_corrected",
+    metadata: {
+      agreementId: agreement.id,
+      playerId: agreement.playerAccountId,
+      previous: {
+        academyPlan: agreement.academyPlan,
+        agreedMonthlyFeePaise: agreement.agreedMonthlyFeePaise,
+        batch: agreement.batch,
+        level: agreement.level,
+      },
+      reason,
+    },
+    now,
+  })
+  const corrected = database.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, agreement.id)).get()
+  if (!corrected) throw new Error("The corrected Fee Plan is unavailable.")
+  return corrected
+}
+
+/** True when financial tracking has been switched on for the academy. */
+export function isFinanceActive(database: SmbaDatabaseExecutor) {
+  return Boolean(readFinanceActivation(database))
 }
 
 function createAgreement(
@@ -1382,6 +1488,19 @@ export function endFeeAgreement(
     now = new Date(),
   }: CoachContext,
 ): EndFeeAgreementResult {
+  return database.transaction((tx) => {
+    requireCoach(tx, coachId)
+    requireFinanceActive(tx)
+    return endFeeAgreementInTransaction(tx, input, { actorId: coachId, createId, now })
+  }, { behavior: "immediate" })
+}
+
+/** The body of `endFeeAgreement`, for callers already inside a transaction. */
+export function endFeeAgreementInTransaction(
+  tx: SmbaDatabaseExecutor,
+  input: EndFeeAgreementInput,
+  { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
+): EndFeeAgreementResult {
   if (!input || typeof input !== "object" || typeof input.agreementId !== "string"
     || input.agreementId.trim().length === 0) {
     financeError("INVALID_INPUT", "Choose the Fee Plan to end.")
@@ -1403,89 +1522,85 @@ export function endFeeAgreement(
     reason,
   })
 
-  return database.transaction((tx) => {
-    requireCoach(tx, coachId)
-    requireFinanceActive(tx)
-    const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
-    if (replay) {
-      const metadata = parseAuditMetadata<{
-        agreementId?: string
-        fingerprint?: string
-      }>(replay.metadata)
-      if (replay.eventType !== "fee_agreement_ended"
-        || replay.entityId !== input.agreementId
-        || metadata.agreementId !== input.agreementId
-        || metadata.fingerprint !== fingerprint) {
-        financeError("IDEMPOTENCY_CONFLICT", "This request identifier was already used differently.")
-      }
-      const agreement = tx.select().from(feeAgreements)
-        .where(eq(feeAgreements.id, input.agreementId)).get()
-      if (!agreement) throw new Error("The ended Fee Plan is unavailable.")
-      return { agreement: toFeeAgreementView(agreement), reused: true }
+  const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
+  if (replay) {
+    const metadata = parseAuditMetadata<{
+      agreementId?: string
+      fingerprint?: string
+    }>(replay.metadata)
+    if (replay.eventType !== "fee_agreement_ended"
+      || replay.entityId !== input.agreementId
+      || metadata.agreementId !== input.agreementId
+      || metadata.fingerprint !== fingerprint) {
+      financeError("IDEMPOTENCY_CONFLICT", "This request identifier was already used differently.")
     }
-
     const agreement = tx.select().from(feeAgreements)
       .where(eq(feeAgreements.id, input.agreementId)).get()
-    if (!agreement || agreement.status !== "active") {
-      financeError("NOT_FOUND", "Choose an active Fee Plan.")
-    }
-    requireActiveFinanceTarget(tx, agreement.playerAccountId)
-    if (agreement.recordRevision !== expectedRevision) {
-      financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before ending it.")
-    }
-    if (input.effectiveThroughPeriod < agreement.effectiveFrom.slice(0, 7)) {
-      financeError("INVALID_INPUT", "The final fee month cannot precede the Fee Plan.", "period")
-    }
-    const laterCharge = tx.select({ id: financialCharges.id })
-      .from(financialCharges).where(and(
-        eq(financialCharges.playerAccountId, agreement.playerAccountId),
-        eq(financialCharges.type, "monthly_training"),
-        eq(financialCharges.lifecycle, "issued"),
-        gt(financialCharges.billingPeriod, input.effectiveThroughPeriod),
-      )).get()
-    if (laterCharge) {
-      financeError(
-        "CONFLICT",
-        "A later monthly fee already exists. Review or void it before ending this Fee Plan.",
-        "period",
-      )
-    }
-    const update = tx.update(feeAgreements).set({
+    if (!agreement) throw new Error("The ended Fee Plan is unavailable.")
+    return { agreement: toFeeAgreementView(agreement), reused: true }
+  }
+
+  const agreement = tx.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, input.agreementId)).get()
+  if (!agreement || agreement.status !== "active") {
+    financeError("NOT_FOUND", "Choose an active Fee Plan.")
+  }
+  requireActiveFinanceTarget(tx, agreement.playerAccountId)
+  if (agreement.recordRevision !== expectedRevision) {
+    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before ending it.")
+  }
+  if (input.effectiveThroughPeriod < agreement.effectiveFrom.slice(0, 7)) {
+    financeError("INVALID_INPUT", "The final fee month cannot precede the Fee Plan.", "period")
+  }
+  const laterCharge = tx.select({ id: financialCharges.id })
+    .from(financialCharges).where(and(
+      eq(financialCharges.playerAccountId, agreement.playerAccountId),
+      eq(financialCharges.type, "monthly_training"),
+      eq(financialCharges.lifecycle, "issued"),
+      gt(financialCharges.billingPeriod, input.effectiveThroughPeriod),
+    )).get()
+  if (laterCharge) {
+    financeError(
+      "CONFLICT",
+      "A later monthly fee already exists. Review or void it before ending this Fee Plan.",
+      "period",
+    )
+  }
+  const update = tx.update(feeAgreements).set({
+    effectiveTo,
+    status: "ended",
+    recordRevision: sql`${feeAgreements.recordRevision} + 1`,
+    updatedByAccountId: actorId,
+    updatedAt: now,
+  }).where(and(
+    eq(feeAgreements.id, agreement.id),
+    eq(feeAgreements.status, "active"),
+    eq(feeAgreements.recordRevision, expectedRevision),
+  )).run()
+  if (update.changes !== 1) {
+    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before ending it.")
+  }
+  insertAudit(tx, {
+    actorId,
+    createId,
+    entityId: agreement.id,
+    entityType: "fee_agreement",
+    eventType: "fee_agreement_ended",
+    idempotencyKey,
+    metadata: {
+      agreementId: agreement.id,
+      effectiveThroughPeriod: input.effectiveThroughPeriod,
       effectiveTo,
-      status: "ended",
-      recordRevision: sql`${feeAgreements.recordRevision} + 1`,
-      updatedByAccountId: coachId,
-      updatedAt: now,
-    }).where(and(
-      eq(feeAgreements.id, agreement.id),
-      eq(feeAgreements.status, "active"),
-      eq(feeAgreements.recordRevision, expectedRevision),
-    )).run()
-    if (update.changes !== 1) {
-      financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before ending it.")
-    }
-    insertAudit(tx, {
-      actorId: coachId,
-      createId,
-      entityId: agreement.id,
-      entityType: "fee_agreement",
-      eventType: "fee_agreement_ended",
-      idempotencyKey,
-      metadata: {
-        agreementId: agreement.id,
-        effectiveThroughPeriod: input.effectiveThroughPeriod,
-        effectiveTo,
-        fingerprint,
-        playerId: agreement.playerAccountId,
-        reason,
-      },
-      now,
-    })
-    const ended = tx.select().from(feeAgreements)
-      .where(eq(feeAgreements.id, agreement.id)).get()
-    if (!ended) throw new Error("The ended Fee Plan is unavailable.")
-    return { agreement: toFeeAgreementView(ended), reused: false }
-  }, { behavior: "immediate" })
+      fingerprint,
+      playerId: agreement.playerAccountId,
+      reason,
+    },
+    now,
+  })
+  const ended = tx.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, agreement.id)).get()
+  if (!ended) throw new Error("The ended Fee Plan is unavailable.")
+  return { agreement: toFeeAgreementView(ended), reused: false }
 }
 
 /**
@@ -3770,68 +3885,77 @@ export function applyChargeAdjustment(
     now = new Date(),
   }: CoachContext,
 ): ChargeView {
+  return database.transaction((tx) => {
+    requireCoach(tx, coachId)
+    requireFinanceActive(tx)
+    return applyChargeAdjustmentInTransaction(tx, input, { actorId: coachId, createId, now })
+  }, { behavior: "immediate" })
+}
+
+/** The body of `applyChargeAdjustment`, for callers already inside a transaction. */
+export function applyChargeAdjustmentInTransaction(
+  tx: SmbaDatabaseExecutor,
+  input: ApplyAdjustmentInput,
+  { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
+): ChargeView {
   const idempotencyKey = validateIdempotencyKey(input.idempotencyKey)
   const amountPaise = validateMoney(input.amountPaise)
   const reason = requireText(input.reason, "reason", "An adjustment reason")
   if (!["manual_credit", "manual_debit"].includes(input.kind)) {
     financeError("INVALID_INPUT", "Choose a valid adjustment type.")
   }
-  return database.transaction((tx) => {
-    requireCoach(tx, coachId)
-    requireFinanceActive(tx)
-    const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
-    if (replay) {
-      if (replay.eventType !== "adjustment_created") {
-        financeError("IDEMPOTENCY_CONFLICT", "This adjustment request was already used.")
-      }
-      const metadata = parseAuditMetadata<{
-        amountPaise: number; chargeId: string; kind: string; reason: string
-      }>(replay.metadata)
-      if (metadata.chargeId !== input.chargeId || metadata.amountPaise !== amountPaise
-        || metadata.kind !== input.kind || metadata.reason !== reason) {
-        financeError("IDEMPOTENCY_CONFLICT", "This adjustment request was already used differently.")
-      }
-      const charge = loadChargeView(tx, metadata.chargeId, now)
-      if (!charge) throw new Error("The adjusted Charge is unavailable.")
-      return charge
+  const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
+  if (replay) {
+    if (replay.eventType !== "adjustment_created") {
+      financeError("IDEMPOTENCY_CONFLICT", "This adjustment request was already used.")
     }
-    const chargeRow = readCharge(tx, input.chargeId)
-    if (!chargeRow || chargeRow.lifecycle !== "issued") {
-      financeError("NOT_FOUND", "Choose an active Charge.")
+    const metadata = parseAuditMetadata<{
+      amountPaise: number; chargeId: string; kind: string; reason: string
+    }>(replay.metadata)
+    if (metadata.chargeId !== input.chargeId || metadata.amountPaise !== amountPaise
+      || metadata.kind !== input.kind || metadata.reason !== reason) {
+      financeError("IDEMPOTENCY_CONFLICT", "This adjustment request was already used differently.")
     }
-    requireActiveFinanceTarget(tx, chargeRow.playerAccountId)
-    const charge = loadChargeView(tx, chargeRow.id, now)
-    if (!charge) throw new Error("The Charge ledger is unavailable.")
-    if (input.kind !== "manual_debit" && amountPaise > charge.outstandingPaise) {
-      financeError("INVALID_INPUT", "Credit cannot exceed the outstanding balance.", "amountPaise")
-    }
-    const adjustmentId = createId()
-    tx.insert(chargeAdjustments).values({
-      id: adjustmentId,
-      chargeId: charge.id,
-      kind: input.kind,
-      amountPaise,
-      reason,
-      createdByAccountId: coachId,
-      createdAt: now,
-    }).run()
-    tx.update(financialCharges).set({
-      recordRevision: sql`${financialCharges.recordRevision} + 1`,
-    }).where(eq(financialCharges.id, charge.id)).run()
-    insertAudit(tx, {
-      actorId: coachId,
-      createId,
-      entityId: adjustmentId,
-      entityType: "adjustment",
-      eventType: "adjustment_created",
-      idempotencyKey,
-      metadata: { amountPaise, chargeId: charge.id, kind: input.kind, reason },
-      now,
-    })
-    const updated = loadChargeView(tx, charge.id, now)
-    if (!updated) throw new Error("The adjusted Charge is unavailable.")
-    return updated
-  }, { behavior: "immediate" })
+    const charge = loadChargeView(tx, metadata.chargeId, now)
+    if (!charge) throw new Error("The adjusted Charge is unavailable.")
+    return charge
+  }
+  const chargeRow = readCharge(tx, input.chargeId)
+  if (!chargeRow || chargeRow.lifecycle !== "issued") {
+    financeError("NOT_FOUND", "Choose an active Charge.")
+  }
+  requireActiveFinanceTarget(tx, chargeRow.playerAccountId)
+  const charge = loadChargeView(tx, chargeRow.id, now)
+  if (!charge) throw new Error("The Charge ledger is unavailable.")
+  if (input.kind !== "manual_debit" && amountPaise > charge.outstandingPaise) {
+    financeError("INVALID_INPUT", "Credit cannot exceed the outstanding balance.", "amountPaise")
+  }
+  const adjustmentId = createId()
+  tx.insert(chargeAdjustments).values({
+    id: adjustmentId,
+    chargeId: charge.id,
+    kind: input.kind,
+    amountPaise,
+    reason,
+    createdByAccountId: actorId,
+    createdAt: now,
+  }).run()
+  tx.update(financialCharges).set({
+    recordRevision: sql`${financialCharges.recordRevision} + 1`,
+  }).where(eq(financialCharges.id, charge.id)).run()
+  insertAudit(tx, {
+    actorId,
+    createId,
+    entityId: adjustmentId,
+    entityType: "adjustment",
+    eventType: "adjustment_created",
+    idempotencyKey,
+    metadata: { amountPaise, chargeId: charge.id, kind: input.kind, reason },
+    now,
+  })
+  const updated = loadChargeView(tx, charge.id, now)
+  if (!updated) throw new Error("The adjusted Charge is unavailable.")
+  return updated
 }
 
 export function reverseChargeAdjustment(

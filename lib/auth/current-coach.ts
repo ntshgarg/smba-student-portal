@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth/coach-access"
 import type { SessionIdentity } from "@/lib/auth/identity"
 import { sessionProvider } from "@/lib/data"
+import { ensureDueTrainingChangesApplied } from "@/lib/training/changes"
 
 const getRequestIdentity = cache(() => sessionProvider.getCurrentIdentity())
 const getRequestCoachAccess = cache((coachId: string) => getCoachAccessProfile(coachId))
@@ -31,6 +32,7 @@ export async function requireHeadAdminAction() {
   if (!identity && !(await sessionProvider.hasActiveSession())) throw new SessionExpiredError()
   if (!identity || identity.role !== "coach") throw new Error("Head coach access is required.")
   requireHeadAdminAccess(identity.subjectId)
+  if (!identity.previewMode) ensureDueTrainingChangesApplied()
   return identity
 }
 
@@ -40,6 +42,9 @@ export async function requireCoachPage() {
   if (identity.role !== "coach") redirect("/player")
   const access = getRequestCoachAccess(identity.subjectId)
   if (!access) redirect("/login")
+  // Training changes scheduled for the 1st take effect on the first request on
+  // or after that day (lib/training/changes.ts). An admin preview only looks.
+  if (!identity.previewMode) ensureDueTrainingChangesApplied()
   return { access, identity }
 }
 

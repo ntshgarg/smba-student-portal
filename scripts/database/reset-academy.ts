@@ -77,6 +77,7 @@ const PURGED = new Set([
   "payments", "player_assessments", "player_enrollments", "refund_allocations", "refunds", "report_publications",
   "session_assignment_weekdays", "session_assignments", "session_attendance_records",
   "session_occurrences", "session_recurrence_rules", "session_series", "staff_attendance_records",
+  "training_changes",
 ])
 
 /*

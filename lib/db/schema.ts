@@ -822,6 +822,54 @@ export const playerAssessments = sqliteTable("player_assessments", {
   ),
 ])
 
+/*
+ * A change to a player's training that waits for a date: a new schedule, plan or
+ * level ("change"), or stopping training ("end"). The head coach decided on
+ * 5 Oct 2026 that real changes are month-wise, so `effective_on` is always the
+ * 1st of a month and the current month is never touched. Nothing runs on a
+ * clock here; lib/training/changes.ts applies a due row the first time the
+ * portal is used on or after `effective_on`, and writes every date it touches
+ * as `effective_on`, so the result is the same whichever day that is.
+ *
+ * One scheduled row per player at a time; editing replaces it.
+ */
+export const trainingChanges = sqliteTable("training_changes", {
+  id: text("id").primaryKey(),
+  playerAccountId: text("player_account_id").notNull().references(() => accounts.id),
+  kind: text("kind", { enum: ["change", "end"] }).notNull(),
+  effectiveOn: text("effective_on").notNull(),
+  status: text("status", { enum: ["scheduled", "applied", "cancelled", "failed"] })
+    .notNull().default("scheduled"),
+  level: text("level", { enum: ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"] }),
+  batch: text("batch", { enum: ["Weekday", "Weekend"] }),
+  academyPlan: text("academy_plan", {
+    enum: ["weekday-3-day", "weekday-4-day", "weekday-5-day", "weekend-standard"],
+  }),
+  seriesId: text("series_id").references(() => sessionSeries.id),
+  weekdays: text("weekdays").notNull().default("[]"),
+  monthlyFeePaise: integer("monthly_fee_paise"),
+  stopFees: integer("stop_fees", { mode: "boolean" }).notNull().default(false),
+  failureReason: text("failure_reason"),
+  createdByAccountId: text("created_by_account_id").notNull().references(() => accounts.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+}, (table) => [
+  index("training_changes_due_idx").on(table.status, table.effectiveOn),
+  uniqueIndex("training_changes_one_scheduled_idx")
+    .on(table.playerAccountId)
+    .where(sql`${table.status} = 'scheduled'`),
+  check("training_changes_kind_check", sql`${table.kind} in ('change', 'end')`),
+  check(
+    "training_changes_status_check",
+    sql`${table.status} in ('scheduled', 'applied', 'cancelled', 'failed')`,
+  ),
+  check(
+    "training_changes_effective_on_check",
+    sql`${table.effectiveOn} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-01' and date(${table.effectiveOn}) = ${table.effectiveOn}`,
+  ),
+])
+
 export const feeAgreements = sqliteTable("fee_agreements", {
   id: text("id").primaryKey(),
   playerAccountId: text("player_account_id").notNull().references(() => accounts.id),
