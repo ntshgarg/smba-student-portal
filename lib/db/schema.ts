@@ -777,6 +777,51 @@ export const reportPublications = sqliteTable("report_publications", {
   index("report_publications_report_idx").on(table.reportId),
 ])
 
+/*
+ * A coach's assessment of one player on one day. Unlike a monthly report it is
+ * not tied to a calendar month: the coach decides when to assess, so a month
+ * with no assessment simply has no row. Ratings are a JSON object of skill key
+ * to a whole number 1-5 (lib/assessments/rubric.ts owns the keys), because a
+ * skill the coach leaves unrated has to be absent rather than zero.
+ *
+ * `status` is draft until the coach publishes; only published rows reach the
+ * player. Editing a published assessment keeps it published and bumps
+ * `revision`. A player has at most one draft at a time, which is what lets the
+ * coach's "Assess" button find the half-finished one instead of opening a
+ * second.
+ */
+export const playerAssessments = sqliteTable("player_assessments", {
+  id: text("id").primaryKey(),
+  playerAccountId: text("player_account_id").notNull().references(() => accounts.id),
+  assessedOn: text("assessed_on").notNull(),
+  status: text("status", { enum: ["draft", "published"] }).notNull().default("draft"),
+  ratings: text("ratings").notNull().default("{}"),
+  strengths: text("strengths").notNull().default(""),
+  improvements: text("improvements").notNull().default(""),
+  comments: text("comments").notNull().default(""),
+  revision: integer("revision").notNull().default(0),
+  publishedAt: integer("published_at", { mode: "timestamp_ms" }),
+  publishedByAccountId: text("published_by_account_id").references(() => accounts.id),
+  createdByAccountId: text("created_by_account_id").notNull().references(() => accounts.id),
+  updatedByAccountId: text("updated_by_account_id").notNull().references(() => accounts.id),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("player_assessments_player_date_idx").on(table.playerAccountId, table.assessedOn),
+  uniqueIndex("player_assessments_one_draft_per_player_idx")
+    .on(table.playerAccountId)
+    .where(sql`${table.status} = 'draft'`),
+  check("player_assessments_status_check", sql`${table.status} in ('draft', 'published')`),
+  check(
+    "player_assessments_assessed_on_check",
+    sql`${table.assessedOn} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' and date(${table.assessedOn}) = ${table.assessedOn}`,
+  ),
+  check(
+    "player_assessments_published_check",
+    sql`(${table.status} = 'published') = (${table.publishedAt} is not null)`,
+  ),
+])
+
 export const feeAgreements = sqliteTable("fee_agreements", {
   id: text("id").primaryKey(),
   playerAccountId: text("player_account_id").notNull().references(() => accounts.id),

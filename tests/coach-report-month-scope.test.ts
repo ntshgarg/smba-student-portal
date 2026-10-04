@@ -175,18 +175,17 @@ describe("coach report reads scoped to one month", () => {
     fs.rmSync(temporaryDirectory, { force: true, recursive: true })
   })
 
-  it("counts the dashboard card from the completed month alone", async () => {
-    const { ReportsCard } = await import("@/components/coach/reports-card")
+  it("builds the dashboard card from assessments and no longer reads monthly reports", async () => {
+    const { AssessmentsCard } = await import("@/components/coach/assessments-card")
     const { default: CoachDashboardPage } = await import("@/app/coach/page")
+    mocks.listCoachMonthlyReports.mockClear()
 
     const page = await CoachDashboardPage({ searchParams: Promise.resolve({}) })
-    const reportsCard = findProps(page, ReportsCard)
+    const card = findProps(page, AssessmentsCard)
 
-    expect(mocks.listCoachMonthlyReports).toHaveBeenCalledWith(reportMonth)
-    expect(reportsCard).toMatchObject({ completedCount: 1, month: reportMonth })
-    // Three active players, one published for July: June's published report is
-    // the row the unscoped read fetched only to drop.
-    expect((reportsCard?.activePlayerIds as string[]).length).toBe(3)
+    // No month is "due" any more: the card counts who has ever been assessed.
+    expect(mocks.listCoachMonthlyReports).not.toHaveBeenCalled()
+    expect(card).toMatchObject({ assessedCount: 0, draftCount: 0, playerCount: 3 })
   // Importing the dashboard pulls in its whole card tree, which is slow to
   // transform on a loaded machine and has nothing to do with the assertion.
   }, 30_000)
