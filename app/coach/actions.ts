@@ -46,10 +46,8 @@ import {
   type HolidayImpact,
 } from "@/lib/sessions/holidays"
 import {
-  assignSessionRecords,
   cancelSessionOccurrence,
   createSessionSeriesRecords,
-  endSessionAssignment,
   endSessionSeriesRecords,
   replaceSessionOccurrence,
   saveSessionAttendanceRecords,
@@ -297,42 +295,6 @@ export async function createSessionSeriesAction(input: CreateSessionSeriesInput)
     })
     revalidateAcademyData()
     return { createdSeriesId: id, ...getCoachScheduleMutationSnapshot() }
-  })
-}
-
-export async function assignSessionAction(input: {
-  effectiveFrom: string
-  playerId: string
-  seriesId: string
-  weekdays: number[]
-}) {
-  const coach = await requireCoach()
-  return runOperationalAction(() => {
-    assignSessionRecords({
-      coachId: coach.subjectId,
-      database: initializeDatabase(),
-      ...input,
-      now: new Date(),
-    })
-    revalidateAcademyData()
-    return getCoachScheduleMutationSnapshot()
-  })
-}
-
-export async function endSessionAssignmentAction(input: {
-  assignmentId: string
-  effectiveTo: string
-}) {
-  const coach = await requireCoach()
-  return runOperationalAction(() => {
-    endSessionAssignment({
-      coachId: coach.subjectId,
-      database: initializeDatabase(),
-      ...input,
-      now: new Date(),
-    })
-    revalidateAcademyData()
-    return getCoachScheduleMutationSnapshot()
   })
 }
 

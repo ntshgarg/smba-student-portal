@@ -14,7 +14,6 @@ export default async function CoachCreateSchedulePage({
 }: {
   searchParams: Promise<{
     batch?: string
-    from?: string
     player?: string
     programme?: string
   }>
@@ -34,7 +33,6 @@ export default async function CoachCreateSchedulePage({
       initialTrainingProfiles={players.trainingProfiles}
     >
       <SessionScheduleCreate
-        guidedFromEvaluation={params.from === "evaluation"}
         initialBatch={batches.find((batch) => batch === params.batch)}
         initialPlayerId={params.player ?? null}
         initialProgramme={programmes.find((programme) => programme === params.programme)}

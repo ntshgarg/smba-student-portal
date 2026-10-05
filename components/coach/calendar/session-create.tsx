@@ -72,12 +72,10 @@ function newSeriesForm(
 }
 
 export function SessionScheduleCreate({
-  guidedFromEvaluation = false,
   initialBatch,
   initialPlayerId = null,
   initialProgramme,
 }: {
-  guidedFromEvaluation?: boolean
   initialBatch?: TrainingBatch
   initialPlayerId?: string | null
   initialProgramme?: TrainingProgramme
@@ -211,7 +209,7 @@ export function SessionScheduleCreate({
 
       {guidedPlayer ? (
         <div className="coach-assignment-guidance">
-          <span>{guidedFromEvaluation ? "Evaluation complete" : "Player assignment"}</span>
+          <span>Player assignment</span>
           <strong>Create a schedule for {guidedPlayer.member.fullName}</strong>
           <p>
             {startingProgramme} · {startingBatch} · {academyPlanLabel(guidedPlayer.training.academyPlan)}.

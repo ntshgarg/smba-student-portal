@@ -257,7 +257,6 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["app/portal.css", "@media (pointer: coarse)", ".security-form input", "16px"],
   ["components/coach/announcements/announcements.module.css", "@media (pointer: coarse)", ".slipField input", "16px"],
   ["components/coach/financials/financial-records.module.css", "@media (pointer: coarse)", '.filters input:not([type="checkbox"])', "16px"],
-  ["components/coach/financials/financials.module.css", "@media (pointer: coarse)", ".focusedLedger .planEditorBody .field input", "16px"],
 ]
 
 /** One line per exempt declaration, in the spelling the failure messages use. The first

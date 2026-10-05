@@ -7,7 +7,6 @@ import {
   type AttendanceAdjustmentRecord,
 } from "@/lib/attendance/adjustments"
 import type { AttendanceRegisterSelection } from "@/lib/attendance/register-workspace"
-import { academyNow, academyToday } from "@/lib/clock"
 import {
   listAttendanceRegisterPlayerRecords,
   listCoachMonthlyReports,
@@ -33,7 +32,6 @@ import {
   listSessionOccurrencesByIds,
   listSessionOccurrencesForSeries,
   listSessionSeries,
-  listStartedScheduledOccurrenceKeys,
 } from "@/lib/sessions/database"
 import type { AcademyHolidayRecord } from "@/lib/sessions/holiday-types"
 import type {
@@ -84,13 +82,7 @@ export type CoachAttendanceAdjustmentsSnapshot = CoachSessionWindowSnapshot & Re
   selectedPlayerId: string | null
 }
 
-export type CoachScheduleBackfillOccurrence = Pick<
-  TrainingSessionOccurrence,
-  "eligibilityDate" | "seriesId"
->
-
 export type CoachScheduleRosterSnapshot = {
-  backfillOccurrences: CoachScheduleBackfillOccurrence[]
   sessionAssignments: SessionAssignment[]
   sessionSeries: TrainingSessionSeries[]
 }
@@ -241,23 +233,10 @@ export function getCoachAttendanceAdjustmentsSnapshot({
   }
 }
 
-export function getCoachScheduleRosterSnapshot(
-  referenceDate = academyToday(),
-  referenceInstant = academyNow(),
-): CoachScheduleRosterSnapshot {
-  const sessionSeries = listSessionSeries()
-  const earliestStart = sessionSeries.reduce<string | null>(
-    (earliest, series) => !earliest || series.startsOn < earliest ? series.startsOn : earliest,
-    null,
-  )
-  const backfillOccurrences = earliestStart
-    ? listStartedScheduledOccurrenceKeys(earliestStart, referenceDate, referenceInstant)
-    : []
-
+export function getCoachScheduleRosterSnapshot(): CoachScheduleRosterSnapshot {
   return {
-    backfillOccurrences,
     sessionAssignments: listSessionAssignments(),
-    sessionSeries,
+    sessionSeries: listSessionSeries(),
   }
 }
 

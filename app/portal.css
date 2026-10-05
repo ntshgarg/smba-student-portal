@@ -5963,7 +5963,6 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 }
 
-
 @media (max-width: 760px) {
   .dashboard-section {
     --player-dashboard-card-padding: 24px 22px;
@@ -6753,7 +6752,6 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-series-form-grid label,
-.coach-roster-assign label,
 .coach-occurrence-actions label {
   display: grid;
   gap: var(--space-tight);
@@ -6796,7 +6794,6 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .coach-series-form label > span,
-.coach-roster-assign label > span,
 .coach-occurrence-actions label > span {
   color: var(--steel);
   font-size: var(--type-operational-floor);
@@ -6807,8 +6804,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-series-form input,
 .coach-series-form select,
-.coach-roster-assign input,
-.coach-roster-assign select,
 .coach-occurrence-actions input,
 .coach-calendar-controls input {
   width: 100%;
@@ -7638,20 +7633,6 @@ tr.is-expanded .coach-member-row-action button svg {
   font-size: var(--type-operational-floor);
 }
 
-.coach-roster-list button {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--white) 18%, transparent);
-  background: transparent;
-  color: var(--white);
-  font-size: var(--type-operational-floor);
-}
-
-.coach-roster-list button:disabled {
-  cursor: wait;
-  opacity: 0.5;
-}
-
 .coach-roster-end-notice {
   margin-top: 10px;
 }
@@ -7689,131 +7670,6 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-series-end-action:disabled {
   cursor: wait;
   opacity: 0.55;
-}
-
-.coach-roster-assign {
-  display: grid;
-  grid-template-columns: minmax(200px, 1fr) minmax(180px, 1fr) minmax(150px, 0.7fr) auto;
-  align-items: end;
-  gap: 14px;
-  margin-top: 28px;
-  padding-top: 26px;
-  border-top: 1px solid color-mix(in srgb, var(--white) 14%, transparent);
-}
-
-.coach-roster-assign > div:first-child {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.coach-roster-assign > div:first-child svg {
-  width: 20px;
-  color: var(--rose-strong);
-}
-
-.coach-roster-assign > div:first-child span {
-  display: grid;
-}
-
-.coach-roster-assign > div:first-child small {
-  color: color-mix(in srgb, var(--white) 55%, transparent);
-  font-size: var(--type-operational-floor);
-}
-
-.coach-roster-assign label > span {
-  color: color-mix(in srgb, var(--white) 55%, transparent);
-}
-
-.coach-roster-assign > button {
-  display: inline-flex;
-  min-height: 48px;
-  align-items: center;
-  gap: var(--space-tight);
-  padding: 0 var(--space-copy);
-  border: 0;
-  background: var(--white);
-  color: var(--navy);
-  font-size: var(--type-operational-floor);
-  font-weight: 800;
-}
-
-.coach-roster-assign > button:disabled {
-  opacity: 0.42;
-}
-
-.coach-assignment-days {
-  display: grid;
-  grid-column: 2 / -1;
-  gap: 10px;
-  margin: 2px 0 0;
-  padding: 0;
-  border: 0;
-}
-
-.coach-assignment-days legend {
-  padding: 0;
-  color: var(--white);
-  font-size: 0.75rem;
-  font-weight: 680;
-}
-
-.coach-assignment-days > p {
-  color: color-mix(in srgb, var(--white) 58%, transparent);
-  font-size: 0.625rem;
-}
-
-.coach-assignment-days > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.coach-assignment-days label {
-  position: relative;
-}
-
-.coach-assignment-days input {
-  position: absolute;
-  width: 1px;
-  min-height: 1px;
-  opacity: 0;
-}
-
-.coach-assignment-days label > span {
-  display: inline-flex;
-  min-height: 42px;
-  align-items: center;
-  padding: 0 13px;
-  border: 1px solid color-mix(in srgb, var(--white) 20%, transparent);
-  color: color-mix(in srgb, var(--white) 72%, transparent);
-  cursor: pointer;
-  font-size: 0.625rem;
-  font-weight: 720;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.coach-assignment-days label.is-selected > span {
-  border-color: var(--white);
-  background: var(--white);
-  color: var(--navy);
-}
-
-.coach-assignment-days input:disabled + span {
-  cursor: not-allowed;
-  opacity: 0.38;
-}
-
-.coach-assignment-days input:focus-visible + span {
-  outline: 2px solid var(--rose-strong);
-  outline-offset: 3px;
-}
-
-.coach-roster-eligibility-note {
-  grid-column: 2 / -1;
-  color: color-mix(in srgb, var(--white) 55%, transparent);
-  font-size: 0.625rem;
 }
 
 .coach-member-form-status {
@@ -7958,10 +7814,6 @@ tr.is-expanded .coach-member-row-action button svg {
     flex-direction: column;
     gap: 12px;
     margin-top: var(--space-group);
-  }
-
-  .coach-roster-eligibility-note {
-    grid-column: 1;
   }
 
   .coach-occurrence-detail {
@@ -8124,17 +7976,6 @@ tr.is-expanded .coach-member-row-action button svg {
     font-weight: 720;
   }
 
-  .coach-roster-assign {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-assignment-days {
-    grid-column: 1;
-  }
-
-  .coach-roster-assign > button {
-    justify-content: center;
-  }
 }
 
 @media (max-width: 360px) {
@@ -8144,24 +7985,8 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 }
 
-.coach-roster-inline-notice {
-  margin-top: 10px;
-}
-
 .coach-calendar-inline-notice {
   margin: 12px 0 4px;
-}
-
-.coach-roster-inline-notice .inline-notice.is-info {
-  color: color-mix(in srgb, var(--white) 70%, transparent);
-}
-
-.coach-roster-inline-notice .inline-notice.is-success {
-  color: #b9e4cc;
-}
-
-.coach-roster-inline-notice .inline-notice.is-error {
-  color: #ffb4ba;
 }
 
 .inline-notice-slot.reserves-space {
@@ -8846,25 +8671,17 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-member-filter-toggle small,
-.coach-member-name small,
-.coach-report-month-control span,
-.coach-report-player-list small,
-.coach-report-player-list em,
-.coach-day-view-heading > strong,
-.coach-day-session > button small,
-.coach-schedule-programme-toggle-heading small,
-.coach-roster-list small,
-.coach-roster-assign > div:first-child small,
-.coach-assignment-days > p,
-.coach-assignment-days label > span,
-.coach-roster-eligibility-note{
+  .coach-member-name small,
+  .coach-report-month-control span,
+  .coach-report-player-list small,
+  .coach-report-player-list em,
+  .coach-day-view-heading > strong,
+  .coach-day-session > button small,
+  .coach-schedule-programme-toggle-heading small,
+  .coach-roster-list small {
     font-size: 0.6875rem;
   }
 
-  .coach-roster-list button,
-  .coach-assignment-days label > span {
-    min-height: 44px;
-  }
 }
 
 .coach-published-reports-page,
@@ -13215,8 +13032,6 @@ tr.is-expanded .coach-member-row-action button svg {
   .attendance-record-date-row input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
   .coach-series-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
   .coach-series-form select,
-  .coach-roster-assign input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
-  .coach-roster-assign select,
   .coach-registration-approved p input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
   .coach-member-search input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
   .coach-member-filter select,

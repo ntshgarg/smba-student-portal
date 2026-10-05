@@ -8,11 +8,9 @@ import {
   voidAttendanceAdjustmentAction,
 } from "@/app/coach/attendance/adjustments/actions"
 import {
-  assignSessionAction,
   archiveMemberAction,
   cancelSessionOccurrenceAction,
   createSessionSeriesAction,
-  endSessionAssignmentAction,
   endSessionSeriesAction,
   markAcademyHolidaysAction,
   previewAcademyHolidaysAction,
@@ -82,22 +80,12 @@ type SessionPortalContextValue = {
   sessionAssignments: SessionAssignment[]
   sessionOccurrences: TrainingSessionOccurrence[]
   sessionSeries: TrainingSessionSeries[]
-  assignSession: (input: {
-    effectiveFrom: string
-    playerId: string
-    seriesId: string
-    weekdays: number[]
-  }) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
   cancelSessionOccurrence: (
     occurrenceId: string,
   ) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
   createSessionSeries: (
     input: CreateSessionSeriesInput,
   ) => Promise<OperationalActionResult<CreatedSessionSnapshot>>
-  endSessionAssignment: (input: {
-    assignmentId: string
-    effectiveTo: string
-  }) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
   endSessionSeries: (
     seriesId: string,
   ) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
@@ -303,32 +291,6 @@ export function CoachPortalProvider({
     return result
   }, [applySessionSnapshot])
 
-  const assignSession = useCallback(async (input: {
-    effectiveFrom: string
-    playerId: string
-    seriesId: string
-    weekdays: number[]
-  }) => {
-    const result = await assignSessionAction(input)
-    if (!result.ok) return result
-    const snapshot = result.data
-    applySessionSnapshot(snapshot)
-    router.refresh()
-    return result
-  }, [applySessionSnapshot, router])
-
-  const endSession = useCallback(async (input: {
-    assignmentId: string
-    effectiveTo: string
-  }) => {
-    const result = await endSessionAssignmentAction(input)
-    if (!result.ok) return result
-    const snapshot = result.data
-    applySessionSnapshot(snapshot)
-    router.refresh()
-    return result
-  }, [applySessionSnapshot, router])
-
   const endSeries = useCallback(async (seriesId: string) => {
     const result = await endSessionSeriesAction(seriesId)
     if (!result.ok) return result
@@ -453,10 +415,8 @@ export function CoachPortalProvider({
   ])
   const sessionValue = useMemo<SessionPortalContextValue>(() => ({
     academyHolidays,
-    assignSession,
     cancelSessionOccurrence: cancelOccurrence,
     createSessionSeries,
-    endSessionAssignment: endSession,
     endSessionSeries: endSeries,
     markAcademyHolidays: markHolidays,
     previewAcademyHolidays: previewHolidays,
@@ -467,11 +427,9 @@ export function CoachPortalProvider({
     sessionSeries,
   }), [
     academyHolidays,
-    assignSession,
     cancelOccurrence,
     createSessionSeries,
     endSeries,
-    endSession,
     markHolidays,
     previewHolidays,
     replaceOccurrence,
