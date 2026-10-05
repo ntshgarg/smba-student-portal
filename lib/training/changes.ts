@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm"
+import { and, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm"
 
 import {
   OperationalActionError,
@@ -585,8 +585,11 @@ export function previewScheduleChange(
   { coachId, database = initializeDatabase() }: TrainingContext,
 ) {
   requireHeadAdminAccess(coachId, { database })
-  const assignments = openAssignments(database, input.playerId)
-  const marks = marksFrom(database, input.playerId, assignments.map((item) => item.seriesId), input.startsOn)
+  const covering = database.select({ seriesId: sessionAssignments.seriesId }).from(sessionAssignments).where(and(
+    eq(sessionAssignments.accountId, input.playerId),
+    or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, input.startsOn)),
+  )).all()
+  const marks = marksFrom(database, input.playerId, [...new Set(covering.map((item) => item.seriesId))], input.startsOn)
   return { marks: marks.map((mark) => ({ choice: mark.choice, occurrenceDate: mark.occurrenceDate })) }
 }
 
@@ -657,7 +660,15 @@ export function changeScheduleThisMonth(
       }
       const { weekdays } = validateSelection(tx, input, startsOn)
 
-      const oldSeries = current.map((item) => item.seriesId)
+      // Every schedule that still covers a day from the start date is cut back,
+      // not only the open one: a second change this month that starts earlier
+      // than the first would otherwise leave the first one covering the days in
+      // between, and the player would be on two registers again.
+      const overlapping = tx.select().from(sessionAssignments).where(and(
+        eq(sessionAssignments.accountId, input.playerId),
+        or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, startsOn)),
+      )).all()
+      const oldSeries = [...new Set(overlapping.map((item) => item.seriesId))]
       const occurrenceIds = tx.select({ id: sessionOccurrences.id }).from(sessionOccurrences).where(and(
         inArray(sessionOccurrences.seriesId, oldSeries),
         gte(sessionOccurrences.occurrenceDate, startsOn),
@@ -688,7 +699,7 @@ export function changeScheduleThisMonth(
           updatedAt: now,
         }).where(eq(sessionAttendanceRecords.id, mark.id)).run()
       }
-      for (const assignment of current) {
+      for (const assignment of overlapping) {
         tx.update(sessionAssignments).set({
           effectiveTo: laterOf(assignment.effectiveFrom, startsOn),
         }).where(eq(sessionAssignments.id, assignment.id)).run()

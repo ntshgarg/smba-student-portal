@@ -153,9 +153,10 @@ export function listMemberTrainingSummaries(
     const charge = charges.find((item) => item.playerId === playerId)
     const concession = activeConcessions.find((item) => item.playerAccountId === playerId)
     if (!current && !next && !active && !charge) continue
-    const scheduledFee = summaries[playerId].scheduled?.kind === "change"
-      ? summaries[playerId].scheduled?.monthlyFeePaise ?? null
-      : null
+    const waiting = summaries[playerId].scheduled
+    const scheduledFee = waiting?.kind === "change" ? waiting.monthlyFeePaise : null
+    // Training that ends this month with its fees stopped has no fee next month.
+    const feesStop = waiting?.kind === "end" && waiting.stopFees
     summaries[playerId].fee = {
       activeAgreementId: active?.id ?? null,
       activeAgreementRevision: active?.recordRevision ?? null,
@@ -170,7 +171,7 @@ export function listMemberTrainingSummaries(
         }
         : null,
       monthlyFeePaise: current?.agreedMonthlyFeePaise ?? null,
-      nextMonthFeePaise: scheduledFee ?? next?.agreedMonthlyFeePaise ?? null,
+      nextMonthFeePaise: feesStop ? null : scheduledFee ?? next?.agreedMonthlyFeePaise ?? null,
       thisMonth: charge
         ? {
           amountPaise: chargeViews.get(charge.id)?.effectiveAmountPaise ?? charge.amountPaise,

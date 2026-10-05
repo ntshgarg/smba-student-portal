@@ -215,7 +215,16 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
             {fee ? (
               <dl className={styles.facts}>
                 <div><dt>Monthly fee</dt><dd>{fee.monthlyFeePaise !== null ? formatInr(fee.monthlyFeePaise) : "None"}</dd></div>
-                <div><dt>{thisMonth} fee</dt><dd>{fee.thisMonth ? `${formatInr(fee.thisMonth.amountPaise)} · due ${dayName(fee.thisMonth.dueDate)}` : "Not issued yet"}</dd></div>
+                <div>
+                  <dt>{thisMonth} fee</dt>
+                  <dd>{fee.thisMonth
+                    ? `${formatInr(fee.thisMonth.amountPaise)} · ${fee.thisMonth.receivedPaise >= fee.thisMonth.amountPaise
+                      ? "paid"
+                      : fee.thisMonth.receivedPaise > 0
+                        ? `${formatInr(fee.thisMonth.receivedPaise)} paid`
+                        : `due ${dayName(fee.thisMonth.dueDate)}`}`
+                    : "Not issued yet"}</dd>
+                </div>
                 <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
                 <div>
                   <dt>Concession</dt>
@@ -517,7 +526,7 @@ function TrainingForm({
 
   const summary = chosen && daysOk && dateOk ? [
     when === "this"
-      ? `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}${profileChanges ? `, ${level} · ${batch} · ${academyPlanLabel(plan)}` : ""}`
+      ? `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}${profileChanges ? `, ${academyPlanLabel(plan)}` : ""}`
       : `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}, ${academyPlanLabel(plan)}`,
     when === "this"
       ? marks?.length
@@ -554,7 +563,8 @@ function TrainingForm({
           (outcome) => {
             if (outcome.kind === "scheduled") return `Scheduled for ${dayName(outcome.startsOn)}`
             const parts = [`Schedule changed from ${dayName(outcome.startsOn)}`]
-            if (outcome.result?.clearedMarks.length) parts.push(`${outcome.result.clearedMarks.length} marks cleared; mark them again`)
+            const cleared = outcome.result?.clearedMarks.length ?? 0
+            if (cleared) parts.push(`${cleared} ${cleared === 1 ? "mark" : "marks"} cleared; mark ${cleared === 1 ? "it" : "them"} again`)
             if (outcome.result && outcome.result.refundNeededPaise > 0) {
               parts.push(`${formatInr(outcome.result.refundNeededPaise)} was already paid and needs a refund in Fee records`)
             }

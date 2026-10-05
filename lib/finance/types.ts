@@ -165,6 +165,13 @@ export type ChargeView = {
   canVoid: boolean
   payments: PaymentView[]
   adjustments?: AdjustmentView[]
+  /**
+   * Net of the coach's manual debits and credits on this charge, still in force.
+   * Shown to the player as "Fee adjusted" so a month whose fee changed after it
+   * was issued (a plan change made from Members) still adds up on their screen.
+   * Concession and withdrawal credits are shown on their own lines instead.
+   */
+  manualAdjustmentPaise?: number
 }
 
 export type FeeAgreementView = {

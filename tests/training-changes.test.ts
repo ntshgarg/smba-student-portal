@@ -356,6 +356,29 @@ describe("training changes from the player's record", () => {
     expect(openAssignments(players.aarav)[0]).toMatchObject({ effectiveFrom: "2026-10-05", seriesId: evening })
   })
 
+  it("cuts back an earlier change this month when a second change starts before it", () => {
+    // From the previous test Aarav is on evenings from 5 Oct, mornings up to then.
+    changes.changeScheduleThisMonth({
+      academyPlan: "weekday-5-day",
+      batch: "Weekday",
+      level: "Beginner",
+      monthlyFeePaise: null,
+      playerId: players.aarav,
+      seriesId: evening,
+      startsOn: "2026-10-01",
+      weekdays: [1, 2, 3, 4, 5],
+    }, { coachId, database, now })
+    const all = database.select().from(schema.sessionAssignments)
+      .where(eq(schema.sessionAssignments.accountId, players.aarav)).all()
+    const coveringOctober = all.filter((item) => (
+      item.effectiveFrom < "2026-10-05"
+      && (item.effectiveTo === null || item.effectiveTo > "2026-10-01")
+    ))
+    // Only the new evening schedule covers 1-4 October now.
+    expect(coveringOctober.map((item) => [item.seriesId, item.effectiveFrom, item.effectiveTo]))
+      .toEqual([[evening, "2026-10-01", null]])
+  })
+
   it("ends training today when the player has already left, and stops the fees after this month", () => {
     changes.endTrainingNow({ playerId: players.ravi, stopFees: true }, context())
     expect(openAssignments(players.ravi)).toHaveLength(0)

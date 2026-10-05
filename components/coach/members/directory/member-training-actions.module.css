@@ -218,6 +218,13 @@
   font-weight: 700;
 }
 
+.selects select:disabled {
+  border-color: var(--line);
+  background: var(--mist);
+  color: var(--steel);
+  cursor: not-allowed;
+}
+
 .option {
   display: flex;
   align-items: flex-start;
@@ -344,6 +351,11 @@
   color: var(--navy);
   font-size: 1rem;
   font-weight: 700;
+}
+
+.inlineField input[type="date"] {
+  width: auto;
+  min-width: 11rem;
 }
 
 .marks {
