@@ -627,6 +627,20 @@
   border-left: 1px solid var(--line);
 }
 
+.managedInMembers {
+  padding: var(--space-copy) clamp(20px, 3vw, 34px);
+  border-bottom: 1px solid var(--line);
+  color: var(--steel);
+  font-size: 0.875rem;
+}
+
+.managedInMembers a {
+  color: var(--navy);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .feePlan dt,
 .chargeAmounts dt {
   color: var(--steel);

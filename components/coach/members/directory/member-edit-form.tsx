@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 
 import {
   relationships,
@@ -135,10 +134,8 @@ export function MemberEditForm({
             id={classificationLockId}
             className="coach-member-classification-lock"
           >
-            End active session assignments before changing these training details.{" "}
-            <Link href={`/coach/schedules?player=${encodeURIComponent(memberId)}`}>
-              Review schedules
-            </Link>
+            Level, batch and plan change with Change training on the member record,
+            from the 1st of next month.
           </p>
         ) : null}
         <div className="coach-member-form-grid">

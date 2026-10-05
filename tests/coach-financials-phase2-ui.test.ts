@@ -50,7 +50,6 @@ describe("coach Financials Phase 2 workflows", () => {
   it("exposes concession commands through coach-only server actions", () => {
     const actions = source("app/coach/financials/actions.ts")
     const workspace = source("components/coach/financials/player-ledger.tsx")
-    const applyForm = source("components/coach/financials/ledger/apply-concession-form.tsx")
 
     expect(actions).toContain("export async function createConcessionAction")
     expect(actions).toContain("export async function applyConcessionAction")
@@ -58,8 +57,5 @@ describe("coach Financials Phase 2 workflows", () => {
     expect(actions).toContain("export async function reverseConcessionAction")
     expect(actions).toContain('revalidatePath("/coach/financials/record")')
     expect(workspace).toContain("<ConcessionManagement ledger={ledger} period={period} />")
-    expect(applyForm).toContain('charge.type !== "monthly_training"')
-    expect(applyForm).toContain("charge.billingPeriod >= concession.startsPeriod")
-    expect(applyForm).toContain("Apply to existing fee")
   })
 })

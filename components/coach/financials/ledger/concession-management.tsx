@@ -6,10 +6,7 @@ import type { CoachConcessionView } from "@/lib/finance/types"
 import { formatDueDate, periodLabel } from "../financials-client-utils"
 import styles from "../financials.module.css"
 import type { PlayerFinancialLedgerView } from "../types"
-import { ApplyConcessionForm } from "./apply-concession-form"
 import { ConcessionApplicationReversal } from "./concession-application-reversal"
-import { ConcessionCreationForm } from "./concession-creation-form"
-import { ConcessionReversal } from "./concession-reversal"
 
 const concessionPercentFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 })
 
@@ -37,15 +34,8 @@ export function ConcessionManagement({
         <p>
           {ledger.archived
             ? "Concessions previously recorded for this player."
-            : "Use a concession to reduce a fee without changing the player’s agreed plan."}
+            : "Concessions are given and stopped from the player’s record in Members. To undo one on a single fee, use Reverse application below."}
         </p>
-        {ledger.archived ? null : (
-          <ConcessionCreationForm
-            key={`${ledger.playerId}-${period}`}
-            period={period}
-            playerId={ledger.playerId}
-          />
-        )}
 
         {concessions.length ? (
           <div className={styles.concessionList}>
@@ -68,14 +58,6 @@ export function ConcessionManagement({
                   </small>
                 ) : null}
 
-                {ledger.archived ? null : (
-                  <ApplyConcessionForm
-                    key={`${concession.id}-${concession.recordRevision}`}
-                    charges={ledger.charges}
-                    concession={concession}
-                  />
-                )}
-
                 {concession.applications.length ? (
                   <div className={styles.concessionApplications}>
                     <span>Applied fees</span>
@@ -93,8 +75,6 @@ export function ConcessionManagement({
                     ))}
                   </div>
                 ) : null}
-
-                {ledger.archived ? null : <ConcessionReversal concession={concession} />}
               </article>
             ))}
           </div>

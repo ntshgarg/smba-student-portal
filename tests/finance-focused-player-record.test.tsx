@@ -172,14 +172,15 @@ describe("focused player fee record", () => {
 })
 
 /*
- * Elite has no standard monthly fee -- terms are agreed per player -- so
- * `defaultMonthlyFeePaise` returns null for it. `enrollmentDefaults` used to
- * require that amount, so a fee-less level produced a null classification,
- * `feePlanSetupReady` went false, and the fee-plan editor returned null: the
- * player was billable and un-editable, with nothing on screen to say why.
+ * Fee changes, concessions and ending a fee plan moved to the player's record
+ * in Members on 5 Oct 2026 (components/coach/members/directory/
+ * member-training-actions.tsx), next to the schedule they usually change with.
+ * The fee record still shows the plan, and points the coach there. The Elite
+ * case that used to live here -- a level with no standard fee must still be
+ * editable -- is now the Members form's "agree one with the player" note.
  */
-describe("a level with no standard fee", () => {
-  const eliteLedger: PlayerFinancialLedgerView = {
+describe("a fee record once fee changes live in Members", () => {
+  const activeLedger: PlayerFinancialLedgerView = {
     ...archivedLedger,
     archived: false,
     enrollmentDefaults: {
@@ -205,56 +206,15 @@ describe("a level with no standard fee", () => {
     status: "paid",
   }
 
-  it("still offers the fee-plan editor", () => {
+  it("shows the plan and sends fee changes to the player's record in Members", () => {
     const html = renderToStaticMarkup(
-      <PlayerLedger focused ledger={eliteLedger} period="2026-08" />,
+      <PlayerLedger focused ledger={activeLedger} period="2026-08" />,
     )
 
-    expect(html).toContain("Change fee plan")
-    expect(html).not.toContain("classification needs review")
-  })
-
-  it("says the fee is agreed per player rather than showing a price", () => {
-    const html = renderToStaticMarkup(
-      <PlayerLedger focused ledger={eliteLedger} period="2026-08" />,
-    )
-
-    expect(html).toContain("Standard fee")
-    expect(html).toContain("agreed per player")
-  })
-
-  it("shows the standard fee for a level that has one", () => {
-    const html = renderToStaticMarkup(
-      <PlayerLedger
-        focused
-        ledger={{
-          ...eliteLedger,
-          enrollmentDefaults: {
-            academyPlan: "weekday-3-day",
-            academyPlanLabel: "3-day plan",
-            batch: "Weekday",
-            level: "Beginner",
-            suggestedMonthlyFeePaise: 350_000,
-          },
-        }}
-        period="2026-08"
-      />,
-    )
-
-    expect(html).toContain("Standard fee")
-    expect(html).not.toContain("agreed per player")
-  })
-
-  it("names a classification that no longer forms a valid combination", () => {
-    const html = renderToStaticMarkup(
-      <PlayerLedger
-        focused
-        ledger={{ ...eliteLedger, enrollmentDefaults: null }}
-        period="2026-08"
-      />,
-    )
-
-    expect(html).toContain("classification needs review")
+    expect(html).toContain("Agreed monthly fee")
+    expect(html).toContain(`/coach/members?player=${activeLedger.playerId}`)
     expect(html).not.toContain("Change fee plan")
+    expect(html).not.toContain("End fee plan")
+    expect(html).not.toContain("Add concession")
   })
 })

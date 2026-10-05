@@ -1,0 +1,415 @@
+/*
+ * The training and fee actions under a player's record in Members. Square
+ * corners and hairlines like the rest of the record, so it reads as part of
+ * the same page.
+ */
+
+.section {
+  margin-top: var(--space-copy);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.column {
+  padding: 20px var(--space-group);
+  background: var(--white);
+}
+
+.column h4,
+.formHead h4 {
+  margin-top: 4px;
+  color: var(--navy);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  color: var(--red);
+  font-size: var(--type-operational-floor);
+  font-weight: var(--weight-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  font-weight: var(--weight-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.help {
+  margin-top: 6px;
+  color: var(--steel);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.scheduled {
+  display: grid;
+  gap: 2px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, var(--white));
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 0.8125rem;
+}
+
+.scheduled strong {
+  font-size: 0.875rem;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px var(--space-copy);
+  margin: 12px 0 0;
+}
+
+.facts dt {
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  font-weight: var(--weight-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.facts dd {
+  margin: 2px 0 0;
+  color: var(--navy);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin-top: var(--space-copy);
+}
+
+.button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-copy);
+  border: 1px solid var(--line-control);
+  background: var(--white);
+  color: var(--navy);
+  font-size: 0.8125rem;
+  font-weight: var(--weight-control);
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--navy);
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.primary {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: var(--white);
+}
+
+.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.dangerSolid {
+  border-color: var(--red);
+  background: var(--red);
+  color: var(--white);
+}
+
+.button:focus-visible,
+.option input:focus-visible,
+.day input:focus-visible,
+.check input:focus-visible,
+.selects select:focus-visible,
+.money input:focus-visible,
+.inlineField input:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.notice {
+  margin-top: 12px;
+}
+
+.form {
+  margin-top: var(--space-copy);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--red);
+  background: var(--white);
+}
+
+.formHead {
+  padding: 14px var(--space-group);
+  border-bottom: 1px solid var(--line);
+}
+
+.formBody {
+  display: grid;
+  gap: 20px;
+  padding: 20px var(--space-group);
+}
+
+.formFoot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-tight);
+  padding: 14px var(--space-group);
+  border-top: 1px solid var(--line);
+}
+
+.field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.fixed {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  background: var(--mist);
+  color: var(--navy);
+  font-weight: 800;
+}
+
+.selects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+}
+
+.selects select {
+  min-width: 160px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line-control);
+  border-radius: 0;
+  background: var(--white);
+  color: var(--navy);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.option input {
+  margin-top: 3px;
+  accent-color: var(--navy);
+}
+
+.option strong {
+  display: block;
+  color: var(--navy);
+  font-size: 0.875rem;
+}
+
+.option small {
+  display: block;
+  color: var(--steel);
+  font-size: 0.75rem;
+}
+
+.optionOn {
+  border-color: var(--navy);
+  background: color-mix(in srgb, var(--navy) 4%, var(--white));
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin-bottom: var(--space-tight);
+}
+
+.inline .option {
+  margin-top: 0;
+}
+
+.days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.day {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  color: var(--navy);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.day input {
+  accent-color: var(--navy);
+}
+
+.dayOn {
+  border-color: var(--navy);
+  background: color-mix(in srgb, var(--navy) 6%, var(--white));
+}
+
+.money {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--line-control);
+  background: var(--white);
+  color: var(--steel);
+}
+
+.money input {
+  width: 140px;
+  border: 0;
+  background: transparent;
+  color: var(--navy);
+  font-size: 1rem;
+  font-weight: 700;
+  outline: none;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--ink);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.check input {
+  margin-top: 3px;
+  accent-color: var(--navy);
+}
+
+.inlineField {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--steel);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.inlineField input {
+  width: 72px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line-control);
+  border-radius: 0;
+  color: var(--navy);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.marks {
+  margin: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--red) 30%, var(--white));
+  background: var(--red-soft);
+  list-style: none;
+}
+
+.marks li {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-tight) 12px;
+  border-top: 1px solid color-mix(in srgb, var(--red) 18%, var(--white));
+  font-size: 0.8125rem;
+}
+
+.marks li:first-child {
+  border-top: 0;
+}
+
+.marks s {
+  color: var(--red-dark);
+}
+
+.summary {
+  padding: 14px var(--space-copy);
+  background: var(--navy);
+  color: var(--white);
+  font-size: 0.875rem;
+}
+
+.summary span {
+  color: color-mix(in srgb, var(--white) 75%, var(--navy));
+  font-size: var(--type-operational-floor);
+  font-weight: var(--weight-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.summary ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 720px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+
+  .column,
+  .formHead,
+  .formBody,
+  .formFoot {
+    padding-right: var(--space-copy);
+    padding-left: var(--space-copy);
+  }
+
+  .actions .button,
+  .formFoot .button {
+    flex: 1 1 auto;
+  }
+
+  .selects select {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+}

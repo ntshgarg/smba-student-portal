@@ -247,19 +247,19 @@ describe("training changes from the player's record", () => {
     }, context())).toThrow()
   })
 
-  it("corrects this month: clears the wrong schedule's marks, starts the right one on the 1st, fixes the fee", () => {
+  it("changes the schedule from the 1st of this month: clears its marks, starts the right one, fixes the unpaid fee", () => {
     const before = database.select().from(schema.financialCharges).where(and(
       eq(schema.financialCharges.playerAccountId, players.meera),
       eq(schema.financialCharges.billingPeriod, "2026-10"),
     )).get()
     expect(before).toBeTruthy()
 
-    const result = changes.correctThisMonth({
+    const result = changes.changeScheduleThisMonth({
       ...threeDayEvenings,
-      adjustThisMonthFee: true,
       monthlyFeePaise: 250_000,
       playerId: players.meera,
       seriesId: morning,
+      startsOn: "2026-10-01",
     }, context())
 
     expect(result.startsOn).toBe("2026-10-01")
@@ -284,20 +284,76 @@ describe("training changes from the player's record", () => {
     expect(result.adjustment).toEqual({ amountPaise: expected, kind: "manual_credit" })
   })
 
-  it("will not correct a month while a change is waiting for next month", () => {
+  it("will not change this month while a change is waiting for next month", () => {
     changes.scheduleTrainingChange({
       ...threeDayEvenings,
       monthlyFeePaise: 250_000,
       playerId: players.sana,
       seriesId: evening,
     }, context())
-    expect(() => changes.correctThisMonth({
+    expect(() => changes.changeScheduleThisMonth({
       ...threeDayEvenings,
-      adjustThisMonthFee: true,
       monthlyFeePaise: 250_000,
       playerId: players.sana,
       seriesId: morning,
+      startsOn: "2026-10-01",
     }, context())).toThrowError(/waiting for next month/u)
+  })
+
+  it("once this month's fee is paid, allows only a change of session time from a date this month", () => {
+    const charge = database.select().from(schema.financialCharges).where(and(
+      eq(schema.financialCharges.playerAccountId, players.aarav),
+      eq(schema.financialCharges.billingPeriod, "2026-10"),
+    )).get()!
+    finance.recordPayment({
+      amountPaise: 100_000,
+      chargeId: charge.id,
+      expectedChargeRevision: charge.recordRevision,
+      idempotencyKey: "aarav-october-part-payment",
+      method: "cash",
+      receivedOn: "2026-10-03",
+    }, context())
+    mark(players.aarav, morning, "2026-10-02", "present")
+    mark(players.aarav, morning, "2026-10-05", "present")
+
+    // Aarav's 3-day evening change happened on 1 Nov in an earlier test, so
+    // look back at October from inside October for these checks.
+    const october = { coachId, database, now }
+    database.update(schema.sessionAssignments).set({ effectiveTo: null })
+      .where(and(eq(schema.sessionAssignments.accountId, players.aarav), eq(schema.sessionAssignments.seriesId, morning))).run()
+    database.delete(schema.sessionAssignmentWeekdays).where(eq(
+      schema.sessionAssignmentWeekdays.assignmentId,
+      openAssignments(players.aarav).find((item) => item.seriesId === evening)!.id,
+    )).run()
+    database.delete(schema.sessionAssignments).where(and(
+      eq(schema.sessionAssignments.accountId, players.aarav),
+      eq(schema.sessionAssignments.seriesId, evening),
+    )).run()
+    database.update(schema.playerEnrollments).set({ academyPlan: "weekday-5-day" })
+      .where(eq(schema.playerEnrollments.accountId, players.aarav)).run()
+
+    expect(() => changes.changeScheduleThisMonth({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: players.aarav,
+      seriesId: evening,
+      startsOn: "2026-10-05",
+    }, october)).toThrowError(/already been paid/u)
+
+    const result = changes.changeScheduleThisMonth({
+      academyPlan: "weekday-5-day",
+      batch: "Weekday",
+      level: "Beginner",
+      monthlyFeePaise: null,
+      playerId: players.aarav,
+      seriesId: evening,
+      startsOn: "2026-10-05",
+      weekdays: [1, 2, 3, 4, 5],
+    }, october)
+    // Only the mark on or after the start date is cleared; 2 Oct stays.
+    expect(result.clearedMarks.map((item) => item.occurrenceDate)).toEqual(["2026-10-05"])
+    expect(result.adjustment).toBeNull()
+    expect(openAssignments(players.aarav)[0]).toMatchObject({ effectiveFrom: "2026-10-05", seriesId: evening })
   })
 
   it("ends training today when the player has already left, and stops the fees after this month", () => {

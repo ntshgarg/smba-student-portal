@@ -541,39 +541,57 @@ export function ensureDueTrainingChangesApplied(now = new Date()) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Correct this month                                                  */
+/* Change schedule within this month                                   */
 /* ------------------------------------------------------------------ */
 
-export type CorrectMonthInput = TrainingSelection & {
-  adjustThisMonthFee: boolean
+/*
+ * A change that starts on a day of the current month, up to today (head coach,
+ * 5 Oct 2026). Changing only the session time is always allowed. Changing the
+ * level, batch or plan is allowed only while this month's fee has not been
+ * paid -- any payment against it counts as paid -- because the change also
+ * corrects this month's fee, and a paid fee is left alone. Marks in the old
+ * schedule from the start date on are cleared, not moved: the coach marks those
+ * days again on the new schedule. Starting on the 1st is how a schedule that
+ * was wrong all month is put right.
+ */
+
+export type ChangeThisMonthInput = TrainingSelection & {
   monthlyFeePaise: number | null
+  startsOn: string
 }
 
-export type CorrectMonthResult = {
+export type ChangeThisMonthResult = {
   adjustment: { amountPaise: number; kind: "manual_credit" | "manual_debit" } | null
   clearedMarks: Array<{ choice: string; occurrenceDate: string }>
   refundNeededPaise: number
   startsOn: string
 }
 
-/** What a correction would clear, for the confirm screen. */
-export function previewMonthCorrection(
-  playerId: string,
-  { coachId, database = initializeDatabase(), now = new Date() }: TrainingContext,
-) {
-  requireHeadAdminAccess(coachId, { database })
-  const today = getAcademyDateKey(now)
-  const monthStart = monthStartOf(today)
-  const assignments = openAssignments(database, playerId)
-  const marks = marksToClear(database, playerId, assignments.map((item) => item.seriesId), monthStart)
-  return {
-    marks: marks.map((mark) => ({ choice: mark.choice, occurrenceDate: mark.occurrenceDate })),
-    monthStart,
-  }
+function thisMonthCharge(database: Executor, playerId: string, monthStart: string, now: Date) {
+  const charge = database.select().from(financialCharges).where(and(
+    eq(financialCharges.playerAccountId, playerId),
+    eq(financialCharges.type, "monthly_training"),
+    eq(financialCharges.billingPeriod, monthStart.slice(0, 7)),
+    eq(financialCharges.lifecycle, "issued"),
+  )).get()
+  if (!charge) return null
+  const view = loadChargeView(database, charge.id, now)
+  return { charge, outstandingPaise: view?.outstandingPaise ?? 0, receivedPaise: view?.receivedPaise ?? 0 }
 }
 
-function marksToClear(database: Executor, playerId: string, seriesIds: string[], monthStart: string) {
-  if (!seriesIds.length) return []
+/** What a change from `startsOn` would clear, for the confirm screen. */
+export function previewScheduleChange(
+  input: { playerId: string; startsOn: string },
+  { coachId, database = initializeDatabase() }: TrainingContext,
+) {
+  requireHeadAdminAccess(coachId, { database })
+  const assignments = openAssignments(database, input.playerId)
+  const marks = marksFrom(database, input.playerId, assignments.map((item) => item.seriesId), input.startsOn)
+  return { marks: marks.map((mark) => ({ choice: mark.choice, occurrenceDate: mark.occurrenceDate })) }
+}
+
+function marksFrom(database: Executor, playerId: string, seriesIds: string[], startsOn: string) {
+  if (!seriesIds.length || !/^\d{4}-\d{2}-\d{2}$/u.test(startsOn)) return []
   return database.select({
     choice: sessionAttendanceRecords.choice,
     id: sessionAttendanceRecords.id,
@@ -584,43 +602,66 @@ function marksToClear(database: Executor, playerId: string, seriesIds: string[],
     .where(and(
       eq(sessionAttendanceRecords.accountId, playerId),
       inArray(sessionOccurrences.seriesId, seriesIds),
-      gte(sessionOccurrences.occurrenceDate, monthStart),
-      lte(sessionOccurrences.occurrenceDate, monthEndOf(monthStart)),
+      gte(sessionOccurrences.occurrenceDate, startsOn),
+      lte(sessionOccurrences.occurrenceDate, monthEndOf(startsOn)),
       ne(sessionAttendanceRecords.choice, "cleared"),
     ))
     .all()
     .sort((first, second) => first.occurrenceDate.localeCompare(second.occurrenceDate))
 }
 
-export function correctThisMonth(
-  input: CorrectMonthInput,
+export function changeScheduleThisMonth(
+  input: ChangeThisMonthInput,
   { coachId, createId = randomUUID, database = initializeDatabase(), now = new Date() }: TrainingContext,
-): CorrectMonthResult {
+): ChangeThisMonthResult {
   requireHeadAdminAccess(coachId, { database })
   try {
     return database.transaction((tx) => {
-      requirePlayer(tx, input.playerId)
+      const player = requirePlayer(tx, input.playerId)
       const today = getAcademyDateKey(now)
       const monthStart = monthStartOf(today)
+      const startsOn = input.startsOn
+      if (typeof startsOn !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(startsOn)
+        || startsOn < monthStart || startsOn > today) {
+        operationalActionError(
+          "INVALID_INPUT",
+          "Choose a start date from the 1st of this month up to today, or start next month.",
+          "startsOn",
+        )
+      }
+      if (startsOn < player.trainingStartOn) {
+        operationalActionError("INVALID_INPUT", "The new schedule cannot start before the player's training started.", "startsOn")
+      }
       if (scheduledChange(tx, input.playerId)) {
         operationalActionError(
           "CONFLICT",
-          "This player has a change waiting for next month. Cancel it before correcting this month.",
+          "This player has a change waiting for next month. Cancel it before changing this month.",
         )
       }
       const current = openAssignments(tx, input.playerId)
       if (!current.length) {
-        operationalActionError("BUSINESS_RULE", "This player has no schedule to correct.")
+        operationalActionError("BUSINESS_RULE", "This player is not on any schedule. Use Start training.")
       }
-      const earliest = current.map((item) => item.effectiveFrom).sort()[0]
-      const startsOn = laterOf(monthStart, earliest)
+      const enrollment = tx.select().from(playerEnrollments)
+        .where(eq(playerEnrollments.accountId, input.playerId)).get()
+      const profileChanges = enrollment?.level !== input.level
+        || enrollment?.batch !== input.batch
+        || enrollment?.academyPlan !== input.academyPlan
+      const financeActive = isFinanceActive(tx)
+      const monthCharge = financeActive ? thisMonthCharge(tx, input.playerId, monthStart, now) : null
+      if (profileChanges && monthCharge && monthCharge.receivedPaise > 0) {
+        operationalActionError(
+          "BUSINESS_RULE",
+          "This month's fee has already been paid, so only the session time can change this month. To change the level, batch or plan, start the change next month.",
+        )
+      }
       const { weekdays } = validateSelection(tx, input, startsOn)
 
       const oldSeries = current.map((item) => item.seriesId)
       const occurrenceIds = tx.select({ id: sessionOccurrences.id }).from(sessionOccurrences).where(and(
         inArray(sessionOccurrences.seriesId, oldSeries),
-        gte(sessionOccurrences.occurrenceDate, monthStart),
-        lte(sessionOccurrences.occurrenceDate, monthEndOf(monthStart)),
+        gte(sessionOccurrences.occurrenceDate, startsOn),
+        lte(sessionOccurrences.occurrenceDate, monthEndOf(startsOn)),
       )).all().map((row) => row.id)
       if (occurrenceIds.length) {
         const makeup = tx.select({ id: attendanceAdjustments.id }).from(attendanceAdjustments).where(and(
@@ -634,12 +675,12 @@ export function correctThisMonth(
         if (makeup) {
           operationalActionError(
             "BUSINESS_RULE",
-            "This month has a rescheduled (make-up) session for this player. Undo it in Reschedule attendance first.",
+            "A rescheduled (make-up) session falls after this start date. Undo it in Reschedule attendance first, or start later.",
           )
         }
       }
 
-      const marks = marksToClear(tx, input.playerId, oldSeries, monthStart)
+      const marks = marksFrom(tx, input.playerId, oldSeries, startsOn)
       for (const mark of marks) {
         tx.update(sessionAttendanceRecords).set({
           choice: "cleared",
@@ -647,7 +688,6 @@ export function correctThisMonth(
           updatedAt: now,
         }).where(eq(sessionAttendanceRecords.id, mark.id)).run()
       }
-
       for (const assignment of current) {
         tx.update(sessionAssignments).set({
           effectiveTo: laterOf(assignment.effectiveFrom, startsOn),
@@ -671,31 +711,28 @@ export function correctThisMonth(
         weekdays,
       })
 
-      const result: CorrectMonthResult = {
+      const result: ChangeThisMonthResult = {
         adjustment: null,
         clearedMarks: marks.map((mark) => ({ choice: mark.choice, occurrenceDate: mark.occurrenceDate })),
         refundNeededPaise: 0,
         startsOn,
       }
-      if (!isFinanceActive(tx)) return result
+      // A change of session time alone leaves the fee exactly as it is.
+      if (!financeActive || !profileChanges) return result
 
       const fee = validateFee(input.monthlyFeePaise, true) as number
       const { active, covering } = agreementsAround(tx, input.playerId, monthStart)
       if (active && active.effectiveFrom > monthStart) {
         operationalActionError(
           "CONFLICT",
-          "A new fee already starts next month. Cancel that fee change before correcting this month.",
+          "A new fee already starts next month. Cancel that fee change before changing this month.",
         )
       }
       if (!covering) return result
-      const sameProfile = covering.level === input.level
-        && covering.batch === input.batch
-        && covering.academyPlan === input.academyPlan
-      if (sameProfile && covering.agreedMonthlyFeePaise === fee) return result
-
       const monthLabel = new Intl.DateTimeFormat("en-IN", {
         month: "long", timeZone: "UTC", year: "numeric",
       }).format(new Date(`${monthStart}T00:00:00Z`))
+      const reason = `Schedule changed in ${monthLabel}`
       if (covering.effectiveFrom >= monthStart) {
         correctFeeAgreementInTransaction(tx, {
           academyPlan: input.academyPlan,
@@ -703,7 +740,7 @@ export function correctThisMonth(
           agreementId: covering.id,
           batch: input.batch,
           level: input.level,
-          reason: `Training corrected for ${monthLabel}`,
+          reason,
         }, { actorId: coachId, createId, now })
       } else {
         createFeeAgreementInTransaction(tx, {
@@ -712,46 +749,37 @@ export function correctThisMonth(
           batch: input.batch,
           effectiveFrom: monthStart,
           expectedAgreementRevision: covering.recordRevision,
-          idempotencyKey: `training-correct:${createId()}`,
+          idempotencyKey: `schedule-change:${createId()}`,
           level: input.level,
           playerId: input.playerId,
         }, { actorId: coachId, createId, now })
       }
 
-      if (!input.adjustThisMonthFee || covering.agreedMonthlyFeePaise === fee) return result
-      const charge = tx.select().from(financialCharges).where(and(
-        eq(financialCharges.playerAccountId, input.playerId),
-        eq(financialCharges.type, "monthly_training"),
-        eq(financialCharges.billingPeriod, monthStart.slice(0, 7)),
-        eq(financialCharges.lifecycle, "issued"),
-      )).get()
-      if (!charge) return result
+      if (!monthCharge || covering.agreedMonthlyFeePaise === fee) return result
       // A first month may have been charged for part of the month, so the
       // corrected amount keeps that same share of the new fee.
-      const corrected = Math.round(charge.originalAmountPaise * fee / covering.agreedMonthlyFeePaise)
-      const delta = corrected - charge.originalAmountPaise
+      const corrected = Math.round(
+        monthCharge.charge.originalAmountPaise * fee / covering.agreedMonthlyFeePaise,
+      )
+      const delta = corrected - monthCharge.charge.originalAmountPaise
       if (delta === 0) return result
-      const reason = `Training corrected for ${monthLabel}`
       if (delta > 0) {
         applyChargeAdjustmentInTransaction(tx, {
           amountPaise: delta,
-          chargeId: charge.id,
-          idempotencyKey: `training-correct-adj:${createId()}`,
+          chargeId: monthCharge.charge.id,
+          idempotencyKey: `schedule-change-adj:${createId()}`,
           kind: "manual_debit",
           reason,
         }, { actorId: coachId, createId, now })
         result.adjustment = { amountPaise: delta, kind: "manual_debit" }
         return result
       }
-      // A credit cannot take a fee below what is still owed; anything beyond
-      // that was already paid and has to go back as a refund in Fee records.
-      const outstanding = loadChargeView(tx, charge.id, now)?.outstandingPaise ?? 0
-      const credit = Math.min(-delta, outstanding)
+      const credit = Math.min(-delta, monthCharge.outstandingPaise)
       if (credit > 0) {
         applyChargeAdjustmentInTransaction(tx, {
           amountPaise: credit,
-          chargeId: charge.id,
-          idempotencyKey: `training-correct-adj:${createId()}`,
+          chargeId: monthCharge.charge.id,
+          idempotencyKey: `schedule-change-adj:${createId()}`,
           kind: "manual_credit",
           reason,
         }, { actorId: coachId, createId, now })
