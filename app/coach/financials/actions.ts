@@ -5,12 +5,8 @@ import { revalidatePath } from "next/cache"
 import { requireHeadAdminAction } from "@/lib/auth/current-coach"
 import {
   activateFinance,
-  applyConcession,
   applyChargeAdjustment,
-  createConcession,
   completePlayerOnboardingFinance,
-  createOrReplaceFeeAgreement,
-  endFeeAgreement,
   FinanceServiceError,
   previewPlayerOnboardingFinance,
   previewPaymentAllocations,
@@ -20,7 +16,6 @@ import {
   recordRefund,
   redateConfirmedTrainingStart,
   reverseChargeAdjustment,
-  reverseConcession,
   reverseConcessionApplication,
   reversePayment,
   reverseRefund,
@@ -28,11 +23,7 @@ import {
 } from "@/lib/finance/service"
 import type {
   ApplyAdjustmentInput,
-  ApplyConcessionInput,
   CommitOnboardingFinanceInput,
-  CreateFeeAgreementInput,
-  CreateConcessionInput,
-  EndFeeAgreementInput,
   FinanceField,
   FinanceServiceErrorCode,
   PrepareMonthlyChargesInput,
@@ -49,7 +40,6 @@ import type {
   ReverseRefundInput,
   ReverseAdjustmentInput,
   ReverseConcessionApplicationInput,
-  ReverseConcessionInput,
   VoidChargeInput,
 } from "@/lib/finance/types"
 
@@ -131,15 +121,6 @@ export async function activateFinanceAction(input: {
   })
 }
 
-export async function replaceFeeAgreementAction(
-  input: CreateFeeAgreementInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    createOrReplaceFeeAgreement(input, { coachId })
-    return { message: "Fee plan updated" }
-  })
-}
-
 export async function completeOnboardingFinanceAction(
   input: CommitOnboardingFinanceInput,
 ): Promise<FinanceActionResult> {
@@ -159,15 +140,6 @@ export async function previewOnboardingFinanceAction(
   input: OnboardingFinanceTerms,
 ): Promise<FinanceDataActionResult<OnboardingFinancePreview>> {
   return runFinanceQuery((coachId) => previewPlayerOnboardingFinance(input, { coachId }))
-}
-
-export async function endFeeAgreementAction(
-  input: EndFeeAgreementInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    const result = endFeeAgreement(input, { coachId })
-    return { message: result.reused ? "Fee plan already ended" : "Fee plan ended" }
-  })
 }
 
 export async function redateConfirmedTrainingStartAction(
@@ -236,24 +208,6 @@ export async function reverseRefundAction(
   })
 }
 
-export async function createConcessionAction(
-  input: CreateConcessionInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    const result = createConcession(input, { coachId })
-    return { message: result.reused ? "Concession already created" : "Concession created" }
-  })
-}
-
-export async function applyConcessionAction(
-  input: ApplyConcessionInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    const result = applyConcession(input, { coachId })
-    return { message: result.reused ? "Concession already applied" : "Concession applied" }
-  })
-}
-
 export async function reverseConcessionApplicationAction(
   input: ReverseConcessionApplicationInput,
 ): Promise<FinanceActionResult> {
@@ -262,15 +216,6 @@ export async function reverseConcessionApplicationAction(
     return {
       message: result.reused ? "Concession application already reversed" : "Concession application reversed",
     }
-  })
-}
-
-export async function reverseConcessionAction(
-  input: ReverseConcessionInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    const result = reverseConcession(input, { coachId })
-    return { message: result.reused ? "Concession already reversed" : "Concession reversed" }
   })
 }
 

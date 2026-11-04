@@ -72,12 +72,10 @@ function newSeriesForm(
 }
 
 export function SessionScheduleCreate({
-  guidedFromEvaluation = false,
   initialBatch,
   initialPlayerId = null,
   initialProgramme,
 }: {
-  guidedFromEvaluation?: boolean
   initialBatch?: TrainingBatch
   initialPlayerId?: string | null
   initialProgramme?: TrainingProgramme
@@ -168,14 +166,11 @@ export function SessionScheduleCreate({
       setCreatedProgramme(programme)
       setFeedback({ message: "Schedule created", tone: "success" })
 
+      // A schedule created for a player in onboarding sends the coach back to
+      // that player's Session step, which is now the only place a player is
+      // added to a schedule.
       if (guidedPlayer) {
-        const params = new URLSearchParams({
-          programme,
-          series: createdId,
-          player: guidedPlayer.member.id,
-          from: guidedFromEvaluation ? "evaluation" : "assignment",
-        })
-        router.push(`/coach/schedules?${params.toString()}`)
+        router.push(`/coach/onboarding?player=${encodeURIComponent(guidedPlayer.member.id)}`)
       }
     } catch (error) {
       const failure = describeSaveFailure({
@@ -214,11 +209,11 @@ export function SessionScheduleCreate({
 
       {guidedPlayer ? (
         <div className="coach-assignment-guidance">
-          <span>{guidedFromEvaluation ? "Evaluation complete" : "Player assignment"}</span>
+          <span>Player assignment</span>
           <strong>Create a schedule for {guidedPlayer.member.fullName}</strong>
           <p>
             {startingProgramme} · {startingBatch} · {academyPlanLabel(guidedPlayer.training.academyPlan)}.
-            After creation, the matching roster will open with this player ready to assign.
+            After creation, you return to this player’s onboarding to choose their training days.
           </p>
         </div>
       ) : null}

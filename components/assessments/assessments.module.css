@@ -315,20 +315,6 @@ button.textLink {
   text-align: center;
 }
 
-.footLink {
-  margin-top: var(--space-group);
-  color: var(--steel);
-  font-size: 0.8125rem;
-}
-
-.footLink a {
-  color: var(--navy);
-  font-weight: 700;
-  text-decoration: underline;
-  text-decoration-color: var(--line);
-  text-underline-offset: 3px;
-}
-
 /* ---- form ---- */
 
 .meta {

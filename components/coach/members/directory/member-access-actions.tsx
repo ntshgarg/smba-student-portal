@@ -20,21 +20,16 @@ export function MemberAccessActions({
   recoveryHref: string | undefined
   retryAction: "archive" | "save" | undefined
 }) {
-  const memberId = player.member.id
 
   return (
     <div className="coach-member-access-actions">
       <div>
         <span>Member access</span>
         <p>{hasActiveAssignments
-          ? "End active session assignments before archiving this member."
+          ? "Use End training above before archiving this member."
           : "Archiving revokes portal access and preserves academy history."}</p>
       </div>
-      {hasActiveAssignments ? (
-        <Link href={`/coach/schedules?player=${encodeURIComponent(memberId)}`}>
-          Review schedules
-        </Link>
-      ) : recoveryHref ? (
+      {hasActiveAssignments ? null : recoveryHref ? (
         <Link href={recoveryHref}>
           Open Fee Record
         </Link>

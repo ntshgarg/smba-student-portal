@@ -8,11 +8,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "smba-report-month-scope-"))
+const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "smba-assessments-card-counts-"))
 process.env.DB_FILE_NAME = path.join(temporaryDirectory, "smba-test.db")
 
 const mocks = vi.hoisted(() => ({
-  listCoachMonthlyReports: vi.fn(),
   redirect: vi.fn(),
   requireCoachPage: vi.fn(),
   requireHeadAdminAction: vi.fn(),
@@ -26,13 +25,6 @@ vi.mock("@/lib/auth/current-coach", () => ({
   requireCoachPage: mocks.requireCoachPage,
   requireHeadAdminAction: mocks.requireHeadAdminAction,
 }))
-// The real reader, watched rather than replaced: what matters is the month it
-// is handed, and that the rows it comes back with still answer the question.
-vi.mock("@/lib/coach/database", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/coach/database")>()
-  mocks.listCoachMonthlyReports.mockImplementation(actual.listCoachMonthlyReports)
-  return { ...actual, listCoachMonthlyReports: mocks.listCoachMonthlyReports }
-})
 
 function findProps(node: ReactNode | unknown, type: unknown): Record<string, unknown> | null {
   if (Array.isArray(node)) {
@@ -46,24 +38,11 @@ function findProps(node: ReactNode | unknown, type: unknown): Record<string, unk
   return findProps((node.props as { children?: ReactNode }).children, type)
 }
 
-/*
- * Both call sites read one month: the dashboard card counts the latest
- * completed month, and a report save reloads the row it just wrote. Reading
- * every month the academy has ever written -- each with a 5,000-character draft
- * and its published body -- is what was narrowed, so what has to be held is
- * that the month reaching the reader is still the right one. On the save path a
- * wrong month is not a slow page but a thrown "could not be reloaded" after the
- * write has already committed.
- */
-describe("coach report reads scoped to one month", () => {
+describe("the coach dashboard's assessments card", () => {
   let database: ReturnType<typeof import("@/lib/db/client")["initializeDatabase"]>
   let schema: typeof import("@/lib/db/schema")
   const now = new Date("2026-08-15T04:30:00.000Z")
-  const reportMonth = "2026-07"
   let coachId: string
-  let publishedPlayerId: string
-  let staleMonthPlayerId: string
-  let mutatingPlayerId: string
 
   beforeAll(async () => {
     vi.useFakeTimers()
@@ -90,14 +69,6 @@ describe("coach report reads scoped to one month", () => {
         subjectId: coachId,
       },
     })
-    mocks.requireHeadAdminAction.mockResolvedValue({
-      academyId: "SMBA#0001",
-      firstName: "Sathiya",
-      fullName: "Sathiya Moorthy",
-      initials: "SM",
-      role: "coach",
-      subjectId: coachId,
-    })
 
     const addPlayer = (name: string) => {
       const accountId = accountService.registerAccount(name, "player")
@@ -112,9 +83,7 @@ describe("coach report reads scoped to one month", () => {
       }).where(eq(schema.playerEnrollments.accountId, accountId)).run()
       return accountId
     }
-    publishedPlayerId = addPlayer("July Published")
-    staleMonthPlayerId = addPlayer("June Published")
-    mutatingPlayerId = addPlayer("Mutating Player")
+    const players = [addPlayer("First Player"), addPlayer("Second Player"), addPlayer("Third Player")]
 
     // A training profile only counts as active once it holds an assignment,
     // and the card counts active players.
@@ -133,7 +102,7 @@ describe("coach report reads scoped to one month", () => {
         durationMinutes: 60,
       },
     })
-    ;[publishedPlayerId, staleMonthPlayerId, mutatingPlayerId].forEach((accountId) => {
+    players.forEach((accountId) => {
       assignSessionRecords({
         coachId,
         database,
@@ -144,30 +113,6 @@ describe("coach report reads scoped to one month", () => {
         weekdays: [1, 3, 5],
       })
     })
-
-    const publish = (playerId: string, month: string, id: string) => {
-      database.insert(schema.monthlyReports).values({
-        id,
-        accountId: playerId,
-        month,
-        draftText: `${month} feedback.`,
-        updatedByAccountId: coachId,
-        createdAt: now,
-        updatedAt: now,
-      }).run()
-      database.insert(schema.reportPublications).values({
-        id: `${id}-publication`,
-        reportId: id,
-        revision: 1,
-        reportText: `${month} feedback.`,
-        attendanceSnapshot: null,
-        publishedByAccountId: coachId,
-        publishedAt: now,
-      }).run()
-    }
-    publish(publishedPlayerId, reportMonth, "july-report")
-    // June is the month the card must not count and must no longer pay to read.
-    publish(staleMonthPlayerId, "2026-06", "june-report")
   })
 
   afterAll(() => {
@@ -175,53 +120,15 @@ describe("coach report reads scoped to one month", () => {
     fs.rmSync(temporaryDirectory, { force: true, recursive: true })
   })
 
-  it("builds the dashboard card from assessments and no longer reads monthly reports", async () => {
+  it("counts who has ever been assessed against every active player", async () => {
     const { AssessmentsCard } = await import("@/components/coach/assessments-card")
     const { default: CoachDashboardPage } = await import("@/app/coach/page")
-    mocks.listCoachMonthlyReports.mockClear()
 
     const page = await CoachDashboardPage({ searchParams: Promise.resolve({}) })
     const card = findProps(page, AssessmentsCard)
 
-    // No month is "due" any more: the card counts who has ever been assessed.
-    expect(mocks.listCoachMonthlyReports).not.toHaveBeenCalled()
     expect(card).toMatchObject({ assessedCount: 0, draftCount: 0, playerCount: 3 })
   // Importing the dashboard pulls in its whole card tree, which is slow to
   // transform on a loaded machine and has nothing to do with the assertion.
   }, 30_000)
-
-  it("reloads a saved draft from the month the coach submitted", async () => {
-    const { saveReportDraftAction } = await import("@/app/coach/actions")
-    mocks.listCoachMonthlyReports.mockClear()
-
-    const result = await saveReportDraftAction({
-      playerId: mutatingPlayerId,
-      month: reportMonth,
-      reportText: "Draft feedback for July.",
-    })
-
-    expect(mocks.listCoachMonthlyReports).toHaveBeenCalledWith(reportMonth)
-    expect(result).toMatchObject({
-      ok: true,
-      report: { month: reportMonth, playerId: mutatingPlayerId, published: null },
-    })
-  })
-
-  it("reloads a published report from the month the coach submitted", async () => {
-    const { publishReportAction } = await import("@/app/coach/actions")
-    mocks.listCoachMonthlyReports.mockClear()
-
-    const result = await publishReportAction({
-      playerId: mutatingPlayerId,
-      month: "2026-06",
-      publicationKey: "3f1a6f1e-6d0a-4a2b-9c8d-0b1e2f3a4b5c",
-      reportText: "Published feedback for June.",
-    })
-
-    expect(mocks.listCoachMonthlyReports).toHaveBeenCalledWith("2026-06")
-    expect(result).toMatchObject({
-      ok: true,
-      report: { month: "2026-06", published: { reportText: "Published feedback for June." } },
-    })
-  })
 })

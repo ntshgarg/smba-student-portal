@@ -40,12 +40,9 @@ export type AccessibilityInteraction =
   | "mobile-navigation-open"
   | "onboarding-first-open"
   | "player-announcement-open"
-  | "player-report-open"
   | "profile-menu-open"
   | "register-error"
   | "register-junior-coach"
-  | "report-preview-open"
-  | "report-publication-open"
   | "search-admin-directory"
 
 // The interactions that click their way onto a different pathname. Every state
@@ -58,17 +55,15 @@ export type AccessibilityInteraction =
 // `attendance-session-open` and `onboarding-first-open` are deliberately absent:
 // they navigate too, but only over the search string, so they land back on the
 // pathname the state already declares and there is nothing left for a second
-// check to say. What they share with the three below is the wait, and that lives
+// check to say. What they share with the two below is the wait, and that lives
 // in `settle` rather than here.
 export const navigatingAccessibilityInteractions: readonly AccessibilityInteraction[] = [
   "financial-player-open",
   "player-announcement-open",
-  "report-publication-open",
 ]
 
 // Deterministic ids the stress fixture builder assigns, so parameterised routes
 // can be deep-linked the same way the query-string routes below already are.
-// Report publications get random ids, so those routes are reached by interaction.
 const stressAnnouncementId = "00000000-0000-4000-8003-000000000001"
 const stressHomepageAnnouncementId = "00000000-0000-4000-8003-000000000002"
 
@@ -432,31 +427,6 @@ export const accessibilityStates: readonly AccessibilityState[] = [
   },
   {
     actor: "head-coach",
-    description: "Published monthly reports",
-    id: "coach-reports",
-    profile: "stress",
-    route: "/coach/reports?period=2026-07",
-  },
-  {
-    actor: "head-coach",
-    compact: true,
-    description: "Monthly-report writing workspace",
-    id: "coach-write-report",
-    interaction: "report-preview-open",
-    profile: "stress",
-    route: "/coach/reports/write?period=2026-08",
-  },
-  {
-    actor: "head-coach",
-    description: "Published report detail with a revision history",
-    id: "coach-report-publication",
-    interaction: "report-publication-open",
-    interactionRoute: /^\/coach\/reports\/publications\/[^/]+$/u,
-    profile: "stress",
-    route: "/coach/reports?period=2026-07",
-  },
-  {
-    actor: "head-coach",
     compact: true,
     description: "Record a payment",
     id: "coach-record-payment",
@@ -590,9 +560,8 @@ export const accessibilityStates: readonly AccessibilityState[] = [
   },
   {
     actor: "player",
-    description: "Player expanded monthly report",
+    description: "Player reports",
     id: "player-report",
-    interaction: "player-report-open",
     profile: "stress",
     route: "/player/reports",
   },

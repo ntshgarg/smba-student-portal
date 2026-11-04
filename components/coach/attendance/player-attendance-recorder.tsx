@@ -181,8 +181,7 @@ export function PlayerAttendanceRecorder({
   // nowhere else. Restoring is announced rather than silent: these are unsaved
   // marks, not saved state, and the coach has to know which they are looking at.
   //
-  // Read after the mounting render rather than during it, as the report resume
-  // hint is (`components/coach/reports/report-resume.ts`), so the server-rendered
+  // Read after the mounting render rather than during it, so the server-rendered
   // register is what hydrates.
   //
   // What comes back is rebased onto that hydrated register before any of it is

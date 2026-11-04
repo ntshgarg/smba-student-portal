@@ -41,11 +41,6 @@ export type FixtureProfile = {
   }>
   key: FixtureProfileName
   pendingPlayerNames: readonly string[]
-  reportMix: {
-    drafts: number
-    published: number
-    revisionDrafts: number
-  }
   target: string
 }
 
@@ -61,7 +56,6 @@ export const fixtureProfiles: Record<FixtureProfileName, FixtureProfile> = {
     ],
     key: "demo",
     pendingPlayerNames: ["Rohan Kulkarni", "Saanvi Reddy"],
-    reportMix: { drafts: 10, published: 8, revisionDrafts: 4 },
     target: path.join(projectDataDirectory, "academy-demo.db"),
   },
   edge: {
@@ -73,7 +67,6 @@ export const fixtureProfiles: Record<FixtureProfileName, FixtureProfile> = {
     ],
     key: "edge",
     pendingPlayerNames: ["Rohan Kulkarni", "Saanvi Reddy", "Kabir Joshi"],
-    reportMix: { drafts: 10, published: 6, revisionDrafts: 3 },
     target: path.join(projectDataDirectory, "academy-edgecases.db"),
   },
   stress: {
@@ -85,7 +78,6 @@ export const fixtureProfiles: Record<FixtureProfileName, FixtureProfile> = {
     ],
     key: "stress",
     pendingPlayerNames: ["Rohan Kulkarni", "Saanvi Reddy", "Kabir Joshi"],
-    reportMix: { drafts: 50, published: 30, revisionDrafts: 10 },
     target: path.join(projectDataDirectory, "academy-stress.db"),
   },
 }

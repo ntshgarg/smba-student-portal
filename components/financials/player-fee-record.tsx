@@ -338,6 +338,12 @@ function MonthDetail({
               <dt>Fee charged</dt>
               <dd>{formatInr(charge.originalAmountPaise)}</dd>
             </div>
+            {charge.manualAdjustmentPaise ? (
+              <div>
+                <dt>Fee adjusted</dt>
+                <dd>{charge.manualAdjustmentPaise > 0 ? "+ " : "− "}{formatInr(Math.abs(charge.manualAdjustmentPaise))}</dd>
+              </div>
+            ) : null}
             {activeConcessionPaise > 0 ? (
               <div>
                 <dt>Fee concession</dt>

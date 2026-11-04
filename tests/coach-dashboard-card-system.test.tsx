@@ -1,9 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
-
-vi.mock("@/components/coach/reports/report-resume", () => ({
-  useReportResume: () => ({ resumePoint: null }),
-}))
+import { describe, expect, it } from "vitest"
 
 import { AnnouncementCard } from "@/components/coach/announcements/announcement-card"
 import { AttendanceCard } from "@/components/coach/attendance-card"
@@ -62,7 +58,7 @@ describe("coach dashboard Court Operations Board", () => {
       previousIndex = index
     }
 
-    expect(html.match(/<a /g)).toHaveLength(16)
+    expect(html.match(/<a /g)).toHaveLength(15)
     expect(html).toContain('id="onboarding"')
     expect(html).toContain('id="attendance"')
     expect(html).toContain('role="group" aria-label="Players"')

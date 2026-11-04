@@ -143,10 +143,6 @@ export async function executeAccessibilityInteraction(
       await clickIntoRoute(page.getByRole("link", { name: /Read announcement:/u }))
       break
     }
-    case "player-report-open": {
-      await clickFirstVisible(page.locator('button[aria-expanded="false"]'))
-      break
-    }
     case "profile-menu-open": {
       await page.getByRole("button", { name: /Open account menu/u }).click()
       break
@@ -162,19 +158,6 @@ export async function executeAccessibilityInteraction(
       // The id and the option value both stay `coach` -- only the label and the
       // word a person reads changed.
       await page.getByLabel("I am registering a").selectOption("coach")
-      break
-    }
-    case "report-preview-open": {
-      await openDialogFrom(page.getByRole("button", { name: "Preview", exact: true }))
-      break
-    }
-    case "report-publication-open": {
-      // Publications get random ids, so the detail page is reached by opening one
-      // from the archive. A report with several revisions renders the most.
-      const withHistory = page.getByRole("link", { name: /latest revision [2-9]/u })
-      await clickIntoRoute(await withHistory.count()
-        ? withHistory
-        : page.getByRole("link", { name: /^Open report for/u }))
       break
     }
     case "search-admin-directory": {

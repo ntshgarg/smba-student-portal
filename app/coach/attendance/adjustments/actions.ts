@@ -33,8 +33,6 @@ function revalidateAttendanceSurfaces() {
   revalidatePath("/coach/attendance/players/register")
   revalidatePath("/coach/attendance/players/record")
   revalidatePath("/coach/attendance/adjustments")
-  revalidatePath("/coach/reports")
-  revalidatePath("/coach/reports/write")
   revalidatePath("/player")
   revalidatePath("/player/reports")
 }

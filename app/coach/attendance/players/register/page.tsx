@@ -48,7 +48,6 @@ export default async function PlayerAttendanceRegisterPage({
       initialAttendanceAdjustments={snapshot.attendanceAdjustments}
       initialAttendanceRecords={snapshot.attendanceRecords}
       initialMembers={snapshot.members}
-      initialReports={[]}
       initialSessionAssignments={snapshot.sessionAssignments}
       initialSessionOccurrences={snapshot.sessionOccurrences}
       initialSessionSeries={snapshot.sessionSeries}

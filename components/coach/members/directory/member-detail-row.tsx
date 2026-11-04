@@ -6,6 +6,7 @@ import { MemberAccessActions } from "@/components/coach/members/directory/member
 import type { MemberDraft } from "@/components/coach/members/directory/member-draft"
 import { MemberEditForm } from "@/components/coach/members/directory/member-edit-form"
 import { MemberProfilePanel } from "@/components/coach/members/directory/member-profile-panel"
+import { MemberTrainingActions } from "@/components/coach/members/directory/member-training-actions"
 import { MemberTrainingPanel } from "@/components/coach/members/directory/member-training-panel"
 import type {
   MemberEditor,
@@ -94,6 +95,8 @@ export function MemberDetailRow({
               />
             </div>
           )}
+
+          {!isEditing ? <MemberTrainingActions player={player} /> : null}
 
           {!isEditing ? (
             <MemberAccessActions

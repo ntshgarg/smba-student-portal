@@ -63,32 +63,6 @@ test("Stress Attendance and Calendar stay within their route payload budgets", a
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
 })
 
-test("Published Reports reveals large result sets progressively and preserves return state", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 568 })
-  await page.goto("/coach/reports?period=2026-07", { waitUntil: "networkidle" })
-
-  const reportRows = page.locator(".coach-published-report-row")
-  await expect(reportRows).toHaveCount(10)
-  expect(await page.locator("*").count()).toBeLessThan(500)
-  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(5_000)
-
-  await page.getByRole("button", { name: "Show more reports" }).click()
-  await expect(reportRows).toHaveCount(20)
-  await expect(page).toHaveURL((url) => url.searchParams.get("shown") === "20")
-
-  await page.getByRole("link", { name: "Open report" }).nth(15).click()
-  await page.getByRole("link", { name: "Back to published reports" }).click()
-  await expect(reportRows).toHaveCount(20)
-  await expect(page).toHaveURL((url) => url.searchParams.get("shown") === "20")
-
-  await page.getByRole("button", { name: "Show more reports" }).click()
-  await expect(reportRows).toHaveCount(30)
-  await expect(page.getByRole("button", { name: "Show more reports" })).toHaveCount(0)
-  await expect.poll(() => page.evaluate(() => (
-    document.activeElement?.classList.contains("coach-published-report-row") ?? false
-  ))).toBe(true)
-})
-
 test("Announcement publication leaves the composer exactly once", async ({ page }) => {
   const title = `Phase 8 navigation ${Date.now()}`
   await page.goto("/coach/announcements/new", { waitUntil: "networkidle" })

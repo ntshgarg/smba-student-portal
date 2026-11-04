@@ -3,10 +3,6 @@ import { describe, expect, it } from "vitest"
 import {
   assertAttendanceBreakdown,
   calculateMonthlyAttendance,
-  createAttendanceSnapshotV2,
-  createAttendanceSnapshotV3,
-  createAttendanceSnapshotV4,
-  parseAttendanceSnapshot,
 } from "@/lib/attendance/domain"
 
 describe("session occurrence attendance domain", () => {
@@ -232,73 +228,9 @@ describe("session occurrence attendance domain", () => {
     })).toMatchObject({ recorded: 1, attended: 1, absent: 0 })
   })
 
-  it("keeps V1-V3 readable and creates adjustment-aware immutable V4 snapshots", () => {
+  it("rejects a breakdown whose totals do not add up", () => {
     expect(() => assertAttendanceBreakdown({
       eligible: 3, recorded: 2, attended: 2, absent: 1, pending: 1, percentage: 100,
     })).toThrow("Recorded attendance")
-
-    const snapshot = createAttendanceSnapshotV2({
-      month: "2026-07",
-      referenceDate: "2026-08-02",
-      joinedOn: "2026-06-30",
-      assignments: [],
-      occurrences: [],
-      records: [],
-    })
-    expect(parseAttendanceSnapshot(snapshot)).toEqual(snapshot)
-    expect(parseAttendanceSnapshot({
-      version: 1,
-      month: "2026-07",
-      referenceDate: "2026-08-02",
-      eligible: 1,
-      recorded: 1,
-      attended: 1,
-      absent: 0,
-      pending: 0,
-      percentage: 100,
-    })?.version).toBe(1)
-    expect(parseAttendanceSnapshot({ ...snapshot, version: 3 })).toBeNull()
-
-    const preciseSnapshot = createAttendanceSnapshotV3({
-      month: "2026-08",
-      referenceDate: "2026-08-03",
-      referenceInstant: "2026-08-03T00:30:00.000Z",
-      joinedOn: "2026-08-01",
-      assignments: [],
-      occurrences: [],
-      records: [],
-    })
-    expect(parseAttendanceSnapshot(preciseSnapshot)).toEqual(preciseSnapshot)
-
-    const adjustedSnapshot = createAttendanceSnapshotV4({
-      month: "2026-08",
-      referenceDate: "2026-08-31",
-      referenceInstant: "2026-08-31T12:30:00.000Z",
-      joinedOn: "2026-08-01",
-      assignments: [{ seriesId: "adult", effectiveFrom: "2026-08-01", effectiveTo: null, weekdays: [1] }],
-      occurrences: [{
-        id: "source",
-        seriesId: "adult",
-        occurrenceDate: "2026-08-03",
-        eligibilityDate: "2026-08-03",
-        startsAt: "2026-08-03T12:30:00.000Z",
-        status: "scheduled",
-      }],
-      records: [{ occurrenceId: "source", choice: "absent" }],
-      adjustments: [{ id: "makeup-b", sourceOccurrenceId: "source" }],
-    })
-    expect(adjustedSnapshot).toMatchObject({
-      version: 4,
-      adjustmentPolicyVersion: 1,
-      appliedAdjustmentIds: ["makeup-b"],
-      eligible: 1,
-      attended: 1,
-      absent: 0,
-    })
-    expect(parseAttendanceSnapshot(adjustedSnapshot)).toEqual(adjustedSnapshot)
-    expect(parseAttendanceSnapshot({ ...adjustedSnapshot, appliedAdjustmentIds: ["makeup-b", "makeup-b"] }))
-      .toBeNull()
-    expect(parseAttendanceSnapshot({ ...adjustedSnapshot, adjustmentPolicyVersion: 2 }))
-      .toBeNull()
   })
 })

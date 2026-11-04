@@ -97,12 +97,11 @@ test("public navigation exposes disclosure semantics and restores keyboard focus
   await expectNoDocumentOverflow(page)
 })
 
-test("player report hierarchy remains screen-reader navigable", async ({ page }) => {
+test("player reports page remains screen-reader navigable", async ({ page }) => {
   await login(page, PLAYER_ACADEMY_ID, "/player")
   await page.goto("/player/reports", { waitUntil: "networkidle" })
 
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
-  await expect(page.locator(".report-year-group > h2").first()).toBeVisible()
   await expectDomIntegrity(page)
   await expectNoAxeViolations(page)
 })

@@ -7,10 +7,8 @@ import {
   type AttendanceAdjustmentRecord,
 } from "@/lib/attendance/adjustments"
 import type { AttendanceRegisterSelection } from "@/lib/attendance/register-workspace"
-import { academyNow, academyToday } from "@/lib/clock"
 import {
   listAttendanceRegisterPlayerRecords,
-  listCoachMonthlyReports,
   listOperationalPlayerRecords,
 } from "@/lib/coach/database"
 import { initializeDatabase } from "@/lib/db/client"
@@ -33,7 +31,6 @@ import {
   listSessionOccurrencesByIds,
   listSessionOccurrencesForSeries,
   listSessionSeries,
-  listStartedScheduledOccurrenceKeys,
 } from "@/lib/sessions/database"
 import type { AcademyHolidayRecord } from "@/lib/sessions/holiday-types"
 import type {
@@ -72,10 +69,6 @@ export type CoachAttendanceRecorderSnapshot = CoachSessionWindowSnapshot & Retur
   attendanceRecords: SessionAttendanceRecords
 }
 
-export type CoachReportWritingSnapshot = CoachAttendanceRecorderSnapshot & {
-  reports: ReturnType<typeof listCoachMonthlyReports>
-}
-
 export type CoachAttendanceAdjustmentsSnapshot = CoachSessionWindowSnapshot & ReturnType<
   typeof listOperationalPlayerRecords
 > & {
@@ -84,13 +77,7 @@ export type CoachAttendanceAdjustmentsSnapshot = CoachSessionWindowSnapshot & Re
   selectedPlayerId: string | null
 }
 
-export type CoachScheduleBackfillOccurrence = Pick<
-  TrainingSessionOccurrence,
-  "eligibilityDate" | "seriesId"
->
-
 export type CoachScheduleRosterSnapshot = {
-  backfillOccurrences: CoachScheduleBackfillOccurrence[]
   sessionAssignments: SessionAssignment[]
   sessionSeries: TrainingSessionSeries[]
 }
@@ -182,22 +169,6 @@ export function getCoachAttendanceRecorderSnapshot(
   }
 }
 
-export function getCoachReportWritingSnapshot(month: string): CoachReportWritingSnapshot {
-  const sessions = getCoachCalendarMonthSessionSnapshot(month)
-  const occurrenceIds = sessions.sessionOccurrences.map((occurrence) => occurrence.id)
-
-  return {
-    ...sessions,
-    ...listOperationalPlayerRecords(),
-    attendanceAdjustments: listAttendanceAdjustments({
-      includeVoided: true,
-      sourceOccurrenceIds: occurrenceIds,
-    }),
-    attendanceRecords: listSessionAttendanceRecordsForOccurrences(occurrenceIds),
-    reports: listCoachMonthlyReports(month),
-  }
-}
-
 export function getCoachAttendanceAdjustmentsSnapshot({
   adjustmentId,
   playerId,
@@ -241,23 +212,10 @@ export function getCoachAttendanceAdjustmentsSnapshot({
   }
 }
 
-export function getCoachScheduleRosterSnapshot(
-  referenceDate = academyToday(),
-  referenceInstant = academyNow(),
-): CoachScheduleRosterSnapshot {
-  const sessionSeries = listSessionSeries()
-  const earliestStart = sessionSeries.reduce<string | null>(
-    (earliest, series) => !earliest || series.startsOn < earliest ? series.startsOn : earliest,
-    null,
-  )
-  const backfillOccurrences = earliestStart
-    ? listStartedScheduledOccurrenceKeys(earliestStart, referenceDate, referenceInstant)
-    : []
-
+export function getCoachScheduleRosterSnapshot(): CoachScheduleRosterSnapshot {
   return {
-    backfillOccurrences,
     sessionAssignments: listSessionAssignments(),
-    sessionSeries,
+    sessionSeries: listSessionSeries(),
   }
 }
 

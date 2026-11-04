@@ -384,10 +384,6 @@ describe("replacement field accessibility", () => {
       process.cwd(),
       "components/coach/calendar/session-create.tsx",
     ), "utf8")
-    const schedules = readFileSync(path.join(
-      process.cwd(),
-      "components/coach/calendar/session-schedules.tsx",
-    ), "utf8")
     const adjustments = readFileSync(path.join(
       process.cwd(),
       "components/coach/attendance-adjustments-workspace.tsx",
@@ -396,9 +392,8 @@ describe("replacement field accessibility", () => {
     expect(scheduleCreate).toContain("field: result.field")
     expect(scheduleCreate).toContain('feedback?.field === "venue"')
     expect(scheduleCreate).toContain("fieldTargets[feedback.field]?.focus()")
-    expect(schedules).toContain("field: result.field")
-    expect(schedules).toContain('rosterFeedback.field === "weekdays"')
-    expect(schedules).toContain("assignmentDateRef.current?.focus()")
+    // Schedules & rosters no longer has a player assignment form to check: players
+    // are added in onboarding's Session step, which carries its own field errors.
     expect(adjustments).toContain("field: result.field")
     expect(adjustments).toContain('feedback.field === "sourceOccurrenceId"')
     expect(adjustments).toContain('aria-invalid={feedback?.field === "completionOccurrenceId" || undefined}')

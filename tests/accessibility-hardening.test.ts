@@ -156,7 +156,6 @@ describe("operational mobile controls", () => {
     // iPad or a phone in landscape still zoomed the roll call on focus (F-13).
     expect(antiZoomRule).toContain(".attendance-record-date-row input:not(")
     expect(antiZoomRule).toContain(".coach-series-form input:not(")
-    expect(antiZoomRule).toContain(".coach-roster-assign input:not(")
     expect(antiZoomRule).toContain(".coach-registration-approved p input:not(")
     expect(antiZoomRule).toContain(".coach-member-search input:not(")
     expect(antiZoomRule).toContain(".coach-member-filter select")

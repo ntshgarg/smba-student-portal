@@ -168,13 +168,6 @@ export async function createActorContext(
     timezoneId: "Asia/Kolkata",
     viewport: { height: viewport.height, width: viewport.width },
   })
-  await context.addInitScript(() => {
-    try {
-      window.localStorage.removeItem("smba-coach-report-resume-v1")
-    } catch {
-      // Storage is unavailable on opaque documents such as about:blank.
-    }
-  })
   return context
 }
 
@@ -552,33 +545,6 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       await clickRequired(page.getByRole("button", { name: "Send code" }), action)
       await pageAlert(page).waitFor({ state: "visible", timeout: 12_000 })
       break
-    case "report-checklist-collapse": {
-      const toggle = page.locator(".coach-report-queue-toggle")
-      await toggle.waitFor({ state: "attached", timeout: 12_000 })
-      if (await toggle.isVisible()) {
-        if (await toggle.getAttribute("aria-expanded") === "true") {
-          await clickRequired(toggle, action)
-        }
-        await page.locator('.coach-report-queue-toggle[aria-expanded="false"]')
-          .waitFor({ state: "visible", timeout: 12_000 })
-      } else {
-        await page.locator(".coach-report-editor")
-          .waitFor({ state: "visible", timeout: 12_000 })
-      }
-      break
-    }
-    case "report-preview-open":
-      await clickRequired(page.getByRole("button", { name: "Preview", exact: true }), action)
-      await page.getByRole("dialog").waitFor({ state: "visible", timeout: 12_000 })
-      break
-
-    case "coach-published-report-open":
-      await clickRequired(
-        page.locator(".coach-published-report-actions a").first(),
-        action,
-      )
-      await page.waitForURL(/\/coach\/reports\/publications\//u)
-      break
     case "schedule-create-weekend":
       await page.locator(".coach-series-form").getByLabel("Programme").selectOption("Adult")
       await page.locator(".coach-series-form").getByLabel("Batch").selectOption("Weekend")
@@ -602,42 +568,6 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       const roster = page.locator(".coach-series-roster-card > button").first()
       await roster.waitFor({ state: "visible", timeout: 12_000 })
       if (await roster.getAttribute("aria-expanded") !== "true") await roster.click()
-      break
-    }
-    case "schedule-roster-player-selected": {
-      const programmes = page.locator(".coach-schedule-programme-toggle-heading button")
-      let selected = false
-      for (let programmeIndex = 0; programmeIndex < await programmes.count() && !selected; programmeIndex += 1) {
-        const programme = programmes.nth(programmeIndex)
-        if (await programme.getAttribute("aria-expanded") !== "true") await programme.click()
-        const group = programme.locator("xpath=ancestor::section[1]")
-        const schedules = group.locator(".coach-series-roster-card > button")
-        for (let scheduleIndex = 0; scheduleIndex < await schedules.count(); scheduleIndex += 1) {
-          const schedule = schedules.nth(scheduleIndex)
-          if (await schedule.getAttribute("aria-expanded") !== "true") await schedule.click()
-          const select = group.locator(".coach-roster-assign select").first()
-          const option = select.locator('option[value]:not([value=""])').first()
-          const playerId = await option.getAttribute("value")
-          if (!playerId) continue
-          await select.selectOption(playerId)
-          selected = true
-          break
-        }
-      }
-      if (!selected) throw new Error(`Capture action ${action} found no eligible player`)
-      break
-    }
-    case "student-report-open": {
-      const trigger = page.locator(".report-month-trigger").first()
-      await trigger.waitFor({ state: "visible", timeout: 12_000 })
-      const triggerId = await trigger.getAttribute("id")
-      if (!triggerId) throw new Error(`Capture action ${action} found a report without an ID`)
-      await clickRequired(trigger, action)
-      const expandedTrigger = page.locator(`[id="${triggerId}"][aria-expanded="true"]`)
-      await expandedTrigger.waitFor({ state: "visible", timeout: 12_000 })
-      const panelId = await expandedTrigger.getAttribute("aria-controls")
-        ?? triggerId.replace(/-trigger$/u, "-panel")
-      await page.locator(`[id="${panelId}"]`).waitFor({ state: "visible", timeout: 12_000 })
       break
     }
   }

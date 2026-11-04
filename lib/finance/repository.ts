@@ -449,6 +449,13 @@ function chargeView(
     status: deriveFinanceStatus(ledgerInput, todayKey),
     recordRevision: charge.recordRevision,
     canVoid: !allocationRows.some(({ payment }) => payment.lifecycle === "recorded"),
+    manualAdjustmentPaise: adjustmentRows
+      .filter((adjustment) => adjustment.reversedAt === null)
+      .reduce((total, adjustment) => (
+        adjustment.kind === "manual_debit"
+          ? total + adjustment.amountPaise
+          : adjustment.kind === "manual_credit" ? total - adjustment.amountPaise : total
+      ), 0),
     payments: allocationRows.map(({ allocation, payment }) => ({
       id: payment.id,
       receiptReference: payment.receiptReference,

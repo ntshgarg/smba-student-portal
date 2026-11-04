@@ -44,14 +44,9 @@ export type CaptureAction =
   | "public-trial-filled"
   | "public-trial-popup-blocked"
   | "register-validation-error"
-  | "report-checklist-collapse"
-  | "report-preview-open"
-  | "coach-published-report-open"
   | "schedule-create-weekend"
   | "schedule-programmes-collapse"
-  | "schedule-roster-player-selected"
   | "schedule-roster-open"
-  | "student-report-open"
 
 export type CaptureViewport = {
   height: number

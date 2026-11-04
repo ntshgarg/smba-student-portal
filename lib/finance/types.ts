@@ -165,6 +165,13 @@ export type ChargeView = {
   canVoid: boolean
   payments: PaymentView[]
   adjustments?: AdjustmentView[]
+  /**
+   * Net of the coach's manual debits and credits on this charge, still in force.
+   * Shown to the player as "Fee adjusted" so a month whose fee changed after it
+   * was issued (a plan change made from Members) still adds up on their screen.
+   * Concession and withdrawal credits are shown on their own lines instead.
+   */
+  manualAdjustmentPaise?: number
 }
 
 export type FeeAgreementView = {
@@ -659,6 +666,7 @@ export const FINANCE_AUDIT_EVENT_TYPES = [
   "fee_agreement_replaced",
   "fee_agreement_paused",
   "fee_agreement_ended",
+  "fee_agreement_corrected",
   "charge_issued",
   "charge_voided",
   "monthly_fees_prepared",
@@ -702,6 +710,7 @@ export const FINANCE_AUDIT_EVENTS: Record<FinanceAuditEventType, FinanceAuditEve
   fee_agreement_replaced: { action: "Fee plan replaced", filterLabel: "Fee plan changed" },
   fee_agreement_paused: { action: "Fee plan paused", filterLabel: "Fee plan paused" },
   fee_agreement_ended: { action: "Fee plan ended", filterLabel: "Fee plan ended" },
+  fee_agreement_corrected: { action: "Fee plan corrected", filterLabel: "Fee plan corrected" },
   charge_issued: { action: "Fee issued", filterLabel: "Fee issued" },
   charge_voided: { action: "Fee voided", filterLabel: "Fee voided" },
   monthly_fees_prepared: { action: "Monthly fees issued", filterLabel: "Monthly fees issued" },

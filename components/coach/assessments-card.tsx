@@ -10,7 +10,7 @@ import {
 /**
  * The dashboard's reports card. There is no "outstanding this month" here any
  * more: the coach decides when to assess, so the card says how many players have
- * ever been assessed and flags only the drafts she has left unfinished.
+ * ever been assessed and flags only the drafts left unfinished.
  */
 export function AssessmentsCard({
   assessedCount,
@@ -41,9 +41,6 @@ export function AssessmentsCard({
       <CoachDashboardActions ariaLabel="Assessment actions">
         <CoachDashboardAction href="/coach/assessments">
           Assess players
-        </CoachDashboardAction>
-        <CoachDashboardAction href="/coach/reports">
-          Monthly reports
         </CoachDashboardAction>
       </CoachDashboardActions>
     </CoachDashboardCard>

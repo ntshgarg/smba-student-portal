@@ -11,7 +11,6 @@ export default async function CoachSchedulesPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    from?: string
     player?: string
     programme?: string
     series?: string
@@ -27,15 +26,12 @@ export default async function CoachSchedulesPage({
       initialAttendanceAdjustments={[]}
       initialAttendanceRecords={{}}
       initialMembers={players.members}
-      initialReports={[]}
       initialSessionAssignments={sessions.sessionAssignments}
       initialSessionOccurrences={[]}
       initialSessionSeries={sessions.sessionSeries}
       initialTrainingProfiles={players.trainingProfiles}
     >
       <SessionSchedules
-        backfillOccurrences={sessions.backfillOccurrences}
-        guidedFromEvaluation={params.from === "evaluation"}
         initialPlayerId={params.player ?? null}
         initialProgramme={programmes.find((programme) => programme === params.programme) ?? null}
         initialSeriesId={params.series ?? null}

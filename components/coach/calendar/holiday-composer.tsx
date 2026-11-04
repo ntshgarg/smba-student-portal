@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react"
 import { useSessionPortal } from "@/components/coach/coach-portal-provider"
 import { InlineNotice } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { formatReportMonth } from "@/lib/coach/report-utils"
 import { formatDateKey } from "@/lib/format"
 import type { HolidayImpact } from "@/lib/sessions/holidays"
 
@@ -160,11 +159,6 @@ export function HolidayComposer({
         key: "makeups",
         title: `${impact.totals.makeUpCompletions} make-up session${impact.totals.makeUpCompletions === 1 ? " was" : "s were"} completed on ${dayWord}`,
         body: "Those players are still credited for the session they originally missed. Each will be flagged for review on the Attendance adjustments screen so you can decide.",
-      },
-      impact.publishedReportMonths.length > 0 && {
-        key: "reports",
-        title: `Reports are already published for ${impact.publishedReportMonths.map(formatReportMonth).join(", ")}`,
-        body: "Published reports keep the attendance figures they were sent with, so a parent's copy will not change. The register and the calendar will.",
       },
     ].filter((warning): warning is { key: string; title: string; body: string } => Boolean(warning))
     : []

@@ -32,8 +32,8 @@ export const contact = {
   maps:
     "https://www.google.com/maps/search/?api=1&query=Just+Play+Mahadevapura+Bengaluru",
   academyInstagram: {
-    handle: "@sathiyamoorthybadmintonacademy",
-    url: "https://www.instagram.com/sathiyamoorthybadmintonacademy/",
+    handle: "@smbaacademy",
+    url: "https://www.instagram.com/smbaacademy/",
   },
   coachInstagram: {
     handle: "@badmintoncoach_sathiya",

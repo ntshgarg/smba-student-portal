@@ -85,12 +85,8 @@ function attemptedAcademyId(path: string, body: unknown) {
  * `"/sign-in/username": { max: 10, window: 60 }` is keyed on ip|path -- 14,400
  * attempts a day from one address and nothing per account -- so nothing counted
  * a guess against the account being guessed at. That rule is router middleware
- * in any case: it never sees an `auth.api.*` call, and today it never sees an
- * HTTP one either, because every request to /api/auth/* faults first with
- * `BetterAuthError: The field "id" does not exist in the "authRateLimits"
- * Drizzle schema` (lib/db/schema.ts stores key/count/last_request and no id).
- * That storage fault predates this guard and is left to its own change; it is
- * named here so nobody reads the rule as cover the endpoint actually has.
+ * in any case: it never sees an `auth.api.*` call, so it is not cover the
+ * endpoint can rely on.
  *
  * `hooks.before` and `hooks.after` run inside `dispatchAuthEndpoint`, which both
  * the HTTP router and every `auth.api.*` call pass through, so one budget now

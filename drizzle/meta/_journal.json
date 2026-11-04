@@ -246,6 +246,20 @@
       "when": 1791103675287,
       "tag": "0034_player_assessments",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1791156856654,
+      "tag": "0035_training_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1793796940180,
+      "tag": "0036_better_auth_1_7_schema",
+      "breakpoints": true
     }
   ]
 }

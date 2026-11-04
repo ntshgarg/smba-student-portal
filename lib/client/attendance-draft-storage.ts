@@ -8,9 +8,9 @@ import type { SessionAttendanceChange } from "@/lib/sessions/types"
  * is one mis-tap from confirming. These drafts are the only record of marks that
  * were made but never sent.
  *
- * Conventions follow `components/coach/reports/report-resume.ts`: a versioned
- * key, a parser that rejects anything it does not recognise, and callers that
- * treat storage as optional rather than load-bearing.
+ * The conventions: a versioned key, a parser that rejects anything it does not
+ * recognise, and callers that treat storage as optional rather than
+ * load-bearing.
  */
 const ATTENDANCE_DRAFT_KEY_PREFIX = "smba-attendance-draft-v1"
 

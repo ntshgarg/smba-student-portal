@@ -33,43 +33,6 @@ export type AttendanceAdjustmentDomainRecord = {
   sourceOccurrenceId: string
 }
 
-export type AttendanceSnapshotV1 = AttendanceBreakdown & {
-  version: 1
-  month: string
-  referenceDate: string
-}
-
-export type AttendanceSnapshotV2 = AttendanceBreakdown & {
-  version: 2
-  source: "session-occurrences"
-  month: string
-  referenceDate: string
-}
-
-export type AttendanceSnapshotV3 = AttendanceBreakdown & {
-  version: 3
-  source: "session-occurrences"
-  month: string
-  referenceDate: string
-  referenceInstant: string
-}
-
-export type AttendanceSnapshotV4 = AttendanceBreakdown & {
-  version: 4
-  source: "session-occurrences"
-  month: string
-  referenceDate: string
-  referenceInstant: string
-  adjustmentPolicyVersion: 1
-  appliedAdjustmentIds: string[]
-}
-
-export type AttendanceSnapshot =
-  | AttendanceSnapshotV1
-  | AttendanceSnapshotV2
-  | AttendanceSnapshotV3
-  | AttendanceSnapshotV4
-
 export type MonthlyAttendanceInput = {
   month: string
   referenceDate: string
@@ -91,11 +54,6 @@ export type MonthlyAttendanceInput = {
   }>
   records: AttendanceDomainRecord[]
   adjustments?: AttendanceAdjustmentDomainRecord[]
-}
-
-type AttendanceCalculationResult = {
-  breakdown: AttendanceBreakdown
-  appliedAdjustmentIds: string[]
 }
 
 export function assertAttendanceBreakdown(
@@ -129,7 +87,7 @@ export function assertAttendanceBreakdown(
   }
 }
 
-function calculateMonthlyAttendanceResult({
+export function calculateMonthlyAttendance({
   adjustments = [],
   assignments,
   joinedOn,
@@ -138,7 +96,7 @@ function calculateMonthlyAttendanceResult({
   records,
   referenceDate,
   referenceInstant,
-}: MonthlyAttendanceInput): AttendanceCalculationResult {
+}: MonthlyAttendanceInput): AttendanceBreakdown {
   if (!isValidDateKey(joinedOn)) throw new Error("Invalid joining date.")
   if (!isValidDateKey(referenceDate)) throw new Error("Invalid reference date.")
   if (referenceInstant !== undefined && !Number.isFinite(Date.parse(referenceInstant))) {
@@ -191,10 +149,9 @@ function calculateMonthlyAttendanceResult({
   const recordByOccurrence = new Map(
     records.map((record) => [record.occurrenceId, record.choice]),
   )
-  const adjustmentByOccurrence = new Map(
-    adjustments.map((adjustment) => [adjustment.sourceOccurrenceId, adjustment.id]),
+  const adjustedOccurrences = new Set(
+    adjustments.map((adjustment) => adjustment.sourceOccurrenceId),
   )
-  const appliedAdjustmentIds: string[] = []
   let attended = 0
   let absent = 0
 
@@ -202,10 +159,8 @@ function calculateMonthlyAttendanceResult({
     const choice = recordByOccurrence.get(occurrence.id)
     if (choice === "present") attended += 1
     if (choice === "absent") {
-      const adjustmentId = adjustmentByOccurrence.get(occurrence.id)
-      if (adjustmentId) {
+      if (adjustedOccurrences.has(occurrence.id)) {
         attended += 1
-        appliedAdjustmentIds.push(adjustmentId)
       } else {
         absent += 1
       }
@@ -222,109 +177,5 @@ function calculateMonthlyAttendanceResult({
     percentage: recorded ? Math.round((attended / recorded) * 100) : null,
   }
   assertAttendanceBreakdown(breakdown)
-  return {
-    breakdown,
-    appliedAdjustmentIds: appliedAdjustmentIds.sort((first, second) => first.localeCompare(second)),
-  }
-}
-
-export function calculateMonthlyAttendance(input: MonthlyAttendanceInput): AttendanceBreakdown {
-  return calculateMonthlyAttendanceResult(input).breakdown
-}
-
-export function createAttendanceSnapshotV2(
-  input: MonthlyAttendanceInput,
-): AttendanceSnapshotV2 {
-  return {
-    version: 2,
-    source: "session-occurrences",
-    month: input.month,
-    referenceDate: input.referenceDate,
-    ...calculateMonthlyAttendance(input),
-  }
-}
-
-export function createAttendanceSnapshotV3(
-  input: MonthlyAttendanceInput & { referenceInstant: string },
-): AttendanceSnapshotV3 {
-  if (!Number.isFinite(Date.parse(input.referenceInstant))) {
-    throw new Error("Invalid attendance reference time.")
-  }
-  return {
-    version: 3,
-    source: "session-occurrences",
-    month: input.month,
-    referenceDate: input.referenceDate,
-    referenceInstant: input.referenceInstant,
-    ...calculateMonthlyAttendance(input),
-  }
-}
-
-export function createAttendanceSnapshotV4(
-  input: MonthlyAttendanceInput & { referenceInstant: string },
-): AttendanceSnapshotV4 {
-  if (!Number.isFinite(Date.parse(input.referenceInstant))) {
-    throw new Error("Invalid attendance reference time.")
-  }
-  const result = calculateMonthlyAttendanceResult(input)
-  return {
-    version: 4,
-    source: "session-occurrences",
-    month: input.month,
-    referenceDate: input.referenceDate,
-    referenceInstant: input.referenceInstant,
-    adjustmentPolicyVersion: 1,
-    appliedAdjustmentIds: result.appliedAdjustmentIds,
-    ...result.breakdown,
-  }
-}
-
-export function parseAttendanceSnapshot(value: unknown): AttendanceSnapshot | null {
-  if (!value || typeof value !== "object") return null
-  const snapshot = value as Partial<AttendanceBreakdown> & {
-    version?: number
-    source?: unknown
-    month?: unknown
-    referenceDate?: unknown
-    referenceInstant?: unknown
-    adjustmentPolicyVersion?: unknown
-    appliedAdjustmentIds?: unknown
-  }
-  if ((snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3 && snapshot.version !== 4)
-    || typeof snapshot.month !== "string"
-    || !isValidMonthKey(snapshot.month)
-    || typeof snapshot.referenceDate !== "string"
-    || !isValidDateKey(snapshot.referenceDate)
-    || typeof snapshot.eligible !== "number"
-    || typeof snapshot.recorded !== "number"
-    || typeof snapshot.attended !== "number"
-    || typeof snapshot.absent !== "number"
-    || typeof snapshot.pending !== "number"
-    || (snapshot.percentage !== null && typeof snapshot.percentage !== "number")) {
-    return null
-  }
-
-  if (snapshot.version === 2
-    && (snapshot as Partial<AttendanceSnapshotV2>).source !== "session-occurrences") return null
-  if (snapshot.version === 3 && (
-    (snapshot as Partial<AttendanceSnapshotV3>).source !== "session-occurrences"
-    || typeof snapshot.referenceInstant !== "string"
-    || !Number.isFinite(Date.parse(snapshot.referenceInstant))
-  )) return null
-  if (snapshot.version === 4 && (
-    (snapshot as Partial<AttendanceSnapshotV4>).source !== "session-occurrences"
-    || typeof snapshot.referenceInstant !== "string"
-    || !Number.isFinite(Date.parse(snapshot.referenceInstant))
-    || snapshot.adjustmentPolicyVersion !== 1
-    || !Array.isArray(snapshot.appliedAdjustmentIds)
-    || snapshot.appliedAdjustmentIds.some((id) => typeof id !== "string" || !id.trim())
-    || new Set(snapshot.appliedAdjustmentIds).size !== snapshot.appliedAdjustmentIds.length
-  )) return null
-
-  try {
-    assertAttendanceBreakdown(snapshot as AttendanceBreakdown)
-    return snapshot as AttendanceSnapshot
-  } catch {
-    return null
-  }
+  return breakdown
 }

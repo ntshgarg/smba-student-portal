@@ -8,7 +8,6 @@ prepared disposable fixture database, then run Playwright from the project root.
 SMBA_CAPTURE_SCENARIO=loaded \
 SMBA_CAPTURE_RUN_LABEL=before \
 SMBA_CAPTURE_REFERENCE_DATE=2026-08-03 \
-SMBA_CAPTURE_REPORT_MONTH=2026-07 \
 npx playwright test -c tests/e2e/playwright.config.ts
 ```
 

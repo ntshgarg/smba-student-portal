@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { formatAcademyDate, formatInr } from "@/lib/format"
 
 import {
@@ -10,8 +12,6 @@ import {
 import styles from "./financials.module.css"
 import { ConcessionManagement } from "./ledger/concession-management"
 import { CorrectionsPanel } from "./ledger/corrections-panel"
-import { FeePlanEditor } from "./ledger/fee-plan-editor"
-import { FeePlanEnder } from "./ledger/fee-plan-ender"
 import { OnboardingFinanceSetup } from "./ledger/onboarding-finance-setup"
 import { ReceiptHistory } from "./ledger/receipt-history"
 import type { PlayerFinancialLedgerView } from "./types"
@@ -50,10 +50,15 @@ export function PlayerLedger({
             <div><dt>Plan status</dt><dd>{ledger.feePlan.status}</dd></div>
           </dl>
           {ledger.archived ? null : (
-            <>
-              <FeePlanEditor ledger={ledger} />
-              <FeePlanEnder ledger={ledger} period={period} />
-            </>
+            // Fee changes, concessions and ending training are made from the
+            // player's record in Members (head coach, 5 Oct 2026), next to the
+            // schedule they usually change with. This record is for money.
+            <p className={styles.managedInMembers}>
+              To change the fee, give a concession or end training, use the{" "}
+              <Link href={`/coach/members?player=${encodeURIComponent(ledger.playerId)}`}>
+                player&apos;s record in Members
+              </Link>.
+            </p>
           )}
         </>
       ) : ledger.archived ? null : <OnboardingFinanceSetup ledger={ledger} />}

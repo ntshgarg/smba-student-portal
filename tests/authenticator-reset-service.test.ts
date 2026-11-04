@@ -13,7 +13,6 @@ import {
   listPendingAuthenticatorResetRequests,
   rejectAuthenticatorResetRequest,
 } from "@/lib/auth/authenticator-reset-service"
-import { CREDENTIAL_ACCOUNT_ISSUER } from "@/lib/auth/identity"
 import type {
   AuthenticatorRecoveryMessage,
   AuthMailer,
@@ -110,7 +109,6 @@ function createAccount(input: {
     accountId: input.accountId,
     createdAt: NOW,
     id: `${input.accountId}-credential`,
-    issuer: CREDENTIAL_ACCOUNT_ISSUER,
     password: "preserved-password-hash",
     providerId: "credential",
     updatedAt: NOW,

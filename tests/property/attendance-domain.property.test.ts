@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest"
 
 import {
   calculateMonthlyAttendance,
-  createAttendanceSnapshotV4,
-  parseAttendanceSnapshot,
   type MonthlyAttendanceInput,
 } from "@/lib/attendance/domain"
 
@@ -101,16 +99,6 @@ describe("attendance domain properties", () => {
         records: [...reconciledInput.records].reverse(),
       })
       expect(reordered).toEqual(reconciled)
-
-      const snapshot = createAttendanceSnapshotV4(reconciledInput)
-      expect(parseAttendanceSnapshot(snapshot)).toEqual(snapshot)
-      expect(snapshot.appliedAdjustmentIds).toEqual(
-        (reconciledInput.adjustments ?? [])
-          .map((adjustment) => adjustment.id)
-          .sort((left, right) => left.localeCompare(right)),
-      )
-      expect(new Set(snapshot.appliedAdjustmentIds).size)
-        .toBe(snapshot.appliedAdjustmentIds.length)
     }), { numRuns: PROPERTY_RUNS })
   })
 })

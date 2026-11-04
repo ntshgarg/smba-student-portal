@@ -13,7 +13,7 @@ export default defineConfig({
     // extracted worktree under a name nobody has thought of yet, and those
     // copies collect as duplicates of tests that already pass here.
     include: ["tests/**/*.{test,spec}.?(c|m)[jt]s?(x)"],
-    // Verified against Vitest 3.2.4: a CLI --exclude, as test:ci passes for
+    // Verified against Vitest 4.1.12: a CLI --exclude, as test:ci passes for
     // tests/regression-fixture.test.ts, adds to this list rather than
     // replacing it.
     exclude: [

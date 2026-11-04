@@ -627,6 +627,25 @@
   border-left: 1px solid var(--line);
 }
 
+.managedInMembers {
+  padding: var(--space-copy) clamp(20px, 3vw, 34px);
+  border-bottom: 1px solid var(--line);
+  color: var(--steel);
+  font-size: 0.875rem;
+}
+
+.managedInMembers a {
+  /* 2.5.8: a 24px target, as `.login-register-link a` does for the same
+     kind of in-sentence link. */
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  color: var(--navy);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .feePlan dt,
 .chargeAmounts dt {
   color: var(--steel);
@@ -670,69 +689,6 @@
   color: var(--red);
   font-size: 0.6875rem;
   font-weight: var(--weight-control);
-}
-
-.setupDefaults {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: var(--space-group);
-  border-block: 1px solid var(--line);
-}
-
-.setupDefaults > div {
-  display: grid;
-  gap: 7px;
-  padding: 17px 14px;
-}
-
-.setupDefaults > div + div {
-  border-left: 1px solid var(--line);
-}
-
-.setupDefaults dt {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: var(--weight-label);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.setupDefaults dd {
-  color: var(--navy);
-  font-size: 0.75rem;
-  font-weight: 720;
-}
-
-.planEditor {
-  border-bottom: 1px solid var(--line);
-}
-
-.planEditor > summary {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  padding: 0 clamp(22px, 3vw, 34px);
-  color: var(--steel);
-  cursor: pointer;
-  font-size: 0.625rem;
-  font-weight: var(--weight-control);
-  list-style-position: inside;
-}
-
-.planEditorBody {
-  padding: 4px clamp(22px, 3vw, 34px) 26px;
-}
-
-.planEditorBody > p {
-  color: var(--steel);
-  font-size: 0.6875rem;
-  line-height: var(--leading-body);
-}
-
-.planEditorBody form {
-  display: grid;
-  gap: 18px;
-  margin-top: 22px;
 }
 
 .setupState svg {
@@ -1449,7 +1405,6 @@
 }
 
 .concessions > summary,
-.concessionCreate > summary,
 .concessionReversal > summary {
   display: flex;
   min-height: 50px;
@@ -1468,13 +1423,11 @@
 }
 
 .concessions > summary::-webkit-details-marker,
-.concessionCreate > summary::-webkit-details-marker,
 .concessionReversal > summary::-webkit-details-marker {
   display: none;
 }
 
 .concessions > summary::after,
-.concessionCreate > summary::after,
 .concessionReversal > summary::after {
   content: "+";
   color: var(--red);
@@ -1483,7 +1436,6 @@
 }
 
 .concessions[open] > summary::after,
-.concessionCreate[open] > summary::after,
 .concessionReversal[open] > summary::after {
   content: "−";
 }
@@ -1510,22 +1462,6 @@
   color: var(--steel);
   font-size: 0.6875rem;
   line-height: var(--leading-body);
-}
-
-.concessionCreate {
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--ivory) 52%, var(--white));
-}
-
-.concessionCreate > summary {
-  padding: 0 var(--space-copy);
-}
-
-.concessionCreate > form {
-  display: grid;
-  gap: 18px;
-  padding: 20px;
-  border-top: 1px solid var(--line);
 }
 
 .concessionList {
@@ -1590,21 +1526,6 @@
   margin-top: 6px;
   color: var(--steel);
   font-size: var(--type-operational-floor);
-}
-
-.concessionApply {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 12px;
-  margin-top: 17px;
-  padding-top: 17px;
-  border-top: 1px solid var(--line);
-}
-
-.concessionApply > .notice {
-  grid-column: 1 / -1;
-  margin: 0;
 }
 
 .concessionApplications {
@@ -2480,7 +2401,6 @@
   font-size: 0.875rem;
 }
 
-.focusedLedger .planEditor > summary,
 .focusedLedger .concessions > summary,
 .focusedLedger .paymentHistory summary,
 .focusedLedger .corrections > summary {
@@ -2492,13 +2412,11 @@
   list-style: none;
 }
 
-.focusedLedger .planEditor > summary::-webkit-details-marker,
 .focusedLedger .paymentHistory summary::-webkit-details-marker,
 .focusedLedger .corrections > summary::-webkit-details-marker {
   display: none;
 }
 
-.focusedLedger .planEditor > summary::after,
 .focusedLedger .paymentHistory summary::after,
 .focusedLedger .corrections > summary::after {
   flex: 0 0 auto;
@@ -2508,73 +2426,9 @@
   font-weight: 500;
 }
 
-.focusedLedger .planEditor[open] > summary::after,
 .focusedLedger .paymentHistory[open] summary::after,
 .focusedLedger .corrections[open] > summary::after {
   content: "−";
-}
-
-.focusedLedger .setupDefaults {
-  margin-top: 0;
-  border-block: 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.focusedLedger .setupDefaults > div {
-  gap: 5px;
-  padding: 12px 14px;
-}
-
-.focusedLedger .setupDefaults dt {
-  font-size: 0.625rem;
-}
-
-.focusedLedger .setupDefaults dd {
-  font-size: 0.8125rem;
-}
-
-.focusedLedger .planEditorBody {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(450px, 0.95fr);
-  padding: 0;
-  border-top: 1px solid var(--line);
-  background: var(--white);
-}
-
-.focusedLedger .planEditorBody > p {
-  grid-column: 1 / -1;
-  margin: 0;
-  padding: 10px clamp(18px, 2.3vw, 26px);
-  border-bottom: 1px solid var(--line);
-  font-size: 0.625rem;
-}
-
-.focusedLedger .planEditorBody .setupDefaults {
-  border-right: 1px solid var(--line);
-  border-bottom: 0;
-}
-
-.focusedLedger .planEditorBody form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 10px;
-  margin: 0;
-  padding: 12px 14px;
-}
-
-.focusedLedger .planEditorBody .fieldRow {
-  gap: 10px;
-}
-
-.focusedLedger .planEditorBody .field {
-  gap: 6px;
-}
-
-.focusedLedger .planEditorBody .field input {
-  min-height: 44px;
-  padding-block: 9px;
-  font-size: 0.9375rem;
 }
 
 /* The Agreed monthly fee box, held at the 16px focus-zoom floor on touch. The
@@ -2583,19 +2437,7 @@
    app/globals.css was ever rescuing it, and that leaves every tablet and every
    landscape phone zooming into a money field it cannot zoom back out of. */
 @media (pointer: coarse) {
-  .focusedLedger .planEditorBody .field input {
-    font-size: 16px;
-  }
-}
 
-.focusedLedger .planEditorBody .paymentFooter {
-  display: grid;
-  gap: var(--space-tight);
-}
-
-.focusedLedger .planEditorBody .paymentFooter .primaryButton {
-  min-height: 44px;
-  white-space: nowrap;
 }
 
 .focusedLedger .receiptSection,
@@ -3386,29 +3228,8 @@
     width: 100%;
   }
 
-  .setupDefaults {
-    grid-template-columns: 1fr;
-  }
-
-  .setupDefaults > div + div {
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
-
   .correctionsBody .paymentFooter {
     gap: 10px;
-  }
-
-  .concessionCreate > form {
-    padding: 18px 14px;
-  }
-
-  .concessionApply {
-    grid-template-columns: 1fr;
-  }
-
-  .concessionApply .quietButton {
-    width: 100%;
   }
 
   .correctionButton {
@@ -3531,7 +3352,6 @@
     padding: 0;
   }
 
-  .focusedLedger .planEditor > summary,
   .focusedLedger .concessions > summary,
   .focusedLedger .corrections > summary {
     padding-inline: var(--space-copy);
@@ -3541,49 +3361,6 @@
     padding-inline: 14px;
   }
 
-  .focusedLedger .setupDefaults,
-  .focusedLedger .planEditorBody .setupDefaults {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .focusedLedger .setupDefaults > div {
-    min-width: 0;
-    padding: 11px 10px;
-  }
-
-  .focusedLedger .setupDefaults > div + div {
-    border-top: 0;
-    border-left: 1px solid var(--line);
-  }
-
-  .focusedLedger .setupDefaults dd {
-    overflow-wrap: anywhere;
-  }
-
-  .focusedLedger .planEditorBody form {
-    grid-template-columns: 1fr;
-    padding: 12px 14px 14px;
-  }
-
-  .focusedLedger .planEditorBody .fieldRow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
-  }
-
-  .focusedLedger .planEditorBody .paymentFooter .primaryButton {
-    width: 100%;
-  }
-
-  .focusedLedger .planEditorBody {
-    grid-template-columns: 1fr;
-  }
-
-  .focusedLedger .planEditorBody > p {
-    padding: 9px var(--space-copy);
-    line-height: 1.45;
-  }
 }
 
 /* The same anti-zoom guard app/globals.css carries: iOS Safari and Chrome zoom
@@ -3704,7 +3481,6 @@
 .focusedLedger .ledgerBalance em,
 .focusedLedger .feePlan dt,
 .focusedLedger .chargeAmounts dt,
-.focusedLedger .setupDefaults dt,
 .focusedLedger .sectionHeading > p,
 .focusedLedger .receiptMeta dt,
 .focusedLedger .receiptAllocations > span,
@@ -3718,13 +3494,11 @@
   font-size: var(--type-utility-label);
 }
 
-.focusedLedger .planEditor > summary,
 .focusedLedger .concessions > summary,
 .focusedLedger .paymentHistory summary {
   font-size: var(--type-operational-action);
 }
 
-.focusedLedger .planEditorBody > p,
 .focusedLedger .receipt > summary strong,
 .focusedLedger .receiptMeta dd,
 .focusedLedger .receiptAllocations li strong,

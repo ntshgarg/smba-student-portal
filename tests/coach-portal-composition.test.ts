@@ -69,7 +69,6 @@ describe("coach portal composition", () => {
     expect(source).toContain("MemberPortalContext")
     expect(source).toContain("AttendancePortalContext")
     expect(source).toContain("SessionPortalContext")
-    expect(source).toContain("ReportPortalContext")
     expect(source).not.toContain("useCoachPortal")
   })
 

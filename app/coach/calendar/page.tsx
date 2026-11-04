@@ -33,7 +33,6 @@ export default async function CoachCalendarPage({
       initialAttendanceAdjustments={[]}
       initialAttendanceRecords={{}}
       initialMembers={snapshot.members}
-      initialReports={[]}
       initialSessionAssignments={snapshot.sessionAssignments}
       initialSessionOccurrences={snapshot.sessionOccurrences}
       initialSessionSeries={snapshot.sessionSeries}

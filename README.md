@@ -23,20 +23,21 @@ Open `http://localhost:3000`.
 - `/account/security` and `/account/recovery-email/setup` — self-service account security
 - `/admin` — audited, read-only platform-owner dashboard
 - `/setup/head-coach` — the one-time first head-coach setup, opened from `/admin`
-- `/player`, `/player/reports`, `/player/financials`, `/player/announcements` and
+- `/player`, `/player/reports`, `/player/reports/assessments/[assessmentId]`,
+  `/player/financials`, `/player/announcements` and
   `/player/announcements/[announcementId]` — authenticated Player Journal
 - `/coach`, `/coach/calendar`, `/coach/schedules`, `/coach/schedules/new`,
   `/coach/onboarding`, `/coach/members`,
   `/coach/attendance/players/register`, `/coach/attendance/players/record`,
   `/coach/attendance/staff/register`, `/coach/attendance/staff/record`,
   `/coach/attendance/coaches`, `/coach/attendance/adjustments`,
-  `/coach/reports`, `/coach/reports/write`,
-  `/coach/reports/publications/[publicationId]`, `/coach/financials`,
+  `/coach/assessments`, `/coach/assessments/new`, `/coach/assessments/[id]`,
+  `/coach/assessments/players/[playerId]`, `/coach/financials`,
   `/coach/financials/record`, `/coach/financials/records`,
   `/coach/financials/players/[playerId]`, `/coach/announcements`,
   `/coach/announcements/new` and `/coach/announcements/[id]` — coach-only workspace
-- `/progress`, `/reports` and `/coach/attendance` are redirects kept for older links;
-  they resolve to `/player`, `/player/reports` and `/coach/attendance/players/record`
+- `/progress` and `/coach/attendance` are redirects kept for older links; they resolve
+  to `/player` and `/coach/attendance/players/record`
 
 The former public `site` project remains in the parent workspace as a temporary rollback copy,
 but this application is now the canonical local server.
@@ -237,7 +238,7 @@ one-use recovery codes must not be shared or photographed.
 5. A new player begins as **Unassigned**. Approval alone does not make the player attendance-eligible.
 6. The coach confirms the academy-local Training start date together with one Level, one Weekday or Weekend Batch and an informational Academy Plan, then continues directly to matching recurring-session assignment. Weekday plans require an exact union of 3, 4 or 5 distinct weekdays across active assignments; the first complete assignment makes the player Active.
 7. The final Fee Plan review derives the continuous fee timeline, issues registration and applicable monthly Charges atomically, and permanently locks the Training start date when onboarding completes.
-8. Saved attendance is read from the same database by the player dashboard and coach report workflow.
+8. Saved attendance is read from the same database by the player dashboard and the coach's registers.
 
 Duplicate names are allowed. Internal relationships use immutable account UUIDs, never Academy IDs.
 Academy IDs are immutable, human-friendly academy identifiers that are never edited or reused. Roster
@@ -252,10 +253,10 @@ membership does not depend on an Academy ID authentication method remaining acti
 - Public registration accepts player and junior-coach requests. Both require head-coach approval;
   an approved coach is always created with restricted `junior_coach` access.
 - Member archival is non-destructive and available only after active assignments end. It revokes login
-  access while preserving the account, Academy ID allocation, attendance, reports and training history.
+  access while preserving the account, Academy ID allocation, attendance, assessments and training history.
 - Academy Plan represents the enrolled pricing option. It validates the exact 3/4/5-day Weekday union while assignments are created, but it never drives attendance after those assignment weekdays are saved. Weekend remains flexible at one or two days.
 - Recurring schedules generate their complete bounded occurrence set in the schedule-creation transaction;
-  dashboard, calendar, attendance and report reads never materialize or mutate occurrences. The explicit,
+  dashboard, calendar and attendance reads never materialize or mutate occurrences. The explicit,
   idempotent legacy backfill treats every existing series/date row—including cancellations—as historical truth.
 - Level and Batch determine assignment eligibility; session assignments determine participation.
 - players may hold multiple matching, non-overlapping active session assignments, and each assignment owns its effective-dated weekday selection. Each occurrence is counted independently.
@@ -265,11 +266,10 @@ membership does not depend on an Academy ID authentication method remaining acti
 - unmarked completed sessions remain pending and do not reduce the recorded attendance rate.
 - make-up attendance is published as an auditable adjustment against one saved absence. It changes attendance accounting without changing schedules, assignments, rosters, eligibility, or the fixed scheduled denominator; reversals are soft-voided.
 - adjustment completion is recorded at date level within the following 14 India-calendar days. If ordinary presence supporting that date is later removed, the adjustment is retained and marked for coach review rather than deleted automatically.
-- report drafts can change; every publication is an immutable revision with an append-only versioned attendance snapshot.
 - Financials uses an append-only ledger of Fee Agreements, Charges, receipt-level Payments,
   immutable Payment Allocations, Refunds, Refund Allocations, Adjustments, Concessions and audit
   events. Balances and statuses are derived rather than stored, records are never hard-deleted,
-  and financial state never controls training, attendance, scheduling, reports or account access.
+  and financial state never controls training, attendance, scheduling, assessments or account access.
 - Financial tracking begins through one irreversible academy activation. Monthly fees are prepared
   explicitly and idempotently. A receipt can settle multiple Charges, while corrections use explicit
   Payment/Refund reversal, Charge void, Adjustment and Concession facts so the original history
@@ -282,8 +282,8 @@ membership does not depend on an Academy ID authentication method remaining acti
   readable Activity History. Private receipt and player-statement PDFs and CSV exports are generated
   on demand and never persisted. Fee Plans end through an explicit effective-dated, audited action;
   restarting creates a new non-overlapping agreement rather than rewriting history.
-- business records are never stored in browser local storage. Only the coach's “continue where I left off” hint is local.
-- account, attendance and published-report records use archive/status transitions rather than hard deletion.
+- business records are never stored in browser local storage. Only unsaved attendance marks are kept there, until they are saved.
+- account and attendance records use archive/status transitions rather than hard deletion.
 
 The repository and session interfaces keep page components independent from SQLite and the Better Auth
 adapter. Credential, TOTP and session storage can evolve without changing historical academy records.
@@ -320,8 +320,7 @@ archived. It also contains three pending player registrations, two junior coache
 present/absent staff-attendance facts plus one cleared-state representative (41 records total), eight one-hour sessions
 on every weekday, four on every weekend day,
 deterministic assignments, July attendance, one active and one voided attendance adjustment, and
-cancelled plus cross-weekday replacement-session examples. The report queue contains fifty reports,
-thirty-one immutable publications and one multi-revision report. Its complete financial ledger covers
+cancelled plus cross-weekday replacement-session examples. Its complete financial ledger covers
 settled, partial and outstanding balances as well as Payment replacement, manual credit/debit,
 Refund, Concession and ended/restarted Fee Plan lifecycles. Five announcements cover active and pinned,
 Homepage-only, Player Dashboard-only, expired, withdrawn and both-channel presentation states.
@@ -333,7 +332,6 @@ With the regression server running, capture the authenticated mobile workspace:
 SMBA_CAPTURE_SCENARIO=loaded \
 SMBA_CAPTURE_RUN_LABEL=regression \
 SMBA_CAPTURE_REFERENCE_DATE=2026-08-03 \
-SMBA_CAPTURE_REPORT_MONTH=2026-07 \
 SMBA_CAPTURE_FIXTURE_MANIFEST=.data/regression/loaded-fixture.json \
 npm run regression:capture
 ```

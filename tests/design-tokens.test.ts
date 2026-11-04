@@ -199,13 +199,13 @@ const SUBJECTS_A_CONTROL = /(?<![\w-])(?:input|select|textarea)(?![\w-])/u
    A reader who lowers the default (Chrome's slider bottoms out at 9px) would take a `1rem`
    control to 9px, drop under the threshold, and get the zoom-on-focus trap on the courtside
    register's date input and both money forms. Those are the surfaces the conversion was
-   made for, so these 24 declarations keep the unit that states the threshold literally.
+   made for, so these 21 declarations keep the unit that states the threshold literally.
 
    Named individually rather than left to the shape rule, and checked in both directions by
    the case below: the shape rule alone would silently absorb a new px `font-size` on any
    control, and the list alone would go stale the day a rule is deleted.
 
-   All 24 lose their scaling, and two of them reach far more than one field: the
+   All 21 lose their scaling, and two of them reach far more than one field: the
    `@media (max-width: 430px)` rule in app/globals.css is `input, select, textarea` with
    `!important`, so at phone width no form control's text resizes at all while every label
    beside it doubles; the `@media (max-width: 720px), (pointer: coarse)` list in
@@ -213,14 +213,14 @@ const SUBJECTS_A_CONTROL = /(?<![\w-])(?:input|select|textarea)(?![\w-])/u
    laptops in tablet mode included. That is the change's principal user-visible cost and it
    is one rule, not a footnote.
 
-   One of the 24 has nothing to protect and is marked as such. At Chrome's lowest default
-   (9px) the three textarea sizes would land at 10.7px, 10.1px and 9.6px, all under the
-   16px threshold, so they are protective after all — the `// typographic` labels they used
-   to carry were arithmetic that was never done. Only `.balanceMoneyInput input` at 30px
+   One of the 21 has nothing to protect and is marked as such. At Chrome's lowest default
+   (9px) the textarea size would land at 9.6px, under the 16px threshold, so it is
+   protective after all — the `// typographic` label it used to carry was arithmetic that
+   was never done. Only `.balanceMoneyInput input` at 30px
    would still clear it (1.875rem = 16.875px at a 9px root). It stays px because the rule
    is applied as a class rather than case by case, which is what keeps the list from
-   becoming twenty-four separate judgements; `max(16px, Nrem)` would give the other
-   twenty-three their scaling back and is the next move rather than this one, since a new
+   becoming twenty-one separate judgements; `max(16px, Nrem)` would give the other
+   twenty their scaling back and is the next move rather than this one, since a new
    construction needs a per-site decision and tests/accessibility-hardening.test.ts pins the
    literal bytes `font-size: 16px` on the (pointer: coarse) list. */
 const CONTROL_FLOOR_MINIMUM = 16
@@ -229,11 +229,8 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["app/globals.css", "@media (max-width: 430px)", 'input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not([type="range"]):not([type="reset"]):not([type="submit"])', "16px"],
   ["app/portal.css", "", ".login-field input", "16px"],
   ["app/portal.css", "@media (max-width: 760px)", ".security-form input", "16px"],
-  ["app/portal.css", "", ".coach-report-field textarea", "19px"], // 1.1875rem = 10.7px at a 9px root
-  ["app/portal.css", "@media (max-width: 720px)", ".coach-report-field textarea", "18px"], // 1.125rem = 10.1px
   ["app/portal.css", "@media (max-width: 430px)", ".admin-directory-search-field input", "16px"],
   ["app/portal.css", "@media (max-width: 760px)", ".attendance-record-date-row input", "16px"],
-  ["app/portal.css", "", ".coach-published-reports-search input", "16px"],
   ["app/portal.css", "@media (max-width: 720px)", ".coach-member-search input", "16px"],
   ["app/portal.css", "@media (max-width: 720px)", ".coach-member-form-grid input", "16px"],
   ["app/portal.css", "@media (max-width: 720px), (pointer: coarse)", '.attendance-record-date-row input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])', "16px"],
@@ -257,7 +254,6 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["app/portal.css", "@media (pointer: coarse)", ".security-form input", "16px"],
   ["components/coach/announcements/announcements.module.css", "@media (pointer: coarse)", ".slipField input", "16px"],
   ["components/coach/financials/financial-records.module.css", "@media (pointer: coarse)", '.filters input:not([type="checkbox"])', "16px"],
-  ["components/coach/financials/financials.module.css", "@media (pointer: coarse)", ".focusedLedger .planEditorBody .field input", "16px"],
 ]
 
 /** One line per exempt declaration, in the spelling the failure messages use. The first
@@ -343,19 +339,15 @@ describe("design color tokens", () => {
     })
   })
 
-  it("keeps both PDF generators reading that palette", () => {
-    /* The guard above only checks the five exports; it stays green if a
+  it("keeps the PDF generator reading that palette", () => {
+    /* The guard above only checks the five exports; it stays green if the
        generator stops importing them. TypeScript blocks a second `const NAVY`,
        but `const BRAND_NAVY = "#081c42"` or an inline `.fillColor("#081c42")`
-       reintroduces the drift F-37 removed — and both files already spell some
+       reintroduces the drift F-37 removed — and the file already spells some
        colours out, so an inline literal is the habit there, not a hypothetical.
-       Every hex a generator is still allowed to own is therefore listed here:
+       Every hex the generator is still allowed to own is therefore listed here:
        adding another is a decision someone takes on purpose. */
     const documentOwn: Record<string, string[]> = {
-      "lib/reports/pdf.ts": [
-        "#d9d8d3", // footer rule
-        "#b9c9e5", // the report label sitting on the navy panel
-      ],
       "lib/finance/pdf.ts": [
         "#ece9e1", // PALE
         "#176b4d", // GREEN

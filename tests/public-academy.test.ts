@@ -55,7 +55,7 @@ describe("public academy facts", () => {
     })
     expect(contact.phone).toBe("+917010928404")
     expect(contact.location).toBe("Just Play, Mahadevapura, Bengaluru")
-    expect(contact.academyInstagram.handle).toBe("@sathiyamoorthybadmintonacademy")
+    expect(contact.academyInstagram.handle).toBe("@smbaacademy")
     expect(contact.coachInstagram.handle).toBe("@badmintoncoach_sathiya")
   })
 

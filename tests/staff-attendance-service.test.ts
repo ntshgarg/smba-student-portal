@@ -25,7 +25,6 @@ import type { SmbaDatabase } from "@/lib/db/client"
 import { INITIAL_COACH_ACCOUNT_ID, seedDatabase } from "@/lib/db/seed"
 import * as schema from "@/lib/db/schema"
 import * as attendanceAdjustments from "@/lib/attendance/adjustments"
-import * as reportService from "@/lib/reports/service"
 import * as sessionService from "@/lib/sessions/service"
 
 const HEAD_COACH_ID = INITIAL_COACH_ACCOUNT_ID
@@ -224,26 +223,6 @@ describe("coach access profiles", () => {
       referenceDate: "2026-08-08",
       startTime: "invalid",
       venue: "",
-    })).toThrow(denied)
-
-    expect(() => reportService.saveMonthlyReportDraft({
-      month: "invalid",
-      playerId: "missing",
-      reportText: "",
-    }, {
-      coachId: FIRST_JUNIOR_ID,
-      database,
-      now,
-    })).toThrow(denied)
-    expect(() => reportService.publishMonthlyReport({
-      month: "invalid",
-      playerId: "missing",
-      publicationKey: "invalid",
-      reportText: "",
-    }, {
-      coachId: FIRST_JUNIOR_ID,
-      database,
-      now,
     })).toThrow(denied)
 
     expect(() => attendanceAdjustments.publishMakeupAttendanceAdjustment({

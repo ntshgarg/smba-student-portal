@@ -127,10 +127,6 @@ export function AssessmentHome({
             )}
         </section>
       </div>
-
-      <p className={styles.footLink}>
-        Looking for an older monthly report? <Link href="/coach/reports">Open the monthly reports</Link>.
-      </p>
     </div>
   )
 }

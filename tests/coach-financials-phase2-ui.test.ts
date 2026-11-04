@@ -47,19 +47,17 @@ describe("coach Financials Phase 2 workflows", () => {
     expect(refundForm).toContain("receipt.receiptReference")
   })
 
-  it("exposes concession commands through coach-only server actions", () => {
+  it("keeps only the concession command Fee records still offers", () => {
     const actions = source("app/coach/financials/actions.ts")
     const workspace = source("components/coach/financials/player-ledger.tsx")
-    const applyForm = source("components/coach/financials/ledger/apply-concession-form.tsx")
 
-    expect(actions).toContain("export async function createConcessionAction")
-    expect(actions).toContain("export async function applyConcessionAction")
+    // Giving, applying and ending a concession moved to Members on 5 Oct 2026
+    // (app/coach/members/training-actions.ts); undoing one fee's concession stays.
+    expect(actions).not.toContain("export async function createConcessionAction")
+    expect(actions).not.toContain("export async function applyConcessionAction")
     expect(actions).toContain("export async function reverseConcessionApplicationAction")
-    expect(actions).toContain("export async function reverseConcessionAction")
+    expect(actions).not.toContain("export async function reverseConcessionAction")
     expect(actions).toContain('revalidatePath("/coach/financials/record")')
     expect(workspace).toContain("<ConcessionManagement ledger={ledger} period={period} />")
-    expect(applyForm).toContain('charge.type !== "monthly_training"')
-    expect(applyForm).toContain("charge.billingPeriod >= concession.startsPeriod")
-    expect(applyForm).toContain("Apply to existing fee")
   })
 })
