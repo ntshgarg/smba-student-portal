@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi, type Mock } from "vitest"
 
 // Same approach as tests/unsaved-work-committed-surface-callback.test.tsx: the
 // suite has no DOM, so React never flushes mount effects by itself. They are
@@ -123,8 +123,8 @@ function mountDirtySurfaces(scopes: string[]) {
   return { guards, registerSurfaces }
 }
 
-function leaveSiteEvent(): LeaveSiteEvent & { preventDefault: ReturnType<typeof vi.fn> } {
-  return { preventDefault: vi.fn(), returnValue: false }
+function leaveSiteEvent(): LeaveSiteEvent & { preventDefault: Mock<() => void> } {
+  return { preventDefault: vi.fn<() => void>(), returnValue: false }
 }
 
 describe("unsaved-work history boundary", () => {
