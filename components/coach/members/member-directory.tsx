@@ -147,6 +147,7 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
                           isEditing={editingMemberId === memberId}
                           onArchive={handleArchive}
                           onBeginEdit={beginEditing}
+                          onClose={openMember}
                           onRevealContact={revealContact}
                           player={player}
                           setContactLinkRef={setContactLinkRef}

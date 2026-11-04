@@ -1,6 +1,6 @@
 "use client"
 
-import { PencilLine } from "lucide-react"
+import { PencilLine, X } from "lucide-react"
 
 import { MemberAccessActions } from "@/components/coach/members/directory/member-access-actions"
 import type { MemberDraft } from "@/components/coach/members/directory/member-draft"
@@ -25,6 +25,7 @@ export function MemberDetailRow({
   isEditing,
   onArchive,
   onBeginEdit,
+  onClose,
   onRevealContact,
   player,
   setContactLinkRef,
@@ -39,6 +40,7 @@ export function MemberDetailRow({
   isEditing: boolean
   onArchive: (player: PlayerMemberRecord) => Promise<void>
   onBeginEdit: (player: PlayerMemberRecord) => void
+  onClose: (memberId: string) => void
   onRevealContact: (memberId: string) => void
   player: PlayerMemberRecord
   setContactLinkRef: (memberId: string, node: HTMLAnchorElement | null) => void
@@ -52,7 +54,7 @@ export function MemberDetailRow({
 
   return (
     <tr className="coach-member-detail-row">
-      <td colSpan={7}>
+      <td colSpan={6}>
         <div id={`member-details-${memberId}`} className="coach-member-detail-panel">
           <div className="coach-member-detail-heading">
             <div>
@@ -60,16 +62,23 @@ export function MemberDetailRow({
               <h3 id={`member-details-title-${memberId}`} tabIndex={-1}>{player.member.fullName}</h3>
               <p>{player.member.academyId} · {player.training.level}</p>
             </div>
-            {!isEditing ? (
-              <button
-                ref={(node) => setEditButtonRef(memberId, node)}
-                type="button"
-                onClick={() => onBeginEdit(player)}
-              >
-                <PencilLine aria-hidden="true" /> Edit member
+            <div className="coach-member-detail-heading-actions">
+              {!isEditing ? (
+                <button
+                  ref={(node) => setEditButtonRef(memberId, node)}
+                  type="button"
+                  onClick={() => onBeginEdit(player)}
+                >
+                  <PencilLine aria-hidden="true" /> Edit member
+                </button>
+              ) : null}
+              <button className="is-quiet" type="button" onClick={() => onClose(memberId)}>
+                <X aria-hidden="true" /> Close
               </button>
-            ) : null}
+            </div>
           </div>
+
+          {!isEditing ? <MemberTrainingActions player={player} /> : null}
 
           {isEditing && draft ? (
             <MemberEditForm
@@ -95,8 +104,6 @@ export function MemberDetailRow({
               />
             </div>
           )}
-
-          {!isEditing ? <MemberTrainingActions player={player} /> : null}
 
           {!isEditing ? (
             <MemberAccessActions
