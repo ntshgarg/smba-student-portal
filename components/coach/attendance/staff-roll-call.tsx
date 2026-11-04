@@ -135,8 +135,7 @@ export function StaffRollCall({
   // surface on today's register. Restoring is announced rather than silent:
   // these are unsaved marks, not the saved record.
   //
-  // Read after the mounting render rather than during it, as the report resume
-  // hint is (`components/coach/reports/report-resume.ts`), so the server-rendered
+  // Read after the mounting render rather than during it, so the server-rendered
   // roll call is what hydrates.
   //
   // What comes back is rebased onto that hydrated day before any of it is shown,

@@ -1,4 +1,3 @@
-import type { AttendanceBreakdown } from "@/lib/attendance/domain"
 import type {
   SessionAssignment,
   SessionAttendanceChange,
@@ -21,42 +20,6 @@ export type CoachProfile = {
   fullName: string
   initials: string
 }
-
-export type CoachReportTask = {
-  id: string
-  playerId: string
-  playerName: string
-  playerInitials: string
-  playerContext: string
-  monthLabel: string
-  status: "due" | "draft"
-  activityLabel: string
-}
-
-export type CoachReportPublishedSnapshot = {
-  reportText: string
-  nextPriorities: string
-  publishedAt: string
-  updatedAt: string
-  revision: number
-}
-
-export type CoachMonthlyReportRecord = {
-  id: string
-  playerId: string
-  month: string
-  reportText: string
-  nextPriorities: string
-  updatedAt: string
-  published: CoachReportPublishedSnapshot | null
-}
-
-export type CoachReportResumePoint = {
-  month: string
-  playerId: string
-}
-
-export type CoachReportAttendance = AttendanceBreakdown
 
 export type OperationalAcademyMember = {
   id: string

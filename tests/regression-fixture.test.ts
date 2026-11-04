@@ -215,9 +215,7 @@ describe("regression fixture repeatability", () => {
         coachProfiles: 3,
         pending: 3,
         players: 100,
-        publications: 31,
         recurrenceRules: 56,
-        reports: 50,
         series: 13,
         staffAttendance: 41,
       },
@@ -384,21 +382,12 @@ describe("regression fixture repeatability", () => {
     }
   }, 120_000)
 
-  it("persists the representative Stress report, finance, and announcement states", async () => {
+  it("persists the representative Stress finance and announcement states", async () => {
     const databasePath = path.join(temporaryDirectory, "stress-records.db")
     await prepareAndLoad(databasePath)
     const db = openFixture(databasePath)
 
     try {
-      expect(scalar(db, "select count(*) as count from monthly_reports")).toBe(50)
-      expect(scalar(db, "select count(*) as count from report_publications")).toBe(31)
-      expect(scalar(db, `
-        select count(*) as count from (
-          select report_id from report_publications
-          group by report_id having count(*) > 1
-        )
-      `)).toBeGreaterThanOrEqual(1)
-
       expect(scalar(db, "select count(*) as count from payments where lifecycle = 'reversed'"))
         .toBeGreaterThanOrEqual(1)
       expect(scalar(db, `
@@ -483,11 +472,11 @@ describe("regression fixture repeatability", () => {
   }, 120_000)
 
   it.each([
-    ["demo", 40, 2, 3, 40, 10, 9],
-    ["edge", 32, 3, 3, 41, 10, 7],
+    ["demo", 40, 2, 3, 40],
+    ["edge", 32, 3, 3, 41],
   ] as const)(
     "builds a deterministic %s profile with staff and supported exceptions",
-    async (profile, players, pending, coachProfiles, staffAttendance, reports, publications) => {
+    async (profile, players, pending, coachProfiles, staffAttendance) => {
       const firstDatabase = path.join(temporaryDirectory, `${profile}-first.db`)
       const secondDatabase = path.join(temporaryDirectory, `${profile}-second.db`)
       await prepareAndLoad(firstDatabase, profile)
@@ -508,40 +497,10 @@ describe("regression fixture repeatability", () => {
           coachProfiles,
           pending,
           players,
-          publications,
-          reports,
           staffAttendance,
         },
       })
 
-      if (profile === "demo") {
-        const db = openFixture(firstDatabase)
-        try {
-          const months = db.prepare(`
-            select distinct report.month
-            from monthly_reports report
-            join report_publications publication on publication.report_id = report.id
-            where report.account_id = (
-              select account.id
-              from accounts account
-              join academy_id_allocations allocation on allocation.account_id = account.id
-              where account.role = 'player'
-              order by allocation.serial
-              limit 1
-            )
-            order by report.month desc
-          `).all().map((row) => (row as { month: string }).month)
-          expect(months).toEqual([
-            "2026-07",
-            "2026-06",
-            "2026-05",
-            "2026-04",
-            "2026-03",
-          ])
-        } finally {
-          db.close()
-        }
-      }
       expect(normalizedVerification(second)).toEqual(normalizedVerification(first))
     },
     120_000,

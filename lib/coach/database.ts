@@ -1,7 +1,6 @@
 import "server-only"
 
-import { and, asc, desc, eq, gt, inArray, isNull, notExists } from "drizzle-orm"
-import { alias } from "drizzle-orm/sqlite-core"
+import { and, asc, eq, inArray, isNull } from "drizzle-orm"
 
 import { formatAcademyId, identityNameParts } from "@/lib/auth/identity"
 import { academyToday } from "@/lib/clock"
@@ -12,9 +11,7 @@ import {
   authCredentialStates,
   coachProfiles,
   feeAgreements,
-  monthlyReports,
   playerEnrollments,
-  reportPublications,
   sessionAssignments,
   sessionSeries,
 } from "@/lib/db/schema"
@@ -26,7 +23,6 @@ import {
 import type {
   AcademyMember,
   AcademyStaffMember,
-  CoachMonthlyReportRecord,
   OperationalAcademyMember,
   PlayerTrainingProfile,
 } from "@/lib/coach/types"
@@ -406,53 +402,6 @@ export function getPlayerOnboardingWorkspace(
     pendingRequests,
     players,
     referenceDate,
-  })
-}
-
-export function listCoachMonthlyReports(month?: string): CoachMonthlyReportRecord[] {
-  const db = initializeDatabase()
-  const newerPublication = alias(reportPublications, "newer_coach_report_publication")
-  const reports = db.select({
-    report: monthlyReports,
-    publication: {
-      publishedAt: reportPublications.publishedAt,
-      reportText: reportPublications.reportText,
-      revision: reportPublications.revision,
-    },
-  }).from(monthlyReports)
-    .leftJoin(reportPublications, and(
-      eq(reportPublications.reportId, monthlyReports.id),
-      notExists(
-        db.select({ id: newerPublication.id })
-          .from(newerPublication)
-          .where(and(
-            eq(newerPublication.reportId, reportPublications.reportId),
-            gt(newerPublication.revision, reportPublications.revision),
-          )),
-      ),
-    ))
-    .where(month ? eq(monthlyReports.month, month) : undefined)
-    .orderBy(desc(monthlyReports.month))
-    .all()
-
-  return reports.map(({ report, publication }) => {
-    return {
-      id: report.id,
-      playerId: report.accountId,
-      month: report.month,
-      reportText: report.draftText,
-      nextPriorities: "",
-      updatedAt: report.updatedAt.toISOString(),
-      published: publication
-        ? {
-            reportText: publication.reportText,
-            nextPriorities: "",
-            publishedAt: publication.publishedAt.toISOString(),
-            updatedAt: publication.publishedAt.toISOString(),
-            revision: publication.revision,
-          }
-        : null,
-    }
   })
 }
 

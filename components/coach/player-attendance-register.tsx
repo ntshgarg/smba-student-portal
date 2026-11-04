@@ -263,8 +263,7 @@ export function PlayerAttendanceRegister({
               {/*
                 * "Rescheduled" and "Needs review" were rendered by the grid and
                 * missing from the key, so an amber cell and a red-ringed one had
-                * to be guessed at -- on the register that feeds monthly reports
-                * and fee decisions.
+                * to be guessed at -- on the register that feeds fee decisions.
                 *
                 * Neither the wording nor the swatch is invented here. The
                 * player's own attendance card already labels this exact state

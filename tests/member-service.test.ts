@@ -249,15 +249,6 @@ describe("member directory service", () => {
       createdAt: now,
       updatedAt: now,
     }).run()
-    database.insert(schema.monthlyReports).values({
-      id: "member-archive-report",
-      accountId: playerId,
-      month: "2026-07",
-      draftText: "Historical feedback.",
-      updatedByAccountId: coach.accountId,
-      createdAt: now,
-      updatedAt: now,
-    }).run()
     database.insert(schema.authSessions).values({
       tokenHash: "member-active-session",
       accountId: playerId,
@@ -290,8 +281,6 @@ describe("member directory service", () => {
       .where(eq(schema.sessionAssignments.accountId, playerId)).all()).toHaveLength(1)
     expect(database.select().from(schema.sessionAttendanceRecords)
       .where(eq(schema.sessionAttendanceRecords.accountId, playerId)).all()).toHaveLength(1)
-    expect(database.select().from(schema.monthlyReports)
-      .where(eq(schema.monthlyReports.accountId, playerId)).all()).toHaveLength(1)
     expect(coachDatabase.listApprovedPlayerRecords().members
       .some((member) => member.id === playerId)).toBe(false)
   })

@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   initializeDatabase: vi.fn(),
   listAttendanceAdjustments: vi.fn(),
   listAttendanceRegisterPlayerRecords: vi.fn(),
-  listCoachMonthlyReports: vi.fn(),
   listAcademyHolidaysInWindow: vi.fn(),
   listOperationalPlayerRecords: vi.fn(),
   listSessionAssignments: vi.fn(),
@@ -25,7 +24,6 @@ vi.mock("@/lib/attendance/adjustments", () => ({
 }))
 vi.mock("@/lib/coach/database", () => ({
   listAttendanceRegisterPlayerRecords: mocks.listAttendanceRegisterPlayerRecords,
-  listCoachMonthlyReports: mocks.listCoachMonthlyReports,
   listOperationalPlayerRecords: mocks.listOperationalPlayerRecords,
 }))
 vi.mock("@/lib/db/client", () => ({ initializeDatabase: mocks.initializeDatabase }))
@@ -47,7 +45,6 @@ import {
   getCoachAttendanceRecorderSnapshot,
   getCoachAttendanceRegisterSnapshot,
   getCoachCalendarMonthSnapshot,
-  getCoachReportWritingSnapshot,
   getCoachScheduleMutationSnapshot,
   getCoachScheduleRosterSnapshot,
 } from "@/lib/coach/session-read-models"
@@ -132,7 +129,6 @@ describe("route-scoped coach session read models", () => {
     mocks.listSessionAttendanceRecordsForPlayer.mockReturnValue({})
     mocks.listSessionOccurrencesByIds.mockReturnValue([occurrence])
     mocks.listAttendanceAdjustments.mockReturnValue([])
-    mocks.listCoachMonthlyReports.mockReturnValue([])
     mocks.listOperationalPlayerRecords.mockReturnValue({
       members: [{ id: "player-1" }],
       trainingProfiles: [{ memberId: "player-1" }],
@@ -164,18 +160,6 @@ describe("route-scoped coach session read models", () => {
     })
     expect(mocks.listOperationalPlayerRecords).toHaveBeenCalledWith(["player-1"])
     expect(snapshot.sessionOccurrences).toEqual([occurrence])
-  })
-
-  it("loads report writing data for one exact month", () => {
-    getCoachReportWritingSnapshot("2026-08")
-
-    expect(mocks.listSessionOccurrences).toHaveBeenCalledWith("2026-08-01", "2026-08-31")
-    expect(mocks.listSessionAttendanceRecordsForOccurrences).toHaveBeenCalledWith(["occurrence-1"])
-    expect(mocks.listCoachMonthlyReports).toHaveBeenCalledWith("2026-08")
-    expect(mocks.listAttendanceAdjustments).toHaveBeenCalledWith({
-      includeVoided: true,
-      sourceOccurrenceIds: ["occurrence-1"],
-    })
   })
 
   it("loads adjustment attendance and assignments for only the selected player", () => {

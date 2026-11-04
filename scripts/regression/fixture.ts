@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto"
+import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -37,8 +37,7 @@ const COACH_ACADEMY_ID = HEAD_COACH_ACADEMY_ID
 const CANONICAL_DATE = FIXTURE_ANCHOR_DATE
 const SCHEDULE_START = FIXTURE_SCHEDULE_START
 const SCHEDULE_END = FIXTURE_SCHEDULE_END
-const REPORT_MONTH = "2026-07"
-const REPORT_REFERENCE_DATE = "2026-07-31"
+const LAST_ATTENDANCE_DATE = "2026-07-31"
 const FINANCE_TRACKING_MONTH = "2026-07"
 const CURRENT_FEE_PERIOD = "2026-08"
 const FINANCE_REFERENCE_DATE = "2026-08-03"
@@ -50,7 +49,7 @@ const FINANCE_REFERENCE_DATE = "2026-08-03"
  * - inside the schedule window, so there are sessions on it to suspend;
  * - clear of the hand-cancelled lifecycle examples on 2026-08-05 and of the
  *   replacement on 2026-08-12, which the counts below keep separate;
- * - after the last attendance mark (REPORT_REFERENCE_DATE) and the last make-up
+ * - after the last attendance mark (LAST_ATTENDANCE_DATE) and the last make-up
  *   completion (CANONICAL_DATE), so no closure lands on a day already carrying
  *   attendance and nothing gets flagged for review;
  * - two days before SMBA_ACCESSIBILITY_CLOCK in
@@ -134,29 +133,6 @@ const selectedProfile = resolveFixtureProfile((() => {
   return index >= 0 ? args[index + 1] : process.env.SMBA_FIXTURE_PROFILE
 })())
 const DEFAULT_TARGET = selectedProfile.target
-
-const representativeReportHistory = selectedProfile.key === "demo" ? [
-  {
-    month: "2026-03",
-    publishedAt: "2026-04-03T18:00:00+05:30",
-    reportText: "has settled into the training rhythm with steady attention to grip, ready position, and a balanced split step. The clearest improvement is arriving behind the shuttle before starting the stroke.\n\nThe next focus is to keep the racket preparation compact and return to base without crossing the feet.",
-  },
-  {
-    month: "2026-04",
-    publishedAt: "2026-05-03T18:00:00+05:30",
-    reportText: "is moving into the rear court with better balance and is beginning to contact the shuttle higher. Recovery after the overhead stroke is calmer, which is helping the next movement begin on time.\n\nThe next step is to keep the non-racket arm active and maintain the same shape when the pace increases.",
-  },
-  {
-    month: "2026-05",
-    publishedAt: "2026-06-03T18:00:00+05:30",
-    reportText: "has become more deliberate in serve-and-return practice. Short serves are landing with better control, and the first three shots of the rally now show clearer intent instead of being rushed.\n\nThe coming month should build confidence in choosing when to lift, block, or move forward to the net.",
-  },
-  {
-    month: "2026-06",
-    publishedAt: "2026-07-03T18:00:00+05:30",
-    reportText: "is sustaining longer rallies with improved patience and a more reliable recovery step. The strongest progress this month has been keeping the body composed after a difficult defensive shot.\n\nThe next focus is to turn that control into purposeful rally construction, especially through the backhand side.",
-  },
-] as const : []
 
 type Stage = "default" | "registrations" | "enrollments" | "schedules" | "loaded"
 
@@ -919,7 +895,7 @@ async function seedAssignmentsAndAttendance(target: string) {
         and o.occurrence_date >= a.effective_from
         and (a.effective_to is null or o.occurrence_date < a.effective_to)
       order by a.account_id, o.occurrence_date, o.starts_at, o.id
-    `).all(SCHEDULE_START, REPORT_REFERENCE_DATE) as Array<{
+    `).all(SCHEDULE_START, LAST_ATTENDANCE_DATE) as Array<{
       occurrenceDate: string
       occurrenceId: string
       playerId: string
@@ -942,8 +918,8 @@ async function seedAssignmentsAndAttendance(target: string) {
       changes,
       coachId: COACH_ID,
       database,
-      now: new Date(`${REPORT_REFERENCE_DATE}T23:59:59+05:30`),
-      referenceDate: REPORT_REFERENCE_DATE,
+      now: new Date(`${LAST_ATTENDANCE_DATE}T23:59:59+05:30`),
+      referenceDate: LAST_ATTENDANCE_DATE,
     })
   }
 
@@ -1235,109 +1211,6 @@ function seedStaffAttendanceExamples(target: string) {
   } finally {
     db.close()
   }
-}
-
-async function seedReports(target: string) {
-  const current = summaryFor(target)
-  const reportCount = selectedProfile.reportMix.drafts
-  const publicationCount = selectedProfile.reportMix.published + 1
-  if (current.reports === reportCount && current.publications === publicationCount) return
-  if (current.reports || current.publications) {
-    throw new Error("Report stage is partial; prepare a fresh regression database.")
-  }
-  process.env.DB_FILE_NAME = target
-  const [{ getPlayerAttendanceInput }, { createAttendanceSnapshotV2 }] = await Promise.all([
-    import("../../lib/attendance/database"),
-    import("../../lib/attendance/domain"),
-  ])
-  const db = new Database(target)
-  db.pragma("foreign_keys = ON")
-  const accounts = approvedPlayers(db)
-  const insertReport = db.prepare(`
-    insert into monthly_reports
-      (id, account_id, month, draft_text, updated_by_account_id, created_at, updated_at)
-    values (?, ?, ?, ?, ?, ?, ?)
-  `)
-  const insertPublication = db.prepare(`
-    insert into report_publications
-      (id, report_id, revision, report_text, attendance_snapshot, published_by_account_id, published_at)
-    values (?, ?, ?, ?, ?, ?, ?)
-  `)
-  const createdAt = Date.parse(`${REPORT_REFERENCE_DATE}T12:00:00+05:30`)
-  const reportIndexes = Array.from({ length: reportCount }, (_, index) => index)
-  if (reportIndexes.length > 0) {
-    reportIndexes[reportIndexes.length - 1] = players.findIndex((player) => (
-      player.finalState === "archived"
-    ))
-  }
-  for (let reportIndex = 0; reportIndex < reportIndexes.length; reportIndex += 1) {
-    const historicalReport = selectedProfile.key === "demo"
-      ? representativeReportHistory[reportIndex - 1]
-      : undefined
-    const index = historicalReport ? 0 : reportIndexes[reportIndex]
-    const player = players[index]
-    const account = accounts[index]
-    const reportId = randomUUID()
-    const reportMonth = historicalReport?.month ?? REPORT_MONTH
-    const reportReferenceDate = historicalReport
-      ? new Date(Date.UTC(
-          Number(reportMonth.slice(0, 4)),
-          Number(reportMonth.slice(5, 7)),
-          0,
-        )).toISOString().slice(0, 10)
-      : REPORT_REFERENCE_DATE
-    const reportCreatedAt = historicalReport
-      ? Date.parse(historicalReport.publishedAt)
-      : createdAt
-    const publishedText = historicalReport
-      ? `${player.fullName} ${historicalReport.reportText}`
-      : `${player.fullName} has trained with good attention this month. The most consistent progress has come from staying balanced through the first movement and recovering calmly after each shot.\n\nThe next step is to keep that same control when the rally becomes faster, without rushing the preparation.`
-    const draftOnlyText = `${player.fullName} is becoming more composed through the weekly training rhythm. Movement quality is improving, and the focus now is to carry that consistency into longer rallies.`
-    const isPublished = reportIndex < selectedProfile.reportMix.published
-    const isRevision = isPublished
-      && reportIndex >= selectedProfile.reportMix.published - selectedProfile.reportMix.revisionDrafts
-    const draftText = isRevision
-      ? `${publishedText}\n\nRevision note: the latest sessions show better patience under pressure.`
-      : isPublished ? publishedText : draftOnlyText
-    insertReport.run(
-      reportId,
-      account.id,
-      reportMonth,
-      draftText,
-      COACH_ID,
-      reportCreatedAt,
-      reportCreatedAt,
-    )
-    if (isPublished) {
-      const attendanceInput = getPlayerAttendanceInput(
-        account.id,
-        reportMonth,
-        reportReferenceDate,
-      )
-      if (!attendanceInput) throw new Error(`Attendance input missing for ${player.fullName}.`)
-      insertPublication.run(
-        randomUUID(),
-        reportId,
-        1,
-        publishedText,
-        JSON.stringify(createAttendanceSnapshotV2(attendanceInput)),
-        COACH_ID,
-        reportCreatedAt,
-      )
-      if (reportIndex === 0) {
-        insertPublication.run(
-          randomUUID(),
-          reportId,
-          2,
-          `${publishedText}\n\nFollow-up: movement recovery remained composed through the final week.`,
-          JSON.stringify(createAttendanceSnapshotV2(attendanceInput)),
-          COACH_ID,
-          reportCreatedAt + 86_400_000,
-        )
-      }
-    }
-  }
-  db.close()
 }
 
 function deterministicFeeReferenceGenerator() {
@@ -1910,7 +1783,6 @@ async function seedLoaded(target: string) {
   await seedScheduleLifecycleExamples(target)
   await seedAcademyHoliday(target)
   seedStaffAttendanceExamples(target)
-  await seedReports(target)
   await seedFinancials(target)
   await seedAnnouncementExamples(target)
   return verify(target, "loaded")
@@ -1947,9 +1819,7 @@ function summaryFor(target: string) {
       occurrences: tableCount(db, "session_occurrences"),
       pending: scalar("select count(*) as count from accounts where approval_status = 'pending'"),
       players: tableCount(db, "player_enrollments"),
-      publications: tableCount(db, "report_publications"),
       recurrenceRules: tableCount(db, "session_recurrence_rules"),
-      reports: tableCount(db, "monthly_reports"),
       series: tableCount(db, "session_series"),
       feeAgreements: safeTableCount(db, "fee_agreements"),
       financialCharges: safeTableCount(db, "financial_charges"),
@@ -2030,16 +1900,6 @@ function logicalChecksum(db: Database.Database) {
     join session_recurrence_rules r on r.series_id = s.id
       and r.weekday = cast(strftime('%w', o.occurrence_date) as integer)
     order by m.identifier, o.occurrence_date, startTime
-  `).all()
-  const reports = db.prepare(`
-    select m.identifier as academyId,
-      r.month, r.draft_text as draftText,
-      p.report_text as publishedText, p.revision
-    from monthly_reports r
-    join academy_id_allocations x on x.account_id = r.account_id
-    join auth_methods m on m.account_id = r.account_id and m.revoked_at is null
-    left join report_publications p on p.report_id = r.id
-    order by x.serial, r.month, p.revision
   `).all()
   const registrations = db.prepare(`
     select full_name as fullName, requested_role as requestedRole,
@@ -2182,7 +2042,6 @@ function logicalChecksum(db: Database.Database) {
     registrations,
     sessionLifecycle,
     holidays,
-    reports,
     adjustments,
     announcements,
     coachAccess,
@@ -2206,8 +2065,6 @@ function verify(target: string, expectedStage?: Stage) {
     const loadedAccountCount = approvedAccountCount + selectedProfile.pendingPlayerNames.length
     const expectedAssignments = players.filter((player) => player.finalState !== "unassigned").length
     const expectedActiveAssignments = players.filter((player) => player.finalState === "active").length
-    const expectedReports = selectedProfile.reportMix.drafts
-    const expectedPublications = selectedProfile.reportMix.published + 1
     const financePlayerCount = players.filter((player, index) => (
       player.finalState !== "archived"
       && index !== 6
@@ -2405,46 +2262,6 @@ function verify(target: string, expectedStage?: Stage) {
       `).get() as { count: number }
       if (activeCohorts.count !== 8) {
         problems.push("Every Level and Batch cohort must retain an active representative.")
-      }
-      if (summary.reports !== expectedReports || summary.publications !== expectedPublications) {
-        problems.push(
-          `Report mix must contain ${expectedReports} records and ${expectedPublications} publications.`,
-        )
-      }
-      if (selectedProfile.key === "demo") {
-        const representativeMonths = db.prepare(`
-          select distinct report.month
-          from monthly_reports report
-          join report_publications publication on publication.report_id = report.id
-          where report.account_id = (
-            select account.id
-            from accounts account
-            join academy_id_allocations allocation on allocation.account_id = account.id
-            where account.role = 'player'
-            order by allocation.serial
-            limit 1
-          )
-          order by report.month desc
-        `).all().map((row) => (row as { month: string }).month)
-        const expectedMonths = [
-          REPORT_MONTH,
-          ...representativeReportHistory.map((report) => report.month),
-        ].sort((first, second) => second.localeCompare(first))
-        if (JSON.stringify(representativeMonths) !== JSON.stringify(expectedMonths)) {
-          problems.push("Demo representative player must retain five published report months.")
-        }
-      }
-      const multiRevisionReports = db.prepare(`
-        select count(*) as count
-        from (
-          select report_id
-          from report_publications
-          group by report_id
-          having count(*) >= 2 and max(revision) >= 2
-        )
-      `).get() as { count: number }
-      if (multiRevisionReports.count < 1) {
-        problems.push("Report coverage must contain one immutable multi-revision publication history.")
       }
       const mismatches = db.prepare(`
         select count(*) as count

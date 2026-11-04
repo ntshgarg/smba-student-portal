@@ -529,31 +529,6 @@ test("New Announcement exposes its first field in every supported portrait viewp
   }
 })
 
-test("Published report detail contains revision history at every supported portrait width", async ({ page }) => {
-  await loginAsCoach(page)
-  await page.goto("/coach/reports?period=2026-07", { waitUntil: "domcontentloaded" })
-
-  const detailLink = page.locator(".coach-published-report-actions a").first()
-  await expect(detailLink).toBeVisible()
-  const detailHref = await detailLink.getAttribute("href")
-  if (!detailHref) throw new Error("Published report detail link has no href")
-  expect(detailHref).toMatch(/^\/coach\/reports\/publications\//u)
-
-  for (const viewport of announcementViewports) {
-    const viewportLabel = `${viewport.width}x${viewport.height}`
-    await page.setViewportSize(viewport)
-    await page.goto(detailHref, { waitUntil: "domcontentloaded" })
-    await settleResponsiveLayout(page)
-
-    const detailGrid = page.locator(".coach-published-report-detail-grid")
-    const revisionNavigation = page.locator(".coach-published-report-revisions nav")
-    await expectHorizontallyContained(detailGrid, `${viewportLabel} published report detail`)
-    await expect(revisionNavigation).toBeVisible()
-    await expect(revisionNavigation).toHaveCSS("overflow-x", "auto")
-    await expectNoDocumentOverflow(page, `${viewportLabel} published report detail`)
-  }
-})
-
 /*
  * Un-quarantined from G-27, and the caption was only the first of two things
  * wrong with it. Both cases resolved the register through getByRole("table", {

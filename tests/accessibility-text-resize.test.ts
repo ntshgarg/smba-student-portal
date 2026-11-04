@@ -1031,7 +1031,7 @@ describe("the states the text-resize pass covers", () => {
     // over the stress matrix would not fit inside what is left.
     const stressAudits = statesForProfile("stress")
       .reduce((total, state) => total + viewportsForState(state).length, 0)
-    expect(stressAudits).toBe(153)
+    expect(stressAudits).toBe(143)
     expect(textResizeAuditCount()).toBe(55)
     expect(textResizeAuditCount()).toBeLessThan(stressAudits * 0.4)
 

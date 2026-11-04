@@ -96,11 +96,11 @@ const TEXT_RESIZE_RESULT_SUFFIX = "#text-200"
 /*
  * The subset, and why it is this subset.
  *
- * The whole matrix is 67 states over four widths — 236 audits. A second full
+ * The whole matrix is 64 states over four widths — 226 audits. A second full
  * pass does not fit: .github/workflows/ui-accessibility.yml gives the job 25
  * minutes for three profiles plus an `npm ci`, a production build and a
  * Playwright install, and the stress profile alone already spends most of a
- * quarter of that on 153 audits that each run two axe passes and a twelve-press
+ * quarter of that on 143 audits that each run two axe passes and a twelve-press
  * keyboard walk.
  *
  * So this selects the states where raised text meets a box that does not move
@@ -126,7 +126,7 @@ const TEXT_RESIZE_RESULT_SUFFIX = "#text-200"
  * authentication forms are also out: they are single-column, one control per
  * row, and the widest thing on them is a button that already spans the column.
  *
- * 16 states, 55 audits — 35.9% of the stress matrix's 153.
+ * 16 states, 55 audits — 38.5% of the stress matrix's 143.
  *
  * What those 55 cost, stated properly because an earlier draft of this comment
  * called it "a small fraction of the per-audit cost" and that was wrong. The

@@ -137,7 +137,6 @@ export const captureSettings = {
     : undefined,
   projectRoot,
   referenceDate: process.env.SMBA_CAPTURE_REFERENCE_DATE ?? "2026-08-03",
-  reportMonth: process.env.SMBA_CAPTURE_REPORT_MONTH ?? "2026-07",
   revision: process.env.SMBA_CAPTURE_REVISION ?? "unlabelled",
   runDir: path.join(outputRoot, runLabel, scenario),
   runLabel,
@@ -150,14 +149,9 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(captureSettings.referenceDate)) {
   throw new Error("SMBA_CAPTURE_REFERENCE_DATE must use YYYY-MM-DD")
 }
 
-if (!/^\d{4}-\d{2}$/.test(captureSettings.reportMonth)) {
-  throw new Error("SMBA_CAPTURE_REPORT_MONTH must use YYYY-MM")
-}
-
 export function resolveCaptureRoute(route: string) {
   return route
     .replaceAll("{referenceDate}", encodeURIComponent(captureSettings.referenceDate))
-    .replaceAll("{reportMonth}", encodeURIComponent(captureSettings.reportMonth))
 }
 
 export function storageStateForActor(actor: CaptureActor) {

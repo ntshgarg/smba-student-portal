@@ -10,7 +10,6 @@ import {
   attendanceAdjustments,
   feeAgreements,
   financialCharges,
-  monthlyReports,
   payments,
   playerEnrollments,
   sessionAssignments,
@@ -207,11 +206,6 @@ export function resetOnboardingSessionAssignment({
         label: "payment",
         rows: tx.select({ id: payments.id }).from(payments)
           .where(eq(payments.playerAccountId, playerId)).all().length,
-      },
-      {
-        label: "monthly report",
-        rows: tx.select({ id: monthlyReports.id }).from(monthlyReports)
-          .where(eq(monthlyReports.accountId, playerId)).all().length,
       },
     ].filter(({ rows }) => rows > 0)
 

@@ -12,7 +12,6 @@ export default function robots(): MetadataRoute.Robots {
         "/player",
         "/login",
         "/register",
-        "/reports",
         "/progress",
       ],
     },

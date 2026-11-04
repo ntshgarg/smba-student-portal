@@ -46,13 +46,9 @@ describe("Phase 3 accessibility corrections", () => {
     expect(header).toContain('aria-controls={open ? "mobile-navigation" : undefined}')
   })
 
-  it("uses sequential headings in populated report and attendance views", () => {
-    const reports = source("components/reports/report-accordion.tsx")
+  it("uses sequential headings in the populated attendance view", () => {
     const register = source("components/coach/player-attendance-register.tsx")
 
-    expect(reports).toContain("<h2>")
-    expect(reports).toContain("<h3>")
-    expect(reports).not.toContain("<h4>")
     expect(register).toContain("<h2>{selectedProgramme} · {selectedBatch}</h2>")
     expect(register).not.toContain("<h3>{selectedProgramme} · {selectedBatch}</h3>")
   })

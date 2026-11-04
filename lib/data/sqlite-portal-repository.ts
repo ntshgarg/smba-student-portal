@@ -1,8 +1,8 @@
 import "server-only"
 
-import { and, desc, eq, gt, isNull, notExists } from "drizzle-orm"
-import { alias } from "drizzle-orm/sqlite-core"
+import { and, desc, eq, isNull } from "drizzle-orm"
 
+import { formatAssessmentDate } from "@/lib/assessments/display"
 import { calculatePlayerAttendanceForMonth } from "@/lib/attendance/database"
 import { getPlayerAttendanceRecord } from "@/lib/attendance/player-record"
 import type { AttendanceBreakdown } from "@/lib/attendance/domain"
@@ -11,9 +11,8 @@ import { initializeDatabase } from "@/lib/db/client"
 import {
   accounts,
   authMethods,
-  monthlyReports,
   playerEnrollments,
-  reportPublications,
+  playerAssessments,
   sessionSeries,
 } from "@/lib/db/schema"
 import { academyCurrentMonth, academyNow, academyToday } from "@/lib/clock"
@@ -27,10 +26,8 @@ import {
 } from "@/lib/format"
 import type {
   AttendanceSummary,
-  LatestReportSummary,
-  MonthlyReport,
+  LatestAssessmentSummary,
   PlayerProfile,
-  PlayerReportArchiveItem,
 } from "@/lib/types"
 import {
   listSessionAssignmentsForPlayers,
@@ -38,7 +35,6 @@ import {
 } from "@/lib/sessions/database"
 import { resolveNextAssignedOccurrence } from "@/lib/sessions/domain"
 import { academyPlanSummary } from "@/lib/training/academy-plans"
-import { resolvePublishedReportAttendance } from "@/lib/reports/published-report"
 
 function indiaMonthKey() {
   return academyCurrentMonth()
@@ -182,139 +178,19 @@ function nextPlayerSession(accountId: string) {
   }
 }
 
-type PublishedReportRow = {
-  id: string
-  month: string
-  publication: {
-    attendanceSnapshot: string | null
-    coachName: string
-    publishedAt: Date
-    reportText: string
-  }
-}
-
-type PlayerReportArchiveRow = {
-  id: string
-  month: string
-  publishedAt: Date
-  reportText: string
-}
-
-function latestPublishedReportSummary(accountId: string): LatestReportSummary | null {
+function latestPublishedAssessmentSummary(accountId: string): LatestAssessmentSummary | null {
   const row = initializeDatabase().select({
-    month: monthlyReports.month,
-  }).from(monthlyReports)
-    .innerJoin(reportPublications, eq(reportPublications.reportId, monthlyReports.id))
-    .where(eq(monthlyReports.accountId, accountId))
-    .orderBy(desc(monthlyReports.month))
+    assessedOn: playerAssessments.assessedOn,
+  }).from(playerAssessments)
+    .where(and(
+      eq(playerAssessments.playerAccountId, accountId),
+      eq(playerAssessments.status, "published"),
+    ))
+    .orderBy(desc(playerAssessments.assessedOn))
     .limit(1)
     .get()
 
-  return row
-    ? { monthLabel: monthDetails(row.month).monthLabel }
-    : null
-}
-
-function playerReportArchiveRows(accountId: string): PlayerReportArchiveRow[] {
-  const db = initializeDatabase()
-  const newerPublication = alias(reportPublications, "newer_player_report_publication")
-
-  return db.select({
-    id: monthlyReports.id,
-    month: monthlyReports.month,
-    publishedAt: reportPublications.publishedAt,
-    reportText: reportPublications.reportText,
-  }).from(monthlyReports)
-    .innerJoin(reportPublications, eq(reportPublications.reportId, monthlyReports.id))
-    .where(and(
-      eq(monthlyReports.accountId, accountId),
-      notExists(
-        db.select({ id: newerPublication.id })
-          .from(newerPublication)
-          .where(and(
-            eq(newerPublication.reportId, reportPublications.reportId),
-            gt(newerPublication.revision, reportPublications.revision),
-          )),
-      ),
-    ))
-    .orderBy(desc(monthlyReports.month))
-    .all()
-}
-
-function toPlayerReportArchiveItems(
-  rows: PlayerReportArchiveRow[],
-): PlayerReportArchiveItem[] {
-  return rows.map((report) => ({
-    id: report.id,
-    month: report.month,
-    monthLabel: monthDetails(report.month).monthLabel,
-    publishedAt: report.publishedAt.toISOString(),
-    reportText: report.reportText,
-  }))
-}
-
-function publishedReportRows(accountId: string, reportId?: string): PublishedReportRow[] {
-  const db = initializeDatabase()
-  const newerPublication = alias(reportPublications, "newer_report_publication")
-  const ownerConditions = [eq(monthlyReports.accountId, accountId)]
-  if (reportId) ownerConditions.push(eq(monthlyReports.id, reportId))
-
-  return db.select({
-    id: monthlyReports.id,
-    month: monthlyReports.month,
-    publication: {
-      attendanceSnapshot: reportPublications.attendanceSnapshot,
-      coachName: accounts.fullName,
-      publishedAt: reportPublications.publishedAt,
-      reportText: reportPublications.reportText,
-    },
-  }).from(monthlyReports)
-    .innerJoin(reportPublications, eq(reportPublications.reportId, monthlyReports.id))
-    .innerJoin(accounts, eq(reportPublications.publishedByAccountId, accounts.id))
-    .where(and(
-      ...ownerConditions,
-      notExists(
-        db.select({ id: newerPublication.id })
-          .from(newerPublication)
-          .where(and(
-            eq(newerPublication.reportId, reportPublications.reportId),
-            gt(newerPublication.revision, reportPublications.revision),
-          )),
-      ),
-    ))
-    .orderBy(desc(monthlyReports.month))
-    .all()
-}
-
-function toPublishedReports(accountId: string, rows: PublishedReportRow[]): MonthlyReport[] {
-  return rows.map((report) => {
-    const publication = report.publication
-    const details = monthDetails(report.month)
-    const attendance = resolvePublishedReportAttendance({
-      attendanceSnapshot: publication.attendanceSnapshot,
-      month: report.month,
-      playerId: accountId,
-      publishedAt: publication.publishedAt,
-    })
-    return {
-      id: report.id,
-      month: report.month,
-      monthLabel: details.monthLabel,
-      publishedAt: publication.publishedAt.toISOString(),
-      coachName: publication.coachName,
-      reportText: publication.reportText,
-      attendance: {
-        month: details.month,
-        eligible: attendance.eligible,
-        recorded: attendance.recorded,
-        attended: attendance.attended,
-        absent: attendance.absent,
-        pending: attendance.pending,
-        percentage: attendance.percentage,
-      },
-      development: [],
-    } satisfies MonthlyReport
-  })
+  return row ? { dateLabel: formatAssessmentDate(row.assessedOn) } : null
 }
 
 export class SqlitePortalRepository implements PortalRepository {
@@ -332,7 +208,7 @@ export class SqlitePortalRepository implements PortalRepository {
     return {
       player,
       coachMessage,
-      latestReport: latestPublishedReportSummary(playerId),
+      latestAssessment: latestPublishedAssessmentSummary(playerId),
       attendance: attendance.eligible || attendance.recorded ? attendance : null,
       attendanceRecord,
       nextSession: nextPlayerSession(playerId),
@@ -342,14 +218,5 @@ export class SqlitePortalRepository implements PortalRepository {
 
   async getProgress() {
     return null
-  }
-
-  async listReports(playerId: string) {
-    return toPlayerReportArchiveItems(playerReportArchiveRows(playerId))
-  }
-
-  async getReport(playerId: string, reportId: string) {
-    const rows = publishedReportRows(playerId, reportId)
-    return toPublishedReports(playerId, rows)[0] ?? null
   }
 }

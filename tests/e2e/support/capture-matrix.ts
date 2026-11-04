@@ -40,7 +40,6 @@ const populatedScenarios: CaptureScenario[] = [
 
 const scheduledScenarios: CaptureScenario[] = ["schedules", "loaded"]
 
-const reportScenarios: CaptureScenario[] = ["loaded"]
 
 export const captureDefinitions: CaptureDefinition[] = [
   {
@@ -468,48 +467,6 @@ export const captureDefinitions: CaptureDefinition[] = [
   },
   {
     actor: "coach",
-    description: "Monthly report workspace initial state",
-    id: "coach-reports-default",
-    route: "/coach/reports/write?month={reportMonth}",
-  },
-  {
-    actions: ["report-checklist-collapse"],
-    actor: "coach",
-    critical: true,
-    description: "Monthly report editor with the checklist collapsed",
-    id: "coach-report-editor",
-    route: "/coach/reports/write?month={reportMonth}",
-    scenarios: reportScenarios,
-  },
-  {
-    actions: ["report-checklist-collapse", "report-preview-open"],
-    actor: "coach",
-    critical: true,
-    description: "Monthly report preview dialog open",
-    id: "coach-report-preview",
-    route: "/coach/reports/write?month={reportMonth}",
-    scenarios: reportScenarios,
-    viewportOnly: true,
-  },
-  {
-    actor: "coach",
-    critical: true,
-    description: "Published monthly reports archive for all players",
-    id: "coach-published-reports",
-    route: "/coach/reports?period={reportMonth}",
-    scenarios: reportScenarios,
-  },
-  {
-    actions: ["coach-published-report-open"],
-    actor: "coach",
-    critical: true,
-    description: "Focused immutable published report with revision history",
-    id: "coach-published-report-detail",
-    route: "/coach/reports?period={reportMonth}",
-    scenarios: reportScenarios,
-  },
-  {
-    actor: "coach",
     critical: true,
     description: "Coach rapid payment workspace scoped to outstanding players",
     id: "coach-financials-record-payment",
@@ -591,20 +548,10 @@ export const captureDefinitions: CaptureDefinition[] = [
   },
   {
     actor: "player",
-    description: "Player monthly reports initial state",
+    description: "Player reports initial state",
     id: "player-reports-default",
     route: "/player/reports",
     scenarios: populatedScenarios,
-  },
-  {
-    actions: ["student-report-open"],
-    actor: "player",
-    critical: true,
-    description: "Player latest monthly report expanded",
-    id: "player-report-expanded",
-    route: "/player/reports",
-    scenarios: reportScenarios,
-    segmentPolicy: "always",
   },
   {
     actor: "player",

@@ -93,27 +93,8 @@ export type DevelopmentMarker = {
   note: string
 }
 
-export type MonthlyReport = {
-  id: string
-  month: string
-  monthLabel: string
-  publishedAt: string
-  coachName: string
-  reportText: string
-  attendance: AttendanceSummary
-  development: DevelopmentMarker[]
-}
-
-export type LatestReportSummary = {
-  monthLabel: string
-}
-
-export type PlayerReportArchiveItem = {
-  id: string
-  month: string
-  monthLabel: string
-  publishedAt: string
-  reportText: string
+export type LatestAssessmentSummary = {
+  dateLabel: string
 }
 
 export type ProgressMilestone = {
@@ -134,7 +115,7 @@ export type ProgressJourney = {
 export type DashboardSnapshot = {
   player: PlayerProfile
   coachMessage: CoachMessage
-  latestReport: LatestReportSummary | null
+  latestAssessment: LatestAssessmentSummary | null
   attendance: AttendanceSummary | null
   attendanceRecord: PlayerAttendanceRecord
   nextSession: TrainingSession | null

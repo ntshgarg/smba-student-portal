@@ -606,11 +606,11 @@ textarea:focus-visible {
    changed the setting the rem conversion was made for.
 
    So the rule is a class, not a special case: a `font-size` of 16px or more on a
-   selector subjecting input, select or textarea stays px. That is 24 declarations,
+   selector subjecting input, select or textarea stays px. That is 21 declarations,
    listed by file and line in tests/design-tokens.test.ts, which fails if the list and
    the sheets part company in either direction.
 
-   It costs something, and the cost is worth naming properly. All 24 stop growing with
+   It costs something, and the cost is worth naming properly. All 21 stop growing with
    the reader's preference, not four of them, and the reach is not one field each: the
    rule directly below is `input, select, textarea` with `!important`, so at 430px and
    under, no form control's text resizes at 200% at all while every label beside it
@@ -618,12 +618,11 @@ textarea:focus-visible {
    forms on any touch device, tablet-mode laptops included. That is this change's
    principal user-visible cost.
 
-   Of the 24, exactly one has nothing left to protect. Run the arithmetic at Chrome's
-   lowest default of 9px: `.coach-report-field textarea` at 19px would be 1.1875rem =
-   10.7px, at 18px 1.125rem = 10.1px, and `.slipField textarea` at 17px 1.0625rem =
-   9.6px — all three under the threshold, so all three are protective after all. Only
+   Of the 21, exactly one has nothing left to protect. Run the arithmetic at Chrome's
+   lowest default of 9px: `.slipField textarea` at 17px would be 1.0625rem = 9.6px —
+   under the threshold, so it is protective after all. Only
    `.balanceMoneyInput input` at 30px would still clear it (1.875rem = 16.9px at a 9px
-   root). `max(16px, Nrem)` would give the other 23 their scaling back and is where
+   root). `max(16px, Nrem)` would give the other 20 their scaling back and is where
    this should go next; it is not in this change because it is a new construction
    rather than a substitution that provably moves nothing, and because
    tests/accessibility-hardening.test.ts pins the literal bytes `font-size: 16px` on

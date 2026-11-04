@@ -137,7 +137,7 @@ describe("Player Dashboard read failure isolation", () => {
       attendance: {},
       attendanceRecord: [],
       coachMessage: "Keep building your game.",
-      latestReport: null,
+      latestAssessment: null,
       nextSession: null,
       player: {
         academyPlan: "3 days/week",
@@ -159,7 +159,7 @@ describe("Player Dashboard read failure isolation", () => {
       expect(html).toContain("Academy notices could not be loaded just now.")
       expect(html).toContain("Player welcome remains available")
       expect(html).toContain("Attendance remains available")
-      expect(html).toContain("Monthly reports")
+      expect(html).toContain("Assessments")
       expect(html).toContain('href="/player/reports"')
       expect(html).toContain("Open report records")
       expect(html).toContain("Fee record remains available")
@@ -189,7 +189,7 @@ describe("Player Dashboard read failure isolation", () => {
 
       expect(html).toContain("Player welcome remains available")
       expect(html).toContain("Attendance remains available")
-      expect(html).toContain("Monthly reports")
+      expect(html).toContain("Assessments")
       expect(html).toContain('href="/player/reports"')
       expect(html).toContain("Fee record remains available")
       expect(html).toContain("The notice board is clear.")

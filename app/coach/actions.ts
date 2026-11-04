@@ -15,7 +15,6 @@ import {
 import { requireHeadAdminAction } from "@/lib/auth/current-coach"
 import { createAuthMailer } from "@/lib/auth/mailer"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
-import { listCoachMonthlyReports } from "@/lib/coach/database"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   getCoachCalendarMonthSessionSnapshot,
@@ -56,20 +55,10 @@ import type {
   CreateSessionSeriesInput,
   SessionAttendanceChange,
 } from "@/lib/sessions/types"
-import type {
-  PublishReportInput,
-  ReportMutationResult,
-  SaveReportDraftInput,
-} from "@/lib/reports/contracts"
-import {
-  publishMonthlyReport,
-  ReportServiceError,
-  saveMonthlyReportDraft,
-} from "@/lib/reports/service"
 
 /**
  * The bare guard, for the actions this file has not moved onto
- * `runCoachAction` yet. Both attendance registers have moved; the other 12
+ * `runCoachAction` yet. Both attendance registers have moved; the other 11
  * exports here still throw an expiry across the server-action boundary, where
  * React replaces it with a fixed sentence and a digest.
  */
@@ -89,9 +78,6 @@ function runOperationalAction<T>(operation: () => T): OperationalActionResult<T>
 }
 
 /**
- * `/reports` is deliberately absent: the page is a bare
- * `redirect("/player/reports")`, and that target is already in this list.
- *
  * `/` stays, and the reason is worth recording because the obvious reading says it
  * should not. The homepage reads no academy data on the server -- its fee table is
  * the compile-time `monthlyFeePaise` table in `lib/finance/config.ts`, and its
@@ -131,8 +117,6 @@ function revalidateAcademyData() {
   revalidatePath("/coach/schedules/new")
   revalidatePath("/coach/members")
   revalidatePath("/coach/onboarding")
-  revalidatePath("/coach/reports")
-  revalidatePath("/coach/reports/write")
   revalidatePath("/coach/financials")
   revalidatePath("/player")
   revalidatePath("/player/financials")
@@ -412,53 +396,4 @@ export async function replaceSessionOccurrenceAction(input: {
     if (!sourceOccurrence) throw new Error("The replaced session could not be reloaded.")
     return getCoachCalendarMonthSessionSnapshot(sourceOccurrence.occurrenceDate.slice(0, 7))
   })
-}
-
-function reportMutationFailure(error: ReportServiceError): ReportMutationResult {
-  return {
-    ok: false,
-    code: error.code,
-    field: error.field,
-    message: error.message,
-  }
-}
-
-/**
- * `upsertDraft` keys the row on `(accountId, month)` and returns that row's id
- * (`lib/reports/service.ts:125`), so the saved report is always in the month
- * the caller submitted -- reloading it does not need the archive of every month
- * the academy has ever written.
- */
-function reportMutationSuccess(reportId: string, month: string): ReportMutationResult {
-  const report = listCoachMonthlyReports(month).find((item) => item.id === reportId)
-  if (!report) throw new Error("The saved report could not be reloaded.")
-  return { ok: true, report }
-}
-
-export async function saveReportDraftAction(
-  input: SaveReportDraftInput,
-): Promise<ReportMutationResult> {
-  const coach = await requireCoach()
-  try {
-    const { reportId } = saveMonthlyReportDraft(input, { coachId: coach.subjectId })
-    revalidatePath("/coach/reports/write")
-    return reportMutationSuccess(reportId, input.month)
-  } catch (error) {
-    if (error instanceof ReportServiceError) return reportMutationFailure(error)
-    throw error
-  }
-}
-
-export async function publishReportAction(
-  input: PublishReportInput,
-): Promise<ReportMutationResult> {
-  const coach = await requireCoach()
-  try {
-    const { reportId } = publishMonthlyReport(input, { coachId: coach.subjectId })
-    revalidateAcademyData()
-    return reportMutationSuccess(reportId, input.month)
-  } catch (error) {
-    if (error instanceof ReportServiceError) return reportMutationFailure(error)
-    throw error
-  }
 }

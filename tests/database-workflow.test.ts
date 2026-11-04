@@ -289,40 +289,37 @@ describe("shared academy session workflow", () => {
       ],
     })
 
-    database.insert(schema.monthlyReports).values({
-      id: "report-one",
-      accountId: firstId,
-      month: "2026-07",
-      draftText: "Published coach feedback.",
-      updatedByAccountId: coach.accountId,
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-    database.insert(schema.reportPublications).values({
-      id: "publication-one",
-      reportId: "report-one",
-      revision: 1,
-      reportText: "Published coach feedback.",
-      attendanceSnapshot: JSON.stringify({
-        version: 1,
-        month: "2026-07",
-        referenceDate: "2026-08-02",
-        eligible: 4,
-        recorded: 3,
-        attended: 2,
-        absent: 1,
-        pending: 1,
-        percentage: 67,
-      }),
-      publishedByAccountId: coach.accountId,
-      publishedAt: now,
-    }).run()
+    // The dashboard names the latest published assessment, never a draft.
+    database.insert(schema.playerAssessments).values([
+      {
+        id: "assessment-published",
+        playerAccountId: firstId,
+        assessedOn: "2026-07-20",
+        status: "published",
+        revision: 1,
+        publishedAt: now,
+        publishedByAccountId: coach.accountId,
+        createdByAccountId: coach.accountId,
+        updatedByAccountId: coach.accountId,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "assessment-draft",
+        playerAccountId: firstId,
+        assessedOn: "2026-08-01",
+        createdByAccountId: coach.accountId,
+        updatedByAccountId: coach.accountId,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]).run()
 
     const { SqlitePortalRepository } = await import("@/lib/data/sqlite-portal-repository")
     const { listApprovedPlayerRecords } = await import("@/lib/coach/database")
     const dashboard = await new SqlitePortalRepository().getDashboard(firstId)
     expect(dashboard?.attendance).toMatchObject({ eligible: 2, attended: 2, recorded: 2, percentage: 100 })
-    expect(dashboard?.latestReport).toEqual({ monthLabel: "July 2026" })
+    expect(dashboard?.latestAssessment).toEqual({ dateLabel: "20 Jul 2026" })
     expect(dashboard?.attendanceRecord.assignments).toHaveLength(3)
     expect(dashboard?.attendanceRecord.records).toEqual(expect.arrayContaining([
       { occurrenceId: todayOccurrence.id, choice: "present" },

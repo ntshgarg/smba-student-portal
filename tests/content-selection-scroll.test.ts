@@ -21,10 +21,4 @@ describe("content selection focus", () => {
 
     expect(schedules).toContain("guidanceHeadingRef.current?.focus({ preventScroll: true })")
   })
-
-  it("does not move the viewport when more published reports are revealed", () => {
-    const reports = source("components/coach/reports/published-reports-list.tsx")
-
-    expect(reports).toContain("firstNewReportRef.current?.focus({ preventScroll: true })")
-  })
 })

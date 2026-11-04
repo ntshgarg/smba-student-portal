@@ -9,7 +9,6 @@ import {
 import type { AttendanceRegisterSelection } from "@/lib/attendance/register-workspace"
 import {
   listAttendanceRegisterPlayerRecords,
-  listCoachMonthlyReports,
   listOperationalPlayerRecords,
 } from "@/lib/coach/database"
 import { initializeDatabase } from "@/lib/db/client"
@@ -68,10 +67,6 @@ export type CoachAttendanceRecorderSnapshot = CoachSessionWindowSnapshot & Retur
 > & {
   attendanceAdjustments: AttendanceAdjustmentRecord[]
   attendanceRecords: SessionAttendanceRecords
-}
-
-export type CoachReportWritingSnapshot = CoachAttendanceRecorderSnapshot & {
-  reports: ReturnType<typeof listCoachMonthlyReports>
 }
 
 export type CoachAttendanceAdjustmentsSnapshot = CoachSessionWindowSnapshot & ReturnType<
@@ -171,22 +166,6 @@ export function getCoachAttendanceRecorderSnapshot(
       sourceOccurrenceIds: occurrenceIds,
     }),
     attendanceRecords: listSessionAttendanceRecordsForOccurrences(occurrenceIds),
-  }
-}
-
-export function getCoachReportWritingSnapshot(month: string): CoachReportWritingSnapshot {
-  const sessions = getCoachCalendarMonthSessionSnapshot(month)
-  const occurrenceIds = sessions.sessionOccurrences.map((occurrence) => occurrence.id)
-
-  return {
-    ...sessions,
-    ...listOperationalPlayerRecords(),
-    attendanceAdjustments: listAttendanceAdjustments({
-      includeVoided: true,
-      sourceOccurrenceIds: occurrenceIds,
-    }),
-    attendanceRecords: listSessionAttendanceRecordsForOccurrences(occurrenceIds),
-    reports: listCoachMonthlyReports(month),
   }
 }
 

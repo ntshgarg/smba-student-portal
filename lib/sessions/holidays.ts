@@ -9,8 +9,6 @@ import type { SmbaDatabase } from "@/lib/db/client"
 import {
   academyHolidays,
   attendanceAdjustments,
-  monthlyReports,
-  reportPublications,
   sessionAttendanceRecords,
   sessionOccurrences,
 } from "@/lib/db/schema"
@@ -47,8 +45,6 @@ export type HolidayDateImpact = {
 
 export type HolidayImpact = {
   dates: HolidayDateImpact[]
-  /** Months among these dates that already have a published report. */
-  publishedReportMonths: string[]
   totals: {
     datesToClose: number
     datesAlreadyClosed: number
@@ -188,16 +184,6 @@ export function previewAcademyHolidays({
     return map
   }, new Map())
 
-  const months = [...new Set(dates.map((dateKey) => dateKey.slice(0, 7)))]
-  const publishedReportMonths = [...new Set(
-    database.select({ month: monthlyReports.month })
-      .from(reportPublications)
-      .innerJoin(monthlyReports, eq(monthlyReports.id, reportPublications.reportId))
-      .where(inArray(monthlyReports.month, months))
-      .all()
-      .map((row) => row.month),
-  )].sort((first, second) => first.localeCompare(second))
-
   const dateImpacts = dates.map((dateKey) => {
     const forDate = occurrences.filter((occurrence) => occurrence.occurrenceDate === dateKey)
     const scheduled = forDate.filter((occurrence) => occurrence.status === "scheduled")
@@ -240,7 +226,6 @@ export function previewAcademyHolidays({
 
   return {
     dates: dateImpacts,
-    publishedReportMonths,
     totals: {
       datesToClose: openDates.length,
       datesAlreadyClosed: dateImpacts.length - openDates.length,

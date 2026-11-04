@@ -161,19 +161,19 @@ export default async function DashboardPage() {
             delay={0.08}
           >
             <header className="player-ticket-masthead">
-              <h3 className="player-ticket-title">Monthly reports</h3>
+              <h3 className="player-ticket-title">Assessments</h3>
               <span className="player-ticket-context">
-                {dashboard.latestReport?.monthLabel ?? "Record"}
+                {dashboard.latestAssessment?.dateLabel ?? "Record"}
               </span>
             </header>
             <div className="player-ticket-record-primary">
               <strong className="player-ticket-record-value">
-                {dashboard.latestReport ? "Latest feedback" : "Your development record"}
+                {dashboard.latestAssessment ? "Latest assessment" : "Your development record"}
               </strong>
               <p className="player-ticket-record-copy">
-                {dashboard.latestReport
-                  ? "Read your coach’s latest report and follow your development over time."
-                  : "Your coach’s feedback will appear here after your first month of training."}
+                {dashboard.latestAssessment
+                  ? "Read your coach’s latest assessment and follow your progress over time."
+                  : "Your coach’s assessments will appear here once the first one is published."}
               </p>
             </div>
             <Link className="player-ticket-action" href="/player/reports">

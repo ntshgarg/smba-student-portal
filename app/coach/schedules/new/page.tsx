@@ -26,7 +26,6 @@ export default async function CoachCreateSchedulePage({
       initialAttendanceAdjustments={[]}
       initialAttendanceRecords={{}}
       initialMembers={players.members}
-      initialReports={[]}
       initialSessionAssignments={[]}
       initialSessionOccurrences={[]}
       initialSessionSeries={[]}
