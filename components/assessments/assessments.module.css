@@ -1252,7 +1252,7 @@ button.textLink {
 
 .stats div {
   display: block;
-  padding: 8px var(--space-group) var(--space-copy);
+  padding: var(--space-tight) var(--space-group) var(--space-copy);
   border-top: 0;
   border-left: 1px solid var(--line);
 }
@@ -1376,7 +1376,7 @@ button.textLink {
   }
 
   .stats div {
-    padding: 8px var(--space-copy) var(--space-copy);
+    padding: var(--space-tight) var(--space-copy) var(--space-copy);
   }
 }
 
