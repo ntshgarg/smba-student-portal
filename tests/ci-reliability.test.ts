@@ -16,10 +16,10 @@ describe("CI reliability controls", () => {
     }
 
     expect(packageJson.scripts["test:ci"]).toBe(
-      "vitest run --exclude tests/regression-fixture.test.ts --maxWorkers=2 --minWorkers=1",
+      "vitest run --exclude tests/regression-fixture.test.ts --maxWorkers=2",
     )
     expect(packageJson.scripts["regression:test"]).toBe(
-      "vitest run tests/regression-fixture.test.ts --maxWorkers=1 --minWorkers=1",
+      "vitest run tests/regression-fixture.test.ts --maxWorkers=1",
     )
   })
 

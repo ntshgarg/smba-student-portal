@@ -635,6 +635,11 @@
 }
 
 .managedInMembers a {
+  /* 2.5.8: a 24px target, as `.login-register-link a` does for the same
+     kind of in-sentence link. */
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
   color: var(--navy);
   font-weight: 700;
   text-decoration: underline;
