@@ -84,7 +84,7 @@ export function StaffSummaryRow({
 export function StaffDetailRow({ staff }: { staff: AcademyStaffMember }) {
   return (
     <tr className="coach-member-detail-row">
-      <td colSpan={7}>
+      <td colSpan={6}>
         <div id={`member-details-${staff.id}`} className="coach-member-detail">
           <section aria-labelledby={`staff-profile-${staff.id}`}>
             <h3 id={`staff-profile-${staff.id}`}>
