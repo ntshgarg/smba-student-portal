@@ -2,16 +2,17 @@
  * Player assessments: the coach's list, the entry form, and the page a player
  * reads. One module because the three share the same cards, scale and slider.
  *
- * Corners are rounded here although most of the portal is square. The head
- * coach asked for it when shown the mockups on 4 October 2026; the colours,
- * type and 1px lines still come from the portal's own tokens, so the screens sit
- * with their neighbours and only the corner radius differs.
+ * The top half is the original layout, with the corners squared off. The block
+ * under "the portal's own patterns" restyles it to match the Member Directory
+ * and the other coach screens: square slabs, serif titles, a navy table head,
+ * red folio numbers. The head coach had asked for rounded corners on
+ * 4 October 2026; the owner chose the portal's square look on 4 November.
  */
 
 .page {
   padding-bottom: 80px;
-  --radius: 16px;
-  --radius-small: 12px;
+  --radius: 0px;
+  --radius-small: 0px;
 }
 
 .backRow a {
@@ -1147,5 +1148,249 @@ button.textLink {
   .progress i,
   .slider::-webkit-slider-thumb {
     transition: none;
+  }
+}
+
+
+/* ---- the portal's own patterns ---- */
+
+.header {
+  padding-bottom: var(--space-block);
+  border-bottom: 1px solid var(--line);
+}
+
+.card {
+  background: var(--paper);
+}
+
+/* Primary actions: square navy with the portal's red arrow. */
+.button {
+  min-height: 52px;
+  font-size: 0.75rem;
+}
+
+.primary::after {
+  content: "\2192";
+  margin-left: var(--space-tight);
+  color: var(--red);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.primary:disabled::after {
+  color: inherit;
+}
+
+/* Section titles in the portal's serif. */
+.sectionHead h2,
+.readSection h2,
+.listHead h2 {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+}
+
+.sectionHead span {
+  font-size: 0.6875rem;
+  font-weight: var(--weight-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sectionHead {
+  margin: 0 0 12px;
+}
+
+/* Status as a dot and a word, as on Members. */
+.tag {
+  padding: 0;
+  background: none;
+  color: var(--makeup-dark);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+}
+
+.tag::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
+
+.tagQuiet {
+  background: none;
+}
+
+.draftNote {
+  border-left: 3px solid var(--makeup);
+}
+
+/* Home: a stat strip over one open register, like the Member Directory. */
+.homeGrid {
+  grid-template-columns: 1fr;
+  gap: var(--space-block);
+}
+
+.homeGrid > aside {
+  padding: 0;
+}
+
+.homeGrid > aside > .label {
+  display: block;
+  padding: var(--space-group) var(--space-group) 4px;
+}
+
+.stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.stats div {
+  display: block;
+  padding: 8px var(--space-group) var(--space-copy);
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+
+.stats div:first-child {
+  border-left: 0;
+}
+
+.stats dd {
+  margin-top: 2px;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 2.25rem;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.draftNote {
+  margin: 0;
+  padding: var(--space-copy) var(--space-group);
+  border-top: 1px solid var(--line);
+}
+
+.homeGrid > section {
+  padding: 0;
+  counter-reset: folio;
+}
+
+.listHead {
+  padding: var(--space-group) var(--space-group) var(--space-copy);
+}
+
+.rows {
+  margin: 0;
+}
+
+.tableHead {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1.2fr) minmax(0, 1fr) 160px;
+  gap: 0 var(--space-copy);
+  padding-right: var(--space-group);
+  background: var(--navy);
+  color: var(--white);
+  font-size: 0.75rem;
+  font-weight: var(--weight-label);
+  letter-spacing: 0.09em;
+  line-height: 44px;
+  text-transform: uppercase;
+}
+
+.tableHead span:first-child {
+  grid-column: 2;
+}
+
+.tableHead span:nth-child(2) {
+  grid-column: 3;
+}
+
+
+.row {
+  counter-increment: folio;
+  grid-template-columns: 60px minmax(0, 1.2fr) minmax(0, 1fr) 160px;
+  gap: 4px var(--space-copy);
+  padding: var(--space-copy) var(--space-group) var(--space-copy) 0;
+}
+
+.row::before {
+  content: counter(folio, decimal-leading-zero);
+  grid-column: 1;
+  grid-row: 1;
+  padding-left: var(--space-group);
+  color: var(--red);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.125rem;
+  font-style: italic;
+  font-weight: 560;
+}
+
+.row .avatar {
+  display: none;
+}
+
+/* "Choose a player" has no table head: let the list run edge to edge. */
+.panel > .rows:first-child {
+  margin: calc(var(--space-group) * -1);
+}
+
+.panel > .rows:first-child > .row:first-child {
+  border-top: 0;
+}
+
+.row > :nth-child(2) {
+  grid-column: 2;
+}
+
+/* Form: summary rail and meta strip read as one square sheet. */
+.summary {
+  border-top: 3px solid var(--navy);
+}
+
+.bigNumber {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.field textarea {
+  border-color: var(--line-control);
+}
+
+.skillRow {
+  background: var(--paper);
+}
+
+@media (max-width: 900px) {
+  .homeGrid > aside > .label {
+    padding-top: var(--space-copy);
+  }
+
+  .stats {
+    gap: 0;
+  }
+
+  .stats div {
+    padding: 8px var(--space-copy) var(--space-copy);
+  }
+}
+
+@media (max-width: 560px) {
+  .tableHead {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: 44px minmax(0, 1fr);
+    padding: var(--space-copy) var(--space-copy) var(--space-copy) 0;
+  }
+
+  .row::before {
+    padding-left: var(--space-copy);
   }
 }
