@@ -37,7 +37,7 @@ const newsreaderUpright = Newsreader({
 export const metadata: Metadata = {
   metadataBase: siteOrigin,
   title: {
-    default: "SMBA | Professional Badminton Coaching in Mahadevapura",
+    default: "Sathiya Moorthy Badminton Academy | Coaching in Mahadevapura",
     template: "%s | SMBA",
   },
   description:
@@ -49,10 +49,16 @@ export const metadata: Metadata = {
     "Sathiya Moorthy badminton",
     "badminton free trial",
   ],
+  // Search Console's "HTML tag" verification. Set GOOGLE_SITE_VERIFICATION to the
+  // token Google shows (the content="..." value only) and redeploy. Left unset, no tag
+  // is emitted, so DNS verification is unaffected.
+  verification: process.env.GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+    : undefined,
   authors: [{ name: "Sathiya Moorthy Badminton Academy" }],
   creator: "Sathiya Moorthy Badminton Academy",
   icons: {
-    icon: [{ url: "/images/icon.png", sizes: "512x512", type: "image/png" }],
+    icon: [{ url: "/images/icon.png", sizes: "192x192", type: "image/png" }],
     apple: [{ url: "/images/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
