@@ -79,51 +79,57 @@ export function AssessmentHome({
           {players.length === 0
             ? <p className={styles.empty}>No active players yet. They appear here once they are enrolled.</p>
             : (
-              <ul className={styles.rows}>
-                {players.map((player) => (
-                  <li className={styles.row} key={player.playerId}>
-                    <span className={styles.avatar} aria-hidden="true">{player.initials}</span>
-                    <div>
-                      <span className={styles.rowName}>
-                        {player.name}
-                        {player.draft ? <span className={styles.tag}>Draft</span> : null}
-                        {!player.lastAssessedOn && !player.draft ? <span className={`${styles.tag} ${styles.tagQuiet}`}>New</span> : null}
-                      </span>
-                      {player.group ? <span className={styles.rowMeta}>{player.group}</span> : null}
-                    </div>
-                    <div className={styles.rowWhen}>
-                      {player.lastAssessedOn
-                        ? (
-                          <>
-                            <strong>{formatAssessmentDate(player.lastAssessedOn)}</strong>
-                            <span className={styles.rowMeta}>
-                              {describeDaysAgo(player.lastAssessedOn, today)}
-                              {player.lastOverall !== null ? ` · ${formatRating(player.lastOverall)} / 5` : ""}
-                            </span>
-                          </>
-                        )
-                        : (
-                          <>
-                            <strong>Never assessed</strong>
-                            <span className={styles.rowMeta}>No history yet</span>
-                          </>
-                        )}
-                    </div>
-                    <div className={styles.rowActions}>
-                      {player.lastAssessedOn
-                        ? (
-                          <Link className={styles.textLink} href={`/coach/assessments/players/${player.playerId}`}>
-                            History
-                          </Link>
-                        )
-                        : null}
-                      <Link className={styles.button} href={assessHref(player)}>
-                        {player.draft ? "Continue" : "Assess"}
-                      </Link>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <div className={styles.tableHead} aria-hidden="true">
+                  <span>Player</span>
+                  <span>Last assessed</span>
+                </div>
+                <ul className={styles.rows}>
+                  {players.map((player) => (
+                    <li className={styles.row} key={player.playerId}>
+                      <span className={styles.avatar} aria-hidden="true">{player.initials}</span>
+                      <div>
+                        <span className={styles.rowName}>
+                          {player.name}
+                          {player.draft ? <span className={styles.tag}>Draft</span> : null}
+                          {!player.lastAssessedOn && !player.draft ? <span className={`${styles.tag} ${styles.tagQuiet}`}>New</span> : null}
+                        </span>
+                        {player.group ? <span className={styles.rowMeta}>{player.group}</span> : null}
+                      </div>
+                      <div className={styles.rowWhen}>
+                        {player.lastAssessedOn
+                          ? (
+                            <>
+                              <strong>{formatAssessmentDate(player.lastAssessedOn)}</strong>
+                              <span className={styles.rowMeta}>
+                                {describeDaysAgo(player.lastAssessedOn, today)}
+                                {player.lastOverall !== null ? ` · ${formatRating(player.lastOverall)} / 5` : ""}
+                              </span>
+                            </>
+                          )
+                          : (
+                            <>
+                              <strong>Never assessed</strong>
+                              <span className={styles.rowMeta}>No history yet</span>
+                            </>
+                          )}
+                      </div>
+                      <div className={styles.rowActions}>
+                        {player.lastAssessedOn
+                          ? (
+                            <Link className={styles.textLink} href={`/coach/assessments/players/${player.playerId}`}>
+                              History
+                            </Link>
+                          )
+                          : null}
+                        <Link className={styles.button} href={assessHref(player)}>
+                          {player.draft ? "Continue" : "Assess"}
+                        </Link>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
         </section>
       </div>

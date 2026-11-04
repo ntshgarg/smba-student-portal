@@ -363,7 +363,7 @@ function FeeRegisterTable({
                   <dl>
                     <div><dt>{isRegistration ? "Charged" : "Billed"}</dt><dd>{formatInr(row.originalAmountPaise)}</dd></div>
                     <div><dt>Received</dt><dd>{formatInr(row.receivedPaise)}</dd></div>
-                    <div><dt>Balance</dt><dd>{formatInr(row.outstandingPaise)}</dd></div>
+                    <div className={row.outstandingPaise > 0 ? recordsStyles.balanceOwed : undefined}><dt>Balance</dt><dd>{formatInr(row.outstandingPaise)}</dd></div>
                   </dl>
                 </td>
                 <td className={recordsStyles.registrationStatus} data-label="Status">
