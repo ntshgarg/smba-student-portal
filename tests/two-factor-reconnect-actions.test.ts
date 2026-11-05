@@ -5,12 +5,13 @@ const mocks = vi.hoisted(() => ({
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   getRawAuthSession: vi.fn(),
-  loginIsBlocked: vi.fn(),
-  recordLoginFailure: vi.fn(),
-  recordLoginSuccess: vi.fn(),
   redirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT")
   }),
+  releaseLoginAttempt: vi.fn(),
+  releaseSecondFactorAttempt: vi.fn(),
+  reserveLoginAttempt: vi.fn(),
+  reserveSecondFactorAttempt: vi.fn(),
   revokeOtherSessions: vi.fn(),
   verifyBackupCode: vi.fn(),
   verifyCurrentPassword: vi.fn(),
@@ -35,9 +36,10 @@ vi.mock("@/lib/auth/coach-access", () => ({
   getCoachAccessProfile: mocks.getCoachAccessProfile,
 }))
 vi.mock("@/lib/auth/credential-service", () => ({
-  loginIsBlocked: mocks.loginIsBlocked,
-  recordLoginFailure: mocks.recordLoginFailure,
-  recordLoginSuccess: mocks.recordLoginSuccess,
+  releaseLoginAttempt: mocks.releaseLoginAttempt,
+  releaseSecondFactorAttempt: mocks.releaseSecondFactorAttempt,
+  reserveLoginAttempt: mocks.reserveLoginAttempt,
+  reserveSecondFactorAttempt: mocks.reserveSecondFactorAttempt,
   verifyCurrentPassword: mocks.verifyCurrentPassword,
 }))
 vi.mock("@/lib/auth/session", () => ({ getRawAuthSession: mocks.getRawAuthSession }))
@@ -71,7 +73,8 @@ describe("authenticator reconnection", () => {
       user: { id: "head-coach", twoFactorEnabled: true },
     })
     mocks.getCoachAccessProfile.mockReturnValue({ accessLevel: "head_admin" })
-    mocks.loginIsBlocked.mockReturnValue(false)
+    mocks.reserveLoginAttempt.mockReturnValue(true)
+    mocks.reserveSecondFactorAttempt.mockReturnValue(true)
     mocks.verifyCurrentPassword.mockResolvedValue(true)
     mocks.verifyTOTP.mockResolvedValue({ status: true })
     mocks.verifyBackupCode.mockResolvedValue({ status: true })
@@ -91,7 +94,9 @@ describe("authenticator reconnection", () => {
     })
     expect(mocks.verifyTOTP).not.toHaveBeenCalled()
     expect(mocks.disableTwoFactor).not.toHaveBeenCalled()
-    expect(mocks.recordLoginFailure).toHaveBeenCalled()
+    // The guess was reserved before the check and is not handed back.
+    expect(mocks.reserveLoginAttempt).toHaveBeenCalledWith({ ipHash: "ip-hash", subjectHash: "subject-hash" })
+    expect(mocks.releaseLoginAttempt).not.toHaveBeenCalled()
   })
 
   it("uses a current authenticator code, retires other sessions and starts fresh setup", async () => {
@@ -108,7 +113,9 @@ describe("authenticator reconnection", () => {
       body: { password: "Current secure password!" },
     }))
     expect(mocks.redirect).toHaveBeenLastCalledWith("/auth/two-factor/setup?reconnect=1")
-    expect(mocks.recordLoginSuccess).toHaveBeenCalledWith("subject-hash")
+    expect(mocks.releaseLoginAttempt).toHaveBeenCalledWith({ ipHash: "ip-hash", subjectHash: "subject-hash" })
+    expect(mocks.reserveSecondFactorAttempt).toHaveBeenCalledWith("head-coach", "session")
+    expect(mocks.releaseSecondFactorAttempt).toHaveBeenCalledWith("head-coach")
   })
 
   it("accepts an unused recovery code when the phone entry is gone", async () => {
@@ -138,7 +145,8 @@ describe("authenticator reconnection", () => {
       errorField: "secondFactor",
     })
     expect(mocks.disableTwoFactor).not.toHaveBeenCalled()
-    expect(mocks.recordLoginFailure).toHaveBeenCalled()
+    expect(mocks.reserveSecondFactorAttempt).toHaveBeenCalledWith("head-coach", "session")
+    expect(mocks.releaseSecondFactorAttempt).not.toHaveBeenCalled()
     expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({
       eventType: "totp_failed",
       metadata: { operation: "reconnect" },
@@ -147,7 +155,7 @@ describe("authenticator reconnection", () => {
   })
 
   it("blocks repeated reconnect attempts before checking another credential", async () => {
-    mocks.loginIsBlocked.mockReturnValue(true)
+    mocks.reserveLoginAttempt.mockReturnValue(false)
 
     await expect(beginAuthenticatorReconnect(
       { error: null, errorField: null },
@@ -161,6 +169,25 @@ describe("authenticator reconnection", () => {
     expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({
       eventType: "login_rate_limited",
       metadata: { operation: "totp_reconnect" },
+      outcome: "blocked",
+    }))
+  })
+  it("stops before checking the code once the account's second-factor budget is spent", async () => {
+    mocks.reserveSecondFactorAttempt.mockReturnValue(false)
+
+    await expect(beginAuthenticatorReconnect(
+      { error: null, errorField: null },
+      reconnectData("123456"),
+    )).resolves.toEqual({
+      error: "Too many attempts. Wait a few minutes before trying again.",
+      errorField: null,
+    })
+    expect(mocks.verifyTOTP).not.toHaveBeenCalled()
+    expect(mocks.disableTwoFactor).not.toHaveBeenCalled()
+    expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: "head-coach",
+      eventType: "login_rate_limited",
+      metadata: { factor: "second_factor", operation: "totp_reconnect" },
       outcome: "blocked",
     }))
   })

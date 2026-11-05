@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
     return input.role === "coach" ? "/coach" : "/player"
   }),
   recordLoginFailure: vi.fn(),
+  reserveLoginAttempt: vi.fn(() => true),
   recordLoginSuccess: vi.fn(),
   redirect: vi.fn(),
   confirmRegistration: vi.fn(),
@@ -83,6 +84,7 @@ vi.mock("@/lib/auth/credential-service", () => ({
   // back, not how long it takes, and a real delay would only slow the suite.
   unknownBucketDelayMs: () => 0,
   recordLoginFailure: mocks.recordLoginFailure,
+  reserveLoginAttempt: mocks.reserveLoginAttempt,
   recordLoginSuccess: mocks.recordLoginSuccess,
   validateNewPassword: vi.fn(() => null),
 }))
@@ -305,6 +307,7 @@ describe("role-aware login actions", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.loginIsBlocked.mockReturnValue(false)
+    mocks.reserveLoginAttempt.mockReturnValue(true)
     mocks.coachTotpRequired.mockReturnValue(false)
   })
 
@@ -395,8 +398,22 @@ describe("role-aware login actions", () => {
     // The hooks never see this attempt, so leaving it uncounted would make the
     // form a cheaper way to probe which Academy IDs exist than the endpoint.
     expect(mocks.signInUsername).not.toHaveBeenCalled()
-    expect(mocks.recordLoginFailure).toHaveBeenCalledOnce()
+    // Reserved before the hash, so a burst cannot all pass the read first.
+    expect(mocks.reserveLoginAttempt).toHaveBeenCalledOnce()
+    expect(mocks.recordLoginFailure).not.toHaveBeenCalled()
     expect(mocks.hashPassword).toHaveBeenCalledOnce()
+  })
+
+  it("stops an unknown Academy ID at the reservation when a parallel guess spent the last of the budget", async () => {
+    mocks.findApprovedAccountByAcademyId.mockReturnValue(undefined)
+    mocks.reserveLoginAttempt.mockReturnValue(false)
+
+    await expect(
+      loginWithAcademyId({ error: null }, loginData("password", "A secure password")),
+    ).resolves.toEqual({
+      error: "We couldn\u2019t sign you in. Wait a few minutes before trying again.",
+    })
+    expect(mocks.hashPassword).not.toHaveBeenCalled()
   })
 
   // The two answers above are different strings, so they may only ever be
@@ -484,6 +501,15 @@ describe("role-aware login actions", () => {
     // write every audit row twice.
     expect(mocks.recordLoginFailure).not.toHaveBeenCalled()
     expect(mocks.loginIsBlocked).not.toHaveBeenCalled()
+  })
+
+  it("tells the holder of a retired weak PIN to use their password instead", async () => {
+    mocks.signInPin.mockRejectedValue(Object.assign(new Error("retired"), { status: "FORBIDDEN" }))
+
+    await expect(loginWithPin({ error: null }, loginData("pin", "123456"))).resolves.toEqual({
+      error: "Your PIN was too easy to guess, so we have switched it off to protect your account. "
+        + "Sign in with your password, then choose a new PIN in Account security.",
+    })
   })
 })
 

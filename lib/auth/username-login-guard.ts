@@ -7,9 +7,10 @@ import { createAuthMiddleware, isAPIError } from "better-auth/api"
 import { findApprovedAccountByAcademyId } from "@/lib/auth/account-service"
 import { isAcademyId, normalizeAcademyId } from "@/lib/auth/identity"
 import {
-  loginIsBlocked,
   recordLoginFailure,
   recordLoginSuccess,
+  releaseLoginAttempt,
+  reserveLoginAttempt,
 } from "@/lib/auth/credential-service"
 import {
   authSubjectHash,
@@ -130,7 +131,12 @@ export const usernameLoginHooks = {
        * over them is indexed. A bounded, self-clearing cost is the right trade
        * against an unbounded disclosure.
        */
-      recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+      // A guess was reserved in `before`, so it is already counted. The one
+      // exception is a just-written password, which `before` lets through
+      // without reserving; it is counted here as it always was.
+      if (justWrittenPassword.getStore()) {
+        recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+      }
       writeAuthSecurityEvent({
         ...auditBase,
         eventType: "login_failed",
@@ -145,7 +151,10 @@ export const usernameLoginHooks = {
     // exactly as the login form cleared it before: the password was right, and
     // the code that follows is metered separately by the twoFactor plugin's own
     // eight-attempt `accountLockout`.
-    recordLoginSuccess(subjectHash)
+    // Hand back the guess `before` reserved. A just-written password reserved
+    // nothing, so it only clears the account's failures.
+    if (justWrittenPassword.getStore()) recordLoginSuccess(subjectHash)
+    else releaseLoginAttempt({ ipHash: security.ipHash, subjectHash })
     writeAuthSecurityEvent({
       ...auditBase,
       eventType: "login_succeeded",
@@ -167,7 +176,11 @@ export const usernameLoginHooks = {
 
     const security = requestSecurityContext(context.headers ?? new Headers())
     const subjectHash = authSubjectHash(academyId)
-    if (!loginIsBlocked({ ipHash: security.ipHash, subjectHash })) return
+    // Check and spend in one step, before the handler's slow scrypt verify.
+    // Reading the block here and counting the failure in `after` left the
+    // verify as a window in which a burst of simultaneous guesses each read
+    // "not blocked"; the PIN door was fixed the same way (pin-plugin.ts).
+    if (reserveLoginAttempt({ ipHash: security.ipHash, subjectHash })) return
     writeAuthSecurityEvent({
       eventType: "login_rate_limited",
       ipHash: security.ipHash,

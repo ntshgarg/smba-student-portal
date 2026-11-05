@@ -537,9 +537,11 @@ export async function setPinCredential(input: {
 export function removePinCredential(accountId: string, {
   database = initializeDatabase(),
   now = new Date(),
+  reason,
 }: {
   database?: SmbaDatabase
   now?: Date
+  reason?: "weak_legacy_pin"
 } = {}) {
   const result = database.delete(authPinCredentials)
     .where(eq(authPinCredentials.accountId, accountId)).run()
@@ -548,6 +550,7 @@ export function removePinCredential(accountId: string, {
       accountId,
       actorAccountId: accountId,
       eventType: "pin_removed",
+      ...(reason ? { metadata: { reason } } : {}),
       outcome: "success",
     }, { database, now })
   }
@@ -590,7 +593,9 @@ export async function verifyCurrentPasswordAttempt(input: {
 } = {}): Promise<CurrentPasswordAttemptResult> {
   const subjectHash = authSubjectHash(normalizeAcademyId(input.academyId))
   const attempt = { ipHash: input.ipHash, subjectHash }
-  if (loginIsBlocked(attempt, { database, now })) {
+  // Reserved before the slow verify, not counted after it, so a burst of
+  // parallel guesses cannot all slip in under the ceiling (see reserveLoginAttempt).
+  if (!reserveLoginAttempt(attempt, { database, now })) {
     writeAuthSecurityEvent({
       accountId: input.accountId,
       actorAccountId: input.accountId,
@@ -607,7 +612,7 @@ export async function verifyCurrentPasswordAttempt(input: {
     accountId: input.accountId,
     password: input.password,
   }, { database })) {
-    recordLoginFailure(attempt, { database, now })
+    // Already counted by the reservation.
     writeAuthSecurityEvent({
       accountId: input.accountId,
       actorAccountId: input.accountId,
@@ -620,7 +625,7 @@ export async function verifyCurrentPasswordAttempt(input: {
     }, { database, now })
     return "invalid"
   }
-  recordLoginSuccess(subjectHash, { database })
+  releaseLoginAttempt(attempt, { database, now })
   return "verified"
 }
 
@@ -759,11 +764,17 @@ export function loginIsBlocked(input: {
 
 type AttemptTransaction = Parameters<Parameters<SmbaDatabase["transaction"]>[0]>[0]
 
+type AttemptKey = { key: string, threshold: number }
+
 function countAttempt(tx: AttemptTransaction, input: {
   factor?: LoginFactor
   ipHash: string
   subjectHash: string
 }, now: Date) {
+  countAttemptKeys(tx, attemptKeys(input.subjectHash, input.ipHash, input.factor), now)
+}
+
+function countAttemptKeys(tx: AttemptTransaction, keys: AttemptKey[], now: Date) {
   /*
    * Rows past their window are spent: nothing reads them, and they cannot come
    * back because a stale window resets the count. Left alone the table grew
@@ -778,7 +789,7 @@ function countAttempt(tx: AttemptTransaction, input: {
       lt(authLoginAttempts.blockedUntil, now),
     ),
   )).run()
-  for (const { key, threshold } of attemptKeys(input.subjectHash, input.ipHash, input.factor)) {
+  for (const { key, threshold } of keys) {
     const current = tx.select().from(authLoginAttempts)
       .where(eq(authLoginAttempts.key, key)).get()
     const outsideWindow = !current
@@ -868,6 +879,7 @@ export function reserveLoginAttempt(input: {
  * reservation set is lifted again if the count has fallen back under its ceiling.
  */
 export function releaseLoginAttempt(input: {
+  factor?: LoginFactor
   ipHash: string
   subjectHash: string
 }, {
@@ -880,9 +892,12 @@ export function releaseLoginAttempt(input: {
   database.transaction((tx) => {
     recordLoginSuccess(input.subjectHash, { database: tx })
     // Only a verified PIN resets the PIN budget; see PIN_ACCOUNT_WIDE_FAILURE_THRESHOLD.
-    tx.delete(authLoginAttempts)
-      .where(eq(authLoginAttempts.key, `pin:${input.subjectHash}`))
-      .run()
+    // A right password must not hand a PIN guesser a fresh ten.
+    if (input.factor === "pin") {
+      tx.delete(authLoginAttempts)
+        .where(eq(authLoginAttempts.key, `pin:${input.subjectHash}`))
+        .run()
+    }
     if (input.ipHash === unknownIpHash()) return
     const key = `ip:${input.ipHash}`
     const current = tx.select().from(authLoginAttempts)
@@ -895,6 +910,86 @@ export function releaseLoginAttempt(input: {
       .where(eq(authLoginAttempts.key, key))
       .run()
   }, { behavior: "immediate" })
+}
+
+/*
+ * Budgets for guessing an account's authenticator or recovery codes, spent
+ * before every check.
+ *
+ * Better Auth's own eight-failure lockout counts only sign-in challenges, reads
+ * its count before the slow check and writes it after, so parallel challenges
+ * each saw "not locked". The in-session checks (finishing setup, reconnecting,
+ * reissuing recovery codes, changing the recovery email) skipped it entirely,
+ * and the `/two-factor/*` rate rules in better-auth.ts never run because no
+ * Better Auth HTTP route is mounted. So the portal counts for itself: eight
+ * failures a quarter-hour per account, reserved before the check exactly as PIN
+ * sign-in reserves before its verify.
+ *
+ * Two budgets per account, not one, because the people who can spend them
+ * differ:
+ * - "challenge": checks made before the person is signed in -- the sign-in
+ *   challenge and password recovery. Reaching one needs the account's password,
+ *   its PIN, or its recovery inbox.
+ * - "session": checks made inside a signed-in session. Reaching one needs a
+ *   live session.
+ * Sharing one budget let anyone holding only a coach's PIN fail eight sign-in
+ * codes and lock the real coach, already signed in elsewhere, out of
+ * reconnecting their authenticator or reissuing recovery codes. A right code in
+ * either place proves the factor and clears both.
+ */
+const SECOND_FACTOR_FAILURE_THRESHOLD = 8
+
+export type SecondFactorScope = "challenge" | "session"
+
+function secondFactorKey(accountId: string, scope: SecondFactorScope): AttemptKey {
+  return {
+    key: `second_factor:${scope}:${authSubjectHash(`account:${accountId}`)}`,
+    threshold: SECOND_FACTOR_FAILURE_THRESHOLD,
+  }
+}
+
+/**
+ * Checks one of this account's second-factor budgets and spends a guess from
+ * it, as a single step. Returns false, spending nothing, when that budget is
+ * already gone. Hand the guess back with `releaseSecondFactorAttempt` when the
+ * code was right.
+ */
+export function reserveSecondFactorAttempt(accountId: string, scope: SecondFactorScope, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}) {
+  const keys = [secondFactorKey(accountId, scope)]
+  return database.transaction((tx) => {
+    const blocked = keys.some(({ key }) => {
+      const row = tx.select({ blockedUntil: authLoginAttempts.blockedUntil })
+        .from(authLoginAttempts)
+        .where(eq(authLoginAttempts.key, key))
+        .get()
+      return Boolean(row?.blockedUntil && row.blockedUntil > now)
+    })
+    if (blocked) return false
+    countAttemptKeys(tx, keys, now)
+    return true
+  }, { behavior: "immediate" })
+}
+
+/**
+ * A right code -- or an owner-approved reset that removes the factor -- clears
+ * both of the account's second-factor budgets.
+ */
+export function releaseSecondFactorAttempt(accountId: string, {
+  database = initializeDatabase(),
+}: {
+  database?: SmbaDatabaseExecutor
+} = {}) {
+  for (const scope of ["challenge", "session"] as const) {
+    database.delete(authLoginAttempts)
+      .where(eq(authLoginAttempts.key, secondFactorKey(accountId, scope).key))
+      .run()
+  }
 }
 
 /**

@@ -6,9 +6,10 @@ const mocks = vi.hoisted(() => ({
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   getRawAuthSession: vi.fn(),
-  loginIsBlocked: vi.fn(),
-  recordLoginFailure: vi.fn(),
-  recordLoginSuccess: vi.fn(),
+  releaseLoginAttempt: vi.fn(),
+  releaseSecondFactorAttempt: vi.fn(),
+  reserveLoginAttempt: vi.fn(),
+  reserveSecondFactorAttempt: vi.fn(),
   removePinCredential: vi.fn(),
   revokeOtherSessions: vi.fn(),
   setPinCredential: vi.fn(),
@@ -45,9 +46,10 @@ vi.mock("@/lib/auth/coach-access", () => ({
 }))
 vi.mock("@/lib/auth/credential-service", () => ({
   hasPinCredential: vi.fn(),
-  loginIsBlocked: mocks.loginIsBlocked,
-  recordLoginFailure: mocks.recordLoginFailure,
-  recordLoginSuccess: mocks.recordLoginSuccess,
+  releaseLoginAttempt: mocks.releaseLoginAttempt,
+  releaseSecondFactorAttempt: mocks.releaseSecondFactorAttempt,
+  reserveLoginAttempt: mocks.reserveLoginAttempt,
+  reserveSecondFactorAttempt: mocks.reserveSecondFactorAttempt,
   removePinCredential: mocks.removePinCredential,
   setPinCredential: mocks.setPinCredential,
   validateNewPassword: vi.fn(),
@@ -156,7 +158,8 @@ describe("reissuing the authenticator recovery codes", () => {
     mocks.getRawAuthSession.mockResolvedValue({
       user: { id: "head-coach", twoFactorEnabled: true },
     })
-    mocks.loginIsBlocked.mockReturnValue(false)
+    mocks.reserveLoginAttempt.mockReturnValue(true)
+    mocks.reserveSecondFactorAttempt.mockReturnValue(true)
     mocks.verifyCurrentPassword.mockResolvedValue(true)
     mocks.verifyTOTP.mockResolvedValue({ status: true })
     mocks.verifyBackupCode.mockResolvedValue({ status: true })
@@ -193,9 +196,11 @@ describe("reissuing the authenticator recovery codes", () => {
     expect(mocks.verifyTOTP).toHaveBeenCalledWith(expect.objectContaining({
       body: { code: "123456", trustDevice: false },
     }))
-    // The whole point of the local limiter here: the budget is only cleared
-    // once both factors are past, so second-factor guesses accumulate.
-    expect(mocks.recordLoginSuccess).toHaveBeenCalledWith("hash:SMBA-HC-0001")
+    // The password guess is handed back once it is right; the code is metered
+    // by the account's own second-factor budget, reserved before the check.
+    expect(mocks.releaseLoginAttempt).toHaveBeenCalledWith({ ipHash: "ip", subjectHash: "hash:SMBA-HC-0001" })
+    expect(mocks.reserveSecondFactorAttempt).toHaveBeenCalledWith("head-coach", "session")
+    expect(mocks.releaseSecondFactorAttempt).toHaveBeenCalledWith("head-coach")
   })
 
   it("reads anything that is not six digits as a recovery code", async () => {
@@ -218,11 +223,9 @@ describe("reissuing the authenticator recovery codes", () => {
         errorField: "secondFactor",
       })
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
-    expect(mocks.recordLoginFailure).toHaveBeenCalledWith({
-      ipHash: "ip",
-      subjectHash: "hash:SMBA-HC-0001",
-    })
-    expect(mocks.recordLoginSuccess).not.toHaveBeenCalled()
+    // Spent by the reservation before the check, and not handed back.
+    expect(mocks.reserveSecondFactorAttempt).toHaveBeenCalledWith("head-coach", "session")
+    expect(mocks.releaseSecondFactorAttempt).not.toHaveBeenCalled()
   })
 
   it("asks for the second factor before spending one, when the field is empty", async () => {
@@ -253,7 +256,7 @@ describe("reissuing the authenticator recovery codes", () => {
   })
 
   it("stops at the rate limiter rather than reporting a wrong password", async () => {
-    mocks.loginIsBlocked.mockReturnValue(true)
+    mocks.reserveLoginAttempt.mockReturnValue(false)
 
     await expect(reissueRecoveryCodesAction({ codes: null, error: null }, reissueData()))
       .resolves.toEqual({
@@ -263,6 +266,24 @@ describe("reissuing the authenticator recovery codes", () => {
       })
     expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
+  })
+
+  it("stops before checking the code once the account's second-factor budget is spent", async () => {
+    mocks.reserveSecondFactorAttempt.mockReturnValue(false)
+
+    await expect(reissueRecoveryCodesAction({ codes: null, error: null }, reissueData()))
+      .resolves.toEqual({
+        codes: null,
+        error: "Too many attempts. Wait a few minutes before trying again.",
+        errorField: null,
+      })
+    expect(mocks.verifyTOTP).not.toHaveBeenCalled()
+    expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
+    expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "login_rate_limited",
+      metadata: { factor: "second_factor", operation: "reissue_recovery_codes" },
+      outcome: "blocked",
+    }))
   })
 
   it("refuses an empty form before spending an attempt", async () => {

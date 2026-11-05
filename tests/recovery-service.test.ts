@@ -29,6 +29,7 @@ import {
   recoverySubjectKeyForAccount,
   requestPasswordRecovery,
   requestRecoveryEmailVerification,
+  verifyFreshAccountSecondFactor,
   verifyPasswordRecoverySecondFactor,
 } from "@/lib/auth/recovery-service"
 import type {
@@ -39,6 +40,7 @@ import type {
   RegistrationVerificationMessage,
 } from "@/lib/auth/mailer"
 import { authEmailRequired, validateAuthEmailConfiguration } from "@/lib/auth/mailer"
+import { reserveSecondFactorAttempt } from "@/lib/auth/credential-service"
 import type { SmbaDatabase } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
 
@@ -564,6 +566,161 @@ describe("password recovery", () => {
       role: "coach",
       twoFactorEnabled: true,
     }, { database })).toBe("/auth/pin/setup")
+  })
+
+  async function claimedHeadCoachRecovery() {
+    const accountId = "head-burst"
+    await createActiveAccount({
+      accessLevel: "head_admin",
+      academyId: "SMBA-HC-0001",
+      accountId,
+      email: "coach@example.com",
+      role: "coach",
+    })
+    const secret = await addAuthenticator(accountId)
+    const mailer = new CapturingMailer()
+    await requestPasswordRecovery({ academyId: "SMBA-HC-0001", email: "coach@example.com", mailer }, { database, now: NOW })
+    const token = tokenFrom(mailer.passwordRecovery[0])
+    expect(claimPasswordRecovery(token, { database, now: NOW })).toBe(true)
+    const factor = () => database.select().from(schema.authTwoFactors)
+      .where(eq(schema.authTwoFactors.userId, accountId)).get()!
+    return { factor, secret, token }
+  }
+
+  it("checks only as many simultaneous second-factor guesses as the limits allow, and counts every one", async () => {
+    const { factor, token } = await claimedHeadCoachRecovery()
+    // Fired together from one address. Each check awaits a decrypt, so before
+    // the fix every request read "not blocked" and "not locked" first, and the
+    // stored count was rewritten from a stale copy: fifty misses became one.
+    const results = await Promise.all(Array.from({ length: 50 }, (_, index) =>
+      verifyPasswordRecoverySecondFactor({
+        credential: `WRONG-CODE-${index}`,
+        security: { ipHash: "burst-ip", userAgent: "test" },
+        token,
+      }, { database, now: NOW })))
+    expect(results.every((result) => result === false)).toBe(true)
+    // Five per account per address reach the check; each is counted.
+    expect(factor().failedVerificationCount).toBe(5)
+  })
+
+  it("locks the authenticator after eight misses spread across addresses, and a later miss keeps the lock", async () => {
+    const { factor, secret, token } = await claimedHeadCoachRecovery()
+    for (let index = 0; index < 8; index += 1) {
+      await verifyPasswordRecoverySecondFactor({
+        credential: `WRONG-CODE-${index}`,
+        security: { ipHash: `ip-${index}`, userAgent: "test" },
+        token,
+      }, { database, now: NOW })
+    }
+    expect(factor().failedVerificationCount).toBe(8)
+    expect(factor().lockedUntil?.getTime()).toBe(NOW.getTime() + 15 * 60 * 1000)
+    // Even the right code is refused while the lock stands.
+    expect(await verifyPasswordRecoverySecondFactor({
+      credential: await createOTP(secret).totp(),
+      security: { ipHash: "fresh-ip", userAgent: "test" },
+      token,
+    }, { database, now: NOW })).toBe(false)
+    expect(factor().lockedUntil).not.toBeNull()
+  })
+
+  it("caps simultaneous second-factor guesses per account, not only per address", async () => {
+    const { factor, token } = await claimedHeadCoachRecovery()
+    // Spread over four addresses, the per-address ceiling (5 each) would let 20
+    // through; the account's own budget stops it at 8.
+    await Promise.all(Array.from({ length: 50 }, (_, index) =>
+      verifyPasswordRecoverySecondFactor({
+        credential: `WRONG-CODE-${index}`,
+        security: { ipHash: `burst-ip-${index % 4}`, userAgent: "test" },
+        token,
+      }, { database, now: NOW })))
+    expect(factor().failedVerificationCount).toBe(8)
+  })
+
+  it("never lifts a lock that sign-in set while this check was in flight", async () => {
+    const { factor, token } = await claimedHeadCoachRecovery()
+    database.update(schema.authTwoFactors).set({ failedVerificationCount: 2 })
+      .where(eq(schema.authTwoFactors.userId, "head-burst")).run()
+    // The row is read, unlocked, before the check awaits its decrypt...
+    const pending = verifyPasswordRecoverySecondFactor({
+      credential: "WRONG-CODE",
+      security: { ipHash: "in-flight", userAgent: "test" },
+      token,
+    }, { database, now: NOW })
+    // ...and Better Auth's sign-in lockout locks the factor in the meantime.
+    const lockedUntil = new Date(NOW.getTime() + 10 * 60 * 1000)
+    database.update(schema.authTwoFactors).set({ lockedUntil })
+      .where(eq(schema.authTwoFactors.userId, "head-burst")).run()
+    expect(await pending).toBe(false)
+    // The old read-add-write wrote `lockedUntil: null` from its stale copy.
+    expect(factor().lockedUntil?.getTime()).toBe(lockedUntil.getTime())
+    expect(factor().failedVerificationCount).toBe(3)
+  })
+
+  // The factor row's lock is Better Auth's sign-in lockout. Anyone holding only
+  // a coach's PIN can set it by failing sign-in codes, so it must not block the
+  // real coach, signed in elsewhere, from changing their recovery email.
+  it("lets a signed-in check through a sign-in lock, and keeps its own misses off it", async () => {
+    const { factor, secret } = await claimedHeadCoachRecovery()
+    const lockedUntil = new Date(NOW.getTime() + 10 * 60 * 1000)
+    database.update(schema.authTwoFactors).set({ failedVerificationCount: 3, lockedUntil })
+      .where(eq(schema.authTwoFactors.userId, "head-burst")).run()
+
+    expect(await verifyFreshAccountSecondFactor({
+      accountId: "head-burst",
+      credential: "WRONG-CODE",
+    }, { database, now: NOW })).toBe(false)
+    expect(factor().failedVerificationCount).toBe(3)
+    expect(factor().lockedUntil?.getTime()).toBe(lockedUntil.getTime())
+
+    expect(await verifyFreshAccountSecondFactor({
+      accountId: "head-burst",
+      credential: await createOTP(secret).totp(),
+    }, { database, now: NOW })).toBe(true)
+  })
+
+  it("still refuses password recovery while the sign-in lock stands", async () => {
+    const { secret, token } = await claimedHeadCoachRecovery()
+    database.update(schema.authTwoFactors).set({
+      failedVerificationCount: 8,
+      lockedUntil: new Date(NOW.getTime() + 10 * 60 * 1000),
+    }).where(eq(schema.authTwoFactors.userId, "head-burst")).run()
+    expect(await verifyPasswordRecoverySecondFactor({
+      credential: await createOTP(secret).totp(),
+      security: { ipHash: "locked-out", userAgent: "test" },
+      token,
+    }, { database, now: NOW })).toBe(false)
+  })
+
+  it("starts a fresh count once a lock has run out, so one typo does not lock again", async () => {
+    const { factor, token } = await claimedHeadCoachRecovery()
+    database.update(schema.authTwoFactors).set({
+      failedVerificationCount: 8,
+      lockedUntil: new Date(NOW.getTime() - 1_000),
+    }).where(eq(schema.authTwoFactors.userId, "head-burst")).run()
+    expect(await verifyPasswordRecoverySecondFactor({
+      credential: "WRONG-CODE",
+      security: { ipHash: "after-lock", userAgent: "test" },
+      token,
+    }, { database, now: NOW })).toBe(false)
+    expect(factor().failedVerificationCount).toBe(1)
+    expect(factor().lockedUntil).toBeNull()
+  })
+
+  it("hands back the account's budget when the right code is given", async () => {
+    const { secret, token } = await claimedHeadCoachRecovery()
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+      reserveSecondFactorAttempt("head-burst", "challenge", { database, now: NOW })
+    }
+    expect(await verifyPasswordRecoverySecondFactor({
+      credential: await createOTP(secret).totp(),
+      security: { ipHash: "owner-home", userAgent: "test" },
+      token,
+    }, { database, now: NOW })).toBe(true)
+    let admitted = 0
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (reserveSecondFactorAttempt("head-burst", "challenge", { database, now: NOW })) admitted += 1
+    }
+    expect(admitted).toBe(8)
   })
 
   it("allows an admin backup code once, preserves TOTP and requires PIN recreation", async () => {
