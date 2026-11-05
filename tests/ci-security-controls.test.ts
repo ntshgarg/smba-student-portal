@@ -217,7 +217,13 @@ describe("CI security controls", () => {
 
   it("will not empty the academy unless a backup is confirmed to exist elsewhere", () => {
     const workflow = readRepositoryFile(".github/workflows/empty-academy.yml")
-    expect(workflow).toMatch(/backup_confirmed:\n(?:\s+.*\n)*?\s+required: true\n\s+type: boolean/u)
+    // Read the input's block by position rather than with one nested regex,
+    // which CodeQL flags for backtracking on its repeated whitespace.
+    const start = workflow.indexOf("      backup_confirmed:")
+    expect(start).toBeGreaterThan(-1)
+    const block = workflow.slice(start, workflow.indexOf("\n\n", start))
+    expect(block).toContain("required: true")
+    expect(block).toContain("type: boolean")
     // The check is read through env, not spliced into the script.
     expect(workflow).toContain("BACKUP_CONFIRMED: ${{ inputs.backup_confirmed }}")
     expect(workflow.indexOf("Require a backup made elsewhere"))
