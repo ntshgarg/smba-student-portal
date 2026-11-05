@@ -32,8 +32,8 @@ describe("platform-owner authentication runtime", () => {
       fullName: "Platform Owner",
       password: adminPassword,
       confirmPassword: adminPassword,
-      pin: "135790",
-      confirmPin: "135790",
+      pin: "739251",
+      confirmPin: "739251",
     })
     auth = (await import("@/lib/auth/better-auth")).auth
   })

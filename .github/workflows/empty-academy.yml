@@ -27,6 +27,10 @@ on:
         description: 'Type the platform owner Academy ID to confirm (SMBA-ADMIN-0001)'
         required: true
         type: string
+      backup_confirmed:
+        description: 'I have a current backup of the production database in private, access-controlled storage'
+        required: true
+        type: boolean
 
 concurrency:
   group: empty-academy
@@ -41,6 +45,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Require a backup made elsewhere
+        env:
+          BACKUP_CONFIRMED: ${{ inputs.backup_confirmed }}
+        run: |
+          if [ "$BACKUP_CONFIRMED" != "true" ]; then
+            echo "::error::Tick 'backup_confirmed'. This workflow no longer keeps a copy of the database: a copy stored as a workflow artifact on a public repository is downloadable by any GitHub account."
+            exit 1
+          fi
+
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,10 +68,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Taken here rather than trusted to the nightly one, so the snapshot is
-      # from minutes before the deletion and not from whenever the schedule last
-      # ran. This is the only way back.
-      - name: Snapshot the database first
+      # Proves the production database is reachable and readable before anything
+      # is deleted. It is NOT a backup: the snapshot lives on this runner and goes
+      # with it. It used to be encrypted and kept with actions/upload-artifact, but
+      # the repository is public and any GitHub account can download a public
+      # repository's artifacts, so that put a copy of every child's record in
+      # front of anyone who wanted it, protected only by one passphrase. The
+      # `backup_confirmed` input above makes a person say, before this runs, that a
+      # copy already exists somewhere access-controlled.
+      - name: Check the database can be read first
         env:
           SMBA_DATABASE_SNAPSHOT_SOURCE: ${{ secrets.SMBA_BACKUP_DATABASE_URL }}
           SMBA_DATABASE_SNAPSHOT_TOKEN: ${{ secrets.SMBA_BACKUP_DATABASE_TOKEN }}
@@ -68,28 +86,6 @@ jobs:
           mkdir -p .data/pre-reset
           npm run db:snapshot:create -- .data/pre-reset/smba-production.db
           npm run db:snapshot:verify -- .data/pre-reset/smba-production.db
-
-      - name: Encrypt the snapshot
-        env:
-          RUN_ID: ${{ github.run_id }}
-          SMBA_BACKUP_PASSPHRASE: ${{ secrets.SMBA_BACKUP_PASSPHRASE }}
-        run: |
-          test "${#SMBA_BACKUP_PASSPHRASE}" -ge 24 || { echo "SMBA_BACKUP_PASSPHRASE must contain at least 24 characters."; exit 1; }
-          tar -C .data/pre-reset -czf ".data/pre-reset-${RUN_ID}.tar.gz" \
-            smba-production.db smba-production.db.manifest.json
-          printf '%s' "$SMBA_BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
-            --passphrase-fd 0 --symmetric --cipher-algo AES256 --s2k-digest-algo SHA512 \
-            --output ".data/pre-reset-${RUN_ID}.tar.gz.gpg" \
-            ".data/pre-reset-${RUN_ID}.tar.gz"
-          rm -f ".data/pre-reset-${RUN_ID}.tar.gz"
-
-      - name: Keep the snapshot as an artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v5.0.0
-        with:
-          if-no-files-found: error
-          name: pre-reset-snapshot-${{ github.run_id }}
-          path: .data/pre-reset-${{ github.run_id }}.tar.gz.gpg
-          retention-days: 30
 
       # The backup token is deliberately read-only, and the reset needs to write.
       # Checked before the first attempt so the failure names the missing secret
@@ -113,7 +109,7 @@ jobs:
               echo "- \`SMBA_ADMIN_DATABASE_URL\` — the same value as Vercel's \`TURSO_DATABASE_URL\`"
               echo "- \`SMBA_ADMIN_DATABASE_TOKEN\` — a Turso token **with write access**"
               echo
-              echo "A snapshot was still taken and is attached to this run."
+              echo "Nothing was deleted. This workflow keeps no copy of the database."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi

@@ -204,11 +204,24 @@ describe("CI security controls", () => {
       ".github/workflows/empty-academy.yml",
     ]) {
       const workflow = readRepositoryFile(path)
-      const uploadsASnapshot = /uses: actions\/upload-artifact/u.test(workflow)
-        && /smba-production|pre-reset-snapshot/u.test(workflow)
-      const runsOnASchedule = /^\s*(schedule:|- cron:)/mu.test(workflow)
-      expect(uploadsASnapshot && runsOnASchedule).toBe(false)
+      // Not only scheduled runs: a manual run publishes just the same. The
+      // "Empty the academy" workflow was missed for exactly that reason -- it is
+      // workflow_dispatch only, so a check on schedules let its upload through
+      // while the file sat downloadable on a public repository.
+      const uploadsAnything = /uses:\s*actions\/upload-artifact/u.test(
+        workflow.replace(/^\s*#.*$/gmu, ""),
+      )
+      expect(uploadsAnything, `${path} publishes an artifact`).toBe(false)
     }
+  })
+
+  it("will not empty the academy unless a backup is confirmed to exist elsewhere", () => {
+    const workflow = readRepositoryFile(".github/workflows/empty-academy.yml")
+    expect(workflow).toMatch(/backup_confirmed:\n(?:\s+.*\n)*?\s+required: true\n\s+type: boolean/u)
+    // The check is read through env, not spliced into the script.
+    expect(workflow).toContain("BACKUP_CONFIRMED: ${{ inputs.backup_confirmed }}")
+    expect(workflow.indexOf("Require a backup made elsewhere"))
+      .toBeLessThan(workflow.indexOf("Check out repository"))
   })
 
   it("gives the stored restore only Actions read access and step-scoped passphrase", () => {

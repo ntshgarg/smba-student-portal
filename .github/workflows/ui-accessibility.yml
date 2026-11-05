@@ -22,7 +22,7 @@ jobs:
       BETTER_AUTH_SECRET: smba-accessibility-ci-secret-never-used-in-production-2026
       NEXT_PUBLIC_SMBA_SITE_ORIGIN: https://ci.smbaacademy.in
       SMBA_ACCESSIBILITY_ADMIN_PASSWORD: SMBA accessibility admin 2026!
-      SMBA_ACCESSIBILITY_PIN: "246810"
+      SMBA_ACCESSIBILITY_PIN: "482916"
       SMBA_AUTH_MAIL_TRANSPORT: memory
       SMBA_FIXTURE_PASSWORD: SMBA fixture access 2026!
       SMBA_FAILURE_EVIDENCE_ROOT: output/failure-evidence/accessibility

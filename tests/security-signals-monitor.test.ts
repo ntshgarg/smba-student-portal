@@ -53,8 +53,11 @@ describe("production security-signal monitor", () => {
     expect(result.status).toBe(0)
     expect(JSON.parse(result.stdout)).toEqual({
       applicationErrors: 0,
+      authenticatorResets: 0,
+      backupCodeUses: 0,
       emailDeliveryFailures: 0,
       lookbackMinutes: 60,
+      secondFactorFailures: 0,
       securityLockouts: 0,
     })
   })
@@ -76,5 +79,43 @@ describe("production security-signal monitor", () => {
     const result = runMonitor({ SMBA_MONITOR_LOCKOUT_THRESHOLD: "1" })
     expect(result.status).toBe(1)
     expect(result.stderr).toMatch(/authentication email delivery failure.*security lockout/u)
+  })
+
+  it("alerts on any recovery-code sign-in, but not on an ordinary authenticator one", () => {
+    const insert = sqlite.prepare("INSERT INTO auth_security_events VALUES (?, ?, ?, ?)")
+    insert.run("totp_verified", '{"method":"totp"}', Date.now(), "success")
+    expect(runMonitor().status).toBe(0)
+
+    insert.run("totp_verified", '{"method":"backup_code"}', Date.now(), "success")
+    const result = runMonitor()
+    expect(result.status).toBe(1)
+    expect(result.stderr).toMatch(/1 recovery code sign-in/u)
+  })
+
+  it("alerts on an authenticator reset being requested or approved", () => {
+    const insert = sqlite.prepare("INSERT INTO auth_security_events VALUES (?, ?, ?, ?)")
+    insert.run("totp_reset_requested", "{}", Date.now(), "success")
+    const result = runMonitor()
+    expect(result.status).toBe(1)
+    expect(result.stderr).toMatch(/1 authenticator reset/u)
+  })
+
+  it("alerts once failed second-factor attempts reach the threshold", () => {
+    const insert = sqlite.prepare("INSERT INTO auth_security_events VALUES (?, ?, ?, ?)")
+    for (let index = 0; index < 4; index += 1) {
+      insert.run("totp_failed", '{"operation":"sign_in"}', Date.now(), "failure")
+    }
+    expect(runMonitor().status).toBe(0)
+
+    insert.run("totp_failed", '{"operation":"sign_in"}', Date.now(), "failure")
+    const result = runMonitor()
+    expect(result.status).toBe(1)
+    expect(result.stderr).toMatch(/5 failed second-factor attempt/u)
+  })
+
+  it("ignores second-factor events older than the lookback window", () => {
+    const insert = sqlite.prepare("INSERT INTO auth_security_events VALUES (?, ?, ?, ?)")
+    insert.run("totp_verified", '{"method":"backup_code"}', Date.now() - 3 * 60 * 60_000, "success")
+    expect(runMonitor().status).toBe(0)
   })
 })

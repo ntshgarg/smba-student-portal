@@ -18,9 +18,12 @@ import {
   loginIsBlocked,
   recordLoginFailure,
   recordLoginSuccess,
+  releaseLoginAttempt,
   removePinCredential,
+  reserveLoginAttempt,
   saveActivationClaim,
   setPinCredential,
+  validateNewPin,
   validatePin,
   verifyCurrentPassword,
   verifyCurrentPasswordAttempt,
@@ -232,23 +235,23 @@ describe("production credential lifecycle", () => {
     await completeAccountActivation({ token: activationToken, password: PASSWORD }, { database, now: NOW })
 
     expect(validatePin("12345")).toBe("Enter exactly 6 digits.")
-    expect(validatePin("123456")).toBeNull()
+    expect(validatePin("618203")).toBeNull()
     expect(hasPinCredential(playerId, { database })).toBe(false)
-    await expect(setPinCredential({ accountId: playerId, pin: "123456" }, { database, now: NOW }))
+    await expect(setPinCredential({ accountId: playerId, pin: "618203" }, { database, now: NOW }))
       .resolves.toEqual({ created: true })
     expect(hasPinCredential(playerId, { database })).toBe(true)
-    await expect(verifyPinLogin({ academyId, pin: "123456" }, { database }))
+    await expect(verifyPinLogin({ academyId, pin: "618203" }, { database }))
       .resolves.toEqual({ accountId: playerId, role: "player", twoFactorEnabled: false })
-    await expect(verifyPinLogin({ academyId, pin: "654321" }, { database })).resolves.toBeNull()
+    await expect(verifyPinLogin({ academyId, pin: "907364" }, { database })).resolves.toBeNull()
     await expect(verifyCurrentPassword({ accountId: playerId, password: PASSWORD }, { database }))
       .resolves.toBe(true)
 
-    await expect(setPinCredential({ accountId: playerId, pin: "654321" }, {
+    await expect(setPinCredential({ accountId: playerId, pin: "907364" }, {
       database,
       now: new Date(NOW.getTime() + 1_000),
     })).resolves.toEqual({ created: false })
-    await expect(verifyPinLogin({ academyId, pin: "123456" }, { database })).resolves.toBeNull()
-    await expect(verifyPinLogin({ academyId, pin: "654321" }, { database })).resolves.toMatchObject({
+    await expect(verifyPinLogin({ academyId, pin: "618203" }, { database })).resolves.toBeNull()
+    await expect(verifyPinLogin({ academyId, pin: "907364" }, { database })).resolves.toMatchObject({
       accountId: playerId,
     })
 
@@ -271,19 +274,19 @@ describe("production credential lifecycle", () => {
       updatedAt: NOW,
     }).run()
     await completeAccountActivation({ token: activationToken, password: PASSWORD }, { database, now: NOW })
-    await expect(setPinCredential({ accountId: coachId, pin: "112233" }, { database, now: NOW }))
+    await expect(setPinCredential({ accountId: coachId, pin: "305817" }, { database, now: NOW }))
       .resolves.toEqual({ created: true })
-    await expect(verifyPinLogin({ academyId, pin: "112233" }, { database })).resolves.toEqual({
+    await expect(verifyPinLogin({ academyId, pin: "305817" }, { database })).resolves.toEqual({
       accountId: coachId,
       role: "coach",
       twoFactorEnabled: false,
     })
 
-    await expect(setPinCredential({ accountId: HEAD_COACH_ID, pin: "112233" }, { database, now: NOW }))
+    await expect(setPinCredential({ accountId: HEAD_COACH_ID, pin: "305817" }, { database, now: NOW }))
       .resolves.toEqual({ created: true })
     database.update(schema.authUsers).set({ twoFactorEnabled: true })
       .where(eq(schema.authUsers.id, coachId)).run()
-    await expect(verifyPinLogin({ academyId, pin: "112233" }, { database })).resolves.toEqual({
+    await expect(verifyPinLogin({ academyId, pin: "305817" }, { database })).resolves.toEqual({
       accountId: coachId,
       role: "coach",
       twoFactorEnabled: true,
@@ -299,7 +302,8 @@ describe("production credential lifecycle", () => {
      * cost five requests, not the fifty its own comment claimed, and the fifty
      * key could never fire because the five key blocked first.
      */
-    const { UNKNOWN_IP_HASH } = await import("@/lib/auth/security-context")
+    const { unknownIpHash } = await import("@/lib/auth/security-context")
+    const UNKNOWN_IP_HASH = unknownIpHash()
     const shared = { subjectHash: subjectFor("victim-account"), ipHash: UNKNOWN_IP_HASH }
 
     for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -429,6 +433,148 @@ describe("production credential lifecycle", () => {
       ipHash: "saturated-ip",
       subjectHash: "new-player",
     }, { database, now: NOW })).toBe(true)
+  })
+
+  describe("PIN strength", () => {
+    it.each([
+      "000000", "111111", "123456", "654321", "234567", "876543", "121212",
+      "123123", "112233", "445566", "520520", "246810", "010203", "131313",
+    ])("refuses %s when a PIN is being set", (pin) => {
+      expect(validateNewPin(pin)).toMatch(/too easy to guess/u)
+    })
+
+    it.each(["150906", "090615", "061509", "250310", "100399", "311299"])(
+      "refuses %s, which reads as a date a player or parent was born",
+      (pin) => {
+        expect(validateNewPin(pin)).toMatch(/too easy to guess/u)
+      },
+    )
+
+    it.each(["482916", "739251", "519374", "618203", "907364", "305817"])(
+      "accepts %s",
+      (pin) => {
+        expect(validateNewPin(pin)).toBeNull()
+      },
+    )
+
+    it("still reports a malformed PIN as a shape error, not a strength one", () => {
+      expect(validateNewPin("12345")).toBe("Enter exactly 6 digits.")
+      expect(validateNewPin("12345a")).toBe("Enter exactly 6 digits.")
+    })
+
+    it("leaves sign-in alone, so a PIN set before the rule still works", async () => {
+      // Shape only: tightening this would lock out anyone whose existing PIN is
+      // now considered weak, with no way to sign in and change it.
+      expect(validatePin("123456")).toBeNull()
+      expect(validatePin("000000")).toBeNull()
+    })
+
+    it("refuses to store a weak PIN even if a caller forgets to validate", async () => {
+      const playerId = "weak-pin-player"
+      createApprovedPlayer(playerId, "Weak Pin Player")
+      database.update(schema.authCredentialStates)
+        .set({ status: "active", updatedAt: NOW })
+        .where(eq(schema.authCredentialStates.accountId, playerId)).run()
+      await expect(setPinCredential({ accountId: playerId, pin: "123456" }, { database, now: NOW }))
+        .rejects.toThrow(/too easy to guess/u)
+      expect(hasPinCredential(playerId, { database })).toBe(false)
+    })
+  })
+
+  describe("reserving a sign-in attempt before the secret is checked", () => {
+    it("lets exactly the allowed number of simultaneous guesses through", () => {
+      // Five guesses per account per address. A burst fired together used to
+      // read "not blocked" five hundred times over before any failure was
+      // written; reserving spends each guess at the moment it is checked.
+      const guesser = { ipHash: "burst-ip", subjectHash: subjectFor("burst-victim") }
+      let admitted = 0
+      for (let request = 0; request < 500; request += 1) {
+        if (reserveLoginAttempt(guesser, { database, now: NOW })) admitted += 1
+      }
+      expect(admitted).toBe(5)
+      expect(loginIsBlocked(guesser, { database, now: NOW })).toBe(true)
+    })
+
+    it("applies the tighter PIN ceiling across addresses, and only to PIN sign-in", () => {
+      const subjectHash = subjectFor("pin-victim")
+      let admitted = 0
+      for (let request = 0; request < 40; request += 1) {
+        // A fresh address every time, as an attacker rotating through an IPv6
+        // prefix or a proxy pool would present.
+        if (reserveLoginAttempt({ factor: "pin", ipHash: `rotating-${request}`, subjectHash }, {
+          database,
+          now: NOW,
+        })) admitted += 1
+      }
+      expect(admitted).toBe(10)
+
+      // The tight budget is PIN-only: the password form, from a different
+      // address, is not locked by it.
+      expect(loginIsBlocked({ ipHash: "owner-home", subjectHash }, { database, now: NOW }))
+        .toBe(false)
+    })
+
+    it("is reset by a verified PIN, not by signing in some other way", () => {
+      const subjectHash = subjectFor("pin-budget-owner")
+      const guess = (n: number) => reserveLoginAttempt(
+        { factor: "pin", ipHash: `ip-${n}`, subjectHash },
+        { database, now: NOW },
+      )
+      for (let n = 0; n < 9; n += 1) guess(n)
+      // A password sign-in by the same account must not hand back the PIN guesses.
+      recordLoginSuccess(subjectHash, { database })
+      expect(guess(9)).toBe(true)
+      expect(guess(10)).toBe(false)
+
+      // A correct PIN does.
+      releaseLoginAttempt({ ipHash: "ip-11", subjectHash }, { database, now: NOW })
+      expect(guess(12)).toBe(true)
+    })
+
+    it("hands the guess back when the secret was right", () => {
+      const subjectHash = subjectFor("honest-player")
+      const attempt = { factor: "pin" as const, ipHash: "venue-wifi", subjectHash }
+      for (let index = 0; index < 4; index += 1) {
+        expect(reserveLoginAttempt(attempt, { database, now: NOW })).toBe(true)
+      }
+      expect(reserveLoginAttempt(attempt, { database, now: NOW })).toBe(true)
+      releaseLoginAttempt(attempt, { database, now: NOW })
+      expect(loginIsBlocked(attempt, { database, now: NOW })).toBe(false)
+      expect(reserveLoginAttempt(attempt, { database, now: NOW })).toBe(true)
+    })
+
+    it("does not forgive a shared address for what it did to other accounts", () => {
+      // Nineteen failures against other accounts from one address, then a
+      // correct sign-in. The refund is one guess, not a clean slate.
+      for (let index = 0; index < 19; index += 1) {
+        recordLoginFailure({
+          ipHash: "busy-ip",
+          subjectHash: subjectFor(`other-${index}`),
+        }, { database, now: NOW })
+      }
+      const mine = { ipHash: "busy-ip", subjectHash: subjectFor("me") }
+      expect(reserveLoginAttempt(mine, { database, now: NOW })).toBe(true)
+      releaseLoginAttempt(mine, { database, now: NOW })
+      const another = { ipHash: "busy-ip", subjectHash: subjectFor("someone-else") }
+      expect(reserveLoginAttempt(another, { database, now: NOW })).toBe(true)
+      expect(reserveLoginAttempt(
+        { ipHash: "busy-ip", subjectHash: subjectFor("and-another") },
+        { database, now: NOW },
+      )).toBe(false)
+    })
+
+    it("spends nothing when a ceiling is already standing", () => {
+      const subjectHash = subjectFor("locked")
+      for (let index = 0; index < 5; index += 1) {
+        reserveLoginAttempt({ ipHash: "ip-a", subjectHash }, { database, now: NOW })
+      }
+      const row = () => database.select().from(schema.authLoginAttempts)
+        .where(eq(schema.authLoginAttempts.key, `ip:ip-a`)).get()?.failedCount
+      const before = row()
+      expect(reserveLoginAttempt({ ipHash: "ip-a", subjectHash }, { database, now: NOW }))
+        .toBe(false)
+      expect(row()).toBe(before)
+    })
   })
 
   it("rate-limits repeated current-password confirmation failures", async () => {

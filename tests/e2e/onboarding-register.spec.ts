@@ -17,8 +17,8 @@ async function loginAsCoach(page: import("@playwright/test").Page) {
     url.pathname === "/auth/pin/setup" || url.pathname.startsWith("/coach")
   ))
   if (new URL(page.url()).pathname === "/auth/pin/setup") {
-    await page.getByLabel("Enter PIN").fill("135790")
-    await page.getByLabel("Confirm PIN").fill("135790")
+    await page.getByLabel("Enter PIN").fill("739251")
+    await page.getByLabel("Confirm PIN").fill("739251")
     await page.getByRole("button", { name: "Set up PIN" }).click()
     await page.waitForURL((url) => url.pathname.startsWith("/coach"))
   }

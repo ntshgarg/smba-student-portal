@@ -7,8 +7,10 @@ on:
   # birth and guardian phone numbers, plus password hashes and plaintext TOTP
   # secrets. Fifteen snapshots were live and have been deleted.
   #
-  # Do not re-enable the schedule until the "Store encrypted snapshot" step
-  # below points at storage where a read is authenticated, logged and revocable.
+  # Do not re-enable the schedule until the final "Refuse to publish the
+  # snapshot" step is replaced by an upload to storage where a read is
+  # authenticated, logged and revocable. Until then this workflow fails on
+  # purpose after creating the snapshot, so no run reads as a successful backup.
   workflow_dispatch:
 
 concurrency:
@@ -72,10 +74,14 @@ jobs:
           rm -f .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
           rm -rf .data/backup-run
 
-      - name: Store encrypted snapshot
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: smba-production-backup-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz.gpg
-          if-no-files-found: error
-          retention-days: 35
+      # There is deliberately nowhere to put the file yet. It was kept with
+      # actions/upload-artifact, which on a public repository is readable by any
+      # GitHub account; see the note at the top of this file. Replace this step
+      # with an upload to private, access-controlled, logged storage (for example
+      # an object-storage bucket written with a write-only key) and delete the
+      # failure below. Until then a run that reached here has produced a snapshot
+      # that is about to be thrown away, and says so instead of reporting success.
+      - name: Refuse to publish the snapshot
+        run: |
+          echo "::error::No private storage is configured for backups. The encrypted snapshot was not saved anywhere."
+          exit 1

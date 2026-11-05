@@ -36,8 +36,8 @@ async function loginAs(
       url.pathname.startsWith(destination) || url.pathname === "/auth/pin/setup"
     ), { timeout: 20_000 })
     if (new URL(page.url()).pathname === "/auth/pin/setup") {
-      await page.getByLabel("Enter PIN").fill("246810")
-      await page.getByLabel("Confirm PIN").fill("246810")
+      await page.getByLabel("Enter PIN").fill("482916")
+      await page.getByLabel("Confirm PIN").fill("482916")
       await page.getByRole("button", { name: "Set up PIN" }).click()
       await page.waitForURL((url) => url.pathname.startsWith(destination), { timeout: 20_000 })
     }

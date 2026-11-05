@@ -12,7 +12,7 @@ import {
   recordLoginSuccess,
   removePinCredential,
   setPinCredential,
-  validatePin,
+  validateNewPin,
   validateNewPassword,
   verifyCurrentPassword,
   verifyCurrentPasswordAttempt,
@@ -223,7 +223,7 @@ export async function savePinAction(
   if (confirmation.result !== "verified") {
     return { error: currentPasswordError(confirmation.result), success: null }
   }
-  const pinError = validatePin(pin)
+  const pinError = validateNewPin(pin)
   if (pinError) return { error: pinError, success: null }
   if (pin !== confirmPin) return { error: "The PINs do not match.", success: null }
   const existing = hasPinCredential(identity.subjectId)
@@ -413,6 +413,23 @@ export async function reissueRecoveryCodesAction(
     }
   }
   recordLoginSuccess(subjectHash)
+  if (!/^\d{6}$/u.test(secondFactor)) {
+    // A recovery code spent here is one the monitor alerts on wherever it is used.
+    try {
+      writeAuthSecurityEvent({
+        accountId: identity.subjectId,
+        actorAccountId: identity.subjectId,
+        eventType: "totp_verified",
+        ipHash: security.ipHash,
+        metadata: { method: "backup_code", operation: "reissue_recovery_codes" },
+        outcome: "success",
+        subjectHash,
+        userAgent: security.userAgent,
+      })
+    } catch {
+      // The code is already spent; a failed audit write must not undo that.
+    }
+  }
 
   let codes: string[]
   try {

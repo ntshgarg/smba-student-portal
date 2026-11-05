@@ -51,7 +51,7 @@ vi.mock("@/lib/auth/credential-service", () => ({
   removePinCredential: mocks.removePinCredential,
   setPinCredential: mocks.setPinCredential,
   validateNewPassword: vi.fn(),
-  validatePin: vi.fn(),
+  validateNewPin: vi.fn(),
   verifyCurrentPassword: mocks.verifyCurrentPassword,
   verifyCurrentPasswordAttempt: mocks.verifyCurrentPasswordAttempt,
 }))
