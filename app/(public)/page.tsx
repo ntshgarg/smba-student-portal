@@ -68,7 +68,19 @@ const structuredData = {
       worksFor: {
         "@id": absoluteSiteUrl("/#academy-location"),
       },
+      image: absoluteSiteUrl("/images/coach-sathiya-court.jpeg"),
       sameAs: [contact.coachInstagram.url],
+    },
+    {
+      "@type": "WebSite",
+      "@id": absoluteSiteUrl("/#website"),
+      url: absoluteSiteUrl("/"),
+      name: "Sathiya Moorthy Badminton Academy",
+      alternateName: "SMBA",
+      inLanguage: "en-IN",
+      publisher: {
+        "@id": absoluteSiteUrl("/#academy-location"),
+      },
     },
   ],
 }

@@ -1,3 +1,11 @@
 {
-  "regions": ["bom1"]
+  "regions": ["bom1"],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.smbaacademy.in" }],
+      "destination": "https://smbaacademy.in/$1",
+      "permanent": true
+    }
+  ]
 }
