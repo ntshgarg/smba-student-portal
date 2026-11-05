@@ -23,9 +23,10 @@ import {
   completeAccountActivation,
   createActivationClaimToken,
   loginIsBlocked,
-  recordLoginFailure,
+  reserveLoginAttempt,
   validateNewPassword,
 } from "@/lib/auth/credential-service"
+import { RETIRED_PIN_LOGIN } from "@/lib/auth/pin-plugin"
 import { signInWithJustWrittenPassword } from "@/lib/auth/username-login-guard"
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
@@ -56,6 +57,14 @@ function isRateLimitedAuthError(error: unknown) {
   if (typeof error !== "object" || error === null) return false
   const status = (error as { status?: unknown }).status
   return status === "TOO_MANY_REQUESTS" || status === 429
+}
+
+// The PIN door answers FORBIDDEN only when the PIN was right but too weak to
+// keep, and it has just been switched off (lib/auth/pin-plugin.ts).
+function isRetiredPinError(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+  const status = (error as { status?: unknown }).status
+  return status === "FORBIDDEN" || status === 403
 }
 
 export type LoginFormState = {
@@ -147,8 +156,21 @@ export async function loginWithAcademyId(
     // one scrypt measured 74-83 ms idle on this machine and more under load, so
     // a dozen requests a second from one address would otherwise pin a core on
     // an unauthenticated path that no proxy rule meters.
+    //
+    // Reserved before the hash rather than counted after it, the same as the
+    // endpoint's own hooks, so a burst cannot all pass the read above first.
+    if (!reserveLoginAttempt({ ipHash: security.ipHash, subjectHash })) {
+      writeAuthSecurityEvent({
+        eventType: "login_rate_limited",
+        ipHash: security.ipHash,
+        metadata: { factor: "password" },
+        outcome: "blocked",
+        subjectHash,
+        userAgent: security.userAgent,
+      })
+      return { error: RATE_LIMITED_LOGIN_ERROR }
+    }
     await hashPassword(password)
-    recordLoginFailure({ ipHash: security.ipHash, subjectHash })
     writeAuthSecurityEvent({
       accountId: account?.accountId,
       eventType: "login_failed",
@@ -212,6 +234,7 @@ export async function loginWithPin(
       headers: requestHeaders,
     })
   } catch (error) {
+    if (isRetiredPinError(error)) return { error: RETIRED_PIN_LOGIN }
     return { error: isRateLimitedAuthError(error) ? RATE_LIMITED_LOGIN_ERROR : GENERIC_PIN_ERROR }
   }
 

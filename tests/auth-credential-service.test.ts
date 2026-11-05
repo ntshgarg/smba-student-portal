@@ -19,8 +19,10 @@ import {
   recordLoginFailure,
   recordLoginSuccess,
   releaseLoginAttempt,
+  releaseSecondFactorAttempt,
   removePinCredential,
   reserveLoginAttempt,
+  reserveSecondFactorAttempt,
   saveActivationClaim,
   setPinCredential,
   validateNewPin,
@@ -527,7 +529,7 @@ describe("production credential lifecycle", () => {
       expect(guess(10)).toBe(false)
 
       // A correct PIN does.
-      releaseLoginAttempt({ ipHash: "ip-11", subjectHash }, { database, now: NOW })
+      releaseLoginAttempt({ factor: "pin", ipHash: "ip-11", subjectHash }, { database, now: NOW })
       expect(guess(12)).toBe(true)
     })
 
@@ -575,6 +577,105 @@ describe("production credential lifecycle", () => {
         .toBe(false)
       expect(row()).toBe(before)
     })
+  })
+
+  describe("the per-account second-factor budgets", () => {
+    const reserve = (accountId: string, scope: "challenge" | "session", now = NOW) =>
+      reserveSecondFactorAttempt(accountId, scope, { database, now })
+
+    it("admits exactly eight guesses at one account's code, however many arrive together", () => {
+      let admitted = 0
+      for (let request = 0; request < 200; request += 1) {
+        if (reserve("head-coach-account", "challenge")) admitted += 1
+      }
+      expect(admitted).toBe(8)
+    })
+
+    it("keeps each account's budget separate", () => {
+      for (let request = 0; request < 8; request += 1) reserve("head-coach-account", "challenge")
+      expect(reserve("head-coach-account", "challenge")).toBe(false)
+      expect(reserve("owner-account", "challenge")).toBe(true)
+    })
+
+    // Someone holding only a coach's PIN can open sign-in challenges and fail
+    // them. That must not lock the coach, already signed in, out of the
+    // in-session checks (reconnect, reissue, recovery-email change).
+    it("keeps sign-in failures from blocking the signed-in owner, and the other way round", () => {
+      for (let request = 0; request < 8; request += 1) reserve("head-coach-account", "challenge")
+      expect(reserve("head-coach-account", "challenge")).toBe(false)
+      expect(reserve("head-coach-account", "session")).toBe(true)
+      for (let request = 0; request < 8; request += 1) reserve("owner-account", "session")
+      expect(reserve("owner-account", "session")).toBe(false)
+      expect(reserve("owner-account", "challenge")).toBe(true)
+    })
+
+    it("is cleared, in both places, by a right code", () => {
+      for (let request = 0; request < 8; request += 1) {
+        reserve("head-coach-account", "challenge")
+        reserve("head-coach-account", "session")
+      }
+      releaseSecondFactorAttempt("head-coach-account", { database })
+      for (const scope of ["challenge", "session"] as const) {
+        let admitted = 0
+        for (let request = 0; request < 20; request += 1) {
+          if (reserve("head-coach-account", scope)) admitted += 1
+        }
+        expect(admitted).toBe(8)
+      }
+    })
+
+    it("opens again after fifteen minutes", () => {
+      for (let request = 0; request < 8; request += 1) reserve("head-coach-account", "challenge")
+      const later = new Date(NOW.getTime() + 15 * 60 * 1000 + 1)
+      expect(reserve("head-coach-account", "challenge", later)).toBe(true)
+    })
+
+    it("does not touch the sign-in budgets", () => {
+      for (let request = 0; request < 8; request += 1) reserve("head-coach-account", "challenge")
+      expect(loginIsBlocked(
+        { ipHash: "any-ip", subjectHash: subjectFor("SMBA-HC-0001") },
+        { database, now: NOW },
+      )).toBe(false)
+    })
+  })
+
+  it("does not reset the PIN budget when a password turns out right", () => {
+    const subjectHash = subjectFor("pin-target")
+    for (let request = 0; request < 10; request += 1) {
+      reserveLoginAttempt({ factor: "pin", ipHash: `rotating-${request}`, subjectHash }, { database, now: NOW })
+    }
+    expect(reserveLoginAttempt({ factor: "pin", ipHash: "fresh", subjectHash }, { database, now: NOW }))
+      .toBe(false)
+    // The child signs in with their password: the password door reserves and
+    // releases without the PIN factor.
+    const password = { ipHash: "home", subjectHash }
+    expect(reserveLoginAttempt(password, { database, now: NOW })).toBe(true)
+    releaseLoginAttempt(password, { database, now: NOW })
+    expect(reserveLoginAttempt({ factor: "pin", ipHash: "fresh-2", subjectHash }, { database, now: NOW }))
+      .toBe(false)
+    // A right PIN does reset it.
+    releaseLoginAttempt({ factor: "pin", ipHash: "home", subjectHash }, { database, now: NOW })
+    expect(reserveLoginAttempt({ factor: "pin", ipHash: "fresh-3", subjectHash }, { database, now: NOW }))
+      .toBe(true)
+  })
+
+  it("lets only the allowed number of simultaneous current-password guesses be checked", async () => {
+    const playerId = "burst-confirmation-player"
+    const { academyId, activationToken } = createApprovedPlayer(playerId, "Burst Confirmation Player")
+    await completeAccountActivation({ token: activationToken, password: PASSWORD }, { database, now: NOW })
+    // Fired together: each verify is a slow scrypt that yields, so before the
+    // reservation every one of these read "not blocked" first.
+    const results = await Promise.all(Array.from({ length: 20 }, (_, index) =>
+      verifyCurrentPasswordAttempt({
+        academyId,
+        accountId: playerId,
+        ipHash: "burst-ip",
+        operation: "save_pin",
+        password: `Wrong password ${index}`,
+        userAgent: "test",
+      }, { database, now: NOW })))
+    expect(results.filter((result) => result === "invalid")).toHaveLength(5)
+    expect(results.filter((result) => result === "blocked")).toHaveLength(15)
   })
 
   it("rate-limits repeated current-password confirmation failures", async () => {

@@ -10,7 +10,9 @@ import { ACADEMY_ID_LABEL, normalizeAcademyId } from "@/lib/auth/identity"
 import { findApprovedAccountByAcademyId } from "@/lib/auth/account-service"
 import {
   releaseLoginAttempt,
+  removePinCredential,
   reserveLoginAttempt,
+  validateNewPin,
   verifyPinLogin,
 } from "@/lib/auth/credential-service"
 import {
@@ -22,6 +24,9 @@ import {
 const INVALID_PIN_LOGIN = `${ACADEMY_ID_LABEL} or PIN is incorrect.`
 const RATE_LIMITED_PIN_LOGIN =
   "We couldn\u2019t sign you in. Wait a few minutes before trying again."
+export const RETIRED_PIN_LOGIN =
+  "Your PIN was too easy to guess, so we have switched it off to protect your account. "
+  + "Sign in with your password, then choose a new PIN in Account security."
 
 const pinLoginBody = z.object({
   pin: z.string(),
@@ -87,7 +92,27 @@ export function smbaPinLogin() {
           })
           throw context.error("UNAUTHORIZED", { message: INVALID_PIN_LOGIN })
         }
-        releaseLoginAttempt({ ipHash: security.ipHash, subjectHash })
+        // A PIN chosen before the strength rules existed is still accepted at
+        // the door (validatePin is shape-only so old PINs keep working), which
+        // left 123456 and birthday PINs signing children in. The PIN is right,
+        // so this is the holder or someone who guessed it; either way it stops
+        // working now. No session is issued: the password, which every PIN
+        // holder also has, is the way in, and a new PIN must pass the rules.
+        // The reservation is deliberately not handed back -- nobody signed in,
+        // so this must not clear the account's other failure counters.
+        if (validateNewPin(context.body.pin)) {
+          removePinCredential(verified.accountId, { reason: "weak_legacy_pin" })
+          writeAuthSecurityEvent({
+            ...auditBase,
+            accountId: verified.accountId,
+            eventType: "login_failed",
+            metadata: { factor: "pin", reason: "weak_legacy_pin" },
+            outcome: "blocked",
+          })
+          throw context.error("FORBIDDEN", { message: RETIRED_PIN_LOGIN })
+        }
+
+        releaseLoginAttempt({ factor: "pin", ipHash: security.ipHash, subjectHash })
         writeAuthSecurityEvent({
           ...auditBase,
           accountId: verified.accountId,

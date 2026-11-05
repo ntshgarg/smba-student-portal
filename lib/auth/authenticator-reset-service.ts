@@ -2,6 +2,7 @@ import "server-only"
 
 import { and, asc, eq, gt, isNull } from "drizzle-orm"
 
+import { releaseSecondFactorAttempt } from "@/lib/auth/credential-service"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import {
   initializeDatabase,
@@ -128,6 +129,9 @@ export function approveAuthenticatorResetRequest(input: {
     tx.delete(authTwoFactors).where(eq(authTwoFactors.userId, request.accountId)).run()
     tx.update(authUsers).set({ twoFactorEnabled: false, updatedAt: now })
       .where(eq(authUsers.id, request.accountId)).run()
+    // The old factor is gone, so failures against it must not stand in the way
+    // of enrolling the new one.
+    releaseSecondFactorAttempt(request.accountId, { database: tx })
     writeAuthSecurityEvent({
       accountId: request.accountId,
       actorAccountId: input.actorAccountId,

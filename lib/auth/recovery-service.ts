@@ -5,7 +5,7 @@ import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 
 
 import { createOTP } from "@better-auth/utils/otp"
 import { hashPassword, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto"
-import { and, desc, eq, gt, isNull, lte, ne } from "drizzle-orm"
+import { and, desc, eq, gt, isNull, lte, ne, sql } from "drizzle-orm"
 
 import { normalizeAcademyId } from "@/lib/auth/identity"
 import { authEmailRequired, createAuthMailer, type AuthMailer } from "@/lib/auth/mailer"
@@ -13,6 +13,11 @@ import {
   loginIsBlocked,
   recordLoginFailure,
   recordLoginSuccess,
+  releaseLoginAttempt,
+  releaseSecondFactorAttempt,
+  reserveLoginAttempt,
+  reserveSecondFactorAttempt,
+  type SecondFactorScope,
   validateNewPassword,
 } from "@/lib/auth/credential-service"
 import { authSubjectHash, writeAuthSecurityEvent } from "@/lib/auth/security-context"
@@ -151,6 +156,19 @@ function requestThrottleKeys(subject: string, ipHash?: string | null) {
     ipHash: authSubjectHash(`recovery-request:${ipHash ?? "unknown-ip"}`),
     subjectHash: authSubjectHash(subject),
   }
+}
+
+/*
+ * One wrong emailed code. Counted in the database rather than as the row's
+ * count plus one, so two misses landing together are two misses, and the miss
+ * that reaches the limit burns the challenge.
+ */
+function countEmailCodeFailure(challengeId: string, database: SmbaDatabaseExecutor, now: Date) {
+  database.update(authEmailChallenges).set({
+    failedAttempts: sql`${authEmailChallenges.failedAttempts} + 1`,
+    consumedAt: sql`CASE WHEN ${authEmailChallenges.failedAttempts} + 1 >= ${EMAIL_VERIFICATION_MAX_ATTEMPTS} THEN COALESCE(${authEmailChallenges.consumedAt}, ${now.getTime()}) ELSE ${authEmailChallenges.consumedAt} END`,
+    updatedAt: now,
+  }).where(eq(authEmailChallenges.id, challengeId)).run()
 }
 
 /**
@@ -352,12 +370,7 @@ export function confirmRecoveryEmailVerification(input: {
     input.code,
   )
   if (!equalDigest(challenge.secretHash, suppliedHash)) {
-    const failedAttempts = challenge.failedAttempts + 1
-    database.update(authEmailChallenges).set({
-      failedAttempts,
-      consumedAt: failedAttempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS ? now : null,
-      updatedAt: now,
-    }).where(eq(authEmailChallenges.id, challenge.id)).run()
+    countEmailCodeFailure(challenge.id, database, now)
     recordLoginFailure(attempt, { database, now })
     return null
   }
@@ -652,14 +665,9 @@ export function confirmRegistrationVerification<T>(input: {
   if (!challenge || challenge.failedAttempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS) return null
   const suppliedHash = challengeSecretHash("verify_email", hashedSubject, challenge.id, code)
   if (!equalDigest(challenge.secretHash, suppliedHash)) {
-    const failedAttempts = challenge.failedAttempts + 1
-    database.update(authEmailChallenges).set({
-      failedAttempts,
-      // The fifth miss burns the challenge outright rather than leaving a
-      // guessable row behind for the next attempt to resume against.
-      consumedAt: failedAttempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS ? now : null,
-      updatedAt: now,
-    }).where(eq(authEmailChallenges.id, challenge.id)).run()
+    // The fifth miss burns the challenge outright rather than leaving a
+    // guessable row behind for the next attempt to resume against.
+    countEmailCodeFailure(challenge.id, database, now)
     recordLoginFailure(attempt, { database, now })
     return null
   }
@@ -1085,17 +1093,29 @@ export function submitAuthenticatorResetRequest(input: {
 async function verifyAccountSecondFactor(input: {
   accountId: string
   credential: string
+  scope: SecondFactorScope
 }, {
   database,
   now,
 }: {
   database: SmbaDatabase
   now: Date
-}) {
+}): Promise<"blocked" | "invalid" | "verified"> {
   const factor = database.select().from(authTwoFactors)
     .where(eq(authTwoFactors.userId, input.accountId)).get()
-  if (!factor?.verified) return false
-  if (factor.lockedUntil && factor.lockedUntil > now) return false
+  if (!factor?.verified) return "invalid"
+  // The lock on the factor row is Better Auth's sign-in lockout. It belongs to
+  // the checks made before anyone is signed in -- sign-in and password recovery
+  // -- and Better Auth itself ignores it on its in-session path. Honouring it
+  // here for an in-session check let anyone holding only a coach's PIN fail
+  // eight sign-in codes and block the real coach, signed in elsewhere, from
+  // changing their recovery email; counting in-session misses on it let those
+  // misses lock sign-in in turn. Each side keeps to its own counter.
+  const signInScope = input.scope === "challenge"
+  if (signInScope && factor.lockedUntil && factor.lockedUntil > now) return "blocked"
+  // This scope's per-account budget, spent before the slow decrypt-and-compare
+  // below so that a burst of parallel guesses cannot all read "not locked" first.
+  if (!reserveSecondFactorAttempt(input.accountId, input.scope, { database, now })) return "blocked"
 
   let valid = false
   let updatedBackupCodes: string | null = null
@@ -1118,15 +1138,21 @@ async function verifyAccountSecondFactor(input: {
     valid = false
   }
 
+  if (!valid && !signInScope) return "invalid"
   if (!valid) {
-    const failedVerificationCount = factor.failedVerificationCount + 1
+    // Counted in the database, not from the row read before the await: a
+    // read-add-write from that stale copy let parallel failures collapse into
+    // one, and wrote `lockedUntil: null` over a lock that sign-in had set in the
+    // meantime. A failure never lifts a lock that is still running. One that
+    // has run out starts a fresh count, as Better Auth's own lockout does, so a
+    // single typo after a lock does not lock again.
+    const lockExpired = sql`(${authTwoFactors.lockedUntil} IS NOT NULL AND ${authTwoFactors.lockedUntil} <= ${now.getTime()})`
+    const failures = sql`(CASE WHEN ${lockExpired} THEN 1 ELSE ${authTwoFactors.failedVerificationCount} + 1 END)`
     database.update(authTwoFactors).set({
-      failedVerificationCount,
-      lockedUntil: failedVerificationCount >= SECOND_FACTOR_FAILURE_LIMIT
-        ? new Date(now.getTime() + SECOND_FACTOR_LOCK_MS)
-        : null,
+      failedVerificationCount: failures,
+      lockedUntil: sql`CASE WHEN ${failures} >= ${SECOND_FACTOR_FAILURE_LIMIT} THEN ${now.getTime() + SECOND_FACTOR_LOCK_MS} WHEN ${lockExpired} THEN NULL ELSE ${authTwoFactors.lockedUntil} END`,
     }).where(eq(authTwoFactors.id, factor.id)).run()
-    return false
+    return "invalid"
   }
 
   const update = updatedBackupCodes
@@ -1142,7 +1168,9 @@ async function verifyAccountSecondFactor(input: {
       failedVerificationCount: 0,
       lockedUntil: null,
     }).where(eq(authTwoFactors.id, factor.id)).run()
-  return update.changes === 1
+  if (update.changes !== 1) return "invalid"
+  releaseSecondFactorAttempt(input.accountId, { database })
+  return "verified"
 }
 
 export async function verifyPasswordRecoverySecondFactor(input: {
@@ -1164,7 +1192,7 @@ export async function verifyPasswordRecoverySecondFactor(input: {
     `recovery-factor:${challenge.accountId}`,
     input.security?.ipHash,
   )
-  if (loginIsBlocked(attempt, { database, now })) {
+  const blocked = () => {
     writeAuthSecurityEvent({
       accountId: challenge.accountId,
       eventType: "password_recovery_failed",
@@ -1174,12 +1202,15 @@ export async function verifyPasswordRecoverySecondFactor(input: {
     }, { database, now })
     return false
   }
-  const valid = await verifyAccountSecondFactor({
+  // Reserved before the check, not counted after it (see reserveLoginAttempt).
+  if (!reserveLoginAttempt(attempt, { database, now })) return blocked()
+  const result = await verifyAccountSecondFactor({
     accountId: challenge.accountId,
     credential: input.credential,
+    scope: "challenge",
   }, { database, now })
-  if (!valid) {
-    recordLoginFailure(attempt, { database, now })
+  if (result === "blocked") return blocked()
+  if (result === "invalid") {
     writeAuthSecurityEvent({
       accountId: challenge.accountId,
       eventType: "password_recovery_failed",
@@ -1189,7 +1220,7 @@ export async function verifyPasswordRecoverySecondFactor(input: {
     }, { database, now })
     return false
   }
-  recordLoginSuccess(attempt.subjectHash, { database })
+  releaseLoginAttempt(attempt, { database, now })
   database.update(authEmailChallenges).set({
     secondFactorVerifiedAt: now,
     updatedAt: now,
@@ -1218,13 +1249,14 @@ export async function verifyFreshAccountSecondFactor(input: {
     `fresh-account-factor:${input.accountId}`,
     input.security?.ipHash,
   )
-  if (loginIsBlocked(attempt, { database, now })) return false
-  const valid = await verifyAccountSecondFactor(input, { database, now })
-  if (!valid) {
-    recordLoginFailure(attempt, { database, now })
-    return false
-  }
-  recordLoginSuccess(attempt.subjectHash, { database })
+  if (!reserveLoginAttempt(attempt, { database, now })) return false
+  const result = await verifyAccountSecondFactor({
+    accountId: input.accountId,
+    credential: input.credential,
+    scope: "session",
+  }, { database, now })
+  if (result !== "verified") return false
+  releaseLoginAttempt(attempt, { database, now })
   return true
 }
 

@@ -20,6 +20,7 @@ import type {
   RecoveryEmailVerificationMessage,
   RegistrationVerificationMessage,
 } from "@/lib/auth/mailer"
+import { reserveSecondFactorAttempt } from "@/lib/auth/credential-service"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
 import {
   claimPasswordRecovery,
@@ -283,6 +284,27 @@ describe("admin-approved authenticator recovery", () => {
       mailer,
     }, { database, now: new Date(NOW.getTime() + 2_000) })
     expect(mailer.authenticatorRecovery).toHaveLength(0)
+  })
+
+  // A coach who lost their phone usually fails a few codes first. Those
+  // failures were against the factor the reset removes, so they must not block
+  // enrolling the new one.
+  it("clears the coach's second-factor budgets when the reset is approved", () => {
+    vi.stubEnv("BETTER_AUTH_SECRET", "test-only-better-auth-secret-with-32-characters")
+    const requestId = insertPendingRequest()
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      reserveSecondFactorAttempt(HEAD_ID, "challenge", { database, now: NOW })
+      reserveSecondFactorAttempt(HEAD_ID, "session", { database, now: NOW })
+    }
+    expect(reserveSecondFactorAttempt(HEAD_ID, "session", { database, now: NOW })).toBe(false)
+
+    expect(approveAuthenticatorResetRequest({
+      actorAccountId: ADMIN_ID,
+      requestId,
+    }, { database, now: NOW })).toEqual({ accountId: HEAD_ID })
+    expect(reserveSecondFactorAttempt(HEAD_ID, "session", { database, now: NOW })).toBe(true)
+    expect(reserveSecondFactorAttempt(HEAD_ID, "challenge", { database, now: NOW })).toBe(true)
+    vi.unstubAllEnvs()
   })
 
   it("rejects unauthorized, expired and email-changed approvals without altering MFA", () => {

@@ -7,10 +7,11 @@ import { headers } from "next/headers"
 import { getAuth } from "@/lib/auth/better-auth"
 import {
   hasPinCredential,
-  loginIsBlocked,
-  recordLoginFailure,
-  recordLoginSuccess,
+  releaseLoginAttempt,
+  releaseSecondFactorAttempt,
   removePinCredential,
+  reserveLoginAttempt,
+  reserveSecondFactorAttempt,
   setPinCredential,
   validateNewPin,
   validateNewPassword,
@@ -325,13 +326,13 @@ export async function reissueRecoveryCodesAction(
   // this action spends is the one the rest of the page shares.
   const subjectHash = authSubjectHash(normalizeAcademyId(identity.academyId))
   const attempt = { ipHash: security.ipHash, subjectHash }
-  if (loginIsBlocked(attempt)) {
+  const rateLimited = (factor: "current_password" | "second_factor") => {
     writeAuthSecurityEvent({
       accountId: identity.subjectId,
       actorAccountId: identity.subjectId,
       eventType: "login_rate_limited",
       ipHash: security.ipHash,
-      metadata: { operation: "reissue_recovery_codes" },
+      metadata: { factor, operation: "reissue_recovery_codes" },
       outcome: "blocked",
       subjectHash,
       userAgent: security.userAgent,
@@ -348,11 +349,13 @@ export async function reissueRecoveryCodesAction(
   if (!currentPassword) {
     return { codes: null, error: "Enter your current password.", errorField: "currentPassword" }
   }
+  // Each guess is reserved before its slow check rather than counted after it,
+  // so parallel requests cannot all read "not blocked" first.
+  if (!reserveLoginAttempt(attempt)) return rateLimited("current_password")
   if (!await verifyCurrentPassword({
     accountId: identity.subjectId,
     password: currentPassword,
   })) {
-    recordLoginFailure(attempt)
     writeAuthSecurityEvent({
       accountId: identity.subjectId,
       actorAccountId: identity.subjectId,
@@ -369,6 +372,7 @@ export async function reissueRecoveryCodesAction(
       errorField: "currentPassword",
     }
   }
+  releaseLoginAttempt(attempt)
   if (!secondFactor) {
     return {
       codes: null,
@@ -376,6 +380,9 @@ export async function reissueRecoveryCodesAction(
       errorField: "secondFactor",
     }
   }
+  // A signed-in code check skips Better Auth's lockout, so the account's own
+  // second-factor budget is the limit here.
+  if (!reserveSecondFactorAttempt(identity.subjectId, "session")) return rateLimited("second_factor")
 
   const requestAuth = getAuth()
   try {
@@ -395,7 +402,6 @@ export async function reissueRecoveryCodesAction(
       })
     }
   } catch {
-    recordLoginFailure(attempt)
     writeAuthSecurityEvent({
       accountId: identity.subjectId,
       actorAccountId: identity.subjectId,
@@ -412,7 +418,7 @@ export async function reissueRecoveryCodesAction(
       errorField: "secondFactor",
     }
   }
-  recordLoginSuccess(subjectHash)
+  releaseSecondFactorAttempt(identity.subjectId)
   if (!/^\d{6}$/u.test(secondFactor)) {
     // A recovery code spent here is one the monitor alerts on wherever it is used.
     try {
