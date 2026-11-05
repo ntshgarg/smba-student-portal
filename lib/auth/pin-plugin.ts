@@ -9,9 +9,8 @@ import { z } from "zod"
 import { ACADEMY_ID_LABEL, normalizeAcademyId } from "@/lib/auth/identity"
 import { findApprovedAccountByAcademyId } from "@/lib/auth/account-service"
 import {
-  loginIsBlocked,
-  recordLoginFailure,
-  recordLoginSuccess,
+  releaseLoginAttempt,
+  reserveLoginAttempt,
   verifyPinLogin,
 } from "@/lib/auth/credential-service"
 import {
@@ -57,7 +56,13 @@ export function smbaPinLogin() {
           subjectHash,
           userAgent: security.userAgent,
         }
-        if (loginIsBlocked({ ipHash: security.ipHash, subjectHash })) {
+        // Check and spend in one step, before the slow verify. Checking first and
+        // recording the failure afterwards left the verify as a window in which
+        // a burst of simultaneous guesses each saw "not blocked", because none
+        // had written its failure yet; the ceilings counted them afterwards and
+        // stopped nothing. The guess is handed back below if the PIN is right.
+        const attempt = { factor: "pin" as const, ipHash: security.ipHash, subjectHash }
+        if (!reserveLoginAttempt(attempt)) {
           writeAuthSecurityEvent({
             ...auditBase,
             eventType: "login_rate_limited",
@@ -72,7 +77,7 @@ export function smbaPinLogin() {
         const account = findApprovedAccountByAcademyId(username)
         const verified = await verifyPinLogin({ pin: context.body.pin, academyId: username })
         if (!verified) {
-          recordLoginFailure({ ipHash: security.ipHash, subjectHash })
+          // Already counted by the reservation above.
           writeAuthSecurityEvent({
             ...auditBase,
             accountId: account?.accountId,
@@ -82,7 +87,7 @@ export function smbaPinLogin() {
           })
           throw context.error("UNAUTHORIZED", { message: INVALID_PIN_LOGIN })
         }
-        recordLoginSuccess(subjectHash)
+        releaseLoginAttempt({ ipHash: security.ipHash, subjectHash })
         writeAuthSecurityEvent({
           ...auditBase,
           accountId: verified.accountId,

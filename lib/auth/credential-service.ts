@@ -1,5 +1,6 @@
 import "server-only"
 
+import { resolveAuthSecret } from "@/lib/auth/auth-secret"
 import { createHash, createHmac, randomBytes, randomUUID, scryptSync } from "node:crypto"
 
 import { and, eq, gt, isNull, like, lt, or } from "drizzle-orm"
@@ -26,7 +27,7 @@ import {
   playerEnrollments,
 } from "@/lib/db/schema"
 import {
-  UNKNOWN_IP_HASH,
+  unknownIpHash,
   authSubjectHash,
   writeAuthSecurityEvent,
 } from "@/lib/auth/security-context"
@@ -43,8 +44,7 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000
 const LOGIN_BLOCK_MS = 15 * 60 * 1000
 
 function credentialSecret() {
-  return process.env.BETTER_AUTH_SECRET?.trim()
-    || "smba-local-only-credential-secret-change-before-deployment-2026"
+  return resolveAuthSecret("smba-local-only-credential-secret-change-before-deployment-2026")
 }
 
 function credentialHash(label: string, value: string) {
@@ -61,8 +61,68 @@ function activationClaimHash(value: string) {
   return credentialHash("activation-claim", value.trim())
 }
 
+/**
+ * Shape only. This is what sign-in checks, so a PIN chosen before the strength
+ * rules below existed still signs in; use `validateNewPin` when one is being set.
+ */
 export function validatePin(pin: string) {
   return /^\d{6}$/u.test(pin) ? null : "Enter exactly 6 digits."
+}
+
+const WEAK_PIN_MESSAGE =
+  "That PIN is too easy to guess. Avoid repeats, counting up or down, and birthdays."
+
+// The sixty-odd six-digit codes people reach for first. Patterns below catch
+// runs and repeats; this list catches the rest (keyboard shapes, 123321, 520520).
+const COMMON_PINS = new Set([
+  "000000", "001122", "010203", "010101", "100200", "101010", "102030",
+  "111222", "112233", "121212", "123123", "123321", "123456", "123654",
+  "124578", "131313", "147258", "159753", "159357", "192837", "200000",
+  "202020", "212121", "232323", "321321", "333666", "456456", "456789",
+  "520131", "520520", "555666", "654321", "666888", "696969", "741852",
+  "753951", "778899", "789456", "789789", "888999", "987654", "987456",
+  "998877", "999000", "135790", "246810", "135246", "142536", "162534",
+  "090909", "707070", "181818", "191919", "909090", "808080", "151515",
+  "171717", "141414", "161616", "252525",
+])
+
+function isDateLike(pin: string) {
+  // The three orders people write a date in: ddmmyy, mmddyy, yymmdd.
+  const candidates: Array<{ day: number, month: number, year: number }> = [
+    { day: Number(pin.slice(0, 2)), month: Number(pin.slice(2, 4)), year: Number(pin.slice(4, 6)) },
+    { day: Number(pin.slice(2, 4)), month: Number(pin.slice(0, 2)), year: Number(pin.slice(4, 6)) },
+    { day: Number(pin.slice(4, 6)), month: Number(pin.slice(2, 4)), year: Number(pin.slice(0, 2)) },
+  ]
+  // Birth years of the people who hold these PINs: players (2000s onwards) and
+  // the adults around them (1970 onwards). A real calendar day and month.
+  return candidates.some(({ day, month, year }) =>
+    day >= 1 && day <= 31 && month >= 1 && month <= 12
+    && (year <= 26 || year >= 70))
+}
+
+/**
+ * What a PIN has to clear to be *set*. A PIN is the only factor a player -- a
+ * minor -- signs in with, and the Academy ID beside it is sequential, so a PIN
+ * from the first few hundred anyone would try is as good as none.
+ */
+export function validateNewPin(pin: string) {
+  const shape = validatePin(pin)
+  if (shape) return shape
+  const digits = [...pin].map(Number)
+  const allSame = digits.every((digit) => digit === digits[0])
+  const step = digits[1] - digits[0]
+  const isRun = Math.abs(step) === 1
+    && digits.every((digit, index) => index === 0 || digit - digits[index - 1] === step)
+  // 121212, 123123, 112112: the first two or three digits repeated.
+  const repeatsPair = pin.slice(0, 2).repeat(3) === pin
+  const repeatsTriple = pin.slice(0, 3).repeat(2) === pin
+  // 112233, 445566: three pairs of doubled digits.
+  const pairedDoubles = digits[0] === digits[1] && digits[2] === digits[3] && digits[4] === digits[5]
+  if (allSame || isRun || repeatsPair || repeatsTriple || pairedDoubles
+    || COMMON_PINS.has(pin) || isDateLike(pin)) {
+    return WEAK_PIN_MESSAGE
+  }
+  return null
 }
 
 function internalEmail(accountId: string) {
@@ -445,7 +505,7 @@ export async function setPinCredential(input: {
   database?: SmbaDatabase
   now?: Date
 } = {}) {
-  const pinError = validatePin(input.pin)
+  const pinError = validateNewPin(input.pin)
   if (pinError) throw new Error(pinError)
   const account = pinEligibleAccount(input.accountId, database)
   if (!account?.role
@@ -641,19 +701,44 @@ export async function verifyPinLogin(input: {
  * forwarded header the proxy actually writes and the real ceilings work.
  */
 const ACCOUNT_WIDE_FAILURE_THRESHOLD = 50
+const IP_FAILURE_THRESHOLD = 20
 
-function attemptKeys(subjectHash: string, ipHash: string) {
-  if (ipHash === UNKNOWN_IP_HASH) {
-    return [{ key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD }]
+/*
+ * A six-digit PIN has a million values, where a password has far more than can
+ * be tried, so the generic fifty-a-quarter-hour budget is too generous for it:
+ * 4,800 guesses a day is half a percent of the space, daily, indefinitely. PIN
+ * sign-in gets its own, tighter account-wide budget. It is a separate key that
+ * only PIN sign-in reads, and only a verified PIN clears it: signing in some
+ * other way does not hand an attacker a fresh ten.
+ *
+ * What it does not do is keep PIN guessing away from the password form. PIN
+ * attempts also spend the shared per-address and per-account keys, so five wrong
+ * PINs from one address still pause the password form from that address.
+ */
+const PIN_ACCOUNT_WIDE_FAILURE_THRESHOLD = 10
+
+export type LoginFactor = "pin"
+
+function attemptKeys(subjectHash: string, ipHash: string, factor?: LoginFactor) {
+  const factorKeys = factor === "pin"
+    ? [{ key: `pin:${subjectHash}`, threshold: PIN_ACCOUNT_WIDE_FAILURE_THRESHOLD }]
+    : []
+  if (ipHash === unknownIpHash()) {
+    return [
+      { key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD },
+      ...factorKeys,
+    ]
   }
   return [
     { key: `subject:${subjectHash}:${ipHash}`, threshold: 5 },
     { key: `subject:${subjectHash}`, threshold: ACCOUNT_WIDE_FAILURE_THRESHOLD },
-    { key: `ip:${ipHash}`, threshold: 20 },
+    { key: `ip:${ipHash}`, threshold: IP_FAILURE_THRESHOLD },
+    ...factorKeys,
   ]
 }
 
 export function loginIsBlocked(input: {
+  factor?: LoginFactor
   ipHash: string
   subjectHash: string
 }, {
@@ -663,7 +748,7 @@ export function loginIsBlocked(input: {
   database?: SmbaDatabaseExecutor
   now?: Date
 } = {}) {
-  return attemptKeys(input.subjectHash, input.ipHash).some(({ key }) => {
+  return attemptKeys(input.subjectHash, input.ipHash, input.factor).some(({ key }) => {
     const row = database.select({ blockedUntil: authLoginAttempts.blockedUntil })
       .from(authLoginAttempts)
       .where(eq(authLoginAttempts.key, key))
@@ -672,7 +757,117 @@ export function loginIsBlocked(input: {
   })
 }
 
+type AttemptTransaction = Parameters<Parameters<SmbaDatabase["transaction"]>[0]>[0]
+
+function countAttempt(tx: AttemptTransaction, input: {
+  factor?: LoginFactor
+  ipHash: string
+  subjectHash: string
+}, now: Date) {
+  /*
+   * Rows past their window are spent: nothing reads them, and they cannot come
+   * back because a stale window resets the count. Left alone the table grew
+   * one row per unauthenticated failure and never shrank, on a database that
+   * is Turso in production. Cleared here rather than on a schedule so the
+   * cost lands on the writer producing the rows.
+   */
+  tx.delete(authLoginAttempts).where(and(
+    lt(authLoginAttempts.windowStartedAt, new Date(now.getTime() - LOGIN_WINDOW_MS)),
+    or(
+      isNull(authLoginAttempts.blockedUntil),
+      lt(authLoginAttempts.blockedUntil, now),
+    ),
+  )).run()
+  for (const { key, threshold } of attemptKeys(input.subjectHash, input.ipHash, input.factor)) {
+    const current = tx.select().from(authLoginAttempts)
+      .where(eq(authLoginAttempts.key, key)).get()
+    const outsideWindow = !current
+      || now.getTime() - current.windowStartedAt.getTime() >= LOGIN_WINDOW_MS
+    const failedCount = outsideWindow ? 1 : current.failedCount + 1
+    const blockedUntil = failedCount >= threshold
+      ? new Date(now.getTime() + LOGIN_BLOCK_MS)
+      : null
+    tx.insert(authLoginAttempts).values({
+      key,
+      blockedUntil,
+      failedCount,
+      updatedAt: now,
+      windowStartedAt: outsideWindow ? now : current.windowStartedAt,
+    }).onConflictDoUpdate({
+      target: authLoginAttempts.key,
+      set: {
+        blockedUntil,
+        failedCount,
+        updatedAt: now,
+        windowStartedAt: outsideWindow ? now : current.windowStartedAt,
+      },
+    }).run()
+  }
+}
+
 export function recordLoginFailure(input: {
+  factor?: LoginFactor
+  ipHash: string
+  subjectHash: string
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}) {
+  database.transaction((tx) => countAttempt(tx, input, now), { behavior: "immediate" })
+}
+
+/**
+ * Checks the ceilings and spends one guess, as a single step.
+ *
+ * `loginIsBlocked` followed, after the slow verify, by `recordLoginFailure`
+ * leaves the whole verify as a window: every request that arrives inside it
+ * reads "not blocked" because none of the others has written its failure yet, so
+ * a burst of simultaneous guesses all run and the ceiling only ever counts them
+ * afterwards. Reserving first closes that -- the Nth concurrent request sees the
+ * N-1 before it -- at the price that the caller must hand the guess back with
+ * `releaseLoginAttempt` when the secret turns out to be right.
+ *
+ * Returns false, spending nothing, when a ceiling is already standing.
+ */
+export function reserveLoginAttempt(input: {
+  factor?: LoginFactor
+  ipHash: string
+  subjectHash: string
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabase
+  now?: Date
+} = {}) {
+  return database.transaction((tx) => {
+    const blocked = attemptKeys(input.subjectHash, input.ipHash, input.factor).some(({ key }) => {
+      const row = tx.select({ blockedUntil: authLoginAttempts.blockedUntil })
+        .from(authLoginAttempts)
+        .where(eq(authLoginAttempts.key, key))
+        .get()
+      return Boolean(row?.blockedUntil && row.blockedUntil > now)
+    })
+    if (blocked) return false
+    countAttempt(tx, input, now)
+    return true
+  }, { behavior: "immediate" })
+}
+
+/**
+ * Hands back the guess `reserveLoginAttempt` spent, because it was the right
+ * secret, and clears this account's failures as `recordLoginSuccess` does.
+ *
+ * The per-account keys are cleared outright. The per-address key is shared with
+ * every other account that address has tried, so it is refunded by exactly one
+ * rather than cleared -- otherwise one correct sign-in would forgive an address
+ * that had just failed nineteen times elsewhere -- and a block that this very
+ * reservation set is lifted again if the count has fallen back under its ceiling.
+ */
+export function releaseLoginAttempt(input: {
   ipHash: string
   subjectHash: string
 }, {
@@ -683,45 +878,22 @@ export function recordLoginFailure(input: {
   now?: Date
 } = {}) {
   database.transaction((tx) => {
-    /*
-     * Rows past their window are spent: nothing reads them, and they cannot come
-     * back because a stale window resets the count. Left alone the table grew
-     * one row per unauthenticated failure and never shrank, on a database that
-     * is Turso in production. Cleared here rather than on a schedule so the
-     * cost lands on the writer producing the rows.
-     */
-    tx.delete(authLoginAttempts).where(and(
-      lt(authLoginAttempts.windowStartedAt, new Date(now.getTime() - LOGIN_WINDOW_MS)),
-      or(
-        isNull(authLoginAttempts.blockedUntil),
-        lt(authLoginAttempts.blockedUntil, now),
-      ),
-    )).run()
-    for (const { key, threshold } of attemptKeys(input.subjectHash, input.ipHash)) {
-      const current = tx.select().from(authLoginAttempts)
-        .where(eq(authLoginAttempts.key, key)).get()
-      const outsideWindow = !current
-        || now.getTime() - current.windowStartedAt.getTime() >= LOGIN_WINDOW_MS
-      const failedCount = outsideWindow ? 1 : current.failedCount + 1
-      const blockedUntil = failedCount >= threshold
-        ? new Date(now.getTime() + LOGIN_BLOCK_MS)
-        : null
-      tx.insert(authLoginAttempts).values({
-        key,
-        blockedUntil,
-        failedCount,
-        updatedAt: now,
-        windowStartedAt: outsideWindow ? now : current.windowStartedAt,
-      }).onConflictDoUpdate({
-        target: authLoginAttempts.key,
-        set: {
-          blockedUntil,
-          failedCount,
-          updatedAt: now,
-          windowStartedAt: outsideWindow ? now : current.windowStartedAt,
-        },
-      }).run()
-    }
+    recordLoginSuccess(input.subjectHash, { database: tx })
+    // Only a verified PIN resets the PIN budget; see PIN_ACCOUNT_WIDE_FAILURE_THRESHOLD.
+    tx.delete(authLoginAttempts)
+      .where(eq(authLoginAttempts.key, `pin:${input.subjectHash}`))
+      .run()
+    if (input.ipHash === unknownIpHash()) return
+    const key = `ip:${input.ipHash}`
+    const current = tx.select().from(authLoginAttempts)
+      .where(eq(authLoginAttempts.key, key)).get()
+    if (!current || now.getTime() - current.windowStartedAt.getTime() >= LOGIN_WINDOW_MS) return
+    const failedCount = Math.max(0, current.failedCount - 1)
+    const stillBlocked = failedCount >= IP_FAILURE_THRESHOLD ? current.blockedUntil : null
+    tx.update(authLoginAttempts)
+      .set({ blockedUntil: stillBlocked, failedCount, updatedAt: now })
+      .where(eq(authLoginAttempts.key, key))
+      .run()
   }, { behavior: "immediate" })
 }
 

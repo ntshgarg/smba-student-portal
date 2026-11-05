@@ -1,5 +1,6 @@
 import "server-only"
 
+import { resolveAuthSecret } from "@/lib/auth/auth-secret"
 import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto"
 
 import { createOTP } from "@better-auth/utils/otp"
@@ -58,8 +59,7 @@ type SecurityMetadata = {
 }
 
 function recoverySecret() {
-  return process.env.BETTER_AUTH_SECRET?.trim()
-    || "smba-local-only-recovery-secret-change-before-deployment-2026"
+  return resolveAuthSecret("smba-local-only-recovery-secret-change-before-deployment-2026")
 }
 
 function digest(label: string, value: string) {

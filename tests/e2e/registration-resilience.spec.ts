@@ -506,8 +506,8 @@ async function loginAsHeadCoach(browser: Browser) {
     ), { timeout: 20_000 })
   }
   if (new URL(page.url()).pathname === "/auth/pin/setup") {
-    await page.getByLabel("Enter PIN").fill("135790")
-    await page.getByLabel("Confirm PIN").fill("135790")
+    await page.getByLabel("Enter PIN").fill("739251")
+    await page.getByLabel("Confirm PIN").fill("739251")
     await page.getByRole("button", { name: "Set up PIN" }).click()
     await page.waitForURL((url) => url.pathname.startsWith("/coach"), { timeout: 20_000 })
   }
@@ -536,7 +536,7 @@ async function loginAsActivatedPlayer(
 test("a player completes code-free browser activation, optional PIN, and password fallback", async ({ browser, page }) => {
   const fullName = "Browser Claim Activation Player"
   const password = "A durable browser password!"
-  const pin = "246810"
+  const pin = "482916"
   await openRegistration(page)
   await completeRegistration(page, fullName)
   await page.getByRole("link", { name: "View activation status" }).click()

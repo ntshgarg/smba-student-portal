@@ -1,5 +1,6 @@
 import "server-only"
 
+import { resolveAuthSecret } from "@/lib/auth/auth-secret"
 import { createHmac, timingSafeEqual } from "node:crypto"
 
 export const ADMIN_PREVIEW_COOKIE = "smba_admin_preview"
@@ -12,8 +13,7 @@ type PreviewClaim = {
 }
 
 function secret() {
-  return process.env.BETTER_AUTH_SECRET?.trim()
-    || "smba-local-only-auth-secret-change-before-deployment-2026"
+  return resolveAuthSecret("smba-local-only-auth-secret-change-before-deployment-2026")
 }
 
 function signature(payload: string) {

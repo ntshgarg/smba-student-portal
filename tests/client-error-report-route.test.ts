@@ -91,7 +91,7 @@ describe("client error report endpoint", () => {
       ...validReport,
       digest: "NEXT_REDIRECT;push;/coach/members/SMBA-PL-0004;307;",
       errorName: "AaravGuptaError",
-      routePath: "/coach/members/SMBA-PL-0004?token=abc",
+      routePath: "/coach/financials/players/SMBA-PL-0004?token=abc",
       summary: "Could not save aarav.guardian@example.com",
     }))
 
@@ -102,7 +102,7 @@ describe("client error report endpoint", () => {
         digest: "NEXT_REDIRECT",
         errorName: "Error",
         eventType: "client_error",
-        routePath: "/coach/members/:id",
+        routePath: "/coach/financials/players/:id",
         summary: "Could not save <redacted-email>",
       },
     })

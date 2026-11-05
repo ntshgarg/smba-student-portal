@@ -170,11 +170,11 @@ describe("Better Auth runtime adapter", () => {
     const { setPinCredential } = await import("@/lib/auth/credential-service")
     await setPinCredential({
       accountId: "00000000-0000-4000-8000-000000000001",
-      pin: "246810",
+      pin: "482916",
     })
 
     const pinSignIn = await auth.api.signInPin({
-      body: { pin: "246810", username: "SMBA#0001" },
+      body: { pin: "482916", username: "SMBA#0001" },
       headers: new Headers(),
       returnHeaders: true,
     })
@@ -340,7 +340,7 @@ describe("Better Auth runtime adapter", () => {
     const { setPinCredential } = await import("@/lib/auth/credential-service")
     await setPinCredential({
       accountId: "00000000-0000-4000-8000-000000000001",
-      pin: "246810",
+      pin: "482916",
     })
 
     const attemptHeaders = new Headers({ "x-forwarded-for": "203.0.113.77" })
@@ -377,7 +377,7 @@ describe("Better Auth runtime adapter", () => {
 
     // A correct PIN must not slip through the lock either.
     await expect(auth.api.signInPin({
-      body: { pin: "246810", username: "SMBA#0001" },
+      body: { pin: "482916", username: "SMBA#0001" },
       headers: attemptHeaders,
     })).rejects.toThrow()
   })

@@ -452,7 +452,7 @@ describe("password recovery", () => {
       email: "junior@example.com",
       role: "coach",
     })
-    await setPinCredential({ accountId, pin: "123456" }, { database, now: NOW })
+    await setPinCredential({ accountId, pin: "618203" }, { database, now: NOW })
     const mailer = new CapturingMailer()
     await requestPasswordRecovery({
       academyId: "SMBA-JC-2042",
@@ -503,7 +503,7 @@ describe("password recovery", () => {
   it("resets a player password, revokes sessions, removes PIN and rejects replay", async () => {
     const accountId = "player-recovery"
     await createActiveAccount({ academyId: "SMBA-PL-3001", accountId, email: SHARED_EMAIL, role: "player" })
-    await setPinCredential({ accountId, pin: "246810" }, { database, now: NOW })
+    await setPinCredential({ accountId, pin: "482916" }, { database, now: NOW })
     database.insert(schema.authRuntimeSessions).values({
       createdAt: NOW,
       expiresAt: new Date(NOW.getTime() + 86_400_000),
@@ -539,7 +539,7 @@ describe("password recovery", () => {
       email: "coach@example.com",
       role: "coach",
     })
-    await setPinCredential({ accountId, pin: "135790" }, { database, now: NOW })
+    await setPinCredential({ accountId, pin: "739251" }, { database, now: NOW })
     const secret = await addAuthenticator(accountId)
     const originalFactor = database.select().from(schema.authTwoFactors)
       .where(eq(schema.authTwoFactors.userId, accountId)).get()!

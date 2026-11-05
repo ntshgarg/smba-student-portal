@@ -159,6 +159,11 @@ export async function beginAuthenticatorReconnect(
   }
 
   recordLoginSuccess(subjectHash)
+  // Spending a recovery code here goes on to switch the authenticator off, which
+  // is exactly what an alert on recovery-code use exists to catch.
+  if (!/^\d{6}$/u.test(secondFactor)) {
+    recordSecondFactorSuccess(requestHeaders, identity.subjectId, "backup_code", "reconnect")
+  }
 
   try {
     await requestAuth.api.revokeOtherSessions({ headers: requestHeaders })
@@ -256,6 +261,79 @@ export async function confirmTotpSetup(
   redirect(destinationForUser(rawSession.user.id))
 }
 
+// Failures an unauthenticated caller can cause are written, but not without
+// limit: this action is public, and the two-factor plugin's own throttle never
+// sees a call that carries no challenge. Per instance and per address, which is
+// enough to keep one source from filling the table or tripping the monitor.
+const FAILURE_AUDIT_WINDOW_MS = 60 * 60 * 1000
+const FAILURE_AUDIT_PER_WINDOW = 10
+const FAILURE_AUDIT_TRACKED_KEYS = 2_000
+const failureAudit = new Map<string, { count: number, windowStartedAt: number }>()
+
+function failureAuditAllowed(key: string, now = Date.now()) {
+  if (failureAudit.size > FAILURE_AUDIT_TRACKED_KEYS) failureAudit.clear()
+  const current = failureAudit.get(key)
+  if (!current || now - current.windowStartedAt >= FAILURE_AUDIT_WINDOW_MS) {
+    failureAudit.set(key, { count: 1, windowStartedAt: now })
+    return true
+  }
+  current.count += 1
+  return current.count <= FAILURE_AUDIT_PER_WINDOW
+}
+
+// A sign-in that is genuinely waiting on its second factor carries the
+// plugin's signed challenge cookie (`<prefix>.two_factor`, with a __Secure-
+// prefix over HTTPS). A request without one is not a failed second factor, it
+// is noise, and is not recorded.
+function carriesSecondFactorChallenge(requestHeaders: Pick<Headers, "get">) {
+  return (requestHeaders.get("cookie") ?? "")
+    .split(";")
+    .some((pair) => /(?:^|[._-])two_factor$/u.test(pair.split("=")[0]?.trim() ?? ""))
+}
+
+function recordSecondFactorFailure(
+  requestHeaders: Awaited<ReturnType<typeof headers>>,
+  method: "backup_code" | "totp",
+) {
+  try {
+    if (!carriesSecondFactorChallenge(requestHeaders)) return
+    const security = requestSecurityContext(requestHeaders)
+    if (!failureAuditAllowed(security.ipHash)) return
+    writeAuthSecurityEvent({
+      eventType: "totp_failed",
+      ipHash: security.ipHash,
+      metadata: { method, operation: "sign_in" },
+      outcome: "failure",
+      userAgent: security.userAgent,
+    })
+  } catch {
+    // Never let a failed audit write change what the person sees.
+  }
+}
+
+// A verified second factor has already been accepted and its code spent by the
+// time this runs, so a failed write must not turn that into a refusal.
+function recordSecondFactorSuccess(
+  requestHeaders: Awaited<ReturnType<typeof headers>>,
+  accountId: string,
+  method: "backup_code" | "totp",
+  operation?: string,
+) {
+  try {
+    const security = requestSecurityContext(requestHeaders)
+    writeAuthSecurityEvent({
+      accountId,
+      eventType: "totp_verified",
+      ipHash: security.ipHash,
+      metadata: operation ? { method, operation } : { method },
+      outcome: "success",
+      userAgent: security.userAgent,
+    })
+  } catch {
+    // See above.
+  }
+}
+
 export async function verifyTotpSignIn(
   _previousState: TotpVerificationState,
   formData: FormData,
@@ -268,19 +346,17 @@ export async function verifyTotpSignIn(
       body: { code, trustDevice: formData.get("trustDevice") === "on" },
       headers: requestHeaders,
     })
-    const security = requestSecurityContext(requestHeaders)
-    writeAuthSecurityEvent({
-      accountId: response.user.id,
-      eventType: "totp_verified",
-      ipHash: security.ipHash,
-      outcome: "success",
-      userAgent: security.userAgent,
-    })
+    recordSecondFactorSuccess(requestHeaders, response.user.id, "totp")
     redirect(destinationForUser(response.user.id))
   } catch (error) {
     // Next.js redirects are intentionally thrown; do not turn a successful
     // verification into an error message.
     if (error && typeof error === "object" && "digest" in error) throw error
+    // A wrong second factor at sign-in used to leave no trace, so guessing the
+    // authenticator on the head coach or owner account was invisible. The person
+    // is not signed in yet, so there is no account to name; the address and
+    // agent are what the record can carry.
+    recordSecondFactorFailure(requestHeaders, "totp")
     return { error: "That code was not accepted. Wait for a new code and try again." }
   }
 }
@@ -297,9 +373,14 @@ export async function verifyBackupCodeSignIn(
       body: { code, trustDevice: false },
       headers: requestHeaders,
     })
+    // A recovery code skips the authenticator for the head coach and the owner,
+    // and each one is single-use, so any use at all is worth an alert: it is
+    // either the owner who lost their phone or someone who found the codes.
+    recordSecondFactorSuccess(requestHeaders, response.user.id, "backup_code")
     redirect(destinationForUser(response.user.id))
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error
+    recordSecondFactorFailure(requestHeaders, "backup_code")
     return { error: "That recovery code was not accepted." }
   }
 }

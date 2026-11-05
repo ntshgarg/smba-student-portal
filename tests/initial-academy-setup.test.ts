@@ -89,8 +89,8 @@ describe("empty-academy first-run security", () => {
       fullName: "Nitish Gupta",
       password: ADMIN_PASSWORD,
       confirmPassword: ADMIN_PASSWORD,
-      pin: "135790",
-      confirmPin: "135790",
+      pin: "739251",
+      confirmPin: "739251",
     }, { database, now: NOW })
 
     expect(setup).toMatchObject({
@@ -110,7 +110,7 @@ describe("empty-academy first-run security", () => {
     }, { database })).resolves.toBe(true)
     await expect(verifyPinLogin({
       academyId: PLATFORM_ADMIN_ACADEMY_ID,
-      pin: "135790",
+      pin: "739251",
     }, { database })).resolves.toMatchObject({
       accountId: PLATFORM_ADMIN_ACCOUNT_ID,
       role: "platform_admin",
@@ -120,8 +120,8 @@ describe("empty-academy first-run security", () => {
       fullName: "Another Owner",
       password: "Another secure owner password!",
       confirmPassword: "Another secure owner password!",
-      pin: "246810",
-      confirmPin: "246810",
+      pin: "482916",
+      confirmPin: "482916",
     }, { database, now: NOW })).rejects.toThrow("already been configured")
   })
 
@@ -130,8 +130,8 @@ describe("empty-academy first-run security", () => {
       fullName: "Nitish Gupta",
       password: ADMIN_PASSWORD,
       confirmPassword: ADMIN_PASSWORD,
-      pin: "135790",
-      confirmPin: "135790",
+      pin: "739251",
+      confirmPin: "739251",
     }, { database, now: NOW })
     expect(headCoachSetupAvailable({ database })).toBe(true)
     const claim = createHeadCoachSetupClaim({
@@ -143,8 +143,8 @@ describe("empty-academy first-run security", () => {
       fullName: "Sathiya Moorthy",
       password: HEAD_PASSWORD,
       confirmPassword: HEAD_PASSWORD,
-      pin: "246810",
-      confirmPin: "246810",
+      pin: "482916",
+      confirmPin: "482916",
       setupToken: claim.token,
       ...verifiedEmail,
     }, { database, now: NOW })
@@ -159,7 +159,7 @@ describe("empty-academy first-run security", () => {
     }, { database })).resolves.toBe(true)
     await expect(verifyPinLogin({
       academyId: HEAD_COACH_ACADEMY_ID,
-      pin: "246810",
+      pin: "482916",
     }, { database })).resolves.toMatchObject({
       accountId: setup.accountId,
       role: "coach",
@@ -170,8 +170,8 @@ describe("empty-academy first-run security", () => {
       fullName: "Second Head",
       password: "Another secure password!",
       confirmPassword: "Another secure password!",
-      pin: "135790",
-      confirmPin: "135790",
+      pin: "739251",
+      confirmPin: "739251",
       setupToken: claim.token,
       ...verifiedEmail,
     }, { database, now: NOW })).rejects.toThrow("one-time setup session")
@@ -183,8 +183,8 @@ describe("empty-academy first-run security", () => {
       fullName: "Nitish Gupta",
       password: ADMIN_PASSWORD,
       confirmPassword: ADMIN_PASSWORD,
-      pin: "135790",
-      confirmPin: "135790",
+      pin: "739251",
+      confirmPin: "739251",
     }, { database, now: NOW })
     const first = createHeadCoachSetupClaim({
       createdByAccountId: PLATFORM_ADMIN_ACCOUNT_ID,
@@ -220,10 +220,10 @@ describe("empty-academy first-run security", () => {
 describe("first head-coach setup validation names the field at fault", () => {
   const valid = {
     confirmPassword: "A stronger passphrase 1",
-    confirmPin: "246813",
+    confirmPin: "519374",
     fullName: "Sathiya Moorthy",
     password: "A stronger passphrase 1",
-    pin: "246813",
+    pin: "519374",
     recoveryEmailReceiptToken: "receipt",
     recoveryEmailSubjectKey: "subject",
     setupToken: "token",

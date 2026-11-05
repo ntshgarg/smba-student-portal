@@ -204,11 +204,30 @@ describe("CI security controls", () => {
       ".github/workflows/empty-academy.yml",
     ]) {
       const workflow = readRepositoryFile(path)
-      const uploadsASnapshot = /uses: actions\/upload-artifact/u.test(workflow)
-        && /smba-production|pre-reset-snapshot/u.test(workflow)
-      const runsOnASchedule = /^\s*(schedule:|- cron:)/mu.test(workflow)
-      expect(uploadsASnapshot && runsOnASchedule).toBe(false)
+      // Not only scheduled runs: a manual run publishes just the same. The
+      // "Empty the academy" workflow was missed for exactly that reason -- it is
+      // workflow_dispatch only, so a check on schedules let its upload through
+      // while the file sat downloadable on a public repository.
+      const uploadsAnything = /uses:\s*actions\/upload-artifact/u.test(
+        workflow.replace(/^\s*#.*$/gmu, ""),
+      )
+      expect(uploadsAnything, `${path} publishes an artifact`).toBe(false)
     }
+  })
+
+  it("will not empty the academy unless a backup is confirmed to exist elsewhere", () => {
+    const workflow = readRepositoryFile(".github/workflows/empty-academy.yml")
+    // Read the input's block by position rather than with one nested regex,
+    // which CodeQL flags for backtracking on its repeated whitespace.
+    const start = workflow.indexOf("      backup_confirmed:")
+    expect(start).toBeGreaterThan(-1)
+    const block = workflow.slice(start, workflow.indexOf("\n\n", start))
+    expect(block).toContain("required: true")
+    expect(block).toContain("type: boolean")
+    // The check is read through env, not spliced into the script.
+    expect(workflow).toContain("BACKUP_CONFIRMED: ${{ inputs.backup_confirmed }}")
+    expect(workflow.indexOf("Require a backup made elsewhere"))
+      .toBeLessThan(workflow.indexOf("Check out repository"))
   })
 
   it("gives the stored restore only Actions read access and step-scoped passphrase", () => {

@@ -6,6 +6,7 @@ import { and, eq, gte } from "drizzle-orm"
 
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import { clientErrorReports } from "@/lib/db/schema"
+import { purgeExpiredTelemetryOccasionally } from "@/lib/telemetry/retention"
 import {
   type ClientErrorReport,
   clientErrorSignature,
@@ -32,6 +33,8 @@ export function recordClientErrorReport(input: {
   const fingerprint = createHash("sha256")
     .update(clientErrorSignature(input.report))
     .digest("hex")
+
+  purgeExpiredTelemetryOccasionally({ database, now })
 
   const duplicate = database.select({ id: clientErrorReports.id })
     .from(clientErrorReports)

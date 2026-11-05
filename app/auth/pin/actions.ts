@@ -5,7 +5,7 @@ import { redirect } from "next/navigation"
 
 import { getAuth } from "@/lib/auth/better-auth"
 import { sessionProvider } from "@/lib/data"
-import { hasPinCredential, setPinCredential, validatePin } from "@/lib/auth/credential-service"
+import { hasPinCredential, setPinCredential, validateNewPin } from "@/lib/auth/credential-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 
 /*
@@ -69,7 +69,7 @@ export async function setupPinAction(
   }
   const pin = String(formData.get("pin") ?? "")
   const confirmPin = String(formData.get("confirmPin") ?? "")
-  const pinError = validatePin(pin)
+  const pinError = validateNewPin(pin)
   if (pinError) return { error: pinError, errorField: "pin" }
   if (pin !== confirmPin) {
     return { error: "The PINs do not match.", errorField: "confirmPin" }

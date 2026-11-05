@@ -226,6 +226,100 @@ export function clientErrorSignature(report: ClientErrorReport): string {
   ].join("|")
 }
 
+/*
+ * Every route pattern the portal serves, as `toRoutePattern` would mask it.
+ *
+ * `toRoutePattern` only checks that a segment *looks* like a route word, so a
+ * caller could invent `/aaaa/bbbb/cccc` and every invented path was a fresh
+ * fingerprint, a fresh row, on an endpoint that takes no login. A report whose
+ * route is not one of these is filed under "/unknown", so the routes a caller
+ * can name are a closed set. That bounds what the table holds, not how fast it
+ * fills: the rate is the endpoint's per-address limit and the duplicate window,
+ * and what it holds over time is bounded by the 90-day purge in retention.ts.
+ *
+ * `:id` stands for any one segment. tests/client-error-report-routes.test.ts
+ * compares this list with the pages and route handlers in app/, so adding a
+ * page without adding it here fails CI rather than silently losing its reports.
+ */
+export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
+  "/",
+  "/account/recovery-email/setup",
+  "/account/security",
+  "/activate",
+  "/admin",
+  "/admin/preview/exit",
+  "/announcements/:id",
+  "/api/client-errors",
+  "/api/health",
+  "/api/public/announcements",
+  "/api/session-summary",
+  "/auth/pin/setup",
+  "/auth/two-factor",
+  "/auth/two-factor/reconnect",
+  "/auth/two-factor/recovery",
+  "/auth/two-factor/recovery/claim",
+  "/auth/two-factor/setup",
+  "/coach",
+  "/coach/announcements",
+  "/coach/announcements/:id",
+  "/coach/announcements/new",
+  "/coach/assessments",
+  "/coach/assessments/:id",
+  "/coach/assessments/new",
+  "/coach/assessments/players/:id",
+  "/coach/attendance",
+  "/coach/attendance/adjustments",
+  "/coach/attendance/coaches",
+  "/coach/attendance/players/record",
+  "/coach/attendance/players/register",
+  "/coach/attendance/staff/record",
+  "/coach/attendance/staff/register",
+  "/coach/calendar",
+  "/coach/financials",
+  "/coach/financials/:id",
+  "/coach/financials/players/:id",
+  "/coach/financials/players/:id/statement/download",
+  "/coach/financials/receipts/:id/download",
+  "/coach/financials/record",
+  "/coach/financials/records",
+  "/coach/financials/records/:id",
+  "/coach/members",
+  "/coach/onboarding",
+  "/coach/schedules",
+  "/coach/schedules/new",
+  "/login",
+  "/player",
+  "/player/announcements",
+  "/player/announcements/:id",
+  "/player/financials",
+  "/player/reports",
+  "/player/reports/assessments/:id",
+  "/progress",
+  "/recover",
+  "/recover/claim",
+  "/recover/reset",
+  "/register",
+  "/setup/head-coach",
+  "/setup/head-coach/claim",
+]
+
+const KNOWN_ROUTE_SET: ReadonlySet<string> = new Set(KNOWN_ROUTE_PATTERNS)
+
+/** Masks a pathname, then keeps it only if it is a route the portal really has. */
+export function toKnownRoutePattern(value: unknown): string {
+  const masked = toRoutePattern(value)
+  if (masked === "/unknown") return masked
+  if (KNOWN_ROUTE_SET.has(masked)) return masked
+
+  const segments = masked.split("/").filter(Boolean)
+  const wildcardMatch = KNOWN_ROUTE_PATTERNS.find((pattern) => {
+    const known = pattern.split("/").filter(Boolean)
+    return known.length === segments.length
+      && known.every((segment, index) => segment === ":id" || segment === segments[index])
+  })
+  return wildcardMatch ?? "/unknown"
+}
+
 /** Narrows an untrusted request body, or returns null when it is not a report. */
 export function parseClientErrorReport(value: unknown): ClientErrorReport | null {
   if (typeof value !== "object" || value === null) return null
@@ -240,7 +334,7 @@ export function parseClientErrorReport(value: unknown): ClientErrorReport | null
     digest: normalizeErrorDigest(candidate.digest),
     errorName: normalizeErrorName(candidate.errorName),
     eventType,
-    routePath: toRoutePattern(candidate.routePath),
+    routePath: toKnownRoutePattern(candidate.routePath),
     summary: redactReportSummary(candidate.summary),
   }
 }

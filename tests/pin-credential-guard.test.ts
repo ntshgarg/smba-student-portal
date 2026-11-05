@@ -43,7 +43,7 @@ vi.mock("@/lib/data", () => ({
 vi.mock("@/lib/auth/credential-service", () => ({
   hasPinCredential: mocks.hasPinCredential,
   setPinCredential: mocks.setPinCredential,
-  validatePin: (pin: string) => /^\d{6}$/u.test(pin) ? null : "Enter exactly 6 digits.",
+  validateNewPin: (pin: string) => /^\d{6}$/u.test(pin) ? null : "Enter exactly 6 digits.",
 }))
 vi.mock("@/lib/auth/coach-access", () => ({
   getCoachAccessProfile: mocks.getCoachAccessProfile,

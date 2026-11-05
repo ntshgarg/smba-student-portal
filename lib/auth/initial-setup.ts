@@ -16,7 +16,7 @@ import {
   PLATFORM_ADMIN_ACCOUNT_ID,
   upsertPasswordCredential,
   validateNewPassword,
-  validatePin,
+  validateNewPin,
 } from "@/lib/auth/credential-service"
 import { consumeVerifiedSetupRecoveryEmail } from "@/lib/auth/recovery-service"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
@@ -169,7 +169,7 @@ function validateInitialPlatformAdminSetup(input: InitialPlatformAdminSetupInput
   const passwordError = validateNewPassword(input.password)
   if (passwordError) return passwordError
   if (input.password !== input.confirmPassword) return "The passwords do not match."
-  const pinError = validatePin(input.pin)
+  const pinError = validateNewPin(input.pin)
   if (pinError) return pinError
   if (input.pin !== input.confirmPin) return "The PINs do not match."
   return null
@@ -304,7 +304,7 @@ export function validateInitialHeadCoachSetup(
   if (input.password !== input.confirmPassword) {
     return { field: "confirmPassword", message: "The passwords do not match." }
   }
-  const pinError = validatePin(input.pin)
+  const pinError = validateNewPin(input.pin)
   if (pinError) return { field: "pin", message: pinError }
   if (input.pin !== input.confirmPin) {
     return { field: "confirmPin", message: "The PINs do not match." }

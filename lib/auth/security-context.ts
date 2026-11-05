@@ -1,18 +1,19 @@
 import "server-only"
 
+import { resolveAuthSecret } from "@/lib/auth/auth-secret"
 import { isIP } from "node:net"
 
 import { createHmac, randomUUID } from "node:crypto"
 
 import { authSecurityEvents } from "@/lib/db/schema"
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
+import { purgeExpiredTelemetryOccasionally } from "@/lib/telemetry/retention"
 
 export type AuthSecurityEventType = typeof authSecurityEvents.$inferInsert.eventType
 export type AuthSecurityEventOutcome = typeof authSecurityEvents.$inferInsert.outcome
 
 function auditKey() {
-  return process.env.BETTER_AUTH_SECRET?.trim()
-    || "smba-local-only-audit-key-change-before-deployment-2026"
+  return resolveAuthSecret("smba-local-only-audit-key-change-before-deployment-2026")
 }
 
 function digest(value: string) {
@@ -55,7 +56,7 @@ function trustedHeaderValue(value: string | null) {
  * "coarse is the safe direction" was wrong about that, badly. A bucket everyone
  * shares must never be allowed to refuse anybody: twenty failed logins against
  * twenty different accounts denied the whole portal, every coach and every
- * player, for fifteen minutes and renewably. `UNKNOWN_IP_HASH` below is how the
+ * player, for fifteen minutes and renewably. `unknownIpHash()` below is how the
  * throttle tells the two cases apart.
  *
  * Set it to the one header the proxy in front of this deployment writes. On a
@@ -97,15 +98,76 @@ export function warnIfCallersAreIndistinguishable() {
 /**
  * The hash every caller gets when no address could be established.
  *
+ * A function, not a constant: it needs the signing secret, and computing it as
+ * the module loaded made merely importing this file throw wherever the secret is
+ * absent -- including the database-preparation step of a Vercel build, which
+ * never signs anything.
+ *
  * Exported so the login throttle can recognise it: a ceiling that refuses an
  * account must never be applied to a bucket that may hold the whole internet.
  */
-export const UNKNOWN_IP_HASH = digest("ip:unknown")
+export function unknownIpHash() {
+  return digest("ip:unknown")
+}
+
+/*
+ * What a caller is counted as.
+ *
+ * An IPv4 address is one machine, so it is counted as itself. An IPv6 address
+ * is not: a home or mobile connection is handed a whole /64 -- 2^64 addresses --
+ * and the client can pick any of them per request. Counting the exact address
+ * gave every guess a fresh, empty bucket, so the per-address ceilings (five
+ * guesses per account, twenty overall) never applied to anyone on IPv6. The
+ * first 64 bits are the standard unit of one subscriber or device, so that is
+ * the unit counted (it is also what Better Auth's own limiter uses). This is a
+ * floor, not a wall: some subscribers are delegated a /56 or /48 and can still
+ * rotate across the 256 to 65,536 /64s inside it, each with a fresh per-address
+ * allowance. Counting coarser would lock out unrelated phones that share a
+ * mobile carrier's prefix, so the cap that holds against that is the
+ * account-wide one. An IPv4-mapped IPv6 address (::ffff:a.b.c.d) and a NAT64
+ * address (64:ff9b::a.b.c.d) embed an IPv4 machine and are unwrapped to it.
+ *
+ * Input has already passed isIP, so it is a well-formed address.
+ */
+export function addressBucket(address: string) {
+  const withoutZone = address.split("%")[0] ?? address
+  if (isIP(withoutZone) !== 6) return address
+
+  let text = withoutZone.toLowerCase()
+  const embeddedV4 = /(\d{1,3}(?:\.\d{1,3}){3})$/u.exec(text)
+  if (embeddedV4) {
+    const octets = embeddedV4[1].split(".").map(Number)
+    const high = ((octets[0] << 8) | octets[1]).toString(16)
+    const low = ((octets[2] << 8) | octets[3]).toString(16)
+    text = `${text.slice(0, embeddedV4.index)}${high}:${low}`
+  }
+
+  const [head, tail, ...rest] = text.split("::")
+  if (rest.length > 0) return address
+  const headGroups = head ? head.split(":") : []
+  const tailGroups = tail === undefined ? [] : tail ? tail.split(":") : []
+  const missing = 8 - headGroups.length - tailGroups.length
+  if (tail === undefined ? missing !== 0 : missing < 0) return address
+  const groups = [...headGroups, ...Array<string>(tail === undefined ? 0 : missing).fill("0"), ...tailGroups]
+    .map((group) => group.padStart(4, "0"))
+  if (groups.length !== 8) return address
+
+  // ::ffff:0:0/96 is IPv4-mapped; 64:ff9b::/96 is NAT64.
+  const mapped = groups.slice(0, 5).every((group) => group === "0000") && groups[5] === "ffff"
+  const nat64 = groups[0] === "0064" && groups[1] === "ff9b"
+    && groups.slice(2, 6).every((group) => group === "0000")
+  if (mapped || nat64) {
+    const high = Number.parseInt(groups[6], 16)
+    const low = Number.parseInt(groups[7], 16)
+    return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`
+  }
+  return `${groups.slice(0, 4).join(":")}::/64`
+}
 
 export function requestSecurityContext(requestHeaders: Pick<Headers, "get">) {
   const header = forwardedIpHeader()
-  const ipAddress = (header ? trustedHeaderValue(requestHeaders.get(header)) : null)
-    ?? "unknown"
+  const trusted = header ? trustedHeaderValue(requestHeaders.get(header)) : null
+  const ipAddress = trusted ? addressBucket(trusted) : "unknown"
   const userAgent = requestHeaders.get("user-agent")?.slice(0, 240) || null
 
   return {
@@ -134,6 +196,7 @@ export function writeAuthSecurityEvent(input: {
   database?: SmbaDatabaseExecutor
   now?: Date
 } = {}) {
+  purgeExpiredTelemetryOccasionally({ database, now })
   database.insert(authSecurityEvents).values({
     id: randomUUID(),
     accountId: input.accountId ?? null,

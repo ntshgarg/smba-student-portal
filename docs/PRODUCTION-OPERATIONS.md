@@ -119,12 +119,15 @@ keep its decryption key in a separate password manager.
 
 ### Scheduled encrypted backups
 
-`.github/workflows/encrypted-production-backup.yml` creates and verifies a logical snapshot every day at
-08:17 IST,
-encrypts the database and manifest with GnuPG AES-256 before upload, removes every plaintext runner copy,
-and retains the encrypted artifact for 35 days (approximately 35 daily restore points). A repository
-administrator who deletes workflow runs can also delete their artifacts; GitHub-only storage is the
-accepted boundary for this phase. Configure these GitHub Actions secrets:
+**There is currently no stored backup.** `.github/workflows/encrypted-production-backup.yml` can create,
+verify and encrypt a logical snapshot, but its schedule is off and it ends by failing on purpose: the
+only place it used to put the file was a GitHub Actions artifact, and on a public repository any GitHub
+account can download those. Until its last step uploads to private, access-controlled, logged storage
+(for example an object-storage bucket written with a write-only key), keep backups yourself with
+`npm run db:snapshot:create` and store them in a vault. The restore verification and backup-freshness
+alerts have nothing to check until then. When storage exists, the workflow is meant to run daily at
+08:17 IST, encrypt with GnuPG AES-256 before upload and remove every plaintext runner copy. Configure
+these GitHub Actions secrets:
 
 - `SMBA_BACKUP_DATABASE_URL`: production Turso database URL;
 - `SMBA_BACKUP_DATABASE_TOKEN`: database-scoped read-only token created with
@@ -202,8 +205,9 @@ TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<write token> \
     .data/backups/smba-admin-only-YYYY-MM-DD.db .data/backups/smba-pre-reset-YYYY-MM-DD.db
 ```
 
-1. Confirm the latest automated daily backup is green and take a fresh `npm run db:snapshot:create`
-   snapshot as well. The script's own backup is an undo, not the record of what the academy held.
+1. Take a fresh `npm run db:snapshot:create` snapshot and keep it in private storage. If you run the
+   reset from the "Empty the academy" workflow instead, it keeps no copy of its own: tick
+   `backup_confirmed` only once you hold one. The script's own backup is an undo, not the record of what the academy held.
 2. Build the source with `prepare-admin-only-snapshot.mjs` against the same database you are about to
    reset. Building it elsewhere replaces the owner's credentials, and a schema that differs by one
    table aborts the reset.
