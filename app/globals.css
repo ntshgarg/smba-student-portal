@@ -244,7 +244,29 @@
   --shadow-focus-ring: 0 0 0 1px var(--navy);
   --duration-fast: 160ms;
   --duration-base: 180ms;
-  --ease-standard: ease;
+  /* Motion. One curve per job: things arriving decelerate into place
+     (--ease-out); things already on screen that move or turn speed up and
+     settle (--ease-in-out). No curve here overshoots: everyday UI does not
+     bounce. --ease-standard is the in-out curve, kept under its old name for
+     the hover and state transitions that already use it. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --ease-standard: var(--ease-in-out);
+  /* Menus and popovers open inside 150-250ms and close 20% faster, so the
+     screen is back in the coach's hands sooner than it left them. The same
+     pair times every other entrance and exit that is not a page-level reveal.
+     components/motion/motion-tokens.ts mirrors these two for script timers. */
+  --duration-enter: 220ms;
+  --duration-exit: 176ms;
+  --duration-press: 120ms;
+  /* Rows in a list arrive 30ms apart; a revealed panel settles the same way. */
+  --stagger-step: 30ms;
+  /* A pressed button gives 3%; a popover grows from 95% at its trigger; a
+     knob being dragged stretches 12% along its track. */
+  --press-scale: 0.97;
+  --press-transition: scale var(--duration-press) var(--ease-out);
+  --popover-scale-from: 0.95;
+  --knob-stretch: 1.12;
   --z-overlay: 40;
   --z-header: 50;
   --z-dialog: 90;
@@ -254,6 +276,22 @@
 
 :where(a, button, input, select, textarea, summary, [role="button"]) {
   touch-action: manipulation;
+}
+
+/* Press feedback. Every button gives 3% under the finger and springs back the
+   moment it is released. It uses the individual `scale` property, not
+   `transform`, so it composes with a hover lift or a centring translate rather
+   than replacing it, and a rule here can never knock a positioned control off
+   its spot. :where() keeps it at zero specificity: any component that sets its
+   own `transition` must list `scale` in it (see --press-transition) or the
+   press snaps instead of easing. Wide row-style buttons opt out in
+   app/portal.css, where a 3% shrink of a full-width row reads as a jolt. */
+:where(button, [role="button"], input[type="submit"], input[type="button"]) {
+  transition: var(--press-transition);
+}
+
+:where(button, [role="button"], input[type="submit"], input[type="button"]):where(:active):where(:not(:disabled, [aria-disabled="true"])) {
+  scale: var(--press-scale);
 }
 
 /* Local replacement for Tailwind's `sr-only`, and the one class here that the
@@ -534,6 +572,12 @@ h3 {
   padding: 0 18px;
   background: var(--navy);
   color: var(--white);
+  transition: var(--press-transition);
+}
+
+/* A link dressed as a button presses like one. */
+.primary-link:active {
+  scale: var(--press-scale);
 }
 
 @media (max-width: 720px) {

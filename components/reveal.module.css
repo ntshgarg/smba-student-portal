@@ -5,9 +5,13 @@
  * no successful hydration, and no intersection observer. A CSS animation is
  * finite and self-terminating, so the content cannot be stranded mid-reveal the
  * way a scroll-triggered opacity gate can.
+ *
+ * An entrance, so it decelerates into place (--ease-out). Cards in a group wait
+ * one --stagger-step per place in the order the page gives them.
  */
 .reveal {
-  animation: revealRise 280ms ease-out backwards;
+  animation: revealRise 280ms var(--ease-out) backwards;
+  animation-delay: calc(var(--reveal-order, 0) * var(--stagger-step));
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -5,6 +5,8 @@ import Image from "next/image"
 import { ArrowRight, ChevronRight, Menu, X } from "lucide-react"
 
 import { clearSession } from "@/app/login/actions"
+import { IconSwap } from "@/components/motion/icon-swap"
+import { usePresence } from "@/components/motion/use-presence"
 import type { SessionSummaryResponse } from "@/lib/auth/session-summary"
 
 const navItems = [
@@ -50,6 +52,8 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
   const [account, setAccount] = useState<HeaderAccount | null>(null)
   const [open, setOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const accountMenu = usePresence(accountOpen)
+  const mobileNav = usePresence(open)
   const headerRef = useRef<HTMLElement>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const accountButtonRef = useRef<HTMLButtonElement>(null)
@@ -144,10 +148,12 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
                   <span aria-hidden="true">{account.initials}</span>
                 </button>
 
-                {accountOpen ? (
+                {accountMenu.mounted ? (
                   <nav
                     id="header-account-menu"
                     className="header-account-menu"
+                    data-state={accountMenu.state}
+                    inert={!accountOpen}
                     aria-label="Account navigation"
                   >
                     <p>
@@ -193,11 +199,17 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
             setOpen((value) => !value)
           }}
         >
-          {open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+          <IconSwap active={open} on={<X aria-hidden="true" />} off={<Menu aria-hidden="true" />} />
         </button>
 
-        {open ? (
-          <nav id="mobile-navigation" className="mobile-nav" aria-label="Mobile navigation">
+        {mobileNav.mounted ? (
+          <nav
+            id="mobile-navigation"
+            className="mobile-nav"
+            aria-label="Mobile navigation"
+            data-state={mobileNav.state}
+            inert={!open}
+          >
             {navItems.map((item) => (
               <a key={item.href} href={`${homePath}${item.href}`} onClick={() => setOpen(false)}>
                 {item.label}
@@ -211,7 +223,9 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
         ) : null}
       </header>
 
-      {open ? <div className="mobile-nav-overlay" aria-hidden="true" /> : null}
+      {mobileNav.mounted ? (
+        <div className="mobile-nav-overlay" data-state={mobileNav.state} aria-hidden="true" />
+      ) : null}
     </>
   )
 }

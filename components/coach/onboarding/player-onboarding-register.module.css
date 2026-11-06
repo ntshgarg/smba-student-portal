@@ -227,7 +227,7 @@
   align-items: center;
   gap: clamp(12px, 1.6vw, 26px);
   padding: 12px var(--space-copy);
-  transition: background-color 150ms ease;
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
 .row:hover {
@@ -314,7 +314,7 @@
   line-height: 1.2;
   text-align: center;
   text-decoration: none;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 .openButton {
@@ -1581,4 +1581,11 @@
        which narrowed the drop from 17.6px to 8.7px instead of closing it. */
     min-height: 3.2em;
   }
+}
+
+/* A link dressed as a button presses like one (--press-scale in app/globals.css). */
+.openButton:active,
+.formActions > a:active,
+.primaryButton:active {
+  scale: var(--press-scale);
 }

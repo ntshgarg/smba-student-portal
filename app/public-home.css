@@ -79,7 +79,8 @@
   font-weight: 700;
   transition:
     background var(--duration-base) var(--ease-standard),
-    transform var(--duration-base) var(--ease-standard);
+    transform var(--duration-base) var(--ease-standard),
+    var(--press-transition);
 }
 
 .header-actions {
@@ -171,6 +172,25 @@
   border: 1px solid color-mix(in srgb, var(--navy) 12%, transparent);
   background: var(--ivory);
   box-shadow: 0 24px 50px color-mix(in srgb, var(--navy) 13%, transparent);
+  /* Grows out of the account button and shrinks back into it. The button is
+     centred in the 56px .header-account-slot this hangs from, so its centre
+     sits 28px in from the menu's right edge.
+     components/motion/use-presence.ts keeps the menu mounted for the exit. */
+  transform-origin: calc(100% - 28px) top;
+  transition:
+    opacity var(--duration-enter) var(--ease-out),
+    scale var(--duration-enter) var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    scale: var(--popover-scale-from);
+  }
+}
+
+.header-account-menu[data-state="closing"] {
+  opacity: 0;
+  scale: var(--popover-scale-from);
+  transition-duration: var(--duration-exit);
 }
 
 .header-account-menu p {
@@ -234,6 +254,10 @@
 .header-cta:hover {
   background: var(--red);
   transform: translateY(-1px);
+}
+
+.header-cta:active {
+  scale: var(--press-scale);
 }
 
 .menu-button,
@@ -314,7 +338,8 @@
   font-size: 0.8125rem;
   font-weight: 750;
   transition:
-    transform var(--duration-fast) cubic-bezier(0.23, 1, 0.32, 1),
+    transform var(--duration-fast) var(--ease-out),
+    var(--press-transition),
     color var(--duration-base) var(--ease-standard),
     background var(--duration-base) var(--ease-standard),
     border-color var(--duration-base) var(--ease-standard);
@@ -332,7 +357,7 @@
 }
 
 .button:active {
-  transform: scale(0.97);
+  scale: var(--press-scale);
 }
 
 .button-primary {
@@ -484,7 +509,7 @@
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   vector-effect: non-scaling-stroke;
-  animation: shuttle-trajectory-draw 1.35s cubic-bezier(0.22, 1, 0.36, 1) 300ms forwards;
+  animation: shuttle-trajectory-draw 1.35s var(--ease-out) 300ms forwards;
 }
 
 @keyframes shuttle-trajectory-draw {
@@ -704,8 +729,8 @@
   opacity: 1;
   transform: translateY(0);
   transition:
-    opacity 320ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+    opacity 320ms var(--ease-out),
+    transform 320ms var(--ease-out);
 }
 
 .about-principles > li {
@@ -963,7 +988,7 @@
   transition:
     background var(--duration-base) var(--ease-standard),
     color var(--duration-base) var(--ease-standard),
-    box-shadow var(--duration-base) var(--ease-standard);
+    box-shadow var(--duration-base) var(--ease-standard), var(--press-transition);
 }
 
 .segmented button > span {
@@ -1042,7 +1067,7 @@
   transition:
     border var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
-    background var(--duration-fast) var(--ease-standard);
+    background var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 .choice-row button:hover {
@@ -1077,7 +1102,7 @@
   justify-content: space-between;
   gap: var(--space-group);
   padding: 20px 0;
-  animation: price-result-enter 200ms cubic-bezier(0.26, 0.02, 0.23, 0.94);
+  animation: price-result-enter var(--duration-enter) var(--ease-out);
 }
 
 @keyframes price-result-enter {
@@ -1451,8 +1476,8 @@
   line-height: var(--leading-body);
   text-align: center;
   transition:
-    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+    opacity var(--duration-enter) var(--ease-out),
+    transform var(--duration-enter) var(--ease-out);
 
   @starting-style {
     opacity: 0;
@@ -1775,13 +1800,21 @@
     box-shadow: 0 24px 50px color-mix(in srgb, var(--navy) 11%, transparent);
     -webkit-overflow-scrolling: touch;
     transition:
-      opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
-      transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+      opacity var(--duration-enter) var(--ease-out),
+      transform var(--duration-enter) var(--ease-out);
 
     @starting-style {
       opacity: 0;
       transform: translateY(-8px);
     }
+  }
+
+  /* The sheet folds back up under the header it came from, 20% faster than it
+     arrived, while the page behind it is already uncovering. */
+  .mobile-nav[data-state="closing"] {
+    opacity: 0;
+    transform: translateY(-8px);
+    transition-duration: var(--duration-exit);
   }
 
   .mobile-nav-overlay {
@@ -1793,12 +1826,25 @@
     left: 0;
     display: block;
     background: color-mix(in srgb, var(--navy) 7%, transparent);
+    transition: opacity var(--duration-enter) var(--ease-out);
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+
+  .mobile-nav-overlay[data-state="closing"] {
+    opacity: 0;
+    transition-duration: var(--duration-exit);
   }
 
   .header-account-menu {
     top: calc(100% + 13px);
     right: -52px;
     width: min(240px, calc(100vw - 32px));
+    /* Pulled 52px past the slot to line up with the header edge, so the
+       button it grows from is 52px further in: 28px + 52px. */
+    transform-origin: calc(100% - 80px) top;
   }
 
   .mobile-nav a {

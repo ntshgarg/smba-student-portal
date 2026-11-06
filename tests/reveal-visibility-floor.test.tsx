@@ -55,10 +55,10 @@ describe("reveal visibility floor", () => {
 
   it("staggers a delayed reveal without hiding it first", () => {
     const html = renderToStaticMarkup(
-      <Reveal delay={0.08}>Fee record</Reveal>,
+      <Reveal order={3}>Fee record</Reveal>,
     )
 
-    expect(html).toContain("animation-delay:0.08s")
+    expect(html).toContain("--reveal-order:3")
     expect(html).not.toMatch(opacityGate)
   })
 

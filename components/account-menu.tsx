@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react"
 import { LogOut } from "lucide-react"
 
 import { clearSession } from "@/app/login/actions"
+import { usePresence } from "@/components/motion/use-presence"
+
 type AccountIdentity = {
   fullName: string
   firstName: string
@@ -19,6 +21,7 @@ export function AccountMenu({
   publicSiteHref: string
 }) {
   const [open, setOpen] = useState(false)
+  const menu = usePresence(open)
   const rootRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
@@ -60,8 +63,13 @@ export function AccountMenu({
         </div>
       </button>
 
-      {open ? (
-        <div id="portal-account-menu" className="account-menu">
+      {menu.mounted ? (
+        <div
+          id="portal-account-menu"
+          className="account-menu"
+          data-state={menu.state}
+          inert={!open}
+        >
           <p>
             <span>Signed in as</span>
             <strong>{account.fullName}</strong>
