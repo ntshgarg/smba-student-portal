@@ -42,7 +42,7 @@ export function PlayerAnnouncementsCard({
     return (
       <Reveal
         className={`${styles.dashboardCard} dashboard-card player-ticket-card player-ticket-announcements`}
-        delay={0.08}
+        order={4}
       >
         <header className="player-ticket-masthead">
           <h3 className="player-ticket-title">Announcements</h3>
@@ -61,7 +61,7 @@ export function PlayerAnnouncementsCard({
     return (
       <Reveal
         className={`${styles.dashboardCard} dashboard-card player-ticket-card player-ticket-announcements`}
-        delay={0.08}
+        order={4}
       >
         <header className="player-ticket-masthead">
           <h3 className="player-ticket-title">Announcements</h3>
@@ -82,7 +82,7 @@ export function PlayerAnnouncementsCard({
   return (
     <Reveal
       className={`${styles.dashboardCard} dashboard-card player-ticket-card player-ticket-announcements`}
-      delay={0.08}
+      order={4}
     >
       <header className="player-ticket-masthead">
         <h3 className="player-ticket-title">Announcements</h3>

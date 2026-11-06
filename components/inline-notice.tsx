@@ -71,7 +71,9 @@ export function InlineNotice({
       >
         {normalizedMessage ? (
           <>
-            <Icon aria-hidden="true" />
+            {/* Keyed on the message so each new confirmation replays the
+                success pulse instead of only the first one. */}
+            <Icon key={normalizedMessage} aria-hidden="true" />
             <span>{normalizedMessage}</span>
             {action ? (
               <Link className="inline-notice-action" href={action.href}>

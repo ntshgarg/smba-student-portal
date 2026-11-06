@@ -74,7 +74,7 @@
   font-weight: var(--weight-control);
   white-space: nowrap;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 .button:hover:not(:disabled) {
@@ -406,7 +406,8 @@ button.textLink {
      page on every step, and a transform does not. The track clips the ends. */
   transform: scaleX(var(--done, 0));
   transform-origin: left;
-  transition: transform 0.2s ease;
+  /* The bar is already on screen and grows along it: an in-out move. */
+  transition: transform var(--duration-base) var(--ease-in-out);
 }
 
 .summary p {
@@ -582,7 +583,11 @@ button.textLink {
   border-radius: 50%;
   background: var(--white);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--navy) 18%, transparent);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  /* Only the press is eased. Where the thumb sits is never tweened: it is the
+     native range thumb, drawn under the finger on every pointer move, and the
+     only animated travel is the settle onto a whole score after release
+     (assessment-form.tsx), which no longer has a hand on it. */
+  transition: transform var(--duration-press) var(--ease-out), box-shadow var(--duration-press) var(--ease-out);
   -webkit-appearance: none;
 }
 
@@ -592,6 +597,11 @@ button.textLink {
   border: 2px solid var(--line-control);
   border-radius: 50%;
   background: var(--white);
+  transition: transform var(--duration-press) var(--ease-out);
+}
+
+.slider:active::-moz-range-thumb {
+  transform: scaleX(var(--knob-stretch));
 }
 
 .sliderSet::-webkit-slider-runnable-track {
@@ -612,8 +622,10 @@ button.textLink {
   background: var(--tone);
 }
 
+/* A held thumb stretches 12% along the track it is being dragged on, rather
+   than swelling evenly: it reads as being pulled, not zoomed. */
 .slider:active::-webkit-slider-thumb {
-  transform: scale(1.12);
+  transform: scaleX(var(--knob-stretch));
   box-shadow: 0 3px 10px color-mix(in srgb, var(--navy) 28%, transparent);
 }
 

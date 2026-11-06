@@ -3,6 +3,8 @@
 import { forwardRef, useId, useState, type ComponentPropsWithoutRef } from "react"
 import { Eye, EyeOff } from "lucide-react"
 
+import { IconSwap } from "@/components/motion/icon-swap"
+
 type PasswordInputProps = Omit<ComponentPropsWithoutRef<"input">, "type">
 
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
@@ -30,7 +32,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           aria-pressed={visible}
           onClick={() => setVisible((current) => !current)}
         >
-          {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+          <IconSwap active={visible} on={<EyeOff aria-hidden="true" />} off={<Eye aria-hidden="true" />} />
           <span>{action}</span>
         </button>
       </div>

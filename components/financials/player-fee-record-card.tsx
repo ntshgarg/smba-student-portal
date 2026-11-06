@@ -29,7 +29,7 @@ export function PlayerFeeRecordCard({
   return (
     <Reveal
       className="dashboard-card player-ticket-card player-ticket-record-card player-ticket-fee"
-      delay={0.1}
+      order={3}
     >
       <header className="player-ticket-masthead">
         <h3 className="player-ticket-title">Fee record</h3>

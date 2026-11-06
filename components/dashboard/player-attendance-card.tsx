@@ -139,7 +139,7 @@ export function PlayerAttendanceCard({
         + (hasRecord ? " has-record" : "")
         + (isOpen ? " is-open" : "")
       }
-      delay={0.06}
+      order={1}
     >
       <header className="attendance-card-header player-ticket-masthead">
         <h3 className="player-ticket-title">Attendance</h3>

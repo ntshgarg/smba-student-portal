@@ -18,7 +18,7 @@
   font-size: 0.8125rem;
   font-weight: var(--weight-control);
   text-align: center;
-  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 .viewNavigation a + a {
@@ -609,7 +609,7 @@
 }
 
 .registrationTable tbody tr {
-  transition: background 150ms ease;
+  transition: background var(--duration-fast) var(--ease-standard);
 }
 
 .registrationTable tbody tr:hover {
@@ -1616,4 +1616,9 @@
   .filters select {
     font-size: 16px;
   }
+}
+
+/* A link dressed as a button presses like one (--press-scale in app/globals.css). */
+.viewNavigation a:active {
+  scale: var(--press-scale);
 }

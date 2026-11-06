@@ -97,7 +97,6 @@ export default async function DashboardPage() {
         <div className="dashboard-grid">
           <Reveal
             className={`session-card dashboard-card player-ticket-card player-ticket-session${dashboard.nextSession ? "" : " is-empty"}`}
-            delay={0.04}
           >
             <header className="session-card-header player-ticket-masthead">
               <h3 className="player-ticket-title">Next session</h3>
@@ -158,7 +157,7 @@ export default async function DashboardPage() {
 
           <Reveal
             className="latest-report-card dashboard-card player-ticket-card player-ticket-record-card player-ticket-report"
-            delay={0.08}
+            order={2}
           >
             <header className="player-ticket-masthead">
               <h3 className="player-ticket-title">Assessments</h3>
@@ -187,7 +186,7 @@ export default async function DashboardPage() {
           <PlayerAnnouncementsCard announcements={announcements} />
         </div>
 
-        <Reveal className="player-profile-reveal" delay={0.1}>
+        <Reveal className="player-profile-reveal" order={5}>
           <dl className="player-profile-ledger" aria-label="Player profile">
             <div>
               <dt>Player</dt>

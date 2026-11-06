@@ -422,18 +422,34 @@
   color: var(--red);
   font-size: 0.8125rem;
   font-weight: 800;
+  transition: color var(--duration-exit) var(--ease-out), var(--press-transition);
 }
 
-.coach-adjustment-missed-calendar-grid > button::before {
+.coach-adjustment-missed-calendar-grid > button::before,
+.coach-adjustment-missed-calendar-grid > button::after {
   position: absolute;
   width: 38px;
   max-width: calc(100% - 8px);
   aspect-ratio: 1;
-  border: 1.5px solid var(--red);
   border-radius: var(--radius-pill);
-  background: var(--white);
   content: "";
-  transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+}
+
+.coach-adjustment-missed-calendar-grid > button::before {
+  border: 1.5px solid var(--red);
+  background: var(--white);
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+/* Selecting a day is a colour change, so it is drawn as one: the red fill is a
+   separate disc revealed through a circular mask that opens from the centre of
+   the ring, rather than the whole ring cross-fading from white to red. */
+.coach-adjustment-missed-calendar-grid > button::after {
+  background: var(--red);
+  clip-path: circle(0 at 50% 50%);
+  transition:
+    clip-path var(--duration-exit) var(--ease-out),
+    transform var(--duration-fast) var(--ease-standard);
 }
 
 .coach-adjustment-missed-calendar-grid > button > span {
@@ -441,16 +457,19 @@
   z-index: 1;
 }
 
-.coach-adjustment-missed-calendar-grid > button:hover::before {
+.coach-adjustment-missed-calendar-grid > button:hover::before,
+.coach-adjustment-missed-calendar-grid > button:hover::after {
   transform: translateY(-1px);
 }
 
 .coach-adjustment-missed-calendar-grid > button.is-selected {
   color: var(--white);
+  transition-duration: var(--duration-enter), var(--duration-press);
 }
 
-.coach-adjustment-missed-calendar-grid > button.is-selected::before {
-  background: var(--red);
+.coach-adjustment-missed-calendar-grid > button.is-selected::after {
+  clip-path: circle(50% at 50% 50%);
+  transition-duration: var(--duration-enter), var(--duration-fast);
 }
 
 .coach-adjustment-choice-list.is-source-slots {
@@ -765,7 +784,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   background: var(--white);
-  transition: background-color 150ms ease;
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
 .coach-adjustment-history-item > button {
@@ -882,7 +901,7 @@
   line-height: 1.15;
   text-align: center;
   text-transform: uppercase;
-  transition: background-color 150ms ease;
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
 .coach-adjustment-history-status.is-published {
@@ -1058,7 +1077,8 @@
     font-size: 0.75rem;
   }
 
-  .coach-adjustment-missed-calendar-grid > button::before {
+  .coach-adjustment-missed-calendar-grid > button::before,
+  .coach-adjustment-missed-calendar-grid > button::after {
     width: 34px;
   }
 
@@ -1342,6 +1362,24 @@
   border: 1px solid color-mix(in srgb, var(--navy) 12%, transparent);
   background: var(--white);
   box-shadow: 0 24px 60px color-mix(in srgb, var(--navy) 14%, transparent);
+  /* The menu hangs from the profile chip's bottom-right corner, so it grows
+     out of that corner and shrinks back into it (components/motion/use-presence.ts
+     keeps it mounted for the exit). */
+  transform-origin: top right;
+  transition:
+    opacity var(--duration-enter) var(--ease-out),
+    scale var(--duration-enter) var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    scale: var(--popover-scale-from);
+  }
+}
+
+.account-menu[data-state="closing"] {
+  opacity: 0;
+  scale: var(--popover-scale-from);
+  transition-duration: var(--duration-exit);
 }
 
 .account-menu > p {
@@ -1696,7 +1734,7 @@
   color: var(--white);
   font-size: 0.75rem;
   font-weight: 800;
-  transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+  transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 /* [aria-disabled] as well as :disabled: the authenticator submit is held open
@@ -2519,11 +2557,11 @@
    the visible one: the greeting is on screen even if hydration never runs. The
    ribbon trails the copy by 100ms, and `backwards` holds it hidden until then. */
 .welcome-copy {
-  animation: welcome-hero-rise 380ms ease-out backwards;
+  animation: welcome-hero-rise 380ms var(--ease-out) backwards;
 }
 
 .welcome-scoreboard-ribbon {
-  animation: welcome-hero-rise 380ms ease-out 100ms backwards;
+  animation: welcome-hero-rise 380ms var(--ease-out) 100ms backwards;
 }
 
 @keyframes welcome-hero-rise {
@@ -3417,7 +3455,7 @@
   color: var(--steel);
   cursor: pointer;
   text-align: left;
-  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 .coach-session-picker button:hover {
@@ -3740,7 +3778,7 @@
   background: var(--white);
   color: var(--steel);
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 .coach-register-table td button:hover {
@@ -4036,7 +4074,7 @@
   background: transparent;
   font-size: 0.6875rem;
   font-weight: 720;
-  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 .coach-member-show-more:hover {
@@ -6666,6 +6704,20 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--red-dark);
 }
 
+/* Success is confirmed with one pulse of the tick: it swells 25% and settles
+   back, once, never dipping below its resting size. A beat the eye catches at
+   the edge of vision, so the coach does not have to read the sentence to know
+   the save landed. */
+.inline-notice.is-success svg {
+  animation: success-pulse 420ms var(--ease-in-out);
+}
+
+@keyframes success-pulse {
+  40% {
+    scale: 1.25;
+  }
+}
+
 /* The notice's own way out, present only when the surface cannot correct what
    the notice reports. `color: inherit` keeps it inside the tone rather than
    competing with it, so the underline is what marks it as the thing to press.
@@ -7847,7 +7899,7 @@ tr.is-expanded .coach-member-row-action button svg {
   font-weight: 780;
   line-height: 1.3;
   text-align: left;
-  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
 .player-ticket-dashboard .player-ticket-action:hover {
@@ -11694,8 +11746,29 @@ tr.is-expanded .coach-member-row-action button svg {
   backdrop-filter: blur(8px);
 }
 
+/* A modal is not anchored to the control that opened it, so it is the one
+   surface that grows from its own centre: the veil fades in and the panel
+   rises from 95% on the shared entrance timing. */
 .coach-holiday-backdrop[open] {
   display: grid;
+  animation: dialog-veil-in var(--duration-enter) var(--ease-out);
+}
+
+.coach-holiday-backdrop[open] > .coach-holiday-panel {
+  animation: dialog-panel-in var(--duration-enter) var(--ease-out);
+}
+
+@keyframes dialog-veil-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-panel-in {
+  from {
+    opacity: 0;
+    scale: var(--popover-scale-from);
+  }
 }
 
 .coach-holiday-backdrop::backdrop {
@@ -12161,5 +12234,100 @@ tr.is-expanded .coach-member-row-action button svg {
     height: auto;
     padding: 0;
     border-bottom: 0;
+  }
+}
+
+/* Settling detail. When a coach opens a row, a disclosure or a record, what it
+   reveals does not land as one slab: each block rises 4px and fades in, one
+   --stagger-step (30ms) after the block above it, on the entrance curve. The
+   same rhythm staggers the rows of a list that opens on demand. Only the
+   first eight steps wait; anything further arrives with the eighth, so a long
+   panel is never still assembling after a quarter of a second.
+
+   `translate`, not `transform`, so a block that positions itself with a
+   transform keeps it. The animation sits on the open state only, so closing
+   and reopening plays it again. */
+.coach-member-detail-panel > *,
+.coach-occurrence-detail > *,
+.coach-adjustment-history-details > *,
+.coach-adjustment-history-list > *,
+.player-attendance-register > *,
+details[open] > :not(summary) {
+  animation: detail-settle var(--duration-enter) var(--ease-out) backwards;
+}
+
+:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(2),
+details[open] > :not(summary):nth-child(3) {
+  animation-delay: var(--stagger-step);
+}
+
+:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(3),
+details[open] > :not(summary):nth-child(4) {
+  animation-delay: calc(2 * var(--stagger-step));
+}
+
+:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(4),
+details[open] > :not(summary):nth-child(5) {
+  animation-delay: calc(3 * var(--stagger-step));
+}
+
+:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(5),
+details[open] > :not(summary):nth-child(6) {
+  animation-delay: calc(4 * var(--stagger-step));
+}
+
+:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(6),
+details[open] > :not(summary):nth-child(7) {
+  animation-delay: calc(5 * var(--stagger-step));
+}
+
+:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(7),
+details[open] > :not(summary):nth-child(8) {
+  animation-delay: calc(6 * var(--stagger-step));
+}
+
+:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(n + 8),
+details[open] > :not(summary):nth-child(n + 9) {
+  animation-delay: calc(7 * var(--stagger-step));
+}
+
+@keyframes detail-settle {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+/* Wide row-style buttons keep still under the finger: a 3% shrink of a
+   full-width disclosure row is a visible jolt, not feedback. Their chevron
+   turn and the panel settling below already answer the press. */
+:is(
+  .coach-day-session > button,
+  .coach-adjustment-history-item > button,
+  .coach-adjustment-history-disclosure,
+  .player-attendance-toggle,
+  .coach-schedule-programme-toggle-heading button,
+  .coach-series-roster-card > button
+):active {
+  scale: none;
+}
+
+/* A link dressed as a button presses like one (--press-scale in app/globals.css). */
+.player-ticket-dashboard a.player-ticket-action:active {
+  scale: var(--press-scale);
+}
+
+/* The global reduced-motion floor shortens durations but leaves delays, and a
+   staggered block held back by `backwards` would sit invisible through its
+   delay. With reduced motion the detail simply is there. */
+@media (prefers-reduced-motion: reduce) {
+  .coach-member-detail-panel > *,
+  .coach-occurrence-detail > *,
+  .coach-adjustment-history-details > *,
+  .coach-adjustment-history-list > *,
+  .player-attendance-register > *,
+  details[open] > :not(summary),
+  .inline-notice.is-success svg {
+    animation: none;
   }
 }

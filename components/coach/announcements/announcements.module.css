@@ -20,7 +20,7 @@
   color: var(--navy);
   font-size: 0.75rem;
   font-weight: var(--weight-control);
-  transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
+  transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard), var(--press-transition);
 }
 
 .newAnnouncementLink:hover {
@@ -587,6 +587,29 @@
 
 .dialogBackdrop::backdrop {
   background: color-mix(in srgb, var(--navy) 58%, transparent);
+}
+
+/* Modals grow from their own centre (nothing on screen anchors them) while the
+   veil behind fades in, both on the shared entrance timing. */
+.dialogBackdrop[open] {
+  animation: dialogPanelIn var(--duration-enter) var(--ease-out);
+}
+
+.dialogBackdrop[open]::backdrop {
+  animation: dialogVeilIn var(--duration-enter) var(--ease-out);
+}
+
+@keyframes dialogPanelIn {
+  from {
+    opacity: 0;
+    scale: var(--popover-scale-from);
+  }
+}
+
+@keyframes dialogVeilIn {
+  from {
+    opacity: 0;
+  }
 }
 
 .reviewDialog,
@@ -1635,4 +1658,9 @@
   .archiveFilters select {
     font-size: 16px;
   }
+}
+
+/* A link dressed as a button presses like one (--press-scale in app/globals.css). */
+.newAnnouncementLink:active {
+  scale: var(--press-scale);
 }
