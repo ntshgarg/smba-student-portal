@@ -4,7 +4,7 @@ import { CalendarOff, CircleAlert, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { useSessionPortal } from "@/components/coach/coach-portal-provider"
-import { InlineNotice } from "@/components/inline-notice"
+import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import { formatDateKey } from "@/lib/format"
 import type { HolidayImpact } from "@/lib/sessions/holidays"
@@ -74,14 +74,17 @@ export function holidayClosedMessage(
 
 export function HolidayComposer({
   onClose,
-  onClosed,
+  onNotice,
   selectedDate,
   today,
   viewMonth,
 }: {
   onClose: () => void
-  /** Called after the closure is saved, with what it actually did. */
-  onClosed: (message: string) => void
+  /**
+   * The calendar's own notice. Gets what a saved closure actually did, and a
+   * failure too once the panel has been closed while the closure was saving.
+   */
+  onNotice: (feedback: ActionFeedback) => void
   selectedDate: string
   today: string
   /** The month the calendar has on screen. */
@@ -91,6 +94,15 @@ export function HolidayComposer({
   const dialogRef = useRef<HTMLDialogElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const labelRef = useRef<HTMLInputElement>(null)
+  /*
+   * Set once the panel has gone while a closure may still be saving: the
+   * browser closed the dialog itself (see `onClose` below), so the outcome
+   * goes to the calendar instead of to a panel nobody can see. A plain ref,
+   * not state: the save that reads it was started by an earlier render.
+   */
+  const dismissedRef = useRef(false)
+  // Our own unmount closes the dialog too; that close is not the coach's.
+  const unmountingRef = useRef(false)
   const [from, setFrom] = useState(selectedDate)
   const [to, setTo] = useState(selectedDate)
   const [label, setLabel] = useState("")
@@ -110,6 +122,7 @@ export function HolidayComposer({
     closeButtonRef.current?.focus()
 
     return () => {
+      unmountingRef.current = true
       document.body.style.overflow = previousOverflow
       if (dialog?.open) dialog.close()
       previouslyFocused?.focus()
@@ -168,27 +181,48 @@ export function HolidayComposer({
     try {
       const result = await markAcademyHolidays({ dateKeys: dates, label, viewMonth })
       if (!result.ok) {
-        setFeedback({ message: result.message, tone: "error" })
+        reportFailure(result.message)
         return
       }
-      onClosed(holidayClosedMessage(label, result.data))
+      onNotice({ message: holidayClosedMessage(label, result.data), tone: "success" })
+      if (!dismissedRef.current) onClose()
     } catch (error) {
       const failure = describeSaveFailure({
         error,
         fallbackMessage: "The academy could not be closed",
-        retained: "Your dates and holiday name are still on screen",
+        retained: dismissedRef.current
+          ? "Mark the holiday again to see whether the days were closed"
+          : "Your dates and holiday name are still on screen",
         subject: "The closure",
       })
-      setFeedback({ message: failure.message, tone: "error" })
+      reportFailure(failure.message)
     } finally {
       setBusy(false)
     }
+  }
+
+  function reportFailure(message: string) {
+    if (dismissedRef.current) onNotice({ message, tone: "error" })
+    else setFeedback({ message, tone: "error" })
   }
 
   // While a closure is being saved the panel stays: closing it would not stop
   // the save, and the coach would lose sight of whether it went through.
   function dismiss() {
     if (busy) return
+    onClose()
+  }
+
+  /*
+   * The browser can close the dialog without asking: Chrome and Edge let a page
+   * refuse Escape only once per press of the page, so a second Escape closes
+   * it regardless. The page then has to agree, or it would keep thinking the
+   * panel is open -- scrolling stays locked and "Mark holiday" does nothing.
+   * Whatever the closure then does is reported on the calendar.
+   */
+  function closedByBrowser() {
+    if (unmountingRef.current) return
+    dismissedRef.current = true
     onClose()
   }
 
@@ -222,6 +256,7 @@ export function HolidayComposer({
         event.preventDefault()
         dismiss()
       }}
+      onClose={closedByBrowser}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) dismiss()
       }}

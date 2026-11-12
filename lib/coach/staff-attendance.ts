@@ -510,8 +510,9 @@ export function saveStaffAttendanceRecords({
           "changes",
         )
       }
-      // Clearing an old mark stays allowed, so a mark saved before the day was
-      // closed can still be taken off.
+      // Only a new mark is refused. Clearing records nothing on the closed day,
+      // so it is let through; no screen offers it, because a mark saved before
+      // the closure is kept, hidden and uncounted, and returns with the day.
       const closure = closures.get(change.dateKey)
       if (closure && change.choice !== "cleared") {
         operationalActionError(

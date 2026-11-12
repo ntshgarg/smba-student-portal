@@ -84,20 +84,28 @@ function sessionCount(count: number) {
   return `${count} ${count === 1 ? "session" : "sessions"}`
 }
 
-/** What removing a holiday actually did, in the coach's words. */
-export function holidayRemovedMessage({
-  keptCancelledSessions,
-  restoredSessions,
-  reviewFlagsCleared,
-}: {
-  keptCancelledSessions: number
-  restoredSessions: number
-  reviewFlagsCleared: number
-}) {
+/**
+ * What removing a holiday actually did, in the coach's words. It names the day:
+ * the notice sits above the calendar and the coach may be looking at another
+ * day, or the month on a phone, by the time the answer comes back.
+ */
+export function holidayRemovedMessage(
+  dateKey: string,
+  {
+    keptCancelledSessions,
+    restoredSessions,
+    reviewFlagsCleared,
+  }: {
+    keptCancelledSessions: number
+    restoredSessions: number
+    reviewFlagsCleared: number
+  },
+) {
+  const day = formatDateKey(dateKey)
   const parts = [
     restoredSessions
-      ? `Holiday removed. ${sessionCount(restoredSessions)} ${restoredSessions === 1 ? "is" : "are"} back on.`
-      : "Holiday removed. No sessions needed restoring.",
+      ? `Holiday on ${day} removed. ${sessionCount(restoredSessions)} ${restoredSessions === 1 ? "is" : "are"} back on.`
+      : `Holiday on ${day} removed. No sessions needed restoring.`,
   ]
   if (keptCancelledSessions) {
     parts.push(`${sessionCount(keptCancelledSessions)} stayed cancelled because ${keptCancelledSessions === 1 ? "its schedule has" : "their schedules have"} ended or already ${keptCancelledSessions === 1 ? "has" : "have"} a session that day.`)
@@ -108,25 +116,41 @@ export function holidayRemovedMessage({
   return parts.join(" ")
 }
 
+/** A removal the server turned down, naming the day it was for. */
+export function holidayRemovalRefusedMessage(dateKey: string, reason: string) {
+  return `The holiday on ${formatDateKey(dateKey)} was not removed. ${reason}`
+}
+
 /**
  * Why a cancelled session is off, as far as this screen can tell: a holiday, a
- * move to another day or time (when the new session is in the loaded month), or
- * an ordinary cancellation. Ending a schedule is recorded the same way as an
- * ordinary cancellation, so it reads as "Cancelled".
+ * move to another day or time (when the session it ended up as is in the loaded
+ * month), or an ordinary cancellation. A move can be moved again, so the chain
+ * of replacements is followed to its end. Ending a schedule is recorded the same
+ * way as an ordinary cancellation, so it reads as "Cancelled".
  */
 export function cancellationLabel(
   occurrence: Pick<TrainingSessionOccurrence, "holidayId" | "id" | "occurrenceDate">,
-  occurrences: readonly Pick<TrainingSessionOccurrence, "replacementForOccurrenceId" | "status">[],
+  occurrences: readonly Pick<TrainingSessionOccurrence, "id" | "replacementForOccurrenceId" | "status">[],
   holidayByDate: ReadonlyMap<string, { label: string }>,
 ) {
   if (occurrence.holidayId) {
     const holiday = holidayByDate.get(occurrence.occurrenceDate)
     return holiday ? `Closed for ${holiday.label}` : "Closed for a holiday"
   }
-  const moved = occurrences.some((candidate) => (
-    candidate.replacementForOccurrenceId === occurrence.id && candidate.status === "scheduled"
-  ))
-  return moved ? "Moved" : "Cancelled"
+  const seen = new Set([occurrence.id])
+  let frontier = [occurrence.id]
+  while (frontier.length) {
+    const next: string[] = []
+    for (const candidate of occurrences) {
+      if (!candidate.replacementForOccurrenceId || !frontier.includes(candidate.replacementForOccurrenceId)) continue
+      if (candidate.status === "scheduled") return "Moved"
+      if (seen.has(candidate.id)) continue
+      seen.add(candidate.id)
+      next.push(candidate.id)
+    }
+    frontier = next
+  }
+  return "Cancelled"
 }
 
 type ReplacementDraft = {
@@ -199,10 +223,14 @@ export function SessionCalendar({
   const selectedHoliday = holidayByDate.get(selectedDate) ?? null
 
   const [holidayComposerOpen, setHolidayComposerOpen] = useState(false)
-  // The date being reopened, not a flag: the coach can move to another closed
-  // day while a removal is in flight, and that day's button is not busy.
-  const [retractingHolidayDate, setRetractingHolidayDate] = useState<string | null>(null)
-  const retractingHoliday = retractingHolidayDate === selectedDate
+  // The dates being reopened, not a flag: the coach can move to another closed
+  // day while a removal is in flight and remove that one too. Server actions
+  // run one after another, so the second waits for the first.
+  const [retractingHolidayDates, setRetractingHolidayDates] = useState<readonly string[]>([])
+  const retractingHoliday = retractingHolidayDates.includes(selectedDate)
+  // Above both panes, not inside the day view: on a phone the month and the day
+  // are shown one at a time, and a closure is usually marked from the month.
+  // Every message names its days, so it reads right whichever day is selected.
   const [holidayFeedback, setHolidayFeedback] = useState<ActionFeedback | null>(null)
   const [mobileView, setMobileView] = useState<"month" | "day">("day")
   const [expandedOccurrenceId, setExpandedOccurrenceId] = useState<string | null>(null)
@@ -305,7 +333,7 @@ export function SessionCalendar({
       "Leave this day and discard the unsaved replacement details?",
     )) return
     setFeedback(null)
-    // A holiday notice is about the day it was raised on.
+    // A finished holiday notice has been seen; one still on its way names its day.
     setHolidayFeedback(null)
     setExpandedOccurrenceId(null)
     if (openDay) {
@@ -345,15 +373,19 @@ export function SessionCalendar({
       {holidayComposerOpen ? (
         <HolidayComposer
           onClose={() => setHolidayComposerOpen(false)}
-          onClosed={(message) => {
-            setHolidayComposerOpen(false)
-            setHolidayFeedback({ message, tone: "success" })
-          }}
+          onNotice={setHolidayFeedback}
           selectedDate={selectedDate}
           today={today}
           viewMonth={selectedMonth}
         />
       ) : null}
+
+      <InlineNotice
+        className="coach-calendar-holiday-notice"
+        message={holidayFeedback?.message}
+        tone={holidayFeedback?.tone}
+        reserveSpace={false}
+      />
 
       <section className={`coach-calendar-workspace is-${mobileView}`} aria-label="Session calendar workspace">
         <div className="coach-calendar-month-pane">
@@ -434,47 +466,47 @@ export function SessionCalendar({
                 type="button"
                 disabled={retractingHoliday}
                 onClick={() => {
-                  if (retractingHolidayDate !== null) return
+                  if (retractingHoliday) return
+                  const dateKey = selectedDate
+                  const day = formatDateKey(dateKey)
                   const confirmed = window.confirm(
-                    `Remove the ${selectedHoliday.label} holiday on ${formatDateKey(selectedDate)}? The sessions it cancelled will be restored.`,
+                    `Remove the ${selectedHoliday.label} holiday on ${day}? The sessions it cancelled come back, except any whose schedule has ended since or already has a session that day.`,
                   )
                   if (!confirmed) return
-                  const dateKey = selectedDate
-                  setRetractingHolidayDate(dateKey)
+                  setRetractingHolidayDates((current) => [...current, dateKey])
                   setHolidayFeedback(null)
                   void retractAcademyHoliday(dateKey)
                     .then((result) => {
                       if (!result.ok) {
-                        setHolidayFeedback({ message: result.message, tone: "error" })
+                        setHolidayFeedback({
+                          message: holidayRemovalRefusedMessage(dateKey, result.message),
+                          tone: "error",
+                        })
                         return
                       }
                       setHolidayFeedback({
-                        message: holidayRemovedMessage(result.data),
+                        message: holidayRemovedMessage(dateKey, result.data),
                         tone: "success",
                       })
                     })
                     .catch((error: unknown) => {
                       const failure = describeSaveFailure({
                         error,
-                        fallbackMessage: "The holiday could not be removed",
+                        fallbackMessage: `The holiday on ${day} could not be removed`,
                         retained: "Reload the calendar to see whether the day is still closed",
-                        subject: "Removing the holiday",
+                        subject: `Removing the holiday on ${day}`,
                       })
                       setHolidayFeedback({ message: failure.message, tone: "error" })
                     })
-                    .finally(() => setRetractingHolidayDate(null))
+                    .finally(() => setRetractingHolidayDates((current) => (
+                      current.filter((candidate) => candidate !== dateKey)
+                    )))
                 }}
               >
                 {retractingHoliday ? "Removing…" : "Remove holiday"}
               </button>
             </div>
           ) : null}
-
-          <InlineNotice
-            message={holidayFeedback?.message}
-            tone={holidayFeedback?.tone}
-            reserveSpace={false}
-          />
 
           {!dayOccurrences.length ? (
             <div className="coach-calendar-empty coach-day-view-empty">
@@ -797,9 +829,14 @@ function MonthGrid({
          * day has no scheduled sessions, so without this it announces "0
          * sessions" -- the same as a Sunday, which is the confusion the whole
          * feature exists to remove.
+         *
+         * A closed day should hold no live session (every way onto it now
+         * cancels or refuses one, and drizzle/0038 repaired the ones left from
+         * before). If one is there anyway it is shown, not hidden behind
+         * "Holiday", so the grid never disagrees with the day view.
          */
         const label = holiday
-          ? `${formatDateKey(dateKey)}, closed for ${holiday.label}`
+          ? `${formatDateKey(dateKey)}, closed for ${holiday.label}${count ? `, but ${count} ${count === 1 ? "session is" : "sessions are"} still scheduled` : ""}`
           : `${formatDateKey(dateKey)}, ${count} ${count === 1 ? "session" : "sessions"}`
         return (
           <button
@@ -817,7 +854,7 @@ function MonthGrid({
           >
             <strong>{Number(dateKey.slice(-2))}</strong>
             {holiday
-              ? <small className="coach-month-holiday">Holiday</small>
+              ? <small className="coach-month-holiday">Holiday{count ? ` · ${count}` : ""}</small>
               : count ? (
                 <small>
                   {count}

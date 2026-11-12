@@ -1,8 +1,9 @@
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 
 import Database from "better-sqlite3"
-import { and, eq } from "drizzle-orm"
+import { and, eq, gt } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/better-sqlite3"
 import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -18,6 +19,7 @@ import {
 } from "@/components/coach/calendar/holiday-composer"
 import {
   cancellationLabel,
+  holidayRemovalRefusedMessage,
   holidayRemovedMessage,
 } from "@/components/coach/calendar/session-calendar"
 import {
@@ -83,6 +85,34 @@ function createSeries(programme: "Beginner" | "Intermediate", startTime: string)
 
 function markHoliday(dateKeys: string[], label = "Diwali") {
   return markAcademyHolidays({ coachId: COACH_ID, database, dateKeys, label, now: NOW })
+}
+
+/**
+ * A schedule ended by the End schedule code from before holiday sessions were
+ * detached: the player's place closes on the day it ended, the schedule is
+ * marked ended, and sessions the holiday cancelled stay tied to it.
+ */
+function endTheOldWay(
+  seriesId: string,
+  playerId: string,
+  { endedOn, from }: { endedOn: string; from: string },
+) {
+  database.insert(schema.sessionAssignments).values({
+    accountId: playerId,
+    assignedAt: NOW,
+    assignedByAccountId: COACH_ID,
+    effectiveFrom: from,
+    effectiveTo: endedOn,
+    id: randomUUID(),
+    seriesId,
+  }).run()
+  database.update(schema.sessionSeries).set({ status: "ended" })
+    .where(eq(schema.sessionSeries.id, seriesId)).run()
+  database.update(schema.sessionOccurrences).set({ status: "cancelled" }).where(and(
+    eq(schema.sessionOccurrences.seriesId, seriesId),
+    eq(schema.sessionOccurrences.status, "scheduled"),
+    gt(schema.sessionOccurrences.occurrenceDate, endedOn),
+  )).run()
 }
 
 beforeEach(() => {
@@ -431,6 +461,51 @@ describe("retracting a holiday", () => {
     expect(occurrenceOn(morningSeriesId, NEXT_MONDAY).status).toBe("cancelled")
   })
 
+  /*
+   * A schedule ended before `endSessionSeriesRecords` detached its holiday
+   * sessions: the session is still tied to the closure, and by the time the
+   * holiday is removed its day has passed. Comparing with today would bring it
+   * back as a past session of an ended schedule with nobody on it.
+   */
+  it("keeps an ended schedule's session off after its day has passed, when the day came after the end", () => {
+    const playerId = addAccount("Ended Player", "player")
+    markHoliday([NEXT_MONDAY])
+    endTheOldWay(morningSeriesId, playerId, { from: MONDAY, endedOn: "2026-08-06" })
+
+    const result = retractAcademyHoliday({
+      coachId: COACH_ID,
+      database,
+      dateKey: NEXT_MONDAY,
+      now: new Date("2026-08-20T09:00:00+05:30"),
+    })
+
+    expect(result).toMatchObject({ keptCancelledSessions: 1, restoredSessions: 1 })
+    expect(occurrenceOn(morningSeriesId, NEXT_MONDAY)).toMatchObject({
+      holidayId: null,
+      status: "cancelled",
+    })
+    expect(occurrenceOn(eveningSeriesId, NEXT_MONDAY).status).toBe("scheduled")
+  })
+
+  // The other side of the same line: a day before the schedule ended is part
+  // of its record, and comes back like any other.
+  it("brings back an ended schedule's session from before it ended", () => {
+    const playerId = addAccount("Ended Player", "player")
+    const closedOn = new Date("2026-08-02T09:00:00+05:30")
+    markAcademyHolidays({ coachId: COACH_ID, database, dateKeys: [MONDAY], label: "Bandh", now: closedOn })
+    endTheOldWay(morningSeriesId, playerId, { from: MONDAY, endedOn: "2026-08-06" })
+
+    const result = retractAcademyHoliday({
+      coachId: COACH_ID,
+      database,
+      dateKey: MONDAY,
+      now: new Date("2026-08-20T09:00:00+05:30"),
+    })
+
+    expect(result).toMatchObject({ keptCancelledSessions: 0, restoredSessions: 2 })
+    expect(occurrenceOn(morningSeriesId, MONDAY).status).toBe("scheduled")
+  })
+
   it("clears the review flags the closure raised, and only those", () => {
     const playerId = addAccount("Make-up Player", "player")
     const otherPlayerId = addAccount("Other Player", "player")
@@ -526,6 +601,124 @@ describe("a day already closed never gets a live session", () => {
   })
 })
 
+/*
+ * drizzle/0038: sessions put on an already-closed day before that was stopped
+ * stayed live there, and every screen showed the day differently. The repair
+ * cancels each by that day's holiday, as marking the holiday would have done.
+ */
+describe("repairing sessions left live on a closed day before this release", () => {
+  function runRepair() {
+    const repair = readFileSync(
+      path.resolve(process.cwd(), "drizzle", "0038_repair_sessions_on_closed_days.sql"),
+      "utf8",
+    )
+    repair.split("--> statement-breakpoint").forEach((statement) => sqlite.exec(statement))
+  }
+
+  function byId(id: string) {
+    const occurrence = database.select().from(schema.sessionOccurrences)
+      .where(eq(schema.sessionOccurrences.id, id)).get()
+    if (!occurrence) throw new Error(`Expected occurrence ${id}.`)
+    return occurrence
+  }
+
+  function leftLiveTheOldWay() {
+    markHoliday([NEXT_MONDAY])
+    const [holiday] = listAcademyHolidays({ database })
+    // A term created after the closure, by the code that did not look.
+    const lateSeriesId = createSeries("Intermediate", "08:00")
+    const lateId = occurrenceOn(lateSeriesId, NEXT_MONDAY).id
+    database.update(schema.sessionOccurrences).set({ holidayId: null, status: "scheduled" })
+      .where(eq(schema.sessionOccurrences.id, lateId)).run()
+    // A session moved onto the closed day, by the code that did not refuse.
+    const source = occurrenceOn(morningSeriesId, "2026-08-17")
+    const movedId = randomUUID()
+    database.update(schema.sessionOccurrences).set({ status: "cancelled" })
+      .where(eq(schema.sessionOccurrences.id, source.id)).run()
+    database.insert(schema.sessionOccurrences).values({
+      createdAt: NOW,
+      durationMinutes: 60,
+      id: movedId,
+      occurrenceDate: NEXT_MONDAY,
+      replacementForOccurrenceId: source.id,
+      seriesId: morningSeriesId,
+      startsAt: new Date("2026-08-10T07:00:00+05:30"),
+      status: "scheduled",
+      venue: "SMBA Court",
+    }).run()
+    // A make-up completed on the moved session, after the closure.
+    const playerId = addAccount("Make-up Player", "player")
+    database.insert(schema.attendanceAdjustments).values({
+      completedOn: NEXT_MONDAY,
+      completionOccurrenceId: movedId,
+      id: "completed-after-closure",
+      playerId,
+      publishedAt: NOW,
+      publishedByAccountId: COACH_ID,
+      reviewRequiredAt: null,
+      sourceOccurrenceId: occurrenceOn(morningSeriesId, MONDAY).id,
+      type: "makeup",
+    }).run()
+    const morningOwnId = database.select().from(schema.sessionOccurrences).where(and(
+      eq(schema.sessionOccurrences.seriesId, morningSeriesId),
+      eq(schema.sessionOccurrences.occurrenceDate, NEXT_MONDAY),
+      eq(schema.sessionOccurrences.holidayId, holiday.id),
+    )).get()!.id
+    return { holiday, lateId, lateSeriesId, morningOwnId, movedId }
+  }
+
+  it("cancels each one by that day's holiday and flags a make-up completed on it", () => {
+    const { holiday, lateId, movedId } = leftLiveTheOldWay()
+
+    runRepair()
+
+    expect(database.select().from(schema.sessionOccurrences).where(and(
+      eq(schema.sessionOccurrences.occurrenceDate, NEXT_MONDAY),
+      eq(schema.sessionOccurrences.status, "scheduled"),
+    )).all()).toHaveLength(0)
+    expect(byId(lateId)).toMatchObject({ holidayId: holiday.id, status: "cancelled" })
+    expect(byId(movedId)).toMatchObject({ holidayId: holiday.id, status: "cancelled" })
+    expect(database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, "completed-after-closure")).get()?.reviewRequiredAt)
+      .toEqual(holiday.createdAt)
+    // Days that are not closed are left alone.
+    expect(occurrenceOn(morningSeriesId, "2026-08-24").status).toBe("scheduled")
+    expect(occurrenceOn(morningSeriesId, MONDAY).status).toBe("scheduled")
+  })
+
+  it("changes nothing when run again", () => {
+    leftLiveTheOldWay()
+    runRepair()
+    const before = database.select().from(schema.sessionOccurrences).all()
+
+    runRepair()
+
+    expect(database.select().from(schema.sessionOccurrences).all()).toEqual(before)
+  })
+
+  // Removing the holiday afterwards gives back what the coach had, once each.
+  it("lets the holiday be removed later, bringing back the moved session rather than two for one schedule", () => {
+    const { lateSeriesId, morningOwnId, movedId } = leftLiveTheOldWay()
+    runRepair()
+
+    const result = retractAcademyHoliday({
+      coachId: COACH_ID,
+      database,
+      dateKey: NEXT_MONDAY,
+      now: new Date("2026-08-20T09:00:00+05:30"),
+    })
+
+    expect(result).toMatchObject({ keptCancelledSessions: 1, restoredSessions: 3, reviewFlagsCleared: 1 })
+    expect(byId(movedId)).toMatchObject({ holidayId: null, status: "scheduled" })
+    expect(byId(morningOwnId)).toMatchObject({ holidayId: null, status: "cancelled" })
+    expect(occurrenceOn(eveningSeriesId, NEXT_MONDAY).status).toBe("scheduled")
+    expect(database.select().from(schema.sessionOccurrences).where(and(
+      eq(schema.sessionOccurrences.seriesId, lateSeriesId),
+      eq(schema.sessionOccurrences.occurrenceDate, NEXT_MONDAY),
+    )).get()?.status).toBe("scheduled")
+  })
+})
+
 describe("what the calendar says after a holiday change", () => {
   it("reports a closure from what was saved", () => {
     expect(holidayClosedMessage(" Diwali ", {
@@ -542,12 +735,16 @@ describe("what the calendar says after a holiday change", () => {
     })).toBe("Closed Monday 3 August for Diwali. No sessions needed cancelling.")
   })
 
-  it("reports a removal, including sessions that stayed off", () => {
-    expect(holidayRemovedMessage({
+  // The notice sits above the calendar and the answer can arrive after the
+  // coach has moved to another day, so it always names the day it was for.
+  it("reports a removal, naming the day, including sessions that stayed off", () => {
+    expect(holidayRemovedMessage(MONDAY, {
       keptCancelledSessions: 1,
       restoredSessions: 2,
       reviewFlagsCleared: 1,
-    })).toBe("Holiday removed. 2 sessions are back on. 1 session stayed cancelled because its schedule has ended or already has a session that day. 1 make-up is no longer waiting for review.")
+    })).toBe("Holiday on Monday 3 August removed. 2 sessions are back on. 1 session stayed cancelled because its schedule has ended or already has a session that day. 1 make-up is no longer waiting for review.")
+    expect(holidayRemovalRefusedMessage(MONDAY, "That date is not marked as a holiday."))
+      .toBe("The holiday on Monday 3 August was not removed. That date is not marked as a holiday.")
   })
 
   it("tells a holiday, a move and an ordinary cancellation apart", () => {
@@ -556,9 +753,23 @@ describe("what the calendar says after a holiday change", () => {
 
     expect(cancellationLabel({ ...base, holidayId: "h" }, [], holidays)).toBe("Closed for Diwali")
     expect(cancellationLabel(base, [
-      { replacementForOccurrenceId: "a", status: "scheduled" },
+      { id: "b", replacementForOccurrenceId: "a", status: "scheduled" },
     ], holidays)).toBe("Moved")
     expect(cancellationLabel(base, [], holidays)).toBe("Cancelled")
+  })
+
+  it("still reads Moved when the moved session was moved again", () => {
+    const holidays = new Map<string, { label: string }>()
+    const base = { holidayId: null, id: "tue", occurrenceDate: "2026-11-03" }
+
+    expect(cancellationLabel(base, [
+      { id: "wed", replacementForOccurrenceId: "tue", status: "cancelled" },
+      { id: "thu", replacementForOccurrenceId: "wed", status: "scheduled" },
+    ], holidays)).toBe("Moved")
+    // A move whose new session was then called off is just cancelled.
+    expect(cancellationLabel(base, [
+      { id: "wed", replacementForOccurrenceId: "tue", status: "cancelled" },
+    ], holidays)).toBe("Cancelled")
   })
 })
 

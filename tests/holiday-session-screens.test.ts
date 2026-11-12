@@ -15,6 +15,10 @@ function between(text: string, start: string, end: string) {
   return text.slice(from, to)
 }
 
+// Refusals refetching, the panel staying open while saving and the return to
+// onboarding are run for real in tests/holiday-calendar-render.test.tsx and
+// tests/holiday-screen-handlers.test.ts. What is left here is wiring that only
+// shows in a browser or behind a signed-in server action.
 describe("the coach calendar stays in step with the server", () => {
   const provider = source("components/coach/coach-portal-provider.tsx")
 
@@ -22,13 +26,6 @@ describe("the coach calendar stays in step with the server", () => {
     const reconcile = between(provider, "const timer = window.setTimeout(() => {", "return () => window.clearTimeout(timer)")
     expect(reconcile).toContain("setAcademyHolidays(initialAcademyHolidays)")
     expect(reconcile).toContain("setSessionOccurrences(initialSessionOccurrences)")
-  })
-
-  it("refetches after a session or holiday action is turned down", () => {
-    for (const name of ["const cancelOccurrence", "const replaceOccurrence", "const retractHoliday"]) {
-      const body = between(provider, name, "}, [")
-      expect(body).toContain("refreshAfterRefusal(result)")
-    }
   })
 })
 
@@ -41,22 +38,5 @@ describe("closing days from a month that does not hold them", () => {
     const mark = between(actions, "export async function markAcademyHolidaysAction", "export async function retractAcademyHolidayAction")
     expect(mark).toContain("getCoachCalendarMonthSessionSnapshot(viewMonth)")
     expect(mark).not.toContain("getCoachCalendarMonthSessionSnapshot(anchorDate")
-  })
-
-  it("keeps the panel open while the closure is being saved", () => {
-    const composer = source("components/coach/calendar/holiday-composer.tsx")
-    const dismiss = between(composer, "function dismiss()", "}")
-    expect(dismiss).toContain("if (busy) return")
-    expect(composer).not.toMatch(/onCancel=\{\(event\) => \{\s*event\.preventDefault\(\)\s*onClose\(\)/u)
-    expect(composer).not.toMatch(/if \(event\.target === event\.currentTarget\) onClose\(\)/u)
-  })
-})
-
-describe("creating a schedule from a player's onboarding", () => {
-  it("returns to onboarding through the unsaved-work guard, so the return is not undone", () => {
-    const create = source("components/coach/calendar/session-create.tsx")
-    const success = between(create, "if (guidedPlayer) {", "} catch (error)")
-    expect(success).toMatch(/navigateAfterCommit\(\(\) => \{\s*router\.push\(`\/coach\/onboarding/u)
-    expect(create).not.toContain("Manage roster")
   })
 })
