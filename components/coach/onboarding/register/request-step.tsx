@@ -167,8 +167,8 @@ export function RequestStep({
               : "People already on record who may be this person:"}
           </p>
           <ul>
-            {item.duplicateSignals.map((signal) => (
-              <li key={`${signal.fullName}-${signal.reason}-${signal.standing}-${signal.academyId ?? "none"}`}>
+            {item.duplicateSignals.map((signal, index) => (
+              <li key={`${signal.fullName}-${signal.reason}-${signal.standing}-${signal.academyId ?? "none"}-${index}`}>
                 <strong>{signal.fullName}</strong>
                 {duplicateStandingLabel(signal)}
                 <span>

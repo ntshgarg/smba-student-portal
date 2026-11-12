@@ -315,7 +315,7 @@ describe("registration review lifecycle", () => {
       expect(registrationStandingLine({ ...base, approvedDetail: "active" }))
         .toContain("already set up")
       expect(registrationStandingLine({ purpose: "status", standing: "rejected" }))
-        .toBe("A registration for this name and address was not accepted. Please contact the academy.")
+        .toBe("This registration was not accepted. Please contact the academy.")
     })
   })
 })

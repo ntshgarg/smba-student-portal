@@ -45,10 +45,10 @@ export function smbaPinLogin() {
 
         // The account/IP lockout lives here rather than in the caller because
         // this endpoint has two of them. `loginWithPin` in app/login/actions.ts
-        // reaches it through `auth.api.signInPin`, but the plugin also mounts it
-        // at POST /api/auth/sign-in/pin, which app/api/auth/[...all]/route.ts
-        // serves to anyone. A guard in the server action protects only the first
-        // caller; the public route would keep a six-digit PIN -- the factor a
+        // reaches it through `auth.api.signInPin`. No public /api/auth route
+        // is mounted today, but the plugin declares POST /api/auth/sign-in/pin,
+        // and if one is ever added a guard in the server action would protect
+        // only the first caller; that route would keep a six-digit PIN -- the factor a
         // player, i.e. a minor, signs in with -- exposed to unlimited guessing,
         // with nothing written to auth_login_attempts or auth_security_events
         // for check-security-signals.mjs to alert on. Better Auth's own

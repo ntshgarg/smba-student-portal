@@ -50,7 +50,7 @@ const GENERIC_PIN_ERROR = `${ACADEMY_ID_LABEL} or PIN is incorrect. Use your pas
 const RATE_LIMITED_LOGIN_ERROR = "We couldn\u2019t sign you in. Wait a few minutes before trying again."
 const ACTIVATED_WITHOUT_SESSION_ERROR = "Your account is ready, but we couldn\u2019t sign you in. Open the sign-in page and use your new password."
 const ACTIVATION_ALREADY_COMPLETE_ERROR = "This account already has a password. Open the sign-in page and use your Academy ID and that password."
-const ACTIVATION_UNAVAILABLE_ERROR = "This password setup has run out or was replaced by a status check on another device. Check your status again on the activation page to continue."
+const ACTIVATION_UNAVAILABLE_ERROR = "This password setup has run out or was replaced on another device (by a status check or a new registration). Check your status again at /activate to continue."
 
 // Better Auth surfaces an endpoint refusal as an APIError carrying the status it
 // was thrown with. Both sign-in endpoints throw TOO_MANY_REQUESTS once the
@@ -121,9 +121,9 @@ export async function loginWithAcademyId(
 
   // The account/IP lockout and the audit rows for a guess that reaches the
   // endpoint live in its hooks (lib/auth/username-login-guard.ts), not here: it
-  // is reachable both through `auth.api.signInUsername` below and directly at
-  // POST /api/auth/sign-in/username, so a guard that only sat in this action
-  // covered one caller and left the other open.
+  // is reached through `auth.api.signInUsername` below and would also be
+  // reached at POST /api/auth/sign-in/username if a public auth route were ever
+  // mounted (none is today), so the guard sits with the endpoint.
   //
   // The block is still read here, and read first, because this action answers
   // two ways. An Academy ID that exists and is active reaches the endpoint and
@@ -223,10 +223,10 @@ export async function loginWithPin(
   }
 
   // The account/IP lockout and the audit rows for this factor live in the
-  // endpoint itself (lib/auth/pin-plugin.ts), not here. It is reachable both
-  // through `auth.api.signInPin` below and directly at POST
-  // /api/auth/sign-in/pin, so a guard in this action would have covered one
-  // caller and left the other open. Duplicating it here as well would double
+  // endpoint itself (lib/auth/pin-plugin.ts), not here. It is reached through
+  // `auth.api.signInPin` below and would also be reached at POST
+  // /api/auth/sign-in/pin if a public auth route were ever mounted (none is
+  // today), so the guard sits with the endpoint. Duplicating it here as well would double
   // every failure against the five-attempt budget and write each audit row
   // twice, so this action now only translates the endpoint's refusal into copy.
   const requestHeaders = await headers()

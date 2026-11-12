@@ -96,7 +96,7 @@ export function RegistrationStatusForm({
       setState(next)
       if (kind === "resend" && next.step === "code" && !next.error) {
         setCode("")
-        setNotice(`Sent again to ${next.values.email}. Use the newest code you receive.`)
+        setNotice(`If a new code was due, it is on its way to ${next.values.email}. A code you already received still works until it runs out.`)
       }
     } catch {
       setState({

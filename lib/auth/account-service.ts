@@ -663,7 +663,8 @@ export function approveRegistration(
 function isUniqueConstraintViolation(error: unknown) {
   if (!(error instanceof Error)) return false
   const code = String((error as Error & { code?: unknown }).code ?? "")
-  return code.startsWith("SQLITE_CONSTRAINT") || error.message.includes("UNIQUE constraint failed")
+  return code === "SQLITE_CONSTRAINT_UNIQUE" || code === "SQLITE_CONSTRAINT_PRIMARYKEY"
+    || error.message.includes("UNIQUE constraint failed")
 }
 
 function approveRegistrationRecord(

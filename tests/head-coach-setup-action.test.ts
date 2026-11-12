@@ -89,9 +89,9 @@ describe("first-run head-coach setup action", () => {
 
     await completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())
 
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_coach_setup")
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_setup_email")
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_coach_setup_name")
+    expect(mocks.cookieDelete).toHaveBeenCalledWith({ name: "smba_head_coach_setup", path: "/setup/head-coach" })
+    expect(mocks.cookieDelete).toHaveBeenCalledWith({ name: "smba_head_setup_email", path: "/setup/head-coach" })
+    expect(mocks.cookieDelete).toHaveBeenCalledWith({ name: "smba_head_coach_setup_name", path: "/setup/head-coach" })
     expect(mocks.redirect).toHaveBeenCalledWith("/auth/two-factor/setup")
   })
 
@@ -137,12 +137,12 @@ describe("first-run head-coach setup action", () => {
     mocks.getVerifiedSetupRecoveryEmail.mockReturnValue(null)
 
     await expect(completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())).resolves.toEqual({
-      error: "The email check ran out. Verify the coach’s email again to continue.",
+      error: "The email check ran out. Reload this page to verify the coach’s email again.",
       errorField: null,
     })
     expect(mocks.completeInitialHeadCoachSetup).not.toHaveBeenCalled()
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_setup_email")
-    expect(mocks.cookieDelete).not.toHaveBeenCalledWith("smba_head_coach_setup")
+    // Changing a cookie re-renders the page and would hide this message.
+    expect(mocks.cookieDelete).not.toHaveBeenCalled()
   })
 
   // A genuine creation failure still has to read as one, and the one-time

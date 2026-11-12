@@ -62,9 +62,11 @@ export async function completeHeadCoachSetupAction(
     receiptToken: input.recoveryEmailReceiptToken,
     subjectKey: input.recoveryEmailSubjectKey,
   })) {
-    cookieStore.delete(HEAD_SETUP_EMAIL_COOKIE)
+    // The cookie is left alone: changing a cookie here re-renders the page,
+    // which swaps this form for the email step and drops this message. On the
+    // next load the page sees the email has run out and shows that step.
     return {
-      error: "The email check ran out. Verify the coach\u2019s email again to continue.",
+      error: "The email check ran out. Reload this page to verify the coach\u2019s email again.",
       errorField: null,
     }
   }
@@ -101,8 +103,10 @@ export async function completeHeadCoachSetupAction(
       errorField: null,
     }
   }
-  cookieStore.delete(HEAD_COACH_SETUP_COOKIE)
-  cookieStore.delete(HEAD_SETUP_EMAIL_COOKIE)
-  cookieStore.delete(HEAD_COACH_SETUP_NAME_COOKIE)
+  // These were set at Path=/setup/head-coach; a delete without the path would
+  // target a different cookie and leave these (the name included) in place.
+  for (const name of [HEAD_COACH_SETUP_COOKIE, HEAD_SETUP_EMAIL_COOKIE, HEAD_COACH_SETUP_NAME_COOKIE]) {
+    cookieStore.delete({ name, path: "/setup/head-coach" })
+  }
   redirect("/auth/two-factor/setup")
 }

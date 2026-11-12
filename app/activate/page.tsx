@@ -89,6 +89,15 @@ export default async function ActivatePage() {
           <p>Use this Academy ID and the password you created.</p>
           <Link href="/login">Sign in</Link>
         </div>
+        {/* A spent receipt can stay in this browser for weeks; without this a
+            shared family phone could never reach a second child from here. */}
+        <details className="activation-other-lookup">
+          <summary>Checking on a different player?</summary>
+          <p className="login-helper">
+            Enter their name and the email they were registered with.
+          </p>
+          <RegistrationStatusForm />
+        </details>
       </ActivationShell>
     )
   }

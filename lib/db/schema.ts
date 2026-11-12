@@ -374,8 +374,8 @@ export const authSecurityEvents = sqliteTable("auth_security_events", {
       "activation_issued",
       "academy_id_notification_sent",
       // Who decided on a request or ended an account, and when. Read from
-      // this log only; the actor columns on `accounts` are overwritten by an
-      // undo, the log is not.
+      // this log; the actor columns on `accounts` are cleared by an undo. The
+      // log itself is pruned after 180 days (lib/telemetry/retention.ts).
       "registration_approved",
       "registration_rejected",
       "registration_rejection_undone",

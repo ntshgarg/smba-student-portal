@@ -84,7 +84,7 @@ export function registrationStandingLine(message: Pick<
     case "pending":
       return "A request for this name and address is already with your coach for review."
     case "rejected":
-      return "A registration for this name and address was not accepted. Please contact the academy."
+      return "This registration was not accepted. Please contact the academy."
     case "new":
       return message.purpose === "status"
         ? "We have no registration under this name and email. Check the spelling, or send a new request from the registration page."
