@@ -111,7 +111,7 @@ describe("recovery-email enrolment is first-time only", () => {
 
     await expect(requestCurrentRecoveryEmail(initialState, withoutPassword)).resolves.toEqual({
       email: "borrowed@example.com",
-      error: "Enter your current password.",
+      error: "Enter your current password or PIN.",
       sent: false,
     })
     expect(mocks.requestRecoveryEmailVerification).not.toHaveBeenCalled()
@@ -120,12 +120,15 @@ describe("recovery-email enrolment is first-time only", () => {
     await expect(requestCurrentRecoveryEmail(initialState, enrolmentData("borrowed@example.com")))
       .resolves.toEqual({
         email: "borrowed@example.com",
-        error: "The current password could not be verified.",
+        error: "That password or PIN could not be verified.",
         sent: false,
       })
+    // A player held on this required step who signs in by PIN and forgot the
+    // password must still get past it, so the PIN is accepted here.
     expect(mocks.verifyCurrentPasswordAttempt).toHaveBeenCalledWith(expect.objectContaining({
       academyId: "SMBA-PL-0001",
       accountId: "player-one",
+      allowPin: true,
       operation: "add_recovery_email",
       password: "Current secure password!",
     }))

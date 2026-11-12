@@ -89,7 +89,7 @@ export function AdminAuthenticatorRecoveryQueue({
         <div>
           <p className="eyebrow">Security approvals</p>
           <h2 id="admin-authenticator-recovery-title">Authenticator recovery</h2>
-          <p>Approve only after confirming the head coach’s identity outside the website.</p>
+          <p>Approve only after confirming the head coach’s identity outside the website. Approving removes their authenticator and, for the next 24 hours, also lets whoever reads the recovery email set a new password.</p>
         </div>
         <span>{requests.length} pending</span>
       </header>

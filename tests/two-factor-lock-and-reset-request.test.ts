@@ -123,26 +123,16 @@ describe("the authenticator check at sign-in", () => {
     })
   })
 
-  it("withdraws a waiting reset request once the coach proves the authenticator", async () => {
+  it("leaves a waiting reset request alone when the coach signs in with a code", async () => {
+    // The code may come from the stolen phone or printed recovery codes the
+    // request is about; the owner's approval must still be able to shut them out.
     mocks.verifyTOTP.mockResolvedValue({ user: { id: "head-coach" } })
     await expect(verifyTotpSignIn(initialState, form("code", "123456")))
       .rejects.toThrow("NEXT_REDIRECT:/coach")
-    expect(mocks.withdrawPendingAuthenticatorResetRequests).toHaveBeenCalledWith("head-coach", {
-      reason: "signed_in_with_authenticator",
-    })
 
     mocks.verifyBackupCode.mockResolvedValue({ user: { id: "head-coach" } })
     await expect(verifyBackupCodeSignIn(initialState, form("backupCode", "SPARE-CODE")))
       .rejects.toThrow("NEXT_REDIRECT:/coach")
-    expect(mocks.withdrawPendingAuthenticatorResetRequests).toHaveBeenCalledTimes(2)
-  })
-
-  it("lets the coach in even when withdrawing the request fails", async () => {
-    mocks.verifyTOTP.mockResolvedValue({ user: { id: "head-coach" } })
-    mocks.withdrawPendingAuthenticatorResetRequests.mockImplementation(() => {
-      throw new Error("database busy")
-    })
-    await expect(verifyTotpSignIn(initialState, form("code", "123456")))
-      .rejects.toThrow("NEXT_REDIRECT:/coach")
+    expect(mocks.withdrawPendingAuthenticatorResetRequests).not.toHaveBeenCalled()
   })
 })

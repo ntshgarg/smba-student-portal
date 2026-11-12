@@ -20,7 +20,7 @@ import type { RegistrationStatusState } from "@/lib/auth/registration-form"
 /** One answer for every unusable code -- see confirmRegistrationStatusCode. */
 const INVALID_CODE_MESSAGE = "That code is invalid or expired."
 const CODE_CHECKS_PAUSED_MESSAGE =
-  "Too many codes were tried from this connection. Wait a few minutes, then enter the same code again."
+  "Too many codes were tried from this connection. Wait 15 minutes, then ask for a new code: this one will have expired by then."
 
 function valuesFrom(formData: FormData) {
   return {

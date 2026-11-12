@@ -110,6 +110,10 @@ export const trustedDeviceDatabaseHooks = {
     delete: {
       async before(row: TrustRow, context: object | null | undefined) {
         if (!context || !storedTrustRow(row)) return
+        // Better Auth also deletes rows that have already run out, as cleanup
+        // during any lookup. That is not a renewal, and carrying its past date
+        // over would make a trust ticked in the same request expire at once.
+        if (new Date(row.expiresAt).getTime() <= Date.now()) return
         trustExpiryBeingRenewed.set(context, {
           accountId: row.value,
           expiresAt: new Date(row.expiresAt),

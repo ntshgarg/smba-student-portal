@@ -154,9 +154,25 @@ export function RecoveryEmailEnrollmentForm({
           <span>{confirming ? "Verifying…" : "Verify recovery email"}</span>
           <ArrowRight aria-hidden="true" />
         </button>
-        <button className="totp-switch" type="submit" formAction={send} disabled={sending || confirming}>
-          {sending ? "Sending another code…" : "Send another code"}
-        </button>
+        {requireCurrentPassword ? (
+          /*
+           * Every send here needs the password or PIN, which the code step
+           * does not hold, so "another code" goes back to the address step
+           * with the address kept, where it is asked for again.
+           */
+          <button
+            className="totp-switch"
+            type="button"
+            disabled={sending || confirming}
+            onClick={() => setRetired({ confirm: confirmState, request: requestState })}
+          >
+            Send another code
+          </button>
+        ) : (
+          <button className="totp-switch" type="submit" formAction={send} disabled={sending || confirming}>
+            {sending ? "Sending another code…" : "Send another code"}
+          </button>
+        )}
         <button
           className="totp-switch"
           type="button"
@@ -204,7 +220,7 @@ export function RecoveryEmailEnrollmentForm({
       </div>
       {requireCurrentPassword ? (
         <div className="login-field">
-          <label htmlFor="recovery-email-current-password">Current password</label>
+          <label htmlFor="recovery-email-current-password">Current password or PIN</label>
           <PasswordInput
             id="recovery-email-current-password"
             name="currentPassword"
@@ -213,7 +229,7 @@ export function RecoveryEmailEnrollmentForm({
             aria-describedby="recovery-email-password-help"
           />
           <p id="recovery-email-password-help" className="login-helper">
-            Password resets will go to this address, so we check it is you first.
+            Password resets will go to this address, so we check it is you first. Your six-digit PIN works too.
           </p>
         </div>
       ) : null}

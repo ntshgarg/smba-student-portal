@@ -353,7 +353,7 @@ describe("changing the recovery email", () => {
       updatedAt: NOW,
     }).run()
     await changeAddress("head-moving", "new@example.com", new Date(NOW.getTime() + 1_000))
-    expect(database.select().from(schema.authAuthenticatorResetRequests).get()?.status).toBe("expired")
+    expect(database.select().from(schema.authAuthenticatorResetRequests).get()?.status).toBe("rejected")
   })
 
   it("says why no code can be sent before anything is checked", async () => {
@@ -534,6 +534,7 @@ describe("protected accounts and their authenticator", () => {
     const pass = claimPasswordRecovery(await emailedPasswordLink("SMBA-HC-5306", "head@example.com"), { database, now: NOW })
     expect(getPasswordRecoveryStatus(pass!, { database, now: NOW })).toEqual({
       academyId: "SMBA-HC-5306",
+      owner: false,
       state: "unavailable",
     })
     await expect(completePasswordRecovery({ password: NEW_PASSWORD, token: pass! }, { database, now: NOW }))
@@ -563,7 +564,7 @@ describe("the coach's authenticator reset request", () => {
     expect(withdrawPendingAuthenticatorResetRequests("head-coach", {
       database,
       now: NOW,
-      reason: "signed_in_with_authenticator",
+      reason: "cancelled_by_coach",
     })).toBe(1)
     expect(approveAuthenticatorResetRequest({ actorAccountId: "owner", requestId: "request" }, { database, now: NOW }))
       .toBeNull()

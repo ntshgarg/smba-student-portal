@@ -47,7 +47,7 @@ async function securityContext() {
 
 const INVALID_CODE = "That code is invalid or expired."
 const CODE_CHECKS_PAUSED =
-  "Too many codes were tried from this connection. Wait a few minutes, then enter the same code again."
+  "Too many codes were tried from this connection. Wait 15 minutes, then ask for a new code: this one will have expired by then."
 const TOO_MANY_ATTEMPTS = "Too many attempts. Wait a few minutes before trying again."
 
 /*
@@ -135,7 +135,7 @@ export async function requestCurrentRecoveryEmail(
     return { email, error: "Enter a valid recovery email address.", sent: false }
   }
   if (!currentPassword) {
-    return { email, error: "Enter your current password.", sent: false }
+    return { email, error: "Enter your current password or PIN.", sent: false }
   }
   const security = await securityContext()
   const subjectKey = recoverySubjectKeyForAccount(identity.subjectId)
@@ -148,11 +148,16 @@ export async function requestCurrentRecoveryEmail(
    * anyone who picked up a player's still-signed-in phone before a recovery
    * email was added could add their own, reset the password from it and keep
    * the account.
+   *
+   * The PIN is accepted too. This page is a required step, and a player who
+   * signs in by PIN every day and has forgotten the password has no other way
+   * past it: with no recovery email yet, "Forgot password?" cannot help them.
    */
   const passwordResult = await verifyCurrentPasswordAttempt({
     academyId: identity.academyId,
     accountId: identity.subjectId,
     ipHash: security.ipHash,
+    allowPin: true,
     operation: "add_recovery_email",
     password: currentPassword,
     userAgent: security.userAgent,
@@ -162,7 +167,7 @@ export async function requestCurrentRecoveryEmail(
       email,
       error: passwordResult === "blocked"
         ? TOO_MANY_ATTEMPTS
-        : "The current password could not be verified.",
+        : "That password or PIN could not be verified.",
       sent: false,
     }
   }

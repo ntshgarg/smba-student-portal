@@ -121,10 +121,11 @@ export function getPendingAuthenticatorResetRequest(accountId: string, {
  *
  * Two ways in. The coach presses "Cancel reset request" -- because they found
  * the phone, or because they never asked and someone with their recovery inbox
- * did. Or the coach proves their authenticator again, at sign-in or by
- * connecting a new one: from then on an approval could only do harm, wiping
- * the authenticator they have just shown they hold and signing them out
- * everywhere, from a request the owner had no way to know was stale.
+ * did. Or the coach connects a new authenticator: from then on an approval
+ * could only do harm, wiping the authenticator they have just set up and
+ * signing them out everywhere, from a request the owner had no way to know was
+ * stale. Merely signing in with a code does not withdraw it: that code can come
+ * from the lost phone or the printed recovery codes the request is about.
  *
  * Recorded as declined by the coach themself, so it can never be read as the
  * owner's decision.
@@ -136,7 +137,7 @@ export function withdrawPendingAuthenticatorResetRequests(accountId: string, {
 }: {
   database?: SmbaDatabase
   now?: Date
-  reason: "authenticator_connected" | "cancelled_by_coach" | "signed_in_with_authenticator"
+  reason: "authenticator_connected" | "cancelled_by_coach"
 }) {
   return database.transaction((tx) => {
     const pending = tx.select({ id: authAuthenticatorResetRequests.id })
@@ -206,7 +207,9 @@ export function latestAuthenticatorResetOutcome(accountId: string, {
     return { at: latest.requestedAt, state: "pending" }
   }
   const lapsed = latest.status === "expired" || latest.status === "pending"
-  const finishedAt = latest.status === "pending"
+  // A lapsed request ran out at its own expiry; `resolvedAt` on an expired row
+  // is only when somebody next opened the owner's queue.
+  const finishedAt = lapsed
     ? latest.expiresAt
     : latest.resolvedAt ?? latest.expiresAt
   if (now.getTime() - finishedAt.getTime() > OUTCOME_NOTICE_WINDOW_MS) return null

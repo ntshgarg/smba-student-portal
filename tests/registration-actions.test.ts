@@ -317,7 +317,7 @@ describe("public registration action", () => {
     )
 
     expect(result).toMatchObject({
-      error: "Too many codes were tried from this connection. Wait a few minutes, then enter the same code again.",
+      error: "Too many codes were tried from this connection. Wait 15 minutes, then ask for a new code: this one will have expired by then.",
       errorField: "code",
       step: "code",
     })

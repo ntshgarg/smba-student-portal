@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
 
 import { openAuthenticatorRecoveryLinkAction } from "@/app/auth/two-factor/recovery/actions"
+import { RecoveryLinkContinueButton } from "@/components/recovery-link-continue-button"
 import { recoveryLinkIsOpenable } from "@/lib/auth/recovery-service"
 import { publicSiteUrl } from "@/lib/config"
 
@@ -44,10 +44,7 @@ export default async function AuthenticatorRecoveryLinkPage({
         {openable ? (
           <form className="login-form" action={openAuthenticatorRecoveryLinkAction}>
             <input type="hidden" name="token" value={token} />
-            <button className="login-submit" type="submit">
-              <span>Continue</span>
-              <ArrowRight aria-hidden="true" />
-            </button>
+            <RecoveryLinkContinueButton />
           </form>
         ) : (
           <div className="login-empty-state"><Link href="/auth/two-factor/recovery">Request another link</Link></div>

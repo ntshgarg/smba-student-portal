@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import {
   AUTHENTICATOR_RECOVERY_COOKIE,
   claimPasswordRecovery,
+  getAuthenticatorRecoveryStatus,
   PASSWORD_RECOVERY_LIFETIME_MS,
   requestPasswordRecovery,
   submitAuthenticatorResetRequest,
@@ -50,8 +51,15 @@ export async function requestAuthenticatorRecoveryAction(
 export async function openAuthenticatorRecoveryLinkAction(formData: FormData) {
   const token = String(formData.get("token") ?? "")
   const pass = claimPasswordRecovery(token, { intent: "authenticator" })
-  if (!pass) redirect("/auth/two-factor/recovery?error=invalid")
   const cookieStore = await cookies()
+  if (!pass) {
+    // A second tap whose first already tied the request to this browser.
+    const held = cookieStore.get(AUTHENTICATOR_RECOVERY_COOKIE)?.value
+    if (held && getAuthenticatorRecoveryStatus(held).state === "verified") {
+      redirect("/auth/two-factor/recovery?verified=1")
+    }
+    redirect("/auth/two-factor/recovery?error=invalid")
+  }
   cookieStore.set(AUTHENTICATOR_RECOVERY_COOKIE, pass, {
     httpOnly: true,
     maxAge: PASSWORD_RECOVERY_LIFETIME_MS / 1_000,

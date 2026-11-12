@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   cookieDelete: vi.fn(),
   cookieGet: vi.fn(() => ({ value: "browser-pass" })),
   cookieSet: vi.fn(),
+  getAuthenticatorRecoveryStatus: vi.fn(() => ({ state: "missing" })),
+  getPasswordRecoveryStatus: vi.fn(() => ({ state: "missing" })),
   passwordRecoveryCodeChecksPaused: vi.fn(() => false),
   redirect: vi.fn((destination: string) => {
     const error = new Error(`NEXT_REDIRECT:${destination}`) as Error & { digest: string }
@@ -40,6 +42,8 @@ vi.mock("@/lib/auth/recovery-service", () => ({
   AUTHENTICATOR_RECOVERY_COOKIE: "smba_authenticator_recovery",
   claimPasswordRecovery: mocks.claimPasswordRecovery,
   completePasswordRecovery: mocks.completePasswordRecovery,
+  getAuthenticatorRecoveryStatus: mocks.getAuthenticatorRecoveryStatus,
+  getPasswordRecoveryStatus: mocks.getPasswordRecoveryStatus,
   PASSWORD_RECOVERY_LIFETIME_MS: 20 * 60 * 1000,
   passwordRecoveryCodeChecksPaused: mocks.passwordRecoveryCodeChecksPaused,
   RECOVERY_SESSION_COOKIE: "smba_password_recovery",
@@ -83,6 +87,29 @@ describe("opening an emailed link", () => {
     await expect(openPasswordRecoveryLinkAction(tokenForm("spent")))
       .rejects.toThrow("NEXT_REDIRECT:/recover?error=invalid")
     expect(mocks.cookieSet).not.toHaveBeenCalled()
+  })
+
+  it("sends a second tap on to the reset the first tap already opened here", async () => {
+    // On a slow phone the second press arrives after the first has spent the
+    // link and tied the reset to this browser; that is not an invalid link.
+    mocks.claimPasswordRecovery.mockReturnValue(null)
+    mocks.getPasswordRecoveryStatus.mockReturnValue({
+      academyId: "SMBA-PL-0001",
+      requiresSecondFactor: false,
+      secondFactorVerified: false,
+      state: "active",
+    } as never)
+    await expect(openPasswordRecoveryLinkAction(tokenForm("spent")))
+      .rejects.toThrow("NEXT_REDIRECT:/recover/reset")
+    expect(mocks.getPasswordRecoveryStatus).toHaveBeenCalledWith("browser-pass")
+    expect(mocks.cookieSet).not.toHaveBeenCalled()
+
+    mocks.getAuthenticatorRecoveryStatus.mockReturnValue({ state: "verified" } as never)
+    await expect(openAuthenticatorRecoveryLinkAction(tokenForm("spent")))
+      .rejects.toThrow("NEXT_REDIRECT:/auth/two-factor/recovery?verified=1")
+    mocks.getAuthenticatorRecoveryStatus.mockReturnValue({ state: "missing" } as never)
+    await expect(openAuthenticatorRecoveryLinkAction(tokenForm("spent")))
+      .rejects.toThrow("NEXT_REDIRECT:/auth/two-factor/recovery?error=invalid")
   })
 
   it("opens an authenticator link only as an authenticator link", async () => {

@@ -88,7 +88,7 @@ const INVALID_CODE_MESSAGE = "That code is invalid or expired."
  * family waiting a few minutes and a family deciding the code is broken.
  */
 const CODE_CHECKS_PAUSED_MESSAGE =
-  "Too many codes were tried from this connection. Wait a few minutes, then enter the same code again."
+  "Too many codes were tried from this connection. Wait 15 minutes, then ask for a new code: this one will have expired by then."
 
 function registrationValuesFrom(formData: FormData): RegistrationValues {
   return {

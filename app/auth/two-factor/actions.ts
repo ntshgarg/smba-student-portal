@@ -90,14 +90,20 @@ function isTooManyRequests(error: unknown) {
 }
 
 /*
- * The coach has just proved they hold an authenticator, so a reset request
- * still waiting for the owner can only do harm now: approving it would wipe
- * the authenticator they hold and sign them out everywhere. Withdrawn here.
+ * The coach has just connected a new authenticator, so a reset request still
+ * waiting for the owner can only do harm now: approving it would wipe the
+ * authenticator they just set up and sign them out everywhere. Withdrawn here.
  * Never allowed to change what the person sees.
+ *
+ * Signing in with a code does not withdraw it. The code may come from the very
+ * phone, or the printed recovery codes, the request is about -- in a stolen
+ * bag -- and the owner's approval is then the coach's only way to shut that
+ * person out. A coach who simply found the phone cancels the request from
+ * Account security.
  */
 function withdrawStaleResetRequest(
   accountId: string,
-  reason: "authenticator_connected" | "signed_in_with_authenticator",
+  reason: "authenticator_connected",
 ) {
   try {
     withdrawPendingAuthenticatorResetRequests(accountId, { reason })
@@ -524,7 +530,6 @@ export async function verifyTotpSignIn(
     })
     releaseSecondFactorAttempt(response.user.id)
     recordSecondFactorSuccess(requestHeaders, response.user.id, "totp")
-    withdrawStaleResetRequest(response.user.id, "signed_in_with_authenticator")
     redirect(destinationForUser(response.user.id))
   } catch (error) {
     // Next.js redirects are intentionally thrown; do not turn a successful
@@ -567,7 +572,6 @@ export async function verifyBackupCodeSignIn(
     // and each one is single-use, so any use at all is worth an alert: it is
     // either the owner who lost their phone or someone who found the codes.
     recordSecondFactorSuccess(requestHeaders, response.user.id, "backup_code")
-    withdrawStaleResetRequest(response.user.id, "signed_in_with_authenticator")
     redirect(destinationForUser(response.user.id))
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error

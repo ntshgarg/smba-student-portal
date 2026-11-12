@@ -5,7 +5,7 @@ import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 
 
 import { createOTP } from "@better-auth/utils/otp"
 import { hashPassword, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto"
-import { and, desc, eq, gt, isNull, lte, ne, sql } from "drizzle-orm"
+import { and, desc, eq, gt, isNull, lt, lte, ne, sql } from "drizzle-orm"
 
 import { normalizeAcademyId } from "@/lib/auth/identity"
 import { authEmailRequired, createAuthMailer, type AuthMailer } from "@/lib/auth/mailer"
@@ -557,9 +557,12 @@ function retireRecoveryWorkForOldAddress(
       eq(authEmailChallenges.purpose, "password_reset"),
       isNull(authEmailChallenges.consumedAt),
     )).run()
+  // Withdrawn by the account itself, not "expired": the coach made this change
+  // and is not to be told later that the request ran out unanswered.
   database.update(authAuthenticatorResetRequests).set({
     resolvedAt: now,
-    status: "expired",
+    resolvedByAccountId: accountId,
+    status: "rejected",
     updatedAt: now,
   }).where(and(
     eq(authAuthenticatorResetRequests.accountId, accountId),
@@ -799,7 +802,9 @@ export async function requestRegistrationVerification(input: {
       eq(authEmailChallenges.subjectHash, hashedSubject),
       eq(authEmailChallenges.purpose, "verify_email"),
       isNull(authEmailChallenges.consumedAt),
-      ne(authEmailChallenges.id, challengeId),
+      // Only codes asked for before this one: two overlapping requests used to
+      // retire each other, leaving neither emailed code usable.
+      lt(authEmailChallenges.createdAt, now),
     )).run()
   return { email }
 }
@@ -1100,7 +1105,10 @@ export async function requestPasswordRecovery(input: {
       eq(authEmailChallenges.purpose, "password_reset"),
       isNull(authEmailChallenges.consumedAt),
       isNull(authEmailChallenges.claimedAt),
-      ne(authEmailChallenges.id, challengeId),
+      // Only links asked for before this one. Retiring every other link let
+      // two overlapping requests (a double tap, two tabs) retire each other,
+      // and both emailed links were dead; now the later one always survives.
+      lt(authEmailChallenges.createdAt, now),
     )).run()
   writeAuthSecurityEvent({
     accountId: account.accountId,
@@ -1184,6 +1192,7 @@ export const APPROVED_RESET_PASSWORD_WINDOW_MS = AUTHENTICATOR_RESET_REQUEST_LIF
 
 function recentlyApprovedAuthenticatorReset(
   accountId: string,
+  email: string,
   database: SmbaDatabaseExecutor,
   now: Date,
 ) {
@@ -1192,6 +1201,9 @@ function recentlyApprovedAuthenticatorReset(
     .where(and(
       eq(authAuthenticatorResetRequests.accountId, accountId),
       eq(authAuthenticatorResetRequests.status, "approved"),
+      // Only for the inbox the owner approved. A recovery address changed
+      // since then has not been vouched for by anybody.
+      eq(authAuthenticatorResetRequests.recoveryEmail, email),
       gt(authAuthenticatorResetRequests.resolvedAt, new Date(now.getTime() - APPROVED_RESET_PASSWORD_WINDOW_MS)),
     ))
     .get())
@@ -1206,14 +1218,17 @@ function recentlyApprovedAuthenticatorReset(
  * was nothing to show at all, so a head coach who lost the phone and also
  * forgot the password was stuck even after the owner approved the reset --
  * the very approval that already accepted "this inbox plus the owner's yes" as
- * enough to remove the authenticator. For a day after that approval, the same
- * proof is enough to set a new password. Outside it there is still no way
+ * enough to remove the authenticator. For a day after that approval, and only
+ * from the inbox that was approved, the same proof is enough to set a new
+ * password. The owner's queue says so beside the Approve button, so the owner
+ * knows that is what they are agreeing to. Outside it there is still no way
  * through by email, and the page says so rather than asking for a code that
  * cannot exist.
  */
 function recoverySecondFactorRule(row: {
   accessLevel: "head_admin" | "junior_coach" | null
   accountId: string | null
+  email: string
   role: "coach" | "platform_admin" | "player" | null
 }, database: SmbaDatabaseExecutor, now: Date): "not_required" | "required" | "unavailable" {
   if (!roleRequiresRecoverySecondFactor(row) || !row.accountId) return "not_required"
@@ -1222,7 +1237,7 @@ function recoverySecondFactorRule(row: {
     .where(eq(authTwoFactors.userId, row.accountId))
     .get()
   if (factor?.verified) return "required"
-  if (row.role === "coach" && recentlyApprovedAuthenticatorReset(row.accountId, database, now)) {
+  if (row.role === "coach" && recentlyApprovedAuthenticatorReset(row.accountId, row.email, database, now)) {
     return "not_required"
   }
   return "unavailable"
@@ -1243,6 +1258,26 @@ export function recoveryLinkIsOpenable(token: string, intent: RecoveryLinkIntent
 } = {}) {
   const challenge = recoveryChallenge(token, intent, database, now)
   return Boolean(challenge && !challenge.claimedAt)
+}
+
+/**
+ * Whether an unopened password link leads to a reset that email alone cannot
+ * finish (a protected account with no authenticator and no recent approval).
+ * The link page says so up front instead of promising a new password and
+ * spending the link on Continue only to say it there.
+ */
+export function passwordRecoveryLinkBlocked(token: string, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  const challenge = recoveryChallenge(token, "password", database, now)
+  if (!challenge || challenge.claimedAt || !challenge.role) return null
+  return recoverySecondFactorRule(challenge, database, now) === "unavailable"
+    ? { academyId: challenge.academyId, owner: challenge.role === "platform_admin" }
+    : null
 }
 
 /**
@@ -1283,7 +1318,7 @@ export function claimPasswordRecovery(token: string, {
 
 export type PasswordRecoveryStatus =
   | { state: "missing" }
-  | { academyId: string; state: "unavailable" }
+  | { academyId: string; owner: boolean; state: "unavailable" }
   | {
     academyId: string
     requiresSecondFactor: boolean
@@ -1301,7 +1336,13 @@ export function getPasswordRecoveryStatus(token: string, {
   const challenge = recoveryChallenge(token, "password", database, now)
   if (!challenge?.claimedAt || !challenge.role) return { state: "missing" }
   const rule = recoverySecondFactorRule(challenge, database, now)
-  if (rule === "unavailable") return { academyId: challenge.academyId, state: "unavailable" }
+  if (rule === "unavailable") {
+    return {
+      academyId: challenge.academyId,
+      owner: challenge.role === "platform_admin",
+      state: "unavailable",
+    }
+  }
   const requiresSecondFactor = rule === "required"
   return {
     academyId: challenge.academyId,

@@ -31,7 +31,7 @@ function resetOutcomeNotice(outcome: AuthenticatorResetOutcome) {
   const on = formatAcademyDate(outcome.at)
   switch (outcome.state) {
     case "pending":
-      return `Your request to reset the authenticator, sent on ${on}, is waiting for the platform admin. Until it is approved, your current authenticator and recovery codes still work here.`
+      return `Your request to reset the authenticator, sent on ${on}, is waiting for the platform admin. Until it is approved, your current authenticator and recovery codes still work here. Signing in does not cancel it; if you have your authenticator back, cancel it from Account security.`
     case "declined":
       return `The platform admin did not approve your authenticator reset request on ${on}. If you still cannot sign in, speak to them or send a new request below.`
     case "lapsed":

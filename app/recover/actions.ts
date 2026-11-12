@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import {
   claimPasswordRecovery,
   completePasswordRecovery,
+  getPasswordRecoveryStatus,
   PASSWORD_RECOVERY_LIFETIME_MS,
   passwordRecoveryCodeChecksPaused,
   RECOVERY_SESSION_COOKIE,
@@ -57,8 +58,13 @@ export async function requestPasswordRecoveryAction(
 export async function openPasswordRecoveryLinkAction(formData: FormData) {
   const token = String(formData.get("token") ?? "")
   const pass = claimPasswordRecovery(token)
-  if (!pass) redirect("/recover?error=invalid")
   const cookieStore = await cookies()
+  if (!pass) {
+    // A second tap whose first already tied the reset to this browser.
+    const held = cookieStore.get(RECOVERY_SESSION_COOKIE)?.value
+    if (held && getPasswordRecoveryStatus(held).state !== "missing") redirect("/recover/reset")
+    redirect("/recover?error=invalid")
+  }
   cookieStore.set(RECOVERY_SESSION_COOKIE, pass, {
     httpOnly: true,
     maxAge: PASSWORD_RECOVERY_LIFETIME_MS / 1_000,

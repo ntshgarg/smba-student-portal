@@ -1,10 +1,14 @@
 import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
 
 import { openPasswordRecoveryLinkAction } from "@/app/recover/actions"
-import { recoveryLinkIsOpenable } from "@/lib/auth/recovery-service"
+import { RecoveryLinkContinueButton } from "@/components/recovery-link-continue-button"
+import { protectedResetUnavailableCopy } from "@/lib/auth/recovery-copy"
+import {
+  passwordRecoveryLinkBlocked,
+  recoveryLinkIsOpenable,
+} from "@/lib/auth/recovery-service"
 import { publicSiteUrl } from "@/lib/config"
 
 export const metadata: Metadata = {
@@ -26,7 +30,10 @@ export default async function RecoveryLinkPage({
   searchParams: Promise<{ token?: string }>
 }) {
   const token = (await searchParams).token ?? ""
-  const openable = recoveryLinkIsOpenable(token, "password")
+  const blocked = passwordRecoveryLinkBlocked(token)
+  // A reset email alone cannot finish is said here, before Continue spends
+  // the link on a promise of a new password.
+  const openable = !blocked && recoveryLinkIsOpenable(token, "password")
   return (
     <main className="login-page">
       <section className="login-card" aria-labelledby="recovery-link-title">
@@ -37,21 +44,22 @@ export default async function RecoveryLinkPage({
         <div className="login-copy activation-copy">
           <p className="eyebrow">Account recovery</p>
           <h1 id="recovery-link-title">
-            {openable ? "Reset your password." : "This reset link has been used or has expired."}
+            {blocked
+              ? "This reset needs the platform admin."
+              : openable ? "Reset your password." : "This reset link has been used or has expired."}
           </h1>
-          <p>{openable
-            ? "Continue in this browser to choose a new password. The link works once, so finish here."
-            : "If you already pressed Continue in another browser, finish there. Otherwise request a new email."}</p>
+          <p>{blocked
+            ? protectedResetUnavailableCopy(blocked.academyId, blocked.owner)
+            : openable
+              ? "Continue in this browser to choose a new password. The link works once, so finish here."
+              : "If you already pressed Continue in another browser, finish there. Otherwise request a new email."}</p>
         </div>
         {openable ? (
           <form className="login-form" action={openPasswordRecoveryLinkAction}>
             <input type="hidden" name="token" value={token} />
-            <button className="login-submit" type="submit">
-              <span>Continue</span>
-              <ArrowRight aria-hidden="true" />
-            </button>
+            <RecoveryLinkContinueButton />
           </form>
-        ) : (
+        ) : blocked ? null : (
           <div className="login-empty-state"><Link href="/recover">Request another link</Link></div>
         )}
         <Link className="login-back" href="/login">← Back to login</Link>

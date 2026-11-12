@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MailCheck, ShieldCheck } from "lucide-react"
 
 import {
@@ -35,6 +35,21 @@ export function RecoveryEmailSecurityPanel({
    * "Use a different address" starts a fresh attempt by remounting the pair.
    */
   const [attempt, setAttempt] = useState(0)
+  // The address from the attempt being redone, so a typo is fixed, not retyped.
+  const [previousEmail, setPreviousEmail] = useState("")
+
+  /*
+   * The "changed" notice belongs to this one visit. The marker comes off the
+   * address straight away, so a reload or a bookmark a week later does not
+   * announce a change again (and a shared link cannot show it either).
+   */
+  useEffect(() => {
+    if (!changed) return
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has("emailChanged")) return
+    url.searchParams.delete("emailChanged")
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+  }, [changed])
 
   return (
     <section className="security-panel" aria-labelledby="recovery-email-security-title">
@@ -53,7 +68,11 @@ export function RecoveryEmailSecurityPanel({
       ) : null}
       <RecoveryEmailChangeForms
         key={attempt}
-        onStartOver={() => setAttempt((value) => value + 1)}
+        initialEmail={previousEmail}
+        onStartOver={(email) => {
+          setPreviousEmail(email)
+          setAttempt((value) => value + 1)
+        }}
         requiresSecondFactor={requiresSecondFactor}
       />
     </section>
@@ -61,10 +80,12 @@ export function RecoveryEmailSecurityPanel({
 }
 
 function RecoveryEmailChangeForms({
+  initialEmail,
   onStartOver,
   requiresSecondFactor,
 }: {
-  onStartOver: () => void
+  initialEmail: string
+  onStartOver: (email: string) => void
   requiresSecondFactor: boolean
 }) {
   const [requestState, requestAction, requesting] = useResilientActionState(
@@ -113,7 +134,7 @@ function RecoveryEmailChangeForms({
         }}
       >
         <input type="hidden" name="email" value={email} />
-        <p role="status">We sent a six-digit code to <strong>{email}</strong>. If that address is wrong, use a different address below.</p>
+        <p role="status">We sent a six-digit code to <strong>{email}</strong>. If that address is wrong, use a different address below. A new code can be sent one minute after this one.</p>
         <label>
           <span>Verification code <span className="security-required-marker" aria-hidden="true">*</span></span>
           <input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required aria-invalid={confirmValidationTarget === "code" ? true : undefined} />
@@ -125,7 +146,7 @@ function RecoveryEmailChangeForms({
           className="security-secondary-action"
           type="button"
           disabled={confirming}
-          onClick={onStartOver}
+          onClick={() => onStartOver(email)}
         >
           Use a different address
         </button>
@@ -156,7 +177,7 @@ function RecoveryEmailChangeForms({
     >
       <label>
         <span>New recovery email <span className="security-required-marker" aria-hidden="true">*</span></span>
-        <input name="email" type="email" autoComplete="email" maxLength={254} required defaultValue={requestState.email} aria-invalid={requestValidationTarget === "email" ? true : undefined} />
+        <input name="email" type="email" autoComplete="email" maxLength={254} required defaultValue={requestState.email || initialEmail} aria-invalid={requestValidationTarget === "email" ? true : undefined} />
       </label>
       <div className="security-password-field">
         <label htmlFor="recovery-email-current-password">

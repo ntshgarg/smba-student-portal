@@ -11,6 +11,7 @@ import {
   getPasswordRecoveryStatus,
   RECOVERY_SESSION_COOKIE,
 } from "@/lib/auth/recovery-service"
+import { protectedResetUnavailableCopy } from "@/lib/auth/recovery-copy"
 import { publicSiteUrl } from "@/lib/config"
 
 export const metadata: Metadata = {
@@ -42,15 +43,28 @@ export default async function RecoveryResetPage() {
           <p>{status.state === "missing"
             ? "Request a new email from the recovery page."
             : status.state === "unavailable"
-              ? `${status.academyId} is a protected account with no authenticator connected, so its password cannot be reset by email alone. Speak to the platform admin.`
+              ? protectedResetUnavailableCopy(status.academyId, status.owner)
               : status.requiresSecondFactor && !status.secondFactorVerified
                 ? "This protected account also requires its existing authenticator."
                 : `Resetting ${status.academyId} will log out every device and remove its old PIN.`}</p>
         </div>
         {status.state === "missing" || status.state === "unavailable" ? (
-          <div className="login-empty-state"><Link href="/recover">Request another link</Link></div>
+          <div className="login-empty-state"><Link href="/login">Back to sign-in</Link></div>
         ) : status.requiresSecondFactor && !status.secondFactorVerified
-          ? <RecoverySecondFactorForm />
+          ? (
+            <>
+              <RecoverySecondFactorForm />
+              {/*
+               * A head coach who lost the phone as well as the password has
+               * one way through, and it starts on another page.
+               */}
+              <p className="login-helper">
+                Lost your authenticator and every recovery code?{" "}
+                <Link href="/auth/two-factor/recovery">Ask the platform admin to reset the authenticator</Link>.
+                Once they approve, use “Forgot password?” again within 24 hours and no code will be asked for.
+              </p>
+            </>
+          )
           : <RecoveryPasswordForm />}
         <Link className="login-back" href="/login">← Back to login</Link>
       </section>

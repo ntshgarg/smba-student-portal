@@ -578,9 +578,23 @@ export async function verifyCurrentPassword(input: {
 
 export type CurrentPasswordAttemptResult = "blocked" | "invalid" | "verified"
 
+async function verifyCurrentPin(accountId: string, pin: string, database: SmbaDatabaseExecutor) {
+  const stored = database.select({ pinHash: authPinCredentials.pinHash })
+    .from(authPinCredentials)
+    .where(eq(authPinCredentials.accountId, accountId))
+    .get()?.pinHash
+  return Boolean(stored && await verifyPassword({ hash: stored, password: pin }))
+}
+
+/**
+ * `allowPin`: also accept the account's six-digit PIN. A password is never six
+ * digits (MIN_PASSWORD_LENGTH), so the two cannot be confused, and a PIN guess
+ * spends the tighter PIN budget exactly as PIN sign-in does.
+ */
 export async function verifyCurrentPasswordAttempt(input: {
   accountId: string
   academyId: string
+  allowPin?: boolean
   ipHash: string
   operation: string
   password: string
@@ -593,7 +607,11 @@ export async function verifyCurrentPasswordAttempt(input: {
   now?: Date
 } = {}): Promise<CurrentPasswordAttemptResult> {
   const subjectHash = authSubjectHash(normalizeAcademyId(input.academyId))
-  const attempt = { ipHash: input.ipHash, subjectHash }
+  const asPin = Boolean(input.allowPin) && validatePin(input.password) === null
+  const factorName = asPin ? "current_pin" : "current_password"
+  const attempt = asPin
+    ? { factor: "pin" as const, ipHash: input.ipHash, subjectHash }
+    : { ipHash: input.ipHash, subjectHash }
   // Reserved before the slow verify, not counted after it, so a burst of
   // parallel guesses cannot all slip in under the ceiling (see reserveLoginAttempt).
   if (!reserveLoginAttempt(attempt, { database, now })) {
@@ -602,24 +620,27 @@ export async function verifyCurrentPasswordAttempt(input: {
       actorAccountId: input.accountId,
       eventType: "login_rate_limited",
       ipHash: input.ipHash,
-      metadata: { factor: "current_password", operation: input.operation },
+      metadata: { factor: factorName, operation: input.operation },
       outcome: "blocked",
       subjectHash,
       userAgent: input.userAgent,
     }, { database, now })
     return "blocked"
   }
-  if (!await verifyCurrentPassword({
-    accountId: input.accountId,
-    password: input.password,
-  }, { database })) {
+  const verified = asPin
+    ? await verifyCurrentPin(input.accountId, input.password, database)
+    : await verifyCurrentPassword({
+      accountId: input.accountId,
+      password: input.password,
+    }, { database })
+  if (!verified) {
     // Already counted by the reservation.
     writeAuthSecurityEvent({
       accountId: input.accountId,
       actorAccountId: input.accountId,
       eventType: "login_failed",
       ipHash: input.ipHash,
-      metadata: { factor: "current_password", operation: input.operation },
+      metadata: { factor: factorName, operation: input.operation },
       outcome: "failure",
       subjectHash,
       userAgent: input.userAgent,
