@@ -76,6 +76,15 @@ export function describeRefusedSave(
     subject: string
   },
 ): RefusedSaveDescription {
+  // A conflict's own sentence asks the coach to refresh. The refresh brings the
+  // marks back only if the device kept them, so when it did not, say so before
+  // they press it.
+  if (result.code === "CONFLICT" && !marksOnDevice()) {
+    return {
+      message: `${result.message} These marks are only on this screen and a refresh`
+        + " will clear them, so note them before you refresh.",
+    }
+  }
   if (result.code !== sessionExpiredCode) return { message: result.message }
 
   const signIn = { href: signInHref, label: "Sign in" }

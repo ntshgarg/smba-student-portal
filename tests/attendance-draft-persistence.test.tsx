@@ -5,6 +5,7 @@ import {
   ATTENDANCE_DRAFT_LIFETIME_MS,
   attendanceDraftStorage,
   discardStaffAttendanceDraft,
+  keepMarkedExpectations,
   parseAttendanceDraft,
   persistPlayerAttendanceDraft,
   persistStaffAttendanceDraft,
@@ -245,6 +246,22 @@ describe("attendance draft storage failure modes", () => {
     expect(readPlayerAttendanceDraft("occurrence-1", { now: markedAt, storage })).toEqual([])
   })
 
+  // The registers word their leave prompt from this: "kept on this device" is
+  // only said when the device really kept the marks.
+  it("reports whether the device kept the draft", () => {
+    expect(persistPlayerAttendanceDraft("occurrence-1", playerMarks, {
+      now: markedAt,
+      storage: fakeStorage().storage,
+    })).toBe(true)
+    expect(persistPlayerAttendanceDraft("occurrence-1", playerMarks, {
+      now: markedAt,
+      storage: fakeStorage({}, () => true).storage,
+    })).toBe(false)
+    expect(persistStaffAttendanceDraft("2026-08-21", [
+      { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "cleared" },
+    ], { now: markedAt, storage: null })).toBe(false)
+  })
+
   it("clears expired drafts and retries once when the quota is exhausted", () => {
     const stale = playerAttendanceDraftKey("occurrence-old")
     const { entries, storage, writeAttempts } = fakeStorage(
@@ -322,6 +339,9 @@ const { mountEffects, recorderFixture, stateUpdates } = vi.hoisted(() => ({
     // rebased onto. Mutable so a test can put the occurrence's cells where the
     // days between marking and restoring would have left them.
     attendanceRecords: {} as Record<string, Record<string, "absent" | "present">>,
+    // Active make-ups; one whose missed session is this occurrence turns that
+    // player's row into a "Rescheduled" link with no buttons to mark.
+    attendanceAdjustments: [] as Array<Record<string, unknown>>,
     occurrence: {
       durationMinutes: 90,
       eligibilityDate: "2026-08-21",
@@ -383,15 +403,33 @@ vi.mock("@/components/unsaved-work-guard", () => ({
   }),
 }))
 
+/*
+ * A restore only brings back marks the register can show, so the players the
+ * drafts below name are on the session's roster: approved, joined before it,
+ * and assigned to its series on its weekday.
+ */
+const rosterPlayerIds = ["player-1", "player-2"]
+const rosterPlayers = rosterPlayerIds.map((id) => ({
+  member: { fullName: `Player ${id}`, id, trainingStartOn: "2026-08-01" },
+}))
+const rosterAssignments = rosterPlayerIds.map((playerId) => ({
+  effectiveFrom: "2026-08-01",
+  effectiveTo: null,
+  id: `assignment-${playerId}`,
+  playerId,
+  seriesId: "series-1",
+  weekdays: [new Date("2026-08-21T00:00:00.000Z").getUTCDay()],
+}))
+
 vi.mock("@/components/coach/coach-portal-provider", () => ({
   useAttendancePortal: () => ({
-    attendanceAdjustments: [],
+    attendanceAdjustments: recorderFixture.attendanceAdjustments,
     attendanceRecords: recorderFixture.attendanceRecords,
     saveAttendanceRegister: vi.fn(),
   }),
-  useMemberPortal: () => ({ players: [] }),
+  useMemberPortal: () => ({ players: rosterPlayers }),
   useSessionPortal: () => ({
-    sessionAssignments: [],
+    sessionAssignments: rosterAssignments,
     sessionOccurrences: [recorderFixture.occurrence],
     sessionSeries: [recorderFixture.series],
   }),
@@ -464,6 +502,7 @@ describe("attendance registers restore their own drafts", () => {
   afterEach(() => {
     mountEffects.length = 0
     recorderFixture.attendanceRecords = {}
+    recorderFixture.attendanceAdjustments = []
     vi.unstubAllGlobals()
   })
 
@@ -628,5 +667,74 @@ describe("attendance registers restore their own drafts", () => {
       { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "present" },
     ])
     expect(reopened.notice).toBe(movedStaffNotice)
+  })
+
+  /*
+   * A draft can name players the register no longer lets the coach mark: one
+   * since moved off the session, and one whose absence here has since been made
+   * up -- that row shows "Rescheduled" and no buttons. Restored, such a mark is
+   * invisible and cannot be undone, and the server refuses the whole save
+   * because of it.
+   */
+  it("leaves out restored marks the register cannot show, and says so", () => {
+    const { storage } = fakeStorage()
+    persistPlayerAttendanceDraft("occurrence-1", [
+      { choice: "present", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
+      { choice: "present", expectedChoice: "absent", occurrenceId: "occurrence-1", playerId: "player-2" },
+      { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-left" },
+    ], { now: markedFourDaysAgo(), storage })
+    recorderFixture.attendanceRecords = { "occurrence-1": { "player-2": "absent" } }
+    recorderFixture.attendanceAdjustments = [{
+      completionOccurrenceId: "occurrence-later",
+      id: "adjustment-1",
+      playerId: "player-2",
+      sourceOccurrenceId: "occurrence-1",
+      voidedAt: null,
+    }]
+
+    const restore = mountRecorder(storage)
+
+    expect(restore.marks).toEqual([
+      { choice: "present", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
+    ])
+    expect(restore.notice).toBe(
+      "1 unsaved change restored from an earlier visit."
+      + " 2 marks were left out because those players can no longer be marked here."
+      + " Nothing is recorded until you save attendance",
+    )
+  })
+
+  it("drops a stored draft made only of marks the register cannot show", () => {
+    const { entries, storage } = fakeStorage()
+    persistPlayerAttendanceDraft("occurrence-1", [
+      { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-left" },
+    ], { now: markedFourDaysAgo(), storage })
+
+    const restore = mountRecorder(storage)
+
+    expect(restore.marks).toEqual([])
+    expect(restore.notice).toBeUndefined()
+    expect(entries.has(playerAttendanceDraftKey("occurrence-1"))).toBe(false)
+  })
+})
+
+describe("writing a restored draft back", () => {
+  // The coach's next tap persists the whole register. Restored marks they have
+  // not touched keep the expectation they were marked against, so the next
+  // visit can still warn that the register moved underneath them.
+  it("keeps the marked-against expectation on restored marks the coach has not re-tapped", () => {
+    const rebased: SessionAttendanceChange[] = [
+      { choice: "absent", expectedChoice: "present", occurrenceId: "occurrence-1", playerId: "player-1" },
+      { choice: "present", expectedChoice: "absent", occurrenceId: "occurrence-1", playerId: "player-2" },
+    ]
+
+    expect(keepMarkedExpectations(
+      rebased,
+      (change) => change.playerId,
+      new Map([["player-1", "cleared" as const]]),
+    )).toEqual([
+      { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
+      { choice: "present", expectedChoice: "absent", occurrenceId: "occurrence-1", playerId: "player-2" },
+    ])
   })
 })

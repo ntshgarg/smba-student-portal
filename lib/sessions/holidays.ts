@@ -318,12 +318,31 @@ export function markAcademyHolidays({
      * Rather than silently revoking it -- the player may well have trained --
      * put it in front of the coach on the adjustments screen.
      */
-    const affectedAdjustmentIds = tx.select({ id: attendanceAdjustments.id })
+    const completedOnClosedDate = tx.select({ id: attendanceAdjustments.id })
       .from(attendanceAdjustments).where(and(
         inArray(attendanceAdjustments.completedOn, openDates),
         isNull(attendanceAdjustments.voidedAt),
         isNull(attendanceAdjustments.reviewRequiredAt),
       )).all().map((adjustment) => adjustment.id)
+    /*
+     * The other end of a make-up: the missed session itself was on a day now
+     * closed, so the absence it makes up for may no longer matter. Flagged the
+     * same way rather than voided, so the coach decides.
+     */
+    const missedOnClosedDate = tx.select({ id: attendanceAdjustments.id })
+      .from(attendanceAdjustments)
+      .innerJoin(
+        sessionOccurrences,
+        eq(sessionOccurrences.id, attendanceAdjustments.sourceOccurrenceId),
+      ).where(and(
+        inArray(sessionOccurrences.occurrenceDate, openDates),
+        isNull(attendanceAdjustments.voidedAt),
+        isNull(attendanceAdjustments.reviewRequiredAt),
+      )).all().map((adjustment) => adjustment.id)
+    const affectedAdjustmentIds = [...new Set([
+      ...completedOnClosedDate,
+      ...missedOnClosedDate,
+    ])]
     const adjustmentsFlaggedForReview = affectedAdjustmentIds.length
       ? tx.update(attendanceAdjustments).set({ reviewRequiredAt: now })
         .where(inArray(attendanceAdjustments.id, affectedAdjustmentIds)).run().changes

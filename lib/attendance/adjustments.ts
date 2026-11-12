@@ -52,6 +52,8 @@ export type VoidAttendanceAdjustmentInput = DatabaseOption & {
   now?: Date
 }
 
+export type KeepAttendanceAdjustmentInput = VoidAttendanceAdjustmentInput
+
 export type ReconcileAttendanceAdjustmentReviewInput = {
   database: SmbaDatabase
   playerId: string
@@ -277,17 +279,65 @@ function activeAdjustmentForCompletion(
   )).get()
 }
 
-function activeLegacyAdjustmentForCompletionDate(
+/*
+ * Make-ups recorded before `completion_occurrence_id` existed name a date, not a
+ * session, so each one stands for "one of the sessions the player attended that
+ * day". Blocking the whole date whenever one exists stopped a player who trained
+ * twice that day from using the second session at all. A date is full only
+ * when every Present the player has on it is already spoken for -- by a dated
+ * make-up or by one linked to an exact session.
+ */
+function legacyMakeupsFillCompletionDate(
   database: SmbaDatabaseExecutor,
   playerId: string,
   completedOn: string,
 ) {
-  return database.select().from(attendanceAdjustments).where(and(
+  const sameDay = database.select({
+    completionOccurrenceId: attendanceAdjustments.completionOccurrenceId,
+  }).from(attendanceAdjustments).where(and(
     eq(attendanceAdjustments.playerId, playerId),
     eq(attendanceAdjustments.completedOn, completedOn),
-    isNull(attendanceAdjustments.completionOccurrenceId),
     isNull(attendanceAdjustments.voidedAt),
-  )).get()
+  )).all()
+  const legacyCount = sameDay.filter((item) => !item.completionOccurrenceId).length
+  if (!legacyCount) return false
+  const linkedCount = sameDay.length - legacyCount
+  const presentSessions = database.select({ id: sessionAttendanceRecords.id })
+    .from(sessionAttendanceRecords)
+    .innerJoin(
+      sessionOccurrences,
+      eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
+    ).where(and(
+      eq(sessionAttendanceRecords.accountId, playerId),
+      eq(sessionAttendanceRecords.choice, "present"),
+      eq(sessionOccurrences.occurrenceDate, completedOn),
+      eq(sessionOccurrences.status, "scheduled"),
+    )).all().length
+  return presentSessions - linkedCount - legacyCount < 1
+}
+
+function playerHasPresenceForAdjustment(
+  database: SmbaDatabaseExecutor,
+  adjustment: AttendanceAdjustmentRecord,
+) {
+  if (adjustment.completionOccurrenceId) {
+    return Boolean(database.select({ id: sessionAttendanceRecords.id })
+      .from(sessionAttendanceRecords).where(and(
+        eq(sessionAttendanceRecords.accountId, adjustment.playerId),
+        eq(sessionAttendanceRecords.occurrenceId, adjustment.completionOccurrenceId),
+        eq(sessionAttendanceRecords.choice, "present"),
+      )).get())
+  }
+  return Boolean(database.select({ id: sessionAttendanceRecords.id })
+    .from(sessionAttendanceRecords)
+    .innerJoin(
+      sessionOccurrences,
+      eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
+    ).where(and(
+      eq(sessionAttendanceRecords.accountId, adjustment.playerId),
+      eq(sessionAttendanceRecords.choice, "present"),
+      eq(sessionOccurrences.occurrenceDate, adjustment.completedOn),
+    )).get())
 }
 
 function publishConflict(
@@ -366,6 +416,17 @@ export function publishMakeupAttendanceAdjustment({
       }
       assertApprovedPlayer(tx, playerId)
 
+      // A Present that proved one make-up and was later changed to Absent leaves
+      // that make-up in review; the same session must not then also be offered
+      // up as a fresh absence to make up.
+      if (activeAdjustmentForCompletion(tx, playerId, sourceOccurrenceId)) {
+        operationalActionError(
+          "BUSINESS_RULE",
+          "This session is where the player made up another missed session, so it cannot also be the missed session.",
+          "sourceOccurrenceId",
+        )
+      }
+
       const source = assertSourceIsEligibleAbsence({
         database: tx,
         now,
@@ -402,10 +463,10 @@ export function publishMakeupAttendanceAdjustment({
         )
       }
 
-      if (activeLegacyAdjustmentForCompletionDate(tx, playerId, completedOn)) {
+      if (legacyMakeupsFillCompletionDate(tx, playerId, completedOn)) {
         operationalActionError(
           "CONFLICT",
-          "This training date is linked to a legacy adjustment that requires review. Void it before using this session.",
+          "An older make-up already uses this player's attendance on this date. Void it before using this session.",
           "completionOccurrenceId",
         )
       }
@@ -475,14 +536,66 @@ export function voidAttendanceAdjustment({
       )
     }
 
+    // `reviewRequiredAt` is left as it was: a voided make-up is never shown as
+    // needing review, and keeping the stamp records that it was in review when
+    // the coach voided it.
     return tx.update(attendanceAdjustments).set({
-      reviewRequiredAt: null,
       voidedByAccountId: coachId,
       voidedAt: now,
     }).where(and(
       eq(attendanceAdjustments.id, adjustment.id),
       isNull(attendanceAdjustments.voidedAt),
     )).returning().get()
+  }, { behavior: "immediate" })
+}
+
+/**
+ * The way out of "Requires review" that keeps the player's credit. Until now a
+ * flagged make-up could only be voided -- restoring the absence -- or cleared
+ * as a side effect of re-saving a mark, and a holiday declared on the completed
+ * date left no mark that could be re-saved, so the flag stayed for good.
+ *
+ * Keeping still needs the evidence a make-up rests on: a saved Present on the
+ * session it was completed at (any Present that day for an older, date-only
+ * make-up). Without it the coach is told to restore that mark or void.
+ */
+export function keepAttendanceAdjustment({
+  adjustmentId,
+  coachId,
+  database = initializeDatabase(),
+}: KeepAttendanceAdjustmentInput): AttendanceAdjustmentRecord {
+  assertApprovedCoach(database, coachId)
+  return database.transaction((tx) => {
+    const adjustment = tx.select().from(attendanceAdjustments)
+      .where(eq(attendanceAdjustments.id, adjustmentId)).get()
+    if (!adjustment) {
+      operationalActionError(
+        "NOT_FOUND",
+        "The active attendance adjustment was not found.",
+        "adjustmentId",
+      )
+    }
+    if (adjustment.voidedAt) {
+      operationalActionError(
+        "CONFLICT",
+        "This make-up has already been voided.",
+        "adjustmentId",
+      )
+    }
+    if (!adjustment.reviewRequiredAt) return adjustment
+    if (!playerHasPresenceForAdjustment(tx, adjustment)) {
+      operationalActionError(
+        "BUSINESS_RULE",
+        "The player is no longer marked Present at the session this make-up was completed at. Mark them Present there again, or void the make-up.",
+        "adjustmentId",
+      )
+    }
+
+    return tx.update(attendanceAdjustments).set({ reviewRequiredAt: null })
+      .where(and(
+        eq(attendanceAdjustments.id, adjustment.id),
+        isNull(attendanceAdjustments.voidedAt),
+      )).returning().get()
   }, { behavior: "immediate" })
 }
 
@@ -495,14 +608,23 @@ export function voidAttendanceAdjustment({
  * -- measured 10 statements for a one-player save and 21 for twelve -- and a
  * player who did have one cost three.
  *
- * Nothing about the review rule moves. Each adjustment is still judged only by
- * whether its own completion session holds a saved Present -- for the legacy
- * rows that predate `completion_occurrence_id`, by any Present on the completed
+ * Each adjustment is judged only by whether its own completion session still
+ * took place and holds a saved Present -- for the legacy rows that predate
+ * `completion_occurrence_id`, by any Present on a session still running that
  * date -- and `lostFinalPresence` is still read per (player, date), never
  * shared across pairs. Reads may be hoisted above the writes because the only
  * column written, `reviewRequiredAt`, appears in no predicate here, and because
  * an adjustment row belongs to exactly one (playerId, completedOn) pair, so no
  * pair can see another pair's update.
+ *
+ * A make-up whose completion session has since been cancelled -- a holiday
+ * declared on that day -- is left exactly as it is. The holiday put it in
+ * review and only the coach can say whether the player trained: a Present
+ * still sitting on the cancelled session must not quietly clear that, and a
+ * coach's "Keep" must not be undone by an unrelated save on the same date.
+ *
+ * A make-up already in review keeps the time it was first flagged rather than
+ * being re-stamped by every later save.
  */
 export function reconcileAttendanceAdjustmentReviewStates({
   database,
@@ -535,23 +657,34 @@ export function reconcileAttendanceAdjustmentReviewStates({
   ))
   if (!active.length) return 0
 
-  // Two players can complete the same make-up session, so this is a set.
+  // Two players can complete the same make-up session, so this is a set. One
+  // statement answers both questions asked of each completion session: whether
+  // it still took place, and which of these players hold a Present on it.
   const completionOccurrenceIds = [...new Set(
     active.map((adjustment) => adjustment.completionOccurrenceId)
       .filter((occurrenceId): occurrenceId is string => Boolean(occurrenceId)),
   )]
-  const presenceByPlayerCompletion = new Set(
-    completionOccurrenceIds.length
-      ? database.select({
-        accountId: sessionAttendanceRecords.accountId,
-        occurrenceId: sessionAttendanceRecords.occurrenceId,
-      }).from(sessionAttendanceRecords).where(and(
-        inArray(sessionAttendanceRecords.accountId, playerIds),
-        inArray(sessionAttendanceRecords.occurrenceId, completionOccurrenceIds),
+  const completionRows = completionOccurrenceIds.length
+    ? database.select({
+      accountId: sessionAttendanceRecords.accountId,
+      occurrenceId: sessionOccurrences.id,
+      status: sessionOccurrences.status,
+    }).from(sessionOccurrences)
+      .leftJoin(sessionAttendanceRecords, and(
+        eq(sessionAttendanceRecords.occurrenceId, sessionOccurrences.id),
         eq(sessionAttendanceRecords.choice, "present"),
-      )).all().map((row) => pairKey(row.accountId, row.occurrenceId))
-      : [],
-  )
+        inArray(sessionAttendanceRecords.accountId, playerIds),
+      ))
+      .where(inArray(sessionOccurrences.id, completionOccurrenceIds)).all()
+    : []
+  const cancelledCompletionIds = new Set(completionRows
+    .filter((row) => row.status !== "scheduled")
+    .map((row) => row.occurrenceId))
+  const presenceByPlayerCompletion = new Set(completionRows.flatMap((row) => (
+    row.status === "scheduled" && row.accountId
+      ? [pairKey(row.accountId, row.occurrenceId)]
+      : []
+  )))
 
   const legacyCompletedOnDates = [...new Set(
     active.filter((adjustment) => !adjustment.completionOccurrenceId)
@@ -569,6 +702,7 @@ export function reconcileAttendanceAdjustmentReviewStates({
         ).where(and(
           inArray(sessionAttendanceRecords.accountId, playerIds),
           eq(sessionAttendanceRecords.choice, "present"),
+          eq(sessionOccurrences.status, "scheduled"),
           inArray(sessionOccurrences.occurrenceDate, legacyCompletedOnDates),
         )).all().map((row) => pairKey(row.accountId, row.occurrenceDate))
       : [],
@@ -577,16 +711,19 @@ export function reconcileAttendanceAdjustmentReviewStates({
   const clearedIds: string[] = []
   const reviewRequiredIds: string[] = []
   active.forEach((adjustment) => {
+    if (adjustment.completionOccurrenceId
+      && cancelledCompletionIds.has(adjustment.completionOccurrenceId)) return
     const hasOrdinaryPresence = adjustment.completionOccurrenceId
       ? presenceByPlayerCompletion.has(
         pairKey(adjustment.playerId, adjustment.completionOccurrenceId),
       )
       : presenceByPlayerDate.has(pairKey(adjustment.playerId, adjustment.completedOn))
     if (hasOrdinaryPresence) {
-      clearedIds.push(adjustment.id)
+      if (adjustment.reviewRequiredAt) clearedIds.push(adjustment.id)
       return
     }
-    if (lostFinalPresenceByPair.get(pairKey(adjustment.playerId, adjustment.completedOn))) {
+    if (lostFinalPresenceByPair.get(pairKey(adjustment.playerId, adjustment.completedOn))
+      && !adjustment.reviewRequiredAt) {
       reviewRequiredIds.push(adjustment.id)
     }
   })

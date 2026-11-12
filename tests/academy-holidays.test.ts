@@ -315,6 +315,21 @@ describe("make-up sessions completed on a day that becomes a holiday", () => {
       .where(eq(schema.attendanceAdjustments.id, adjustmentId)).get()?.reviewRequiredAt)
       .toBeInstanceOf(Date)
   })
+
+  /*
+   * The other end: the missed session's own day is closed, so the absence the
+   * make-up answers may no longer need answering. Left active and unflagged,
+   * the coach was never told.
+   */
+  it("flags them when the missed session's day becomes a holiday", () => {
+    const adjustmentId = addMakeUp(NEXT_MONDAY)
+    const result = markHoliday([MONDAY])
+
+    expect(result.adjustmentsFlaggedForReview).toBe(1)
+    expect(database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, adjustmentId)).get()?.reviewRequiredAt)
+      .toBeInstanceOf(Date)
+  })
 })
 
 describe("retracting a holiday", () => {

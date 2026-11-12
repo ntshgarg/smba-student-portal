@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 
 import {
+  keepAttendanceAdjustmentAction,
   publishAttendanceAdjustmentAction,
   voidAttendanceAdjustmentAction,
 } from "@/app/coach/attendance/adjustments/actions"
@@ -53,6 +54,9 @@ type MemberPortalContextValue = {
 type AttendancePortalContextValue = {
   attendanceAdjustments: AttendanceAdjustmentRecord[]
   attendanceRecords: SessionAttendanceRecords
+  keepAttendanceAdjustment: (
+    adjustmentId: string,
+  ) => Promise<OperationalActionResult<AttendanceAdjustmentRecord>>
   publishAttendanceAdjustment: (input: {
     completionOccurrenceId: string
     playerId: string
@@ -241,6 +245,17 @@ export function CoachPortalProvider({
     return result
   }, [router])
 
+  const keepAdjustment = useCallback(async (adjustmentId: string) => {
+    const result = await keepAttendanceAdjustmentAction(adjustmentId)
+    if (!result.ok) return result
+    const kept = result.data
+    setAttendanceAdjustments((current) => current.map((item) => (
+      item.id === kept.id ? kept : item
+    )))
+    router.refresh()
+    return result
+  }, [router])
+
   /*
    * Every session mutation returns the same window snapshot, and each used to
    * unpack it field by field. Adding a field then meant editing five call
@@ -357,12 +372,14 @@ export function CoachPortalProvider({
   const attendanceValue = useMemo<AttendancePortalContextValue>(() => ({
     attendanceAdjustments,
     attendanceRecords,
+    keepAttendanceAdjustment: keepAdjustment,
     publishAttendanceAdjustment,
     saveAttendanceRegister,
     voidAttendanceAdjustment: voidAdjustment,
   }), [
     attendanceAdjustments,
     attendanceRecords,
+    keepAdjustment,
     publishAttendanceAdjustment,
     saveAttendanceRegister,
     voidAdjustment,

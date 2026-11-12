@@ -170,15 +170,20 @@ function readDraftMarks(
   }
 }
 
+/**
+ * Reports whether the device kept the draft, so a register can say honestly
+ * what leaving the page costs: kept marks come back, unkept ones do not.
+ */
 function writeDraftMarks(
   key: string,
   draft: StoredAttendanceDraft,
   storage: Storage | null,
 ) {
-  if (!storage) return
+  if (!storage) return false
 
   try {
     storage.setItem(key, JSON.stringify(draft))
+    return true
   } catch {
     // Quota exhausted, or storage refused the write. Clear what has already
     // expired and try once; a draft that cannot be stored must never cost the
@@ -186,8 +191,10 @@ function writeDraftMarks(
     pruneExpiredAttendanceDrafts(storage, draft.savedAt)
     try {
       storage.setItem(key, JSON.stringify(draft))
+      return true
     } catch {
       // Nothing further to try. The marks remain in component state.
+      return false
     }
   }
 }
@@ -222,9 +229,9 @@ export function persistPlayerAttendanceDraft(
   const key = playerAttendanceDraftKey(occurrenceId)
   if (!changes.length) {
     clearDraft(key, storage)
-    return
+    return false
   }
-  writeDraftMarks(key, {
+  return writeDraftMarks(key, {
     context: occurrenceId,
     marks: changes.map((change) => ({
       choice: change.choice,
@@ -263,9 +270,9 @@ export function persistStaffAttendanceDraft(
   const key = staffAttendanceDraftKey(dateKey)
   if (!changes.length) {
     clearDraft(key, storage)
-    return
+    return false
   }
-  writeDraftMarks(key, {
+  return writeDraftMarks(key, {
     context: dateKey,
     marks: changes.map((change) => ({
       choice: change.choice,
@@ -310,7 +317,10 @@ export function discardStaffAttendanceDraft(
  * naming, because the register beneath them is no longer the one they were made
  * against.
  *
- * The rebased set is deliberately not written back. Both readers rebase before
+ * The rebased set is deliberately not written back -- not on restore, and not
+ * on the coach's next tap either: `keepMarkedExpectations` puts the stored
+ * expectation back on every restored mark the coach has not re-tapped, so the
+ * tap that persists the register does not erase the warning. Both readers rebase before
  * they use what they read, so storage never has to be corrected for the marks to
  * save; what it does have to keep is the expectation the coach marked against,
  * because that is the only thing `changedUnderneath` can be measured from. Store
@@ -321,6 +331,25 @@ export function discardStaffAttendanceDraft(
 export type RebasedAttendanceDraft<Change> = {
   changedUnderneath: number
   changes: Change[]
+}
+
+/**
+ * What a register writes back after a restore. A restored mark the coach has
+ * not re-tapped keeps the expectation it was marked against (see above); one
+ * they have re-tapped was made against the register in front of them, so its
+ * own expectation stands. `markedAgainst` holds the former, by subject.
+ */
+export function keepMarkedExpectations<Change extends {
+  expectedChoice: AttendanceDraftChoice
+}>(
+  changes: Change[],
+  subject: (change: Change) => string,
+  markedAgainst: ReadonlyMap<string, AttendanceDraftChoice>,
+): Change[] {
+  return changes.map((change) => {
+    const expected = markedAgainst.get(subject(change))
+    return expected ? { ...change, expectedChoice: expected } : change
+  })
 }
 
 export function rebaseRestoredAttendanceDraft<Change extends {
@@ -357,11 +386,15 @@ export function restoredAttendanceDraftNotice(
   count: number,
   saveAction: string,
   changedUnderneath = 0,
+  leftOut = 0,
 ) {
   return `${count} unsaved ${count === 1 ? "change" : "changes"} restored from an`
     + ` earlier visit.${changedUnderneath
       ? ` ${changedUnderneath} ${changedUnderneath === 1 ? "was" : "were"} marked`
         + " differently elsewhere since."
+      : ""}${leftOut
+      ? ` ${leftOut} ${leftOut === 1 ? "mark was" : "marks were"} left out because`
+        + ` ${leftOut === 1 ? "that player" : "those players"} can no longer be marked here.`
       : ""}`
     + ` Nothing is recorded until you ${saveAction}`
 }

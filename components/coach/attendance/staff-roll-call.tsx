@@ -1,9 +1,9 @@
 "use client"
 
-import { ArrowLeft, Check, RotateCcw, UsersRound } from "lucide-react"
+import { ArrowLeft, CalendarDays, Check, RotateCcw, UsersRound } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { saveStaffAttendanceAction } from "@/app/coach/actions"
 import {
@@ -14,6 +14,7 @@ import {
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import {
   discardStaffAttendanceDraft,
+  keepMarkedExpectations,
   persistStaffAttendanceDraft,
   readStaffAttendanceDraft,
   rebaseRestoredAttendanceDraft,
@@ -59,6 +60,18 @@ const choices: Array<{
 const discardMarksPrompt = "Leave this date and discard the unsaved staff attendance changes?"
 
 /**
+ * Leaving the *page* does not clear the stored draft, so when the device kept
+ * it the marks come back the next time this date is opened. Changing the date
+ * on this page still really discards, and keeps `discardMarksPrompt`.
+ */
+const keptMarksPrompt = "Leave this date? Your unsaved marks are kept on this device"
+  + " and come back when you open it again."
+
+/** Shown when the head coach tries to change the date while a save is running. */
+const waitForSaveMessage = "Staff attendance is still saving. Wait for it to finish"
+  + " before choosing another date."
+
+/**
  * `offerRetry`, `signIn` and `leaveConfirmation` ride on the feedback so every
  * existing `setFeedback(null)` also withdraws the retry prompt, the sign-in
  * link and the re-worded leave confirmation together. The first two never
@@ -96,16 +109,31 @@ export function StaffRollCall({
   const [drafts, setDrafts] = useState<StaffAttendanceChange[]>([])
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  // Whether the device holds the marks on screen; undefined until a write or a
+  // restore has said. See the player recorder's `draftKeptOnDevice`.
+  const [draftKeptOnDevice, setDraftKeptOnDevice] = useState<boolean | undefined>(undefined)
+  // The expectation each restored mark was made against, by coach, until that
+  // coach is re-tapped. See `keepMarkedExpectations`.
+  const restoredExpectationsRef = useRef(new Map<string, StaffAttendanceChoice>())
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: drafts.length > 0,
     // Leaving the *page* discards nothing while an expiry stands: the marks are
     // on the device, the notice has just said so, and this register is the one
     // place they cannot be saved from. The guard still confirms -- only the
     // sentence changes, and only once the draft has been read back out of
-    // storage. See `describeRefusedSave`.
-    message: feedback?.leaveConfirmation ?? discardMarksPrompt,
+    // storage. See `describeRefusedSave`. Otherwise the sentence follows what
+    // the device kept: see `keptMarksPrompt`.
+    message: feedback?.leaveConfirmation
+      ?? (draftKeptOnDevice ? keptMarksPrompt : discardMarksPrompt),
     scope: "staff-roll-call",
   })
+  // The page is keyed on the date the server rendered, so between picking a
+  // new day and that day's records arriving, `records` still belongs to the
+  // day being left. Showing them -- and using them as the base for a tap --
+  // put the previous day's marks under the new date, where a tap could do the
+  // opposite of what the head coach meant. Until the new day arrives the list
+  // is withheld and nothing can be marked.
+  const isChangingDate = selectedDate !== initialDate
   const storedByCoach = useMemo(
     () => new Map(records.map((record) => [record.coachAccountId, record.choice])),
     [records],
@@ -121,7 +149,7 @@ export function StaffRollCall({
   // the failure whose "Save staff attendance again" below is the way back, would
   // send the next Tab to the top of the document. `saveRollCall` reads the same
   // constant, so a press that still reaches the handler does nothing.
-  const cannotSave = !drafts.length || isSaving || futureDate
+  const cannotSave = !drafts.length || isSaving || futureDate || isChangingDate
   // `aria-disabled` on its own would leave the button a permanent tab stop
   // whose press is a silent no-op, and the footer renders on a future date and
   // with nothing marked yet. So only the in-flight save keeps it tabbable: that
@@ -150,6 +178,7 @@ export function StaffRollCall({
   // twice: it only changes when this register's own save succeeds, and that
   // discards the draft before the effect can run again.
   useEffect(() => {
+    if (isChangingDate) return
     const timer = window.setTimeout(() => {
       const restored = readStaffAttendanceDraft(selectedDate)
       if (!restored.length) return
@@ -158,7 +187,11 @@ export function StaffRollCall({
         (change) => storedByCoach.get(change.coachAccountId) ?? "cleared",
       )
       if (!rebased.changes.length) return
+      restoredExpectationsRef.current = new Map(
+        restored.map((change) => [change.coachAccountId, change.expectedChoice]),
+      )
       setDrafts(rebased.changes)
+      setDraftKeptOnDevice(true)
       setFeedback({
         message: restoredAttendanceDraftNotice(
           rebased.changes.length,
@@ -170,7 +203,7 @@ export function StaffRollCall({
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [selectedDate, storedByCoach])
+  }, [isChangingDate, selectedDate, storedByCoach])
 
   function resolvedChoice(coachAccountId: string) {
     return draftByCoach.get(coachAccountId)
@@ -180,8 +213,15 @@ export function StaffRollCall({
 
   function chooseDate(dateKey: string) {
     if (!dateKey || dateKey === selectedDate) return
+    // A save in flight holds the date where it is: moving on remounted the
+    // roll call before the save answered, so a failure was never shown.
+    if (isSaving) {
+      setFeedback({ message: waitForSaveMessage, tone: "info" })
+      return
+    }
     if (drafts.length && !confirmDiscard(discardMarksPrompt)) return
     if (drafts.length) discardStaffAttendanceDraft(selectedDate)
+    restoredExpectationsRef.current = new Map()
     setDrafts([])
     setFeedback(null)
     setSelectedDate(dateKey)
@@ -194,7 +234,7 @@ export function StaffRollCall({
     coachAccountId: string,
     choice: StaffAttendanceChoice,
   ) {
-    if (isSaving) return
+    if (isSaving || isChangingDate) return
     const base = storedByCoach.get(coachAccountId) ?? "cleared"
     const current = resolvedChoice(coachAccountId)
     const next = current === choice ? "cleared" : choice
@@ -211,7 +251,15 @@ export function StaffRollCall({
         expectedChoice: base,
       }]
     setDrafts(nextDrafts)
-    persistStaffAttendanceDraft(selectedDate, nextDrafts)
+    restoredExpectationsRef.current.delete(coachAccountId)
+    setDraftKeptOnDevice(persistStaffAttendanceDraft(
+      selectedDate,
+      keepMarkedExpectations(
+        nextDrafts,
+        (draft) => draft.coachAccountId,
+        restoredExpectationsRef.current,
+      ),
+    ))
     setFeedback(null)
   }
 
@@ -249,12 +297,16 @@ export function StaffRollCall({
         ]
       })
       discardStaffAttendanceDraft(selectedDate)
+      restoredExpectationsRef.current = new Map()
       setDrafts([])
       setFeedback({ message: "Staff attendance saved", tone: "success" })
     } catch (error) {
       const failure = describeSaveFailure({
         error,
         fallbackMessage: "Staff attendance could not be saved",
+        // The service skips a mark the day already holds, so a repeat of a
+        // save that did land changes nothing.
+        repeatable: true,
         retained: "Your marks are still on screen",
         subject: "Staff attendance",
       })
@@ -307,7 +359,13 @@ export function StaffRollCall({
           <strong>{juniorCoaches.length}</strong>
         </div>
 
-        {!juniorCoaches.length ? (
+        {isChangingDate ? (
+          <div className="attendance-record-empty is-roster" role="status">
+            <CalendarDays aria-hidden="true" />
+            <h3>Loading roll call…</h3>
+            <p>Checking staff attendance for this date.</p>
+          </div>
+        ) : !juniorCoaches.length ? (
           <div className="attendance-record-empty is-roster">
             <UsersRound aria-hidden="true" />
             <h3>No assistant coaches yet.</h3>

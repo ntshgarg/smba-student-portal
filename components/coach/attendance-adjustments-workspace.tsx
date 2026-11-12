@@ -33,6 +33,7 @@ import {
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { adjustmentReviewAdvice } from "@/lib/attendance/adjustment-review"
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import {
@@ -133,6 +134,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const {
     attendanceAdjustments,
     attendanceRecords,
+    keepAttendanceAdjustment,
     publishAttendanceAdjustment,
     voidAttendanceAdjustment,
   } = useAttendancePortal()
@@ -216,9 +218,24 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     () => attendanceAdjustments.filter((item) => !item.voidedAt),
     [attendanceAdjustments],
   )
+  // Per player: two players can miss the same session, and a make-up recorded
+  // for one of them says nothing about the other's absence.
+  const playerActiveAdjustments = useMemo(
+    () => activeAdjustments.filter((item) => item.playerId === selectedPlayerId),
+    [activeAdjustments, selectedPlayerId],
+  )
   const adjustedSourceIds = useMemo(
-    () => new Set(activeAdjustments.map((item) => item.sourceOccurrenceId)),
-    [activeAdjustments],
+    () => new Set(playerActiveAdjustments.map((item) => item.sourceOccurrenceId)),
+    [playerActiveAdjustments],
+  )
+  // A session that proves one make-up cannot also be the absence of another,
+  // even when its Present was later changed to Absent and that make-up is in
+  // review.
+  const usedCompletionIds = useMemo(
+    () => new Set(playerActiveAdjustments.flatMap((item) => (
+      item.completionOccurrenceId ? [item.completionOccurrenceId] : []
+    ))),
+    [playerActiveAdjustments],
   )
   const sourceOptions = useMemo(() => {
     if (!selectedPlayerId) return []
@@ -228,6 +245,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         occurrence.status === "scheduled"
         && attendanceRecords[occurrence.id]?.[selectedPlayerId] === "absent"
         && !adjustedSourceIds.has(occurrence.id)
+        && !usedCompletionIds.has(occurrence.id)
         && occurrence.occurrenceDate <= todayKey
         && !occurrenceIsUpcoming(occurrence, referenceInstant)
       ))
@@ -242,6 +260,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     selectedPlayerId,
     sessionOccurrences,
     todayKey,
+    usedCompletionIds,
   ])
   const sourceOccurrence = sourceOccurrenceId
     ? occurrenceById.get(sourceOccurrenceId)
@@ -291,17 +310,26 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     const playerAssignments = sessionAssignments.filter(
       (assignment) => assignment.playerId === selectedPlayerId,
     )
-    const usedCompletionIds = new Set(activeAdjustments
-      .filter((adjustment) => adjustment.playerId === selectedPlayerId)
-      .flatMap((adjustment) => adjustment.completionOccurrenceId
-        ? [adjustment.completionOccurrenceId]
-        : []))
-    const legacyCompletionDates = new Set(activeAdjustments
-      .filter((adjustment) => (
-        adjustment.playerId === selectedPlayerId
-        && !adjustment.completionOccurrenceId
-      ))
-      .map((adjustment) => adjustment.completedOn))
+    // Older make-ups name a date rather than a session, so each one uses up one
+    // of the player's Present sessions that day. The date is full only once
+    // every Present on it is spoken for -- the server applies the same count.
+    const fullLegacyDates = new Set<string>()
+    const legacyCountByDate = new Map<string, number>()
+    const linkedCountByDate = new Map<string, number>()
+    playerActiveAdjustments.forEach((adjustment) => {
+      const counts = adjustment.completionOccurrenceId ? linkedCountByDate : legacyCountByDate
+      counts.set(adjustment.completedOn, (counts.get(adjustment.completedOn) ?? 0) + 1)
+    })
+    legacyCountByDate.forEach((legacyCount, dateKey) => {
+      const presentCount = sessionOccurrences.filter((occurrence) => (
+        occurrence.occurrenceDate === dateKey
+        && occurrence.status === "scheduled"
+        && attendanceRecords[occurrence.id]?.[selectedPlayerId] === "present"
+      )).length
+      if (presentCount - (linkedCountByDate.get(dateKey) ?? 0) - legacyCount < 1) {
+        fullLegacyDates.add(dateKey)
+      }
+    })
 
     return sessionOccurrences
       .filter((occurrence) => (
@@ -311,7 +339,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         && !occurrenceIsUpcoming(occurrence, referenceInstant)
         && attendanceRecords[occurrence.id]?.[selectedPlayerId] === "present"
         && !usedCompletionIds.has(occurrence.id)
-        && !legacyCompletionDates.has(occurrence.occurrenceDate)
+        && !fullLegacyDates.has(occurrence.occurrenceDate)
         && playerWasEnrolledForOccurrence(selectedPlayer.member.trainingStartOn, occurrence)
         && playerAssignments.some((assignment) => (
           assignmentCoversOccurrence(assignment, occurrence)
@@ -322,8 +350,8 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         || first.id.localeCompare(second.id)
       ))
   }, [
-    activeAdjustments,
     attendanceRecords,
+    playerActiveAdjustments,
     referenceInstant,
     selectedPlayer,
     selectedPlayerId,
@@ -331,6 +359,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     sessionOccurrences,
     sourceOccurrence,
     todayKey,
+    usedCompletionIds,
   ])
   const completionOccurrence = completionOccurrenceId
     ? occurrenceById.get(completionOccurrenceId)
@@ -511,6 +540,47 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: "publish",
+        tone: "error",
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  function completionPresence(adjustment: AttendanceAdjustmentRecord) {
+    // Marks are loaded for the selected player only.
+    if (adjustment.playerId !== selectedPlayerId) return "unknown" as const
+    const isPresent = adjustment.completionOccurrenceId
+      ? attendanceRecords[adjustment.completionOccurrenceId]?.[adjustment.playerId] === "present"
+      : sessionOccurrences.some((occurrence) => (
+        occurrence.occurrenceDate === adjustment.completedOn
+        && attendanceRecords[occurrence.id]?.[adjustment.playerId] === "present"
+      ))
+    return isPresent ? "present" as const : "missing" as const
+  }
+
+  async function keepAdjustment(adjustment: AttendanceAdjustmentRecord) {
+    const pendingKey = `keep:${adjustment.id}`
+    setPendingAction(pendingKey)
+    setFeedback(null)
+    try {
+      const result = await keepAttendanceAdjustment(adjustment.id)
+      if (!result.ok) {
+        setFeedback({ field: result.field, message: result.message, tone: "error" })
+        return
+      }
+      setFeedback({ message: "Make-up kept and no longer needs review", tone: "success" })
+    } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The make-up could not be kept",
+        retained: "The make-up still needs review",
+        subject: "Keeping the make-up",
+      })
+      setFeedback({
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: pendingKey,
         tone: "error",
       })
     } finally {
@@ -889,6 +959,15 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   const isVoided = Boolean(adjustment.voidedAt)
                   const requiresReview = Boolean(adjustment.reviewRequiredAt) && !isVoided
                   const isExpanded = adjustment.id === expandedAdjustmentId
+                  const reviewAdvice = requiresReview
+                    ? adjustmentReviewAdvice({
+                      completion: resolvedOccurrence,
+                      isDateOnly: !adjustment.completionOccurrenceId,
+                      presence: completionPresence(adjustment),
+                      source,
+                    })
+                    : null
+                  const keepKey = `keep:${adjustment.id}`
 
                   return (
                     <article
@@ -938,10 +1017,10 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 
                       {isExpanded ? (
                         <div id={`adjustment-details-${adjustment.id}`} className="coach-adjustment-history-details">
-                          {requiresReview ? (
+                          {reviewAdvice ? (
                             <div className="coach-adjustment-review-warning">
                               <CircleAlert aria-hidden="true" />
-                              <p><strong>This adjustment requires review.</strong> Check the ordinary attendance recorded on its completion date.</p>
+                              <p><strong>This adjustment requires review.</strong> {reviewAdvice.message}</p>
                             </div>
                           ) : null}
                           <dl>
@@ -951,6 +1030,21 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                             <div><dt>Traceability</dt><dd>{resolvedOccurrence ? sessionLabel(resolvedOccurrence.id) : "Date-level record"}</dd></div>
                             {adjustment.reason ? <div className="is-wide"><dt>Reason</dt><dd>{adjustment.reason}</dd></div> : null}
                           </dl>
+                          {reviewAdvice?.canKeep ? (
+                            <button
+                              className="coach-adjustment-history-void is-keep"
+                              type="button"
+                              disabled={pendingAction !== null}
+                              onClick={() => void keepAdjustment(adjustment)}
+                            >
+                              <Check aria-hidden="true" />
+                              {pendingAction === keepKey
+                                ? "Keeping…"
+                                : retryAction === keepKey
+                                  ? "Keep make-up again"
+                                  : "Keep make-up"}
+                            </button>
+                          ) : null}
                           {!isVoided ? (
                             <button
                               className="coach-adjustment-history-void"
