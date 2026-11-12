@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
@@ -103,9 +104,14 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   )
   if (!data || !summary) return null
 
-  const onboarded = player.training.level !== "Assessment pending"
-    && player.training.batch !== "Assessment pending"
-    && Boolean(player.training.academyPlan)
+  // Starting or changing training waits for Player onboarding to finish (the
+  // server refuses it too, lib/training/changes.ts). A level, batch and plan
+  // are set part-way through onboarding, so they are not the signal.
+  const onboarded = player.member.onboardingCompletedAt !== undefined
+    ? Boolean(player.member.onboardingCompletedAt)
+    : player.training.level !== "Assessment pending"
+      && player.training.batch !== "Assessment pending"
+      && Boolean(player.training.academyPlan)
   const scheduled = summary.scheduled
   const fee = summary.fee
   const nextMonth = monthName(data.nextMonthStart)
@@ -178,7 +184,17 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
 
           <div className={styles.actions}>
             {!onboarded ? (
-              <p className={styles.help}>Finish Player onboarding to set a first schedule.</p>
+              <>
+                <p className={styles.help}>
+                  Finish <Link href="/coach/onboarding">Player onboarding</Link> first. It sets this player&apos;s first schedule and fee plan.
+                </p>
+                {/* A player who leaves part-way through can still be taken off their schedule. */}
+                {current.length ? (
+                  <button className={`${styles.button} ${styles.danger}`} disabled={busy} onClick={() => toggle("end")} type="button">
+                    End training
+                  </button>
+                ) : null}
+              </>
             ) : current.length ? (
               <>
                 <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("change")} type="button">

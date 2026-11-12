@@ -123,6 +123,7 @@ function requirePlayer(database: Executor, playerId: string) {
     approvalStatus: accounts.approvalStatus,
     archivedAt: accounts.archivedAt,
     fullName: accounts.fullName,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
     recordRevision: playerEnrollments.recordRevision,
     trainingStartOn: playerEnrollments.trainingStartOn,
   }).from(accounts)
@@ -133,6 +134,28 @@ function requirePlayer(database: Executor, playerId: string) {
     operationalActionError("NOT_FOUND", "This player is not available.", "playerId")
   }
   return player
+}
+
+/*
+ * Starting or changing training from Members waits for Player onboarding to
+ * finish. Onboarding sets the first schedule, confirms the training start and
+ * creates the fee plan with the registration fee, in that order. A Members
+ * change made part-way through used to add a schedule and a fee plan behind
+ * onboarding's back: the case then sat at the Session step for good (reset
+ * and completion both refuse once a fee plan exists), so the player could never
+ * sign in and the registration fee was never charged. A level change at the
+ * Fee Plan step also left the weeks before it unbilled.
+ *
+ * Ending training stays open: for a player who leaves part-way through, it is
+ * sometimes the only way to take them off a schedule.
+ */
+function requireOnboarded(player: { onboardingCompletedAt: Date | null }) {
+  if (!player.onboardingCompletedAt) {
+    operationalActionError(
+      "BUSINESS_RULE",
+      "Finish Player onboarding first. It sets this player's first schedule and fee plan.",
+    )
+  }
 }
 
 function openAssignments(database: Executor, playerId: string) {
@@ -248,7 +271,7 @@ export function scheduleTrainingChange(
 ) {
   requireHeadAdminAccess(coachId, { database })
   return database.transaction((tx) => {
-    requirePlayer(tx, input.playerId)
+    requireOnboarded(requirePlayer(tx, input.playerId))
     const today = getAcademyDateKey(now)
     const effectiveOn = nextMonthStartOf(today)
     const { weekdays } = validateSelection(tx, input, effectiveOn)
@@ -408,7 +431,9 @@ function applyChange(
 ) {
   const actorId = change.createdByAccountId
   const effectiveOn = change.effectiveOn
-  requirePlayer(tx, change.playerAccountId)
+  const player = requirePlayer(tx, change.playerAccountId)
+  // A change scheduled before this rule existed fails visibly instead.
+  if (change.kind === "change") requireOnboarded(player)
 
   if (change.kind === "end") {
     endOpenAssignments(tx, change.playerAccountId, effectiveOn)
@@ -628,6 +653,7 @@ export function changeScheduleThisMonth(
   try {
     return database.transaction((tx) => {
       const player = requirePlayer(tx, input.playerId)
+      requireOnboarded(player)
       const today = getAcademyDateKey(now)
       const monthStart = monthStartOf(today)
       const startsOn = input.startsOn
