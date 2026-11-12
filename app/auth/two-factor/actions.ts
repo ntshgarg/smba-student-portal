@@ -13,6 +13,10 @@ import {
   reserveSecondFactorAttempt,
   verifyCurrentPassword,
 } from "@/lib/auth/credential-service"
+import {
+  endSessionsStartedBefore,
+  forgetTrustedDevices,
+} from "@/lib/auth/second-factor-reset"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
 import {
@@ -287,6 +291,8 @@ export async function beginAuthenticatorReconnect(
       errorField: null,
     }
   }
+  // The library forgets only this browser's trust; a lost phone's goes too.
+  forgetTrustedDevices(identity.subjectId)
 
   writeAuthSecurityEvent({
     accountId: identity.subjectId,
@@ -380,6 +386,9 @@ export async function confirmTotpSetup(
     return { error: TOO_MANY_SECOND_FACTOR_ATTEMPTS }
   }
 
+  // Every sign-in started before this moment is ended once the code is
+  // accepted; Better Auth gives this device a fresh session as it confirms.
+  const connectedAt = new Date()
   try {
     // Same convention, other half: an action grants nothing its form did not
     // ask for. The enrolment form has no trust-this-device control, and
@@ -402,11 +411,21 @@ export async function confirmTotpSetup(
   }
 
   releaseSecondFactorAttempt(rawSession.user.id)
+  /*
+   * A newly connected authenticator starts clean. Sign-ins made while the
+   * account had none (a PIN or password alone was enough then) would otherwise
+   * become full sessions on their next request, and a browser trusted under the
+   * old authenticator would keep skipping the code. Both are ended here, after
+   * the code is accepted, so a wrong code changes nothing.
+   */
+  const endedSessions = endSessionsStartedBefore(rawSession.user.id, connectedAt)
+  const forgottenDevices = forgetTrustedDevices(rawSession.user.id)
   const security = requestSecurityContext(requestHeaders)
   writeAuthSecurityEvent({
     accountId: rawSession.user.id,
     eventType: "totp_enabled",
     ipHash: security.ipHash,
+    metadata: { endedSessions, forgottenDevices },
     outcome: "success",
     userAgent: security.userAgent,
   })

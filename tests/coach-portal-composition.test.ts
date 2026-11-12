@@ -33,6 +33,7 @@ const player = {
     memberId: "player-one",
     recordRevision: 0,
     status: "active",
+    termFinishedOn: null,
   },
 } satisfies PlayerMemberRecord
 
@@ -75,7 +76,7 @@ describe("coach portal composition", () => {
   it("builds member and schedule lookup indexes once from source records", () => {
     const memberIndex = buildMemberDirectoryIndex([player], assignments, [series])
     const scheduleIndex = buildSessionScheduleIndex(assignments)
-    const groups = buildProgrammeGroups([series], scheduleIndex.activeBySeries)
+    const groups = buildProgrammeGroups([series], scheduleIndex.activeBySeries, "2026-08-03")
 
     expect(memberIndex.playerById.get(player.member.id)).toBe(player)
     expect(memberIndex.earliestByPlayer.get(player.member.id)).toBe("2026-01-05")

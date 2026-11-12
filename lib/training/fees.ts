@@ -51,6 +51,27 @@ function monthLabel(dateKey: string) {
     .format(new Date(`${dateKey.slice(0, 7)}-01T00:00:00Z`))
 }
 
+/**
+ * The month a fee change made today starts from. Shared by the change itself
+ * and the Members form, so the confirmation the head coach approves names the
+ * month the new fee actually takes: on the 1st, before that month's fee is
+ * issued, it is this month, not next.
+ */
+export function feeChangeStartsOn({
+  activePlanFrom,
+  thisMonthIssued,
+  today,
+}: {
+  activePlanFrom: string
+  thisMonthIssued: boolean
+  today: string
+}) {
+  const thisMonth = monthStartOf(today)
+  return today === thisMonth && !thisMonthIssued && activePlanFrom < thisMonth
+    ? thisMonth
+    : nextMonthStartOf(today)
+}
+
 export function changeMonthlyFee(
   input: { idempotencyKey: string; monthlyFeePaise: number; playerId: string },
   { coachId, createId = randomUUID, database = initializeDatabase(), now = new Date() }: FeeContext,
@@ -90,9 +111,7 @@ export function changeMonthlyFee(
         eq(financialCharges.billingPeriod, thisMonth.slice(0, 7)),
         eq(financialCharges.lifecycle, "issued"),
       )).get())
-      const startsOn = today === thisMonth && !thisMonthIssued && active.effectiveFrom < thisMonth
-        ? thisMonth
-        : nextMonthStartOf(today)
+      const startsOn = feeChangeStartsOn({ activePlanFrom: active.effectiveFrom, thisMonthIssued, today })
 
       if (active.effectiveFrom >= startsOn) {
         // A fee change for that month is already waiting; change its amount.

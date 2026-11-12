@@ -39,6 +39,7 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
     hasDirectoryCriteria,
     hasMoreMembers,
     memberFeedback,
+    noteStaffArchived,
     openMember,
     players,
     resetFilters,
@@ -169,7 +170,7 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
                         onOpen={openMember}
                         staff={member}
                       />
-                      {isExpanded ? <StaffDetailRow staff={member} /> : null}
+                      {isExpanded ? <StaffDetailRow onArchived={noteStaffArchived} staff={member} /> : null}
                     </Fragment>
                   )
                 })}

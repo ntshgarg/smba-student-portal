@@ -56,6 +56,13 @@
   line-height: 1.5;
 }
 
+.help a {
+  color: var(--navy);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .scheduled {
   display: grid;
   gap: 2px;

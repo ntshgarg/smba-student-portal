@@ -17,9 +17,13 @@ import {
 } from "@/components/coach/coach-portal-provider"
 import {
   assignmentKey,
+  buildFinishedSchedules,
   buildProgrammeGroups,
   buildSessionScheduleIndex,
+  scheduleGroupKey,
+  type ScheduleGroupKey,
 } from "@/components/coach/calendar/session-schedule-index"
+import { termFinishedMembersHref } from "@/components/coach/members/member-directory-query"
 import {
   InlineNotice,
   type ActionFeedback,
@@ -27,13 +31,14 @@ import {
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import {
   SESSION_LABEL_SEPARATOR,
+  formatDateKey,
   formatSessionLabel,
   sessionLabelParts,
 } from "@/lib/format"
 import { distinctAssignmentWeekdays } from "@/lib/sessions/domain"
+import { formatTermDate, scheduleTermFinished } from "@/lib/sessions/term"
 import type {
   SessionAssignment,
-  TrainingProgramme,
   TrainingSessionSeries,
 } from "@/lib/sessions/types"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
@@ -65,6 +70,21 @@ function activeAssignedWeekdays(assignments: SessionAssignment[]) {
     .map((assignment) => assignment.weekdays))
 }
 
+function shortDate(dateKey: string) {
+  return formatDateKey(dateKey, { month: "short", weekday: undefined, year: "numeric" })
+}
+
+/** "1 Apr 2026 – 31 Oct 2026": a schedule's first and last day. */
+function scheduleDates(series: TrainingSessionSeries) {
+  return series.endsOn
+    ? `${shortDate(series.startsOn)} – ${shortDate(series.endsOn)}`
+    : `From ${shortDate(series.startsOn)}`
+}
+
+function countLabel(count: number, one: string, many: string) {
+  return `${count} ${count === 1 ? one : many}`
+}
+
 function seriesLabel(series: TrainingSessionSeries) {
   const slot = series.slots[0]
   return formatSessionLabel({
@@ -82,15 +102,22 @@ function seriesLabel(series: TrainingSessionSeries) {
  * changes move to the player's row in Members (head coach, 5 Oct 2026), so
  * each job has one place and a second way in cannot quietly backdate a start.
  * `?player=` still opens that player's schedules.
+ *
+ * A schedule whose last day has passed keeps its players until the head coach
+ * moves them on (head coach, 12 Nov 2026), so it moves to a "Finished" group
+ * below the running ones rather than looking like one. `today` is the
+ * academy's today from the server.
  */
 export function SessionSchedules({
   initialPlayerId = null,
   initialProgramme = null,
   initialSeriesId = null,
+  today,
 }: {
   initialPlayerId?: string | null
-  initialProgramme?: TrainingProgramme | null
+  initialProgramme?: ScheduleGroupKey | null
   initialSeriesId?: string | null
+  today: string
 }) {
   const { players } = useMemberPortal()
   const {
@@ -114,15 +141,19 @@ export function SessionSchedules({
     ? seriesById.get(initialSeriesId) ?? null
     : null
   const [expandedSeriesId, setExpandedSeriesId] = useState<string | null>(requestedSeries?.id ?? null)
-  const [expandedProgramme, setExpandedProgramme] = useState<TrainingProgramme | null>(
-    requestedSeries?.programme ?? initialProgramme,
+  const [expandedProgramme, setExpandedProgramme] = useState<ScheduleGroupKey | null>(
+    requestedSeries ? scheduleGroupKey(requestedSeries, today) : initialProgramme,
   )
   const [endingSeriesId, setEndingSeriesId] = useState<string | null>(null)
   const [endingFeedback, setEndingFeedback] = useState<EndingFeedback | null>(null)
   const hasPendingMutation = endingSeriesId !== null
   const programmeGroups = useMemo(
-    () => buildProgrammeGroups(sessionSeries, assignmentIndex.activeBySeries),
-    [assignmentIndex.activeBySeries, sessionSeries],
+    () => buildProgrammeGroups(sessionSeries, assignmentIndex.activeBySeries, today),
+    [assignmentIndex.activeBySeries, sessionSeries, today],
+  )
+  const finishedGroup = useMemo(
+    () => buildFinishedSchedules(sessionSeries, assignmentIndex.activeBySeries, today),
+    [assignmentIndex.activeBySeries, sessionSeries, today],
   )
   const guidedPlayer = useMemo(() => initialPlayerId
     ? playerById.get(initialPlayerId) ?? null
@@ -130,9 +161,22 @@ export function SessionSchedules({
   const guidedActiveAssignments = useMemo(() => guidedPlayer
     ? assignmentIndex.activeByPlayer.get(guidedPlayer.member.id) ?? []
     : [], [assignmentIndex.activeByPlayer, guidedPlayer])
+  // A place on a schedule that has run out is still open, but the player is
+  // not training on it, so the note counts only the others as their schedules.
+  const guidedFinishedAssignments = useMemo(() => guidedActiveAssignments.filter((assignment) => {
+    const series = seriesById.get(assignment.seriesId)
+    return series ? scheduleTermFinished(series, today) : false
+  }), [guidedActiveAssignments, seriesById, today])
+  const guidedCurrentAssignments = useMemo(() => guidedActiveAssignments.filter((assignment) => (
+    !guidedFinishedAssignments.includes(assignment)
+  )), [guidedActiveAssignments, guidedFinishedAssignments])
   const guidedAssignedWeekdays = guidedPlayer
-    ? activeAssignedWeekdays(guidedActiveAssignments)
+    ? activeAssignedWeekdays(guidedCurrentAssignments)
     : []
+  const guidedTermFinishedOn = guidedFinishedAssignments.reduce<string | null>((latest, assignment) => {
+    const endsOn = seriesById.get(assignment.seriesId)?.endsOn ?? null
+    return endsOn && (!latest || endsOn > latest) ? endsOn : latest
+  }, null)
   const guidanceHeadingRef = useRef<HTMLDivElement>(null)
   const handledGuidanceRef = useRef(false)
 
@@ -141,18 +185,19 @@ export function SessionSchedules({
     const frame = window.requestAnimationFrame(() => {
       if (handledGuidanceRef.current) return
       handledGuidanceRef.current = true
-      const assignedSeries = seriesById.get(guidedActiveAssignments[0]?.seriesId ?? "")
+      const assignment = guidedCurrentAssignments[0] ?? guidedFinishedAssignments[0]
+      const assignedSeries = seriesById.get(assignment?.seriesId ?? "")
       if (assignedSeries) {
-        setExpandedProgramme(assignedSeries.programme)
+        setExpandedProgramme(scheduleGroupKey(assignedSeries, today))
         setExpandedSeriesId(assignedSeries.id)
       }
       guidanceHeadingRef.current?.focus({ preventScroll: true })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [guidedActiveAssignments, guidedPlayer, seriesById])
+  }, [guidedCurrentAssignments, guidedFinishedAssignments, guidedPlayer, seriesById, today])
 
   function replaceExpandedScheduleUrl(
-    programme: TrainingProgramme | null,
+    programme: ScheduleGroupKey | null,
     seriesId: string | null,
   ) {
     const params = new URLSearchParams(window.location.search)
@@ -168,12 +213,207 @@ export function SessionSchedules({
     )
   }
 
-  function toggleProgramme(programme: TrainingProgramme) {
+  function toggleProgramme(programme: ScheduleGroupKey) {
     if (hasPendingMutation) return
     const nextProgramme = expandedProgramme === programme ? null : programme
     setExpandedProgramme(nextProgramme)
     setExpandedSeriesId(null)
     replaceExpandedScheduleUrl(nextProgramme, null)
+  }
+
+  function guidanceNote() {
+    if (guidedCurrentAssignments.length) {
+      const count = guidedCurrentAssignments.length
+      const finished = guidedFinishedAssignments.length
+      return `On ${count === 1 ? "one schedule" : `${count} schedules`}${guidedAssignedWeekdays.length ? ` for ${assignmentDayLabel(guidedAssignedWeekdays)}` : ""}.${finished
+        ? ` Still on ${finished === 1 ? "a schedule" : `${finished} schedules`} whose term has finished.`
+        : ""} Schedule changes for a player are made from Members.`
+    }
+    if (guidedTermFinishedOn) {
+      return `Term finished on ${formatTermDate(guidedTermFinishedOn)}. Schedule changes for a player are made from Members.`
+    }
+    return "Not on any schedule. A first schedule is set in Player onboarding."
+  }
+
+  function renderSeriesCard(series: TrainingSessionSeries, finished: boolean) {
+    const isExpanded = expandedSeriesId === series.id
+    const groupKey: ScheduleGroupKey = finished ? "finished" : series.programme
+    const roster = (assignmentIndex.activeBySeries.get(series.id) ?? []).flatMap(
+      (assignment) => playerById.get(assignment.playerId) ?? [],
+    )
+    const seriesEndingFeedback = endingFeedback?.seriesId === series.id && endingFeedback.offerRetry
+      ? endingFeedback
+      : null
+    const endingRetryIsSeries = Boolean(seriesEndingFeedback)
+    return (
+      <article className="coach-series-roster-card" data-finished={finished || undefined} key={series.id}>
+        <button type="button" disabled={hasPendingMutation} aria-expanded={isExpanded} onClick={() => {
+          const opening = !isExpanded
+          setExpandedProgramme(groupKey)
+          setExpandedSeriesId(opening ? series.id : null)
+          replaceExpandedScheduleUrl(groupKey, opening ? series.id : null)
+        }}>
+          <span>
+            <strong>{(() => {
+              /* Same split the coach hero uses. The label ends in a clock
+                 range and the browser will break inside it -- at 320 this
+                 row read "Adult · Weekend · 10-" over "11 am", and four
+                 more orphaned a two-character meridiem onto a second line
+                 while up to 12px of the first sat empty. */
+              const { context, range } = sessionLabelParts(seriesLabel(series))
+              return range ? (
+                <>
+                  {context}
+                  {SESSION_LABEL_SEPARATOR}
+                  <span className="session-label-range">{range}</span>
+                </>
+              ) : seriesLabel(series)
+            })()}</strong>
+            <small className="coach-series-dates">
+              {finished ? "Term finished · " : ""}{scheduleDates(series)}
+            </small>
+          </span>
+          <span>
+            <Users aria-hidden="true" /> {finished
+              ? `${roster.length} still on it`
+              : countLabel(roster.length, "player", "players")} <ChevronDown aria-hidden="true" />
+          </span>
+        </button>
+        {finished && series.endsOn ? (
+          <p className="coach-series-term-note">
+            Term finished on {formatTermDate(series.endsOn)}. Move each player on
+            in <Link href={termFinishedMembersHref}>Members</Link>, or press End schedule.
+          </p>
+        ) : null}
+        {isExpanded ? (
+          <div className="coach-series-roster-detail">
+            <div className="coach-series-rhythm">
+              {series.slots.map((slot) => (
+                <span key={slot.id}>{weekdays.find((day) => day.value === slot.weekday)?.short} · {slot.startTime}</span>
+              ))}
+              <span><MapPin aria-hidden="true" /> {series.venue}</span>
+            </div>
+            <div className="coach-roster-list">
+              {roster.length ? roster.map((player) => {
+                const assignment = assignmentIndex.activeByPlayerSeries.get(
+                  assignmentKey(player.member.id, series.id),
+                )
+                return (
+                  <div key={player.member.id}>
+                    <span className="coach-roster-initials">{player.member.initials}</span>
+                    <span>
+                      <strong>{player.member.fullName}</strong>
+                      <small>From {assignment?.effectiveFrom} · {assignmentDayLabel(assignment?.weekdays ?? [])}</small>
+                    </span>
+                  </div>
+                )
+              }) : <p>{finished
+                ? "No players are left on this schedule."
+                : "No players on this schedule. Players are added in Player onboarding."}</p>}
+            </div>
+            <InlineNotice
+              className="coach-roster-end-notice"
+              message={endingFeedback?.seriesId === series.id ? endingFeedback.message : null}
+              reserveSpace={false}
+              tone={endingFeedback?.seriesId === series.id ? endingFeedback.tone : "info"}
+            />
+            <button
+              className="coach-series-end-action"
+              type="button"
+              disabled={hasPendingMutation}
+              onClick={async () => {
+                if (hasPendingMutation || !window.confirm(finished
+                  ? `End ${seriesLabel(series)} now? Its last day has passed, so there are no sessions left to cancel. Every player still on it will be removed from this schedule. This cannot be undone.`
+                  : `End ${seriesLabel(series)} now? Upcoming sessions will be cancelled and every player will be removed from this schedule. This cannot be undone.`,
+                )) return
+                setEndingSeriesId(series.id)
+                setEndingFeedback(null)
+                try {
+                  const result = await endSessionSeries(series.id)
+                  if (!result.ok) {
+                    setEndingFeedback({
+                      message: result.message,
+                      seriesId: series.id,
+                      tone: "error",
+                    })
+                  }
+                } catch (error) {
+                  const failure = describeSaveFailure({
+                    error,
+                    fallbackMessage: "Schedule could not be ended",
+                    retained: "The schedule is still active",
+                    subject: "The schedule ending",
+                  })
+                  setEndingFeedback({
+                    message: failure.message,
+                    offerRetry: failure.offerRetry,
+                    seriesId: series.id,
+                    tone: "error",
+                  })
+                } finally {
+                  setEndingSeriesId(null)
+                }
+              }}
+            >
+              <CalendarX2 aria-hidden="true" /> {endingSeriesId === series.id
+                ? "Ending schedule…"
+                : endingRetryIsSeries ? "End schedule again" : "End schedule"}
+            </button>
+          </div>
+        ) : null}
+      </article>
+    )
+  }
+
+  function renderGroup({
+    groupKey,
+    series,
+    summary,
+    title,
+  }: {
+    groupKey: ScheduleGroupKey
+    series: TrainingSessionSeries[]
+    summary: string
+    title: string
+  }) {
+    const finished = groupKey === "finished"
+    const isProgrammeOpen = expandedProgramme === groupKey
+    const programmeContentId = `schedule-programme-${groupKey.toLowerCase()}`
+
+    return (
+      <section
+        className="coach-schedule-programme-group"
+        data-finished={finished || undefined}
+        key={groupKey}
+      >
+        <div className="coach-schedule-programme-heading">
+          <h3>{title}</h3>
+          <p>{summary}</p>
+        </div>
+        <h3 className="coach-schedule-programme-toggle-heading">
+          <button
+            type="button"
+            disabled={hasPendingMutation}
+            aria-expanded={isProgrammeOpen}
+            aria-controls={programmeContentId}
+            onClick={() => toggleProgramme(groupKey)}
+          >
+            <span>
+              <strong>{title}</strong>
+              <small>{summary}</small>
+            </span>
+            <ChevronDown aria-hidden="true" />
+          </button>
+        </h3>
+        <div
+          className="coach-schedule-programme-content"
+          id={programmeContentId}
+          data-expanded={isProgrammeOpen}
+        >
+          {series.map((item) => renderSeriesCard(item, finished))}
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -202,9 +442,7 @@ export function SessionSchedules({
           <span>Player schedules</span>
           <strong>{guidedPlayer.member.fullName}</strong>
           <p>
-            {guidedPlayer.training.level} · {guidedPlayer.training.batch} · {academyPlanLabel(guidedPlayer.training.academyPlan)}. {guidedActiveAssignments.length
-              ? `On ${guidedActiveAssignments.length === 1 ? "one schedule" : `${guidedActiveAssignments.length} schedules`}${guidedAssignedWeekdays.length ? ` for ${assignmentDayLabel(guidedAssignedWeekdays)}` : ""}. Schedule changes for a player are made from Members.`
-              : "Not on any schedule. A first schedule is set in Player onboarding."}
+            {guidedPlayer.training.level} · {guidedPlayer.training.batch} · {academyPlanLabel(guidedPlayer.training.academyPlan)}. {guidanceNote()}
           </p>
         </div>
       ) : null}
@@ -214,158 +452,32 @@ export function SessionSchedules({
           <span>Session assignments</span>
           <h2 id="series-rosters-title">Recurring sessions &amp; rosters</h2>
         </div>
-        {programmeGroups.length ? programmeGroups.map((group) => {
-          const isProgrammeOpen = expandedProgramme === group.programme
-          const programmeContentId = `schedule-programme-${group.programme.toLowerCase()}`
-          const groupSummary = `${group.series.length} ${group.series.length === 1 ? "schedule" : "schedules"} · ${group.playerCount} ${group.playerCount === 1 ? "player" : "players"}`
-
-          return (
-            <section className="coach-schedule-programme-group" key={group.programme}>
-              <div className="coach-schedule-programme-heading">
-                <h3>{group.programme}</h3>
-                <p>{groupSummary}</p>
-              </div>
-              <h3 className="coach-schedule-programme-toggle-heading">
-                <button
-                  type="button"
-                  disabled={hasPendingMutation}
-                  aria-expanded={isProgrammeOpen}
-                  aria-controls={programmeContentId}
-                  onClick={() => toggleProgramme(group.programme)}
-                >
-                  <span>
-                    <strong>{group.programme}</strong>
-                    <small>{groupSummary}</small>
-                  </span>
-                  <ChevronDown aria-hidden="true" />
-                </button>
-              </h3>
-              <div
-                className="coach-schedule-programme-content"
-                id={programmeContentId}
-                data-expanded={isProgrammeOpen}
-              >
-                {group.series.map((series) => {
-          const isExpanded = expandedSeriesId === series.id
-          const roster = (assignmentIndex.activeBySeries.get(series.id) ?? []).flatMap(
-            (assignment) => playerById.get(assignment.playerId) ?? [],
-          )
-          const seriesEndingFeedback = endingFeedback?.seriesId === series.id && endingFeedback.offerRetry
-            ? endingFeedback
-            : null
-          const endingRetryIsSeries = Boolean(seriesEndingFeedback)
-          return (
-            <article className="coach-series-roster-card" key={series.id}>
-              <button type="button" disabled={hasPendingMutation} aria-expanded={isExpanded} onClick={() => {
-                const opening = !isExpanded
-                setExpandedProgramme(series.programme)
-                setExpandedSeriesId(opening ? series.id : null)
-                replaceExpandedScheduleUrl(series.programme, opening ? series.id : null)
-              }}>
-                <span>
-                  <strong>{(() => {
-                    /* Same split the coach hero uses. The label ends in a clock
-                       range and the browser will break inside it -- at 320 this
-                       row read "Adult · Weekend · 10-" over "11 am", and four
-                       more orphaned a two-character meridiem onto a second line
-                       while up to 12px of the first sat empty. */
-                    const { context, range } = sessionLabelParts(seriesLabel(series))
-                    return range ? (
-                      <>
-                        {context}
-                        {SESSION_LABEL_SEPARATOR}
-                        <span className="session-label-range">{range}</span>
-                      </>
-                    ) : seriesLabel(series)
-                  })()}</strong>
-                </span>
-                <span><Users aria-hidden="true" /> {roster.length} {roster.length === 1 ? "player" : "players"} <ChevronDown aria-hidden="true" /></span>
-              </button>
-              {isExpanded ? (
-                <div className="coach-series-roster-detail">
-                  <div className="coach-series-rhythm">
-                    {series.slots.map((slot) => (
-                      <span key={slot.id}>{weekdays.find((day) => day.value === slot.weekday)?.short} · {slot.startTime}</span>
-                    ))}
-                    <span><MapPin aria-hidden="true" /> {series.venue}</span>
-                  </div>
-                  <div className="coach-roster-list">
-                    {roster.length ? roster.map((player) => {
-                      const assignment = assignmentIndex.activeByPlayerSeries.get(
-                        assignmentKey(player.member.id, series.id),
-                      )
-                      return (
-                        <div key={player.member.id}>
-                          <span className="coach-roster-initials">{player.member.initials}</span>
-                          <span>
-                            <strong>{player.member.fullName}</strong>
-                            <small>From {assignment?.effectiveFrom} · {assignmentDayLabel(assignment?.weekdays ?? [])}</small>
-                          </span>
-                        </div>
-                      )
-                    }) : <p>No players on this schedule. Players are added in Player onboarding.</p>}
-                  </div>
-                  <InlineNotice
-                    className="coach-roster-end-notice"
-                    message={endingFeedback?.seriesId === series.id ? endingFeedback.message : null}
-                    reserveSpace={false}
-                    tone={endingFeedback?.seriesId === series.id ? endingFeedback.tone : "info"}
-                  />
-                  <button
-                    className="coach-series-end-action"
-                    type="button"
-                    disabled={hasPendingMutation}
-                    onClick={async () => {
-                      if (hasPendingMutation || !window.confirm(
-                        `End ${seriesLabel(series)} now? Upcoming sessions will be cancelled and every player will be removed from this schedule. This cannot be undone.`,
-                      )) return
-                      setEndingSeriesId(series.id)
-                      setEndingFeedback(null)
-                      try {
-                        const result = await endSessionSeries(series.id)
-                        if (!result.ok) {
-                          setEndingFeedback({
-                            message: result.message,
-                            seriesId: series.id,
-                            tone: "error",
-                          })
-                        }
-                      } catch (error) {
-                        const failure = describeSaveFailure({
-                          error,
-                          fallbackMessage: "Schedule could not be ended",
-                          retained: "The schedule is still active",
-                          subject: "The schedule ending",
-                        })
-                        setEndingFeedback({
-                          message: failure.message,
-                          offerRetry: failure.offerRetry,
-                          seriesId: series.id,
-                          tone: "error",
-                        })
-                      } finally {
-                        setEndingSeriesId(null)
-                      }
-                    }}
-                  >
-                    <CalendarX2 aria-hidden="true" /> {endingSeriesId === series.id
-                      ? "Ending schedule…"
-                      : endingRetryIsSeries ? "End schedule again" : "End schedule"}
-                  </button>
-                </div>
-              ) : null}
-            </article>
-          )
-                })}
-              </div>
-            </section>
-          )
-        }) : (
+        {programmeGroups.length ? programmeGroups.map((group) => renderGroup({
+          groupKey: group.programme,
+          series: group.series,
+          summary: `${countLabel(group.series.length, "schedule", "schedules")} · ${countLabel(group.playerCount, "player", "players")}`,
+          title: group.programme,
+        })) : finishedGroup.series.length ? (
+          <div className="coach-series-rosters-empty">
+            <p>No schedules are running now. Create the next one, then move each player onto it in Members.</p>
+            <Link href="/coach/schedules/new">Create schedule</Link>
+          </div>
+        ) : (
           <div className="coach-series-rosters-empty">
             <p>No schedules yet. Create the first recurring schedule, then add players to it in Player onboarding.</p>
             <Link href="/coach/schedules/new">Create schedule</Link>
           </div>
         )}
+        {finishedGroup.series.length ? renderGroup({
+          groupKey: "finished",
+          series: finishedGroup.series,
+          // Players still holding a place on these schedules, as each card
+          // counts them. Not "to move": a player with a place on a running
+          // schedule as well is still training, so the to-do and Members'
+          // "Term finished" leave them out.
+          summary: `${countLabel(finishedGroup.series.length, "schedule", "schedules")} · ${countLabel(finishedGroup.playerCount, "player", "players")} still on ${finishedGroup.series.length === 1 ? "it" : "them"}`,
+          title: "Finished",
+        }) : null}
       </section>
     </div>
   )

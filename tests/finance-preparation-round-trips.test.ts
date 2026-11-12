@@ -135,7 +135,8 @@ describe("monthly preparation round trips", () => {
       createFeeReference,
       createId,
       database,
-      now,
+      // A month's fees are issued once that month has begun.
+      now: period > "2026-08" ? new Date(`${period}-01T10:00:00+05:30`) : now,
     })
   }
 

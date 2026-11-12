@@ -1361,7 +1361,7 @@ describe("Financials V2 service", () => {
       createFeeReference: () => "SMBA-2B4D6F8H",
       createId: ids,
       database,
-      now,
+      now: new Date("2026-09-01T10:00:00+05:30"),
     })).toMatchObject({ ready: 1, reused: false })
     const septemberCharge = finance.getPlayerFeeRecord(playerId, { database, now })
       ?.monthlyCharges.find((charge) => charge.billingPeriod === "2026-09")
@@ -1411,7 +1411,7 @@ describe("Financials V2 service", () => {
       createFeeReference: () => "SMBA-3B5D7F9H",
       createId: ids,
       database,
-      now,
+      now: new Date("2026-09-01T10:00:00+05:30"),
     })).toMatchObject({ ready: 1, alreadyPrepared: 1, reused: false })
     expect(finance.getPlayerFeeRecord(newlyReadyPlayerId, { database, now })
       ?.monthlyCharges.find((charge) => charge.billingPeriod === "2026-09"))
@@ -1459,7 +1459,7 @@ describe("Financials V2 service", () => {
       createFeeReference: () => "SMBA-4B6D8F2H",
       createId: ids,
       database,
-      now,
+      now: new Date("2026-09-01T10:00:00+05:30"),
     })).toMatchObject({ alreadyPrepared: 2, reused: false })
     expect(database.select().from(schema.concessionApplications).where(and(
       eq(schema.concessionApplications.concessionId, recurring.concession.id),

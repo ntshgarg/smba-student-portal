@@ -1,8 +1,13 @@
 "use client"
 
-import { ChevronDown } from "lucide-react"
+import { Archive, ChevronDown } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
 
+import { archiveCoachAction } from "@/app/coach/actions"
 import { formatJoinedDate } from "@/components/coach/members/directory/shared"
+import { InlineNotice } from "@/components/inline-notice"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { AcademyStaffMember } from "@/lib/coach/types"
 
 export function staffAccessLabel(accessLevel: AcademyStaffMember["accessLevel"]) {
@@ -81,43 +86,132 @@ export function StaffSummaryRow({
   )
 }
 
-export function StaffDetailRow({ staff }: { staff: AcademyStaffMember }) {
+/*
+ * Archiving an assistant coach who has left. Their sign-in stops at once; their
+ * past attendance stays on the staff register. The head coach's own account is
+ * not offered: it is set up and replaced by the platform owner.
+ */
+function StaffAccessActions({
+  onArchived,
+  staff,
+}: {
+  onArchived: (staff: AcademyStaffMember) => void
+  staff: AcademyStaffMember
+}) {
+  const router = useRouter()
+  const [pending, setPending] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+
+  async function archive() {
+    if (pending) return
+    const confirmed = window.confirm(
+      `Archive ${staff.fullName}? They will no longer be able to sign in. Their past attendance stays on the staff register.`,
+    )
+    if (!confirmed) return
+    setPending(true)
+    setMessage(null)
+    try {
+      const result = await archiveCoachAction({ coachAccountId: staff.id })
+      if (!result.ok) {
+        setMessage(result.message)
+        return
+      }
+      onArchived(staff)
+      router.refresh()
+    } catch (error) {
+      setMessage(describeSaveFailure({
+        error,
+        fallbackMessage: "The coach could not be archived",
+        retained: "The coach can still sign in",
+        subject: "The coach archive",
+      }).message)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="coach-member-access-actions">
+        <div>
+          <span>Coach access</span>
+          <p>Archiving switches off their sign-in. Their past attendance stays on the staff register.</p>
+        </div>
+        <button type="button" disabled={pending} onClick={() => void archive()}>
+          <Archive aria-hidden="true" /> {pending ? "Archiving…" : "Archive coach"}
+        </button>
+      </div>
+      <InlineNotice
+        className="coach-member-save-notice"
+        message={message}
+        reserveSpace={false}
+        tone="error"
+      />
+    </>
+  )
+}
+
+export function StaffDetailRow({
+  onArchived,
+  staff,
+}: {
+  onArchived: (staff: AcademyStaffMember) => void
+  staff: AcademyStaffMember
+}) {
   return (
     <tr className="coach-member-detail-row">
       <td colSpan={6}>
-        <div id={`member-details-${staff.id}`} className="coach-member-detail">
-          <section aria-labelledby={`staff-profile-${staff.id}`}>
-            <h3 id={`staff-profile-${staff.id}`}>
-              <span className="eyebrow">Profile</span>
-              Staff details
-            </h3>
-            <dl>
-              <div>
-                <dt>Academy ID</dt>
-                <dd>{staff.academyId}</dd>
-              </div>
-              <div>
-                <dt>Access</dt>
-                <dd>{staffAccessLabel(staff.accessLevel)}</dd>
-              </div>
-              <div>
-                <dt>Joined</dt>
-                <dd>{formatJoinedDate(staff.joinedOn)}</dd>
-              </div>
-              <div>
-                <dt>Coach approved</dt>
-                <dd>{staff.approvedAt
-                  ? formatJoinedDate(staff.approvedAt.slice(0, 10))
-                  : "Not recorded"}</dd>
-              </div>
-              <div>
-                <dt>Account activated</dt>
-                <dd>{staff.activatedAt
-                  ? formatJoinedDate(staff.activatedAt.slice(0, 10))
-                  : "Not yet activated"}</dd>
-              </div>
-            </dl>
-          </section>
+        {/* The same panel a player's record uses, so a coach's record reads as
+            one: it had no styles of its own and rendered as bare stacked text. */}
+        <div id={`member-details-${staff.id}`} className="coach-member-detail-panel">
+          <div className="coach-member-detail-heading">
+            <div>
+              <span>Staff record</span>
+              <h3>{staff.fullName}</h3>
+              <p>{staff.academyId} · {staffAccessLabel(staff.accessLevel)}</p>
+            </div>
+          </div>
+          <div className="coach-member-detail-domains">
+            <section aria-labelledby={`staff-profile-${staff.id}`}>
+              <span>Profile</span>
+              <h4 id={`staff-profile-${staff.id}`}>Staff details</h4>
+              <dl>
+                <div>
+                  <dt>Academy ID</dt>
+                  <dd>{staff.academyId}</dd>
+                </div>
+                <div>
+                  <dt>Access</dt>
+                  <dd>{staffAccessLabel(staff.accessLevel)}</dd>
+                </div>
+                <div>
+                  <dt>Joined</dt>
+                  <dd>{formatJoinedDate(staff.joinedOn)}</dd>
+                </div>
+              </dl>
+            </section>
+            <section aria-labelledby={`staff-account-${staff.id}`}>
+              <span>Account</span>
+              <h4 id={`staff-account-${staff.id}`}>Portal account</h4>
+              <dl>
+                <div>
+                  <dt>Coach approved</dt>
+                  <dd>{staff.approvedAt
+                    ? formatJoinedDate(staff.approvedAt.slice(0, 10))
+                    : "Not recorded"}</dd>
+                </div>
+                <div>
+                  <dt>Account activated</dt>
+                  <dd>{staff.activatedAt
+                    ? formatJoinedDate(staff.activatedAt.slice(0, 10))
+                    : "Not yet activated"}</dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+          {staff.accessLevel === "junior_coach"
+            ? <StaffAccessActions onArchived={onArchived} staff={staff} />
+            : null}
         </div>
       </td>
     </tr>

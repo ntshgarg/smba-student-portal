@@ -239,6 +239,21 @@ describe("admin-approved authenticator recovery", () => {
       expiresAt: new Date(NOW.getTime() + 60_000),
       tokenHash: "legacy-token",
     }).run()
+    // A lost phone trusted to skip the code, and an unrelated verification row.
+    for (const [id, identifier, value] of [
+      ["trust-lost-phone", "trust-device-lostphone", HEAD_ID],
+      ["trust-other-account", "trust-device-someoneelse", ADMIN_ID],
+      ["unrelated-verification", "2fa-attempts-anything", HEAD_ID],
+    ]) {
+      database.insert(schema.authVerifications).values({
+        createdAt: NOW,
+        expiresAt: new Date(NOW.getTime() + 60_000),
+        id,
+        identifier,
+        updatedAt: NOW,
+        value,
+      }).run()
+    }
 
     const approved = approveAuthenticatorResetRequest({
       actorAccountId: ADMIN_ID,
@@ -250,6 +265,9 @@ describe("admin-approved authenticator recovery", () => {
       .where(eq(schema.authTwoFactors.userId, HEAD_ID)).all()).toHaveLength(0)
     expect(database.select().from(schema.authRuntimeSessions).all()).toHaveLength(0)
     expect(database.select().from(schema.authSessions).all()).toHaveLength(0)
+    // Only the coach's trusted browsers are forgotten.
+    expect(database.select({ id: schema.authVerifications.id }).from(schema.authVerifications).all()
+      .map((row) => row.id).sort()).toEqual(["trust-other-account", "unrelated-verification"])
     expect(database.select().from(schema.authPinCredentials)
       .where(eq(schema.authPinCredentials.accountId, HEAD_ID)).get()?.pinHash).toBe("preserved-pin-hash")
     expect(database.select().from(schema.authProviderAccounts)

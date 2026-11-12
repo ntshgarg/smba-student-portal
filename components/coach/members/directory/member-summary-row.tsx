@@ -2,8 +2,10 @@
 
 import { ChevronDown } from "lucide-react"
 
+import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import { formatJoinedDate } from "@/components/coach/members/directory/shared"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
+import { trainingStatusLabel } from "@/lib/sessions/term"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
 
 export function MemberSummaryRow({
@@ -19,7 +21,12 @@ export function MemberSummaryRow({
   onOpen: (memberId: string) => void
   player: PlayerMemberRecord
 }) {
+  const memberTraining = useMemberTraining()
   const memberId = player.member.id
+  // A term-finished player whose move or end is already booked stays "Term
+  // finished" until it happens, so the row says it is in hand.
+  const changeScheduled = player.training.status === "finished"
+    && Boolean(memberTraining?.summaries[memberId]?.scheduled)
 
   return (
     <tr className={isExpanded ? "is-expanded" : undefined}>
@@ -40,13 +47,13 @@ export function MemberSummaryRow({
       </td>
       <td className="coach-member-sessions" data-label="Sessions">
         <span>{activeSessionLabels.length
-          ? `${activeSessionLabels.length} active`
+          ? `${activeSessionLabels.length} ${player.training.status === "finished" ? "finished" : "active"}${changeScheduled ? " · change scheduled" : ""}`
           : "Not assigned"}</span>
       </td>
       <td className="coach-member-joined" data-label="Training from">{formatJoinedDate(player.member.trainingStartOn)}</td>
       <td className="coach-member-status-cell" data-label="Status">
         <span className={`coach-member-status is-${player.training.status}`}>
-          {player.training.status}
+          {trainingStatusLabel(player.training.status)}
         </span>
       </td>
       <td className="coach-member-row-action">

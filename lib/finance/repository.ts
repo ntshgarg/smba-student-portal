@@ -23,6 +23,7 @@ import {
   sessionAssignmentWeekdays,
   sessionOccurrences,
   sessionSeries,
+  trainingChanges,
 } from "@/lib/db/schema"
 import { academyPlanIsValid } from "@/lib/training/academy-plans"
 import {
@@ -31,6 +32,7 @@ import {
   deriveFinanceStatus,
   monthEnd,
   monthStart,
+  withdrawalCanClosePlan,
 } from "@/lib/finance/domain"
 import {
   FINANCE_CURRENCY,
@@ -46,6 +48,8 @@ import {
 import { getAcademyDateKey } from "@/lib/format"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
+import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import { termFinishedOn } from "@/lib/sessions/term"
 
 export const FINANCE_ACADEMY_ENTITY_ID = "smba"
 
@@ -115,6 +119,25 @@ export function readActiveFeeAgreement(database: Executor, playerId: string) {
   )).get()
 }
 
+/*
+ * Which assignments put a player on a schedule for a fee month. The dates on
+ * the assignment decide it, not whether its schedule is still running: ending
+ * a schedule closes every open assignment at that day (lib/sessions/service.ts
+ * endSessionSeriesRecords), so the days trained before the end still count.
+ * Filtering on `session_series.status = 'active'` used to drop them, and a
+ * schedule ended on the 10th before that month's fees were prepared left its
+ * players unbilled for a month they trained in, and stuck as "not prepared".
+ *
+ * An assignment that never covered a day (one that was due to start later and
+ * was closed on its own start date) does not count.
+ */
+function coversADay() {
+  return or(
+    isNull(sessionAssignments.effectiveTo),
+    gt(sessionAssignments.effectiveTo, sessionAssignments.effectiveFrom),
+  )
+}
+
 export function hasAssignmentInPeriod(
   database: Executor,
   playerId: string,
@@ -131,7 +154,7 @@ export function hasAssignmentInPeriod(
       eq(sessionAssignments.accountId, playerId),
       training ? eq(sessionSeries.programme, training.programme) : undefined,
       training ? eq(sessionSeries.batch, training.batch) : undefined,
-      eq(sessionSeries.status, "active"),
+      coversADay(),
       lte(sessionAssignments.effectiveFrom, monthEnd(period)),
       or(
         isNull(sessionAssignments.effectiveTo),
@@ -169,7 +192,7 @@ export function loadPeriodAssignmentIndex(
       .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
       .where(and(
         inArray(sessionAssignments.accountId, [...new Set(playerIds)]),
-        eq(sessionSeries.status, "active"),
+        coversADay(),
         lte(sessionAssignments.effectiveFrom, monthEnd(period)),
         or(
           isNull(sessionAssignments.effectiveTo),
@@ -220,7 +243,7 @@ export function readFirstMonthSessionProration(
       eq(sessionAssignments.accountId, playerId),
       eq(sessionSeries.programme, programme),
       eq(sessionSeries.batch, batch),
-      eq(sessionSeries.status, "active"),
+      coversADay(),
       lte(sessionAssignments.effectiveFrom, monthEnd(period)),
       or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, monthStart(period))),
     )).all()
@@ -640,6 +663,23 @@ function loadFeeAgreementsById(database: Executor, agreementIds: string[]) {
   return agreements
 }
 
+/** Each player's most recent fee plan start, to tell a replaced plan from an ended one. */
+function loadLatestPlanStarts(database: Executor, playerIds: string[]) {
+  const starts = new Map<string, string>()
+  if (!playerIds.length) return starts
+  database.select({
+    playerId: feeAgreements.playerAccountId,
+    latestStart: sql<string | null>`max(${feeAgreements.effectiveFrom})`,
+  }).from(feeAgreements)
+    .where(inArray(feeAgreements.playerAccountId, playerIds))
+    .groupBy(feeAgreements.playerAccountId)
+    .all()
+    .forEach((row) => {
+      if (row.latestStart) starts.set(row.playerId, row.latestStart)
+    })
+  return starts
+}
+
 function loadLatestIssuedMonthlyPeriods(database: Executor, playerIds: string[]) {
   const periods = new Map<string, string>()
   if (!playerIds.length) return periods
@@ -722,6 +762,9 @@ function loadCoachReceiptContext(
       .map(({ charge }) => charge.feeAgreementId)
       .filter((agreementId): agreementId is string => agreementId !== null))]),
     chargeRelations: loadChargeRelations(database, chargeIds),
+    latestPlanStarts: loadLatestPlanStarts(database, [...new Set(
+      allocationRows.map(({ charge }) => charge.playerAccountId),
+    )]),
     latestIssuedMonthlyPeriods: loadLatestIssuedMonthlyPeriods(database, [...new Set(
       allocationRows.map(({ charge }) => charge.playerAccountId),
     )]),
@@ -820,9 +863,13 @@ function loadPlayerPhaseTwoHistory(
           row.withdrawalEffectiveOn === agreement.effectiveTo
         ))
         : reversedWithdrawalRefunds[0]
-      const agreementCanClose = agreement?.status === "active"
-        || (agreement?.status === "ended"
-          && reversedWithdrawalRefund?.withdrawalEffectiveOn === agreement.effectiveTo)
+      const latestPlanStart = coachContext.latestPlanStarts.get(charge.playerAccountId) ?? null
+      const agreementCanClose = charge.billingPeriod !== null && withdrawalCanClosePlan({
+        agreement,
+        laterPlanExists: Boolean(agreement && latestPlanStart && latestPlanStart > agreement.effectiveFrom),
+        period: charge.billingPeriod,
+        reversedRefundOn: reversedWithdrawalRefund?.withdrawalEffectiveOn,
+      })
       const withdrawalEligible = payment.lifecycle === "recorded"
         && charge.type === "monthly_training"
         && Boolean(charge.billingPeriod)
@@ -1043,6 +1090,31 @@ export function loadPlayerFeeRecord(
     ...(phaseTwoHistory.coachManagement
       ? { coachManagement: phaseTwoHistory.coachManagement }
       : {}),
+    ...termFeeMonths(database, playerId, todayKey),
+  }
+}
+
+/*
+ * The finished term the fee page explains, and where a booked move ends that
+ * gap. A move booked for the 1st keeps the old place open until then, so the
+ * term still reads as finished, but its month will be billed at the move's
+ * fee once it happens (lib/training/changes.ts).
+ */
+function termFeeMonths(database: Executor, playerId: string, todayKey: string) {
+  const finishedOn = termFinishedOn(
+    loadOpenPlaces(database, [playerId]).get(playerId) ?? [],
+    todayKey,
+  )
+  const bookedMove = finishedOn
+    ? database.select({ effectiveOn: trainingChanges.effectiveOn }).from(trainingChanges).where(and(
+      eq(trainingChanges.playerAccountId, playerId),
+      eq(trainingChanges.status, "scheduled"),
+      eq(trainingChanges.kind, "change"),
+    )).get()
+    : undefined
+  return {
+    termFeeResumesOn: bookedMove?.effectiveOn ?? null,
+    termFinishedOn: finishedOn,
   }
 }
 
@@ -1109,7 +1181,8 @@ export function listFinancePlayers(
       and ${sessionSeries.batch} = ${playerEnrollments.batch}
       and ${sessionAssignments.effectiveFrom} <= ${monthEnd(period)}
       and (${sessionAssignments.effectiveTo} is null
-        or ${sessionAssignments.effectiveTo} > ${monthStart(period)})
+        or (${sessionAssignments.effectiveTo} > ${monthStart(period)}
+          and ${sessionAssignments.effectiveTo} > ${sessionAssignments.effectiveFrom}))
       and ${sessionSeries.startsOn} <= ${monthEnd(period)}
       and (${sessionSeries.endsOn} is null or ${sessionSeries.endsOn} >= ${monthStart(period)})
   )`

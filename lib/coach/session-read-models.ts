@@ -33,6 +33,7 @@ import {
   listSessionSeries,
 } from "@/lib/sessions/database"
 import type { AcademyHolidayRecord } from "@/lib/sessions/holiday-types"
+import { placeReachesWindow } from "@/lib/sessions/term"
 import type {
   SessionAssignment,
   SessionAttendanceRecords,
@@ -291,10 +292,17 @@ export function getCoachAttendanceRegisterSnapshot(
   const categoryOccurrencesInYear = sessionOccurrences.filter((occurrence) => (
     occurrence.occurrenceDate >= yearStart && occurrence.occurrenceDate < nextYearStart
   ))
+  const seriesById = new Map(sessionSeries.map((series) => [series.id, series]))
   const sessionAssignments = listSessionAssignmentsForSeries(categorySeriesIds).filter(
     (assignment) => {
-      const overlapsDisplayedYear = assignment.effectiveFrom < nextYearStart
-        && (!assignment.effectiveTo || assignment.effectiveTo > yearStart)
+      // A place still open on a schedule that ran out before this year does
+      // not reach into it, so it gets no row of crossed-out days here.
+      const overlapsDisplayedYear = placeReachesWindow(
+        assignment,
+        seriesById.get(assignment.seriesId),
+        yearStart,
+        nextYearStart,
+      )
       const coversReplacementInDisplayedYear = categoryOccurrencesInYear.some((occurrence) => (
         occurrence.status === "scheduled"
         && assignmentCoversOccurrence(assignment, occurrence)

@@ -10,7 +10,10 @@ import {
   normalizedNameKey,
 } from "@/lib/auth/identity"
 import { normalizeEmailAddress, registrationSubjectKey } from "@/lib/auth/recovery-service"
+import { academyToday } from "@/lib/clock"
 import type {
+  ArchiveCoachInput,
+  ArchiveCoachResult,
   ArchiveMemberInput,
   ArchiveMemberResult,
   MemberField,
@@ -26,11 +29,15 @@ import {
   authMethods,
   authRuntimeSessions,
   authSessions,
+  coachProfiles,
   playerEnrollments,
   sessionAssignments,
   sessionSeries,
 } from "@/lib/db/schema"
 import { readPlayerFinancialCloseoutState } from "@/lib/finance/service"
+import { getAcademyDateKey } from "@/lib/format"
+import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import { playerTrainingStatus } from "@/lib/sessions/term"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   type AcademyPlan,
@@ -177,6 +184,7 @@ function validateMemberUpdate(input: UpdateMemberInput):
 export function readCanonicalPlayerRecord(
   database: SmbaDatabaseExecutor,
   memberId: string,
+  today = academyToday(),
 ): PlayerMemberRecord | null {
   const row = database.select({
     activatedAt: authCredentialStates.activatedAt,
@@ -210,17 +218,15 @@ export function readCanonicalPlayerRecord(
     .get()
   if (!row) return null
 
-  const activeSessionIds = database.select({ seriesId: sessionAssignments.seriesId })
-    .from(sessionAssignments)
-    .where(and(
-      eq(sessionAssignments.accountId, memberId),
-      isNull(sessionAssignments.effectiveTo),
-    ))
-    .all()
-    .map((assignment) => assignment.seriesId)
-  const status = activeSessionIds.length
-    ? "active" as const
-    : row.status === "unassigned" ? "unassigned" as const : "paused" as const
+  // The same rule as the directory read (lib/coach/database.ts), so a saved
+  // edit cannot turn a term-finished player back into an "active" one.
+  const openPlaces = loadOpenPlaces(database, [memberId]).get(memberId) ?? []
+  const activeSessionIds = openPlaces.map((place) => place.seriesId)
+  const { status, termFinishedOn } = playerTrainingStatus({
+    enrollmentStatus: row.status,
+    openPlaces,
+    today,
+  })
 
   return {
     member: {
@@ -250,6 +256,7 @@ export function readCanonicalPlayerRecord(
       activeSessionIds,
       recordRevision: row.recordRevision,
       status,
+      termFinishedOn,
     },
   }
 }
@@ -258,13 +265,17 @@ export function updateMemberRecord({
   coachId,
   database,
   input,
-  now = new Date(),
+  now: requestedNow,
 }: {
   coachId: string
   database: SmbaDatabase
   input: UpdateMemberInput
   now?: Date
 }): MemberMutationResult {
+  const now = requestedNow ?? new Date()
+  // Only the read-back below uses the academy's today; what is written keeps
+  // its own timestamp.
+  const today = requestedNow ? getAcademyDateKey(requestedNow) : academyToday()
   requireHeadAdminAccess(coachId, { database })
   if (!input || typeof input !== "object") {
     return memberFailure("VALIDATION", "The member update is invalid.")
@@ -388,7 +399,7 @@ export function updateMemberRecord({
       throw new Error("Member account changed during an immediate transaction.")
     }
 
-    const record = readCanonicalPlayerRecord(tx, input.memberId)
+    const record = readCanonicalPlayerRecord(tx, input.memberId, today)
     if (!record) return memberFailure("NOT_FOUND", "Player account was not found.")
     return { ok: true, record }
   }, { behavior: "immediate" })
@@ -483,17 +494,99 @@ export function archiveMemberRecord({
     if (accountUpdate.changes !== 1 || enrollmentUpdate.changes !== 1) {
       throw new Error("Member changed during an immediate archive transaction.")
     }
-    tx.update(authMethods).set({ revokedAt: now }).where(and(
-      eq(authMethods.accountId, input.memberId),
-      isNull(authMethods.revokedAt),
-    )).run()
-    tx.delete(authSessions).where(eq(authSessions.accountId, input.memberId)).run()
-    tx.delete(authRuntimeSessions).where(eq(authRuntimeSessions.userId, input.memberId)).run()
-    tx.update(authCredentialStates).set({
-      status: "revoked",
-      updatedAt: now,
-    }).where(eq(authCredentialStates.accountId, input.memberId)).run()
+    revokePortalAccess(tx, input.memberId, now)
 
     return { ok: true, memberId: input.memberId }
+  }, { behavior: "immediate" })
+}
+
+/**
+ * Switches off every way an archived account signs in: the Academy ID, every
+ * open session, and the credential (so activation, recovery and the PIN all
+ * refuse it). Shared by player and coach archiving so the two cannot drift.
+ */
+function revokePortalAccess(tx: SmbaDatabaseExecutor, accountId: string, now: Date) {
+  tx.update(authMethods).set({ revokedAt: now }).where(and(
+    eq(authMethods.accountId, accountId),
+    isNull(authMethods.revokedAt),
+  )).run()
+  tx.delete(authSessions).where(eq(authSessions.accountId, accountId)).run()
+  tx.delete(authRuntimeSessions).where(eq(authRuntimeSessions.userId, accountId)).run()
+  tx.update(authCredentialStates).set({
+    status: "revoked",
+    updatedAt: now,
+  }).where(eq(authCredentialStates.accountId, accountId)).run()
+}
+
+/**
+ * Archives an assistant coach who has left. Until this existed nothing in the
+ * portal could end a coach's access: archiving took players only, so a coach
+ * who left kept signing in to the Coach Workspace and kept appearing on the
+ * staff register.
+ *
+ * Their history stays: past staff attendance still shows on the register,
+ * which stops offering days after the archive date, and every record they
+ * marked keeps their name. Only an assistant coach can be archived here; the
+ * head coach's own account is set up and replaced by the platform owner.
+ */
+export function archiveCoachRecord({
+  coachId,
+  database,
+  input,
+  now = new Date(),
+}: {
+  coachId: string
+  database: SmbaDatabase
+  input: ArchiveCoachInput
+  now?: Date
+}): ArchiveCoachResult {
+  requireHeadAdminAccess(coachId, { database })
+  const notFound: ArchiveCoachResult = {
+    ok: false,
+    code: "NOT_FOUND",
+    message: "Assistant coach was not found.",
+  }
+  if (!input || typeof input !== "object"
+    || typeof input.coachAccountId !== "string"
+    || !input.coachAccountId.trim()) {
+    return notFound
+  }
+  if (input.coachAccountId === coachId) {
+    return { ok: false, code: "SELF", message: "You cannot archive your own account." }
+  }
+  return database.transaction((tx) => {
+    const current = tx.select({ accessLevel: coachProfiles.accessLevel })
+      .from(accounts)
+      .innerJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
+      .where(and(
+        eq(accounts.id, input.coachAccountId),
+        eq(accounts.role, "coach"),
+        eq(accounts.approvalStatus, "approved"),
+        isNull(accounts.archivedAt),
+      ))
+      .get()
+    if (!current) return notFound
+    if (current.accessLevel !== "junior_coach") {
+      return {
+        ok: false,
+        code: "HEAD_COACH",
+        message: "Only an assistant coach can be archived here.",
+      }
+    }
+
+    // The identity key is released for the same reason as a player's: a coach
+    // who later returns registers again rather than colliding with this row.
+    const accountUpdate = tx.update(accounts).set({
+      archivedAt: now,
+      archivedByAccountId: coachId,
+      registrationIdentityKey: null,
+      updatedAt: now,
+    }).where(and(eq(accounts.id, input.coachAccountId), isNull(accounts.archivedAt))).run()
+    if (accountUpdate.changes !== 1) {
+      throw new Error("Coach changed during an immediate archive transaction.")
+    }
+    revokePortalAccess(tx, input.coachAccountId, now)
+
+    return { ok: true, coachAccountId: input.coachAccountId }
   }, { behavior: "immediate" })
 }

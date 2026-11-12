@@ -10,6 +10,7 @@ import {
   type DraftErrors,
   type MemberDraft,
 } from "@/components/coach/members/directory/member-draft"
+import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import type {
   MemberEditor,
   MemberFeedback,
@@ -39,6 +40,7 @@ import type {
   PlayerMemberRecord,
 } from "@/lib/coach/types"
 import { formatInr } from "@/lib/format"
+import { termFinishedToMove } from "@/lib/sessions/term"
 import {
   academyPlanIsValid,
   academyPlansFor,
@@ -71,7 +73,7 @@ function financialCloseoutMessage(
  *
  * The hook is called first and unconditionally, so the hook order React sees is
  * the order the component itself used: usePathname, useSearchParams, the two
- * portal contexts, two useMemos, twelve useStates, six useRefs, the filter
+ * portal contexts, the training summaries' context, two useMemos, twelve useStates, six useRefs, the filter
  * useMemo, useUnsavedWorkGuard, then five useEffects. All 449 statement lines
  * moved here byte for byte, indentation included, which is why that order is
  * checkable rather than asserted.
@@ -86,9 +88,14 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     sessionAssignments,
     sessionSeries,
   } = useMemberDirectoryPortal()
+  // The academy's today, read on the server with the training summaries, so a
+  // schedule whose term has finished is labelled by the same clock that set
+  // each player's status.
+  const memberTraining = useMemberTraining()
+  const today = memberTraining?.today ?? null
   const memberIndex = useMemo(
-    () => buildMemberDirectoryIndex(players, sessionAssignments, sessionSeries),
-    [players, sessionAssignments, sessionSeries],
+    () => buildMemberDirectoryIndex(players, sessionAssignments, sessionSeries, today),
+    [players, sessionAssignments, sessionSeries, today],
   )
   const { playerById, sessionLabelsByPlayer } = memberIndex
   const urlCriteria = useMemo(
@@ -132,7 +139,16 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
           || player.member.primaryContact.name.toLocaleLowerCase().includes(normalizedQuery)
         const matchesLevel = level === "All levels"
           || player.training.level === level
-        const matchesStatus = status === "all" || player.training.status === status
+        // "finished" is the dashboard's link to the players to move, so it
+        // lists exactly the ones its count does: a term-finished player with
+        // a move or an end already booked has been dealt with
+        // (termFinishedToMove in lib/sessions/term.ts).
+        const matchesStatus = status === "all" || (status === "finished"
+          ? termFinishedToMove(
+            player.training.status,
+            Boolean(memberTraining?.summaries[player.member.id]?.scheduled),
+          )
+          : player.training.status === status)
         const matchesBatch = batch === "All batches" || player.training.batch === batch
         // The role filter is the only one that can empty this list wholesale.
         // It is applied here rather than at the render so the count in the
@@ -144,7 +160,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
           || (matchesSearch && matchesLevel && matchesBatch && matchesStatus && matchesRole)
       })
       .sort((a, b) => a.member.fullName.localeCompare(b.member.fullName))
-  }, [batch, editingMemberId, expandedMemberId, level, players, query, role, status])
+  }, [batch, editingMemberId, expandedMemberId, level, memberTraining, players, query, role, status])
 
   /*
    * Staff answer to the role filter and the search box only. Level, batch and
@@ -522,6 +538,17 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     }
   }
 
+  // The staff list is server data, so the archived coach's row leaves when the
+  // page refreshes; this closes it and says what happened in the meantime.
+  function noteStaffArchived(staffMember: AcademyStaffMember) {
+    setExpandedMemberId(null)
+    setDirectoryFeedback({
+      message: `${staffMember.fullName} archived and their sign-in switched off`,
+      tone: "success",
+    })
+    focusAfterRender(() => directorySummaryRef.current)
+  }
+
   function planForClassification(
     nextLevel: MemberDraft["level"],
     nextBatch: MemberDraft["batch"],
@@ -600,6 +627,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     hasDirectoryCriteria,
     hasMoreMembers,
     memberFeedback,
+    noteStaffArchived,
     openMember,
     players,
     resetFilters,

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
@@ -22,6 +23,7 @@ import type { PlayerMemberRecord } from "@/lib/coach/types"
 import type { MemberFeeSummary, MemberScheduledChange } from "@/lib/training/member-summaries"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
 import { formatDateKey, formatInr, formatSessionLabel, parseRupeesToPaise } from "@/lib/format"
+import { formatTermDate } from "@/lib/sessions/term"
 import type { TrainingBatch, TrainingProgramme, TrainingSessionSeries } from "@/lib/sessions/types"
 import {
   academyBatchesFor,
@@ -31,6 +33,7 @@ import {
   academyPlansFor,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
+import { planThisMonthFeeCorrection } from "@/lib/training/this-month-fee-plan"
 
 const LEVELS: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 const DAYS = [
@@ -102,11 +105,20 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   )
   if (!data || !summary) return null
 
-  const onboarded = player.training.level !== "Assessment pending"
-    && player.training.batch !== "Assessment pending"
-    && Boolean(player.training.academyPlan)
+  // Starting or changing training waits for Player onboarding to finish (the
+  // server refuses it too, lib/training/changes.ts). A level, batch and plan
+  // are set part-way through onboarding, so they are not the signal.
+  const onboarded = player.member.onboardingCompletedAt !== undefined
+    ? Boolean(player.member.onboardingCompletedAt)
+    : player.training.level !== "Assessment pending"
+      && player.training.batch !== "Assessment pending"
+      && Boolean(player.training.academyPlan)
   const scheduled = summary.scheduled
   const fee = summary.fee
+  // "active" means at least one running place (lib/sessions/term.ts). A
+  // player on no schedule, or whose term has finished, has no fee to change:
+  // the server refuses it, so the button is not offered.
+  const hasRunningPlace = player.training.status === "active"
   const nextMonth = monthName(data.nextMonthStart)
   const thisMonth = monthName(data.today)
 
@@ -177,7 +189,17 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
 
           <div className={styles.actions}>
             {!onboarded ? (
-              <p className={styles.help}>Finish Player onboarding to set a first schedule.</p>
+              <>
+                <p className={styles.help}>
+                  Finish <Link href="/coach/onboarding">Player onboarding</Link> first. It sets this player&apos;s first schedule and fee plan.
+                </p>
+                {/* A player who leaves part-way through can still be taken off their schedule. */}
+                {current.length ? (
+                  <button className={`${styles.button} ${styles.danger}`} disabled={busy} onClick={() => toggle("end")} type="button">
+                    End training
+                  </button>
+                ) : null}
+              </>
             ) : current.length ? (
               <>
                 <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("change")} type="button">
@@ -225,7 +247,11 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                         : `due ${dayName(fee.thisMonth.dueDate)}`}`
                     : "Not issued yet"}</dd>
                 </div>
-                <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
+                <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthNoFee === "term-finished"
+                  ? "No fee: term finished"
+                  : fee.nextMonthNoFee === "no-schedule"
+                    ? "No fee: not on a schedule"
+                    : fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
                 <div>
                   <dt>Concession</dt>
                   <dd>{fee.concession
@@ -236,11 +262,24 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
             ) : (
               <p className={styles.help}>No fee plan yet. It is set during Player onboarding.</p>
             )}
+            {/* Without a running place there is no fee to change. A booked
+                move carries its own fee, edited with that change; a booked
+                end needs nothing more. */}
+            {fee?.activeAgreementId && !hasRunningPlace && !scheduled ? (
+              <p className={styles.help}>Move them to a schedule first to change their fee.</p>
+            ) : null}
+            {fee?.activeAgreementId && !hasRunningPlace && scheduled?.kind === "change" ? (
+              <p className={styles.help}>
+                Their fee from {monthName(scheduled.effectiveOn)} is set in the scheduled change.
+              </p>
+            ) : null}
             {fee?.activeAgreementId ? (
               <div className={styles.actions}>
-                <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
-                  Change fee
-                </button>
+                {hasRunningPlace ? (
+                  <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
+                    Change fee
+                  </button>
+                ) : null}
                 {fee.concession ? (
                   <button
                     className={styles.button}
@@ -301,15 +340,17 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           onCancel={() => setOpen(null)}
           onSubmit={submit}
           playerId={memberId}
+          termFinishedOn={player.training.termFinishedOn}
           thisMonth={thisMonth}
         />
       ) : null}
-      {open === "fee" && fee ? (
+      {open === "fee" && fee && hasRunningPlace ? (
         <FeeForm
           busy={busy}
           currentFee={fee.monthlyFeePaise}
           name={player.member.fullName}
-          nextMonth={nextMonth}
+          startsMonth={monthName(fee.feeChangeStartsOn)}
+          startsThisMonth={fee.feeChangeStartsOn <= data.today}
           onCancel={() => setOpen(null)}
           onSubmit={submit}
           playerId={memberId}
@@ -520,8 +561,11 @@ function TrainingForm({
   const thisMonth = monthName(monthStart)
   const label = chosen ? seriesLabel(chosen) : "the new schedule"
   const thisMonthFee = fee?.thisMonth?.amountPaise ?? null
-  const correctedThisMonth = when === "this" && profileChanges && thisMonthFee !== null && fee?.monthlyFeePaise && feePaise
-    ? Math.round(thisMonthFee * feePaise / fee.monthlyFeePaise)
+  // The same sum the server runs when it posts the correction, so the figure
+  // confirmed here is the figure billed (concessions included).
+  const thisMonthBasis = fee?.thisMonth?.basis ?? null
+  const correctedThisMonth = when === "this" && profileChanges && thisMonthBasis && feePaise
+    ? planThisMonthFeeCorrection(thisMonthBasis, feePaise).newAmountPaise
     : null
 
   const summary = chosen && daysOk && dateOk ? [
@@ -565,8 +609,8 @@ function TrainingForm({
             const parts = [`Schedule changed from ${dayName(outcome.startsOn)}`]
             const cleared = outcome.result?.clearedMarks.length ?? 0
             if (cleared) parts.push(`${cleared} ${cleared === 1 ? "mark" : "marks"} cleared; mark ${cleared === 1 ? "it" : "them"} again`)
-            if (outcome.result && outcome.result.refundNeededPaise > 0) {
-              parts.push(`${formatInr(outcome.result.refundNeededPaise)} was already paid and needs a refund in Fee records`)
+            if (outcome.result?.newAmountPaise != null) {
+              parts.push(`${thisMonth}'s fee is now ${formatInr(outcome.result.newAmountPaise)}`)
             }
             return parts.join(". ")
           },
@@ -740,6 +784,7 @@ function EndForm({
   onCancel,
   onSubmit,
   playerId,
+  termFinishedOn,
   thisMonth,
 }: {
   busy: boolean
@@ -749,6 +794,8 @@ function EndForm({
   onCancel: () => void
   onSubmit: Submit
   playerId: string
+  /** Set when the player's term has finished; the ending itself is unchanged. */
+  termFinishedOn: string | null
   thisMonth: string
 }) {
   const [leftAlready, setLeftAlready] = useState(false)
@@ -775,6 +822,9 @@ function EndForm({
       ]}
       title={`${name} stops training`}
     >
+      {termFinishedOn ? (
+        <p className={styles.help}>Their term finished on {formatTermDate(termFinishedOn)}.</p>
+      ) : null}
       <div className={styles.field}>
         <span className={styles.label}>Last month of training</span>
         <div className={styles.fixed}>{thisMonth} · this month</div>
@@ -804,19 +854,23 @@ function FeeForm({
   busy,
   currentFee,
   name,
-  nextMonth,
   onCancel,
   onSubmit,
   playerId,
+  startsMonth,
+  startsThisMonth,
   thisMonth,
 }: {
   busy: boolean
   currentFee: number | null
   name: string
-  nextMonth: string
   onCancel: () => void
   onSubmit: Submit
   playerId: string
+  /** The month the new fee takes, worked out on the server (lib/training/fees.ts). */
+  startsMonth: string
+  /** On the 1st, before this month's fee is issued, the new fee takes this month. */
+  startsThisMonth: boolean
   thisMonth: string
 }) {
   const [text, setText] = useState(currentFee !== null ? String(currentFee / 100) : "")
@@ -837,8 +891,10 @@ function FeeForm({
         )
       }}
       summary={amount && amount !== currentFee ? [
-        `Keep ${thisMonth} as it is`,
-        `Charge ${formatInr(amount)} a month from ${nextMonth}`,
+        startsThisMonth
+          ? `${thisMonth}'s fee is not issued yet, so it uses the new fee`
+          : `Keep ${thisMonth} as it is`,
+        `Charge ${formatInr(amount)} a month from ${startsMonth}`,
       ] : []}
       title={`New monthly fee for ${name}`}
     >
@@ -850,7 +906,7 @@ function FeeForm({
             <input name="newMonthlyFee" inputMode="decimal" value={text} onChange={(event) => setText(event.target.value)} />
           </span>
         </label>
-        <p className={styles.help}>Now {currentFee !== null ? formatInr(currentFee) : "no fee"}. Starts with {nextMonth}&apos;s fee; fees already issued do not change.</p>
+        <p className={styles.help}>Now {currentFee !== null ? formatInr(currentFee) : "no fee"}. Starts with {startsMonth}&apos;s fee{startsThisMonth ? ", which is not issued yet" : ""}; fees already issued do not change.</p>
       </div>
     </FormShell>
   )

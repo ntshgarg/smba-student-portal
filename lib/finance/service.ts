@@ -47,6 +47,7 @@ import {
   isValidMutationId,
   monthEnd,
   monthStart,
+  withdrawalCanClosePlan,
 } from "@/lib/finance/domain"
 import {
   FinanceRecordsCursorError,
@@ -1972,6 +1973,11 @@ function monthlyChargeBasis(
   }
 }
 
+function monthKeyLabel(period: string) {
+  return new Intl.DateTimeFormat("en-IN", { month: "long", timeZone: "UTC", year: "numeric" })
+    .format(new Date(`${period}-01T00:00:00Z`))
+}
+
 export function prepareMonthlyCharges(
   input: PrepareMonthlyChargesInput,
   {
@@ -2008,6 +2014,21 @@ export function prepareMonthlyCharges(
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was used for another month.")
       }
       return { ...result, deferred: result.deferred ?? 0, reused: true }
+    }
+    /*
+     * A month's fees are issued once that month has begun, never ahead of it.
+     * Issued fees never change, so a fee issued early froze it before the
+     * month's changes could reach it: a fee change or concession given
+     * afterwards silently missed it (a one-month concession never applied at
+     * all), and an "End training" with fees stopped failed on the 1st because
+     * a later fee already existed.
+     */
+    if (input.period > getAcademyMonthKey(now)) {
+      financeError(
+        "INVALID_INPUT",
+        `${monthKeyLabel(input.period)} fees can be issued from the 1st of that month.`,
+        "period",
+      )
     }
 
     const candidates = monthlyPreparationCandidates(tx, input.period, now)
@@ -2645,9 +2666,18 @@ function withdrawalRefundablePaymentAllocations(
             ? eq(refunds.withdrawalEffectiveOn, agreement.effectiveTo)
             : undefined,
         )).get()
-      const agreementCanClose = agreement?.status === "active"
-        || (agreement?.status === "ended"
-          && reversedWithdrawalRefund?.withdrawalEffectiveOn === agreement.effectiveTo)
+      const laterPlan = agreement
+        ? database.select({ id: feeAgreements.id }).from(feeAgreements).where(and(
+          eq(feeAgreements.playerAccountId, agreement.playerAccountId),
+          gt(feeAgreements.effectiveFrom, agreement.effectiveFrom),
+        )).get()
+        : undefined
+      const agreementCanClose = withdrawalCanClosePlan({
+        agreement,
+        laterPlanExists: Boolean(laterPlan),
+        period,
+        reversedRefundOn: reversedWithdrawalRefund?.withdrawalEffectiveOn,
+      })
       if (!agreement || !agreementCanClose
         || agreement.playerAccountId !== charge.playerAccountId
         || agreement.effectiveFrom > withdrawalEffectiveOn

@@ -1,6 +1,7 @@
 "use client"
 
 import type { PlayerMemberRecord } from "@/lib/coach/types"
+import { formatTermDate } from "@/lib/sessions/term"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
 
 export function MemberTrainingPanel({
@@ -20,7 +21,9 @@ export function MemberTrainingPanel({
         <div><dt>Level</dt><dd>{player.training.level}</dd></div>
         <div><dt>Batch</dt><dd>{player.training.batch}</dd></div>
         <div><dt>Academy Plan</dt><dd>{academyPlanLabel(player.training.academyPlan)}</dd></div>
-        <div><dt>Status</dt><dd>{player.training.status}</dd></div>
+        <div><dt>Status</dt><dd>{player.training.status === "finished" && player.training.termFinishedOn
+          ? `Term finished on ${formatTermDate(player.training.termFinishedOn)}`
+          : player.training.status}</dd></div>
         <div className="is-wide">
           <dt>Active sessions</dt>
           <dd>{activeSessionLabels.length

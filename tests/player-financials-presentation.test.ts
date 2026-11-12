@@ -136,6 +136,8 @@ function feeRecord(overrides: Partial<PlayerFeeRecord> = {}): PlayerFeeRecord {
     monthlyCharges: [charge()],
     receipts: [monthlyReceipt(), registrationReceipt()],
     concessionEntries: [],
+    termFeeResumesOn: null,
+    termFinishedOn: null,
     ...overrides,
   }
 }
@@ -692,5 +694,47 @@ describe("player financial presentation", () => {
     expect(html).not.toContain("private-coach-id")
     expect(html).not.toContain("private-receipt-key")
     expect(html).not.toContain("private-player-id")
+  })
+
+  it("says a month after a finished term has no fee rather than one not issued yet", () => {
+    function monthCellLabel(html: string, period: string) {
+      return html.match(new RegExp(
+        `data-fee-month-cell="${period}"[^>]*>[\\s\\S]*?<strong>([^<]*)</strong>`,
+        "u",
+      ))?.[1]
+    }
+    const record = feeRecord({
+      monthlyCharges: [charge({ billingPeriod: "2026-10", dueDate: "2026-10-05", id: "charge-october" })],
+      receipts: [],
+      termFinishedOn: "2026-10-31",
+    })
+    const html = renderToStaticMarkup(PlayerFeeRecordView({
+      currentPeriod: "2026-11",
+      record,
+      requestedYear: "2026",
+    }))
+
+    expect(monthCellLabel(html, "2026-09")).toBe("Not issued")
+    expect(monthCellLabel(html, "2026-10")).toBe("Partially paid")
+    expect(monthCellLabel(html, "2026-11")).toBe("No fee: term finished")
+    expect(monthCellLabel(html, "2026-12")).toBe("No fee: term finished")
+
+    const running = renderToStaticMarkup(PlayerFeeRecordView({
+      currentPeriod: "2026-11",
+      record: { ...record, termFinishedOn: null },
+      requestedYear: "2026",
+    }))
+    expect(monthCellLabel(running, "2026-11")).toBe("Not issued")
+    expect(running).not.toContain("term finished")
+
+    // A move booked for 1 December will be billed from December, so only
+    // November has no fee; December waits for its fee like any other month.
+    const booked = renderToStaticMarkup(PlayerFeeRecordView({
+      currentPeriod: "2026-11",
+      record: { ...record, termFeeResumesOn: "2026-12-01" },
+      requestedYear: "2026",
+    }))
+    expect(monthCellLabel(booked, "2026-11")).toBe("No fee: term finished")
+    expect(monthCellLabel(booked, "2026-12")).toBe("Not issued")
   })
 })

@@ -3,6 +3,7 @@ import "server-only"
 import { and, asc, eq, gt, isNull } from "drizzle-orm"
 
 import { releaseSecondFactorAttempt } from "@/lib/auth/credential-service"
+import { forgetTrustedDevices } from "@/lib/auth/second-factor-reset"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import {
   initializeDatabase,
@@ -127,6 +128,9 @@ export function approveAuthenticatorResetRequest(input: {
     tx.delete(authRuntimeSessions).where(eq(authRuntimeSessions.userId, request.accountId)).run()
     tx.delete(authSessions).where(eq(authSessions.accountId, request.accountId)).run()
     tx.delete(authTwoFactors).where(eq(authTwoFactors.userId, request.accountId)).run()
+    // A reset is for a lost or stolen phone; a browser trusted earlier must not
+    // keep skipping the code once a new authenticator is connected.
+    forgetTrustedDevices(request.accountId, { database: tx })
     tx.update(authUsers).set({ twoFactorEnabled: false, updatedAt: now })
       .where(eq(authUsers.id, request.accountId)).run()
     // The old factor is gone, so failures against it must not stand in the way

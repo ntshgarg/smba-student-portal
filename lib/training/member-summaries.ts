@@ -2,6 +2,7 @@ import "server-only"
 
 import { and, desc, eq, gte, inArray, isNull, ne, or } from "drizzle-orm"
 
+import type { PlayerTrainingProfile } from "@/lib/coach/types"
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   concessions,
@@ -12,7 +13,17 @@ import {
 import { loadChargeViews } from "@/lib/finance/repository"
 import { isFinanceActive } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
+import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import {
+  placeReachesWindow,
+  scheduleIsRunning,
+  termFinishedOn,
+  termFinishedToMove,
+} from "@/lib/sessions/term"
 import { nextMonthStartOf } from "@/lib/training/changes"
+import { feeChangeStartsOn } from "@/lib/training/fees"
+import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
+import type { ThisMonthFeeBasis } from "@/lib/training/this-month-fee-plan"
 
 /*
  * What the Members directory shows on each player's record about their
@@ -45,9 +56,29 @@ export type MemberFeeSummary = {
     value: number
     valueKind: "fixed" | "percentage"
   } | null
+  /** The 1st of the month a fee change made today would start from. */
+  feeChangeStartsOn: string
   monthlyFeePaise: number | null
   nextMonthFeePaise: number | null
-  thisMonth: { amountPaise: number; dueDate: string; receivedPaise: number } | null
+  /**
+   * Why no fee will be issued next month although the plan has one: no
+   * running place reaches into next month and no booked move gives them one.
+   * "term-finished" when the player's term has finished
+   * (lib/sessions/term.ts), "no-schedule" otherwise. Null when next month's
+   * fee is issued as shown.
+   */
+  nextMonthNoFee: "no-schedule" | "term-finished" | null
+  thisMonth: {
+    amountPaise: number
+    /**
+     * What a level, batch or plan change this month would do to this month's
+     * fee, for lib/training/this-month-fee-plan.ts. Null when no plan covers
+     * the month.
+     */
+    basis: ThisMonthFeeBasis | null
+    dueDate: string
+    receivedPaise: number
+  } | null
 }
 
 export type MemberTrainingSummary = {
@@ -61,6 +92,32 @@ export type MemberTrainingSummaries = {
   nextMonthStart: string
   summaries: Record<string, MemberTrainingSummary>
   today: string
+}
+
+/**
+ * The term-finished players the head coach still has to move: those with no
+ * move or end of training booked for them in Members yet (termFinishedToMove
+ * in lib/sessions/term.ts). The dashboard's to-do counts them; Members'
+ * "Term finished" filter lists the same players, reading the booked change
+ * from listMemberTrainingSummaries below.
+ */
+export function listTermFinishedPlayersToMove(
+  profiles: readonly Pick<PlayerTrainingProfile, "memberId" | "status">[],
+  { database = initializeDatabase() }: { database?: SmbaDatabaseExecutor } = {},
+) {
+  const finished = profiles
+    .filter((profile) => profile.status === "finished")
+    .map((profile) => profile.memberId)
+  if (!finished.length) return []
+  const booked = new Set(database.select({ playerId: trainingChanges.playerAccountId })
+    .from(trainingChanges)
+    .where(and(
+      inArray(trainingChanges.playerAccountId, finished),
+      eq(trainingChanges.status, "scheduled"),
+    ))
+    .all()
+    .map((row) => row.playerId))
+  return finished.filter((playerId) => termFinishedToMove("finished", booked.has(playerId)))
 }
 
 function covers(
@@ -145,6 +202,33 @@ export function listMemberTrainingSummaries(
     or(isNull(concessions.endsPeriod), gte(concessions.endsPeriod, nextPeriod)),
   )).all()
 
+  const monthStart = `${thisPeriod}-01`
+  const monthAgreements = !charges.length ? [] : database.select({
+    agreedMonthlyFeePaise: feeAgreements.agreedMonthlyFeePaise,
+    effectiveFrom: feeAgreements.effectiveFrom,
+    effectiveTo: feeAgreements.effectiveTo,
+    playerAccountId: feeAgreements.playerAccountId,
+  }).from(feeAgreements).where(and(
+    inArray(feeAgreements.playerAccountId, charges.map((charge) => charge.playerId)),
+    ne(feeAgreements.status, "paused"),
+  )).all()
+  // The plan covering the 1st is the one a change this month corrects
+  // (agreementsAround in lib/training/changes.ts).
+  const feeBases = loadThisMonthFeeBases(database, charges.flatMap((charge) => {
+    const covering = monthAgreements.find((agreement) => (
+      agreement.playerAccountId === charge.playerId && covers(agreement, monthStart)
+    ))
+    return covering
+      ? [{ feePaise: covering.agreedMonthlyFeePaise, id: charge.id, originalAmountPaise: charge.amountPaise }]
+      : []
+  }))
+
+  // Fee issuing bills a month only for a place whose dates reach into it
+  // (lib/finance/repository.ts hasAssignmentInPeriod), so a plan's next fee is
+  // only real while a running place, or a booked move, carries into next month.
+  const openPlaces = loadOpenPlaces(database, playerIds)
+  const monthAfterNextStart = nextMonthStartOf(nextMonthStart)
+
   for (const playerId of playerIds) {
     const own = agreements.filter((agreement) => agreement.playerAccountId === playerId)
     const current = own.find((agreement) => covers(agreement, today)) ?? null
@@ -157,6 +241,12 @@ export function listMemberTrainingSummaries(
     const scheduledFee = waiting?.kind === "change" ? waiting.monthlyFeePaise : null
     // Training that ends this month with its fees stopped has no fee next month.
     const feesStop = waiting?.kind === "end" && waiting.stopFees
+    const places = openPlaces.get(playerId) ?? []
+    // A booked move starts a place on the 1st; a booked end closes them all.
+    const placeNextMonth = waiting?.kind === "change" || (waiting?.kind !== "end" && places.some((place) => (
+      scheduleIsRunning(place, today)
+      && placeReachesWindow(place, place, nextMonthStart, monthAfterNextStart)
+    )))
     summaries[playerId].fee = {
       activeAgreementId: active?.id ?? null,
       activeAgreementRevision: active?.recordRevision ?? null,
@@ -170,11 +260,18 @@ export function listMemberTrainingSummaries(
           valueKind: concession.valueKind,
         }
         : null,
+      feeChangeStartsOn: active
+        ? feeChangeStartsOn({ activePlanFrom: active.effectiveFrom, thisMonthIssued: Boolean(charge), today })
+        : nextMonthStart,
       monthlyFeePaise: current?.agreedMonthlyFeePaise ?? null,
       nextMonthFeePaise: feesStop ? null : scheduledFee ?? next?.agreedMonthlyFeePaise ?? null,
+      nextMonthNoFee: placeNextMonth || feesStop
+        ? null
+        : termFinishedOn(places, today) ? "term-finished" : "no-schedule",
       thisMonth: charge
         ? {
           amountPaise: chargeViews.get(charge.id)?.effectiveAmountPaise ?? charge.amountPaise,
+          basis: feeBases.get(charge.id) ?? null,
           dueDate: charge.dueDate,
           receivedPaise: chargeViews.get(charge.id)?.receivedPaise ?? 0,
         }

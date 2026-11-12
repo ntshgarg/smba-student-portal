@@ -20,6 +20,7 @@ import {
 } from "@/lib/auth/credential-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { normalizeAcademyId } from "@/lib/auth/identity"
+import { forgetTrustedDevices } from "@/lib/auth/second-factor-reset"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
 import {
@@ -160,6 +161,14 @@ export async function revokeOtherSessionsAction() {
   const requestHeaders = await headers()
   await getAuth().api.revokeOtherSessions({ headers: requestHeaders })
   /*
+   * Trusted browsers go too, this one included. Ending a lost phone's session
+   * is not enough while that phone is still trusted to skip the authenticator
+   * code: with a saved password it signed straight back in. Telling this
+   * browser's trust apart would mean reading the library's signed cookie, and
+   * one extra code on the next sign-in here is the smaller cost.
+   */
+  const forgottenDevices = forgetTrustedDevices(identity.subjectId)
+  /*
    * This deliberately does NOT remove the PIN, though the first attempt at
    * closing the stolen-cookie hole made it do so. This action is gated on a
    * session and nothing else, so deleting a credential here handed the thief the
@@ -177,7 +186,7 @@ export async function revokeOtherSessionsAction() {
     actorAccountId: identity.subjectId,
     eventType: "sessions_revoked",
     ipHash: security.ipHash,
-    metadata: { scope: "other_devices" },
+    metadata: { forgottenDevices, scope: "other_devices" },
     outcome: "success",
     userAgent: security.userAgent,
   })

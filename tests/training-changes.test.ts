@@ -405,4 +405,54 @@ describe("training changes from the player's record", () => {
     expect(all[0]?.effectiveTo).toBe("2026-11-01")
     expect(agreements(players.sana)[0]).toMatchObject({ effectiveTo: "2026-10-31", status: "ended" })
   })
+  it("waits for Player onboarding before starting or changing training, but still lets it end", () => {
+    const nisha = "20000000-0000-4000-8000-0000000000a5"
+    addPlayer(nisha, "Nisha Rao", 9005, "2026-10-01")
+    assign(nisha, morning, "2026-10-01", [1, 2, 3, 4, 5])
+    // Assessed and given a session, but the Fee Plan step is not done.
+    database.update(schema.playerEnrollments).set({ onboardingCompletedAt: null })
+      .where(eq(schema.playerEnrollments.accountId, nisha)).run()
+
+    expect(() => changes.scheduleTrainingChange({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: nisha,
+      seriesId: evening,
+    }, context())).toThrowError(/Finish Player onboarding first/u)
+    expect(() => changes.changeScheduleThisMonth({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: nisha,
+      seriesId: evening,
+      startsOn: "2026-10-05",
+    }, context())).toThrowError(/Finish Player onboarding first/u)
+    expect(agreements(nisha)).toHaveLength(0)
+    expect(openAssignments(nisha)).toHaveLength(1)
+
+    changes.endTrainingNow({ playerId: nisha, stopFees: true }, context())
+    expect(openAssignments(nisha)).toHaveLength(0)
+    expect(enrollment(nisha)?.status).toBe("paused")
+  })
+
+  it("fails a change that falls due for a player whose onboarding is not finished", () => {
+    const omar = "20000000-0000-4000-8000-0000000000a6"
+    addPlayer(omar, "Omar Khan", 9006, "2026-07-01")
+    assign(omar, morning, "2026-07-01", [1, 2, 3, 4, 5])
+    changes.scheduleTrainingChange({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: omar,
+      seriesId: evening,
+    }, context())
+    database.update(schema.playerEnrollments).set({ onboardingCompletedAt: null })
+      .where(eq(schema.playerEnrollments.accountId, omar)).run()
+
+    changes.applyDueTrainingChanges({ database, now: new Date("2026-11-02T05:00:00.000Z") })
+    expect(database.select().from(schema.trainingChanges)
+      .where(eq(schema.trainingChanges.playerAccountId, omar)).get()).toMatchObject({
+      failureReason: expect.stringMatching(/Finish Player onboarding first/u),
+      status: "failed",
+    })
+    expect(agreements(omar)).toHaveLength(0)
+  })
 })

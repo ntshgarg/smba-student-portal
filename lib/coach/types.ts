@@ -78,9 +78,17 @@ export type PlayerTrainingProfile = {
   level: import("@/lib/sessions/types").TrainingProgramme | "Assessment pending"
   batch: "Weekday" | "Weekend" | "Assessment pending"
   academyPlan: import("@/lib/training/academy-plans").AcademyPlan | null
+  /** Every open place (assignment with no end), finished terms included. */
   activeSessionIds: string[]
   recordRevision: number
-  status: "unassigned" | "active" | "paused"
+  /**
+   * "finished" when every open place is on a schedule whose last day has
+   * passed (lib/sessions/term.ts). Nothing changes by itself at term end, so
+   * the player still holds those places until the head coach moves them on.
+   */
+  status: import("@/lib/sessions/term").PlayerTrainingStatus
+  /** The last day of the finished term while status is "finished"; otherwise null. */
+  termFinishedOn: string | null
 }
 
 export type PlayerMemberRecord = {
@@ -135,6 +143,18 @@ export type ArchiveMemberInput = {
   memberId: string
   expectedRevision: number
 }
+
+export type ArchiveCoachInput = {
+  coachAccountId: string
+}
+
+export type ArchiveCoachResult =
+  | { ok: true; coachAccountId: string }
+  | {
+      ok: false
+      code: "HEAD_COACH" | "NOT_FOUND" | "SELF"
+      message: string
+    }
 
 export type ArchiveMemberResult =
   | { ok: true; memberId: string }
