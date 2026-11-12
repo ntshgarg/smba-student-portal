@@ -114,6 +114,9 @@ export function MemberDirectoryFilters({
             <option value="all">All members</option>
             <option value="unassigned">Unassigned</option>
             <option value="active">Active</option>
+            {/* Players with a move or an end already booked are left out
+                (termFinishedToMove), so the option says what it lists. */}
+            <option value="finished">Term finished, to move</option>
             <option value="paused">Paused</option>
           </select>
         </label>

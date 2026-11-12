@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { PlayerMemberRecord } from "@/lib/coach/types"
+import type { AcademyStaffMember, PlayerMemberRecord } from "@/lib/coach/types"
+import type { MemberTrainingSummaries } from "@/lib/training/member-summaries"
 
 const mocks = vi.hoisted(() => ({
   archiveMember: vi.fn(),
@@ -43,7 +44,9 @@ vi.mock("@/components/unsaved-work-guard", () => ({
   useUnsavedWorkGuard: () => ({ confirmDiscard: () => true }),
 }))
 
+import { MemberTrainingProvider } from "@/components/coach/members/directory/member-training-context"
 import { MemberDirectory } from "@/components/coach/members/member-directory"
+import { termFinishedMembersHref } from "@/components/coach/members/member-directory-query"
 import {
   MEMBERS_INCREMENT,
   initialMemberWindow,
@@ -77,6 +80,7 @@ function players(count: number): PlayerMemberRecord[] {
         memberId,
         recordRevision: 1,
         status: "unassigned",
+        termFinishedOn: null,
       },
     }
   })
@@ -169,5 +173,101 @@ describe("Member Directory reveal window", () => {
     expect(memberWindowSummary(12, 30)).toBe("Showing 12 of 30 members")
     expect(memberWindowSummary(12, 12)).toBe("12 members")
     expect(memberWindowSummary(1, 1)).toBe("1 member")
+  })
+})
+
+/*
+ * The dashboard's "Term finished: N players to move" lands here with
+ * status=finished&role=players. The list has to be the same N players: no
+ * coach after them, and no term-finished player whose move or end is already
+ * booked, since the to-do no longer counts them.
+ */
+describe("Member Directory from the dashboard's term-finished to-do", () => {
+  const coach: AcademyStaffMember = {
+    academyId: "SMBA-JC-6442",
+    accessLevel: "junior_coach",
+    activatedAt: "2026-08-27T09:10:00.000Z",
+    approvedAt: "2026-08-27T08:00:00.000Z",
+    fullName: "Kavya Iyer",
+    id: "staff-1",
+    initials: "KI",
+    joinedOn: "2026-08-27",
+    role: "coach",
+  }
+
+  function player(id: string, fullName: string, status: PlayerMemberRecord["training"]["status"]) {
+    const [record] = players(1)
+    return {
+      member: { ...record.member, fullName, id },
+      training: {
+        ...record.training,
+        activeSessionIds: status === "paused" ? [] : ["autumn"],
+        memberId: id,
+        status,
+        termFinishedOn: status === "finished" ? "2026-10-31" : null,
+      },
+    } satisfies PlayerMemberRecord
+  }
+
+  function render(search: string) {
+    mocks.players = [
+      player("to-move", "Asha Iyer", "finished"),
+      player("booked", "Ela Shah", "finished"),
+      player("running", "Chitra Rao", "active"),
+    ]
+    mocks.search = search
+    const training: MemberTrainingSummaries = {
+      financeActive: false,
+      nextMonthStart: "2026-12-01",
+      summaries: {
+        booked: {
+          failed: null,
+          fee: null,
+          scheduled: {
+            academyPlan: "weekday-3-day",
+            batch: "Weekday",
+            effectiveOn: "2026-12-01",
+            id: "booked-move",
+            kind: "change",
+            level: "Beginner",
+            monthlyFeePaise: null,
+            seriesId: "season",
+            stopFees: false,
+            weekdays: [1],
+          },
+        },
+        running: { failed: null, fee: null, scheduled: null },
+        "to-move": { failed: null, fee: null, scheduled: null },
+      },
+      today: "2026-11-12",
+    }
+    return renderToStaticMarkup(
+      <MemberTrainingProvider value={training}>
+        <MemberDirectory staff={[coach]} />
+      </MemberTrainingProvider>,
+    )
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("lists only the players still to move, without the coaches", () => {
+    const html = render(new URL(termFinishedMembersHref, "https://smba.test").search)
+
+    expect(html).toContain("Asha Iyer")
+    expect(html).not.toContain("Ela Shah")
+    expect(html).not.toContain("Chitra Rao")
+    expect(html).not.toContain("Kavya Iyer")
+    expect(html).toContain(">1 member<")
+  })
+
+  it("still shows a booked player as term finished among everyone", () => {
+    const html = render("")
+
+    expect(html).toContain("Ela Shah")
+    expect(html.match(/>Term finished</gu)).toHaveLength(2)
+    expect(html).toContain("Kavya Iyer")
+    expect(html).toContain(">4 members<")
   })
 })

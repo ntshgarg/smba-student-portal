@@ -31,6 +31,7 @@ const training: PlayerTrainingProfile = {
   activeSessionIds: ["series-one"],
   recordRevision: 0,
   status: "active",
+  termFinishedOn: null,
 }
 
 describe("coach member utilities", () => {

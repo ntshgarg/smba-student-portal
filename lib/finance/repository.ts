@@ -23,6 +23,7 @@ import {
   sessionAssignmentWeekdays,
   sessionOccurrences,
   sessionSeries,
+  trainingChanges,
 } from "@/lib/db/schema"
 import { academyPlanIsValid } from "@/lib/training/academy-plans"
 import {
@@ -47,6 +48,8 @@ import {
 import { getAcademyDateKey } from "@/lib/format"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
+import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import { termFinishedOn } from "@/lib/sessions/term"
 
 export const FINANCE_ACADEMY_ENTITY_ID = "smba"
 
@@ -1087,6 +1090,31 @@ export function loadPlayerFeeRecord(
     ...(phaseTwoHistory.coachManagement
       ? { coachManagement: phaseTwoHistory.coachManagement }
       : {}),
+    ...termFeeMonths(database, playerId, todayKey),
+  }
+}
+
+/*
+ * The finished term the fee page explains, and where a booked move ends that
+ * gap. A move booked for the 1st keeps the old place open until then, so the
+ * term still reads as finished, but its month will be billed at the move's
+ * fee once it happens (lib/training/changes.ts).
+ */
+function termFeeMonths(database: Executor, playerId: string, todayKey: string) {
+  const finishedOn = termFinishedOn(
+    loadOpenPlaces(database, [playerId]).get(playerId) ?? [],
+    todayKey,
+  )
+  const bookedMove = finishedOn
+    ? database.select({ effectiveOn: trainingChanges.effectiveOn }).from(trainingChanges).where(and(
+      eq(trainingChanges.playerAccountId, playerId),
+      eq(trainingChanges.status, "scheduled"),
+      eq(trainingChanges.kind, "change"),
+    )).get()
+    : undefined
+  return {
+    termFeeResumesOn: bookedMove?.effectiveOn ?? null,
+    termFinishedOn: finishedOn,
   }
 }
 

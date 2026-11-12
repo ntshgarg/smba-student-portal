@@ -13,8 +13,28 @@
   scroll-margin-top: calc(var(--portal-header-height) - var(--page-scroll-padding));
 }
 
+/* The to-do row exists only while the to-do card is drawn (it is left out
+   when there is nothing to do), so an empty academy keeps the board above
+   with no blank row and no extra gap. */
+.stack:has(> .section[data-area="todo"]) {
+  grid-template-areas:
+    "todo todo todo todo todo todo todo todo todo todo todo todo"
+    "attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance attendance"
+    "onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding onboarding"
+    "sessions sessions sessions sessions sessions sessions sessions reports reports reports reports reports"
+    "financials financials financials financials announcements announcements announcements announcements members members members members";
+}
+
 .section {
   min-width: 0;
+}
+
+.section[data-area="todo"] {
+  grid-area: todo;
+}
+
+.section[data-area="todo"] .card {
+  min-height: 0;
 }
 
 .section[data-area="onboarding"] {
@@ -320,6 +340,16 @@
     gap: 18px;
   }
 
+  .stack:has(> .section[data-area="todo"]) {
+    grid-template-areas:
+      "todo todo"
+      "attendance attendance"
+      "onboarding onboarding"
+      "sessions sessions"
+      "reports financials"
+      "announcements members";
+  }
+
   .section[data-area="attendance"] .card {
     min-height: 330px;
   }
@@ -370,6 +400,18 @@
       "members";
     gap: var(--space-copy);
     padding-block: var(--space-copy) 72px;
+  }
+
+  .stack:has(> .section[data-area="todo"]) {
+    grid-template-areas:
+      "todo"
+      "attendance"
+      "onboarding"
+      "sessions"
+      "reports"
+      "financials"
+      "announcements"
+      "members";
   }
 
   .card,

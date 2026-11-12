@@ -27,6 +27,7 @@ import {
   playerWasEnrolledForOccurrence,
 } from "@/lib/sessions/domain"
 import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
+import { placeReachesWindow } from "@/lib/sessions/term"
 const weekdayShortLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 export function PlayerAttendanceRegister({
@@ -107,8 +108,14 @@ export function PlayerAttendanceRegister({
   const seriesOrder = new Map(sessionSeries.map((series, index) => [series.id, index]))
   const registerRows = sessionAssignments.flatMap((assignment) => {
     if (!categorySeriesIds.has(assignment.seriesId)) return []
-    const overlapsDisplayedYear = assignment.effectiveFrom < nextYearStart
-      && (!assignment.effectiveTo || assignment.effectiveTo > yearStart)
+    // The same rule the server applied when it chose these assignments: a
+    // schedule that ran out before this year gives no row in it.
+    const overlapsDisplayedYear = placeReachesWindow(
+      assignment,
+      seriesById.get(assignment.seriesId),
+      yearStart,
+      nextYearStart,
+    )
     const coversReplacementInDisplayedYear = categoryOccurrences.some((occurrence) => (
       occurrence.status === "scheduled"
       && occurrence.occurrenceDate >= yearStart

@@ -8,7 +8,9 @@ export const memberDirectoryLevels: TrainingProgramme[] = [
   "Elite",
 ]
 export const memberDirectoryBatches: TrainingBatch[] = ["Weekday", "Weekend"]
-const memberDirectoryStatuses = ["all", "unassigned", "active", "paused"] as const
+// "finished" is the dashboard's "Term finished" link (termFinishedMembersHref):
+// the term-finished players with nothing booked yet, lib/sessions/term.ts.
+const memberDirectoryStatuses = ["all", "unassigned", "active", "finished", "paused"] as const
 export const memberDirectoryRoles = ["everyone", "players", "staff"] as const
 
 export type MemberDirectoryLevel = TrainingProgramme | "All levels"
@@ -94,3 +96,14 @@ export function memberDirectoryCriteriaKey(criteria: MemberDirectoryCriteria) {
 export function memberDirectoryHref(pathname: string, search: string) {
   return search ? `${pathname}?${search}` : pathname
 }
+
+/*
+ * Where "Show these players" (dashboard) and a finished schedule's "Members"
+ * link land: players only, since coaches have no schedule and the status
+ * filter does not apply to them, so without the role the list (and its count)
+ * would carry every coach after the players to move.
+ */
+export const termFinishedMembersHref = memberDirectoryHref(
+  "/coach/members",
+  memberDirectorySearch("", { ...defaults, role: "players", status: "finished" }),
+)

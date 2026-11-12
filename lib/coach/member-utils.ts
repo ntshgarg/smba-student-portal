@@ -69,5 +69,11 @@ export function isPlayerTrainingProfile(value: unknown): value is PlayerTraining
     && profile.activeSessionIds.every((id) => typeof id === "string")
     && Number.isInteger(profile.recordRevision)
     && (profile.recordRevision ?? -1) >= 0
-    && (profile.status === "unassigned" || profile.status === "active" || profile.status === "paused")
+    && (profile.status === "unassigned"
+      || profile.status === "active"
+      || profile.status === "paused"
+      || profile.status === "finished")
+    && (profile.status === "finished"
+      ? typeof profile.termFinishedOn === "string"
+      : profile.termFinishedOn === null)
 }

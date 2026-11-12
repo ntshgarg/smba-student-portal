@@ -4178,7 +4178,8 @@
   color: var(--green);
 }
 
-.coach-member-status.is-paused {
+.coach-member-status.is-paused,
+.coach-member-status.is-finished {
   color: var(--red);
 }
 
@@ -6255,6 +6256,39 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .coach-series-roster-card button svg {
   width: 16px;
+}
+
+/* A schedule's first and last day. Quiet on a running schedule; red once the
+   last day has passed and the players on it still need moving on. */
+.coach-series-roster-card button small.coach-series-dates {
+  color: var(--steel);
+}
+
+.coach-series-roster-card[data-finished] button small.coach-series-dates,
+.coach-schedule-programme-group[data-finished] .coach-schedule-programme-heading p {
+  color: var(--red);
+}
+
+.coach-series-rosters-empty + .coach-schedule-programme-group {
+  margin-top: 42px;
+}
+
+/* Sits under a finished schedule's row, outside its button, so the link to
+   Members is a link of its own rather than nested in the toggle. */
+.coach-series-term-note {
+  max-width: 560px;
+  margin-top: -4px;
+  padding-bottom: 18px;
+  color: var(--steel);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.coach-series-term-note a {
+  color: var(--navy);
+  font-weight: 760;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .coach-series-roster-detail {

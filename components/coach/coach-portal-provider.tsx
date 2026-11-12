@@ -163,6 +163,8 @@ export function CoachPortalProvider({
     () => joinPlayerMembers(members, trainingProfiles),
     [members, trainingProfiles],
   )
+  // Players training now. A term-finished player still holds a place on a
+  // schedule that has run out, so is not one of them (lib/sessions/term.ts).
   const activePlayers = useMemo(
     () => players.filter((player) => player.training.status === "active"),
     [players],
@@ -443,6 +445,7 @@ export function useMemberDirectoryPortal() {
     ),
     [memberContext.players],
   )
+  // As above: "finished" players are not training, so they are not active.
   const activePlayers = useMemo(
     () => players.filter((player) => player.training.status === "active"),
     [players],

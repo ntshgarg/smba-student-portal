@@ -15,6 +15,7 @@ import {
 } from "@/components/coach/members/member-directory-query"
 import { InlineNotice } from "@/components/inline-notice"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
+import { formatTermDate, trainingStatusLabel } from "@/lib/sessions/term"
 import {
   academyPlanLabel,
   academyPlansFor,
@@ -209,8 +210,10 @@ export function MemberEditForm({
           </label>
           <div className="coach-member-form-status">
             <span>Status</span>
-            <strong>{player.training.status}</strong>
-            <small>Managed by active session assignments.</small>
+            <strong>{trainingStatusLabel(player.training.status)}</strong>
+            <small>{player.training.status === "finished" && player.training.termFinishedOn
+              ? `Their term finished on ${formatTermDate(player.training.termFinishedOn)}.`
+              : "Managed by active session assignments."}</small>
           </div>
         </div>
       </fieldset>

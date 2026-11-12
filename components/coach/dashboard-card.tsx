@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 import styles from "./dashboard-card.module.css"
 
 export type CoachDashboardArea =
+  | "todo"
   | "onboarding"
   | "attendance"
   | "sessions"

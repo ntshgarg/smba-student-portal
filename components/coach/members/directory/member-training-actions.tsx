@@ -23,6 +23,7 @@ import type { PlayerMemberRecord } from "@/lib/coach/types"
 import type { MemberFeeSummary, MemberScheduledChange } from "@/lib/training/member-summaries"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
 import { formatDateKey, formatInr, formatSessionLabel, parseRupeesToPaise } from "@/lib/format"
+import { formatTermDate } from "@/lib/sessions/term"
 import type { TrainingBatch, TrainingProgramme, TrainingSessionSeries } from "@/lib/sessions/types"
 import {
   academyBatchesFor,
@@ -114,6 +115,10 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
       && Boolean(player.training.academyPlan)
   const scheduled = summary.scheduled
   const fee = summary.fee
+  // "active" means at least one running place (lib/sessions/term.ts). A
+  // player on no schedule, or whose term has finished, has no fee to change:
+  // the server refuses it, so the button is not offered.
+  const hasRunningPlace = player.training.status === "active"
   const nextMonth = monthName(data.nextMonthStart)
   const thisMonth = monthName(data.today)
 
@@ -242,7 +247,11 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                         : `due ${dayName(fee.thisMonth.dueDate)}`}`
                     : "Not issued yet"}</dd>
                 </div>
-                <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
+                <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthNoFee === "term-finished"
+                  ? "No fee: term finished"
+                  : fee.nextMonthNoFee === "no-schedule"
+                    ? "No fee: not on a schedule"
+                    : fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
                 <div>
                   <dt>Concession</dt>
                   <dd>{fee.concession
@@ -253,11 +262,24 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
             ) : (
               <p className={styles.help}>No fee plan yet. It is set during Player onboarding.</p>
             )}
+            {/* Without a running place there is no fee to change. A booked
+                move carries its own fee, edited with that change; a booked
+                end needs nothing more. */}
+            {fee?.activeAgreementId && !hasRunningPlace && !scheduled ? (
+              <p className={styles.help}>Move them to a schedule first to change their fee.</p>
+            ) : null}
+            {fee?.activeAgreementId && !hasRunningPlace && scheduled?.kind === "change" ? (
+              <p className={styles.help}>
+                Their fee from {monthName(scheduled.effectiveOn)} is set in the scheduled change.
+              </p>
+            ) : null}
             {fee?.activeAgreementId ? (
               <div className={styles.actions}>
-                <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
-                  Change fee
-                </button>
+                {hasRunningPlace ? (
+                  <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
+                    Change fee
+                  </button>
+                ) : null}
                 {fee.concession ? (
                   <button
                     className={styles.button}
@@ -318,10 +340,11 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           onCancel={() => setOpen(null)}
           onSubmit={submit}
           playerId={memberId}
+          termFinishedOn={player.training.termFinishedOn}
           thisMonth={thisMonth}
         />
       ) : null}
-      {open === "fee" && fee ? (
+      {open === "fee" && fee && hasRunningPlace ? (
         <FeeForm
           busy={busy}
           currentFee={fee.monthlyFeePaise}
@@ -761,6 +784,7 @@ function EndForm({
   onCancel,
   onSubmit,
   playerId,
+  termFinishedOn,
   thisMonth,
 }: {
   busy: boolean
@@ -770,6 +794,8 @@ function EndForm({
   onCancel: () => void
   onSubmit: Submit
   playerId: string
+  /** Set when the player's term has finished; the ending itself is unchanged. */
+  termFinishedOn: string | null
   thisMonth: string
 }) {
   const [leftAlready, setLeftAlready] = useState(false)
@@ -796,6 +822,9 @@ function EndForm({
       ]}
       title={`${name} stops training`}
     >
+      {termFinishedOn ? (
+        <p className={styles.help}>Their term finished on {formatTermDate(termFinishedOn)}.</p>
+      ) : null}
       <div className={styles.field}>
         <span className={styles.label}>Last month of training</span>
         <div className={styles.fixed}>{thisMonth} · this month</div>

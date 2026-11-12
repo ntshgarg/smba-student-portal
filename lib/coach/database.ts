@@ -32,6 +32,8 @@ import {
   listSessionSeries,
   sessionPortalWindow,
 } from "@/lib/sessions/database"
+import { loadOpenPlaces, type OpenPlace } from "@/lib/sessions/open-places"
+import { playerTrainingStatus } from "@/lib/sessions/term"
 
 type PlayerTrainingRow = Pick<
   typeof playerEnrollments.$inferSelect,
@@ -44,36 +46,25 @@ type PlayerTrainingRow = Pick<
   | "status"
 > & { id: string }
 
-function activeSeriesByPlayer(accountIds?: readonly string[]) {
-  if (accountIds && !accountIds.length) return new Map<string, string[]>()
-  const db = initializeDatabase()
-  const assignments = db.select({
-    accountId: sessionAssignments.accountId,
-    seriesId: sessionAssignments.seriesId,
-  }).from(sessionAssignments)
-    .where(and(
-      isNull(sessionAssignments.effectiveTo),
-      accountIds ? inArray(sessionAssignments.accountId, [...accountIds]) : undefined,
-    ))
-    .all()
-
-  return assignments.reduce<Map<string, string[]>>((map, assignment) => {
-    const current = map.get(assignment.accountId) ?? []
-    current.push(assignment.seriesId)
-    map.set(assignment.accountId, current)
-    return map
-  }, new Map())
+function openPlacesByPlayer(accountIds?: readonly string[]) {
+  return loadOpenPlaces(initializeDatabase(), accountIds)
 }
 
 function trainingProfilesFromRows(
   rows: PlayerTrainingRow[],
-  activeSeriesByAccount: Map<string, string[]>,
+  openPlacesByAccount: Map<string, OpenPlace[]>,
+  today: string,
 ): PlayerTrainingProfile[] {
   return rows.map((row) => {
-    const activeSessionIds = activeSeriesByAccount.get(row.id) ?? []
-    const status = activeSessionIds.length
-      ? "active" as const
-      : row.status === "unassigned" ? "unassigned" as const : "paused" as const
+    const openPlaces = openPlacesByAccount.get(row.id) ?? []
+    // Every open place, a finished term's included: actions and archiving
+    // read this as "still holds a place", whatever the schedule's dates.
+    const activeSessionIds = openPlaces.map((place) => place.seriesId)
+    const { status, termFinishedOn } = playerTrainingStatus({
+      enrollmentStatus: row.status,
+      openPlaces,
+      today,
+    })
 
     return {
       memberId: row.id,
@@ -84,11 +75,15 @@ function trainingProfilesFromRows(
       activeSessionIds,
       recordRevision: row.recordRevision,
       status,
+      termFinishedOn,
     }
   })
 }
 
-export function listOperationalPlayerRecords(accountIds?: readonly string[]) {
+export function listOperationalPlayerRecords(
+  accountIds?: readonly string[],
+  today = academyToday(),
+) {
   if (accountIds && !accountIds.length) {
     return { members: [], trainingProfiles: [] }
   }
@@ -125,7 +120,7 @@ export function listOperationalPlayerRecords(accountIds?: readonly string[]) {
 
   return {
     members,
-    trainingProfiles: trainingProfilesFromRows(rows, activeSeriesByPlayer(accountIds)),
+    trainingProfiles: trainingProfilesFromRows(rows, openPlacesByPlayer(accountIds), today),
   }
 }
 
@@ -133,7 +128,10 @@ export function listOperationalPlayerRecords(accountIds?: readonly string[]) {
  * Historical attendance keeps archived players visible without widening any
  * active roster, recorder, reporting, or onboarding projection.
  */
-export function listAttendanceRegisterPlayerRecords(accountIds?: readonly string[]) {
+export function listAttendanceRegisterPlayerRecords(
+  accountIds?: readonly string[],
+  today = academyToday(),
+) {
   if (accountIds && !accountIds.length) {
     return { members: [], trainingProfiles: [] }
   }
@@ -169,7 +167,7 @@ export function listAttendanceRegisterPlayerRecords(accountIds?: readonly string
 
   return {
     members,
-    trainingProfiles: trainingProfilesFromRows(rows, activeSeriesByPlayer(accountIds)),
+    trainingProfiles: trainingProfilesFromRows(rows, openPlacesByPlayer(accountIds), today),
   }
 }
 
@@ -219,7 +217,7 @@ export function listApprovedStaffRecords(): AcademyStaffMember[] {
   }))
 }
 
-export function listApprovedPlayerRecords() {
+export function listApprovedPlayerRecords(today = academyToday()) {
   const db = initializeDatabase()
   const rows = db.select({
     activatedAt: authCredentialStates.activatedAt,
@@ -272,7 +270,7 @@ export function listApprovedPlayerRecords() {
     },
   }))
 
-  const trainingProfiles = trainingProfilesFromRows(rows, activeSeriesByPlayer())
+  const trainingProfiles = trainingProfilesFromRows(rows, openPlacesByPlayer(), today)
 
   return { members, trainingProfiles }
 }
