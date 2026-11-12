@@ -471,7 +471,7 @@ describe("attendance adjustments", () => {
     })).toThrowError(expect.objectContaining({
       code: "CONFLICT",
       field: "completionOccurrenceId",
-      message: expect.stringContaining("older make-up"),
+      message: expect.stringContaining("legacy adjustment"),
     }))
     expect(adjustments.listActiveAttendanceAdjustments(fixture.playerId, database))
       .toHaveLength(1)
@@ -956,7 +956,7 @@ describe("attendance adjustments", () => {
       database,
     })).toThrowError(expect.objectContaining({
       code: "BUSINESS_RULE",
-      message: expect.stringContaining("no longer marked Present"),
+      message: expect.stringContaining("no Present mark"),
     }))
 
     // Every later save that still finds no Present keeps the first review time.
@@ -1014,104 +1014,6 @@ describe("attendance adjustments", () => {
       code: "BUSINESS_RULE",
       field: "sourceOccurrenceId",
     }))
-  })
-
-  /*
-   * An older make-up names only a date, so it uses up one of the player's
-   * Present sessions that day -- not all of them.
-   */
-  it("lets a second Present session on an older make-up's date be used", () => {
-    const fixture = createScenario("legacy-second-session")
-    database.insert(schema.attendanceAdjustments).values({
-      id: "legacy-second-session-adjustment",
-      type: "makeup",
-      playerId: fixture.playerId,
-      sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
-      completionOccurrenceId: null,
-      reason: null,
-      publishedByAccountId: coachId,
-      publishedAt: now,
-      reviewRequiredAt: now,
-      voidedByAccountId: null,
-      voidedAt: null,
-    }).run()
-    const secondSourceOccurrenceId = addAbsentSource(
-      "legacy-2nd-missed",
-      fixture.playerId,
-      "2026-08-11",
-    )
-    // A second session the player attended on the same completed date.
-    database.insert(schema.sessionSeries).values({
-      id: "legacy-second-session-evening-series",
-      title: "Legacy second session evening",
-      programme: "Adult",
-      batch: "Weekday",
-      venue: "SMBA Court",
-      startsOn: "2026-08-01",
-      endsOn: "2026-08-31",
-      status: "active",
-      createdByAccountId: coachId,
-      createdAt: now,
-    }).run()
-    database.insert(schema.sessionOccurrences).values({
-      id: "legacy-second-session-evening",
-      seriesId: "legacy-second-session-evening-series",
-      occurrenceDate: fixture.completedOn,
-      startsAt: new Date(`${fixture.completedOn}T18:00:00+05:30`),
-      durationMinutes: 60,
-      venue: "SMBA Court",
-      status: "scheduled",
-      createdAt: now,
-    }).run()
-    database.insert(schema.sessionAssignments).values({
-      id: "legacy-second-session-evening-assignment",
-      accountId: fixture.playerId,
-      seriesId: "legacy-second-session-evening-series",
-      effectiveFrom: "2026-08-01",
-      effectiveTo: null,
-      assignedByAccountId: coachId,
-      assignedAt: now,
-    }).run()
-    database.insert(schema.sessionAssignmentWeekdays).values({
-      id: "legacy-second-session-evening-weekday",
-      assignmentId: "legacy-second-session-evening-assignment",
-      weekday: new Date(`${fixture.completedOn}T00:00:00.000Z`).getUTCDay(),
-    }).run()
-    database.insert(schema.sessionAttendanceRecords).values({
-      id: "legacy-second-session-evening-attendance",
-      accountId: fixture.playerId,
-      occurrenceId: "legacy-second-session-evening",
-      choice: "present",
-      markedByAccountId: coachId,
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-
-    const published = adjustments.publishMakeupAttendanceAdjustment({
-      coachId,
-      database,
-      now,
-      completionOccurrenceId: "legacy-second-session-evening",
-      playerId: fixture.playerId,
-      sourceOccurrenceId: secondSourceOccurrenceId,
-    })
-    expect(published.completionOccurrenceId).toBe("legacy-second-session-evening")
-
-    // Both Present sessions are now spoken for, so a third make-up is refused.
-    const thirdSourceOccurrenceId = addAbsentSource(
-      "legacy-3rd-missed",
-      fixture.playerId,
-      "2026-08-09",
-    )
-    expect(() => adjustments.publishMakeupAttendanceAdjustment({
-      coachId,
-      database,
-      now,
-      completionOccurrenceId: fixture.completionOccurrenceId,
-      playerId: fixture.playerId,
-      sourceOccurrenceId: thirdSourceOccurrenceId,
-    })).toThrow("older make-up")
   })
 
   function addPresentSession(prefix: string, playerId: string, dateKey: string, hour: string) {
@@ -1195,63 +1097,5 @@ describe("attendance adjustments", () => {
     })
 
     expect(readAdjustmentRow(published.id)?.reviewRequiredAt).toEqual(flaggedAt)
-    expect(adjustments.describeAdjustmentReviews({
-      adjustments: [readAdjustmentRow(published.id)!],
-      database,
-    })).toEqual({ [published.id]: { completionCancelled: false, hasPresence: true } })
-  })
-
-  /*
-   * One attended session must not credit two missed ones: an older date-only
-   * make-up and a session-linked one cannot both rest on the same Present.
-   */
-  it("flags an older make-up whose only remaining Present another make-up uses", async () => {
-    const fixture = createScenario("legacy-shared")
-    const { saveSessionAttendanceRecords } = await import("@/lib/sessions/service")
-    database.insert(schema.attendanceAdjustments).values({
-      id: "legacy-shared-old",
-      type: "makeup",
-      playerId: fixture.playerId,
-      sourceOccurrenceId: fixture.sourceOccurrenceId,
-      completedOn: fixture.completedOn,
-      completionOccurrenceId: null,
-      reason: null,
-      publishedByAccountId: coachId,
-      publishedAt: now,
-      reviewRequiredAt: null,
-      voidedByAccountId: null,
-      voidedAt: null,
-    }).run()
-    const evening = addPresentSession("legacy-shared-evening", fixture.playerId, fixture.completedOn, "18:00")
-    const secondMissed = addAbsentSource("legacy-shared-missed", fixture.playerId, "2026-08-11")
-    adjustments.publishMakeupAttendanceAdjustment({
-      coachId,
-      database,
-      now,
-      completionOccurrenceId: evening,
-      playerId: fixture.playerId,
-      sourceOccurrenceId: secondMissed,
-    })
-
-    // The morning Present goes; only the evening one is left, and it is used.
-    saveSessionAttendanceRecords({
-      database,
-      coachId,
-      now,
-      referenceDate: "2026-08-20",
-      changes: [{
-        playerId: fixture.playerId,
-        occurrenceId: fixture.completionOccurrenceId,
-        choice: "absent",
-        expectedChoice: "present",
-      }],
-    })
-
-    expect(readAdjustmentRow("legacy-shared-old")?.reviewRequiredAt).toEqual(now)
-    expect(() => adjustments.keepAttendanceAdjustment({
-      adjustmentId: "legacy-shared-old",
-      coachId,
-      database,
-    })).toThrow("older make-up")
   })
 })

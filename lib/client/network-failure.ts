@@ -87,12 +87,8 @@ function isSaveTimeout(error: unknown) {
  * A timeout is deliberately never described as a failure, because the write may
  * have landed. Offline and unreachable are described as failures by default.
  *
- * `repeatable` is for saves the server treats as "make it so" -- the two
- * attendance registers, which skip a mark the register already holds. A
- * connection can drop after the request was sent, and the browser reports that
- * with the same error as one that never left, so for these saves the outcome
- * is called unknown and saving again is offered as the way to confirm it,
- * exactly as a timeout is.
+ * `repeatable` saves (the attendance registers) can be safely sent again, so a
+ * dropped connection is reported as an unknown outcome, like a timeout.
  */
 export function describeSaveFailure({
   error,

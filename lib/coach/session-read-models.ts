@@ -3,11 +3,9 @@ import "server-only"
 import { and, desc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm"
 
 import {
-  describeAdjustmentReviews,
   listAttendanceAdjustments,
   type AttendanceAdjustmentRecord,
 } from "@/lib/attendance/adjustments"
-import type { AdjustmentReviewFacts } from "@/lib/attendance/adjustment-review"
 import type { AttendanceRegisterSelection } from "@/lib/attendance/register-workspace"
 import {
   listAttendanceRegisterPlayerRecords,
@@ -77,8 +75,6 @@ export type CoachAttendanceAdjustmentsSnapshot = CoachSessionWindowSnapshot & Re
 > & {
   attendanceAdjustments: AttendanceAdjustmentRecord[]
   attendanceRecords: SessionAttendanceRecords
-  /** Why each flagged make-up needs review, the same whichever player is selected. */
-  adjustmentReviewFacts: Record<string, AdjustmentReviewFacts>
   selectedPlayerId: string | null
 }
 
@@ -206,7 +202,6 @@ export function getCoachAttendanceAdjustmentsSnapshot({
     // Adjustments are read by id, not over a date window, and this screen never
     // draws a calendar. Nothing here can show a closure, so nothing loads one.
     academyHolidays: [],
-    adjustmentReviewFacts: describeAdjustmentReviews({ adjustments: attendanceAdjustments }),
     attendanceAdjustments,
     attendanceRecords,
     selectedPlayerId,

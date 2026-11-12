@@ -170,10 +170,7 @@ function readDraftMarks(
   }
 }
 
-/**
- * Reports whether the device kept the draft, so a register can say honestly
- * what leaving the page costs: kept marks come back, unkept ones do not.
- */
+/** Reports whether the device kept the draft. */
 function writeDraftMarks(
   key: string,
   draft: StoredAttendanceDraft,
@@ -317,10 +314,7 @@ export function discardStaffAttendanceDraft(
  * naming, because the register beneath them is no longer the one they were made
  * against.
  *
- * The rebased set is deliberately not written back -- not on restore, and not
- * on the coach's next tap either: `keepMarkedExpectations` puts the stored
- * expectation back on every restored mark the coach has not re-tapped, so the
- * tap that persists the register does not erase the warning. Both readers rebase before
+ * The rebased set is deliberately not written back. Both readers rebase before
  * they use what they read, so storage never has to be corrected for the marks to
  * save; what it does have to keep is the expectation the coach marked against,
  * because that is the only thing `changedUnderneath` can be measured from. Store
@@ -331,25 +325,6 @@ export function discardStaffAttendanceDraft(
 export type RebasedAttendanceDraft<Change> = {
   changedUnderneath: number
   changes: Change[]
-}
-
-/**
- * What a register writes back after a restore. A restored mark the coach has
- * not re-tapped keeps the expectation it was marked against (see above); one
- * they have re-tapped was made against the register in front of them, so its
- * own expectation stands. `markedAgainst` holds the former, by subject.
- */
-export function keepMarkedExpectations<Change extends {
-  expectedChoice: AttendanceDraftChoice
-}>(
-  changes: Change[],
-  subject: (change: Change) => string,
-  markedAgainst: ReadonlyMap<string, AttendanceDraftChoice>,
-): Change[] {
-  return changes.map((change) => {
-    const expected = markedAgainst.get(subject(change))
-    return expected ? { ...change, expectedChoice: expected } : change
-  })
 }
 
 export function rebaseRestoredAttendanceDraft<Change extends {
@@ -391,10 +366,7 @@ function leftOutClause(leftOut: number, subjects: DraftSubjects) {
     + ` ${leftOut === 1 ? subjects.one : subjects.many} can no longer be marked here.`
 }
 
-/**
- * Every restored mark was left out. Dropping them silently contradicted the
- * notice that names partial leave-outs, so this says the same thing alone.
- */
+/** Every restored mark was left out. */
 export function leftOutAttendanceDraftNotice(
   leftOut: number,
   subjects: DraftSubjects = playerSubjects,

@@ -160,11 +160,6 @@ export function HolidayComposer({
         title: `${impact.totals.makeUpCompletions} make-up session${impact.totals.makeUpCompletions === 1 ? " was" : "s were"} completed on ${dayWord}`,
         body: "Those players are still credited for the session they originally missed. Each will be flagged for review on the Attendance adjustments screen so you can decide.",
       },
-      impact.totals.makeUpsForMissedSessions > 0 && {
-        key: "missed-makeups",
-        title: `${impact.totals.makeUpsForMissedSessions} make-up${impact.totals.makeUpsForMissedSessions === 1 ? " answers a session" : "s answer sessions"} missed on ${dayWord}`,
-        body: "Once closed, those missed sessions stop counting, so the make-ups may no longer be needed. Each will be flagged for review on the Attendance adjustments screen so you can keep or void it.",
-      },
     ].filter((warning): warning is { key: string; title: string; body: string } => Boolean(warning))
     : []
 

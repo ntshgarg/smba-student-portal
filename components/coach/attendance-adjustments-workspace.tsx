@@ -33,10 +33,6 @@ import {
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
-import {
-  adjustmentReviewAdvice,
-  type AdjustmentReviewFacts,
-} from "@/lib/attendance/adjustment-review"
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import {
@@ -109,12 +105,6 @@ type AttendanceAdjustmentsWorkspaceProps = {
    */
   referenceDate: string
   referenceInstant: number
-  /**
-   * Why each flagged make-up needs review and whether "Keep" will be accepted,
-   * worked out on the server so every player's row gets the same answer, not
-   * only the selected player's. See `describeAdjustmentReviews`.
-   */
-  reviewFacts?: Record<string, AdjustmentReviewFacts>
 }
 
 /**
@@ -125,12 +115,6 @@ type AdjustmentFeedback = ActionFeedback & {
   field?: string
   offerRetry?: boolean
   retryAction?: string
-  /**
-   * The history row a Keep or Void answer belongs to. It is shown inside that
-   * row, beside the button pressed, rather than above the editor -- off-screen
-   * on a phone once the history is scrolled.
-   */
-  target?: string
 }
 
 export const AttendanceAdjustmentsWorkspace = forwardRef<
@@ -144,7 +128,6 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   labelledBy = "reschedule-attendance-trigger",
   referenceDate,
   referenceInstant: initialReferenceInstant,
-  reviewFacts = {},
 }, ref) {
   const { players } = useMemberPortal()
   const {
@@ -244,9 +227,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     () => new Set(playerActiveAdjustments.map((item) => item.sourceOccurrenceId)),
     [playerActiveAdjustments],
   )
-  // A session that proves one make-up cannot also be the absence of another,
-  // even when its Present was later changed to Absent and that make-up is in
-  // review.
+  // A session that proves one make-up cannot also be another's missed session.
   const usedCompletionIds = useMemo(
     () => new Set(playerActiveAdjustments.flatMap((item) => (
       item.completionOccurrenceId ? [item.completionOccurrenceId] : []
@@ -326,26 +307,9 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     const playerAssignments = sessionAssignments.filter(
       (assignment) => assignment.playerId === selectedPlayerId,
     )
-    // Older make-ups name a date rather than a session, so each one uses up one
-    // of the player's Present sessions that day. The date is full only once
-    // every Present on it is spoken for -- the server applies the same count.
-    const fullLegacyDates = new Set<string>()
-    const legacyCountByDate = new Map<string, number>()
-    const linkedCountByDate = new Map<string, number>()
-    playerActiveAdjustments.forEach((adjustment) => {
-      const counts = adjustment.completionOccurrenceId ? linkedCountByDate : legacyCountByDate
-      counts.set(adjustment.completedOn, (counts.get(adjustment.completedOn) ?? 0) + 1)
-    })
-    legacyCountByDate.forEach((legacyCount, dateKey) => {
-      const presentCount = sessionOccurrences.filter((occurrence) => (
-        occurrence.occurrenceDate === dateKey
-        && occurrence.status === "scheduled"
-        && attendanceRecords[occurrence.id]?.[selectedPlayerId] === "present"
-      )).length
-      if (presentCount - (linkedCountByDate.get(dateKey) ?? 0) - legacyCount < 1) {
-        fullLegacyDates.add(dateKey)
-      }
-    })
+    const legacyCompletionDates = new Set(playerActiveAdjustments
+      .filter((adjustment) => !adjustment.completionOccurrenceId)
+      .map((adjustment) => adjustment.completedOn))
 
     return sessionOccurrences
       .filter((occurrence) => (
@@ -355,7 +319,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         && !occurrenceIsUpcoming(occurrence, referenceInstant)
         && attendanceRecords[occurrence.id]?.[selectedPlayerId] === "present"
         && !usedCompletionIds.has(occurrence.id)
-        && !fullLegacyDates.has(occurrence.occurrenceDate)
+        && !legacyCompletionDates.has(occurrence.occurrenceDate)
         && playerWasEnrolledForOccurrence(selectedPlayer.member.trainingStartOn, occurrence)
         && playerAssignments.some((assignment) => (
           assignmentCoversOccurrence(assignment, occurrence)
@@ -570,27 +534,21 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     try {
       const result = await keepAttendanceAdjustment(adjustment.id)
       if (!result.ok) {
-        setFeedback({ message: result.message, target: adjustment.id, tone: "error" })
+        setFeedback({ field: result.field, message: result.message, tone: "error" })
         return
       }
-      setFeedback({ message: "Make-up kept and no longer needs review", target: adjustment.id, tone: "success" })
+      setFeedback({ message: "Make-up kept", tone: "success" })
     } catch (error) {
-      // Keep does nothing to a make-up that is no longer flagged, so pressing
-      // it again is safe, and a dropped connection leaves the outcome unknown.
       const failure = describeSaveFailure({
         error,
         fallbackMessage: "The make-up could not be kept",
-        repeatable: true,
-        retained: "It still shows as needing review until that is confirmed",
-        subject: "Keeping this make-up",
+        retained: "It still needs review",
+        subject: "Keeping the make-up",
       })
       setFeedback({
-        message: failure.offerRetry
-          ? failure.message.replace("Saving again", "Pressing Keep make-up again")
-          : failure.message,
+        message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: pendingKey,
-        target: adjustment.id,
         tone: "error",
       })
     } finally {
@@ -600,11 +558,10 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 
   async function voidAdjustment(adjustment: AttendanceAdjustmentRecord) {
     const player = playerById.get(adjustment.playerId)
-    // A missed session cancelled afterwards no longer counts, so voiding brings
-    // no absence back; saying it would made a pointless make-up look costly.
+    // A missed session cancelled since no longer counts, so no absence comes back.
     const missedCancelled = occurrenceById.get(adjustment.sourceOccurrenceId)?.status === "cancelled"
     const confirmed = window.confirm(
-      `Void this make-up${player ? ` for ${player.member.fullName}` : ""}? ${missedCancelled
+      `Void this make-up adjustment${player ? ` for ${player.member.fullName}` : ""}? ${missedCancelled
         ? "Its missed session was cancelled afterwards, so no absence will count against them."
         : "The original absence will be restored."}`,
     )
@@ -615,16 +572,10 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     try {
       const result = await voidAttendanceAdjustment(adjustment.id)
       if (!result.ok) {
-        setFeedback({ message: result.message, target: adjustment.id, tone: "error" })
+        setFeedback({ field: result.field, message: result.message, tone: "error" })
         return
       }
-      setFeedback({
-        message: missedCancelled
-          ? "Make-up voided"
-          : "Make-up voided and original absence restored",
-        target: adjustment.id,
-        tone: "success",
-      })
+      setFeedback({ message: "Adjustment voided and original absence restored", tone: "success" })
     } catch (error) {
       const failure = describeSaveFailure({
         error,
@@ -636,7 +587,6 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: adjustment.id,
-        target: adjustment.id,
         tone: "error",
       })
     } finally {
@@ -659,7 +609,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
             <p className="operational-eyebrow coach-adjustment-review-heading">Review adjustment</p>
           ) : null}
 
-          {feedback && !feedback.target ? (
+          {feedback ? (
             <InlineNotice
               className="coach-adjustments-notice"
               id={feedbackId}
@@ -981,16 +931,6 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   const isVoided = Boolean(adjustment.voidedAt)
                   const requiresReview = Boolean(adjustment.reviewRequiredAt) && !isVoided
                   const isExpanded = adjustment.id === expandedAdjustmentId
-                  const facts = reviewFacts[adjustment.id]
-                  const reviewAdvice = requiresReview
-                    ? adjustmentReviewAdvice({
-                      completionCancelled: facts?.completionCancelled
-                        ?? resolvedOccurrence?.status === "cancelled",
-                      isDateOnly: !adjustment.completionOccurrenceId,
-                      missedCancelled: source?.status === "cancelled",
-                      presence: facts ? (facts.hasPresence ? "present" : "missing") : "unknown",
-                    })
-                    : null
                   const keepKey = `keep:${adjustment.id}`
 
                   return (
@@ -1041,10 +981,10 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 
                       {isExpanded ? (
                         <div id={`adjustment-details-${adjustment.id}`} className="coach-adjustment-history-details">
-                          {reviewAdvice ? (
+                          {requiresReview ? (
                             <div className="coach-adjustment-review-warning">
                               <CircleAlert aria-hidden="true" />
-                              <p><strong>This adjustment requires review.</strong> {reviewAdvice.message}</p>
+                              <p><strong>This adjustment requires review.</strong> A session it rests on has changed since it was recorded. Keep the make-up if the player trained, or void it.</p>
                             </div>
                           ) : null}
                           <dl>
@@ -1054,15 +994,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                             <div><dt>Traceability</dt><dd>{resolvedOccurrence ? sessionLabel(resolvedOccurrence.id) : "Date-level record"}</dd></div>
                             {adjustment.reason ? <div className="is-wide"><dt>Reason</dt><dd>{adjustment.reason}</dd></div> : null}
                           </dl>
-                          {feedback?.target === adjustment.id ? (
-                            <InlineNotice
-                              className="coach-adjustments-notice"
-                              message={feedback.message}
-                              reserveSpace={false}
-                              tone={feedback.tone}
-                            />
-                          ) : null}
-                          {reviewAdvice?.canKeep ? (
+                          {requiresReview ? (
                             <button
                               className="coach-adjustment-history-void is-keep"
                               type="button"
@@ -1088,8 +1020,8 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                               {pendingAction === adjustment.id
                                 ? "Voiding…"
                                 : retryAction === adjustment.id
-                                  ? "Void make-up again"
-                                  : "Void make-up"}
+                                  ? "Void adjustment again"
+                                  : "Void adjustment"}
                             </button>
                           ) : (
                             <p className="coach-adjustment-voided-note">

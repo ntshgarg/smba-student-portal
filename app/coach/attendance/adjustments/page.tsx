@@ -70,7 +70,6 @@ export default async function AttendanceAdjustmentsPage({
             initialAdjustmentId={adjustment}
             initialHistoryOpen={historyOpen}
             initialPlayerId={snapshot.selectedPlayerId ?? undefined}
-            reviewFacts={snapshot.adjustmentReviewFacts}
             referenceDate={getIndiaDateKey(now)}
             referenceInstant={now.getTime()}
           />

@@ -5,7 +5,6 @@ import {
   ATTENDANCE_DRAFT_LIFETIME_MS,
   attendanceDraftStorage,
   discardStaffAttendanceDraft,
-  keepMarkedExpectations,
   parseAttendanceDraft,
   persistPlayerAttendanceDraft,
   persistStaffAttendanceDraft,
@@ -754,26 +753,5 @@ describe("attendance registers restore their own drafts", () => {
     expect(restore.notice).toContain(
       "1 mark was left out because that assistant coach can no longer be marked here.",
     )
-  })
-})
-
-describe("writing a restored draft back", () => {
-  // The coach's next tap persists the whole register. Restored marks they have
-  // not touched keep the expectation they were marked against, so the next
-  // visit can still warn that the register moved underneath them.
-  it("keeps the marked-against expectation on restored marks the coach has not re-tapped", () => {
-    const rebased: SessionAttendanceChange[] = [
-      { choice: "absent", expectedChoice: "present", occurrenceId: "occurrence-1", playerId: "player-1" },
-      { choice: "present", expectedChoice: "absent", occurrenceId: "occurrence-1", playerId: "player-2" },
-    ]
-
-    expect(keepMarkedExpectations(
-      rebased,
-      (change) => change.playerId,
-      new Map([["player-1", "cleared" as const]]),
-    )).toEqual([
-      { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
-      { choice: "present", expectedChoice: "absent", occurrenceId: "occurrence-1", playerId: "player-2" },
-    ])
   })
 })
