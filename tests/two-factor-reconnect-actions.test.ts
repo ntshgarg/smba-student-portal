@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   disableTwoFactor: vi.fn(),
+  forgetTrustedDevices: vi.fn<(accountId: string) => number>(() => 0),
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   getRawAuthSession: vi.fn(),
@@ -43,6 +44,9 @@ vi.mock("@/lib/auth/credential-service", () => ({
   verifyCurrentPassword: mocks.verifyCurrentPassword,
 }))
 vi.mock("@/lib/auth/session", () => ({ getRawAuthSession: mocks.getRawAuthSession }))
+vi.mock("@/lib/auth/second-factor-reset", () => ({
+  forgetTrustedDevices: mocks.forgetTrustedDevices,
+}))
 vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
 }))
@@ -113,6 +117,8 @@ describe("authenticator reconnection", () => {
       body: { password: "Current secure password!" },
     }))
     expect(mocks.redirect).toHaveBeenLastCalledWith("/auth/two-factor/setup?reconnect=1")
+    // A lost phone's trust goes too, not only this browser's.
+    expect(mocks.forgetTrustedDevices).toHaveBeenCalledWith("head-coach")
     expect(mocks.releaseLoginAttempt).toHaveBeenCalledWith({ ipHash: "ip-hash", subjectHash: "subject-hash" })
     expect(mocks.reserveSecondFactorAttempt).toHaveBeenCalledWith("head-coach", "session")
     expect(mocks.releaseSecondFactorAttempt).toHaveBeenCalledWith("head-coach")
@@ -145,6 +151,7 @@ describe("authenticator reconnection", () => {
       errorField: "secondFactor",
     })
     expect(mocks.disableTwoFactor).not.toHaveBeenCalled()
+    expect(mocks.forgetTrustedDevices).not.toHaveBeenCalled()
     expect(mocks.reserveSecondFactorAttempt).toHaveBeenCalledWith("head-coach", "session")
     expect(mocks.releaseSecondFactorAttempt).not.toHaveBeenCalled()
     expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({

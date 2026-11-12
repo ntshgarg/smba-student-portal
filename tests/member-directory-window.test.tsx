@@ -36,6 +36,8 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
 // The record's training actions call server actions; the directory's window
 // behaviour under test never reaches them.
 vi.mock("@/app/coach/members/training-actions", () => ({}))
+// So does a coach's "Archive coach" button.
+vi.mock("@/app/coach/actions", () => ({}))
 
 vi.mock("@/components/unsaved-work-guard", () => ({
   useUnsavedWorkGuard: () => ({ confirmDiscard: () => true }),

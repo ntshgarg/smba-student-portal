@@ -1,5 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }))
+vi.mock("@/app/coach/actions", () => ({ archiveCoachAction: vi.fn() }))
 
 import {
   StaffDetailRow,
@@ -69,7 +72,7 @@ describe("coaching staff in the Member Directory", () => {
 
   it("shows the dates the directory has for a coach, and names the ones it lacks", () => {
     const html = renderToStaticMarkup(
-      <table><tbody><StaffDetailRow staff={junior} /></tbody></table>,
+      <table><tbody><StaffDetailRow onArchived={() => {}} staff={junior} /></tbody></table>,
     )
     expect(html).toContain("Joined")
     expect(html).toContain("27 Aug 2026")
@@ -78,11 +81,20 @@ describe("coaching staff in the Member Directory", () => {
 
     const pending = renderToStaticMarkup(
       <table><tbody>
-        <StaffDetailRow staff={{ ...junior, activatedAt: null, approvedAt: null }} />
+        <StaffDetailRow onArchived={() => {}} staff={{ ...junior, activatedAt: null, approvedAt: null }} />
       </tbody></table>,
     )
     expect(pending).toContain("Not recorded")
     expect(pending).toContain("Not yet activated")
+  })
+
+  it("offers to archive an assistant coach, never the head coach", () => {
+    const detail = (staff: AcademyStaffMember) => renderToStaticMarkup(
+      <table><tbody><StaffDetailRow onArchived={() => {}} staff={staff} /></tbody></table>,
+    )
+    expect(detail(junior)).toContain("Archive coach")
+    expect(detail(junior)).toContain("Archiving switches off their sign-in")
+    expect(detail({ ...junior, accessLevel: "head_admin" })).not.toContain("Archive coach")
   })
 
   it("distinguishes the head coach from a assistant coach", () => {

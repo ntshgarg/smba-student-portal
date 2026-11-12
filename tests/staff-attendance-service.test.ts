@@ -498,3 +498,133 @@ describe("junior-coach staff attendance", () => {
     })).toThrow("valid attendance date range")
   })
 })
+
+describe("archiving an assistant coach who has left", () => {
+  const archivedAt = new Date("2026-11-12T06:30:00.000Z")
+
+  function giveSignIn(accountId: string, identifier: string) {
+    const instant = new Date("2026-08-01T06:30:00.000Z")
+    database.insert(schema.authMethods).values({
+      id: `method-${accountId}`,
+      accountId,
+      method: "academy_id",
+      identifier,
+      createdAt: instant,
+    }).run()
+    database.insert(schema.authCredentialStates).values({
+      accountId,
+      status: "active",
+      activatedAt: instant,
+      updatedAt: instant,
+    }).run()
+  }
+
+  it("switches off their sign-in and keeps their past attendance on the head register", () => {
+    giveSignIn(SECOND_JUNIOR_ID, "SMBA#0003")
+    saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now: new Date("2026-08-08T06:30:00.000Z"),
+      changes: [
+        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-07", choice: "present", expectedChoice: "cleared" },
+      ],
+    })
+
+    expect(memberService.archiveCoachRecord({
+      coachId: HEAD_COACH_ID,
+      database,
+      input: { coachAccountId: SECOND_JUNIOR_ID },
+      now: archivedAt,
+    })).toEqual({ ok: true, coachAccountId: SECOND_JUNIOR_ID })
+
+    expect(database.select().from(schema.accounts)
+      .where(eq(schema.accounts.id, SECOND_JUNIOR_ID)).get()).toMatchObject({
+      archivedAt,
+      archivedByAccountId: HEAD_COACH_ID,
+    })
+    expect(database.select().from(schema.authMethods)
+      .where(eq(schema.authMethods.accountId, SECOND_JUNIOR_ID)).get()?.revokedAt).toEqual(archivedAt)
+    expect(database.select().from(schema.authCredentialStates)
+      .where(eq(schema.authCredentialStates.accountId, SECOND_JUNIOR_ID)).get()?.status).toBe("revoked")
+    expect(getCoachAccessProfile(SECOND_JUNIOR_ID, { database })).toBeNull()
+    expect(listJuniorCoachProfiles({ database, requesterAccountId: HEAD_COACH_ID })
+      .map((coach) => coach.accountId)).toEqual([FIRST_JUNIOR_ID])
+    expect(listJuniorCoachAttendanceRegisterProfiles({ database, requesterAccountId: HEAD_COACH_ID }))
+      .toContainEqual(expect.objectContaining({ accountId: SECOND_JUNIOR_ID, archivedOn: "2026-11-12" }))
+    expect(listStaffAttendanceRecords({
+      database,
+      requesterAccountId: HEAD_COACH_ID,
+      coachAccountId: SECOND_JUNIOR_ID,
+      from: "2026-08-01",
+      to: "2026-08-31",
+    })).toEqual([expect.objectContaining({ dateKey: "2026-08-07", choice: "present" })])
+
+    // Archiving twice finds nothing to archive.
+    expect(memberService.archiveCoachRecord({
+      coachId: HEAD_COACH_ID,
+      database,
+      input: { coachAccountId: SECOND_JUNIOR_ID },
+      now: archivedAt,
+    })).toMatchObject({ ok: false, code: "NOT_FOUND" })
+  })
+
+  it("is the head coach's alone, and never reaches the head coach or a player", () => {
+    expect(() => memberService.archiveCoachRecord({
+      coachId: FIRST_JUNIOR_ID,
+      database,
+      input: { coachAccountId: SECOND_JUNIOR_ID },
+      now: archivedAt,
+    })).toThrow("Head coach access")
+    expect(memberService.archiveCoachRecord({
+      coachId: HEAD_COACH_ID,
+      database,
+      input: { coachAccountId: HEAD_COACH_ID },
+      now: archivedAt,
+    })).toMatchObject({ ok: false, code: "SELF" })
+
+    const instant = new Date("2026-08-01T06:30:00.000Z")
+    database.insert(schema.accounts).values({
+      id: "second-head",
+      fullName: "Second Head",
+      normalizedName: "second head",
+      requestedRole: "coach",
+      role: "coach",
+      approvalStatus: "approved",
+      approvedAt: instant,
+      createdAt: instant,
+      updatedAt: instant,
+    }).run()
+    database.insert(schema.coachProfiles).values({
+      accountId: "second-head",
+      accessLevel: "head_admin",
+      joinedOn: "2026-08-01",
+      createdAt: instant,
+      updatedAt: instant,
+    }).run()
+    expect(memberService.archiveCoachRecord({
+      coachId: HEAD_COACH_ID,
+      database,
+      input: { coachAccountId: "second-head" },
+      now: archivedAt,
+    })).toMatchObject({ ok: false, code: "HEAD_COACH" })
+
+    database.insert(schema.accounts).values({
+      id: "a-player",
+      fullName: "A Player",
+      normalizedName: "a player",
+      requestedRole: "player",
+      role: "player",
+      approvalStatus: "approved",
+      approvedAt: instant,
+      createdAt: instant,
+      updatedAt: instant,
+    }).run()
+    expect(memberService.archiveCoachRecord({
+      coachId: HEAD_COACH_ID,
+      database,
+      input: { coachAccountId: "a-player" },
+      now: archivedAt,
+    })).toMatchObject({ ok: false, code: "NOT_FOUND" })
+    expect(getCoachAccessProfile(FIRST_JUNIOR_ID, { database })).not.toBeNull()
+  })
+})

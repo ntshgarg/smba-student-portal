@@ -276,6 +276,14 @@
   font-weight: 620;
 }
 
+.preparationNote {
+  max-width: 590px;
+  margin-top: 22px;
+  color: var(--steel);
+  font-size: 0.8125rem;
+  line-height: var(--leading-body);
+}
+
 .preparationReview {
   display: flex;
   align-items: center;

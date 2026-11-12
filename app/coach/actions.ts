@@ -11,6 +11,7 @@ import {
   OperationalActionError,
   operationalActionFailure,
   type OperationalActionResult,
+  type SessionExpiredFailure,
 } from "@/lib/actions/operational-result"
 import { requireHeadAdminAction } from "@/lib/auth/current-coach"
 import { createAuthMailer } from "@/lib/auth/mailer"
@@ -25,12 +26,15 @@ import {
   type StaffAttendanceChange,
 } from "@/lib/coach/staff-attendance"
 import type {
+  ArchiveCoachInput,
+  ArchiveCoachResult,
   ArchiveMemberInput,
   ArchiveMemberResult,
   MemberMutationResult,
   UpdateMemberInput,
 } from "@/lib/coach/types"
 import {
+  archiveCoachRecord,
   archiveMemberRecord,
   updateMemberRecord,
 } from "@/lib/coach/member-service"
@@ -226,6 +230,20 @@ export async function archiveMemberAction(
   })
   if (result.ok) revalidateAcademyData()
   return result
+}
+
+export async function archiveCoachAction(
+  input: ArchiveCoachInput,
+): Promise<ArchiveCoachResult | SessionExpiredFailure> {
+  return runCoachAction((coach) => {
+    const result = archiveCoachRecord({
+      coachId: coach.subjectId,
+      database: initializeDatabase(),
+      input,
+    })
+    if (result.ok) revalidateAcademyData()
+    return result
+  })
 }
 
 export async function saveAttendanceRegisterAction(input: {

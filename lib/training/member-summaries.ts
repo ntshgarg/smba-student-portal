@@ -13,6 +13,9 @@ import { loadChargeViews } from "@/lib/finance/repository"
 import { isFinanceActive } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
 import { nextMonthStartOf } from "@/lib/training/changes"
+import { feeChangeStartsOn } from "@/lib/training/fees"
+import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
+import type { ThisMonthFeeBasis } from "@/lib/training/this-month-fee-plan"
 
 /*
  * What the Members directory shows on each player's record about their
@@ -45,9 +48,21 @@ export type MemberFeeSummary = {
     value: number
     valueKind: "fixed" | "percentage"
   } | null
+  /** The 1st of the month a fee change made today would start from. */
+  feeChangeStartsOn: string
   monthlyFeePaise: number | null
   nextMonthFeePaise: number | null
-  thisMonth: { amountPaise: number; dueDate: string; receivedPaise: number } | null
+  thisMonth: {
+    amountPaise: number
+    /**
+     * What a level, batch or plan change this month would do to this month's
+     * fee, for lib/training/this-month-fee-plan.ts. Null when no plan covers
+     * the month.
+     */
+    basis: ThisMonthFeeBasis | null
+    dueDate: string
+    receivedPaise: number
+  } | null
 }
 
 export type MemberTrainingSummary = {
@@ -145,6 +160,27 @@ export function listMemberTrainingSummaries(
     or(isNull(concessions.endsPeriod), gte(concessions.endsPeriod, nextPeriod)),
   )).all()
 
+  const monthStart = `${thisPeriod}-01`
+  const monthAgreements = !charges.length ? [] : database.select({
+    agreedMonthlyFeePaise: feeAgreements.agreedMonthlyFeePaise,
+    effectiveFrom: feeAgreements.effectiveFrom,
+    effectiveTo: feeAgreements.effectiveTo,
+    playerAccountId: feeAgreements.playerAccountId,
+  }).from(feeAgreements).where(and(
+    inArray(feeAgreements.playerAccountId, charges.map((charge) => charge.playerId)),
+    ne(feeAgreements.status, "paused"),
+  )).all()
+  // The plan covering the 1st is the one a change this month corrects
+  // (agreementsAround in lib/training/changes.ts).
+  const feeBases = loadThisMonthFeeBases(database, charges.flatMap((charge) => {
+    const covering = monthAgreements.find((agreement) => (
+      agreement.playerAccountId === charge.playerId && covers(agreement, monthStart)
+    ))
+    return covering
+      ? [{ feePaise: covering.agreedMonthlyFeePaise, id: charge.id, originalAmountPaise: charge.amountPaise }]
+      : []
+  }))
+
   for (const playerId of playerIds) {
     const own = agreements.filter((agreement) => agreement.playerAccountId === playerId)
     const current = own.find((agreement) => covers(agreement, today)) ?? null
@@ -170,11 +206,15 @@ export function listMemberTrainingSummaries(
           valueKind: concession.valueKind,
         }
         : null,
+      feeChangeStartsOn: active
+        ? feeChangeStartsOn({ activePlanFrom: active.effectiveFrom, thisMonthIssued: Boolean(charge), today })
+        : nextMonthStart,
       monthlyFeePaise: current?.agreedMonthlyFeePaise ?? null,
       nextMonthFeePaise: feesStop ? null : scheduledFee ?? next?.agreedMonthlyFeePaise ?? null,
       thisMonth: charge
         ? {
           amountPaise: chargeViews.get(charge.id)?.effectiveAmountPaise ?? charge.amountPaise,
+          basis: feeBases.get(charge.id) ?? null,
           dueDate: charge.dueDate,
           receivedPaise: chargeViews.get(charge.id)?.receivedPaise ?? 0,
         }

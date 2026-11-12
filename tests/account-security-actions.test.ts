@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   disableTwoFactor: vi.fn(),
+  forgetTrustedDevices: vi.fn<(accountId: string) => number>(() => 2),
   generateBackupCodes: vi.fn(),
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
@@ -63,6 +64,9 @@ vi.mock("@/lib/auth/security-context", () => ({
   writeAuthSecurityEvent: mocks.writeAuthSecurityEvent,
 }))
 vi.mock("@/lib/auth/session", () => ({ getRawAuthSession: mocks.getRawAuthSession }))
+vi.mock("@/lib/auth/second-factor-reset", () => ({
+  forgetTrustedDevices: mocks.forgetTrustedDevices,
+}))
 vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
 }))
@@ -70,6 +74,7 @@ vi.mock("@/lib/data", () => ({
 import {
   reissueRecoveryCodesAction,
   removePinAction,
+  revokeOtherSessionsAction,
   savePinAction,
 } from "@/app/account/security/actions"
 
@@ -322,5 +327,28 @@ describe("reissuing the authenticator recovery codes", () => {
     expect(mocks.writeAuthSecurityEvent).not.toHaveBeenCalledWith(expect.objectContaining({
       eventType: "totp_recovery_codes_reissued",
     }))
+  })
+})
+
+describe("logging out other devices", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // A lost phone that was trusted to skip the code would otherwise sign
+  // straight back in with its saved password.
+  it("also forgets every browser trusted to skip the authenticator code", async () => {
+    mocks.getCurrentIdentity.mockResolvedValue({ role: "coach", subjectId: "head-one" })
+
+    await revokeOtherSessionsAction()
+
+    expect(mocks.revokeOtherSessions).toHaveBeenCalled()
+    expect(mocks.forgetTrustedDevices).toHaveBeenCalledWith("head-one")
+    expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "sessions_revoked",
+      metadata: { forgottenDevices: 2, scope: "other_devices" },
+    }))
+    // Still never touches the PIN; see the action's own comment.
+    expect(mocks.removePinCredential).not.toHaveBeenCalled()
   })
 })

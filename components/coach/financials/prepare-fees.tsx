@@ -22,12 +22,23 @@ import styles from "./financials.module.css"
  */
 type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
 
+const monthOnlyFormat = new Intl.DateTimeFormat("en-IN", { month: "long", timeZone: "UTC" })
+
+function monthOnly(period: string) {
+  const [year, month] = period.split("-").map(Number)
+  if (!year || !month) return period
+  return monthOnlyFormat.format(new Date(Date.UTC(year, month - 1, 1)))
+}
+
 export function PrepareFees({
   compact = false,
+  currentPeriod,
   period,
   preparation,
 }: {
   compact?: boolean
+  /** The academy's current month; a later month's fees are not issued yet. */
+  currentPeriod: string
   period: string
   preparation: MonthlyPreparationPreview
 }) {
@@ -36,9 +47,13 @@ export function PrepareFees({
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
   const requestKey = useIdempotencyKey()
+  // Issued fees never change, so issuing ahead of the month would freeze it
+  // before this month's fee changes, concessions and endings could reach it.
+  const notYet = period > currentPeriod
+  const canIssue = preparation.ready > 0 && !notYet
 
   async function prepare() {
-    if (pending || preparation.ready === 0) return
+    if (pending || !canIssue) return
     setPending(true)
     try {
       const result = await prepareMonthlyChargesAction({
@@ -78,15 +93,17 @@ export function PrepareFees({
         {!reviewOpen ? (
           <button
             type="button"
-            disabled={preparation.ready === 0}
+            disabled={!canIssue}
             onClick={() => setReviewOpen(true)}
           >
-            {preparation.ready > 0
-              ? "Review fee issue"
-              : preparation.alreadyPrepared > 0
-                ? "Fees issued"
-                : "No fees to issue"}
-            {preparation.ready > 0 ? <ArrowUpRight aria-hidden="true" /> : <Check aria-hidden="true" />}
+            {notYet
+              ? `Opens 1 ${monthOnly(period)}`
+              : preparation.ready > 0
+                ? "Review fee issue"
+                : preparation.alreadyPrepared > 0
+                  ? "Fees issued"
+                  : "No fees to issue"}
+            {canIssue ? <ArrowUpRight aria-hidden="true" /> : notYet ? null : <Check aria-hidden="true" />}
           </button>
         ) : null}
       </div>
@@ -96,7 +113,13 @@ export function PrepareFees({
         <div><dt>Already issued</dt><dd>{preparation.alreadyPrepared}</dd></div>
       </dl>
 
-      {reviewOpen ? (
+      {notYet ? (
+        <p className={styles.preparationNote}>
+          {periodLabel(period)} fees can be issued from 1 {monthOnly(period)}, so every change made before then still reaches them.
+        </p>
+      ) : null}
+
+      {reviewOpen && canIssue ? (
         <div className={styles.preparationReview}>
           <div>
             <strong>{preparation.ready} {preparation.ready === 1 ? "player is" : "players are"} ready</strong>
