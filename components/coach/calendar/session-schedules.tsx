@@ -16,6 +16,11 @@ import {
   useSessionPortal,
 } from "@/components/coach/coach-portal-provider"
 import {
+  EndSchedulePanel,
+  endScheduleSummary,
+  monthName,
+} from "@/components/coach/calendar/end-schedule-panel"
+import {
   assignmentKey,
   buildFinishedSchedules,
   buildProgrammeGroups,
@@ -37,6 +42,7 @@ import {
 } from "@/lib/format"
 import { distinctAssignmentWeekdays } from "@/lib/sessions/domain"
 import { formatTermDate, scheduleTermFinished } from "@/lib/sessions/term"
+import type { EndScheduleResult } from "@/lib/sessions/service"
 import type {
   SessionAssignment,
   TrainingSessionSeries,
@@ -146,6 +152,11 @@ export function SessionSchedules({
   )
   const [endingSeriesId, setEndingSeriesId] = useState<string | null>(null)
   const [endingFeedback, setEndingFeedback] = useState<EndingFeedback | null>(null)
+  // The schedule whose End schedule panel is open, and what the last End
+  // schedule did, shown above the rosters because the ended schedule leaves
+  // them.
+  const [confirmingSeriesId, setConfirmingSeriesId] = useState<string | null>(null)
+  const [endedSummary, setEndedSummary] = useState<{ closeout: EndScheduleResult; label: string } | null>(null)
   const hasPendingMutation = endingSeriesId !== null
   const programmeGroups = useMemo(
     () => buildProgrammeGroups(sessionSeries, assignmentIndex.activeBySeries, today),
@@ -235,6 +246,40 @@ export function SessionSchedules({
     return "Not on any schedule. A first schedule is set in Player onboarding."
   }
 
+  async function endSchedule(series: TrainingSessionSeries, stopFees: boolean) {
+    if (hasPendingMutation) return
+    setEndingSeriesId(series.id)
+    setEndingFeedback(null)
+    try {
+      const result = await endSessionSeries({ seriesId: series.id, stopFees })
+      if (!result.ok) {
+        setEndingFeedback({
+          message: result.message,
+          seriesId: series.id,
+          tone: "error",
+        })
+        return
+      }
+      setConfirmingSeriesId(null)
+      setEndedSummary({ closeout: result.data.closeout, label: seriesLabel(series) })
+    } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "Schedule could not be ended",
+        retained: "The schedule is still active",
+        subject: "The schedule ending",
+      })
+      setEndingFeedback({
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        seriesId: series.id,
+        tone: "error",
+      })
+    } finally {
+      setEndingSeriesId(null)
+    }
+  }
+
   function renderSeriesCard(series: TrainingSessionSeries, finished: boolean) {
     const isExpanded = expandedSeriesId === series.id
     const groupKey: ScheduleGroupKey = finished ? "finished" : series.programme
@@ -317,48 +362,32 @@ export function SessionSchedules({
               reserveSpace={false}
               tone={endingFeedback?.seriesId === series.id ? endingFeedback.tone : "info"}
             />
-            <button
-              className="coach-series-end-action"
-              type="button"
-              disabled={hasPendingMutation}
-              onClick={async () => {
-                if (hasPendingMutation || !window.confirm(finished
-                  ? `End ${seriesLabel(series)} now? Its last day has passed, so there are no sessions left to cancel. Every player still on it will be removed from this schedule. This cannot be undone.`
-                  : `End ${seriesLabel(series)} now? Upcoming sessions will be cancelled and every player will be removed from this schedule. This cannot be undone.`,
-                )) return
-                setEndingSeriesId(series.id)
-                setEndingFeedback(null)
-                try {
-                  const result = await endSessionSeries(series.id)
-                  if (!result.ok) {
-                    setEndingFeedback({
-                      message: result.message,
-                      seriesId: series.id,
-                      tone: "error",
-                    })
-                  }
-                } catch (error) {
-                  const failure = describeSaveFailure({
-                    error,
-                    fallbackMessage: "Schedule could not be ended",
-                    retained: "The schedule is still active",
-                    subject: "The schedule ending",
-                  })
-                  setEndingFeedback({
-                    message: failure.message,
-                    offerRetry: failure.offerRetry,
-                    seriesId: series.id,
-                    tone: "error",
-                  })
-                } finally {
-                  setEndingSeriesId(null)
-                }
-              }}
-            >
-              <CalendarX2 aria-hidden="true" /> {endingSeriesId === series.id
-                ? "Ending schedule…"
-                : endingRetryIsSeries ? "End schedule again" : "End schedule"}
-            </button>
+            {confirmingSeriesId === series.id ? (
+              <EndSchedulePanel
+                busy={endingSeriesId === series.id}
+                finished={finished}
+                label={seriesLabel(series)}
+                lastDay={series.endsOn}
+                onCancel={() => setConfirmingSeriesId(null)}
+                onConfirm={(stopFees) => void endSchedule(series, stopFees)}
+                retry={endingRetryIsSeries}
+                seriesId={series.id}
+                today={today}
+              />
+            ) : (
+              <button
+                className="coach-series-end-action"
+                type="button"
+                disabled={hasPendingMutation}
+                onClick={() => {
+                  setEndingFeedback(null)
+                  setEndedSummary(null)
+                  setConfirmingSeriesId(series.id)
+                }}
+              >
+                <CalendarX2 aria-hidden="true" /> {endingRetryIsSeries ? "End schedule again" : "End schedule"}
+              </button>
+            )}
           </div>
         ) : null}
       </article>
@@ -451,6 +480,19 @@ export function SessionSchedules({
         <div className="coach-series-rosters-heading">
           <span>Session assignments</span>
           <h2 id="series-rosters-title">Recurring sessions &amp; rosters</h2>
+        </div>
+        <div className="coach-series-ended-summary" role="status" aria-live="polite">
+          {endedSummary ? (
+            <>
+              <strong>{endedSummary.label} ended</strong>
+              <ul>
+                {endScheduleSummary(endedSummary.closeout, monthName(today)).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              <button type="button" onClick={() => setEndedSummary(null)}>Close</button>
+            </>
+          ) : null}
         </div>
         {programmeGroups.length ? programmeGroups.map((group) => renderGroup({
           groupKey: group.programme,

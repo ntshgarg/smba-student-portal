@@ -331,6 +331,57 @@
   margin-top: 10px;
 }
 
+/* Players with a fee plan whom this month's fee issue passes over, by name. */
+.preparationSkipped {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+  color: var(--steel);
+  font-size: 0.8125rem;
+  line-height: var(--leading-body);
+}
+
+.preparationSkipped strong {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.preparationSkipped span,
+.preparationSkipped summary {
+  color: var(--steel);
+  font-size: 0.625rem;
+  font-weight: var(--weight-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.preparationSkipped summary {
+  padding: 14px 0;
+  cursor: pointer;
+}
+
+.preparationSkipped ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preparationSkipped a {
+  color: var(--navy);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.compactPreparation .preparationSkipped {
+  margin: 0;
+  padding: 14px clamp(18px, 2.5vw, 28px);
+  border-bottom: 1px solid var(--line);
+}
+
 .compactPreparation {
   margin-top: 0;
   padding: 0;

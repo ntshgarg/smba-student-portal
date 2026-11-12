@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, desc, eq, gte, inArray, isNull, ne, or } from "drizzle-orm"
+import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm"
 
 import type { PlayerTrainingProfile } from "@/lib/coach/types"
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -21,15 +21,15 @@ import {
   termFinishedToMove,
 } from "@/lib/sessions/term"
 import { nextMonthStartOf } from "@/lib/training/changes"
-import { feeChangeStartsOn } from "@/lib/training/fees"
+import { feeChangeStartsOn, waitingFeeChangeOf } from "@/lib/training/fees"
 import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
 import type { ThisMonthFeeBasis } from "@/lib/training/this-month-fee-plan"
 
 /*
  * What the Members directory shows on each player's record about their
- * training changes and fees, for every player in four queries rather than the
- * fee record page's per-player read: the directory lists dozens of players and
- * production reads are network round trips.
+ * training changes and fees, for every player in a fixed handful of queries
+ * rather than the fee record page's per-player read: the directory lists dozens
+ * of players and production reads are network round trips.
  */
 
 export type MemberScheduledChange = {
@@ -61,6 +61,18 @@ export type MemberFeeSummary = {
   monthlyFeePaise: number | null
   nextMonthFeePaise: number | null
   /**
+   * A fee change made this month that starts next month, while no fee has
+   * been issued on it and the plan it replaced can carry on: "Cancel this fee
+   * change" (lib/training/fees.ts cancelFeeChange). Null otherwise.
+   */
+  waitingFeeChange: {
+    agreementId: string
+    feePaise: number
+    previousFeePaise: number
+    revision: number
+    startsOn: string
+  } | null
+  /**
    * Why no fee will be issued next month although the plan has one: no
    * running place reaches into next month and no booked move gives them one.
    * "term-finished" when the player's term has finished
@@ -82,8 +94,14 @@ export type MemberFeeSummary = {
 }
 
 export type MemberTrainingSummary = {
+  /** A booked change that could not be applied on its day: shown in red. */
   failed: { effectiveOn: string; reason: string } | null
   fee: MemberFeeSummary | null
+  /**
+   * A booking that End schedule cancelled because it was onto the schedule
+   * being ended, said plainly rather than as a failure.
+   */
+  note: string | null
   scheduled: MemberScheduledChange | null
 }
 
@@ -136,13 +154,18 @@ export function listMemberTrainingSummaries(
   const thisPeriod = today.slice(0, 7)
   const nextPeriod = nextMonthStart.slice(0, 7)
   const summaries: Record<string, MemberTrainingSummary> = {}
-  for (const id of playerIds) summaries[id] = { failed: null, fee: null, scheduled: null }
+  for (const id of playerIds) summaries[id] = { failed: null, fee: null, note: null, scheduled: null }
   const financeActive = isFinanceActive(database)
   if (!playerIds.length) return { financeActive, nextMonthStart, summaries, today }
 
+  // A booking the coach cancelled leaves nothing; one End schedule cancelled
+  // carries its reason (lib/sessions/service.ts) and leaves a note.
   const changes = database.select().from(trainingChanges).where(and(
     inArray(trainingChanges.playerAccountId, playerIds),
-    inArray(trainingChanges.status, ["scheduled", "failed", "applied"]),
+    or(
+      inArray(trainingChanges.status, ["scheduled", "failed", "applied"]),
+      and(eq(trainingChanges.status, "cancelled"), isNotNull(trainingChanges.failureReason)),
+    ),
   )).orderBy(desc(trainingChanges.updatedAt)).all()
   const seen = new Set<string>()
   for (const change of changes) {
@@ -163,15 +186,19 @@ export function listMemberTrainingSummaries(
       continue
     }
     // Only the most recent outcome matters: a failure that was followed by a
-    // successful change is history, not something to show.
+    // successful change is history, not something to show. A notice goes
+    // once it is dismissed, or once a later change to the player's schedule
+    // dealt with it (lib/training/changes.ts clearTrainingNotices).
     if (seen.has(change.playerAccountId)) continue
     seen.add(change.playerAccountId)
+    if (change.dismissedAt) continue
     if (change.status === "failed") {
       summary.failed = {
         effectiveOn: change.effectiveOn,
         reason: change.failureReason ?? "The change could not be applied.",
       }
     }
+    if (change.status === "cancelled" && change.failureReason) summary.note = change.failureReason
   }
 
   if (!financeActive) return { financeActive, nextMonthStart, summaries, today }
@@ -192,6 +219,16 @@ export function listMemberTrainingSummaries(
     eq(financialCharges.billingPeriod, thisPeriod),
     eq(financialCharges.lifecycle, "issued"),
   )).all()
+  // A fee change waiting for next month can be cancelled only while nothing
+  // has been issued on it.
+  const activeIds = agreements.filter((agreement) => agreement.status === "active")
+    .map((agreement) => agreement.id)
+  const issuedPlanIds = new Set(activeIds.length
+    ? database.select({ planId: financialCharges.feeAgreementId }).from(financialCharges).where(and(
+      inArray(financialCharges.feeAgreementId, activeIds),
+      eq(financialCharges.lifecycle, "issued"),
+    )).all().flatMap((row) => (row.planId ? [row.planId] : []))
+    : [])
   // Whether this month's fee has any payment decides what a schedule change
   // this month may alter (lib/training/changes.ts), so the form needs it.
   const chargeViews = loadChargeViews(database, charges.map((charge) => charge.id), now)
@@ -247,6 +284,7 @@ export function listMemberTrainingSummaries(
       scheduleIsRunning(place, today)
       && placeReachesWindow(place, place, nextMonthStart, monthAfterNextStart)
     )))
+    const waitingFee = waitingFeeChangeOf(own, today, issuedPlanIds)
     summaries[playerId].fee = {
       activeAgreementId: active?.id ?? null,
       activeAgreementRevision: active?.recordRevision ?? null,
@@ -268,6 +306,15 @@ export function listMemberTrainingSummaries(
       nextMonthNoFee: placeNextMonth || feesStop
         ? null
         : termFinishedOn(places, today) ? "term-finished" : "no-schedule",
+      waitingFeeChange: waitingFee
+        ? {
+          agreementId: waitingFee.change.id,
+          feePaise: waitingFee.change.agreedMonthlyFeePaise,
+          previousFeePaise: waitingFee.replaced.agreedMonthlyFeePaise,
+          revision: waitingFee.change.recordRevision,
+          startsOn: waitingFee.change.effectiveFrom,
+        }
+        : null,
       thisMonth: charge
         ? {
           amountPaise: chargeViews.get(charge.id)?.effectiveAmountPaise ?? charge.amountPaise,

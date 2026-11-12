@@ -223,6 +223,7 @@ describe("Member Directory from the dashboard's term-finished to-do", () => {
         booked: {
           failed: null,
           fee: null,
+          note: null,
           scheduled: {
             academyPlan: "weekday-3-day",
             batch: "Weekday",
@@ -236,8 +237,8 @@ describe("Member Directory from the dashboard's term-finished to-do", () => {
             weekdays: [1],
           },
         },
-        running: { failed: null, fee: null, scheduled: null },
-        "to-move": { failed: null, fee: null, scheduled: null },
+        running: { failed: null, fee: null, note: null, scheduled: null },
+        "to-move": { failed: null, fee: null, note: null, scheduled: null },
       },
       today: "2026-11-12",
     }

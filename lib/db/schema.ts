@@ -834,6 +834,16 @@ export const playerAssessments = sqliteTable("player_assessments", {
  * as `effective_on`, so the result is the same whichever day that is.
  *
  * One scheduled row per player at a time; editing replaces it.
+ *
+ * A row that did not happen leaves a notice on the player's record in Members
+ * (lib/training/member-summaries.ts): a failed row shows its `failure_reason`
+ * in red, and a booking that End schedule cancelled because it was onto the
+ * schedule being ended (lib/sessions/service.ts) is `cancelled` with that
+ * explanation in `failure_reason` and shows as a plain note. A booking the
+ * coach cancelled has no reason and leaves no notice. `dismissed_at` is when
+ * the notice stopped showing: the coach dismissed it, or a later change to
+ * the player's schedule (or, for the note, a new booking) dealt with it
+ * (head coach, 12 Nov 2026).
  */
 export const trainingChanges = sqliteTable("training_changes", {
   id: text("id").primaryKey(),
@@ -856,6 +866,7 @@ export const trainingChanges = sqliteTable("training_changes", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+  dismissedAt: integer("dismissed_at", { mode: "timestamp_ms" }),
 }, (table) => [
   index("training_changes_due_idx").on(table.status, table.effectiveOn),
   uniqueIndex("training_changes_one_scheduled_idx")

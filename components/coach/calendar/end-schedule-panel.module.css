@@ -1,0 +1,42 @@
+/*
+ * The End schedule confirm panel's roster. The panel itself is the Members
+ * FormShell, so only the list of players and their notes live here.
+ */
+
+.panel {
+  color: var(--ink);
+}
+
+.players {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  list-style: none;
+}
+
+.players li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px var(--space-copy);
+  padding: var(--space-tight) 12px;
+  border-top: 1px solid var(--line);
+  color: var(--navy);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.players li:first-child {
+  border-top: 0;
+}
+
+.players small {
+  color: var(--steel);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.players .warn {
+  color: var(--red-dark);
+}

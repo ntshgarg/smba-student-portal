@@ -321,7 +321,7 @@ describe("fee changes reach the fee the family is billed", () => {
   it("bills the days trained before a schedule was ended, even if the month was not yet issued", () => {
     // Tuesday 10 November, before the 18:00 session.
     const tenthNovember = new Date("2026-11-10T05:00:00.000Z")
-    sessions.endSessionSeriesRecords({ coachId, database, now: tenthNovember, seriesId: ending })
+    sessions.endSessionSeriesRecords({ coachId, database, now: tenthNovember, seriesId: ending, stopFees: false })
 
     const prepared = finance.prepareMonthlyCharges({
       period: "2026-11",

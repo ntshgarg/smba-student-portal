@@ -484,6 +484,7 @@ describe("recurring schedule terms", () => {
       database,
       now: new Date("2026-08-01T06:00:00+05:30"),
       seriesId,
+      stopFees: true,
     })).toMatchObject({
       alreadyEnded: false,
       closedAssignments: 1,
@@ -506,10 +507,12 @@ describe("recurring schedule terms", () => {
       database,
       now: new Date("2026-08-01T06:01:00+05:30"),
       seriesId,
-    })).toEqual({
+      stopFees: true,
+    })).toMatchObject({
       alreadyEnded: true,
       cancelledOccurrences: 0,
       closedAssignments: 0,
+      takenOff: [],
     })
     expect(database.select({ revision: schema.playerEnrollments.recordRevision })
       .from(schema.playerEnrollments)
@@ -529,6 +532,7 @@ describe("recurring schedule terms", () => {
       database,
       now: new Date("2026-08-03T06:00:00+05:30"),
       seriesId,
+      stopFees: true,
     })).toThrow("already started today")
     expect(database.select().from(schema.sessionSeries)
       .where(eq(schema.sessionSeries.id, seriesId)).get()?.status).toBe("active")

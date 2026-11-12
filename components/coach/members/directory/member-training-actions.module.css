@@ -432,3 +432,17 @@
     min-width: 0;
   }
 }
+
+/* A change that did not happen, and the button that dismisses its notice. */
+.trainingNotice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-tight);
+  margin-top: 12px;
+}
+
+.trainingNotice > :first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
+}

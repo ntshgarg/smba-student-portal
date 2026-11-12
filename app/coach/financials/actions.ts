@@ -161,10 +161,15 @@ export async function prepareMonthlyChargesAction(
   return runFinanceAction((coachId) => {
     const result = prepareMonthlyCharges(input, { coachId })
     const count = result.createdChargeIds.length
+    // Players with a fee plan but no schedule that month are listed by name
+    // on the panel; the message says how many were passed over.
+    const skipped = result.skipped.length
     return {
       message: result.reused
         ? "Monthly fees were already issued"
-        : `${count} ${count === 1 ? "monthly fee" : "monthly fees"} issued`,
+        : `${count} ${count === 1 ? "monthly fee" : "monthly fees"} issued${skipped
+          ? `; ${skipped} ${skipped === 1 ? "player" : "players"} with a fee plan but no schedule that month ${skipped === 1 ? "was" : "were"} not issued one, listed below`
+          : ""}`,
     }
   })
 }

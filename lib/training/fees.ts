@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, eq } from "drizzle-orm"
+import { and, eq, ne } from "drizzle-orm"
 
 import { operationalActionError } from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
@@ -19,10 +19,14 @@ import {
   createConcession,
   createFeeAgreementInTransaction,
   isFinanceActive,
+  pauseUnstartedFeeAgreementInTransaction,
+  reopenReplacedFeeAgreementInTransaction,
   reverseConcession,
 } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
-import { monthStartOf, nextMonthStartOf } from "@/lib/training/changes"
+import { monthStartOf, nextMonthStartOf, waitingFeeChangeOf } from "@/lib/training/changes"
+
+export { waitingFeeChangeOf }
 
 /*
  * Fee changes and concessions made from a player's record in Members. The head
@@ -136,6 +140,66 @@ export function changeMonthlyFee(
         }, { actorId: coachId, createId, now })
       }
       return { startsOn }
+    }, { behavior: "immediate" })
+  } catch (error) {
+    return rethrow(error)
+  }
+}
+
+
+/*
+ * "Cancel this fee change" (head coach, 12 Nov 2026). A fee change made this
+ * month starts next month, and until a fee is issued on it the head coach can
+ * take it back: the new plan is paused, so it never bills
+ * (pauseUnstartedFeeAgreementInTransaction in lib/finance/service.ts), and the
+ * plan it replaced, which was closed at the end of this month when the change
+ * was made, carries on as if nothing happened. Fees already issued never
+ * change; the earlier plan had billed nothing after the day it was closed.
+ */
+export function cancelFeeChange(
+  input: { agreementId: string; expectedRevision: number; playerId: string },
+  { coachId, createId = randomUUID, database = initializeDatabase(), now = new Date() }: FeeContext,
+) {
+  requireHeadAdminAccess(coachId, { database })
+  try {
+    return database.transaction((tx) => {
+      if (!isFinanceActive(tx)) operationalActionError("BUSINESS_RULE", "Financial tracking is not switched on.")
+      const today = getAcademyDateKey(now)
+      const plans = tx.select().from(feeAgreements).where(and(
+        eq(feeAgreements.playerAccountId, input.playerId),
+        ne(feeAgreements.status, "paused"),
+      )).all()
+      const issued = new Set(tx.select({ planId: financialCharges.feeAgreementId }).from(financialCharges).where(and(
+        eq(financialCharges.playerAccountId, input.playerId),
+        eq(financialCharges.lifecycle, "issued"),
+      )).all().flatMap((row) => (row.planId ? [row.planId] : [])))
+      const waiting = waitingFeeChangeOf(plans, today, issued)
+      if (!waiting || waiting.change.id !== input.agreementId) {
+        operationalActionError(
+          "CONFLICT",
+          "There is no fee change waiting to start that can be cancelled. Reload the record.",
+        )
+      }
+      if (waiting.change.recordRevision !== input.expectedRevision) {
+        operationalActionError("CONFLICT", "This fee changed elsewhere. Reload the record and try again.")
+      }
+      pauseUnstartedFeeAgreementInTransaction(tx, {
+        agreementId: waiting.change.id,
+        expectedRevision: waiting.change.recordRevision,
+        idempotencyKey: `cancel-fee-change:${createId()}`,
+        reason: "Fee change cancelled before it started",
+        restoredAgreementId: waiting.replaced.id,
+        startsAfter: today,
+      }, { actorId: coachId, createId, now })
+      reopenReplacedFeeAgreementInTransaction(tx, {
+        agreementId: waiting.replaced.id,
+        expectedRevision: waiting.replaced.recordRevision,
+        reason: "Fee change cancelled; this fee carries on",
+      }, { actorId: coachId, createId, now })
+      return {
+        monthlyFeePaise: waiting.replaced.agreedMonthlyFeePaise,
+        startsOn: waiting.change.effectiveFrom,
+      }
     }, { behavior: "immediate" })
   } catch (error) {
     return rethrow(error)

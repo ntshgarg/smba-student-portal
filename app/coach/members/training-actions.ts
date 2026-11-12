@@ -13,14 +13,17 @@ import { getAcademyDateKey } from "@/lib/format"
 import {
   cancelTrainingChange,
   changeScheduleThisMonth,
+  dismissTrainingNotice,
   endTrainingNow,
   nextMonthStartOf,
   previewScheduleChange,
   scheduleEndOfTraining,
   scheduleTrainingChange,
+  stopFeePlan,
   type ChangeThisMonthInput,
 } from "@/lib/training/changes"
 import {
+  cancelFeeChange,
   changeMonthlyFee,
   giveConcession,
   stopConcession,
@@ -116,6 +119,26 @@ export async function stopConcessionAction(
 ) {
   return run((coachId) => {
     stopConcession(input, { coachId })
+    return true
+  })
+}
+
+/** "Stop fees" for a player on no schedule with a fee plan still kept. */
+export async function stopFeePlanAction(input: { playerId: string }) {
+  return run((coachId) => stopFeePlan(input, { coachId }))
+}
+
+/** "Cancel this fee change" for a fee change waiting for next month. */
+export async function cancelFeeChangeAction(
+  input: { agreementId: string; expectedRevision: number; playerId: string },
+) {
+  return run((coachId) => cancelFeeChange(input, { coachId }))
+}
+
+/** Dismisses the notice a booked change that did not happen left on the record. */
+export async function dismissTrainingNoticeAction(input: { playerId: string }) {
+  return run((coachId) => {
+    dismissTrainingNotice(input, { coachId })
     return true
   })
 }

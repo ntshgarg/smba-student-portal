@@ -172,7 +172,7 @@ describe("Members shows a finished term", () => {
       const value: MemberTrainingSummaries = {
         financeActive: true,
         nextMonthStart: "2026-12-01",
-        summaries: { finished: { failed: null, fee: null, scheduled } },
+        summaries: { finished: { failed: null, fee: null, note: null, scheduled } },
         today,
       }
       return renderToStaticMarkup(
@@ -207,6 +207,7 @@ describe("Members shows a finished term", () => {
       nextMonthFeePaise: 400_000,
       nextMonthNoFee: null,
       thisMonth: null,
+      waitingFeeChange: null,
       ...overrides,
     }
   }
@@ -223,7 +224,7 @@ describe("Members shows a finished term", () => {
     const value: MemberTrainingSummaries = {
       financeActive: true,
       nextMonthStart: "2026-12-01",
-      summaries: { [record.member.id]: { failed: null, fee: summary, scheduled } },
+      summaries: { [record.member.id]: { failed: null, fee: summary, note: null, scheduled } },
       today,
     }
     return renderToStaticMarkup(

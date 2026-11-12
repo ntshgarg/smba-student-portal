@@ -5,16 +5,20 @@ import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
 import {
+  cancelFeeChangeAction,
   cancelTrainingChangeAction,
   changeMonthlyFeeAction,
   changeScheduleAction,
+  dismissTrainingNoticeAction,
   endTrainingNowAction,
   giveConcessionAction,
   previewScheduleChangeAction,
   scheduleEndOfTrainingAction,
   stopConcessionAction,
+  stopFeePlanAction,
 } from "@/app/coach/members/training-actions"
 import { useMemberDirectoryPortal } from "@/components/coach/coach-portal-provider"
+import { FormShell } from "@/components/coach/members/directory/form-shell"
 import styles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
@@ -46,7 +50,7 @@ const DAYS = [
   { label: "Sun", value: 0 },
 ]
 
-type OpenForm = "change" | "concession" | "end" | "fee" | "start" | null
+type OpenForm = "change" | "concession" | "end" | "fee" | "start" | "stop-fees" | null
 
 function monthName(dateKey: string) {
   return formatDateKey(`${dateKey.slice(0, 7)}-01`, {
@@ -119,6 +123,13 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   // player on no schedule, or whose term has finished, has no fee to change:
   // the server refuses it, so the button is not offered.
   const hasRunningPlace = player.training.status === "active"
+  // Stop fees is for a kept fee plan with nothing else to end it: no place at
+  // all (End training is offered while there is one, and stops fees too) and
+  // nothing booked (a booking keeps what was arranged).
+  const canStopFees = data.financeActive
+    && Boolean(summary.fee?.activeAgreementId)
+    && !current.length
+    && !summary.scheduled
   const nextMonth = monthName(data.nextMonthStart)
   const thisMonth = monthName(data.today)
 
@@ -179,12 +190,30 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
             </div>
           ) : null}
 
-          {summary.failed ? (
-            <InlineNotice
-              message={`The change for ${dayName(summary.failed.effectiveOn)} could not be applied: ${summary.failed.reason}`}
-              reserveSpace={false}
-              tone="error"
-            />
+          {/* A change that did not happen. The red notice and the plain note
+              go once the schedule is changed or ended afterwards (the note
+              also once something new is booked), or when dismissed. */}
+          {summary.failed || summary.note ? (
+            <div className={styles.trainingNotice}>
+              <InlineNotice
+                message={summary.failed
+                  ? `The change for ${dayName(summary.failed.effectiveOn)} could not be applied: ${summary.failed.reason}`
+                  : summary.note}
+                reserveSpace={false}
+                tone={summary.failed ? "error" : "info"}
+              />
+              <button
+                className={styles.button}
+                disabled={busy}
+                onClick={() => void submit(
+                  () => dismissTrainingNoticeAction({ playerId: memberId }),
+                  () => "Notice dismissed",
+                )}
+                type="button"
+              >
+                Dismiss
+              </button>
+            </div>
           ) : null}
 
           <div className={styles.actions}>
@@ -264,9 +293,21 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
             )}
             {/* Without a running place there is no fee to change. A booked
                 move carries its own fee, edited with that change; a booked
-                end needs nothing more. */}
+                end needs nothing more. A player on no schedule at all, with
+                nothing booked, can have their kept fee plan stopped; one
+                still holding a place (a finished term, say) uses End
+                training, which stops fees too. */}
             {fee?.activeAgreementId && !hasRunningPlace && !scheduled ? (
-              <p className={styles.help}>Move them to a schedule first to change their fee.</p>
+              <p className={styles.help}>
+                {canStopFees
+                  ? "Not on a schedule, so no fee is issued. Move them to a schedule to change their fee, or stop fees to end the fee plan."
+                  : "Move them to a schedule first to change their fee."}
+              </p>
+            ) : null}
+            {fee?.waitingFeeChange ? (
+              <p className={styles.help}>
+                New fee of {formatInr(fee.waitingFeeChange.feePaise)} starts with {monthName(fee.waitingFeeChange.startsOn)}&apos;s fee. Cancel it to keep {formatInr(fee.waitingFeeChange.previousFeePaise)} a month.
+              </p>
             ) : null}
             {fee?.activeAgreementId && !hasRunningPlace && scheduled?.kind === "change" ? (
               <p className={styles.help}>
@@ -278,6 +319,32 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                 {hasRunningPlace ? (
                   <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
                     Change fee
+                  </button>
+                ) : null}
+                {fee.waitingFeeChange ? (
+                  <button
+                    className={styles.button}
+                    disabled={busy}
+                    onClick={() => {
+                      const waiting = fee.waitingFeeChange
+                      if (!waiting) return
+                      void submit(
+                        () => cancelFeeChangeAction({
+                          agreementId: waiting.agreementId,
+                          expectedRevision: waiting.revision,
+                          playerId: memberId,
+                        }),
+                        (result) => `Fee change cancelled. ${formatInr(result.monthlyFeePaise)} a month carries on`,
+                      )
+                    }}
+                    type="button"
+                  >
+                    Cancel this fee change
+                  </button>
+                ) : null}
+                {canStopFees ? (
+                  <button className={`${styles.button} ${styles.danger}`} disabled={busy} onClick={() => toggle("stop-fees")} type="button">
+                    Stop fees
                   </button>
                 ) : null}
                 {fee.concession ? (
@@ -357,6 +424,17 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           thisMonth={thisMonth}
         />
       ) : null}
+      {open === "stop-fees" && canStopFees ? (
+        <StopFeesForm
+          busy={busy}
+          name={player.member.fullName}
+          nextMonth={nextMonth}
+          onCancel={() => setOpen(null)}
+          onSubmit={submit}
+          playerId={memberId}
+          thisMonth={thisMonth}
+        />
+      ) : null}
       {open === "concession" && fee ? (
         <ConcessionForm
           busy={busy}
@@ -376,59 +454,6 @@ type Submit = <T>(
   action: () => Promise<OperationalActionResult<T>>,
   success: (data: T) => string,
 ) => Promise<void>
-
-function FormShell({
-  busy,
-  children,
-  confirmLabel,
-  danger = false,
-  disabled = false,
-  eyebrow,
-  onCancel,
-  onConfirm,
-  summary,
-  title,
-}: {
-  busy: boolean
-  children: React.ReactNode
-  confirmLabel: string
-  danger?: boolean
-  disabled?: boolean
-  eyebrow: string
-  onCancel: () => void
-  onConfirm: () => void
-  summary: string[]
-  title: string
-}) {
-  return (
-    <div className={styles.form} role="group" aria-label={title}>
-      <div className={styles.formHead}>
-        <span className={styles.eyebrow}>{eyebrow}</span>
-        <h4>{title}</h4>
-      </div>
-      <div className={styles.formBody}>
-        {children}
-        {summary.length ? (
-          <div className={styles.summary}>
-            <span>You are about to</span>
-            <ul>{summary.map((line) => <li key={line}>{line}</li>)}</ul>
-          </div>
-        ) : null}
-      </div>
-      <div className={styles.formFoot}>
-        <button className={styles.button} disabled={busy} onClick={onCancel} type="button">Cancel</button>
-        <button
-          className={`${styles.button} ${danger ? styles.dangerSolid : styles.primary}`}
-          disabled={busy || disabled}
-          onClick={onConfirm}
-          type="button"
-        >
-          {busy ? "Saving…" : confirmLabel}
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function TrainingForm({
   busy,
@@ -846,6 +871,57 @@ function EndForm({
         <input name="leftAlready" type="checkbox" checked={leftAlready} onChange={(event) => setLeftAlready(event.target.checked)} />
         <span><strong>They have left already.</strong> Take them off their schedule today instead of at the end of the month.</span>
       </label>
+    </FormShell>
+  )
+}
+
+/*
+ * Stop fees for a player on no schedule whose fee plan was kept (head coach,
+ * 12 Nov 2026). The same ending as End training's "Stop fees": the plan ends
+ * after this month, a plan due to start next month never bills, and fees
+ * already issued do not change. Archive then has nothing left to wait for
+ * but money owed.
+ */
+function StopFeesForm({
+  busy,
+  name,
+  nextMonth,
+  onCancel,
+  onSubmit,
+  playerId,
+  thisMonth,
+}: {
+  busy: boolean
+  name: string
+  nextMonth: string
+  onCancel: () => void
+  onSubmit: Submit
+  playerId: string
+  thisMonth: string
+}) {
+  return (
+    <FormShell
+      busy={busy}
+      confirmLabel="Stop fees"
+      danger
+      eyebrow="Stop fees"
+      onCancel={onCancel}
+      onConfirm={() => {
+        void onSubmit(
+          () => stopFeePlanAction({ playerId }),
+          () => `Fees stop after ${thisMonth}`,
+        )
+      }}
+      summary={[
+        `Stop fees after ${thisMonth}`,
+        `Issue no fee from ${nextMonth}`,
+        "Leave fees already issued as they are",
+      ]}
+      title={`Stop fees for ${name}`}
+    >
+      <p className={styles.help}>
+        They are not on a schedule. To train again later, use Start training, which sets a new fee.
+      </p>
     </FormShell>
   )
 }

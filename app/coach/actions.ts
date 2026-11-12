@@ -52,8 +52,10 @@ import {
   cancelSessionOccurrence,
   createSessionSeriesRecords,
   endSessionSeriesRecords,
+  previewEndSessionSeries,
   replaceSessionOccurrence,
   saveSessionAttendanceRecords,
+  type EndSchedulePreview,
 } from "@/lib/sessions/service"
 import type {
   CreateSessionSeriesInput,
@@ -300,17 +302,38 @@ export async function createSessionSeriesAction(input: CreateSessionSeriesInput)
   })
 }
 
-export async function endSessionSeriesAction(seriesId: string) {
+/** What End schedule would do, for its confirm panel. Changes nothing. */
+export async function previewEndSessionSeriesAction(
+  seriesId: string,
+): Promise<OperationalActionResult<EndSchedulePreview>> {
+  const coach = await requireCoach()
+  return runOperationalAction(() => previewEndSessionSeries({
+    coachId: coach.subjectId,
+    database: initializeDatabase(),
+    now: new Date(),
+    seriesId,
+  }))
+}
+
+/*
+ * End schedule also pauses players, ends or keeps their fee plans and cancels
+ * bookings onto the schedule (lib/sessions/service.ts), so the fee screens and
+ * the players' records are refreshed along with the academy's sessions.
+ */
+export async function endSessionSeriesAction(input: { seriesId: string; stopFees: boolean }) {
   const coach = await requireCoach()
   return runOperationalAction(() => {
-    endSessionSeriesRecords({
+    const closeout = endSessionSeriesRecords({
       coachId: coach.subjectId,
       database: initializeDatabase(),
       now: new Date(),
-      seriesId,
+      seriesId: input?.seriesId,
+      stopFees: input?.stopFees === true,
     })
     revalidateAcademyData()
-    return getCoachScheduleMutationSnapshot()
+    revalidatePath("/coach/financials/records")
+    revalidatePath("/coach/financials/players/[playerId]", "page")
+    return { ...getCoachScheduleMutationSnapshot(), closeout }
   })
 }
 

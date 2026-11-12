@@ -14,6 +14,7 @@ import {
   endSessionSeriesAction,
   markAcademyHolidaysAction,
   previewAcademyHolidaysAction,
+  previewEndSessionSeriesAction,
   replaceSessionOccurrenceAction,
   retractAcademyHolidayAction,
   saveAttendanceRegisterAction,
@@ -22,6 +23,7 @@ import {
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
 import type { AcademyHolidayRecord } from "@/lib/sessions/holiday-types"
 import type { HolidayImpact } from "@/lib/sessions/holidays"
+import type { EndSchedulePreview, EndScheduleResult } from "@/lib/sessions/service"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
 import { isAcademyMember, joinPlayerMembers } from "@/lib/coach/member-utils"
 import type {
@@ -78,9 +80,10 @@ type SessionPortalContextValue = {
   createSessionSeries: (
     input: CreateSessionSeriesInput,
   ) => Promise<OperationalActionResult<CreatedSessionSnapshot>>
-  endSessionSeries: (
-    seriesId: string,
-  ) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
+  endSessionSeries: (input: {
+    seriesId: string
+    stopFees: boolean
+  }) => Promise<OperationalActionResult<ReturnTypeSnapshot & { closeout: EndScheduleResult }>>
   markAcademyHolidays: (input: {
     dateKeys: string[]
     label: string
@@ -88,6 +91,9 @@ type SessionPortalContextValue = {
   previewAcademyHolidays: (
     dateKeys: string[],
   ) => Promise<OperationalActionResult<HolidayImpact>>
+  previewEndSessionSeries: (
+    seriesId: string,
+  ) => Promise<OperationalActionResult<EndSchedulePreview>>
   replaceSessionOccurrence: (input: {
     occurrenceId: string
     dateKey: string
@@ -262,8 +268,8 @@ export function CoachPortalProvider({
     return result
   }, [applySessionSnapshot])
 
-  const endSeries = useCallback(async (seriesId: string) => {
-    const result = await endSessionSeriesAction(seriesId)
+  const endSeries = useCallback(async (input: { seriesId: string; stopFees: boolean }) => {
+    const result = await endSessionSeriesAction(input)
     if (!result.ok) return result
     const snapshot = result.data
     applySessionSnapshot(snapshot)
@@ -292,6 +298,11 @@ export function CoachPortalProvider({
     applySessionSnapshot(snapshot)
     return result
   }, [applySessionSnapshot])
+
+  const previewEndSeries = useCallback(
+    (seriesId: string) => previewEndSessionSeriesAction(seriesId),
+    [],
+  )
 
   const previewHolidays = useCallback(
     (dateKeys: string[]) => previewAcademyHolidaysAction(dateKeys),
@@ -374,6 +385,7 @@ export function CoachPortalProvider({
     endSessionSeries: endSeries,
     markAcademyHolidays: markHolidays,
     previewAcademyHolidays: previewHolidays,
+    previewEndSessionSeries: previewEndSeries,
     replaceSessionOccurrence: replaceOccurrence,
     retractAcademyHoliday: retractHoliday,
     sessionAssignments,
@@ -385,6 +397,7 @@ export function CoachPortalProvider({
     createSessionSeries,
     endSeries,
     markHolidays,
+    previewEndSeries,
     previewHolidays,
     replaceOccurrence,
     retractHoliday,

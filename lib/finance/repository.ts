@@ -122,8 +122,9 @@ export function readActiveFeeAgreement(database: Executor, playerId: string) {
 /*
  * Which assignments put a player on a schedule for a fee month. The dates on
  * the assignment decide it, not whether its schedule is still running: ending
- * a schedule closes every open assignment at that day (lib/sessions/service.ts
- * endSessionSeriesRecords), so the days trained before the end still count.
+ * a schedule closes every open assignment at that day, or the day after its
+ * last day if that has passed (lib/sessions/service.ts endSessionSeriesRecords),
+ * so the days trained before the end still count.
  * Filtering on `session_series.status = 'active'` used to drop them, and a
  * schedule ended on the 10th before that month's fees were prepared left its
  * players unbilled for a month they trained in, and stuck as "not prepared".
@@ -176,6 +177,9 @@ export function loadPeriodAssignmentIndex(
   period: string,
 ) {
   const assigned = new Set<string>()
+  // Players with any place in the period, whatever its level and batch, so
+  // fee issuing can say a player was skipped because their level changed.
+  const assignedAnywhere = new Set<string>()
   const key = (
     playerId: string,
     training: {
@@ -201,9 +205,15 @@ export function loadPeriodAssignmentIndex(
         lte(sessionSeries.startsOn, monthEnd(period)),
         or(isNull(sessionSeries.endsOn), gte(sessionSeries.endsOn, monthStart(period))),
       )).all()
-      .forEach((row) => assigned.add(key(row.accountId, row)))
+      .forEach((row) => {
+        assigned.add(key(row.accountId, row))
+        assignedAnywhere.add(row.accountId)
+      })
   }
   return {
+    hasAny(playerId: string) {
+      return assignedAnywhere.has(playerId)
+    },
     has(
       playerId: string,
       training: {
@@ -663,7 +673,11 @@ function loadFeeAgreementsById(database: Executor, agreementIds: string[]) {
   return agreements
 }
 
-/** Each player's most recent fee plan start, to tell a replaced plan from an ended one. */
+/**
+ * Each player's most recent fee plan start, to tell a replaced plan from an
+ * ended one. A paused plan never started (lib/finance/service.ts
+ * pauseUnstartedFeeAgreementInTransaction), so it replaced nothing.
+ */
 function loadLatestPlanStarts(database: Executor, playerIds: string[]) {
   const starts = new Map<string, string>()
   if (!playerIds.length) return starts
@@ -671,7 +685,10 @@ function loadLatestPlanStarts(database: Executor, playerIds: string[]) {
     playerId: feeAgreements.playerAccountId,
     latestStart: sql<string | null>`max(${feeAgreements.effectiveFrom})`,
   }).from(feeAgreements)
-    .where(inArray(feeAgreements.playerAccountId, playerIds))
+    .where(and(
+      inArray(feeAgreements.playerAccountId, playerIds),
+      ne(feeAgreements.status, "paused"),
+    ))
     .groupBy(feeAgreements.playerAccountId)
     .all()
     .forEach((row) => {
@@ -1336,6 +1353,7 @@ export function listMonthlyPreparationCandidates(database: Executor, period: str
     player: {
       archivedAt: accounts.archivedAt,
       approvalStatus: accounts.approvalStatus,
+      fullName: accounts.fullName,
       role: accounts.role,
     },
     enrollment: {

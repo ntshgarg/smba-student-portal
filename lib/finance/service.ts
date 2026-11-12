@@ -113,6 +113,7 @@ import {
   type PlayerFinancialCloseoutState,
   type PlayerFinanceDashboardSummary,
   type MonthlyPreparationPreview,
+  type MonthlyPreparationSkip,
   type OnboardingFinancePreview,
   type OnboardingFinancePreviewLine,
   type OnboardingFinanceTerms,
@@ -141,6 +142,8 @@ import {
   type FeeAgreementView,
 } from "@/lib/finance/types"
 import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
+import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import { scheduleTermFinished } from "@/lib/sessions/term"
 import { academyPlanIsValid } from "@/lib/training/academy-plans"
 import {
   IMPLAUSIBLE_TRAINING_START_MESSAGE,
@@ -721,6 +724,9 @@ function monthlyPreparationCandidates(
     string,
     ReturnType<typeof listMonthlyPreparationCandidates>[number]
   >()
+  // Players whose only plans for the month no longer match their level, batch
+  // and plan. Fee issuing passes over them; the Issue fees panel names them.
+  const levelChanged = new Map<string, string>()
   const currentPeriod = getAcademyDateKey(now).slice(0, 7)
   // A player whose training changes on or before this month's 1st (a change
   // scheduled from Members, lib/training/changes.ts) is billed once that change
@@ -739,7 +745,10 @@ function monthlyPreparationCandidates(
         === candidate.enrollment.academyPlan
       && candidate.agreement.level === candidate.enrollment.level
       && candidate.agreement.batch === candidate.enrollment.batch
-    if (period >= currentPeriod && !matchesCurrentEnrollment) return
+    if (period >= currentPeriod && !matchesCurrentEnrollment) {
+      levelChanged.set(candidate.agreement.playerAccountId, candidate.player.fullName)
+      return
+    }
     const playerId = candidate.agreement.playerAccountId
     const existing = candidatesByPlayer.get(playerId)
     if (!existing
@@ -752,13 +761,68 @@ function monthlyPreparationCandidates(
   const candidates = [...candidatesByPlayer.values()]
   const playerIds = candidates.map((candidate) => candidate.agreement.playerAccountId)
   const periodAssignments = loadPeriodAssignmentIndex(database, playerIds, period)
-  return candidates.map((candidate) => ({
-    ...candidate,
-    hasAssignment: periodAssignments.has(candidate.agreement.playerAccountId, {
-      programme: candidate.agreement.level,
-      batch: candidate.agreement.batch,
-    }),
-  }))
+  candidates.forEach((candidate) => levelChanged.delete(candidate.agreement.playerAccountId))
+  return {
+    candidates: candidates.map((candidate) => ({
+      ...candidate,
+      hasAssignment: periodAssignments.has(candidate.agreement.playerAccountId, {
+        programme: candidate.agreement.level,
+        batch: candidate.agreement.batch,
+      }),
+      hasAnyAssignment: periodAssignments.hasAny(candidate.agreement.playerAccountId),
+    })),
+    levelChanged,
+  }
+}
+
+/*
+ * Who a month's fee issue passes over although they have a fee plan for that
+ * month, and why, so the Issue fees panel can name them instead of skipping
+ * them without a word (head coach, 12 Nov 2026). Reporting only: it reads the
+ * candidates fee issuing already chose and changes nobody's fee.
+ *
+ * - "term_finished": still on a schedule whose last day was before the month.
+ * - "level_changed": their level, batch or plan no longer matches the fee
+ *   plan, or their only place that month is on another level's schedule.
+ * - "on_break": no place that month at all, with the fee plan kept (End
+ *   training or End schedule with "Keep the fee plan").
+ */
+function monthlySkippedPlayers(
+  database: SmbaDatabaseExecutor,
+  period: string,
+  { candidates, levelChanged }: ReturnType<typeof monthlyPreparationCandidates>,
+  /** Players already issued a fee for the month, read only when needed. */
+  readIssuedPlayerIds: () => ReadonlySet<string>,
+): MonthlyPreparationSkip[] {
+  if (!levelChanged.size && candidates.every((candidate) => candidate.hasAssignment)) return []
+  const issuedPlayerIds = readIssuedPlayerIds()
+  const unassigned = candidates.filter((candidate) => (
+    !candidate.hasAssignment && !issuedPlayerIds.has(candidate.agreement.playerAccountId)
+  ))
+  const openPlaces = loadOpenPlaces(
+    database,
+    unassigned.map((candidate) => candidate.agreement.playerAccountId),
+  )
+  const firstDay = monthStart(period)
+  const skipped: MonthlyPreparationSkip[] = [
+    ...[...levelChanged].filter(([playerId]) => !issuedPlayerIds.has(playerId))
+      .map(([playerId, fullName]) => ({
+        fullName,
+        playerId,
+        reason: "level_changed" as const,
+      })),
+    ...unassigned.map(({ agreement, hasAnyAssignment, player }) => ({
+      fullName: player.fullName,
+      playerId: agreement.playerAccountId,
+      reason: hasAnyAssignment
+        ? "level_changed" as const
+        : (openPlaces.get(agreement.playerAccountId) ?? [])
+          .some((place) => scheduleTermFinished(place, firstDay))
+          ? "term_finished" as const
+          : "on_break" as const,
+    })),
+  ]
+  return skipped.sort((first, second) => first.fullName.localeCompare(second.fullName, "en-IN"))
 }
 
 function monthlyPreparationPreview(
@@ -766,7 +830,8 @@ function monthlyPreparationPreview(
   period: string,
   now: Date,
 ): MonthlyPreparationPreview {
-  const candidates = monthlyPreparationCandidates(database, period, now)
+  const prepared = monthlyPreparationCandidates(database, period, now)
+  const { candidates } = prepared
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
@@ -784,6 +849,7 @@ function monthlyPreparationPreview(
     setupRequired: beforeCutover
       ? 0
       : listApprovedPlayerIds(database).length - candidates.length,
+    skipped: beforeCutover ? [] : monthlySkippedPlayers(database, period, prepared, () => preparedIds),
   }
 }
 
@@ -942,6 +1008,9 @@ function createAgreement(
     .from(feeAgreements).where(and(
       eq(feeAgreements.playerAccountId, input.playerId),
       existing ? ne(feeAgreements.id, existing.id) : undefined,
+      // A paused plan never bills (pauseUnstartedFeeAgreementInTransaction),
+      // so it cannot overlap the new one.
+      ne(feeAgreements.status, "paused"),
       or(
         isNull(feeAgreements.effectiveTo),
         gte(feeAgreements.effectiveTo, validated.effectiveFrom),
@@ -1604,6 +1673,185 @@ export function endFeeAgreementInTransaction(
   return { agreement: toFeeAgreementView(ended), reused: false }
 }
 
+/*
+ * A Fee Plan that has not started yet is stopped by pausing it, not ending it.
+ *
+ * "Stop fees after <month>" (End training, End schedule and Stop fees in
+ * Members, lib/training/changes.ts stopFeesAfterMonth) ends the plan in force
+ * with that month. A plan that only starts after that month -- a fee change
+ * made this month, which starts next month, or a new player whose first fee
+ * month is next month -- cannot be ended that way: `fee_agreements_dates_check`
+ * will not let a plan end before it starts, and `endFeeAgreementInTransaction`
+ * refuses a final month before the plan. It used to be skipped quietly, so the
+ * family was billed the new fee anyway. "Cancel this fee change" in Members
+ * (lib/training/fees.ts) stops such a plan the same way.
+ *
+ * `paused` is a fee plan state the schema has always had and nothing wrote
+ * until now. Every path that bills a plan, or reads one as "in force", already
+ * passes over it: fee issuing (`listMonthlyPreparationCandidates`), the fee
+ * register, the Members fee summary, the closeout check before archiving
+ * (`readActiveFeeAgreement`) and payment history (active or ended only). The
+ * reads that looked at every plan whatever its state -- the overlap check when
+ * a new plan is created, the two "a newer plan replaced this one" tests behind
+ * the withdrawal refund, the overlap check in `recordRefund` itself, and the
+ * earliest-plan lookup in `redateConfirmedTrainingStart` -- now pass over it
+ * as well. So a paused
+ * plan is inert, and no new state or column was needed. Its dates and fee are
+ * left as they were, a record of what was agreed and never charged.
+ *
+ * Only a plan with no fee issued against it can be paused: fees already issued
+ * never change.
+ */
+export function pauseUnstartedFeeAgreementInTransaction(
+  tx: SmbaDatabaseExecutor,
+  input: {
+    agreementId: string
+    expectedRevision: number
+    idempotencyKey: string
+    reason: string
+    /** Extra audit detail, such as the plan a cancelled fee change gives way to. */
+    restoredAgreementId?: string
+    /** The plan must start after this day. */
+    startsAfter: string
+  },
+  { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
+): EndFeeAgreementResult {
+  const reason = requireText(input.reason, "reason", "A reason for stopping the Fee Plan")
+  const expectedRevision = validateRevision(
+    input.expectedRevision,
+    "Review the Fee Plan before stopping it.",
+  )
+  const idempotencyKey = validateIdempotencyKey(input.idempotencyKey)
+  const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
+  if (replay) {
+    if (replay.eventType !== "fee_agreement_paused" || replay.entityId !== input.agreementId) {
+      financeError("IDEMPOTENCY_CONFLICT", "This request identifier was already used differently.")
+    }
+    const agreement = tx.select().from(feeAgreements)
+      .where(eq(feeAgreements.id, input.agreementId)).get()
+    if (!agreement) throw new Error("The stopped Fee Plan is unavailable.")
+    return { agreement: toFeeAgreementView(agreement), reused: true }
+  }
+
+  const agreement = tx.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, input.agreementId)).get()
+  if (!agreement || agreement.status !== "active") {
+    financeError("NOT_FOUND", "Choose an active Fee Plan.")
+  }
+  requireActiveFinanceTarget(tx, agreement.playerAccountId)
+  if (agreement.recordRevision !== expectedRevision) {
+    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before stopping it.")
+  }
+  if (!isValidDateKey(input.startsAfter) || agreement.effectiveFrom <= input.startsAfter) {
+    financeError("INVALID_INPUT", "This Fee Plan has already started.")
+  }
+  const issued = tx.select({ id: financialCharges.id }).from(financialCharges).where(and(
+    eq(financialCharges.feeAgreementId, agreement.id),
+    eq(financialCharges.lifecycle, "issued"),
+  )).get()
+  if (issued) {
+    financeError(
+      "CONFLICT",
+      "A fee has already been issued on this Fee Plan. Review or void it before stopping the plan.",
+    )
+  }
+  const update = tx.update(feeAgreements).set({
+    status: "paused",
+    recordRevision: sql`${feeAgreements.recordRevision} + 1`,
+    updatedByAccountId: actorId,
+    updatedAt: now,
+  }).where(and(
+    eq(feeAgreements.id, agreement.id),
+    eq(feeAgreements.status, "active"),
+    eq(feeAgreements.recordRevision, expectedRevision),
+  )).run()
+  if (update.changes !== 1) {
+    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before stopping it.")
+  }
+  insertAudit(tx, {
+    actorId,
+    createId,
+    entityId: agreement.id,
+    entityType: "fee_agreement",
+    eventType: "fee_agreement_paused",
+    idempotencyKey,
+    metadata: {
+      agreementId: agreement.id,
+      effectiveFrom: agreement.effectiveFrom,
+      playerId: agreement.playerAccountId,
+      reason,
+      restoredAgreementId: input.restoredAgreementId ?? null,
+    },
+    now,
+  })
+  const paused = tx.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, agreement.id)).get()
+  if (!paused) throw new Error("The stopped Fee Plan is unavailable.")
+  return { agreement: toFeeAgreementView(paused), reused: false }
+}
+
+/**
+ * Puts back the plan a fee change replaced, for "Cancel this fee change" in
+ * Members (lib/training/fees.ts), after the change's own plan has been paused.
+ * The replaced plan was closed on the day before the change started and had
+ * billed nothing after that day, so reopening it changes no issued fee: it
+ * simply carries on.
+ */
+export function reopenReplacedFeeAgreementInTransaction(
+  tx: SmbaDatabaseExecutor,
+  input: { agreementId: string; expectedRevision: number; reason: string },
+  { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
+) {
+  const reason = requireText(input.reason, "reason", "A reason for reopening the Fee Plan")
+  const agreement = tx.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, input.agreementId)).get()
+  if (!agreement || agreement.status !== "ended" || agreement.recordRevision !== input.expectedRevision) {
+    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it and try again.")
+  }
+  if (readActiveFeeAgreement(tx, agreement.playerAccountId)) {
+    financeError("CONFLICT", "This player already has a Fee Plan in force.")
+  }
+  const laterCharge = agreement.effectiveTo
+    ? tx.select({ id: financialCharges.id }).from(financialCharges).where(and(
+      eq(financialCharges.playerAccountId, agreement.playerAccountId),
+      eq(financialCharges.type, "monthly_training"),
+      eq(financialCharges.lifecycle, "issued"),
+      gt(financialCharges.billingPeriod, agreement.effectiveTo.slice(0, 7)),
+    )).get()
+    : undefined
+  if (laterCharge) {
+    financeError("CONFLICT", "A later monthly fee already exists. Review or void it first.")
+  }
+  const update = tx.update(feeAgreements).set({
+    effectiveTo: null,
+    status: "active",
+    recordRevision: sql`${feeAgreements.recordRevision} + 1`,
+    updatedByAccountId: actorId,
+    updatedAt: now,
+  }).where(and(
+    eq(feeAgreements.id, agreement.id),
+    eq(feeAgreements.status, "ended"),
+    eq(feeAgreements.recordRevision, input.expectedRevision),
+  )).run()
+  if (update.changes !== 1) {
+    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it and try again.")
+  }
+  insertAudit(tx, {
+    actorId,
+    createId,
+    entityId: agreement.id,
+    entityType: "fee_agreement",
+    eventType: "fee_agreement_corrected",
+    metadata: {
+      agreementId: agreement.id,
+      playerId: agreement.playerAccountId,
+      previous: { effectiveTo: agreement.effectiveTo, status: agreement.status },
+      reason,
+    },
+    now,
+  })
+}
+
 /**
  * Confirming a training start later than the player actually began is the one
  * mistake immutability cannot absorb: the earlier months become unbillable and
@@ -1737,11 +1985,27 @@ export function redateConfirmedTrainingStart(
 
     // The earliest Fee Plan is extended back to the corrected month so the
     // reopened months can be prepared. Later plans all start at or after it, so
-    // widening the earliest cannot overlap them.
+    // widening the earliest cannot overlap them. A paused plan never bills
+    // (pauseUnstartedFeeAgreementInTransaction), so widening one would report
+    // months as reopened that are never billed: it is passed over, and a
+    // player whose only plans are paused is refused.
     const earliest = tx.select().from(feeAgreements)
-      .where(eq(feeAgreements.playerAccountId, input.playerId))
+      .where(and(
+        eq(feeAgreements.playerAccountId, input.playerId),
+        ne(feeAgreements.status, "paused"),
+      ))
       .orderBy(asc(feeAgreements.effectiveFrom), asc(feeAgreements.createdAt))
       .get()
+    if (!earliest && tx.select({ id: feeAgreements.id }).from(feeAgreements).where(and(
+      eq(feeAgreements.playerAccountId, input.playerId),
+      eq(feeAgreements.status, "paused"),
+    )).get()) {
+      financeError(
+        "SETUP_REQUIRED",
+        "This player's fee plan was stopped before it started. Set up a fee plan for the months to bill first.",
+        "trainingStartOn",
+      )
+    }
     const reopenedFrom = monthStart(reopenedPeriods[0])
     let agreementEffectiveFrom = earliest?.effectiveFrom ?? null
     if (earliest && earliest.effectiveFrom > reopenedFrom) {
@@ -2008,12 +2272,13 @@ export function prepareMonthlyCharges(
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was already used.")
       }
       const result = parseAuditMetadata<
-        Omit<PrepareMonthlyChargesResult, "deferred"> & { deferred?: number }
+        Omit<PrepareMonthlyChargesResult, "deferred" | "skipped"> & { deferred?: number }
       >(replay.metadata)
       if (result.period !== input.period) {
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was used for another month.")
       }
-      return { ...result, deferred: result.deferred ?? 0, reused: true }
+      // The names skipped are not kept in the audit record; a replay has none.
+      return { ...result, deferred: result.deferred ?? 0, skipped: [], reused: true }
     }
     /*
      * A month's fees are issued once that month has begun, never ahead of it.
@@ -2031,7 +2296,8 @@ export function prepareMonthlyCharges(
       )
     }
 
-    const candidates = monthlyPreparationCandidates(tx, input.period, now)
+    const prepared = monthlyPreparationCandidates(tx, input.period, now)
+    const { candidates } = prepared
     const approvedPlayerIds = listApprovedPlayerIds(tx)
     const candidateIds = new Set(candidates.map(({ agreement }) => agreement.playerAccountId))
     const result: PrepareMonthlyChargesResult = {
@@ -2041,6 +2307,14 @@ export function prepareMonthlyCharges(
       awaitingAssignment: 0,
       deferred: 0,
       setupRequired: approvedPlayerIds.filter((id) => !candidateIds.has(id)).length,
+      // Before any fee below is issued; only players without a place that
+      // month are listed, and the loop issues none of them a fee.
+      skipped: monthlySkippedPlayers(
+        tx,
+        input.period,
+        prepared,
+        () => new Set(listPreparedPlayerIds(tx, input.period)),
+      ),
       createdChargeIds: [],
       reused: false,
     }
@@ -2216,7 +2490,8 @@ export function prepareMonthlyCharges(
       entityType: "academy",
       eventType: "monthly_fees_prepared",
       idempotencyKey,
-      metadata: result,
+      // The skipped players' names stay out of the audit record.
+      metadata: { ...result, skipped: undefined },
       now,
     })
     return result
@@ -2666,9 +2941,11 @@ function withdrawalRefundablePaymentAllocations(
             ? eq(refunds.withdrawalEffectiveOn, agreement.effectiveTo)
             : undefined,
         )).get()
+      // A paused plan never started, so it did not replace this one.
       const laterPlan = agreement
         ? database.select({ id: feeAgreements.id }).from(feeAgreements).where(and(
           eq(feeAgreements.playerAccountId, agreement.playerAccountId),
+          ne(feeAgreements.status, "paused"),
           gt(feeAgreements.effectiveFrom, agreement.effectiveFrom),
         )).get()
         : undefined
@@ -3106,6 +3383,9 @@ export function recordRefund(
       .where(and(
         eq(feeAgreements.playerAccountId, item.agreement.playerAccountId),
         ne(feeAgreements.id, item.agreement.id),
+        // A paused plan never bills, so it overlaps nothing
+        // (pauseUnstartedFeeAgreementInTransaction).
+        ne(feeAgreements.status, "paused"),
         lte(feeAgreements.effectiveFrom, withdrawalEffectiveOn),
         or(
           isNull(feeAgreements.effectiveTo),
@@ -4458,7 +4738,7 @@ export function getCoachFinanceDashboardSummary(
     financeError("INVALID_INPUT", "Choose a valid fee month.", "period")
   }
   const players = listFinancePlayers(database, { now, period })
-  const candidates = monthlyPreparationCandidates(database, period, now)
+  const { candidates } = monthlyPreparationCandidates(database, period, now)
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
