@@ -187,9 +187,48 @@ test("coach-to-player finance journey remains atomic, idempotent and private", a
     expect(registration).toEqual({ amount: 100_000, type: "registration" })
   })
 
+  /*
+   * This journey is a player signing up for a batch that begins next month, so
+   * onboarding issues the registration fee only. A month's fees can be issued
+   * once that month has begun (lib/finance/service.ts prepareMonthlyCharges),
+   * so the panel offers the start month only from its 1st.
+   */
+  await page.goto(`/coach/financials/records?view=fees&mode=monthly&period=${fixture.firstFeeMonth}`, {
+    waitUntil: "networkidle",
+  })
+  await expect(page.getByRole("button", { name: /^Opens 1 / })).toBeDisabled()
+
+  /*
+   * Models that month arriving without touching the server clock: the plan,
+   * the schedule and the training start move to the 1st of the current month
+   * in this disposable database, so the first monthly fee is the current
+   * month's. The schedule has no sessions before its original start, so the
+   * fee is the full month, as it was when it was issued for the start month.
+   */
+  writeDisposableDatabase((database) => {
+    const startsOn = `${payableMonth}-01`
+    const moves = [
+      database.prepare(`
+        update fee_agreements set effective_from = ? where player_account_id = ?
+      `).run(startsOn, fixture.playerId),
+      database.prepare(`
+        update session_assignments set effective_from = ? where account_id = ?
+      `).run(startsOn, fixture.playerId),
+      database.prepare(`
+        update session_series set starts_on = ? where id in (
+          select series_id from session_assignments where account_id = ?
+        )
+      `).run(startsOn, fixture.playerId),
+      database.prepare(`
+        update player_enrollments set training_start_on = ? where account_id = ?
+      `).run(startsOn, fixture.playerId),
+    ]
+    expect(moves.map((move) => move.changes)).toEqual([1, 1, 1, 1])
+  })
+
   const staleIssuePage = await page.context().newPage()
-  await openFeeIssue(page, fixture.firstFeeMonth)
-  await openFeeIssue(staleIssuePage, fixture.firstFeeMonth)
+  await openFeeIssue(page, payableMonth)
+  await openFeeIssue(staleIssuePage, payableMonth)
   await page.getByRole("button", { name: "Issue 1 fee" }).click()
   await expect(page.getByRole("status").filter({ hasText: "1 monthly fee issued" })).toBeVisible()
   await staleIssuePage.getByRole("button", { name: "Issue 1 fee" }).click()
@@ -203,57 +242,31 @@ test("coach-to-player finance journey remains atomic, idempotent and private", a
       from financial_charges
       where player_account_id = ? and type = 'monthly_training'
     `).get(fixture.playerId) as { amount: number; period: string }
-    expect(monthly).toEqual({ amount: 350_000, period: fixture.firstFeeMonth })
+    expect(monthly).toEqual({ amount: 350_000, period: payableMonth })
   })
 
-  // The browser journey issues next month's full fee to avoid proration. Move
-  // only that disposable charge into today's payment horizon to model the
-  // month rollover without changing production clock or payment safeguards.
   /*
-   * The monthly fee is issued for the month the fee plan opens in, which is the
-   * month training starts -- a month that has not arrived, because this journey
-   * is a player signing up for a batch that begins later. Paying it needs it to
-   * be due, so it is moved into the current month here.
-   *
-   * It used to be moved to `fixture.today`, which was the training start and
-   * happened to be the current month back when that date was stamped on the day
-   * the registration was approved. Now that the date is the day the player
-   * actually joins their schedule, that is the future, and a charge due in the
-   * future offers nothing to allocate against.
-   */
-  /*
-   * Brings the monthly fee forward so it can be paid. This journey is a player
-   * signing up for a batch that begins later, so the fee is issued for a month
-   * that has not arrived -- and a fee billed for a future month is not
-   * outstanding, so there is nothing to allocate a payment against.
-   *
-   * Two columns, for two different reasons. `billing_period` is what decides
-   * whether the fee is outstanding. `due_date` is what orders allocation
-   * (lib/finance/repository.ts:948), so it is borrowed from the registration fee
-   * rather than set to the first of the month: dated earlier, the monthly fee
-   * sorts first and swallows the whole payment, and the split this test is about
-   * never happens.
-   *
-   * `description` is deliberately left alone. It is a stored column written when
-   * the charge was issued, so the row keeps reading "Monthly training fee ·
-   * <issued month>" whatever these two say -- which is why the allocation labels
-   * below still use `fixture.firstFeeMonth`.
+   * The fee is already in the current month, so it is outstanding. Only its due
+   * date moves: due date is what orders allocation (lib/finance/repository.ts),
+   * so it is borrowed from the registration fee. Dated earlier, the monthly fee
+   * would sort first and swallow the whole payment, and the split this test is
+   * about would never happen.
    */
   writeDisposableDatabase((database) => {
     const update = database.prepare(`
       update financial_charges
-      set billing_period = ?, due_date = (
+      set due_date = (
         select due_date from financial_charges
         where player_account_id = ? and type = 'registration'
       )
       where player_account_id = ? and type = 'monthly_training'
-    `).run(payableMonth, fixture.playerId, fixture.playerId)
+    `).run(fixture.playerId, fixture.playerId)
     expect(update.changes).toBe(1)
   })
 
   await recordCashPayment(page, fixture.playerId, "1500")
   await expect(page.getByLabel("Amount allocated to SMBA registration fee")).toHaveValue("1000")
-  await expect(page.getByLabel(`Amount allocated to Monthly training fee · ${fixture.firstFeeMonth}`)).toHaveValue("500")
+  await expect(page.getByLabel(`Amount allocated to Monthly training fee · ${payableMonth}`)).toHaveValue("500")
   await page.getByRole("button", { name: "Record payment" }).click()
   await expect(page.getByRole("status").filter({ hasText: "Payment recorded" })).toBeVisible()
 
@@ -279,7 +292,7 @@ test("coach-to-player finance journey remains atomic, idempotent and private", a
   })
 
   await recordCashPayment(page, fixture.playerId, "3000")
-  await expect(page.getByLabel(`Amount allocated to Monthly training fee · ${fixture.firstFeeMonth}`)).toHaveValue("3000")
+  await expect(page.getByLabel(`Amount allocated to Monthly training fee · ${payableMonth}`)).toHaveValue("3000")
   await page.getByRole("button", { name: "Record payment" }).click()
   await expect(page.getByRole("status").filter({ hasText: "Payment recorded" })).toBeVisible()
 
