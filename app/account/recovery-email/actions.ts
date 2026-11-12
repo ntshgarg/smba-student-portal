@@ -48,9 +48,7 @@ export async function requestActivationRecoveryEmail(
   const token = (await cookies()).get(ACTIVATION_CLAIM_COOKIE)?.value
   const status = getActivationClaimStatus(token)
   if (status.state !== "approved") redirect("/activate")
-  // Same first-time-only rule as the signed-in enrolment below. /activate only
-  // offers this step when no address is on file, and the action has to hold
-  // that line itself: confirming upserts, so it could replace a verified one.
+  // First time only: confirming upserts, so it could replace a verified address.
   if (getRecoveryEmail(status.accountId)) redirect("/activate")
   const email = String(formData.get("email") ?? "")
   try {
@@ -292,8 +290,7 @@ export async function confirmHeadSetupRecoveryEmail(
   if (!confirmed?.receiptToken) {
     return { email, error: "That code is invalid or expired.", fullName, sent: true }
   }
-  // Both cookies last as long as the verified email does, counted from now --
-  // the moment of verification -- not from when the code was sent.
+  // Counted from verification, not from when the code was sent.
   const setupCookie = {
     httpOnly: true,
     maxAge: HEAD_SETUP_VERIFIED_EMAIL_LIFETIME_MS / 1000,

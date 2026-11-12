@@ -504,11 +504,7 @@ export function archiveMemberRecord({
 /**
  * Switches off every way an archived account signs in: the Academy ID, every
  * open session, and the credential (so activation, recovery and the PIN all
- * refuse it). Shared by player and coach archiving so the two cannot drift.
- * It also records who archived the account in the security log, which keeps
- * that answer for 180 days (lib/telemetry/retention.ts) even if the account
- * row is edited later. The Better Auth user row is left in place: sign-in is
- * refused by the revoked credential and Academy ID, not by deleting it.
+ * refuse it), and logs who archived it. Shared by player and coach archiving.
  */
 function revokePortalAccess(
   tx: SmbaDatabaseExecutor,

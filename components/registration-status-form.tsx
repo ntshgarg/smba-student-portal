@@ -12,8 +12,6 @@ import {
 import {
   EMPTY_REGISTRATION_STATUS_STATE,
   passwordStepReachable,
-  registrationStatusDetailsAgain,
-  registrationStatusForAnotherPlayer,
   type RegistrationStatusState,
 } from "@/lib/auth/registration-form"
 import { ActivationForm } from "@/components/activation-form"
@@ -21,12 +19,7 @@ import { ActivationForm } from "@/components/activation-form"
 const SUBMISSION_FAILURE_MESSAGE =
   "We couldn’t check that just now. Your details are still here—please try again."
 
-/*
- * A lost reply after the code was checked. The code is spent by then, so
- * "please try again" with the same code could only ever be refused. If the
- * check went through and the account is ready, the password step is already
- * waiting on this page; a reload shows it. Otherwise a new code is needed.
- */
+// A lost reply after the code was checked: the code is spent, so retrying it can only fail.
 const CODE_STEP_FAILURE_MESSAGE =
   "We didn’t hear back after checking your code. Reload this page: if it went through, your next step will be waiting. If not, send a new code."
 
@@ -51,14 +44,9 @@ function formDataFor(values: RegistrationStatusState["values"], code?: string) {
  * activation claim, so the page that renders next can offer the password step
  * without needing the original browser.
  */
-export function RegistrationStatusForm({
-  initialState = EMPTY_REGISTRATION_STATUS_STATE,
-}: {
-  /** Where the form starts. Only tests start it anywhere but the empty details step. */
-  initialState?: RegistrationStatusState
-} = {}) {
-  const [state, setState] = useState<RegistrationStatusState>(initialState)
-  const [values, setValues] = useState(initialState.values)
+export function RegistrationStatusForm() {
+  const [state, setState] = useState<RegistrationStatusState>(EMPTY_REGISTRATION_STATUS_STATE)
+  const [values, setValues] = useState({ email: "", fullName: "" })
   const [code, setCode] = useState("")
   const [pending, setPending] = useState(false)
   const [pendingKind, setPendingKind] = useState<"submit" | "resend" | null>(null)
@@ -128,10 +116,10 @@ export function RegistrationStatusForm({
     void run("resend", () => requestRegistrationStatusCode(state, formDataFor(values)), true)
   }
 
-  function reopen(next: RegistrationStatusState) {
+  function reopen(nextValues: RegistrationStatusState["values"]) {
     if (submissionInFlight.current) return
-    setState(next)
-    setValues(next.values)
+    setState({ ...EMPTY_REGISTRATION_STATUS_STATE, values: nextValues })
+    setValues(nextValues)
     setCode("")
     setNotice(null)
   }
@@ -188,9 +176,9 @@ export function RegistrationStatusForm({
           : null}
         {state.standing === "new" ? <Link href="/register">Request registration</Link> : null}
         <button
-          className="registration-restart"
+          className="totp-switch"
           type="button"
-          onClick={() => reopen(registrationStatusForAnotherPlayer(state))}
+          onClick={() => reopen({ email: state.values.email, fullName: "" })}
         >
           Check a different player
         </button>
@@ -300,7 +288,7 @@ export function RegistrationStatusForm({
             className="totp-switch"
             type="button"
             disabled={pending}
-            onClick={() => reopen(registrationStatusDetailsAgain(state))}
+            onClick={() => reopen(state.values)}
           >
             Use different details
           </button>

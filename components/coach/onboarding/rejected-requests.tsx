@@ -8,19 +8,10 @@ import { InlineNotice } from "@/components/inline-notice"
 import type { RejectedRegistration } from "@/lib/auth/registration-form"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 
-import styles from "./rejected-requests.module.css"
-import { shortDate, type SaveFeedback } from "./register/shared"
+import styles from "./player-onboarding-register.module.css"
+import { folio, shortDate } from "./register/shared"
 
-/**
- * Rejected requests used to vanish from every screen the moment Reject was
- * pressed, while the family's name and email kept answering "not accepted" for
- * good. One mis-tap locked a family out with nothing here for the coach to act
- * on. This list is where a rejection can be found again and undone.
- *
- * Undo only puts the request back in the review queue; approving it is still
- * the separate, deliberate step it always was. Closed by default: it is a place
- * to look things up, not a queue of work.
- */
+/** Rejected requests, so a mistaken rejection can be found and undone. */
 export function RejectedRequests({
   onRestored,
   requests,
@@ -29,7 +20,7 @@ export function RejectedRequests({
   requests: RejectedRegistration[]
 }) {
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [feedback, setFeedback] = useState<(SaveFeedback & { requestId: string }) | null>(null)
+  const [feedback, setFeedback] = useState<{ message: string; requestId: string; tone: "error" } | null>(null)
 
   if (!requests.length) return null
 
@@ -47,12 +38,7 @@ export function RejectedRequests({
         retained: "The request is still rejected",
         subject: "The undo",
       })
-      setFeedback({
-        message: failure.message,
-        offerRetry: failure.offerRetry,
-        requestId: request.id,
-        tone: "error",
-      })
+      setFeedback({ message: failure.message, requestId: request.id, tone: "error" })
       return
     } finally {
       setBusyId(null)
@@ -67,55 +53,41 @@ export function RejectedRequests({
   }
 
   return (
-    <section className={styles.rejected} aria-labelledby="rejected-requests-title">
-      <details>
-        <summary>
-          <h2 id="rejected-requests-title">Rejected requests</h2>
-          <p>
-            <strong>{requests.length}</strong> not accepted · Open to undo a rejection
-          </p>
-        </summary>
-        <p className={styles.help}>
-          The family is told their registration was not accepted and to contact the academy.
-          Undoing a rejection puts the request back in the queue above for you to review again.
-        </p>
-        <ol className={styles.rows}>
-          {requests.map((request) => (
-            <li key={request.id}>
+    <section className={styles.register} aria-labelledby="rejected-requests-title">
+      <div className={styles.registerHeading}>
+        <h2 id="rejected-requests-title">Rejected requests</h2>
+        <p><strong>{requests.length}</strong> not accepted · Undo puts a request back in review</p>
+      </div>
+      <ol className={styles.rows}>
+        {requests.map((request, index) => (
+          <li key={request.id}>
+            <div className={styles.row}>
+              <span className={styles.folio}>{folio(index)}</span>
               <div className={styles.identity}>
                 <strong>{request.fullName}</strong>
-                <small>
-                  {[
-                    request.requestedRole === "coach" ? "Assistant coach" : "Player",
-                    request.rejectedAt ? `Rejected ${shortDate(request.rejectedAt)}` : "Rejected",
-                    request.contactEmail,
-                  ].filter(Boolean).join(" · ")}
-                </small>
+                <small>{request.contactEmail}</small>
+              </div>
+              <span className={styles.stageStamp}>Rejected</span>
+              <div className={styles.nextAction}>
+                <strong>{request.requestedRole === "coach" ? "Assistant coach" : "Player"}</strong>
+                <small>{request.rejectedAt ? `Rejected ${shortDate(request.rejectedAt)}` : "Rejected"}</small>
               </div>
               <button
+                className={styles.openButton}
                 type="button"
                 disabled={Boolean(busyId)}
                 onClick={() => void undo(request)}
               >
+                {busyId === request.id ? "Undoing…" : "Undo rejection"}
                 <Undo2 aria-hidden="true" />
-                {busyId === request.id
-                  ? "Undoing…"
-                  : feedback?.requestId === request.id && feedback.offerRetry
-                    ? "Undo rejection again"
-                    : "Undo rejection"}
               </button>
-              {feedback?.requestId === request.id ? (
-                <InlineNotice
-                  className={styles.notice}
-                  message={feedback.message}
-                  tone={feedback.tone}
-                  reserveSpace={false}
-                />
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      </details>
+            </div>
+            {feedback?.requestId === request.id ? (
+              <InlineNotice message={feedback.message} tone={feedback.tone} reserveSpace={false} />
+            ) : null}
+          </li>
+        ))}
+      </ol>
     </section>
   )
 }

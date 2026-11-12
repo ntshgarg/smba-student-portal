@@ -37,26 +37,18 @@ export type OnboardingDuplicateSignal = {
   academyId: string | null
   fullName: string
   reason: "same-contact" | "same-name-and-birthday"
-  /**
-   * "archived" is someone who has left: archiving frees their identity, so a
-   * returning family arrives as a brand-new request and, before this, nothing
-   * mentioned the old record. "rejected" is a request the coach turned down,
-   * which a second request under a respelled name would otherwise hide.
-   */
-  standing: "pending" | "approved" | "archived" | "rejected"
+  /** "archived": someone who has left and may be registering again. */
+  standing: "pending" | "approved" | "archived"
 }
 
-/**
- * Someone no longer in the academy, or never let in, whom a new request may
- * still be. Only read for the duplicate hint.
- */
+/** A member who has left, compared for the duplicate hint only. */
 export type OnboardingFormerRecord = {
   academyId: string | null
   contactEmail: string | null
   dateOfBirth: string | null
   fullName: string
   id: string
-  standing: "archived" | "rejected"
+  standing: "archived"
 }
 
 export type OnboardingPendingRequest = {
@@ -173,7 +165,6 @@ type OnboardingSummaryInput = {
 }
 
 type OnboardingWorkspaceInput = Omit<OnboardingSummaryInput, "newRequestCount" | "players"> & {
-  /** Archived members and rejected requests, compared for the duplicate hint only. */
   formerRecords?: OnboardingFormerRecord[]
   pendingRequests: OnboardingPendingRequest[]
   players: OnboardingWorkspacePlayer[]

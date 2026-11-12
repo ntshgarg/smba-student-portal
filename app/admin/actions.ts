@@ -89,14 +89,7 @@ export async function openHeadCoachSetupAction() {
     sameSite: "strict",
     secure: process.env.VERCEL === "1",
   })
-  /*
-   * This runs on the coach's device, and the device is about to be handed to
-   * them. The owner's own sign-in used to stay on it for the whole of setup --
-   * the console, dashboard previews and authenticator approvals one address-bar
-   * edit away -- and if the coach's first sign-in hiccuped, opening the sign-in
-   * page dropped them into the owner console. The setup cookie above is all
-   * the setup page needs, so the owner is signed out of this browser here.
-   */
+  // This device is handed to the coach, so sign the owner out of it.
   cookieStore.delete(ADMIN_PREVIEW_COOKIE)
   await clearDatabaseSession()
   redirect("/setup/head-coach")

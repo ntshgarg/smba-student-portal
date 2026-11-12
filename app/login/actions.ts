@@ -121,9 +121,9 @@ export async function loginWithAcademyId(
 
   // The account/IP lockout and the audit rows for a guess that reaches the
   // endpoint live in its hooks (lib/auth/username-login-guard.ts), not here: it
-  // is reached through `auth.api.signInUsername` below and would also be
-  // reached at POST /api/auth/sign-in/username if a public auth route were ever
-  // mounted (none is today), so the guard sits with the endpoint.
+  // is reachable both through `auth.api.signInUsername` below and directly at
+  // POST /api/auth/sign-in/username, so a guard that only sat in this action
+  // covered one caller and left the other open.
   //
   // The block is still read here, and read first, because this action answers
   // two ways. An Academy ID that exists and is active reaches the endpoint and
@@ -223,10 +223,10 @@ export async function loginWithPin(
   }
 
   // The account/IP lockout and the audit rows for this factor live in the
-  // endpoint itself (lib/auth/pin-plugin.ts), not here. It is reached through
-  // `auth.api.signInPin` below and would also be reached at POST
-  // /api/auth/sign-in/pin if a public auth route were ever mounted (none is
-  // today), so the guard sits with the endpoint. Duplicating it here as well would double
+  // endpoint itself (lib/auth/pin-plugin.ts), not here. It is reachable both
+  // through `auth.api.signInPin` below and directly at POST
+  // /api/auth/sign-in/pin, so a guard in this action would have covered one
+  // caller and left the other open. Duplicating it here as well would double
   // every failure against the five-attempt budget and write each audit row
   // twice, so this action now only translates the endpoint's refusal into copy.
   const requestHeaders = await headers()
@@ -278,13 +278,6 @@ export async function activateAccount(
   const token = cookieStore.get(ACTIVATION_CLAIM_COOKIE)?.value ?? ""
   const activated = await completeAccountActivation({ token, password })
   if (!activated) {
-    /*
-     * Every refusal used to say "return to registration", which sent an
-     * approved family -- or someone who had just set the password in another
-     * tab -- off to request access they already had. The two real cases are a
-     * password that already exists, and a setup that was replaced (a status
-     * check on another device) or ran out; neither is fixed by registering.
-     */
     return {
       error: getActivationClaimStatus(token).state === "active"
         ? ACTIVATION_ALREADY_COMPLETE_ERROR
@@ -309,10 +302,7 @@ export async function activateAccount(
       headers: requestHeaders,
     }))
   } catch {
-    // The receipt cookie is left alone here. Deleting it re-rendered /activate
-    // as a page with no receipt -- the lookup form -- so this message never
-    // reached the screen. The claim is already spent, so the cookie grants
-    // nothing; on the next visit it reads as "your account is ready".
+    // Cookie kept so /activate shows this message; the claim is already spent.
     return { error: ACTIVATED_WITHOUT_SESSION_ERROR, errorField: null }
   }
   cookieStore.delete(ACTIVATION_CLAIM_COOKIE)
@@ -408,12 +398,7 @@ export async function confirmRegistrationCode(
   })
   if (!result) return { ...base, error: INVALID_CODE_MESSAGE, errorField: "code" }
 
-  /*
-   * A new request gets its receipt here. So does an existing one that is ready
-   * for its password: `confirmRegistration` minted the claim inside the code's
-   * transaction, and the form below shows the password step on the spot rather
-   * than sending the family to /activate to type everything in again.
-   */
+  // A request ready for its password also gets the receipt `confirmRegistration` minted.
   if (result.standing === "new" || passwordStepReachable(result)) {
     /*
      * The activation claim still rides a cookie so the existing /activate page

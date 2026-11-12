@@ -43,53 +43,13 @@ export type AuthenticatorRecoveryMessage = {
  */
 export type RegistrationVerificationMessage = {
   academyId?: string | null
-  /** For an approved request: still being set up, ready for a password, or already signed up. */
-  approvedDetail?: RegistrationApprovedDetail | null
   code: string
   expiresInMinutes: number
   fullName: string
-  /**
-   * Which door asked. A status check is not a registration, and its email has to
-   * say so -- and say plainly when nothing is on file, which the registration
-   * wording leaves out because there it means "new request".
-   */
+  /** Which door asked: a status check is worded as one. */
   purpose?: "registration" | "status"
   standing: "new" | "pending" | "approved" | "rejected"
   to: string
-}
-
-export type RegistrationApprovedDetail = "setting-up" | "ready" | "active"
-
-/**
- * The one line of a registration or status email that differs by standing.
- * Exported so the wording can be checked without sending anything.
- */
-export function registrationStandingLine(message: Pick<
-  RegistrationVerificationMessage,
-  "academyId" | "approvedDetail" | "purpose" | "standing"
->) {
-  const academyId = message.academyId ? ` Your Academy ID is ${message.academyId}.` : ""
-  switch (message.standing) {
-    case "approved":
-      if (message.approvedDetail === "active") {
-        return `This account is already set up.${academyId} Sign in with it and your password.`
-      }
-      if (message.approvedDetail === "setting-up") {
-        return `Your request has been approved.${academyId} Your coach is still setting up training; you can create a password once that is finished.`
-      }
-      if (message.approvedDetail === "ready") {
-        return `Your request has been approved.${academyId} Enter this code to create your password.`
-      }
-      return `Your request has already been approved.${academyId}`
-    case "pending":
-      return "A request for this name and address is already with your coach for review."
-    case "rejected":
-      return "This registration was not accepted. Please contact the academy."
-    case "new":
-      return message.purpose === "status"
-        ? "We have no registration under this name and email. Check the spelling, or send a new request from the registration page."
-        : null
-  }
 }
 
 export interface AuthMailer {
@@ -267,16 +227,24 @@ class ResendAuthMailer implements AuthMailer {
      * address has proved it; the browser that asked has proved nothing, so it is
      * told the same sentence either way.
      */
-    const standing = registrationStandingLine(message)
+    const statusCheck = message.purpose === "status"
+    const standing = {
+      approved: message.academyId
+        ? `Your request has already been approved. Your Academy ID is ${message.academyId}.`
+        : "Your request has already been approved.",
+      new: statusCheck
+        ? "We have no registration under this name and email. Check the spelling, or send a new request from the registration page."
+        : null,
+      pending: "A request for this name and address is already with your coach for review.",
+      rejected: "A request for this name and address was not approved. Please speak to your coach at the academy.",
+    }[message.standing]
     const standingText = standing ? `\n\n${standing}` : ""
     const standingHtml = standing ? `<p>${escapeHtml(standing)}</p>` : ""
-    const statusCheck = message.purpose === "status"
+    const noun = statusCheck ? "status check" : "registration"
     await this.send({
       to: message.to,
-      subject: statusCheck ? "Your SMBA status check code" : "Your SMBA registration code",
-      text: statusCheck
-        ? `Hello ${message.fullName},\n\nYour SMBA status check code is ${message.code}. Enter it to see where your registration stands. It expires in ${message.expiresInMinutes} minutes.${standingText}\n\nIf you did not request this, you can ignore this email.`
-        : `Hello ${message.fullName},\n\nYour SMBA registration code is ${message.code}. It expires in ${message.expiresInMinutes} minutes.${standingText}\n\nIf you did not request this, you can ignore this email.`,
+      subject: `Your SMBA ${noun} code`,
+      text: `Hello ${message.fullName},\n\nYour SMBA ${noun} code is ${message.code}. It expires in ${message.expiresInMinutes} minutes.${standingText}\n\nIf you did not request this, you can ignore this email.`,
       html: `<p>Hello ${name},</p><p>${statusCheck
         ? "Enter this code to see where your SMBA registration stands."
         : "Enter this code to continue your SMBA registration."}</p><p><strong style="font-size:28px;letter-spacing:0.18em">${code}</strong></p><p>It expires in ${message.expiresInMinutes} minutes.</p>${standingHtml}<p>If you did not request this, you can ignore this email.</p>`,

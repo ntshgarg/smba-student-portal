@@ -26,8 +26,6 @@ function duplicateStandingLabel(signal: OnboardingDuplicateSignal) {
   switch (signal.standing) {
     case "archived":
       return signal.academyId ? ` · was ${signal.academyId}, has left the academy` : " · has left the academy"
-    case "rejected":
-      return " · earlier request not accepted"
     case "pending":
       return " · request waiting"
     case "approved":

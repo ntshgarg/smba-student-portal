@@ -52,19 +52,12 @@ export async function completeHeadCoachSetupAction(
     return { error: validationError.message, errorField: validationError.field }
   }
 
-  /*
-   * The verified email has its own time limit (counted from verification). If
-   * it has run out, say so and put the email step back on screen: answering
-   * "verify the recovery email" while the page still showed it as verified
-   * left the coach nothing to press but reload.
-   */
+  // The verified email has its own time limit; say plainly when it has run out.
   if (!getVerifiedSetupRecoveryEmail({
     receiptToken: input.recoveryEmailReceiptToken,
     subjectKey: input.recoveryEmailSubjectKey,
   })) {
-    // The cookie is left alone: changing a cookie here re-renders the page,
-    // which swaps this form for the email step and drops this message. On the
-    // next load the page sees the email has run out and shows that step.
+    // Cookie left alone: changing it re-renders the page and drops this message.
     return {
       error: "The email check ran out. Reload this page to verify the coach\u2019s email again.",
       errorField: null,
@@ -93,18 +86,14 @@ export async function completeHeadCoachSetupAction(
       headers: requestHeaders,
     }))
   } catch {
-    // The one-time cookies are left in place on this path. They are spent --
-    // the setup claim was consumed with the account -- so they open nothing,
-    // but deleting them re-rendered this page as "setup unavailable" and hid
-    // the one message the coach needed: the account is ready, go and sign in.
+    // Spent cookies kept so the page still shows this message.
     return {
       error: "The head-coach account is ready, but we couldn\u2019t sign you in."
         + " Open the sign-in page and use your new password.",
       errorField: null,
     }
   }
-  // These were set at Path=/setup/head-coach; a delete without the path would
-  // target a different cookie and leave these (the name included) in place.
+  // Set at Path=/setup/head-coach, so the delete must name that path.
   for (const name of [HEAD_COACH_SETUP_COOKIE, HEAD_SETUP_EMAIL_COOKIE, HEAD_COACH_SETUP_NAME_COOKIE]) {
     cookieStore.delete({ name, path: "/setup/head-coach" })
   }

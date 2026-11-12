@@ -67,9 +67,7 @@ export function prepareDatabase({
   }
   // A genuinely empty academy must not contain a hidden or default owner
   // credential. Its platform owner is created only by the operator script
-  // (scripts/database/provision-platform-admin.ts, `npm run db:provision:admin`);
-  // there is no in-app owner sign-up. The head coach then comes from the
-  // owner's one-time setup on the coach's device (lib/auth/initial-setup.ts).
+  // (`npm run db:provision:admin`).
   if (!emptyAcademy) ensureBootstrapCredential({ database })
   return database
 }

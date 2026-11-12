@@ -36,8 +36,7 @@ export default async function HeadCoachSetupPage() {
       subjectKey: recoverySubjectKeyForHeadSetup(setupToken),
     })
     : null
-  // Carried in a cookie scoped to this page, not the address bar, so the coach's
-  // name stays out of browser history and server logs.
+  // A cookie, not the address bar, keeps the name out of history and logs.
   const defaultName = cookieStore.get(HEAD_COACH_SETUP_NAME_COOKIE)?.value.slice(0, 80) ?? ""
 
   return (

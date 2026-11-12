@@ -129,8 +129,7 @@ describe("registration review lifecycle", () => {
       expect((await register("Mira Rao", "mira.family@example.com")).reply)
         .toMatchObject({ standing: "rejected" })
 
-      expect(accountService.undoRegistrationRejection(requestId, coachId, { database, now: tick() }))
-        .toEqual({ accountId: requestId, fullName: "Mira Rao" })
+      accountService.undoRegistrationRejection(requestId, coachId, { database, now: tick() })
 
       const row = database.select().from(schema.accounts)
         .where(eq(schema.accounts.id, requestId)).get()!
@@ -175,31 +174,6 @@ describe("registration review lifecycle", () => {
     })
   })
 
-  describe("approving", () => {
-    it("answers a clash on the Academy ID with 'press Approve again', not a raw database error", async () => {
-      await register("Tara Iyer", "tara.family@example.com")
-      const requestId = accountIdFor("Tara Iyer")!
-      // What a second approval landing on another server at the same moment
-      // leaves behind: an allocation the first one's insert then collides with.
-      database.insert(schema.academyIdAllocations).values({
-        accountId: requestId,
-        createdAt: new Date(),
-        serial: 20_500,
-      }).run()
-
-      let thrown: unknown
-      try {
-        accountService.approveRegistration(requestId, coachId, { now: tick() })
-      } catch (error) {
-        thrown = error
-      }
-      expect(thrown).toBeInstanceOf(actionResults.OperationalActionError)
-      expect(thrown).toMatchObject({ code: "CONFLICT" })
-      expect(database.select({ status: schema.accounts.approvalStatus }).from(schema.accounts)
-        .where(eq(schema.accounts.id, requestId)).get()?.status).toBe("pending")
-    })
-  })
-
   describe("the duplicate hint on a new request", () => {
     /*
      * Archiving frees a member's identity so they can register again, and the
@@ -232,23 +206,6 @@ describe("registration review lifecycle", () => {
         fullName: "Kiran Rao",
         reason: "same-contact",
         standing: "archived",
-      })
-    })
-
-    it("mentions a rejected request on the same address", async () => {
-      await register("Asha Menon", "asha.family@example.com")
-      const rejectedId = accountIdFor("Asha Menon")!
-      accountService.rejectRegistration(rejectedId, coachId, { database, now: tick() })
-      await register("Asha M Menon", "asha.family@example.com")
-      const respelledId = accountIdFor("Asha M Menon")!
-
-      const request = coachDatabase.getPlayerOnboardingWorkspace().cases
-        .find((item) => item.id === respelledId)
-      expect(request?.duplicateSignals).toContainEqual({
-        academyId: null,
-        fullName: "Asha Menon",
-        reason: "same-contact",
-        standing: "rejected",
       })
     })
   })
@@ -287,35 +244,14 @@ describe("registration review lifecycle", () => {
     })
   })
 
-  describe("the status-check email", () => {
-    it("reads as a status check, and says so when nothing is on file", async () => {
-      const mailer = new CapturingMailer()
-      await accountService.requestRegistrationStatus({
-        email: "nobody.here@example.com",
-        fullName: "Nobody Here",
-        mailer,
-      }, { database, now: tick() })
+  it("words the status-check email as a status check", async () => {
+    const mailer = new CapturingMailer()
+    await accountService.requestRegistrationStatus({
+      email: "nobody.here@example.com",
+      fullName: "Nobody Here",
+      mailer,
+    }, { database, now: tick() })
 
-      expect(mailer.registration.at(-1)).toMatchObject({ purpose: "status", standing: "new" })
-      const { registrationStandingLine } = await import("@/lib/auth/mailer")
-      expect(registrationStandingLine(mailer.registration.at(-1)!))
-        .toContain("We have no registration under this name and email")
-      // The registration door stays quiet for "new": there it means a new request.
-      expect(registrationStandingLine({ purpose: "registration", standing: "new" })).toBeNull()
-    })
-
-    it("tells an approved family which of the three next steps is theirs", async () => {
-      const { registrationStandingLine } = await import("@/lib/auth/mailer")
-      const base = { academyId: "SMBA-PL-0042", purpose: "status" as const, standing: "approved" as const }
-
-      expect(registrationStandingLine({ ...base, approvedDetail: "setting-up" }))
-        .toContain("still setting up training")
-      expect(registrationStandingLine({ ...base, approvedDetail: "ready" }))
-        .toContain("create your password")
-      expect(registrationStandingLine({ ...base, approvedDetail: "active" }))
-        .toContain("already set up")
-      expect(registrationStandingLine({ purpose: "status", standing: "rejected" }))
-        .toBe("This registration was not accepted. Please contact the academy.")
-    })
+    expect(mailer.registration.at(-1)).toMatchObject({ purpose: "status", standing: "new" })
   })
 })

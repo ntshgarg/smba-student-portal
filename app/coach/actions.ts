@@ -220,9 +220,9 @@ export async function undoRegistrationRejectionAction(registrationId: string) {
         "registrationId",
       )
     }
-    const restored = undoRegistrationRejection(registrationId, coach.subjectId)
+    undoRegistrationRejection(registrationId, coach.subjectId)
     revalidateAcademyData()
-    return restored
+    return null
   })
 }
 

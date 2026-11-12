@@ -1723,52 +1723,6 @@
   letter-spacing: 0.02em;
 }
 
-/* "Register another player" on the result card: a way back to the form that
-   reads like the card's own links rather than a second primary action. */
-.registration-confirmation .registration-restart {
-  width: fit-content;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--navy);
-  font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 780;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-
-.registration-confirmation .registration-restart:hover {
-  color: var(--red);
-}
-
-/* The lookup offered under "Waiting for your coach", for a parent with more than
-   one child on one browser. Closed until asked for, so the waiting answer stays
-   the first thing on the card. */
-.activation-other-lookup {
-  margin-top: var(--space-copy);
-  padding-top: var(--space-copy);
-  border-top: 1px solid var(--line);
-}
-
-.activation-other-lookup > summary {
-  display: flex;
-  width: fit-content;
-  min-height: 44px;
-  align-items: center;
-  color: var(--navy);
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 780;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-
-.activation-other-lookup > summary:hover {
-  color: var(--red);
-}
-
 .login-submit {
   display: flex;
   min-height: 56px;

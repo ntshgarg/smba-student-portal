@@ -36,11 +36,7 @@ import {
 import { getAcademyDateKey } from "@/lib/format"
 
 export const HEAD_COACH_SETUP_COOKIE = "smba_head_coach_setup"
-/**
- * Carries the coach's typed name from the email step to the account step. It
- * used to ride the address bar as `?name=`, which put a person's full name in
- * browser history and server logs.
- */
+/** The coach's typed name, carried from the email step to the account step. */
 export const HEAD_COACH_SETUP_NAME_COOKIE = "smba_head_coach_setup_name"
 export const HEAD_COACH_SETUP_CLAIM_LIFETIME_MS = 60 * 60 * 1_000
 

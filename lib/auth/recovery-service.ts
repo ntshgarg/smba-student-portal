@@ -47,12 +47,7 @@ import {
 export const RECOVERY_SESSION_COOKIE = "smba_password_recovery"
 export const AUTHENTICATOR_RECOVERY_COOKIE = "smba_authenticator_recovery"
 export const HEAD_SETUP_EMAIL_COOKIE = "smba_head_setup_email"
-/**
- * How long a verified setup email stays usable, counted from verification. The
- * receipt used to keep the code's own expiry -- ten minutes from when the code
- * was *sent* -- so a coach who spent a few minutes choosing a password and PIN
- * was told to verify an email the screen still showed as verified.
- */
+/** How long a verified setup email stays usable, counted from verification. */
 export const HEAD_SETUP_VERIFIED_EMAIL_LIFETIME_MS = 30 * 60 * 1000
 export const EMAIL_VERIFICATION_LIFETIME_MS = 10 * 60 * 1000
 export const PASSWORD_RECOVERY_LIFETIME_MS = 20 * 60 * 1000
@@ -479,7 +474,6 @@ export function consumeVerifiedSetupRecoveryEmail(input: {
  */
 export async function requestRegistrationVerification(input: {
   academyId?: string | null
-  approvedDetail?: "setting-up" | "ready" | "active" | null
   email: string
   fullName: string
   mailer?: AuthMailer
@@ -587,7 +581,6 @@ export async function requestRegistrationVerification(input: {
   try {
     await (input.mailer ?? createAuthMailer()).sendRegistrationVerification({
       academyId: input.academyId ?? null,
-      approvedDetail: input.approvedDetail ?? null,
       code,
       purpose: input.purpose ?? "registration",
       expiresInMinutes: EMAIL_VERIFICATION_LIFETIME_MS / 60_000,

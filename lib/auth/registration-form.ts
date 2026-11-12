@@ -24,12 +24,7 @@ export type RegistrationValues = {
 
 export type RegistrationStanding = "new" | "pending" | "approved" | "rejected"
 
-/**
- * Approved, set up, and no password yet: the one standing where a door can hand
- * over the password step. The registration form, the status lookup and the
- * actions behind them all ask this one question, so the two doors cannot offer
- * different next steps for the same person.
- */
+/** Approved, set up, no password yet: both doors offer the password step only then. */
 export function passwordStepReachable(input: {
   activated: boolean
   onboardingCompleted: boolean
@@ -75,35 +70,6 @@ export const EMPTY_REGISTRATION_STATE: RegistrationFormState = {
   values: EMPTY_REGISTRATION_VALUES,
 }
 
-/**
- * Back from the code step to the details, with everything still typed in.
- * Before this the step only ever moved forward on a server reply, so a
- * mistyped email -- shown right there in the helper text -- could only be
- * fixed by reloading the page and typing all five fields again.
- */
-export function registrationDetailsAgain(state: RegistrationFormState): RegistrationFormState {
-  return {
-    ...EMPTY_REGISTRATION_STATE,
-    values: state.values,
-  }
-}
-
-/**
- * A fresh form for the next child. The contact email and mobile are kept,
- * because siblings are registered on one address; the player's own name and
- * date of birth are cleared.
- */
-export function registrationForAnotherPlayer(state: RegistrationFormState): RegistrationFormState {
-  return {
-    ...EMPTY_REGISTRATION_STATE,
-    values: {
-      ...EMPTY_REGISTRATION_VALUES,
-      email: state.values.email,
-      phone: state.values.phone,
-    },
-  }
-}
-
 /** A request the head coach rejected, as the Rejected list on the intake register shows it. */
 export type RejectedRegistration = {
   contactEmail: string | null
@@ -142,25 +108,4 @@ export const EMPTY_REGISTRATION_STATUS_STATE: RegistrationStatusState = {
   standing: null,
   step: "details",
   values: { email: "", fullName: "" },
-}
-
-/**
- * Back to the name and email, still filled in. The code step used to offer
- * nothing but "Check status", which for a mistyped address or a code past its
- * ten minutes could only ever answer "invalid or expired".
- */
-export function registrationStatusDetailsAgain(
-  state: RegistrationStatusState,
-): RegistrationStatusState {
-  return { ...EMPTY_REGISTRATION_STATUS_STATE, values: state.values }
-}
-
-/** The bare form again, keeping the email, to look up a brother or sister. */
-export function registrationStatusForAnotherPlayer(
-  state: RegistrationStatusState,
-): RegistrationStatusState {
-  return {
-    ...EMPTY_REGISTRATION_STATUS_STATE,
-    values: { email: state.values.email, fullName: "" },
-  }
 }

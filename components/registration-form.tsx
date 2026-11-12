@@ -9,22 +9,17 @@ import { confirmRegistrationCode, requestRegistrationCode } from "@/app/login/ac
 import { ActivationForm } from "@/components/activation-form"
 import {
   EMPTY_REGISTRATION_STATE,
+  EMPTY_REGISTRATION_VALUES,
   passwordStepReachable,
-  registrationDetailsAgain,
-  registrationForAnotherPlayer,
   type RegistrationFormState,
 } from "@/lib/auth/registration-form"
+
+const initialState = EMPTY_REGISTRATION_STATE
 
 const SUBMISSION_FAILURE_MESSAGE =
   "We couldn’t send your request. Your details are still here—please try again."
 
-/*
- * The code step's own failure. The confirm call writes the request and spends
- * the code in one go, so a reply lost on the way back can hide a request that
- * did reach the coach -- and then any retry with the same code is refused. Say
- * that, and point at the status check that can tell the difference, rather than
- * "we couldn't send your request".
- */
+// A lost reply on the code step may hide a saved request; the code is spent either way.
 const CODE_STEP_FAILURE_MESSAGE =
   "We didn’t hear back after checking your code. If it went through, your request is already with your coach—check its status before sending it again."
 
@@ -39,20 +34,11 @@ function formDataFor(values: RegistrationFormState["values"], code?: string) {
  * Two steps in one component rather than two routes, so a wrong code returns the
  * person to the code field with everything they typed intact. The step is read
  * from the action's reply instead of inferred locally: only the server knows
- * whether a code actually went out.
- *
- * The way back is local, though. "Change details" and "Register another player"
- * never ask the server anything; they only reopen the form, so a mistyped email
- * or a second child no longer means reloading the page and typing it all again.
+ * whether a code actually went out. Going back to the form is local.
  */
-export function RegistrationForm({
-  initialState = EMPTY_REGISTRATION_STATE,
-}: {
-  /** Where the form starts. Only tests start it anywhere but the empty details step. */
-  initialState?: RegistrationFormState
-} = {}) {
+export function RegistrationForm() {
   const [state, setState] = useState(initialState)
-  const [values, setValues] = useState(initialState.values)
+  const [values, setValues] = useState(EMPTY_REGISTRATION_VALUES)
   const [code, setCode] = useState("")
   const [pending, setPending] = useState(false)
   /** "resend" while a new code is being asked for from the code step. */
@@ -139,10 +125,10 @@ export function RegistrationForm({
     void run("resend", () => requestRegistrationCode(state, formDataFor(values)), true)
   }
 
-  function reopen(next: RegistrationFormState) {
+  function reopen(nextValues: RegistrationFormState["values"]) {
     if (submissionInFlight.current) return
-    setState(next)
-    setValues(next.values)
+    setState({ ...EMPTY_REGISTRATION_STATE, values: nextValues })
+    setValues(nextValues)
     setCode("")
     setNotice(null)
     setLostCodeReply(false)
@@ -159,12 +145,7 @@ export function RegistrationForm({
      * status door in components/registration-status-form.tsx.
      */
     const settled = state.standing === "approved" && state.activated
-    /*
-     * Ready for a password. The action has already handed this browser the
-     * receipt, so the password step is offered right here -- the same as the
-     * status door -- instead of a link to /activate that asked for the name,
-     * email and a second code all over again.
-     */
+    // The action already handed this browser the receipt, as the status door does.
     const ready = passwordStepReachable(state) && Boolean(state.academyId)
     const heading = settled
       ? "Your account is ready."
@@ -205,9 +186,13 @@ export function RegistrationForm({
           ? <Link href="/login">Sign in</Link>
           : ready ? null : <Link href="/activate">View activation status</Link>}
         <button
-          className="registration-restart"
+          className="totp-switch"
           type="button"
-          onClick={() => reopen(registrationForAnotherPlayer(state))}
+          onClick={() => reopen({
+            ...EMPTY_REGISTRATION_VALUES,
+            email: state.values.email,
+            phone: state.values.phone,
+          })}
         >
           Register another player
         </button>
@@ -389,7 +374,7 @@ export function RegistrationForm({
             className="totp-switch"
             type="button"
             disabled={pending}
-            onClick={() => reopen(registrationDetailsAgain(state))}
+            onClick={() => reopen(state.values)}
           >
             Change details
           </button>
