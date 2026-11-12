@@ -256,7 +256,7 @@ describe("a refused code does not trap the coach on the code step", () => {
     // here the retired result, whose `sent: true` would otherwise ride the
     // failure back onto the code step for the address just walked away from.
     expect(folded.sent).toBe(false)
-    expect(folded.error).toContain("No verification code was sent")
+    expect(folded.error).toContain("Check the connection and send it again")
     expect(reportClientError).not.toHaveBeenCalled()
   })
 
@@ -279,7 +279,7 @@ describe("a refused code does not trap the coach on the code step", () => {
     // either one refuses every code they can enter.
     expect(retry.markup).toContain(`value="${intended}"`)
     expect(retry.markup).not.toContain(mistyped)
-    expect(retry.markup).toContain("The code was not used and is still valid")
+    expect(retry.markup).toContain("Reload this page before trying again")
     expect(reportClientError).not.toHaveBeenCalled()
   })
 })

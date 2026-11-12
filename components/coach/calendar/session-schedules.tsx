@@ -267,6 +267,7 @@ export function SessionSchedules({
         error,
         fallbackMessage: "Schedule could not be ended",
         retained: "The schedule is still active",
+        unconfirmed: "Check the connection, then reload the page to see whether the schedule ended",
         subject: "The schedule ending",
       })
       setEndingFeedback({

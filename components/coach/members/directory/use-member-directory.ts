@@ -549,6 +549,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
         error,
         fallbackMessage: "The member could not be archived",
         retained: "The member is still active",
+        unconfirmed: "Check the connection, then reload the page to see whether the member was archived",
         subject: "The member archive",
       })
       setMemberFeedback({

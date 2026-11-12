@@ -23,6 +23,7 @@ import styles from "@/components/coach/members/directory/member-training-actions
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
+import { isSessionExpiry } from "@/lib/client/network-failure"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
 import type { MemberFeeSummary, MemberScheduledChange } from "@/lib/training/member-summaries"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
@@ -149,8 +150,14 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
       setNotice({ message: success(result.data), tone: "success" })
       setOpen(null)
       router.refresh()
-    } catch {
-      setNotice({ message: "This could not be saved. Check your connection and try again.", tone: "error" })
+    } catch (error) {
+      setNotice({
+        message: isSessionExpiry(error)
+          ? "This was not saved because your sign-in has expired."
+            + " Sign in again in a new tab, then come back here and try again."
+          : "This could not be saved. Check your connection and try again.",
+        tone: "error",
+      })
     } finally {
       setBusy(false)
     }

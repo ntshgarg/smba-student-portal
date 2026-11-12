@@ -97,6 +97,7 @@ export function FeePlanStep({
         error,
         fallbackMessage: "The session assignment could not be reset",
         retained: "Nothing has changed on this player",
+        unconfirmed: "Check the connection, then reload the page to see whether the session assignment was reset",
         subject: "The session assignment reset",
       })
       setFeedback({

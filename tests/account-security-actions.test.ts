@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  changePassword: vi.fn(),
   disableTwoFactor: vi.fn(),
   forgetTrustedDevices: vi.fn<(accountId: string) => number>(() => 2),
   generateBackupCodes: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock("@/lib/auth/better-auth", () => ({
   // prove they are never reached; see app/account/security/actions.ts.
   getAuth: () => ({
     api: {
+      changePassword: mocks.changePassword,
       disableTwoFactor: mocks.disableTwoFactor,
       generateBackupCodes: mocks.generateBackupCodes,
       revokeOtherSessions: mocks.revokeOtherSessions,
@@ -72,11 +74,13 @@ vi.mock("@/lib/data", () => ({
 }))
 
 import {
+  changePasswordAction,
   reissueRecoveryCodesAction,
   removePinAction,
   revokeOtherSessionsAction,
   savePinAction,
 } from "@/app/account/security/actions"
+import { SESSION_EXPIRED_DIGEST } from "@/lib/actions/operational-result"
 
 function passwordData() {
   const formData = new FormData()
@@ -226,6 +230,7 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "That authenticator or recovery code was not accepted.",
         errorField: "secondFactor",
+        storedSetUnchanged: true,
       })
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
     // Spent by the reservation before the check, and not handed back.
@@ -239,6 +244,7 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Enter a current authenticator code or an unused recovery code.",
         errorField: "secondFactor",
+        storedSetUnchanged: true,
       })
     expect(mocks.verifyTOTP).not.toHaveBeenCalled()
     expect(mocks.verifyBackupCode).not.toHaveBeenCalled()
@@ -253,6 +259,7 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "The current password could not be verified.",
         errorField: "currentPassword",
+        storedSetUnchanged: true,
       })
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
     // A wrong password must not burn the recovery code typed beside it.
@@ -268,6 +275,7 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Too many attempts. Wait a few minutes before trying again.",
         errorField: null,
+        storedSetUnchanged: true,
       })
     expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
@@ -281,6 +289,7 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Too many attempts. Wait a few minutes before trying again.",
         errorField: null,
+        storedSetUnchanged: true,
       })
     expect(mocks.verifyTOTP).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
@@ -297,6 +306,7 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Enter your current password.",
         errorField: "currentPassword",
+        storedSetUnchanged: true,
       })
     expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
@@ -310,6 +320,7 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Leave preview mode to manage recovery codes.",
         errorField: null,
+        storedSetUnchanged: true,
       })
     expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
@@ -327,6 +338,80 @@ describe("reissuing the authenticator recovery codes", () => {
     expect(mocks.writeAuthSecurityEvent).not.toHaveBeenCalledWith(expect.objectContaining({
       eventType: "totp_recovery_codes_reissued",
     }))
+  })
+})
+
+/**
+ * M040. The current password is verified before Better Auth is asked to change
+ * it, so a throw from the change is never a wrong current password -- and
+ * Better Auth writes the new password and drops every session before the last
+ * step that can still throw.
+ */
+describe("changing the password when Better Auth throws part-way", () => {
+  function changeData() {
+    const formData = passwordData()
+    formData.set("newPassword", "A brand new secure password!")
+    formData.set("confirmPassword", "A brand new secure password!")
+    return formData
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getCurrentIdentity.mockResolvedValue({
+      academyId: "SMBA-HC-0001",
+      role: "coach",
+      subjectId: "head-coach",
+    })
+    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("verified")
+    mocks.changePassword.mockRejectedValue(new Error("session could not be created"))
+  })
+
+  it("says the password changed, and still removes the PIN, when the new one took", async () => {
+    mocks.verifyCurrentPassword.mockResolvedValue(true)
+
+    const result = await changePasswordAction({ error: null, success: null }, changeData())
+
+    expect(result.error).toBeNull()
+    expect(result.success).toContain("Sign in again with your new password")
+    expect(mocks.verifyCurrentPassword).toHaveBeenCalledWith({
+      accountId: "head-coach",
+      password: "A brand new secure password!",
+    })
+    expect(mocks.removePinCredential).toHaveBeenCalledWith("head-coach")
+  })
+
+  it("does not blame the current password when the change did not take", async () => {
+    mocks.verifyCurrentPassword.mockResolvedValue(false)
+
+    await expect(changePasswordAction({ error: null, success: null }, changeData()))
+      .resolves.toEqual({
+        error: "Your password could not be changed. Your current password still works. Try again.",
+        errorField: null,
+        success: null,
+      })
+    expect(mocks.removePinCredential).not.toHaveBeenCalled()
+  })
+
+  it("does not report a finished change as failed when only the security log write fails", async () => {
+    mocks.changePassword.mockResolvedValue({})
+    mocks.writeAuthSecurityEvent.mockImplementation(() => {
+      throw new Error("log unavailable")
+    })
+
+    await expect(changePasswordAction({ error: null, success: null }, changeData()))
+      .resolves.toMatchObject({ error: null })
+    mocks.writeAuthSecurityEvent.mockReset()
+  })
+})
+
+describe("a sign-in that ran out while the security page was open", () => {
+  it("is refused as an expired sign-in the browser can recognise", async () => {
+    vi.clearAllMocks()
+    mocks.getCurrentIdentity.mockResolvedValue(null)
+
+    await expect(changePasswordAction({ error: null, success: null }, passwordData()))
+      .rejects.toMatchObject({ digest: SESSION_EXPIRED_DIGEST })
+    expect(mocks.changePassword).not.toHaveBeenCalled()
   })
 })
 

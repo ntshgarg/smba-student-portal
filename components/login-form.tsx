@@ -17,8 +17,8 @@ import {
 const initialState: LoginFormState = { error: null }
 
 const signInFailureCopy = {
-  retained: "Nothing was sent and you are still signed out",
   subject: "Your sign-in",
+  unconfirmed: "Check the connection and sign in again",
 }
 
 /** The Academy ID is owned by `LoginForm`, not by either method's form. */

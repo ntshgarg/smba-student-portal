@@ -27,6 +27,33 @@ export async function getRawAuthSession() {
   return getAuth().api.getSession({ headers: await headers() })
 }
 
+/**
+ * True for a live sign-in whose only gap is an unfinished authenticator: a
+ * head coach or the platform owner who walked away from authenticator setup.
+ * `getCurrentIdentity` refuses that session -- every page then treats it as
+ * signed out -- so the sign-in page asks this to send them back to the step
+ * they owe instead of showing a blank sign-in form.
+ */
+export async function sessionOwesAuthenticatorSetup() {
+  const rawSession = await getRawAuthSession()
+  if (!rawSession?.user?.id || rawSession.user.twoFactorEnabled) return false
+  const account = initializeDatabase().select({
+    coachAccessLevel: coachProfiles.accessLevel,
+    role: accounts.role,
+  })
+    .from(accounts)
+    .innerJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
+    .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
+    .where(and(
+      eq(accounts.id, rawSession.user.id),
+      eq(accounts.approvalStatus, "approved"),
+      isNull(accounts.archivedAt),
+      eq(authCredentialStates.status, "active"),
+    ))
+    .get()
+  return Boolean(account?.role && principalTotpRequired(account.role, account.coachAccessLevel))
+}
+
 export class DatabaseSessionProvider implements SessionProvider {
   /**
    * Whether the browser still holds a session Better Auth accepts, before any

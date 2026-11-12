@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
 
+import { SessionExpiredError } from "@/lib/actions/operational-result"
 import { getAuth } from "@/lib/auth/better-auth"
 import {
   hasPinCredential,
@@ -55,11 +56,30 @@ export type RecoveryCodeReissueState = {
   error: string | null
   /** Which credential the reissue form should flag; `null` marks neither. */
   errorField?: "currentPassword" | "secondFactor" | null
+  /**
+   * True when the action refused before it could replace the stored set, so a
+   * set the coach is still reading on screen is still the live one.
+   */
+  storedSetUnchanged?: boolean
 }
 
+/** A reissue refused before the stored set was touched. */
+function reissueRefused(
+  error: string,
+  errorField: RecoveryCodeReissueState["errorField"] = null,
+): RecoveryCodeReissueState {
+  return { codes: null, error, errorField, storedSetUnchanged: true }
+}
+
+/*
+ * Every form here sits on a page that only renders for a signed-in person, so a
+ * missing identity at submit time is a sign-in that ran out (or was ended
+ * elsewhere) while the page was open. Thrown as the expiry it is, the form says
+ * "sign in again" instead of a generic failure.
+ */
 async function requireIdentity() {
   const identity = await sessionProvider.getCurrentIdentity()
-  if (!identity) throw new Error("Authentication is required.")
+  if (!identity) throw new SessionExpiredError()
   return identity
 }
 
@@ -119,17 +139,32 @@ export async function changePasswordAction(
       success: null,
     }
   }
+  /*
+   * The current password was verified just above, so a throw from here is not
+   * a wrong password. Better Auth writes the new password and deletes every
+   * session before it mints this browser's replacement, and that last step can
+   * still fail -- so the new password is asked directly whether it took, rather
+   * than the person being told their current password was wrong.
+   */
+  let signedOutHere = false
   try {
     await getAuth().api.changePassword({
       body: { currentPassword, newPassword, revokeOtherSessions: true },
       headers: confirmation.requestHeaders,
     })
   } catch {
-    return {
-      error: "The current password could not be verified.",
-      errorField: "currentPassword",
-      success: null,
+    const changed = await verifyCurrentPassword({
+      accountId: identity.subjectId,
+      password: newPassword,
+    }).catch(() => false)
+    if (!changed) {
+      return {
+        error: "Your password could not be changed. Your current password still works. Try again.",
+        errorField: null,
+        success: null,
+      }
     }
+    signedOutHere = true
   }
 
   /*
@@ -140,19 +175,35 @@ export async function changePasswordAction(
    * success message below was not true. The emailed reset path already does
    * exactly this.
    */
-  removePinCredential(identity.subjectId)
+  try {
+    removePinCredential(identity.subjectId)
+  } catch {
+    return {
+      error: "Your password was changed and other devices were logged out, but your PIN"
+        + " could not be removed. Change your password again to remove it.",
+      errorField: null,
+      success: null,
+    }
+  }
 
-  writeAuthSecurityEvent({
-    accountId: identity.subjectId,
-    eventType: "password_changed",
-    ipHash: confirmation.security.ipHash,
-    outcome: "success",
-    userAgent: confirmation.security.userAgent,
-  })
+  try {
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      eventType: "password_changed",
+      ipHash: confirmation.security.ipHash,
+      outcome: "success",
+      userAgent: confirmation.security.userAgent,
+    })
+  } catch {
+    // The password has already changed; a failed audit write must not say otherwise.
+  }
   revalidatePath("/account/security")
   return {
     error: null,
-    success: "Password changed. Other devices were logged out and any PIN was removed.",
+    success: signedOutHere
+      ? "Password changed. Every device, this one included, was logged out and any PIN was"
+        + " removed. Sign in again with your new password."
+      : "Password changed. Other devices were logged out and any PIN was removed.",
   }
 }
 
@@ -314,19 +365,11 @@ export async function reissueRecoveryCodesAction(
   // account and Better Auth would reissue the other's codes. The page redirects
   // preview sessions away; a directly invoked action has to refuse for itself.
   if (identity.previewMode) {
-    return {
-      codes: null,
-      error: "Leave preview mode to manage recovery codes.",
-      errorField: null,
-    }
+    return reissueRefused("Leave preview mode to manage recovery codes.")
   }
   const rawSession = await getRawAuthSession()
   if (!rawSession?.user.twoFactorEnabled) {
-    return {
-      codes: null,
-      error: "This account has no authenticator, so it has no recovery codes.",
-      errorField: null,
-    }
+    return reissueRefused("This account has no authenticator, so it has no recovery codes.")
   }
 
   const requestHeaders = await headers()
@@ -346,17 +389,13 @@ export async function reissueRecoveryCodesAction(
       subjectHash,
       userAgent: security.userAgent,
     })
-    return {
-      codes: null,
-      error: "Too many attempts. Wait a few minutes before trying again.",
-      errorField: null,
-    }
+    return reissueRefused("Too many attempts. Wait a few minutes before trying again.")
   }
 
   const currentPassword = String(formData.get("currentPassword") ?? "")
   const secondFactor = String(formData.get("secondFactor") ?? "").trim()
   if (!currentPassword) {
-    return { codes: null, error: "Enter your current password.", errorField: "currentPassword" }
+    return reissueRefused("Enter your current password.", "currentPassword")
   }
   // Each guess is reserved before its slow check rather than counted after it,
   // so parallel requests cannot all read "not blocked" first.
@@ -375,19 +414,14 @@ export async function reissueRecoveryCodesAction(
       subjectHash,
       userAgent: security.userAgent,
     })
-    return {
-      codes: null,
-      error: "The current password could not be verified.",
-      errorField: "currentPassword",
-    }
+    return reissueRefused("The current password could not be verified.", "currentPassword")
   }
   releaseLoginAttempt(attempt)
   if (!secondFactor) {
-    return {
-      codes: null,
-      error: "Enter a current authenticator code or an unused recovery code.",
-      errorField: "secondFactor",
-    }
+    return reissueRefused(
+      "Enter a current authenticator code or an unused recovery code.",
+      "secondFactor",
+    )
   }
   // A signed-in code check skips Better Auth's lockout, so the account's own
   // second-factor budget is the limit here.
@@ -421,11 +455,7 @@ export async function reissueRecoveryCodesAction(
       subjectHash,
       userAgent: security.userAgent,
     })
-    return {
-      codes: null,
-      error: "That authenticator or recovery code was not accepted.",
-      errorField: "secondFactor",
-    }
+    return reissueRefused("That authenticator or recovery code was not accepted.", "secondFactor")
   }
   releaseSecondFactorAttempt(identity.subjectId)
   if (!/^\d{6}$/u.test(secondFactor)) {

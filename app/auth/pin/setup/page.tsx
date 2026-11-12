@@ -9,6 +9,7 @@ import { hasPinCredential } from "@/lib/auth/credential-service"
 import { sessionProvider } from "@/lib/data"
 import { publicSiteUrl } from "@/lib/config"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
+import { sessionFreshEnoughForPinSetup } from "@/lib/auth/pin-setup-freshness"
 
 export const metadata: Metadata = {
   title: "Set up quick login",
@@ -26,6 +27,9 @@ export default async function PinSetupPage() {
       : identity.role === "coach" ? "/coach" : "/player")
   }
   const mandatory = identity.role === "platform_admin" || access?.accessLevel === "head_admin"
+  // The action refuses a sign-in older than a few minutes, so offering the form
+  // to one only set up a refusal -- with no Skip for a head coach, a dead end.
+  const canSetPin = await sessionFreshEnoughForPinSetup()
   return (
     <main className="login-page">
       <section className="login-card" aria-labelledby="pin-setup-title">
@@ -43,10 +47,15 @@ export default async function PinSetupPage() {
           <p className="eyebrow">Quick login</p>
           <h1 id="pin-setup-title">Set up a 6-digit PIN.</h1>
           <p>{mandatory
-            ? "Restore the mandatory PIN removed during password recovery. Your password will always continue to work."
+            ? "This account needs a PIN for quick sign-in. Your password will always continue to work."
             : "Use it for faster sign-in. Your password will always continue to work."}</p>
         </div>
-        <PinSetupForm allowSkip={!mandatory} />
+        {canSetPin ? <PinSetupForm allowSkip={!mandatory} /> : (
+          <p className="login-error" role="status">
+            For your security, a PIN can only be set within a few minutes of signing in.
+            Sign out below, then sign in again to set it.
+          </p>
+        )}
         <InterstitialSignOut />
       </section>
     </main>

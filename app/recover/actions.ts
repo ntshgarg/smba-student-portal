@@ -24,6 +24,12 @@ export type RecoverySecondFactorState = {
 export type RecoveryPasswordState = {
   error: string | null
   errorField: "password" | "confirmPassword" | null
+  /**
+   * The link ran out or was already used while the form was open. The page
+   * only offers "Request another link" when it loads on a dead link, so the
+   * form offers it itself rather than leaving "Back to login" as the only exit.
+   */
+  linkExpired?: boolean
 }
 
 async function requestContext() {
@@ -77,7 +83,12 @@ export async function completePasswordRecoveryAction(
     token,
   })
   if (!completed) {
-    return { error: "This recovery session is invalid or expired.", errorField: null }
+    return {
+      error: "This reset link has expired or has already been used."
+        + " If you have just reset your password, sign in with the new one.",
+      errorField: null,
+      linkExpired: true,
+    }
   }
   cookieStore.delete(RECOVERY_SESSION_COOKIE)
   redirect("/login?recovered=1")

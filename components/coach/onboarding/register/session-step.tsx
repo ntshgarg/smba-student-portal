@@ -193,6 +193,7 @@ export function SessionStep({
         error,
         fallbackMessage: "The session assignment could not be cleared",
         retained: "Nothing has changed on this player",
+        unconfirmed: "Check the connection, then reload the page to see whether the session assignment was cleared",
         subject: "Clearing the session assignment",
       })
       setFeedback({ message: failure.message, offerRetry: failure.offerRetry, tone: "error" })

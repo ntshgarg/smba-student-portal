@@ -385,6 +385,7 @@ export function SessionCalendar({
                         error,
                         fallbackMessage: "The holiday could not be removed",
                         retained: "The holiday is unchanged",
+                        unconfirmed: "Check the connection, then reload the page to see whether the holiday was removed",
                         subject: "Removing the holiday",
                       })
                       setHolidayFeedback({ message: failure.message, tone: "error" })
@@ -483,6 +484,7 @@ export function SessionCalendar({
                               error,
                               fallbackMessage: "Session could not be cancelled",
                               retained: "The session is still scheduled",
+                              unconfirmed: "Check the connection, then reload the page to see whether the session was cancelled",
                               subject: "The cancellation",
                             })
                             setFeedback({

@@ -18,7 +18,13 @@ export function AuthenticatorRecoveryRequestForm() {
   const [state, action, pending] = useResilientActionState(
     requestAuthenticatorRecoveryAction,
     initialRequestState,
-    { retained: "No verification email was sent", subject: "Your recovery request" },
+    {
+      subject: "Your recovery request",
+      // The same request service as the password reset: asking again retires
+      // the earlier link.
+      unconfirmed: "Check your inbox before asking again: if a verification email arrives, use it."
+        + " Asking again sends a new link and the earlier one stops working",
+    },
   )
   if (state.sent) {
     return (
@@ -66,8 +72,11 @@ export function AuthenticatorRecoveryApprovalForm({ academyId }: { academyId: st
     submitAuthenticatorRecoveryApprovalAction,
     initialApprovalState,
     {
-      retained: "Nothing was submitted and no coach session was revoked",
       subject: "Your reset request",
+      // A submitted request spends this verified session, so a retry after it
+      // went through is refused rather than sent twice.
+      unconfirmed: "Check the connection and try again. If trying again says this session has"
+        + " expired, the first request went through and the platform admin already has it",
     },
   )
   return (

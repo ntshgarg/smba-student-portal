@@ -19,8 +19,15 @@ export function TwoFactorReconnectForm() {
     {
       // Neither credential was rejected, so neither field is marked invalid.
       fold: (state, error) => ({ ...state, error, errorField: null }),
-      retained: "Your current authenticator and recovery codes still work",
       subject: "Your authenticator reconnect",
+      // A finished first step switches the old authenticator off, deletes its
+      // recovery codes and signs other devices out before the reply is sent, so
+      // "your current authenticator still works" may be exactly wrong. A reload
+      // lands on the setup step or on sign-in if it went through, and on this
+      // form if it did not.
+      unconfirmed: "Reload this page before trying again. If it went through, your old"
+        + " authenticator and recovery codes no longer work, and you will be taken to connect"
+        + " a new authenticator or to sign in again",
     },
   )
   const passwordRef = useRef<HTMLInputElement>(null)

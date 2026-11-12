@@ -10,6 +10,7 @@ import {
   type CoachAccessProfile,
 } from "@/lib/auth/coach-access"
 import type { SessionIdentity } from "@/lib/auth/identity"
+import { sessionOwesAuthenticatorSetup } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
 import { ensureDueTrainingChangesApplied } from "@/lib/training/changes"
 
@@ -27,9 +28,19 @@ export type CurrentCoachContext = {
 // expired session is not about the coach at all and signing in again clears it.
 // Only a missing identity can be an expiry -- a present one that is not a coach
 // is a genuine refusal -- and the session is only read to tell those apart.
+//
+// One live session is refused the identity yet cleared the same way: a head
+// coach whose authenticator was switched off by a reconnect started in another
+// tab. Signing in again routes them to the authenticator step they owe, so it
+// is treated as the expiry it behaves like. Telling that coach they lacked
+// head-coach access sent them looking for a permission they already had.
 export async function requireHeadAdminAction() {
   const identity = await sessionProvider.getCurrentIdentity()
-  if (!identity && !(await sessionProvider.hasActiveSession())) throw new SessionExpiredError()
+  if (!identity && (
+    !(await sessionProvider.hasActiveSession()) || await sessionOwesAuthenticatorSetup()
+  )) {
+    throw new SessionExpiredError()
+  }
   if (!identity || identity.role !== "coach") throw new Error("Head coach access is required.")
   requireHeadAdminAccess(identity.subjectId)
   if (!identity.previewMode) ensureDueTrainingChangesApplied()

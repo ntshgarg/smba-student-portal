@@ -123,6 +123,7 @@ function StaffAccessActions({
         error,
         fallbackMessage: "The coach could not be archived",
         retained: "The coach can still sign in",
+        unconfirmed: "Check the connection, then reload the page to see whether the coach was archived",
         subject: "The coach archive",
       }).message)
     } finally {

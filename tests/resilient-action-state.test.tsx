@@ -109,11 +109,31 @@ const { TwoFactorReconnectForm } = await import("@/components/two-factor-reconne
 const { TwoFactorSetupForm } = await import("@/components/two-factor-setup-form")
 const { TwoFactorVerificationForm } = await import("@/components/two-factor-verification-form")
 
-/** The sentence `describeSaveFailure` writes for a request that never arrived. */
-function unreachable(subject: string, retained: string) {
-  return `${subject} could not be saved because the request did not complete.`
-    + ` ${retained}. Check the connection and try again.`
+/**
+ * How every one of these forms opens its sentence for a reply that never came
+ * back. A dropped connection cannot say whether the server got there first, so
+ * none of them may call it a failure.
+ */
+function unreachable(subject: string) {
+  return `${subject} was not confirmed because the connection dropped,`
+    + " so it may or may not have gone through. "
 }
+
+/**
+ * The promises these forms used to make after a dropped reply. Each is false
+ * once the server has finished: the password, PIN, recovery codes, reset link
+ * or authenticator it says is untouched may already have been replaced.
+ */
+const promisesNothingHappened = new RegExp([
+  "still works",
+  "still valid",
+  "was not used",
+  "was not sent",
+  "nothing was (sent|changed|submitted)",
+  "no account was created",
+  "no authenticator was connected",
+  "could not be saved",
+].join("|"), "iu")
 
 type Surface = {
   /** Markup that proves the form itself, and what was in it, is still rendered. */
@@ -121,13 +141,12 @@ type Surface = {
   name: string
   render: () => ReactElement
   /** One entry per `useActionState` call the render reaches, in call order. */
-  sites: Array<{ retained: string; subject: string }>
+  sites: Array<{ subject: string }>
   /** Sites whose message the default branch actually displays. */
   visible?: number[]
 }
 
 const signIn = {
-  retained: "Nothing was sent and you are still signed out",
   subject: "Your sign-in",
 }
 
@@ -155,7 +174,6 @@ const surfaces: Surface[] = [
     name: "/activate",
     render: () => <ActivationForm academyId="SMBA-PL-0001" />,
     sites: [{
-      retained: "Nothing was changed and your account is not activated yet",
       subject: "Your new password",
     }],
   },
@@ -164,7 +182,6 @@ const surfaces: Surface[] = [
     name: "/auth/pin/setup",
     render: () => <PinSetupForm />,
     sites: [{
-      retained: "Nothing was changed and your password still signs you in",
       subject: "Your PIN",
     }],
   },
@@ -172,14 +189,13 @@ const surfaces: Surface[] = [
     intact: ['name="academyId"', 'name="email"'],
     name: "/recover",
     render: () => <RecoveryForm />,
-    sites: [{ retained: "No reset email was sent", subject: "Your reset request" }],
+    sites: [{ subject: "Your reset request" }],
   },
   {
     intact: ['name="credential"'],
     name: "/recover/reset second factor",
     render: () => <RecoverySecondFactorForm />,
     sites: [{
-      retained: "The code was not used and your reset link still works",
       subject: "Your code",
     }],
   },
@@ -188,7 +204,6 @@ const surfaces: Surface[] = [
     name: "/recover/reset new password",
     render: () => <RecoveryPasswordForm />,
     sites: [{
-      retained: "Your old password still works and the reset link is still valid",
       subject: "Your new password",
     }],
   },
@@ -197,7 +212,6 @@ const surfaces: Surface[] = [
     name: "/setup/head-coach",
     render: () => <HeadCoachSetupForm defaultName="Ishaan Rao" recoveryEmail="coach@example.com" />,
     sites: [{
-      retained: "No account was created and this one-time setup link still works",
       subject: "Your head-coach account",
     }],
   },
@@ -206,9 +220,8 @@ const surfaces: Surface[] = [
     name: "/auth/two-factor/setup",
     render: () => <TwoFactorSetupForm role="coach" />,
     sites: [
-      { retained: "No authenticator was connected", subject: "Your authenticator setup" },
+      { subject: "Your authenticator setup" },
       {
-        retained: "The recovery codes above are still on screen",
         subject: "Your six-digit code",
       },
     ],
@@ -220,10 +233,9 @@ const surfaces: Surface[] = [
     render: () => <TwoFactorVerificationForm />,
     sites: [
       {
-        retained: "The code was not used and you are still signed out",
         subject: "Your six-digit code",
       },
-      { retained: "The code was not used and is still valid", subject: "Your recovery code" },
+      { subject: "Your recovery code" },
     ],
     visible: [0],
   },
@@ -232,7 +244,6 @@ const surfaces: Surface[] = [
     name: "/auth/two-factor/reconnect",
     render: () => <TwoFactorReconnectForm />,
     sites: [{
-      retained: "Your current authenticator and recovery codes still work",
       subject: "Your authenticator reconnect",
     }],
   },
@@ -240,14 +251,13 @@ const surfaces: Surface[] = [
     intact: ['name="academyId"', 'name="email"'],
     name: "/auth/two-factor/recovery request",
     render: () => <AuthenticatorRecoveryRequestForm />,
-    sites: [{ retained: "No verification email was sent", subject: "Your recovery request" }],
+    sites: [{ subject: "Your recovery request" }],
   },
   {
     intact: ["SMBA-HC-0001"],
     name: "/auth/two-factor/recovery approval",
     render: () => <AuthenticatorRecoveryApprovalForm academyId="SMBA-HC-0001" />,
     sites: [{
-      retained: "Nothing was submitted and no coach session was revoked",
       subject: "Your reset request",
     }],
   },
@@ -263,8 +273,8 @@ const surfaces: Surface[] = [
       />
     ),
     sites: [
-      { retained: "No verification code was sent", subject: "Your recovery email" },
-      { retained: "The code was not used and is still valid", subject: "Your verification code" },
+      { subject: "Your recovery email" },
+      { subject: "Your verification code" },
     ],
     visible: [0],
   },
@@ -274,11 +284,9 @@ const surfaces: Surface[] = [
     render: () => <RecoveryEmailSecurityPanel maskedEmail="i••@example.com" requiresSecondFactor />,
     sites: [
       {
-        retained: "Your current recovery address is unchanged",
         subject: "Your recovery email change",
       },
       {
-        retained: "The code was not used and your current address is unchanged",
         subject: "Your verification code",
       },
     ],
@@ -312,11 +320,10 @@ const surfaces: Surface[] = [
       />
     ),
     sites: [
-      { retained: "Your current password still works", subject: "Your new password" },
-      { retained: "Your current sign-in options are unchanged", subject: "Your PIN" },
-      { retained: "Your PIN still works", subject: "Your PIN removal" },
+      { subject: "Your new password" },
+      { subject: "Your PIN" },
+      { subject: "Your PIN removal" },
       {
-        retained: "No device was signed out and your authenticator app is unchanged",
         subject: "Your new recovery codes",
       },
     ],
@@ -350,7 +357,10 @@ describe("a dropped request leaves an authentication form standing", () => {
       // Rejecting here is the whole point: unwrapped, this line throws and React
       // takes the page down with it.
       const next = await site.action(site.initialState, new FormData())
-      expect(next.error).toBe(unreachable(surface.sites[index].subject, surface.sites[index].retained))
+      expect(next.error?.startsWith(unreachable(surface.sites[index].subject))).toBe(true)
+      // The reply may have been lost after the server finished, so nothing
+      // that would then be false -- "your old password still works" -- is said.
+      expect(next.error).not.toMatch(promisesNothingHappened)
       folded.push(next)
     }
 
@@ -400,9 +410,80 @@ describe("two-factor recovery codes survive a dropped verification", () => {
   })
 })
 
+/**
+ * The four forms where the old sentence did real harm: each change is finished
+ * on the server before its reply is sent, so after a lost reply the old
+ * password, reset link, recovery codes or authenticator the form called safe
+ * may already be dead. What each says now is what to try, in the order that
+ * finds out.
+ */
+describe("after a lost reply the credential forms say what may already have changed", () => {
+  async function droppedMessage(render: () => ReactElement, site: number) {
+    renderToStaticMarkup(render())
+    const { action, initialState } = actionSites[site]
+    return (await action(initialState, new FormData())).error
+  }
+
+  it("tells someone resetting their password to try the new one", async () => {
+    const message = await droppedMessage(() => <RecoveryPasswordForm />, 0)
+    expect(message).toBe(unreachable("Your new password")
+      + "If it went through, your old password and this link no longer work."
+      + " Try signing in with your new password; if it is refused, reload this page and try again.")
+  })
+
+  it("tells someone at the code step to reload before spending another saved code", async () => {
+    const message = await droppedMessage(() => <RecoverySecondFactorForm />, 0)
+    expect(message).toContain("Reload this page before trying again")
+    expect(message).toContain("A saved recovery code works only once")
+  })
+
+  it("does not promise the reset email went unsent", async () => {
+    const message = await droppedMessage(() => <RecoveryForm />, 0)
+    expect(message).toContain("Check your inbox before asking again")
+  })
+
+  it("tells a coach changing their password that the new one may be the one that works", async () => {
+    const message = await droppedMessage(() => (
+      <AccountSecurityWorkspace
+        allowPin
+        authenticatorEnabled
+        authenticatorRequired
+        pinEnabled
+        pinRequired={false}
+        sessions={[]}
+        unusedRecoveryCodeCount={9}
+      />
+    ), 0)
+    expect(message).toContain("your new password is now the one that works")
+    expect(message).toContain("if you are asked to sign in, use your new password")
+  })
+
+  it("tells a head coach whose reissue reply was lost that the old codes may be dead", async () => {
+    const message = await droppedMessage(() => (
+      <AccountSecurityWorkspace
+        allowPin
+        authenticatorEnabled
+        authenticatorRequired
+        pinEnabled
+        pinRequired={false}
+        sessions={[]}
+        unusedRecoveryCodeCount={9}
+      />
+    ), 3)
+    expect(message).toContain("your old codes no longer work")
+    expect(message).toContain("reissue again")
+  })
+
+  it("tells a head coach mid-reconnect the old authenticator may already be off", async () => {
+    const message = await droppedMessage(() => <TwoFactorReconnectForm />, 0)
+    expect(message).toContain("your old authenticator and recovery codes no longer work")
+    expect(message).toContain("Reload this page before trying again")
+  })
+})
+
 describe("the wrapper's contract", () => {
   type FieldState = { error: string | null; errorField: "password" | null }
-  const copy = { retained: "Nothing was sent", subject: "Your sign-in" }
+  const copy = { subject: "Your sign-in", unconfirmed: "Check the connection and sign in again" }
 
   it("passes a settled action straight through", async () => {
     const action = resilientAction<CapturedState>(async () => ({ error: "Wrong password" }), copy)
@@ -412,13 +493,13 @@ describe("the wrapper's contract", () => {
     expect(reportClientError).not.toHaveBeenCalled()
   })
 
-  it("names the device when it is the one that is offline", async () => {
+  it("names the device when it is the one that is offline, without calling it a failure", async () => {
     vi.stubGlobal("navigator", { onLine: false })
     const action = resilientAction<CapturedState>(droppedRequest, copy)
 
     await expect(action({ error: null }, new FormData())).resolves.toEqual({
-      error: "Your sign-in could not be saved because this device is offline."
-        + " Nothing was sent. Try again when the connection returns.",
+      error: "Your sign-in was not confirmed because this device is offline,"
+        + " so it may or may not have gone through. Check the connection and sign in again.",
     })
     vi.stubGlobal("navigator", { onLine: true })
   })
@@ -432,9 +513,23 @@ describe("the wrapper's contract", () => {
     await expect(
       action({ error: "Enter a password", errorField: "password" }, new FormData()),
     ).resolves.toEqual({
-      error: unreachable("Your sign-in", "Nothing was sent"),
+      error: `${unreachable("Your sign-in")}Check the connection and sign in again.`,
       errorField: null,
     })
+  })
+
+  it("says an expired sign-in changed nothing and is cleared by signing in", async () => {
+    const expired = Object.assign(new Error("omitted in production"), {
+      digest: "SMBA_SESSION_EXPIRED",
+    })
+    const action = resilientAction<CapturedState>(() => Promise.reject(expired), copy)
+
+    await expect(action({ error: null }, new FormData())).resolves.toEqual({
+      error: "Your sign-in was not saved because your sign-in has expired. Nothing was changed."
+        + " Sign in again to continue.",
+    })
+    // An expiry is an everyday event on a seven-day clock, not a fault.
+    expect(reportClientError).not.toHaveBeenCalled()
   })
 
   /*
@@ -474,11 +569,28 @@ describe("the wrapper's contract", () => {
     const fault = new Error("Cannot read properties of undefined")
     const action = resilientAction<CapturedState>(() => Promise.reject(fault), copy)
 
-    await expect(action({ error: null }, new FormData())).resolves
-      .toEqual({ error: "Cannot read properties of undefined" })
+    // Plain advice, not the fault's own text: in a production build a server
+    // fault's message is React's fixed "The specific message is omitted..."
+    await expect(action({ error: null }, new FormData())).resolves.toEqual({
+      error: "Your sign-in ran into an unexpected problem, so it may or may not have gone"
+        + " through. Check the connection and sign in again.",
+    })
     expect(reportClientError).toHaveBeenCalledWith({
       boundary: "window",
       error: fault,
+      eventType: "unhandled_rejection",
+    })
+  })
+
+  it("reports a bug in the page as a fault rather than blaming the connection", async () => {
+    const bug = new TypeError("Cannot read properties of undefined (reading 'id')")
+    const action = resilientAction<CapturedState>(() => Promise.reject(bug), copy)
+
+    const next = await action({ error: null }, new FormData())
+    expect(next.error).not.toContain("connection dropped")
+    expect(reportClientError).toHaveBeenCalledWith({
+      boundary: "window",
+      error: bug,
       eventType: "unhandled_rejection",
     })
   })

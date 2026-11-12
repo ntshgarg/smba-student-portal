@@ -21,6 +21,7 @@ import type {
   SaveAssessmentInput,
 } from "@/lib/assessments/contracts"
 import { formatAssessmentDate, sectionTone } from "@/lib/assessments/display"
+import { isSessionExpiry } from "@/lib/client/network-failure"
 import type { PreviousAssessment } from "@/lib/assessments/queries"
 import {
   ASSESSMENT_RATING_LABELS,
@@ -286,12 +287,20 @@ export function AssessmentForm({
           : "Draft saved. Nothing reaches the player until you publish.",
         tone: "success",
       })
-    } catch {
-      setNotice({
-        action: { href: "/login", label: "Sign in again" },
-        message: "This could not be saved. Check your connection, or sign in again if it keeps happening.",
-        tone: "error",
-      })
+    } catch (error) {
+      setNotice(isSessionExpiry(error)
+        ? {
+          // Leaving for /login would take the ratings with it; a new tab renews
+          // the sign-in this tab saves with, so the work stays put.
+          message: "This was not saved because your sign-in has expired. Your ratings and notes"
+            + " are still on screen. Sign in again in a new tab, then come back here and save.",
+          tone: "error",
+        }
+        : {
+          action: { href: "/login", label: "Sign in again" },
+          message: "This could not be saved. Check your connection, or sign in again if it keeps happening.",
+          tone: "error",
+        })
     } finally {
       setPending(null)
     }

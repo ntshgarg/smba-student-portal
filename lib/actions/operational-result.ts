@@ -1,3 +1,17 @@
+/**
+ * The digest an expired sign-in carries across the server-action boundary.
+ *
+ * A production build strips the message, the class and every own property from
+ * anything a server action throws -- except `digest`, which Next.js keeps when
+ * the error already has one ("If the error already has a digest, respect the
+ * original digest" in `next/dist/server/app-render/create-error-handler.js`),
+ * and which React's client restores on the error it rethrows. So this string is
+ * the one fact about a thrown expiry that reaches the browser, and it is how
+ * every save screen -- not only the two registers that convert the expiry into
+ * a value -- tells "sign in again" apart from a broken save.
+ */
+export const SESSION_EXPIRED_DIGEST = "SMBA_SESSION_EXPIRED"
+
 export type OperationalActionErrorCode =
   | "BUSINESS_RULE"
   | "CONFLICT"
@@ -73,10 +87,14 @@ export function operationalActionFailure(
  * and a digest -- "The specific message is omitted in production builds to avoid
  * leaking sensitive details", in the vendored
  * react-server-dom-turbopack-client.browser.production.js -- discarding the
- * class, the message and every own property. Only a value survives the
- * boundary.
+ * class, the message and every own property but `digest`. A value survives the
+ * boundary whole; a throw survives only as its digest, which is why the class
+ * carries `SESSION_EXPIRED_DIGEST`.
  */
 export class SessionExpiredError extends OperationalActionError {
+  /** See `SESSION_EXPIRED_DIGEST`: the only part of this error a browser sees. */
+  readonly digest = SESSION_EXPIRED_DIGEST
+
   constructor() {
     super(
       "SESSION_EXPIRED",

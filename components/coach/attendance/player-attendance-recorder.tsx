@@ -41,7 +41,7 @@ import {
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
-import { describeRefusedSave } from "@/lib/client/session-expiry"
+import { describeRefusedSave, feedbackAfterMark } from "@/lib/client/session-expiry"
 import {
   academyTimeInputValue,
   formatAcademyTime,
@@ -401,7 +401,7 @@ export function PlayerAttendanceRecorder({
       }]
     setDraftChanges(nextChanges)
     persistPlayerAttendanceDraft(selectedOccurrence.id, nextChanges)
-    setFeedback(null)
+    setFeedback(feedbackAfterMark)
   }
 
   async function saveAttendance() {

@@ -17,6 +17,20 @@ const sessionExpiredCode: OperationalActionErrorCode = "SESSION_EXPIRED"
  */
 const signInHref = "/login"
 
+/**
+ * What a new mark leaves of the feedback on screen.
+ *
+ * Every other notice is about the save that just happened, and a new mark makes
+ * it stale, so it goes. An expired sign-in is not about that save: it stands
+ * until the coach signs in, and so do the `Sign in` link and the re-worded
+ * leave confirmation riding on it. Clearing it on the next mark hid the way out
+ * and put back "discard the unsaved ... changes?" -- the sentence the notice
+ * exists to contradict -- while nothing had changed.
+ */
+export function feedbackAfterMark<Feedback extends object>(current: Feedback | null) {
+  return current && "signIn" in current && current.signIn ? current : null
+}
+
 export type RefusedSaveDescription = {
   leaveConfirmation?: string
   message: string

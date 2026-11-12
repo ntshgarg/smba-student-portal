@@ -73,6 +73,7 @@ export function AdminAuthenticatorRecoveryQueue({
             error,
             fallbackMessage: "The recovery decision could not be saved",
             retained: "The request is still pending",
+            unconfirmed: "Check the connection, then reload the page to see whether the decision was recorded",
             subject: "The recovery decision",
           }).message,
           tone: "error",

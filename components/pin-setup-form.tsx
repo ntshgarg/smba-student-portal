@@ -19,8 +19,11 @@ export function PinSetupForm({ allowSkip = true }: { allowSkip?: boolean }) {
   const [state, formAction, pending] = useResilientActionState(setupPinAction, initialState, {
     // Neither PIN field is at fault, so the message stays at form level.
     fold: (state, error) => ({ ...state, error, errorField: null }),
-    retained: "Nothing was changed and your password still signs you in",
     subject: "Your PIN",
+    // A retry after a PIN was saved is sent straight on (setupPinAction), so
+    // trying again is the way to find out.
+    unconfirmed: "Your password still signs you in either way."
+      + " Check the connection and try again; if the PIN was saved, you will be taken straight on",
   })
   const pinRef = useRef<HTMLInputElement>(null)
   const confirmPinRef = useRef<HTMLInputElement>(null)

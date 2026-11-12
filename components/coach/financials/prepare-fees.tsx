@@ -121,6 +121,7 @@ export function PrepareFees({
         error,
         fallbackMessage: "Monthly fees could not be issued",
         retained: "No fees have been issued",
+        unconfirmed: "Check the connection, then reload the page to see whether this month's fees were issued",
         subject: "The monthly fee issue",
       })
       setFeedback({

@@ -126,7 +126,13 @@ async function challengedAccountId(requestHeaders: Pick<Headers, "get">) {
  */
 async function refuseSignedInCaller() {
   const session = await getRawAuthSession()
-  if (session) redirect(destinationForUser(session.user.id))
+  // The session's own authenticator state, not the default: a head coach who
+  // walked away from authenticator setup belongs back on that step, and
+  // assuming it done sent them to /coach, which refused them to a blank
+  // sign-in form.
+  if (session) {
+    redirect(destinationForUser(session.user.id, Boolean(session.user.twoFactorEnabled)))
+  }
 }
 
 function recordSecondFactorRateLimited(
@@ -233,6 +239,18 @@ export async function beginAuthenticatorReconnect(
     }
   }
   if (!await verifyCurrentPassword({ accountId: identity.subjectId, password })) {
+    // The same record the recovery-code reissue writes for the same check, so a
+    // password guessed through this page shows up in the security log too.
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      actorAccountId: identity.subjectId,
+      eventType: "login_failed",
+      ipHash: security.ipHash,
+      metadata: { factor: "current_password", operation: "totp_reconnect" },
+      outcome: "failure",
+      subjectHash,
+      userAgent: security.userAgent,
+    })
     return { error: "The current password could not be verified.", errorField: "password" }
   }
   releaseLoginAttempt(attempt)
@@ -279,15 +297,31 @@ export async function beginAuthenticatorReconnect(
     recordSecondFactorSuccess(requestHeaders, identity.subjectId, "backup_code", "reconnect")
   }
 
+  const usedRecoveryCode = !/^\d{6}$/u.test(secondFactor)
   try {
     await requestAuth.api.revokeOtherSessions({ headers: requestHeaders })
+  } catch {
+    return {
+      error: "The authenticator could not be reconnected. Try again.",
+      errorField: null,
+    }
+  }
+  /*
+   * Two steps, reported apart. Once the first has run, every other device is
+   * already signed out (and a recovery code used above is already spent), so
+   * a failure in the second must not read as though nothing happened -- a
+   * coach would otherwise find the courtside tablet signed out with no reason.
+   */
+  try {
     await requestAuth.api.disableTwoFactor({
       body: { password },
       headers: requestHeaders,
     })
   } catch {
     return {
-      error: "The authenticator could not be reconnected. Try again.",
+      error: "Your other devices were logged out, but the authenticator could not be"
+        + " reconnected. Try again"
+        + (usedRecoveryCode ? " with a different recovery code or an authenticator code." : "."),
       errorField: null,
     }
   }

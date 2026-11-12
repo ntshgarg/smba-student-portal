@@ -32,7 +32,12 @@ export function TwoFactorSetupForm({ role }: { role: "coach" | "platform_admin" 
   const [setupState, setupAction, setupPending] = useResilientActionState(
     startTotpSetup,
     initialSetup,
-    { retained: "No authenticator was connected", subject: "Your authenticator setup" },
+    {
+      subject: "Your authenticator setup",
+      // Starting again replaces an unfinished setup, so nothing half-done
+      // lingers whichever way this went.
+      unconfirmed: "Check the connection and try again; a new QR code replaces any you did not see",
+    },
   )
   const [verifyState, verifyAction, verifyPending] = useResilientActionState(
     confirmTotpSetup,
@@ -41,8 +46,11 @@ export function TwoFactorSetupForm({ role }: { role: "coach" | "platform_admin" 
       // The recovery codes are shown once and live only in `setupState`. Keeping
       // this form mounted is the only thing standing between a dropped request
       // and losing them permanently.
-      retained: "The recovery codes above are still on screen",
       subject: "Your six-digit code",
+      // A retry once setup has finished is sent straight on (confirmTotpSetup),
+      // so trying again with a fresh code is the way to find out.
+      unconfirmed: "The recovery codes above are still on screen, so save them now."
+        + " Then try again with a fresh code; if setup already finished, you will be taken straight on",
     },
   )
   const [codesFeedback, setCodesFeedback] = useState<ActionFeedback | null>(null)

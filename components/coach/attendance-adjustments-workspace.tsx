@@ -539,6 +539,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         error,
         fallbackMessage: "The adjustment could not be voided",
         retained: "The adjustment is still published",
+        unconfirmed: "Check the connection, then reload the page to see whether the adjustment was voided",
         subject: "The adjustment",
       })
       setFeedback({

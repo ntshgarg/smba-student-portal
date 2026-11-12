@@ -8,6 +8,7 @@ import { LoginForm } from "@/components/login-form"
 import { sessionProvider } from "@/lib/data"
 import { publicSiteUrl } from "@/lib/config"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
+import { sessionOwesAuthenticatorSetup } from "@/lib/auth/session"
 
 export const metadata: Metadata = {
   title: "Portal login",
@@ -31,6 +32,7 @@ export default async function LoginPage({
       twoFactorEnabled: true,
     }))
   }
+  if (await sessionOwesAuthenticatorSetup()) redirect("/auth/two-factor/setup")
   const recovered = (await searchParams).recovered === "1"
 
   return (

@@ -3,7 +3,7 @@
 import { unstable_rethrow } from "next/navigation"
 import { useActionState } from "react"
 
-import { describeSaveFailure } from "@/lib/client/network-failure"
+import { classifySaveFailure, networkFailureCause } from "@/lib/client/network-failure"
 import { reportClientError } from "@/lib/telemetry/report-client-error"
 
 /**
@@ -17,9 +17,9 @@ import { reportClientError } from "@/lib/telemetry/report-client-error"
  * A dropped request is enough to trigger that; the action itself need not be
  * buggy. On the authentication surfaces the request is the whole product, so
  * this wrapper supplies the seam React does not: it catches the rejection,
- * turns it into the same operational sentence the attendance registers already
- * use, and folds it into the state the form is rendering, so the failure
- * arrives through the existing error markup instead of through a boundary.
+ * turns it into a plain sentence about what may have happened and what to do,
+ * and folds it into the state the form is rendering, so the failure arrives
+ * through the existing error markup instead of through a boundary.
  *
  * It supplies that seam for faults only. A rejection Next.js threw on purpose --
  * the `redirect()` every successful sign-in ends on, and the `notFound`,
@@ -44,10 +44,20 @@ export type ResilientActionOptions<State> = {
    * success notice, neither of which may outlive the failure.
    */
   fold?: (state: State, message: string) => State
-  /** What remains true despite the failure. No trailing punctuation. */
-  retained: string
   /** What was being submitted. No trailing punctuation. */
   subject: string
+  /**
+   * What the person should do when the request may or may not have gone
+   * through, true in BOTH cases. No trailing punctuation.
+   *
+   * These forms change passwords, PINs, codes and sign-ins, and a dropped
+   * connection cannot say whether the server got there first: the reply is
+   * lost the same way whether the request never arrived or the server had
+   * already finished. So this is never "your old password still works" -- that
+   * is the sentence that sent a coach back to a password the server had
+   * already replaced -- but how to find out and what to try next.
+   */
+  unconfirmed: string
 }
 
 function foldIntoError<State extends ActionErrorState>(state: State, message: string) {
@@ -61,7 +71,7 @@ function foldIntoError<State extends ActionErrorState>(state: State, message: st
  */
 export function resilientAction<State extends ActionErrorState>(
   action: FormAction<State>,
-  { fold = foldIntoError, retained, subject }: ResilientActionOptions<State>,
+  { fold = foldIntoError, subject, unconfirmed }: ResilientActionOptions<State>,
 ): FormAction<State> {
   return async (state, payload) => {
     try {
@@ -96,12 +106,7 @@ export function resilientAction<State extends ActionErrorState>(
        */
       unstable_rethrow(error)
 
-      const failure = describeSaveFailure({
-        error,
-        fallbackMessage: `${subject} could not be sent`,
-        retained,
-        subject,
-      })
+      const kind = classifySaveFailure(error)
 
       // A transport failure is an operating condition on a venue connection,
       // not a defect, and reporting every one of them would bury the endpoint.
@@ -109,13 +114,39 @@ export function resilientAction<State extends ActionErrorState>(
       // `app/error.tsx`, which reports; catching it must not cost that signal.
       // `window` is the boundary the report vocabulary already reserves for a
       // rejection with nowhere else to land.
-      if (failure.kind === "unknown") {
+      if (kind === "unknown") {
         reportClientError({ boundary: "window", error, eventType: "unhandled_rejection" })
       }
 
-      return fold(state, failure.message)
+      return fold(state, describeUnconfirmedSubmission(kind, { subject, unconfirmed }))
     }
   }
+}
+
+/**
+ * The sentence for a submission whose reply did not come back as an answer.
+ *
+ * Only an expired sign-in is known to have changed nothing: the guard refuses
+ * before any write. Every other case -- a dropped connection, a device that
+ * went offline mid-request, a fault on the server -- may have happened after
+ * the server finished, so none of them is called a failure, and none of them
+ * repeats the server's own wording, which a production build replaces with a
+ * fixed technical sentence anyway.
+ */
+export function describeUnconfirmedSubmission(
+  kind: ReturnType<typeof classifySaveFailure>,
+  { subject, unconfirmed }: Pick<ResilientActionOptions<unknown>, "subject" | "unconfirmed">,
+) {
+  if (kind === "session-expired") {
+    return `${subject} was not saved because your sign-in has expired. Nothing was changed.`
+      + " Sign in again to continue."
+  }
+  const cause = kind === "offline" || kind === "unreachable"
+    ? `was not confirmed because ${networkFailureCause(kind)}`
+    : kind === "timeout"
+      ? "was not confirmed in time"
+      : "ran into an unexpected problem"
+  return `${subject} ${cause}, so it may or may not have gone through. ${unconfirmed}.`
 }
 
 type ResilientActionState<State> = [
