@@ -4591,10 +4591,12 @@ function validateRecordsQuery(value: unknown) {
   return value.trim() || undefined
 }
 
+const RECORDS_CURSOR_INVALID = "The financial-records cursor is invalid."
+
 function validateRecordsCursor(value: unknown) {
   if (value === undefined) return undefined
   if (typeof value !== "string" || value.length < 1 || value.length > 200) {
-    financeError("INVALID_INPUT", "The financial-records cursor is invalid.")
+    financeError("INVALID_INPUT", RECORDS_CURSOR_INVALID)
   }
   return value
 }
@@ -4604,10 +4606,22 @@ function recordsQuery<T>(load: () => T) {
     return load()
   } catch (error) {
     if (error instanceof FinanceRecordsCursorError) {
-      financeError("INVALID_INPUT", "The financial-records cursor is invalid.")
+      financeError("INVALID_INPUT", RECORDS_CURSOR_INVALID)
     }
     throw error
   }
+}
+
+/**
+ * Whether a records read failed only because its page anchor no longer
+ * matches a row: the list changed under the coach (a player moved out of the
+ * filtered status, an entry was reversed) or the address was edited. The
+ * records page starts the list again instead of showing the error screen.
+ */
+export function isStaleRecordsCursor(error: unknown) {
+  return error instanceof FinanceServiceError
+    && error.code === "INVALID_INPUT"
+    && error.message === RECORDS_CURSOR_INVALID
 }
 
 export function getFeeRegister(
