@@ -36,6 +36,7 @@ import {
 import {
   discardPlayerAttendanceDraft,
   keepMarkedExpectations,
+  leftOutAttendanceDraftNotice,
   persistPlayerAttendanceDraft,
   readPlayerAttendanceDraft,
   rebaseRestoredAttendanceDraft,
@@ -149,6 +150,11 @@ export function PlayerAttendanceRecorder({
   const [selectedOccurrenceId, setSelectedOccurrenceId] = useState(initialOccurrenceId)
   const [draftChanges, setDraftChanges] = useState<SessionAttendanceChange[]>([])
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
+  // Answers a date or session tap that a running save held back. Shown beside
+  // the date picker rather than in the footer under the roster, which on a
+  // phone is far out of view of the control the coach just tapped. Seeded with
+  // null, not false, like every state here that is not a mark or a flag.
+  const [selectionNotice, setSelectionNotice] = useState<ActionFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
   // The day's occurrences come from the server one date at a time
@@ -314,6 +320,19 @@ export function PlayerAttendanceRecorder({
       restoredOccurrenceIdRef.current = selectedOccurrenceId
       const stored = readPlayerAttendanceDraft(selectedOccurrenceId)
       if (!stored.length) return
+      // A session cancelled since the marks were made -- a holiday recorded
+      // after the fact -- shows no roster and cannot be saved, so restored
+      // marks would sit there unseen and unsaveable. They are not brought
+      // back, but stay on the device in case the holiday is removed.
+      if (selectedOccurrence.status !== "scheduled") {
+        setFeedback({
+          message: `${stored.length} unsaved ${stored.length === 1 ? "mark" : "marks"} from an earlier visit`
+            + " cannot be saved because this session was cancelled. They stay on this device and"
+            + " come back if the session is restored.",
+          tone: "info",
+        })
+        return
+      }
       const restored = stored.filter((change) => (
         eligiblePlayerIds.has(change.playerId)
         && !activeSourceAdjustmentByPlayer.has(change.playerId)
@@ -327,7 +346,10 @@ export function PlayerAttendanceRecorder({
       if (!rebased.changes.length) {
         // Nothing left to show: a draft of only unshowable marks would
         // otherwise come back, invisibly, on every visit for a week.
-        if (leftOut) discardPlayerAttendanceDraft(selectedOccurrenceId)
+        if (leftOut) {
+          discardPlayerAttendanceDraft(selectedOccurrenceId)
+          setFeedback({ message: leftOutAttendanceDraftNotice(leftOut), tone: "info" })
+        }
         return
       }
       restoredExpectationsRef.current = new Map(
@@ -408,7 +430,7 @@ export function PlayerAttendanceRecorder({
   // failure was never shown and the session's marks were silently gone.
   function blockedBySave() {
     if (!isSaving) return false
-    setFeedback({ message: waitForSaveMessage, tone: "info" })
+    setSelectionNotice({ message: waitForSaveMessage, tone: "info" })
     return true
   }
 
@@ -530,6 +552,7 @@ export function PlayerAttendanceRecorder({
       })
     } finally {
       setIsSaving(false)
+      setSelectionNotice(null)
     }
   }
 
@@ -771,6 +794,13 @@ export function PlayerAttendanceRecorder({
           </label>
           <p>{formatDateKey(selectedDate, { year: "numeric" })}</p>
         </div>
+        {selectionNotice ? (
+          <InlineNotice
+            message={selectionNotice.message}
+            reserveSpace={false}
+            tone={selectionNotice.tone}
+          />
+        ) : null}
 
         <div className="attendance-record-layout">
           <section

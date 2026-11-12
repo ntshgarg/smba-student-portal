@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@/lib/attendance/adjustments", () => ({
+  describeAdjustmentReviews: () => ({}),
   listAttendanceAdjustments: mocks.listAttendanceAdjustments,
 }))
 vi.mock("@/lib/coach/database", () => ({

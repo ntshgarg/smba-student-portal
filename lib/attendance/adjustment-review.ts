@@ -4,11 +4,10 @@
  * checking the attendance on the completed date -- advice that is wrong after a
  * holiday, where the attendance is fine and the session simply no longer ran.
  *
- * Nothing records which reason raised the flag, so it is read back from what
- * the screen can see: the two sessions a make-up joins and whether the player
- * still holds the Present it rests on. `presence` is "unknown" when the screen
- * has not loaded that player's marks (the history lists every player, but marks
- * are only loaded for the one selected).
+ * Nothing records which reason raised the flag, so it is read back from the
+ * facts the server reports for each flagged make-up (`describeAdjustmentReviews`
+ * in lib/attendance/adjustments.ts) and the missed session's status. `presence`
+ * is "unknown" only when those facts are missing.
  */
 export type AdjustmentReviewCause =
   | "completion-cancelled"
@@ -17,6 +16,14 @@ export type AdjustmentReviewCause =
   | "presence-removed"
   | "unclear"
 
+/** What the server knows about one flagged make-up, whoever is selected. */
+export type AdjustmentReviewFacts = {
+  /** The completion session was cancelled, or for a date-only make-up its day was closed. */
+  completionCancelled: boolean
+  /** The Present it rests on is still there, exactly as "Keep" checks it. */
+  hasPresence: boolean
+}
+
 export type AdjustmentReviewAdvice = {
   cause: AdjustmentReviewCause
   /** Whether "Keep make-up" can succeed: the server refuses it without a Present. */
@@ -24,41 +31,56 @@ export type AdjustmentReviewAdvice = {
   message: string
 }
 
-type OccurrenceState = { status: "cancelled" | "scheduled" } | undefined
-
 export function adjustmentReviewAdvice({
-  completion,
+  completionCancelled,
   isDateOnly,
+  missedCancelled,
   presence,
-  source,
 }: {
-  completion: OccurrenceState
+  completionCancelled: boolean
   isDateOnly: boolean
+  missedCancelled: boolean
   presence: "missing" | "present" | "unknown"
-  source: OccurrenceState
 }): AdjustmentReviewAdvice {
   if (presence === "missing") {
+    if (completionCancelled) {
+      return {
+        cause: "presence-removed",
+        canKeep: false,
+        message: isDateOnly
+          ? "This older make-up was recorded against a date that has since been closed as a holiday,"
+            + " and the player has no Present mark that day it can rest on. Void the make-up."
+          : "The player's Present mark on the session this make-up was completed at has been removed,"
+            + " and that session has since been cancelled, so the mark cannot be put back. Void the make-up.",
+      }
+    }
     return {
       cause: "presence-removed",
       canKeep: false,
-      message: "The player's Present mark on the session this make-up was completed at has been removed."
-        + " Mark them Present on that session again, or void the make-up.",
+      message: isDateOnly
+        ? "This older make-up was recorded against a date, and the player has no Present mark left that day"
+          + " that another make-up is not already using. Mark them Present at a session that day, or void the make-up."
+        : "The player's Present mark on the session this make-up was completed at has been removed."
+          + " Mark them Present on that session again, or void the make-up.",
     }
   }
-  if (completion?.status === "cancelled") {
+  if (completionCancelled) {
     return {
       cause: "completion-cancelled",
       canKeep: true,
-      message: "The session this make-up was completed at was cancelled afterwards, for example by an academy holiday."
-        + " Keep the make-up if the player did train that day, or void it.",
+      message: isDateOnly
+        ? "The day this older make-up was completed on has since been closed as a holiday."
+          + " Keep the make-up if the player did train that day, or void it."
+        : "The session this make-up was completed at was cancelled afterwards, for example by an academy holiday."
+          + " Keep the make-up if the player did train that day, or void it.",
     }
   }
-  if (source?.status === "cancelled") {
+  if (missedCancelled) {
     return {
       cause: "missed-cancelled",
       canKeep: true,
       message: "The missed session was cancelled afterwards, for example by an academy holiday,"
-        + " so the absence may no longer need making up. Void the make-up if it is not needed, or keep it.",
+        + " so the absence no longer counts and may not need making up. Void the make-up if it is not needed, or keep it.",
     }
   }
   if (isDateOnly) {

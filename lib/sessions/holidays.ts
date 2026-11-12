@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto"
 
-import { and, eq, inArray, isNull, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm"
 
 import { operationalActionError } from "@/lib/actions/operational-result"
+import { reconcileAttendanceAdjustmentReviewStates } from "@/lib/attendance/adjustments"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { isValidDateKey } from "@/lib/date-keys"
 import type { SmbaDatabase } from "@/lib/db/client"
@@ -41,6 +42,8 @@ export type HolidayDateImpact = {
   attendancePlayers: number
   /** Make-up sessions a player completed on this date. */
   makeUpCompletions: number
+  /** Make-ups answering a session missed on this date. */
+  makeUpsForMissedSessions: number
 }
 
 export type HolidayImpact = {
@@ -52,6 +55,11 @@ export type HolidayImpact = {
     attendanceMarks: number
     attendancePlayers: number
     makeUpCompletions: number
+    /**
+     * Make-ups whose missed session is on a closed day, not counting any
+     * already in `makeUpCompletions`, so no make-up is announced twice.
+     */
+    makeUpsForMissedSessions: number
   }
 }
 
@@ -184,6 +192,28 @@ export function previewAcademyHolidays({
     return map
   }, new Map())
 
+  /*
+   * The other end of a make-up: the session it makes up for is on a closed
+   * day, so that absence stops counting and the make-up may serve nothing.
+   * `markAcademyHolidays` flags these too, and the coach was never told.
+   */
+  const missed = database.select({
+    id: attendanceAdjustments.id,
+    completedOn: attendanceAdjustments.completedOn,
+    missedOn: sessionOccurrences.occurrenceDate,
+  }).from(attendanceAdjustments)
+    .innerJoin(
+      sessionOccurrences,
+      eq(sessionOccurrences.id, attendanceAdjustments.sourceOccurrenceId),
+    ).where(and(
+      inArray(sessionOccurrences.occurrenceDate, dates),
+      isNull(attendanceAdjustments.voidedAt),
+    )).all()
+  const missedByDate = missed.reduce<Map<string, number>>((map, adjustment) => {
+    map.set(adjustment.missedOn, (map.get(adjustment.missedOn) ?? 0) + 1)
+    return map
+  }, new Map())
+
   const dateImpacts = dates.map((dateKey) => {
     const forDate = occurrences.filter((occurrence) => occurrence.occurrenceDate === dateKey)
     const scheduled = forDate.filter((occurrence) => occurrence.status === "scheduled")
@@ -207,6 +237,7 @@ export function previewAcademyHolidays({
       attendanceMarks: dateMarks,
       attendancePlayers: datePlayers.size,
       makeUpCompletions: completionsByDate.get(dateKey) ?? 0,
+      makeUpsForMissedSessions: missedByDate.get(dateKey) ?? 0,
     }
   })
 
@@ -233,6 +264,9 @@ export function previewAcademyHolidays({
       attendanceMarks: openDates.reduce((total, impact) => total + impact.attendanceMarks, 0),
       attendancePlayers: affectedPlayers.size,
       makeUpCompletions: openDates.reduce((total, impact) => total + impact.makeUpCompletions, 0),
+      makeUpsForMissedSessions: missed.filter((adjustment) => (
+        openDateKeys.has(adjustment.missedOn) && !openDateKeys.has(adjustment.completedOn)
+      )).length,
     },
   }
 }
@@ -360,6 +394,8 @@ export function markAcademyHolidays({
 export type RetractAcademyHolidayResult = {
   dateKey: string
   restoredSessions: number
+  /** Make-up review flags settled because their sessions are back. */
+  adjustmentsSettled: number
 }
 
 /**
@@ -373,10 +409,12 @@ export function retractAcademyHoliday({
   coachId,
   database,
   dateKey,
+  now = new Date(),
 }: {
   coachId: string
   database: SmbaDatabase
   dateKey: string
+  now?: Date
 }): RetractAcademyHolidayResult {
   requireHeadAdminAccess(coachId, { database })
   if (!isValidDateKey(dateKey)) {
@@ -432,6 +470,38 @@ export function retractAcademyHoliday({
       : 0
     tx.delete(academyHolidays).where(eq(academyHolidays.id, holiday.id)).run()
 
-    return { dateKey, restoredSessions }
+    /*
+     * The holiday flagged the make-ups completed or missed on this day. With
+     * the sessions back, a make-up whose two sessions both run again and whose
+     * Present is still there has nothing left to review, so the same reconcile
+     * a register save runs settles it. Nothing is newly flagged here
+     * (`lostFinalPresence` is false), and one still missing its Present, or
+     * whose other session is on another closed day, stays in review.
+     */
+    const restoredIds = suspended.map((occurrence) => occurrence.id)
+    const touched = tx.select({
+      completedOn: attendanceAdjustments.completedOn,
+      playerId: attendanceAdjustments.playerId,
+    }).from(attendanceAdjustments).where(and(
+      isNull(attendanceAdjustments.voidedAt),
+      restoredIds.length
+        ? or(
+          eq(attendanceAdjustments.completedOn, dateKey),
+          inArray(attendanceAdjustments.sourceOccurrenceId, restoredIds),
+        )
+        : eq(attendanceAdjustments.completedOn, dateKey),
+    )).all()
+    const adjustmentsSettled = touched.length
+      ? reconcileAttendanceAdjustmentReviewStates({
+        database: tx,
+        now,
+        targets: [...new Map(touched.map((row) => [
+          `${row.playerId}:${row.completedOn}`,
+          { completedOn: row.completedOn, lostFinalPresence: false, playerId: row.playerId },
+        ])).values()],
+      })
+      : 0
+
+    return { adjustmentsSettled, dateKey, restoredSessions }
   }, { behavior: "immediate" })
 }

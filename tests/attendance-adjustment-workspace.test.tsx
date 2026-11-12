@@ -96,11 +96,21 @@ function makeUp(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function render({ adjustmentId, playerId }: { adjustmentId?: string; playerId: string }) {
+function render({
+  adjustmentId,
+  playerId,
+  reviewFacts,
+}: {
+  adjustmentId?: string
+  playerId?: string
+  reviewFacts?: Record<string, { completionCancelled: boolean; hasPresence: boolean }>
+}) {
   return renderToStaticMarkup(
     <AttendanceAdjustmentsWorkspace
       initialAdjustmentId={adjustmentId}
+      initialHistoryOpen
       initialPlayerId={playerId}
+      reviewFacts={reviewFacts}
       referenceDate="2026-08-20"
       referenceInstant={Date.parse("2026-08-20T12:00:00.000Z")}
     />,
@@ -164,12 +174,16 @@ describe("reschedule attendance", () => {
     }
     portal.attendanceAdjustments = [makeUp({ reviewRequiredAt: "2026-08-14T12:00:00.000Z" })]
 
-    const markup = render({ adjustmentId: "makeup-a", playerId: "player-a" })
+    const markup = render({
+      adjustmentId: "makeup-a",
+      playerId: "player-a",
+      reviewFacts: { "makeup-a": { completionCancelled: true, hasPresence: true } },
+    })
 
     expect(markup).toContain("was cancelled afterwards, for example by an academy holiday")
     expect(markup).not.toContain("Check the ordinary attendance")
     expect(markup).toContain("Keep make-up")
-    expect(markup).toContain("Void adjustment")
+    expect(markup).toContain("Void make-up")
   })
 
   it("asks for the Present mark back instead of offering to keep a make-up without one", () => {
@@ -180,30 +194,65 @@ describe("reschedule attendance", () => {
     }
     portal.attendanceAdjustments = [makeUp({ reviewRequiredAt: "2026-08-14T12:00:00.000Z" })]
 
-    const markup = render({ adjustmentId: "makeup-a", playerId: "player-a" })
+    const markup = render({
+      adjustmentId: "makeup-a",
+      playerId: "player-a",
+      reviewFacts: { "makeup-a": { completionCancelled: false, hasPresence: false } },
+    })
 
     expect(markup).toContain("Mark them Present on that session again, or void the make-up")
     expect(markup).not.toContain("Keep make-up")
-    expect(markup).toContain("Void adjustment")
+    expect(markup).toContain("Void make-up")
+  })
+
+  // With no player chosen, marks are loaded for nobody, so the screen used to
+  // guess -- and offered a Keep the server refused. The server's answer is the
+  // same whoever is selected.
+  it("gives the same answer with no player selected", () => {
+    portal.sessionOccurrences = [occurrence("monday", "2026-08-10"), occurrence("wednesday", "2026-08-12")]
+    portal.attendanceAdjustments = [makeUp({ reviewRequiredAt: "2026-08-14T12:00:00.000Z" })]
+
+    const markup = render({
+      adjustmentId: "makeup-a",
+      reviewFacts: { "makeup-a": { completionCancelled: false, hasPresence: false } },
+    })
+
+    expect(markup).toContain("Mark them Present on that session again, or void the make-up")
+    expect(markup).not.toContain("Keep make-up")
   })
 })
 
 describe("why a make-up needs review", () => {
   it("names each cause with its own advice", () => {
-    const scheduled = { status: "scheduled" as const }
-    const cancelled = { status: "cancelled" as const }
+    const base = { completionCancelled: false, isDateOnly: false, missedCancelled: false }
 
+    expect(adjustmentReviewAdvice({ ...base, presence: "missing" }))
+      .toMatchObject({ canKeep: false, cause: "presence-removed" })
+    expect(adjustmentReviewAdvice({ ...base, completionCancelled: true, presence: "present" }))
+      .toMatchObject({ canKeep: true, cause: "completion-cancelled" })
+    expect(adjustmentReviewAdvice({ ...base, missedCancelled: true, presence: "present" }))
+      .toMatchObject({ canKeep: true, cause: "missed-cancelled" })
+    expect(adjustmentReviewAdvice({ ...base, isDateOnly: true, presence: "unknown" }))
+      .toMatchObject({ canKeep: true, cause: "date-only" })
+  })
+
+  // The register refuses a cancelled session, so "mark them Present again"
+  // would be advice that cannot be followed.
+  it("does not ask for a mark that can no longer be made", () => {
+    const advice = adjustmentReviewAdvice({
+      completionCancelled: true, isDateOnly: false, missedCancelled: false, presence: "missing",
+    })
+    expect(advice.canKeep).toBe(false)
+    expect(advice.message).not.toContain("Mark them Present")
+    expect(advice.message).toContain("Void the make-up")
+  })
+
+  it("names the holiday for an older make-up whose day was closed", () => {
     expect(adjustmentReviewAdvice({
-      completion: scheduled, isDateOnly: false, presence: "missing", source: scheduled,
-    })).toMatchObject({ canKeep: false, cause: "presence-removed" })
+      completionCancelled: true, isDateOnly: true, missedCancelled: false, presence: "present",
+    }).message).toContain("closed as a holiday")
     expect(adjustmentReviewAdvice({
-      completion: cancelled, isDateOnly: false, presence: "present", source: scheduled,
-    })).toMatchObject({ canKeep: true, cause: "completion-cancelled" })
-    expect(adjustmentReviewAdvice({
-      completion: scheduled, isDateOnly: false, presence: "present", source: cancelled,
-    })).toMatchObject({ canKeep: true, cause: "missed-cancelled" })
-    expect(adjustmentReviewAdvice({
-      completion: undefined, isDateOnly: true, presence: "unknown", source: scheduled,
-    })).toMatchObject({ canKeep: true, cause: "date-only" })
+      completionCancelled: false, isDateOnly: true, missedCancelled: false, presence: "missing",
+    }).message).not.toContain("the session this make-up was completed at")
   })
 })

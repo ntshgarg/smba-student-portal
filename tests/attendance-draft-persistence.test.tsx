@@ -713,8 +713,47 @@ describe("attendance registers restore their own drafts", () => {
     const restore = mountRecorder(storage)
 
     expect(restore.marks).toEqual([])
-    expect(restore.notice).toBeUndefined()
+    expect(restore.notice).toBe(
+      "Unsaved marks from an earlier visit were found."
+      + " 1 mark was left out because that player can no longer be marked here.",
+    )
     expect(entries.has(playerAttendanceDraftKey("occurrence-1"))).toBe(false)
+  })
+
+  // A holiday recorded after the fact cancels the session; the register then
+  // shows no roster and cannot save, so the marks are not put back on it.
+  it("does not restore marks onto a session cancelled since", () => {
+    const { entries, storage } = fakeStorage()
+    persistPlayerAttendanceDraft("occurrence-1", [
+      { choice: "present", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
+    ], { now: markedFourDaysAgo(), storage })
+    recorderFixture.occurrence.status = "cancelled"
+    try {
+      const restore = mountRecorder(storage)
+      expect(restore.marks).toEqual([])
+      expect(restore.notice).toContain("cannot be saved because this session was cancelled")
+      expect(entries.has(playerAttendanceDraftKey("occurrence-1"))).toBe(true)
+    } finally {
+      recorderFixture.occurrence.status = "scheduled"
+    }
+  })
+
+  // An assistant coach archived or promoted since has no row on the roll call.
+  it("leaves out staff marks for an assistant coach no longer listed", () => {
+    const { storage } = fakeStorage()
+    persistStaffAttendanceDraft("2026-08-21", [
+      { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "present" },
+      { choice: "present", coachAccountId: "coach-gone", dateKey: "2026-08-21", expectedChoice: "cleared" },
+    ], { now: markedFourDaysAgo(), storage })
+
+    const restore = mountRollCall(storage)
+
+    expect(restore.marks).toEqual([
+      { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "present" },
+    ])
+    expect(restore.notice).toContain(
+      "1 mark was left out because that assistant coach can no longer be marked here.",
+    )
   })
 })
 

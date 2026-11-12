@@ -321,6 +321,49 @@ describe("make-up sessions completed on a day that becomes a holiday", () => {
    * make-up answers may no longer need answering. Left active and unflagged,
    * the coach was never told.
    */
+  it("tells the coach about make-ups for sessions missed on the closed day", () => {
+    addMakeUp(NEXT_MONDAY)
+
+    const impact = previewAcademyHolidays({ database, dateKeys: [MONDAY], now: NOW })
+    expect(impact.dates[0].makeUpsForMissedSessions).toBe(1)
+    expect(impact.totals.makeUpsForMissedSessions).toBe(1)
+    // Closing both ends announces it once, as a completion.
+    expect(previewAcademyHolidays({ database, dateKeys: [MONDAY, NEXT_MONDAY], now: NOW })
+      .totals.makeUpsForMissedSessions).toBe(0)
+  })
+
+  it("settles the flag when the holiday is removed and the Present is still there", () => {
+    const adjustmentId = addMakeUp(NEXT_MONDAY)
+    const row = database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, adjustmentId)).get()!
+    database.insert(schema.sessionAttendanceRecords).values({
+      accountId: row.playerId,
+      choice: "present",
+      createdAt: NOW,
+      id: randomUUID(),
+      markedByAccountId: COACH_ID,
+      occurrenceId: row.completionOccurrenceId!,
+      updatedAt: NOW,
+    }).run()
+    markHoliday([NEXT_MONDAY])
+
+    const result = retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: NEXT_MONDAY })
+
+    expect(result.adjustmentsSettled).toBe(1)
+    expect(database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, adjustmentId)).get()?.reviewRequiredAt).toBeNull()
+  })
+
+  it("keeps the flag after removing the holiday when the Present is gone", () => {
+    const adjustmentId = addMakeUp(NEXT_MONDAY)
+    markHoliday([NEXT_MONDAY])
+    retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: NEXT_MONDAY })
+
+    expect(database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, adjustmentId)).get()?.reviewRequiredAt)
+      .toBeInstanceOf(Date)
+  })
+
   it("flags them when the missed session's day becomes a holiday", () => {
     const adjustmentId = addMakeUp(NEXT_MONDAY)
     const result = markHoliday([MONDAY])

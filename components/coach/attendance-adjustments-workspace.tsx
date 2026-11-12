@@ -33,7 +33,10 @@ import {
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
-import { adjustmentReviewAdvice } from "@/lib/attendance/adjustment-review"
+import {
+  adjustmentReviewAdvice,
+  type AdjustmentReviewFacts,
+} from "@/lib/attendance/adjustment-review"
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import {
@@ -106,6 +109,12 @@ type AttendanceAdjustmentsWorkspaceProps = {
    */
   referenceDate: string
   referenceInstant: number
+  /**
+   * Why each flagged make-up needs review and whether "Keep" will be accepted,
+   * worked out on the server so every player's row gets the same answer, not
+   * only the selected player's. See `describeAdjustmentReviews`.
+   */
+  reviewFacts?: Record<string, AdjustmentReviewFacts>
 }
 
 /**
@@ -116,6 +125,12 @@ type AdjustmentFeedback = ActionFeedback & {
   field?: string
   offerRetry?: boolean
   retryAction?: string
+  /**
+   * The history row a Keep or Void answer belongs to. It is shown inside that
+   * row, beside the button pressed, rather than above the editor -- off-screen
+   * on a phone once the history is scrolled.
+   */
+  target?: string
 }
 
 export const AttendanceAdjustmentsWorkspace = forwardRef<
@@ -129,6 +144,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   labelledBy = "reschedule-attendance-trigger",
   referenceDate,
   referenceInstant: initialReferenceInstant,
+  reviewFacts = {},
 }, ref) {
   const { players } = useMemberPortal()
   const {
@@ -547,18 +563,6 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     }
   }
 
-  function completionPresence(adjustment: AttendanceAdjustmentRecord) {
-    // Marks are loaded for the selected player only.
-    if (adjustment.playerId !== selectedPlayerId) return "unknown" as const
-    const isPresent = adjustment.completionOccurrenceId
-      ? attendanceRecords[adjustment.completionOccurrenceId]?.[adjustment.playerId] === "present"
-      : sessionOccurrences.some((occurrence) => (
-        occurrence.occurrenceDate === adjustment.completedOn
-        && attendanceRecords[occurrence.id]?.[adjustment.playerId] === "present"
-      ))
-    return isPresent ? "present" as const : "missing" as const
-  }
-
   async function keepAdjustment(adjustment: AttendanceAdjustmentRecord) {
     const pendingKey = `keep:${adjustment.id}`
     setPendingAction(pendingKey)
@@ -566,21 +570,27 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     try {
       const result = await keepAttendanceAdjustment(adjustment.id)
       if (!result.ok) {
-        setFeedback({ field: result.field, message: result.message, tone: "error" })
+        setFeedback({ message: result.message, target: adjustment.id, tone: "error" })
         return
       }
-      setFeedback({ message: "Make-up kept and no longer needs review", tone: "success" })
+      setFeedback({ message: "Make-up kept and no longer needs review", target: adjustment.id, tone: "success" })
     } catch (error) {
+      // Keep does nothing to a make-up that is no longer flagged, so pressing
+      // it again is safe, and a dropped connection leaves the outcome unknown.
       const failure = describeSaveFailure({
         error,
         fallbackMessage: "The make-up could not be kept",
-        retained: "The make-up still needs review",
-        subject: "Keeping the make-up",
+        repeatable: true,
+        retained: "It still shows as needing review until that is confirmed",
+        subject: "Keeping this make-up",
       })
       setFeedback({
-        message: failure.message,
+        message: failure.offerRetry
+          ? failure.message.replace("Saving again", "Pressing Keep make-up again")
+          : failure.message,
         offerRetry: failure.offerRetry,
         retryAction: pendingKey,
+        target: adjustment.id,
         tone: "error",
       })
     } finally {
@@ -590,8 +600,13 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 
   async function voidAdjustment(adjustment: AttendanceAdjustmentRecord) {
     const player = playerById.get(adjustment.playerId)
+    // A missed session cancelled afterwards no longer counts, so voiding brings
+    // no absence back; saying it would made a pointless make-up look costly.
+    const missedCancelled = occurrenceById.get(adjustment.sourceOccurrenceId)?.status === "cancelled"
     const confirmed = window.confirm(
-      `Void this make-up adjustment${player ? ` for ${player.member.fullName}` : ""}? The original absence will be restored.`,
+      `Void this make-up${player ? ` for ${player.member.fullName}` : ""}? ${missedCancelled
+        ? "Its missed session was cancelled afterwards, so no absence will count against them."
+        : "The original absence will be restored."}`,
     )
     if (!confirmed) return
 
@@ -600,10 +615,16 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     try {
       const result = await voidAttendanceAdjustment(adjustment.id)
       if (!result.ok) {
-        setFeedback({ field: result.field, message: result.message, tone: "error" })
+        setFeedback({ message: result.message, target: adjustment.id, tone: "error" })
         return
       }
-      setFeedback({ message: "Adjustment voided and original absence restored", tone: "success" })
+      setFeedback({
+        message: missedCancelled
+          ? "Make-up voided"
+          : "Make-up voided and original absence restored",
+        target: adjustment.id,
+        tone: "success",
+      })
     } catch (error) {
       const failure = describeSaveFailure({
         error,
@@ -615,6 +636,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: adjustment.id,
+        target: adjustment.id,
         tone: "error",
       })
     } finally {
@@ -637,7 +659,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
             <p className="operational-eyebrow coach-adjustment-review-heading">Review adjustment</p>
           ) : null}
 
-          {feedback ? (
+          {feedback && !feedback.target ? (
             <InlineNotice
               className="coach-adjustments-notice"
               id={feedbackId}
@@ -959,12 +981,14 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   const isVoided = Boolean(adjustment.voidedAt)
                   const requiresReview = Boolean(adjustment.reviewRequiredAt) && !isVoided
                   const isExpanded = adjustment.id === expandedAdjustmentId
+                  const facts = reviewFacts[adjustment.id]
                   const reviewAdvice = requiresReview
                     ? adjustmentReviewAdvice({
-                      completion: resolvedOccurrence,
+                      completionCancelled: facts?.completionCancelled
+                        ?? resolvedOccurrence?.status === "cancelled",
                       isDateOnly: !adjustment.completionOccurrenceId,
-                      presence: completionPresence(adjustment),
-                      source,
+                      missedCancelled: source?.status === "cancelled",
+                      presence: facts ? (facts.hasPresence ? "present" : "missing") : "unknown",
                     })
                     : null
                   const keepKey = `keep:${adjustment.id}`
@@ -1030,6 +1054,14 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                             <div><dt>Traceability</dt><dd>{resolvedOccurrence ? sessionLabel(resolvedOccurrence.id) : "Date-level record"}</dd></div>
                             {adjustment.reason ? <div className="is-wide"><dt>Reason</dt><dd>{adjustment.reason}</dd></div> : null}
                           </dl>
+                          {feedback?.target === adjustment.id ? (
+                            <InlineNotice
+                              className="coach-adjustments-notice"
+                              message={feedback.message}
+                              reserveSpace={false}
+                              tone={feedback.tone}
+                            />
+                          ) : null}
                           {reviewAdvice?.canKeep ? (
                             <button
                               className="coach-adjustment-history-void is-keep"
@@ -1056,8 +1088,8 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                               {pendingAction === adjustment.id
                                 ? "Voiding…"
                                 : retryAction === adjustment.id
-                                  ? "Void adjustment again"
-                                  : "Void adjustment"}
+                                  ? "Void make-up again"
+                                  : "Void make-up"}
                             </button>
                           ) : (
                             <p className="coach-adjustment-voided-note">

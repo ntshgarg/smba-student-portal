@@ -2,12 +2,13 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, desc, eq, inArray, isNull } from "drizzle-orm"
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm"
 
 import {
   OperationalActionError,
   operationalActionError,
 } from "@/lib/actions/operational-result"
+import type { AdjustmentReviewFacts } from "@/lib/attendance/adjustment-review"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
@@ -16,6 +17,7 @@ import {
   type SmbaDatabaseExecutor,
 } from "@/lib/db/client"
 import {
+  academyHolidays,
   accounts,
   attendanceAdjustments,
   playerEnrollments,
@@ -328,8 +330,16 @@ function playerHasPresenceForAdjustment(
         eq(sessionAttendanceRecords.choice, "present"),
       )).get())
   }
-  return Boolean(database.select({ id: sessionAttendanceRecords.id })
-    .from(sessionAttendanceRecords)
+  /*
+   * An older, date-only make-up rests on one of the player's Presents that day
+   * that no other make-up already uses: a session-linked make-up holds its own
+   * session's Present, and another date-only make-up that is not in review
+   * holds one. Counting any Present let one attended session credit two
+   * missed ones once the two kinds could share a date.
+   */
+  const presentOccurrenceIds = new Set(database.select({
+    occurrenceId: sessionAttendanceRecords.occurrenceId,
+  }).from(sessionAttendanceRecords)
     .innerJoin(
       sessionOccurrences,
       eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
@@ -337,7 +347,85 @@ function playerHasPresenceForAdjustment(
       eq(sessionAttendanceRecords.accountId, adjustment.playerId),
       eq(sessionAttendanceRecords.choice, "present"),
       eq(sessionOccurrences.occurrenceDate, adjustment.completedOn),
-    )).get())
+    )).all().map((row) => row.occurrenceId))
+  if (!presentOccurrenceIds.size) return false
+  const usedByOthers = database.select({
+    completionOccurrenceId: attendanceAdjustments.completionOccurrenceId,
+    reviewRequiredAt: attendanceAdjustments.reviewRequiredAt,
+  }).from(attendanceAdjustments).where(and(
+    eq(attendanceAdjustments.playerId, adjustment.playerId),
+    eq(attendanceAdjustments.completedOn, adjustment.completedOn),
+    isNull(attendanceAdjustments.voidedAt),
+    ne(attendanceAdjustments.id, adjustment.id),
+  )).all().filter((other) => (
+    other.completionOccurrenceId
+      ? presentOccurrenceIds.has(other.completionOccurrenceId)
+      : !other.reviewRequiredAt
+  )).length
+  return presentOccurrenceIds.size - usedByOthers >= 1
+}
+
+function refuseKeepWithoutPresence(
+  database: SmbaDatabaseExecutor,
+  adjustment: AttendanceAdjustmentRecord,
+): never {
+  if (!adjustment.completionOccurrenceId) {
+    operationalActionError(
+      "BUSINESS_RULE",
+      "This older make-up was recorded against a date, and the player has no Present mark left that day that another make-up is not already using. Mark them Present at a session that day, or void the make-up.",
+      "adjustmentId",
+    )
+  }
+  const completion = database.select({ status: sessionOccurrences.status })
+    .from(sessionOccurrences)
+    .where(eq(sessionOccurrences.id, adjustment.completionOccurrenceId)).get()
+  operationalActionError(
+    "BUSINESS_RULE",
+    completion && completion.status !== "scheduled"
+      ? "The player is no longer marked Present at the session this make-up was completed at, and that session has since been cancelled, so the mark cannot be put back. Void the make-up."
+      : "The player is no longer marked Present at the session this make-up was completed at. Mark them Present there again, or void the make-up.",
+    "adjustmentId",
+  )
+}
+
+/**
+ * What the adjustments screen needs to explain a "Requires review" flag and
+ * to offer "Keep make-up" only when the server will accept it. Computed here
+ * so the answer does not depend on which player the screen has selected:
+ * marks are only loaded for that one player, so the screen used to guess for
+ * everyone else and offer a Keep the server then refused.
+ */
+export function describeAdjustmentReviews({
+  adjustments,
+  database = initializeDatabase(),
+}: DatabaseOption & {
+  adjustments: readonly AttendanceAdjustmentRecord[]
+}): Record<string, AdjustmentReviewFacts> {
+  const flagged = adjustments.filter((item) => item.reviewRequiredAt && !item.voidedAt)
+  if (!flagged.length) return {}
+  const completionIds = [...new Set(flagged.flatMap((item) => (
+    item.completionOccurrenceId ? [item.completionOccurrenceId] : []
+  )))]
+  const cancelledCompletionIds = new Set(completionIds.length
+    ? database.select({ id: sessionOccurrences.id, status: sessionOccurrences.status })
+      .from(sessionOccurrences).where(inArray(sessionOccurrences.id, completionIds)).all()
+      .filter((row) => row.status !== "scheduled")
+      .map((row) => row.id)
+    : [])
+  const dateOnlyDates = [...new Set(flagged.flatMap((item) => (
+    item.completionOccurrenceId ? [] : [item.completedOn]
+  )))]
+  const closedDates = new Set(dateOnlyDates.length
+    ? database.select({ dateKey: academyHolidays.dateKey }).from(academyHolidays)
+      .where(inArray(academyHolidays.dateKey, dateOnlyDates)).all()
+      .map((row) => row.dateKey)
+    : [])
+  return Object.fromEntries(flagged.map((adjustment) => [adjustment.id, {
+    completionCancelled: adjustment.completionOccurrenceId
+      ? cancelledCompletionIds.has(adjustment.completionOccurrenceId)
+      : closedDates.has(adjustment.completedOn),
+    hasPresence: playerHasPresenceForAdjustment(database, adjustment),
+  }]))
 }
 
 function publishConflict(
@@ -584,11 +672,7 @@ export function keepAttendanceAdjustment({
     }
     if (!adjustment.reviewRequiredAt) return adjustment
     if (!playerHasPresenceForAdjustment(tx, adjustment)) {
-      operationalActionError(
-        "BUSINESS_RULE",
-        "The player is no longer marked Present at the session this make-up was completed at. Mark them Present there again, or void the make-up.",
-        "adjustmentId",
-      )
+      refuseKeepWithoutPresence(tx, adjustment)
     }
 
     return tx.update(attendanceAdjustments).set({ reviewRequiredAt: null })
@@ -660,10 +744,16 @@ export function reconcileAttendanceAdjustmentReviewStates({
   // Two players can complete the same make-up session, so this is a set. One
   // statement answers both questions asked of each completion session: whether
   // it still took place, and which of these players hold a Present on it.
-  const completionOccurrenceIds = [...new Set(
-    active.map((adjustment) => adjustment.completionOccurrenceId)
+  //
+  // The missed sessions ride in the same statement: a make-up flagged because
+  // its missed session was later cancelled (a holiday on that day) is the
+  // coach's to settle, and a Present on its completion session says nothing
+  // about that cause, so it must not clear the flag.
+  const completionOccurrenceIds = [...new Set([
+    ...active.map((adjustment) => adjustment.completionOccurrenceId)
       .filter((occurrenceId): occurrenceId is string => Boolean(occurrenceId)),
-  )]
+    ...active.map((adjustment) => adjustment.sourceOccurrenceId),
+  ])]
   const completionRows = completionOccurrenceIds.length
     ? database.select({
       accountId: sessionAttendanceRecords.accountId,
@@ -690,36 +780,79 @@ export function reconcileAttendanceAdjustmentReviewStates({
     active.filter((adjustment) => !adjustment.completionOccurrenceId)
       .map((adjustment) => adjustment.completedOn),
   )]
-  const presenceByPlayerDate = new Set(
-    legacyCompletedOnDates.length
-      ? database.select({
-        accountId: sessionAttendanceRecords.accountId,
-        occurrenceDate: sessionOccurrences.occurrenceDate,
-      }).from(sessionAttendanceRecords)
-        .innerJoin(
-          sessionOccurrences,
-          eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
-        ).where(and(
-          inArray(sessionAttendanceRecords.accountId, playerIds),
-          eq(sessionAttendanceRecords.choice, "present"),
-          eq(sessionOccurrences.status, "scheduled"),
-          inArray(sessionOccurrences.occurrenceDate, legacyCompletedOnDates),
-        )).all().map((row) => pairKey(row.accountId, row.occurrenceDate))
-      : [],
-  )
+  /*
+   * Date-only make-ups each rest on one Present the player has on a running
+   * session that day, but not one a session-linked make-up already uses: that
+   * would let one attended session credit two missed ones. The free Presents
+   * go first to make-ups not in review, so a save never swaps which one is
+   * flagged. A date since closed as a holiday is left alone, as a cancelled
+   * completion session is above.
+   */
+  const presentCountByPlayerDate = new Map<string, number>()
+  if (legacyCompletedOnDates.length) {
+    database.select({
+      accountId: sessionAttendanceRecords.accountId,
+      occurrenceDate: sessionOccurrences.occurrenceDate,
+    }).from(sessionAttendanceRecords)
+      .innerJoin(
+        sessionOccurrences,
+        eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId),
+      ).where(and(
+        inArray(sessionAttendanceRecords.accountId, playerIds),
+        eq(sessionAttendanceRecords.choice, "present"),
+        eq(sessionOccurrences.status, "scheduled"),
+        inArray(sessionOccurrences.occurrenceDate, legacyCompletedOnDates),
+      )).all().forEach((row) => {
+        const key = pairKey(row.accountId, row.occurrenceDate)
+        presentCountByPlayerDate.set(key, (presentCountByPlayerDate.get(key) ?? 0) + 1)
+      })
+  }
+  const closedLegacyDates = new Set(legacyCompletedOnDates.length
+    ? database.select({ dateKey: academyHolidays.dateKey }).from(academyHolidays)
+      .where(inArray(academyHolidays.dateKey, legacyCompletedOnDates)).all()
+      .map((row) => row.dateKey)
+    : [])
+  const legacyWithPresence = new Set<string>()
+  const legacyByPair = new Map<string, AttendanceAdjustmentRecord[]>()
+  active.forEach((adjustment) => {
+    if (adjustment.completionOccurrenceId) return
+    const key = pairKey(adjustment.playerId, adjustment.completedOn)
+    legacyByPair.set(key, [...(legacyByPair.get(key) ?? []), adjustment])
+  })
+  legacyByPair.forEach((legacy, key) => {
+    const usedByLinked = active.filter((adjustment) => (
+      adjustment.completionOccurrenceId
+      && pairKey(adjustment.playerId, adjustment.completedOn) === key
+      && presenceByPlayerCompletion.has(
+        pairKey(adjustment.playerId, adjustment.completionOccurrenceId),
+      )
+    )).length
+    const free = (presentCountByPlayerDate.get(key) ?? 0) - usedByLinked
+    ;[...legacy].sort((first, second) => (
+      Number(Boolean(first.reviewRequiredAt)) - Number(Boolean(second.reviewRequiredAt))
+      || first.publishedAt.getTime() - second.publishedAt.getTime()
+      || first.id.localeCompare(second.id)
+    )).slice(0, Math.max(free, 0)).forEach((adjustment) => {
+      legacyWithPresence.add(adjustment.id)
+    })
+  })
 
   const clearedIds: string[] = []
   const reviewRequiredIds: string[] = []
   active.forEach((adjustment) => {
     if (adjustment.completionOccurrenceId
-      && cancelledCompletionIds.has(adjustment.completionOccurrenceId)) return
+      ? cancelledCompletionIds.has(adjustment.completionOccurrenceId)
+      : closedLegacyDates.has(adjustment.completedOn)) return
     const hasOrdinaryPresence = adjustment.completionOccurrenceId
       ? presenceByPlayerCompletion.has(
         pairKey(adjustment.playerId, adjustment.completionOccurrenceId),
       )
-      : presenceByPlayerDate.has(pairKey(adjustment.playerId, adjustment.completedOn))
+      : legacyWithPresence.has(adjustment.id)
     if (hasOrdinaryPresence) {
-      if (adjustment.reviewRequiredAt) clearedIds.push(adjustment.id)
+      if (adjustment.reviewRequiredAt
+        && !cancelledCompletionIds.has(adjustment.sourceOccurrenceId)) {
+        clearedIds.push(adjustment.id)
+      }
       return
     }
     if (lostFinalPresenceByPair.get(pairKey(adjustment.playerId, adjustment.completedOn))

@@ -15,6 +15,7 @@ import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import {
   discardStaffAttendanceDraft,
   keepMarkedExpectations,
+  leftOutAttendanceDraftNotice,
   persistStaffAttendanceDraft,
   readStaffAttendanceDraft,
   rebaseRestoredAttendanceDraft,
@@ -92,6 +93,14 @@ type SaveFeedback = ActionFeedback & {
  */
 const saveDeadlineMs = 15_000
 
+/**
+ * A date change that has not arrived by now is treated as lost -- a dropped
+ * venue connection -- rather than left on "Loading roll call…" for good.
+ */
+const dateChangeDeadlineMs = 20_000
+
+const staffSubjects = { one: "that assistant coach", many: "those assistant coaches" }
+
 export function StaffRollCall({
   initialDate,
   initialRecords,
@@ -108,6 +117,10 @@ export function StaffRollCall({
   const [records, setRecords] = useState(initialRecords)
   const [drafts, setDrafts] = useState<StaffAttendanceChange[]>([])
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
+  // Answers a date pick: a running save holding it back, or a day that never
+  // arrived. Shown under the date picker, where the head coach just tapped.
+  // Seeded with null so it is told apart from the other states by tests.
+  const [selectionNotice, setSelectionNotice] = useState<ActionFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   // Whether the device holds the marks on screen; undefined until a write or a
   // restore has said. See the player recorder's `draftKeptOnDevice`.
@@ -180,13 +193,32 @@ export function StaffRollCall({
   useEffect(() => {
     if (isChangingDate) return
     const timer = window.setTimeout(() => {
-      const restored = readStaffAttendanceDraft(selectedDate)
-      if (!restored.length) return
+      const stored = readStaffAttendanceDraft(selectedDate)
+      if (!stored.length) return
+      // Only marks this roll call can show and change come back. An assistant
+      // coach archived or promoted since has no row, so a restored mark for
+      // them could be neither seen nor undone, yet the server refused every
+      // save because of it. As in the player register, those are left out and
+      // named.
+      const markable = new Set(juniorCoaches
+        .filter((coach) => selectedDate >= coach.joinedOn && selectedDate <= referenceDate)
+        .map((coach) => coach.accountId))
+      const restored = stored.filter((change) => markable.has(change.coachAccountId))
+      const leftOut = stored.length - restored.length
       const rebased = rebaseRestoredAttendanceDraft(
         restored,
         (change) => storedByCoach.get(change.coachAccountId) ?? "cleared",
       )
-      if (!rebased.changes.length) return
+      if (!rebased.changes.length) {
+        if (leftOut) {
+          discardStaffAttendanceDraft(selectedDate)
+          setFeedback({
+            message: leftOutAttendanceDraftNotice(leftOut, staffSubjects),
+            tone: "info",
+          })
+        }
+        return
+      }
       restoredExpectationsRef.current = new Map(
         restored.map((change) => [change.coachAccountId, change.expectedChoice]),
       )
@@ -197,13 +229,32 @@ export function StaffRollCall({
           rebased.changes.length,
           "save staff attendance",
           rebased.changedUnderneath,
+          leftOut,
+          staffSubjects,
         ),
         tone: "info",
       })
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [isChangingDate, selectedDate, storedByCoach])
+  }, [isChangingDate, juniorCoaches, referenceDate, selectedDate, storedByCoach])
+
+  // The page remounts for the new date when it arrives. If that navigation is
+  // lost, go back to the day this roll call does hold -- its records are
+  // exactly the ones on screen -- and say so, instead of loading for ever.
+  useEffect(() => {
+    if (!isChangingDate) return
+    const pendingDate = selectedDate
+    const timer = window.setTimeout(() => {
+      setSelectedDate(initialDate)
+      setSelectionNotice({
+        message: `The roll call for ${formatDateKey(pendingDate)} did not load.`
+          + " Check the connection and choose the date again.",
+        tone: "error",
+      })
+    }, dateChangeDeadlineMs)
+    return () => window.clearTimeout(timer)
+  }, [initialDate, isChangingDate, selectedDate])
 
   function resolvedChoice(coachAccountId: string) {
     return draftByCoach.get(coachAccountId)
@@ -216,9 +267,10 @@ export function StaffRollCall({
     // A save in flight holds the date where it is: moving on remounted the
     // roll call before the save answered, so a failure was never shown.
     if (isSaving) {
-      setFeedback({ message: waitForSaveMessage, tone: "info" })
+      setSelectionNotice({ message: waitForSaveMessage, tone: "info" })
       return
     }
+    setSelectionNotice(null)
     if (drafts.length && !confirmDiscard(discardMarksPrompt)) return
     if (drafts.length) discardStaffAttendanceDraft(selectedDate)
     restoredExpectationsRef.current = new Map()
@@ -317,6 +369,7 @@ export function StaffRollCall({
       })
     } finally {
       setIsSaving(false)
+      setSelectionNotice(null)
     }
   }
 
@@ -350,6 +403,13 @@ export function StaffRollCall({
           </label>
           <p>{formatDateKey(selectedDate, { year: "numeric" })}</p>
         </div>
+        {selectionNotice ? (
+          <InlineNotice
+            message={selectionNotice.message}
+            reserveSpace={false}
+            tone={selectionNotice.tone}
+          />
+        ) : null}
 
         <div className="attendance-record-section-heading staff-roll-call-heading">
           <div>
