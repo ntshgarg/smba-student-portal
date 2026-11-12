@@ -103,6 +103,65 @@ describe("Published Announcement archive presentation", () => {
     expect(html).not.toContain("No matching announcements.")
   })
 
+  it("does not say nothing matches when the only matches are still showing from earlier months", () => {
+    const standing: CoachAnnouncementSummary = {
+      ...announcement,
+      id: "announcement-0",
+      publishedAt: "2026-07-02T04:30:00.000Z",
+      title: "Holiday hours",
+    }
+    const html = renderToStaticMarkup(
+      <PublishedAnnouncementArchive
+        announcements={[]}
+        currentMonth="2026-08"
+        firstMonth="2026-07"
+        hasPublishedAnnouncements
+        query={{ ...query, query: "holiday", status: "active" }}
+        stillShowing={[standing]}
+      />,
+    )
+
+    // Before: "1 result", the match listed, and then the big "No matching
+    // announcements" block under it.
+    expect(html).toContain("1 result")
+    expect(html).toContain("Holiday hours")
+    expect(html).not.toContain("No matching announcements.")
+    expect(html).toContain("Nothing published in August 2026 matches.")
+  })
+
+  it("heads the two groups one level above the notices in them", () => {
+    const standing: CoachAnnouncementSummary = {
+      ...announcement,
+      id: "announcement-0",
+      publishedAt: "2026-07-02T04:30:00.000Z",
+      title: "Bring your own shuttles",
+    }
+    const grouped = renderToStaticMarkup(
+      <PublishedAnnouncementArchive
+        announcements={[announcement]}
+        currentMonth="2026-08"
+        hasPublishedAnnouncements
+        query={query}
+        stillShowing={[standing]}
+      />,
+    )
+    const plain = renderToStaticMarkup(
+      <PublishedAnnouncementArchive
+        announcements={[announcement]}
+        currentMonth="2026-08"
+        hasPublishedAnnouncements
+        query={query}
+      />,
+    )
+
+    expect(grouped).toContain("<h3>Still showing from earlier months</h3>")
+    expect(grouped).toContain("<h3>Published in August 2026</h3>")
+    expect(grouped).toContain("<h4>Bring your own shuttles</h4>")
+    expect(grouped).toContain("<h4>Academy holiday</h4>")
+    // Without the groups, a notice sits straight under the month.
+    expect(plain).toContain("<h3>Academy holiday</h3>")
+  })
+
   it("stops the earlier-month control at the first month with any announcement", () => {
     const render = (month: string) => renderToStaticMarkup(
       <PublishedAnnouncementArchive

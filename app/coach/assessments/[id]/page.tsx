@@ -31,6 +31,7 @@ export default async function CoachAssessmentPage({
         playerId: loaded.assessment.playerId,
       }}
       previousOptions={loaded.previousOptions}
+      publishedCount={loaded.publishedCount}
       today={getAcademyDateKey(academyNow())}
     />
   )

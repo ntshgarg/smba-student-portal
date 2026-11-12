@@ -19,12 +19,24 @@ export function announcementPreview(content: string, maximumLength = 180) {
   return `${preview}…`
 }
 
+/**
+ * The earliest expiry date a live notice can have: today, in academy time. A
+ * notice is shown up to and including its expiry date, so one that expires
+ * before this has expired. `getAnnouncementStatus` and the database condition
+ * behind the dashboard count and every feed (`isLiveAnnouncement` in
+ * queries.ts) both draw the line here, so changing where it falls changes
+ * them together.
+ */
+export function earliestLiveExpiry(now = new Date()) {
+  return getAcademyDateKey(now)
+}
+
 export function getAnnouncementStatus(
   input: { expiresOn: string | null; withdrawnAt: Date | null },
   now = new Date(),
 ): AnnouncementStatus {
   if (input.withdrawnAt) return "withdrawn"
-  if (input.expiresOn && input.expiresOn < getAcademyDateKey(now)) return "expired"
+  if (input.expiresOn && input.expiresOn < earliestLiveExpiry(now)) return "expired"
   return "active"
 }
 

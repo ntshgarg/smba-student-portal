@@ -14,6 +14,7 @@ import type {
 } from "@/lib/announcements/contracts"
 import {
   announcementPreview,
+  earliestLiveExpiry,
   getAnnouncementStatus,
   isAnnouncementNew,
 } from "@/lib/announcements/domain"
@@ -30,7 +31,7 @@ import {
   broadcasts,
   broadcastWithdrawals,
 } from "@/lib/db/schema"
-import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
+import { getAcademyMonthKey } from "@/lib/format"
 
 type AnnouncementQueryOptions = {
   database?: SmbaDatabaseExecutor
@@ -133,14 +134,15 @@ function coachAnnouncementFromRow(
 /**
  * The database form of "live": not withdrawn, and not past its last academy
  * day. It is `getAnnouncementStatus(...) === "active"` written as a query
- * condition, kept in one place so the dashboard count, the homepage, the
- * players' notice board and the archive cannot drift apart. Every query that
- * uses it must left-join `broadcastWithdrawals`.
+ * condition, and it takes its cut-off from the same `earliestLiveExpiry`, so
+ * the dashboard count, the homepage, the players' notice board and the
+ * archive's status cannot drift apart. Every query that uses it must left-join
+ * `broadcastWithdrawals`.
  */
 function isLiveAnnouncement(now: Date) {
   return and(
     isNull(broadcastWithdrawals.broadcastId),
-    or(isNull(broadcasts.expiresOn), gte(broadcasts.expiresOn, getAcademyDateKey(now))),
+    or(isNull(broadcasts.expiresOn), gte(broadcasts.expiresOn, earliestLiveExpiry(now))),
   )
 }
 

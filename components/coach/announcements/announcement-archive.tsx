@@ -207,6 +207,9 @@ export function PublishedAnnouncementArchive({
             </div>
           ) : null}
 
+          {/* The two groups are headed one level below the month and one above
+              each notice's title, so heading navigation can tell a group from
+              a notice. */}
           {stillShowing.length > 0 ? (
             <>
               <div className={styles.listHeading}>
@@ -217,6 +220,7 @@ export function PublishedAnnouncementArchive({
                 announcements={stillShowing}
                 label="Still showing from earlier months"
                 query={query}
+                titleLevel="h4"
               />
               <div className={styles.listHeading}>
                 <h3>Published in {monthLabel}</h3>
@@ -225,8 +229,15 @@ export function PublishedAnnouncementArchive({
           ) : null}
 
           {announcements.length === 0 ? (
-            stillShowing.length > 0 && !query.query && !filtersActive ? (
-              <p className={styles.listEmptyLine}>Nothing new has been published this month.</p>
+            // With notices listed just above, the full "no matching
+            // announcements" block would contradict them and the result count;
+            // only this month's part is empty.
+            stillShowing.length > 0 ? (
+              <p className={styles.listEmptyLine}>
+                {query.query || filtersActive
+                  ? `Nothing published in ${monthLabel} matches.`
+                  : "Nothing new has been published this month."}
+              </p>
             ) : (
               <div className={`${styles.emptyState} ${styles.compactEmptyState}`}>
                 <Megaphone aria-hidden="true" />
@@ -242,6 +253,7 @@ export function PublishedAnnouncementArchive({
               announcements={announcements}
               label={`${monthLabel} announcements`}
               query={query}
+              titleLevel={stillShowing.length > 0 ? "h4" : "h3"}
             />
           )}
         </section>
@@ -254,11 +266,14 @@ function AnnouncementRows({
   announcements,
   label,
   query,
+  titleLevel,
 }: {
   announcements: CoachAnnouncementSummary[]
   label: string
   query: AnnouncementArchiveQuery
+  titleLevel: "h3" | "h4"
 }) {
+  const Title = titleLevel
   return (
     <ol className={styles.announcementList} aria-label={label}>
       {announcements.map((announcement) => (
@@ -271,7 +286,7 @@ function AnnouncementRows({
                 {announcement.pinned && announcement.status === "active"
                   ? <Pin aria-label="Pinned announcement" />
                   : null}
-                <h3>{announcement.title}</h3>
+                <Title>{announcement.title}</Title>
               </div>
               <p>{announcement.preview}</p>
               <div className={styles.channelPills}>

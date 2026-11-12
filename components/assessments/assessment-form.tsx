@@ -229,6 +229,127 @@ export function unconfirmedSaveNotice(error: unknown, isOnline?: boolean): Notic
   }
 }
 
+/**
+ * What the form knows about its own assessment on the server, as far as a
+ * refused save can change it. Kept together so `afterRefusal` can say what a
+ * refusal means for the screen without a browser to run in.
+ */
+export type FormSaveState = {
+  assessmentId: string | null
+  /** How many published assessments the player had, as far as this form knows. */
+  expectedPublishedCount: number | undefined
+  /** A draft of the player's this form was told about, which a publish may go beside. */
+  knownDraftId: string | null
+  knownUpdatedAt: string | null
+  newAssessmentId: string
+  published: boolean
+  /** The values last saved, serialised; "" once nothing on screen is saved. */
+  saved: string
+}
+
+function assessmentHref(assessmentId: string) {
+  return `/coach/assessments/${encodeURIComponent(assessmentId)}`
+}
+
+/**
+ * What a refused save means for the form: what to tell the coach, and how the
+ * form brings itself up to date so that the next press either goes through on
+ * purpose or is not offered at all. A refusal that left the form as it was
+ * would refuse the same press forever.
+ *
+ * Links open beside the form, because following one in place would ask the
+ * coach to discard the work the refusal has just told them is still here.
+ */
+export function afterRefusal(
+  state: FormSaveState,
+  result: Extract<AssessmentActionResult, { ok: false }>,
+  { firstName, kind, playerId, submitted }: {
+    firstName: string
+    kind: "draft" | "publish"
+    playerId: string
+    /** The values this save sent, serialised. */
+    submitted: string
+  },
+): { notice: Notice; state: FormSaveState } {
+  const historyAction: InlineNoticeAction = {
+    href: `/coach/assessments/players/${encodeURIComponent(playerId)}`,
+    label: `Open ${firstName}’s assessments`,
+    newTab: true,
+  }
+
+  if (result.code === "NOT_FOUND" && state.assessmentId) {
+    // Discarded somewhere else. The work on screen is kept, and the next save
+    // makes it again under the same id: a discarded draft was never seen by
+    // the player and nothing points at it, and the page this form is open on,
+    // /coach/assessments/<id>, then still finds it when the save refreshes the
+    // page, instead of answering "page not found" over the coach's work.
+    return {
+      notice: {
+        message: `${result.message} Your work is still here; ${kind === "publish"
+          ? `publishing again publishes it to ${firstName} as a new assessment`
+          : "saving again keeps it as a new draft"}.`,
+        tone: "error",
+      },
+      state: {
+        ...state,
+        assessmentId: null,
+        knownUpdatedAt: null,
+        newAssessmentId: state.assessmentId,
+        published: false,
+        saved: "",
+      },
+    }
+  }
+
+  if (result.code === "CHANGED_ELSEWHERE" && result.currentUpdatedAt && state.assessmentId) {
+    const published = state.published || result.currentStatus === "published"
+    if (submitted === state.saved) {
+      // Nothing on screen is the coach's own work: the screen is only out of
+      // date. It does not take on the newer version, so a stale screen can
+      // never be saved over it; reloading costs nothing.
+      return {
+        notice: {
+          action: { href: assessmentHref(state.assessmentId), label: "Reload" },
+          message: `${result.message} Reload to see the latest version.`,
+          tone: "error",
+        },
+        state: { ...state, published },
+      }
+    }
+    // The coach has changes of their own. They are told what pressing again
+    // does, and it now does it, rather than being sent away to "open the
+    // latest version" -- leaving this screen is what would lose their work.
+    return {
+      notice: {
+        action: { href: assessmentHref(state.assessmentId), label: "Open the latest version", newTab: true },
+        message: `${result.message} Your changes are still here. ${published
+          ? `Pressing Update assessment replaces that version with yours, and ${firstName} will see yours.`
+          : "Saving again replaces that version with yours."}`,
+        tone: "error",
+      },
+      state: { ...state, knownUpdatedAt: result.currentUpdatedAt, published },
+    }
+  }
+
+  if (result.code === "CONFLICT") {
+    const next = { ...state }
+    // Published somewhere else: say so here too, so the screen stops showing a
+    // draft and offers the update button instead.
+    if (result.currentStatus === "published") {
+      next.published = true
+      if (result.currentUpdatedAt) next.knownUpdatedAt = result.currentUpdatedAt
+    }
+    // Told about once; the next press publishes this one anyway.
+    if (result.currentPublishedCount !== undefined) {
+      next.expectedPublishedCount = result.currentPublishedCount
+    }
+    if (result.currentDraftId) next.knownDraftId = result.currentDraftId
+    return { notice: { action: historyAction, message: result.message, tone: "error" }, state: next }
+  }
+
+  return { notice: { message: result.message, tone: "error" }, state }
+}
+
 export function AssessmentForm({
   assessment,
   group,
@@ -242,7 +363,7 @@ export function AssessmentForm({
   player: FormPlayer
   /** Published assessments to compare against, newest first; see `previousForDate`. */
   previousOptions: PreviousAssessmentOption[]
-  /** For a new assessment: how many the player had published when this opened. */
+  /** How many assessments the player had published when this opened. */
   publishedCount?: number
   today: string
 }) {
@@ -268,6 +389,14 @@ export function AssessmentForm({
    * against the coach's own work.
    */
   const [knownUpdatedAt, setKnownUpdatedAt] = useState<string | null>(assessment?.updatedAt ?? null)
+  /**
+   * The published count this form opened with, kept rather than read from the
+   * prop: saving a first draft refreshes the page with the count as it is now,
+   * which would wave through a publish the count exists to catch. Moved on
+   * only by a refusal that has told the coach why.
+   */
+  const [expectedPublishedCount, setExpectedPublishedCount] = useState(publishedCount)
+  const [knownDraftId, setKnownDraftId] = useState<string | null>(null)
   const [savedDate, setSavedDate] = useState(initial.assessedOn)
   const [published, setPublished] = useState(assessment?.status === "published")
   const [pending, setPending] = useState<"discard" | "draft" | "publish" | null>(null)
@@ -284,7 +413,9 @@ export function AssessmentForm({
 
   // Worked out from the date on screen, so backdating a new assessment compares
   // it with the one before that date rather than with the latest.
-  const previous = previousForDate(previousOptions, values.assessedOn)
+  // Never this assessment itself: after a first publish the page refreshes
+  // with a list that includes it.
+  const previous = previousForDate(previousOptions, values.assessedOn, assessmentId)
   const rated = countRated(values.ratings)
   const overall = overallRating(values.ratings)
   const busy = pending !== null
@@ -309,40 +440,44 @@ export function AssessmentForm({
     return {
       ...(assessmentId
         ? { assessmentId }
-        : {
-          newAssessmentId,
-          ...(publishedCount !== undefined ? { expectedPublishedCount: publishedCount } : {}),
-        }),
+        : { newAssessmentId, ...(knownDraftId ? { knownDraftId } : {}) }),
+      // Every first publish is checked against it, a draft's as much as one
+      // straight from a blank form.
+      ...(!published && expectedPublishedCount !== undefined ? { expectedPublishedCount } : {}),
       ...(assessmentId && knownUpdatedAt ? { expectedUpdatedAt: knownUpdatedAt } : {}),
       ...values,
       playerId: player.playerId,
     }
   }
 
-  const historyAction = {
+  const historyAction: InlineNoticeAction = {
     href: `/coach/assessments/players/${encodeURIComponent(player.playerId)}`,
     label: `Open ${firstName}’s assessments`,
+    newTab: true,
   }
 
-  function refusal(result: Extract<AssessmentActionResult, { ok: false }>): Notice {
-    if (result.code === "NOT_FOUND" && assessmentId) {
-      // Discarded somewhere else. The work on screen is kept, and the next save
-      // starts it again as a new assessment instead of failing again.
-      setAssessmentId(null)
-      setNewAssessmentId(globalThis.crypto.randomUUID())
-      setKnownUpdatedAt(null)
-      setPublished(false)
-      setSaved("")
-      return {
-        message: `${result.message} Your work is still here; saving again keeps it as a new draft.`,
-        tone: "error",
-      }
-    }
-    // Published somewhere else: say so here too, so the screen stops showing a
-    // draft and offers the update button instead.
-    if (result.currentStatus === "published") setPublished(true)
-    if (result.code === "CONFLICT") return { action: historyAction, message: result.message, tone: "error" }
-    return { message: result.message, tone: "error" }
+  function refusal(
+    result: Extract<AssessmentActionResult, { ok: false }>,
+    kind: "draft" | "publish",
+    submitted: string,
+  ): Notice {
+    const { notice: told, state } = afterRefusal({
+      assessmentId,
+      expectedPublishedCount,
+      knownDraftId,
+      knownUpdatedAt,
+      newAssessmentId,
+      published,
+      saved,
+    }, result, { firstName, kind, playerId: player.playerId, submitted })
+    setAssessmentId(state.assessmentId)
+    setExpectedPublishedCount(state.expectedPublishedCount)
+    setKnownDraftId(state.knownDraftId)
+    setKnownUpdatedAt(state.knownUpdatedAt)
+    setNewAssessmentId(state.newAssessmentId)
+    setPublished(state.published)
+    setSaved(state.saved)
+    return told
   }
 
   async function submit(kind: "draft" | "publish") {
@@ -358,7 +493,7 @@ export function AssessmentForm({
         ? publishAssessmentAction(payload())
         : saveAssessmentDraftAction(payload()))
       if (!result.ok) {
-        setNotice(refusal(result))
+        setNotice(refusal(result, kind, submitted))
         return
       }
       if ("discarded" in result) return
@@ -387,9 +522,15 @@ export function AssessmentForm({
     try {
       const result = await discardAssessmentDraftAction({ assessmentId, playerId: player.playerId })
       if (!result.ok) {
-        // Not `refusal`: a draft that cannot be discarded may have been
-        // published elsewhere rather than removed, so nothing here is reset;
-        // the coach is pointed at the player's list to see which.
+        if (result.code === "NOT_FOUND") {
+          // Already gone, discarded somewhere else: what the coach asked for.
+          setDiscarded(true)
+          navigateAfterCommit(() => window.location.replace("/coach/assessments"))
+          return
+        }
+        // Published somewhere else, so it stays on the record. The screen
+        // stops calling it a draft, and the coach is pointed at the list.
+        if (result.currentStatus === "published") setPublished(true)
         setNotice({ action: historyAction, message: result.message, tone: "error" })
         setConfirmingDiscard(false)
         return

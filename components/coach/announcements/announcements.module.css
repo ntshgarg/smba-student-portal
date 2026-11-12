@@ -1033,7 +1033,9 @@
   fill: color-mix(in srgb, var(--red) 20%, transparent);
 }
 
-.announcementIdentity h3 {
+/* h4 when the rows sit under the "still showing" and "published in" groups. */
+.announcementIdentity h3,
+.announcementIdentity h4 {
   min-width: 0;
   color: var(--navy);
   font-size: 1.0625rem;

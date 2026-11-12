@@ -146,7 +146,11 @@ describe("assessment saves that are repeated or race", () => {
     expect(() => service.saveAssessmentDraft(
       input({ assessmentId: firstId, expectedUpdatedAt: opened, strengths: "Window two" }),
       { coachId, database, now: new Date("2026-10-04T11:05:00+05:30") },
-    )).toThrowError(expect.objectContaining({ code: "CONFLICT", currentStatus: "draft" }))
+    )).toThrowError(expect.objectContaining({
+      code: "CHANGED_ELSEWHERE",
+      currentStatus: "draft",
+      currentUpdatedAt: later.toISOString(),
+    }))
     expect(rows()[0].strengths).toBe("Window one")
 
     // Window one sending the same thing again is not a conflict with itself.
@@ -201,6 +205,171 @@ describe("assessment saves that are repeated or race", () => {
       .toMatchObject({ overall: 2 })
     expect(queries.getPublishedAssessmentForPlayer(playerId, firstId, { database })?.previous)
       .toBeNull()
+  })
+
+  it("lets window two save over window one once it has been told, using the version it was told about", () => {
+    service.saveAssessmentDraft(input({ newAssessmentId: firstId }), { coachId, database, now })
+    const opened = rows()[0].updatedAt.toISOString()
+    service.saveAssessmentDraft(
+      input({ assessmentId: firstId, expectedUpdatedAt: opened, strengths: "Window one" }),
+      { coachId, database, now: new Date("2026-10-04T11:00:00+05:30") },
+    )
+    let refusal: unknown
+    try {
+      service.saveAssessmentDraft(
+        input({ assessmentId: firstId, expectedUpdatedAt: opened, strengths: "Window two" }),
+        { coachId, database, now: new Date("2026-10-04T11:05:00+05:30") },
+      )
+    } catch (error) {
+      refusal = error
+    }
+    const told = (refusal as { currentUpdatedAt: string }).currentUpdatedAt
+
+    // Before: every retry was refused, because the form's version never moved
+    // on, and the only way out was to leave and lose window two's work.
+    service.saveAssessmentDraft(
+      input({ assessmentId: firstId, expectedUpdatedAt: told, strengths: "Window two" }),
+      { coachId, database, now: new Date("2026-10-04T11:10:00+05:30") },
+    )
+    expect(rows()[0].strengths).toBe("Window two")
+  })
+
+  it("says a draft was published elsewhere, and lets the update that follows through", () => {
+    service.saveAssessmentDraft(input({ newAssessmentId: firstId }), { coachId, database, now })
+    const opened = rows()[0].updatedAt.toISOString()
+    // Tab B publishes the draft.
+    service.publishAssessment(
+      input({ assessmentId: firstId, expectedUpdatedAt: opened, strengths: "Tab B" }),
+      { coachId, database, now: new Date("2026-10-04T11:00:00+05:30") },
+    )
+
+    // Tab A, still showing the draft, saves it. Before: "already published,
+    // publish your changes", then the publish was refused as out of date.
+    let refusal: { code?: string; currentStatus?: string; currentUpdatedAt?: string } = {}
+    try {
+      service.saveAssessmentDraft(
+        input({ assessmentId: firstId, expectedUpdatedAt: opened, strengths: "Tab A" }),
+        { coachId, database, now: new Date("2026-10-04T11:05:00+05:30") },
+      )
+    } catch (error) {
+      refusal = error as typeof refusal
+    }
+    expect(refusal).toMatchObject({ code: "CHANGED_ELSEWHERE", currentStatus: "published" })
+
+    service.publishAssessment(
+      input({ assessmentId: firstId, expectedUpdatedAt: refusal.currentUpdatedAt, strengths: "Tab A" }),
+      { coachId, database, now: new Date("2026-10-04T11:10:00+05:30") },
+    )
+    expect(rows()).toEqual([expect.objectContaining({ status: "published", strengths: "Tab A" })])
+  })
+
+  it("checks a draft's first publish against the count the form opened with", () => {
+    // Both tabs opened with nothing published. Tab 1 publishes.
+    service.publishAssessment(
+      input({ expectedPublishedCount: 0, newAssessmentId: firstId }),
+      { coachId, database, now },
+    )
+    // Tab 2 saves a draft first (allowed: nothing reaches the player)...
+    service.saveAssessmentDraft(
+      input({ expectedPublishedCount: 0, newAssessmentId: secondId, strengths: "Tab 2" }),
+      { coachId, database, now },
+    )
+
+    // ...then publishes it. Before: no check at all on this path, and the
+    // player got a second published copy.
+    expect(() => service.publishAssessment(
+      input({ assessmentId: secondId, expectedPublishedCount: 0, strengths: "Tab 2" }),
+      { coachId, database, now },
+    )).toThrowError(expect.objectContaining({ code: "CONFLICT", currentPublishedCount: 1 }))
+    expect(rows().filter((row) => row.status === "published")).toHaveLength(1)
+
+    // Told, and sure it is a separate assessment, the coach publishes again.
+    service.publishAssessment(
+      input({ assessmentId: secondId, expectedPublishedCount: 1, strengths: "Tab 2" }),
+      { coachId, database, now },
+    )
+    expect(rows().filter((row) => row.status === "published")).toHaveLength(2)
+  })
+
+  it("publishes beside another window's draft only once the coach has been told about it", () => {
+    service.saveAssessmentDraft(input({ newAssessmentId: firstId }), { coachId, database, now })
+
+    let refusal: { currentDraftId?: string } = {}
+    try {
+      service.publishAssessment(
+        input({ expectedPublishedCount: 0, newAssessmentId: secondId, strengths: "This window" }),
+        { coachId, database, now },
+      )
+    } catch (error) {
+      refusal = error as typeof refusal
+    }
+    expect(refusal.currentDraftId).toBe(firstId)
+
+    // Before: refused every time, so this window's work could not be kept.
+    service.publishAssessment(
+      input({
+        expectedPublishedCount: 0,
+        knownDraftId: refusal.currentDraftId,
+        newAssessmentId: secondId,
+        strengths: "This window",
+      }),
+      { coachId, database, now },
+    )
+    expect(rows()).toHaveLength(2)
+    expect(rows().find((row) => row.id === firstId)?.status).toBe("draft")
+    // A second draft is still not allowed: a player has one at a time.
+    expect(() => service.saveAssessmentDraft(
+      input({ knownDraftId: firstId, newAssessmentId: "50000000-0000-4000-8000-000000000003" }),
+      { coachId, database, now },
+    )).toThrowError(expect.objectContaining({ code: "CONFLICT", currentDraftId: firstId }))
+  })
+
+  it("makes a draft discarded elsewhere again under its old id, so its page still opens", () => {
+    service.saveAssessmentDraft(input({ newAssessmentId: firstId }), { coachId, database, now })
+    service.discardAssessmentDraft({ assessmentId: firstId }, { coachId, database })
+
+    expect(() => service.saveAssessmentDraft(
+      input({ assessmentId: firstId, strengths: "Kept" }),
+      { coachId, database, now },
+    )).toThrowError(expect.objectContaining({ code: "NOT_FOUND" }))
+
+    // The form's next save sends the old id as the new one.
+    service.saveAssessmentDraft(
+      input({ newAssessmentId: firstId, strengths: "Kept" }),
+      { coachId, database, now },
+    )
+    // /coach/assessments/<firstId> re-renders after the save; before, it was
+    // "page not found" over the coach's work.
+    expect(queries.getCoachAssessment(firstId, coachId, { database })?.assessment)
+      .toMatchObject({ status: "draft", strengths: "Kept" })
+  })
+
+  it("tells a discard of a draft that is already gone apart from one that was published", () => {
+    service.saveAssessmentDraft(input({ newAssessmentId: firstId }), { coachId, database, now })
+    service.discardAssessmentDraft({ assessmentId: firstId }, { coachId, database })
+
+    expect(() => service.discardAssessmentDraft({ assessmentId: firstId }, { coachId, database }))
+      .toThrowError(expect.objectContaining({ code: "NOT_FOUND" }))
+  })
+
+  it("never offers a new assessment as its own previous one after its first publish", () => {
+    service.publishAssessment(
+      input({ assessedOn: "2026-10-01", newAssessmentId: firstId, ratings: { footwork: 2 } }),
+      { coachId, database, now },
+    )
+    // The new form publishes, and its page refreshes with a fresh list.
+    service.publishAssessment(
+      input({ expectedPublishedCount: 1, newAssessmentId: secondId, ratings: { footwork: 4 } }),
+      { coachId, database, now },
+    )
+    const start = queries.getAssessmentStart(playerId, coachId, { database })
+    const options = start?.previousOptions ?? []
+
+    // Before: the list's newest entry was this assessment, so "Previous
+    // assessment" and every "Last time" showed its own scores.
+    expect(contracts.previousForDate(options, "2026-10-04")).toMatchObject({ overall: 4 })
+    expect(contracts.previousForDate(options, "2026-10-04", secondId))
+      .toMatchObject({ assessedOn: "2026-10-01", overall: 2 })
   })
 
   it("compares a new assessment with the one before the date the coach picks", () => {

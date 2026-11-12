@@ -13,6 +13,12 @@ export type InlineNoticeTone = "success" | "error" | "info"
 export type InlineNoticeAction = {
   href: string
   label: string
+  /**
+   * Opens beside this screen instead of replacing it. For a notice on a form
+   * holding unsaved work: following the link in place would ask the coach to
+   * discard that work just to look at something.
+   */
+  newTab?: boolean
 }
 
 export type ActionFeedback = {
@@ -76,8 +82,13 @@ export function InlineNotice({
             <Icon key={normalizedMessage} aria-hidden="true" />
             <span>{normalizedMessage}</span>
             {action ? (
-              <Link className="inline-notice-action" href={action.href}>
+              <Link
+                className="inline-notice-action"
+                href={action.href}
+                {...(action.newTab ? { rel: "noopener", target: "_blank" } : {})}
+              >
                 {action.label}
+                {action.newTab ? <span className="sr-only"> (opens in a new tab)</span> : null}
               </Link>
             ) : null}
           </>

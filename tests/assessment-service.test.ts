@@ -158,8 +158,10 @@ describe("player assessments", () => {
     expect(queries.getAssessmentStart(secondPlayerId, coachId, { database })?.draftId).toBeNull()
 
     const [published] = queries.listPublishedAssessmentsForPlayer(playerId, { database })
+    // Told apart from a draft that is already gone, so the form can stop
+    // calling it a draft.
     expect(() => service.discardAssessmentDraft({ assessmentId: published.id }, { coachId, database }))
-      .toThrowError(expect.objectContaining({ code: "NOT_FOUND" }))
+      .toThrowError(expect.objectContaining({ code: "CONFLICT", currentStatus: "published" }))
     expect(database.select().from(schema.playerAssessments)
       .where(eq(schema.playerAssessments.id, published.id)).get()).toBeTruthy()
   })

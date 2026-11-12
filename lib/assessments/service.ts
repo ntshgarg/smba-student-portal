@@ -26,23 +26,44 @@ import { getAcademyDateKey } from "@/lib/format"
 const DATE_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 
+/**
+ * What a refusal knows about how things stand now, so the form can bring
+ * itself up to date and the coach's next press is a deliberate one rather than
+ * the same refusal again.
+ */
+type RefusalDetails = {
+  /** The player's other draft, when a new assessment was refused because of it. */
+  currentDraftId?: string
+  /** How many published assessments the player has now. */
+  currentPublishedCount?: number
+  /** What the assessment is now, when it was changed somewhere else. */
+  currentStatus?: AssessmentStatus
+  /** When the assessment was last saved, when it was changed somewhere else. */
+  currentUpdatedAt?: string
+}
+
 export class AssessmentServiceError extends Error {
   readonly code: AssessmentErrorCode
   readonly field?: AssessmentField
-  /** What the assessment is now, when it was changed somewhere else. */
+  readonly currentDraftId?: string
+  readonly currentPublishedCount?: number
   readonly currentStatus?: AssessmentStatus
+  readonly currentUpdatedAt?: string
 
   constructor(
     code: AssessmentErrorCode,
     message: string,
     field?: AssessmentField,
-    currentStatus?: AssessmentStatus,
+    details: RefusalDetails = {},
   ) {
     super(message)
     this.name = "AssessmentServiceError"
     this.code = code
     this.field = field
-    this.currentStatus = currentStatus
+    this.currentDraftId = details.currentDraftId
+    this.currentPublishedCount = details.currentPublishedCount
+    this.currentStatus = details.currentStatus
+    this.currentUpdatedAt = details.currentUpdatedAt
   }
 }
 
@@ -77,6 +98,9 @@ function validate(input: SaveAssessmentInput, now: Date, { publishing }: { publi
     throw new AssessmentServiceError("INVALID_INPUT", "The assessment could not be read. Reload and try again.")
   }
   if (input.expectedUpdatedAt !== undefined && typeof input.expectedUpdatedAt !== "string") {
+    throw new AssessmentServiceError("INVALID_INPUT", "The assessment could not be read. Reload and try again.")
+  }
+  if (input.knownDraftId !== undefined && typeof input.knownDraftId !== "string") {
     throw new AssessmentServiceError("INVALID_INPUT", "The assessment could not be read. Reload and try again.")
   }
   if (typeof input.playerId !== "string" || !input.playerId.trim()) {
@@ -162,6 +186,34 @@ function sameContent(
     && sameRatings(existing.ratings, content.ratings)
 }
 
+/**
+ * A first publish -- from a blank form or of a draft -- is refused if the
+ * player has had another assessment published since the form opened: that is
+ * what a second tab or a second device publishing the same assessment looks
+ * like, and published assessments cannot be removed. The refusal carries the
+ * new count, so the form's next press, once the coach has been told and has
+ * checked, goes through.
+ */
+function requireExpectedPublishedCount(tx: Transaction, input: SaveAssessmentInput) {
+  if (input.expectedPublishedCount === undefined) return
+  const published = tx.select({ total: sql<number>`count(*)` }).from(playerAssessments)
+    .where(and(
+      eq(playerAssessments.playerAccountId, input.playerId),
+      eq(playerAssessments.status, "published"),
+    ))
+    .get()?.total ?? 0
+  if (published !== input.expectedPublishedCount) {
+    throw new AssessmentServiceError(
+      "CONFLICT",
+      "Another assessment for this player was published after you opened this one,"
+        + " perhaps in another window. Nothing was published. Check their assessments,"
+        + " and publish again if this one is separate.",
+      undefined,
+      { currentPublishedCount: published },
+    )
+  }
+}
+
 function sameRatings(stored: string, incoming: string) {
   const left = parseStoredRatings(stored)
   const right = parseStoredRatings(incoming)
@@ -205,6 +257,26 @@ function save(
         // write, and nothing for the player to see change.
         return existing.id
       }
+      const current = {
+        currentStatus: existing.status,
+        currentUpdatedAt: existing.updatedAt.toISOString(),
+      }
+      // Checked before anything else about the assessment: when another
+      // window has moved it on -- publishing it included -- that is what the
+      // coach needs to hear, and the refusal carries the version it now is.
+      // Checked after it, "already published, publish your changes" sent the
+      // coach to a button this check then refused every time.
+      if (input.expectedUpdatedAt !== undefined
+        && current.currentUpdatedAt !== input.expectedUpdatedAt) {
+        throw new AssessmentServiceError(
+          "CHANGED_ELSEWHERE",
+          existing.status === "published"
+            ? "This assessment was published or changed in another window after you opened it."
+            : "This assessment was changed in another window after you opened it.",
+          undefined,
+          current,
+        )
+      }
       if (existing.status === "published" && !publishing) {
         // A published assessment is changed by publishing the change, so the
         // player never sees a half-edited version and a "save" cannot quietly
@@ -213,19 +285,10 @@ function save(
           "CONFLICT",
           "This assessment is already published. Publish your changes to update it.",
           undefined,
-          "published",
+          current,
         )
       }
-      if (input.expectedUpdatedAt !== undefined
-        && existing.updatedAt.toISOString() !== input.expectedUpdatedAt) {
-        throw new AssessmentServiceError(
-          "CONFLICT",
-          "This assessment was changed in another window after you opened it."
-            + " Open the latest version before saving, so neither set of changes is lost.",
-          undefined,
-          existing.status,
-        )
-      }
+      if (publishing && existing.status === "draft") requireExpectedPublishedCount(tx, input)
       tx.update(playerAssessments).set(publishing
         ? {
           ...content,
@@ -248,29 +311,24 @@ function save(
         eq(playerAssessments.status, "draft"),
       ))
       .get()
-    if (draft) {
-      // A draft this form does not know about was saved somewhere else. A new
-      // draft would collide with it and a new publish would leave it behind.
+    // A draft this form does not know about was saved somewhere else. A new
+    // draft would collide with it (a player has one at a time), so a save is
+    // refused. A publish is refused once, so the coach hears about that draft
+    // before leaving it behind; sent again with the draft it was told about,
+    // it publishes this one beside it, so the work on screen is never stuck.
+    if (draft && !(publishing && input.knownDraftId === draft.id)) {
       throw new AssessmentServiceError(
         "CONFLICT",
-        "This player already has a draft, perhaps from another window. Continue that one instead.",
+        publishing
+          ? "This player already has a draft, perhaps from another window. Nothing was published."
+            + " Continue that draft, or publish again to publish this one and leave that draft as it is."
+          : "This player already has a draft, perhaps from another window, and a player can have only one."
+            + " Continue that draft, or publish this one instead.",
+        undefined,
+        { currentDraftId: draft.id },
       )
     }
-    if (publishing && input.expectedPublishedCount !== undefined) {
-      const published = tx.select({ total: sql<number>`count(*)` }).from(playerAssessments)
-        .where(and(
-          eq(playerAssessments.playerAccountId, input.playerId),
-          eq(playerAssessments.status, "published"),
-        ))
-        .get()?.total ?? 0
-      if (published !== input.expectedPublishedCount) {
-        throw new AssessmentServiceError(
-          "CONFLICT",
-          "Another assessment for this player was published after you opened this one,"
-            + " perhaps in another window. Check their assessments before publishing again.",
-        )
-      }
-    }
+    if (publishing) requireExpectedPublishedCount(tx, input)
 
     const id = input.newAssessmentId ?? createId()
     tx.insert(playerAssessments).values({
@@ -318,10 +376,24 @@ export function discardAssessmentDraft(
       .returning({ id: playerAssessments.id })
       .get()
     if (!deleted) {
-      throw new AssessmentServiceError(
-        "NOT_FOUND",
-        "This draft no longer exists, or it has already been published.",
-      )
+      // Said apart, because the form does different things with them: a draft
+      // that is gone is what the coach asked for, and one that was published
+      // elsewhere means the screen is out of date.
+      const remaining = tx.select({
+        status: playerAssessments.status,
+        updatedAt: playerAssessments.updatedAt,
+      }).from(playerAssessments)
+        .where(eq(playerAssessments.id, input.assessmentId))
+        .get()
+      if (remaining) {
+        throw new AssessmentServiceError(
+          "CONFLICT",
+          "This assessment has already been published, perhaps in another window, so it cannot be discarded.",
+          undefined,
+          { currentStatus: remaining.status, currentUpdatedAt: remaining.updatedAt.toISOString() },
+        )
+      }
+      throw new AssessmentServiceError("NOT_FOUND", "This draft no longer exists.")
     }
     return { assessmentId: deleted.id }
   }, { behavior: "immediate" })

@@ -17,6 +17,7 @@ import {
   type SetAnnouncementPinnedInput,
   type WithdrawAnnouncementInput,
 } from "@/lib/announcements/contracts"
+import { getAnnouncementStatus } from "@/lib/announcements/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { initializeDatabase, type SmbaDatabase } from "@/lib/db/client"
 import {
@@ -214,13 +215,14 @@ export async function publishAnnouncement(
       if (existing.payloadFingerprint !== validated.fingerprint) {
         // The composer keeps one publication key for as long as an earlier
         // publish of this notice might still land, even when the coach edits
-        // it in the meantime. Reaching here means that earlier version did
-        // land, so this one is refused rather than becoming a second live
-        // notice, and the coach is pointed at the one that is live.
+        // it in the meantime. Reaching here means another version sent under
+        // the key got here first, so this one is refused rather than becoming
+        // a second live notice, and the coach is pointed at the one that is
+        // live. "Another", not "earlier": on a slow connection the corrected
+        // version can arrive before the stalled original.
         throw new AnnouncementServiceError(
           "PUBLICATION_CONFLICT",
-          "An earlier version of this announcement was already published before your changes."
-            + " Nothing new was published.",
+          "Another version of this announcement was already published. Nothing new was published.",
           "publicationKey",
           existing.id,
         )
@@ -303,7 +305,7 @@ export async function setAnnouncementPinned(
       fail("ALREADY_WITHDRAWN", "A withdrawn announcement cannot be pinned.", "announcementId")
     }
     if (current.pinned === input.pinned) return { reused: true }
-    if (input.pinned && current.expiresOn && current.expiresOn < getAcademyDateKey(now)) {
+    if (input.pinned && getAnnouncementStatus(current, now) === "expired") {
       fail("INVALID_INPUT", "An expired announcement cannot be pinned.", "announcementId")
     }
     if (current.presentationRevision !== input.expectedPresentationRevision) {

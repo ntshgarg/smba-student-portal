@@ -170,6 +170,7 @@ function previousOptions(
     .map((row) => ({
       ...toPrevious(row),
       createdBefore: self === undefined || row.createdAt < self.createdAt,
+      id: row.id,
     }))
 }
 
@@ -233,6 +234,11 @@ export function getCoachAssessment(
     group: groupLabel(enrollment?.level ?? null, enrollment?.batch ?? null),
     previous: previousForDate(options, row.assessedOn),
     previousOptions: options,
+    /**
+     * How many published assessments the player has, this one included. A
+     * draft's first publish is checked against it, as a new form's is.
+     */
+    publishedCount: options.length + (row.status === "published" ? 1 : 0),
   }
 }
 
