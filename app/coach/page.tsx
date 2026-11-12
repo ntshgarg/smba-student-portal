@@ -31,6 +31,7 @@ import {
 } from "@/lib/coach/database"
 import {
   getStaffAttendanceSummary,
+  listAcademyClosures,
   listStaffAttendanceRecords,
 } from "@/lib/coach/staff-attendance"
 import {
@@ -96,6 +97,10 @@ export default async function CoachDashboardPage({
       to: `${years[years.length - 1]}-12-31`,
     })
     const attendance: JuniorCoachAttendanceView = {
+      holidays: listAcademyClosures({
+        from: `${years[0]}-01-01`,
+        to: `${years[years.length - 1]}-12-31`,
+      }),
       joinedOn: access.joinedOn,
       monthLabel: formatDateKey(`${month}-01`, {
         day: undefined,

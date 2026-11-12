@@ -36,6 +36,8 @@ export type TrainingSessionOccurrence = {
   venue: string
   status: "scheduled" | "cancelled"
   replacementForOccurrenceId: string | null
+  /** Set when a holiday is what cancelled this session. */
+  holidayId?: string | null
 }
 
 export type SessionAssignment = {

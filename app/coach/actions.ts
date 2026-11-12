@@ -38,6 +38,7 @@ import {
   archiveMemberRecord,
   updateMemberRecord,
 } from "@/lib/coach/member-service"
+import { isValidDateKey } from "@/lib/date-keys"
 import { initializeDatabase } from "@/lib/db/client"
 import {
   findScheduledOccurrence,
@@ -378,6 +379,13 @@ export async function previewAcademyHolidaysAction(
 export async function markAcademyHolidaysAction(input: {
   dateKeys: string[]
   label: string
+  /**
+   * The month the calendar has on screen. The snapshot returned replaces the
+   * calendar's sessions and holidays wholesale, so it has to be that month's:
+   * closing Christmas from November used to hand back December and wipe
+   * November's Diwali off the screen until a reload.
+   */
+  viewMonth?: string
 }) {
   const coach = await requireCoach()
   return runOperationalAction(() => {
@@ -389,12 +397,12 @@ export async function markAcademyHolidaysAction(input: {
       now: new Date(),
     })
     revalidateAcademyData()
-    // The earliest closed date decides which month to reload, so a range that
-    // starts in the previous month does not return a snapshot missing its own
-    // first day.
-    const anchorDate = result.closedDates[0] ?? input.dateKeys.slice().sort()[0]
+    const viewMonth = typeof input.viewMonth === "string"
+      && isValidDateKey(`${input.viewMonth}-01`)
+      ? input.viewMonth
+      : (result.closedDates[0] ?? input.dateKeys.slice().sort()[0]).slice(0, 7)
     return {
-      ...getCoachCalendarMonthSessionSnapshot(anchorDate.slice(0, 7)),
+      ...getCoachCalendarMonthSessionSnapshot(viewMonth),
       ...result,
     }
   })
@@ -407,6 +415,7 @@ export async function retractAcademyHolidayAction(dateKey: string) {
       coachId: coach.subjectId,
       database: initializeDatabase(),
       dateKey,
+      now: new Date(),
     })
     revalidateAcademyData()
     return {

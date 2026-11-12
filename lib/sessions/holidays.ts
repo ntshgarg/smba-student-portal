@@ -5,13 +5,15 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 import { operationalActionError } from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { isValidDateKey } from "@/lib/date-keys"
-import type { SmbaDatabase } from "@/lib/db/client"
+import type { SmbaDatabase, SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   academyHolidays,
   attendanceAdjustments,
   sessionAttendanceRecords,
   sessionOccurrences,
+  sessionSeries,
 } from "@/lib/db/schema"
+import { formatDateKey } from "@/lib/format"
 import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
 
 export const MAX_HOLIDAY_DATES_PER_REQUEST = 31
@@ -87,6 +89,42 @@ function normaliseLabel(label: string) {
     )
   }
   return trimmed
+}
+
+/**
+ * The closures on any of these dates, keyed by date. Every path that puts a
+ * session on a day -- a new schedule, a moved session, the backfill -- reads
+ * this inside its own write transaction, so a day closed first can never end up
+ * holding a live session that the calendar draws as closed.
+ */
+export function academyHolidaysOnDates(
+  database: SmbaDatabaseExecutor,
+  dateKeys: readonly string[],
+): Map<string, { id: string; label: string }> {
+  const dates = [...new Set(dateKeys)]
+  if (!dates.length) return new Map()
+  return new Map(database.select({
+    dateKey: academyHolidays.dateKey,
+    id: academyHolidays.id,
+    label: academyHolidays.label,
+  }).from(academyHolidays).where(inArray(academyHolidays.dateKey, dates)).all()
+    .map((holiday) => [holiday.dateKey, { id: holiday.id, label: holiday.label }]))
+}
+
+/** Refuses a session being put on a day the academy has closed. */
+export function assertAcademyOpenOn(
+  database: SmbaDatabaseExecutor,
+  dateKey: string,
+  field = "dateKey",
+) {
+  const holiday = academyHolidaysOnDates(database, [dateKey]).get(dateKey)
+  if (holiday) {
+    operationalActionError(
+      "BUSINESS_RULE",
+      `The academy is closed on ${formatDateKey(dateKey)} for ${holiday.label}. Choose another day, or remove the holiday first.`,
+      field,
+    )
+  }
 }
 
 export function listAcademyHolidays({
@@ -341,23 +379,49 @@ export function markAcademyHolidays({
 export type RetractAcademyHolidayResult = {
   dateKey: string
   restoredSessions: number
+  /**
+   * Sessions the closure had cancelled that stay off: their schedule has since
+   * been ended, or the schedule already has a session on this day because one
+   * was moved onto it.
+   */
+  keptCancelledSessions: number
+  /** Make-ups the closure had flagged for review, now back as they were. */
+  reviewFlagsCleared: number
 }
 
 /**
- * Remove a closure and put back exactly the sessions it cancelled.
+ * Remove a closure and put back the sessions it cancelled.
  *
  * Restoring only rows carrying this holiday's id is what keeps the operation
  * honest: a session the coach had cancelled individually before the holiday was
  * declared has a null `holiday_id` and stays cancelled.
+ *
+ * Two kinds of suspended session stay off rather than come back:
+ *
+ * - One whose schedule has been ended and that has not happened yet. Ending a
+ *   schedule cancels its future sessions and closes every player's place, so
+ *   reviving one would put a session with nobody on it back on the calendar.
+ *   `endSessionSeriesRecords` now detaches these itself; this covers closures
+ *   made before it did.
+ * - One whose schedule already has a session on this day, because a session was
+ *   moved onto it while the day was closed (possible before moves onto a closed
+ *   day were refused). That moved session stands for the schedule on this day.
+ *   This used to refuse the whole removal, and once the day had passed nothing
+ *   could clear the way, so the holiday could never be removed.
+ *
+ * Either way the row is detached from the holiday and left as an ordinary
+ * cancellation, exactly as if it had been cancelled on its own.
  */
 export function retractAcademyHoliday({
   coachId,
   database,
   dateKey,
+  now = new Date(),
 }: {
   coachId: string
   database: SmbaDatabase
   dateKey: string
+  now?: Date
 }): RetractAcademyHolidayResult {
   requireHeadAdminAccess(coachId, { database })
   if (!isValidDateKey(dateKey)) {
@@ -373,46 +437,68 @@ export function retractAcademyHoliday({
 
     const suspended = tx.select({
       id: sessionOccurrences.id,
-      occurrenceDate: sessionOccurrences.occurrenceDate,
       seriesId: sessionOccurrences.seriesId,
+      startsAt: sessionOccurrences.startsAt,
     }).from(sessionOccurrences)
       .where(eq(sessionOccurrences.holidayId, holiday.id)).all()
 
-    /*
-     * `session_occurrences_series_date_idx` is unique on (series, date) but only
-     * over scheduled rows, so while the day was closed nothing stopped a
-     * make-up being booked onto it. Reviving into that would violate the index
-     * mid-transaction; refusing the whole retraction with the reason beats a
-     * partial restore the coach cannot see.
-     */
-    const collisions = suspended.length
-      ? tx.select({
-        occurrenceDate: sessionOccurrences.occurrenceDate,
-        seriesId: sessionOccurrences.seriesId,
-      }).from(sessionOccurrences).where(and(
+    const seriesIds = [...new Set(suspended.map((occurrence) => occurrence.seriesId))]
+    const endedSeries = new Set(seriesIds.length
+      ? tx.select({ id: sessionSeries.id }).from(sessionSeries).where(and(
+        inArray(sessionSeries.id, seriesIds),
+        eq(sessionSeries.status, "ended"),
+      )).all().map((series) => series.id)
+      : [])
+    // `session_occurrences_series_date_idx` is unique on (series, date) over
+    // scheduled rows, so reviving into an occupied slot would also fail outright.
+    const occupiedSeries = new Set(suspended.length
+      ? tx.select({ seriesId: sessionOccurrences.seriesId }).from(sessionOccurrences).where(and(
         eq(sessionOccurrences.occurrenceDate, dateKey),
         eq(sessionOccurrences.status, "scheduled"),
-      )).all()
-      : []
-    const occupied = new Set(collisions.map((row) => `${row.seriesId}:${row.occurrenceDate}`))
-    const blocked = suspended.filter((occurrence) => (
-      occupied.has(`${occurrence.seriesId}:${occurrence.occurrenceDate}`)
-    ))
-    if (blocked.length) {
-      operationalActionError(
-        "CONFLICT",
-        "A session has since been scheduled on this date. Move or cancel it before removing the holiday.",
-        "dateKey",
-      )
-    }
+      )).all().map((row) => row.seriesId)
+      : [])
+    const stayOff = suspended.filter((occurrence) => (
+      occupiedSeries.has(occurrence.seriesId)
+      || (endedSeries.has(occurrence.seriesId) && occurrenceIsUpcoming(occurrence, now))
+    )).map((occurrence) => occurrence.id)
+    const stayOffIds = new Set(stayOff)
+    const restore = suspended.filter((occurrence) => !stayOffIds.has(occurrence.id))
+      .map((occurrence) => occurrence.id)
 
-    const restoredSessions = suspended.length
+    if (stayOff.length) {
+      tx.update(sessionOccurrences).set({ holidayId: null })
+        .where(inArray(sessionOccurrences.id, stayOff)).run()
+    }
+    const restoredSessions = restore.length
       ? tx.update(sessionOccurrences)
         .set({ holidayId: null, status: "scheduled" })
-        .where(eq(sessionOccurrences.holidayId, holiday.id)).run().changes
+        .where(and(
+          inArray(sessionOccurrences.id, restore),
+          eq(sessionOccurrences.holidayId, holiday.id),
+        )).run().changes
       : 0
+
+    /*
+     * `markAcademyHolidays` flags a make-up completed on the closed day with the
+     * closure's own timestamp, and only one that was not already flagged.
+     * Matching that exact timestamp clears what this closure raised and leaves a
+     * flag raised for any other reason in place.
+     */
+    const reviewFlagsCleared = tx.update(attendanceAdjustments)
+      .set({ reviewRequiredAt: null })
+      .where(and(
+        eq(attendanceAdjustments.completedOn, dateKey),
+        isNull(attendanceAdjustments.voidedAt),
+        eq(attendanceAdjustments.reviewRequiredAt, holiday.createdAt),
+      )).run().changes
+
     tx.delete(academyHolidays).where(eq(academyHolidays.id, holiday.id)).run()
 
-    return { dateKey, restoredSessions }
+    return {
+      dateKey,
+      keptCancelledSessions: stayOff.length,
+      restoredSessions,
+      reviewFlagsCleared,
+    }
   }, { behavior: "immediate" })
 }

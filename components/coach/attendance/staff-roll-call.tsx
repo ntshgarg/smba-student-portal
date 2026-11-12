@@ -80,11 +80,14 @@ type SaveFeedback = ActionFeedback & {
 const saveDeadlineMs = 15_000
 
 export function StaffRollCall({
+  closedFor = null,
   initialDate,
   initialRecords,
   juniorCoaches,
   referenceDate,
 }: {
+  /** The holiday's name when the academy was closed on this date. */
+  closedFor?: string | null
   initialDate: string
   initialRecords: StaffRecord[]
   juniorCoaches: StaffMember[]
@@ -115,6 +118,9 @@ export function StaffRollCall({
     [drafts],
   )
   const futureDate = selectedDate > referenceDate
+  // The page is keyed by date, so this is always the closure for the date on
+  // screen. Nothing is marked on a closed day, so nobody is shown as missing.
+  const closedDay = Boolean(closedFor) && selectedDate === initialDate
   // Carried on the save button as `aria-disabled` rather than `disabled`:
   // disabling the element that currently holds focus hands focus to `<body>`,
   // and it is the coach's own press that disables it — so every save, including
@@ -299,6 +305,16 @@ export function StaffRollCall({
           <p>{formatDateKey(selectedDate, { year: "numeric" })}</p>
         </div>
 
+        {closedDay ? (
+          <div className="coach-day-holiday">
+            <div>
+              <span>Academy closed</span>
+              <strong>{closedFor}</strong>
+            </div>
+            <p>Nobody is marked on a closed day, and it does not count towards anyone’s attendance.</p>
+          </div>
+        ) : null}
+
         <div className="attendance-record-section-heading staff-roll-call-heading">
           <div>
             <span>Daily staff record</span>
@@ -321,7 +337,7 @@ export function StaffRollCall({
               <span>Attendance status</span>
             </div>
             {juniorCoaches.map((coach, index) => {
-              const unavailable = futureDate || selectedDate < coach.joinedOn
+              const unavailable = futureDate || closedDay || selectedDate < coach.joinedOn
               const currentChoice = resolvedChoice(coach.accountId)
               const folio = String(index + 1).padStart(2, "0")
               return (
@@ -331,7 +347,9 @@ export function StaffRollCall({
                     <div>
                       <strong>{coach.fullName}</strong>
                       <small>{unavailable
-                        ? futureDate ? "Future date" : `Joined ${formatDateKey(coach.joinedOn)}`
+                        ? futureDate
+                          ? "Future date"
+                          : closedDay ? "Academy closed" : `Joined ${formatDateKey(coach.joinedOn)}`
                         : "Assistant coach"}</small>
                     </div>
                   </div>

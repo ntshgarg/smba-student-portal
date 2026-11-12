@@ -12,7 +12,14 @@ vi.mock("server-only", () => ({}))
 import type { SmbaDatabase } from "@/lib/db/client"
 import { INITIAL_COACH_ACCOUNT_ID, seedDatabase } from "@/lib/db/seed"
 import * as schema from "@/lib/db/schema"
-import { expandDateRange } from "@/components/coach/calendar/holiday-composer"
+import {
+  expandDateRange,
+  holidayClosedMessage,
+} from "@/components/coach/calendar/holiday-composer"
+import {
+  cancellationLabel,
+  holidayRemovedMessage,
+} from "@/components/coach/calendar/session-calendar"
 import {
   listAcademyHolidays,
   markAcademyHolidays,
@@ -347,31 +354,211 @@ describe("retracting a holiday", () => {
     expect(occurrenceOn(eveningSeriesId, NEXT_MONDAY).status).toBe("cancelled")
   })
 
-  it("refuses when a session has since been scheduled onto the freed date", () => {
+  /*
+   * A session moved onto a closed day before such moves were refused. Removal
+   * used to be refused outright, and once the day had passed nothing could
+   * clear the way, so the holiday could never be removed.
+   */
+  it("still removes the holiday when a session was moved onto the closed day, keeping the moved one", () => {
     markHoliday([NEXT_MONDAY])
-    // A make-up moved onto the closed day, which the partial unique index
-    // permits precisely because the original rows are cancelled.
-    sessionService.replaceSessionOccurrence({
+    const source = occurrenceOn(morningSeriesId, "2026-08-17")
+    const movedId = randomUUID()
+    database.update(schema.sessionOccurrences).set({ status: "cancelled" })
+      .where(eq(schema.sessionOccurrences.id, source.id)).run()
+    database.insert(schema.sessionOccurrences).values({
+      createdAt: NOW,
+      durationMinutes: 60,
+      id: movedId,
+      occurrenceDate: NEXT_MONDAY,
+      replacementForOccurrenceId: source.id,
+      seriesId: morningSeriesId,
+      startsAt: new Date("2026-08-10T07:00:00+05:30"),
+      status: "scheduled",
+      venue: "SMBA Court",
+    }).run()
+    const suspendedId = database.select().from(schema.sessionOccurrences).where(and(
+      eq(schema.sessionOccurrences.seriesId, morningSeriesId),
+      eq(schema.sessionOccurrences.occurrenceDate, NEXT_MONDAY),
+      eq(schema.sessionOccurrences.status, "cancelled"),
+    )).get()!.id
+
+    // Long after the day, which is when the old refusal could never be cleared.
+    const result = retractAcademyHoliday({
       coachId: COACH_ID,
       database,
       dateKey: NEXT_MONDAY,
-      durationMinutes: 60,
-      now: NOW,
-      occurrenceId: occurrenceOn(morningSeriesId, "2026-08-17").id,
-      referenceDate: MONDAY,
-      startTime: "06:00",
-      venue: "SMBA Court",
+      now: new Date("2026-08-25T09:00:00+05:30"),
     })
 
-    expect(() => retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: NEXT_MONDAY }))
-      .toThrowError(expect.objectContaining({ code: "CONFLICT" }))
-    expect(listAcademyHolidays({ database })).toHaveLength(1)
+    expect(result).toMatchObject({ keptCancelledSessions: 1, restoredSessions: 1 })
+    expect(listAcademyHolidays({ database })).toHaveLength(0)
+    const byId = (id: string) => database.select().from(schema.sessionOccurrences)
+      .where(eq(schema.sessionOccurrences.id, id)).get()
+    expect(byId(movedId)?.status).toBe("scheduled")
+    expect(byId(suspendedId)).toMatchObject({ holidayId: null, status: "cancelled" })
+    expect(occurrenceOn(eveningSeriesId, NEXT_MONDAY).status).toBe("scheduled")
+  })
+
+  it("does not bring back a session of a schedule ended after the closure", () => {
+    markHoliday([NEXT_MONDAY])
+    sessionService.endSessionSeriesRecords({
+      coachId: COACH_ID,
+      database,
+      now: NOW,
+      seriesId: morningSeriesId,
+      stopFees: false,
+    })
+
+    const result = retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: NEXT_MONDAY, now: NOW })
+
+    expect(result).toMatchObject({ keptCancelledSessions: 0, restoredSessions: 1 })
+    expect(occurrenceOn(morningSeriesId, NEXT_MONDAY)).toMatchObject({
+      holidayId: null,
+      status: "cancelled",
+    })
+    expect(occurrenceOn(eveningSeriesId, NEXT_MONDAY).status).toBe("scheduled")
+  })
+
+  // Closures made before ending a schedule detached its holiday sessions.
+  it("keeps an ended schedule's future session off even when it is still tied to the closure", () => {
+    markHoliday([NEXT_MONDAY])
+    database.update(schema.sessionSeries).set({ status: "ended" })
+      .where(eq(schema.sessionSeries.id, morningSeriesId)).run()
+
+    const result = retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: NEXT_MONDAY, now: NOW })
+
+    expect(result).toMatchObject({ keptCancelledSessions: 1, restoredSessions: 1 })
     expect(occurrenceOn(morningSeriesId, NEXT_MONDAY).status).toBe("cancelled")
+  })
+
+  it("clears the review flags the closure raised, and only those", () => {
+    const playerId = addAccount("Make-up Player", "player")
+    const otherPlayerId = addAccount("Other Player", "player")
+    const insertMakeUp = (id: string, player: string, reviewRequiredAt: Date | null) => {
+      database.insert(schema.attendanceAdjustments).values({
+        completedOn: NEXT_MONDAY,
+        completionOccurrenceId: occurrenceOn(eveningSeriesId, NEXT_MONDAY).id,
+        id,
+        playerId: player,
+        publishedAt: NOW,
+        publishedByAccountId: COACH_ID,
+        reviewRequiredAt,
+        sourceOccurrenceId: occurrenceOn(morningSeriesId, MONDAY).id,
+        type: "makeup",
+      }).run()
+    }
+    const earlierFlag = new Date("2026-08-02T10:00:00+05:30")
+    insertMakeUp("flagged-by-closure", playerId, null)
+    insertMakeUp("flagged-before", otherPlayerId, earlierFlag)
+    markHoliday([NEXT_MONDAY])
+
+    const result = retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: NEXT_MONDAY, now: NOW })
+
+    const reviewOf = (id: string) => database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, id)).get()?.reviewRequiredAt
+    expect(result.reviewFlagsCleared).toBe(1)
+    expect(reviewOf("flagged-by-closure")).toBeNull()
+    expect(reviewOf("flagged-before")).toEqual(earlierFlag)
   })
 
   it("refuses a date that is not a holiday", () => {
     expect(() => retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: MONDAY }))
       .toThrowError(expect.objectContaining({ code: "NOT_FOUND" }))
+  })
+})
+
+describe("a day already closed never gets a live session", () => {
+  it("creates a new schedule's session on the closed day already cancelled by that holiday", () => {
+    markHoliday([NEXT_MONDAY])
+    const lateSeriesId = sessionService.createSessionSeriesRecords({
+      coachId: COACH_ID,
+      database,
+      now: NOW,
+      input: {
+        batch: "Weekday",
+        durationMinutes: 60,
+        endsOn: "2026-08-31",
+        programme: "Advanced",
+        startTime: "08:00",
+        startsOn: MONDAY,
+        venue: "SMBA Court",
+        weekdays: [1],
+      },
+    })
+    const [holiday] = listAcademyHolidays({ database })
+
+    expect(occurrenceOn(lateSeriesId, NEXT_MONDAY)).toMatchObject({
+      holidayId: holiday.id,
+      status: "cancelled",
+    })
+    expect(occurrenceOn(lateSeriesId, "2026-08-17").status).toBe("scheduled")
+
+    // And it comes back with the rest when the holiday is removed.
+    const result = retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: NEXT_MONDAY, now: NOW })
+    expect(result.restoredSessions).toBe(3)
+    expect(occurrenceOn(lateSeriesId, NEXT_MONDAY).status).toBe("scheduled")
+  })
+
+  it("refuses to move a session onto a closed day and changes nothing", () => {
+    markHoliday([NEXT_MONDAY])
+    const source = occurrenceOn(morningSeriesId, "2026-08-17")
+
+    expect(() => sessionService.replaceSessionOccurrence({
+      coachId: COACH_ID,
+      database,
+      dateKey: NEXT_MONDAY,
+      durationMinutes: 60,
+      now: NOW,
+      occurrenceId: source.id,
+      referenceDate: MONDAY,
+      startTime: "07:00",
+      venue: "SMBA Court",
+    })).toThrowError(expect.objectContaining({
+      code: "BUSINESS_RULE",
+      field: "dateKey",
+      message: expect.stringContaining("closed on Monday 10 August for Diwali"),
+    }))
+    expect(occurrenceOn(morningSeriesId, "2026-08-17").status).toBe("scheduled")
+    expect(database.select().from(schema.sessionOccurrences).where(and(
+      eq(schema.sessionOccurrences.occurrenceDate, NEXT_MONDAY),
+      eq(schema.sessionOccurrences.status, "scheduled"),
+    )).all()).toHaveLength(0)
+  })
+})
+
+describe("what the calendar says after a holiday change", () => {
+  it("reports a closure from what was saved", () => {
+    expect(holidayClosedMessage(" Diwali ", {
+      adjustmentsFlaggedForReview: 1,
+      cancelledSessions: 3,
+      closedDates: [MONDAY, NEXT_MONDAY],
+      skippedDates: ["2026-08-17"],
+    })).toBe("Closed 2 days for Diwali. 3 sessions cancelled. 1 day was already a holiday and left as it was. 1 make-up is waiting for review on Attendance adjustments.")
+    expect(holidayClosedMessage("Diwali", {
+      adjustmentsFlaggedForReview: 0,
+      cancelledSessions: 0,
+      closedDates: [MONDAY],
+      skippedDates: [],
+    })).toBe("Closed Monday 3 August for Diwali. No sessions needed cancelling.")
+  })
+
+  it("reports a removal, including sessions that stayed off", () => {
+    expect(holidayRemovedMessage({
+      keptCancelledSessions: 1,
+      restoredSessions: 2,
+      reviewFlagsCleared: 1,
+    })).toBe("Holiday removed. 2 sessions are back on. 1 session stayed cancelled because its schedule has ended or already has a session that day. 1 make-up is no longer waiting for review.")
+  })
+
+  it("tells a holiday, a move and an ordinary cancellation apart", () => {
+    const holidays = new Map([[MONDAY, { label: "Diwali" }]])
+    const base = { holidayId: null, id: "a", occurrenceDate: MONDAY }
+
+    expect(cancellationLabel({ ...base, holidayId: "h" }, [], holidays)).toBe("Closed for Diwali")
+    expect(cancellationLabel(base, [
+      { replacementForOccurrenceId: "a", status: "scheduled" },
+    ], holidays)).toBe("Moved")
+    expect(cancellationLabel(base, [], holidays)).toBe("Cancelled")
   })
 })
 

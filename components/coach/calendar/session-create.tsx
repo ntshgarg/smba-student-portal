@@ -75,15 +75,18 @@ export function SessionScheduleCreate({
   initialBatch,
   initialPlayerId = null,
   initialProgramme,
+  today: academyToday,
 }: {
   initialBatch?: TrainingBatch
   initialPlayerId?: string | null
   initialProgramme?: TrainingProgramme
+  /** The academy's date from the server, so a wrong phone clock cannot move the default start. */
+  today?: string
 }) {
   const { players } = useMemberPortal()
   const { createSessionSeries } = useSessionPortal()
   const router = useRouter()
-  const today = getIndiaDateKey()
+  const today = academyToday ?? getIndiaDateKey()
   const guidedPlayer = initialPlayerId
     ? players.find((player) => player.member.id === initialPlayerId) ?? null
     : null
@@ -115,7 +118,7 @@ export function SessionScheduleCreate({
   const endsOnRef = useRef<HTMLInputElement>(null)
   const weekdaysRef = useRef<HTMLFieldSetElement>(null)
   const feedbackId = "schedule-create-feedback"
-  useUnsavedWorkGuard({
+  const { navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty: JSON.stringify(seriesForm) !== JSON.stringify(seriesBaseline),
     message: "Leave without saving this recurring schedule?",
     scope: "coach-schedule-create",
@@ -169,8 +172,15 @@ export function SessionScheduleCreate({
       // A schedule created for a player in onboarding sends the coach back to
       // that player's Session step, which is now the only place a player is
       // added to a schedule.
+      //
+      // Through `navigateAfterCommit`: the form was dirty a moment ago, so the
+      // unsaved-work guard still held a history entry, and releasing it on the
+      // next render stepped history back and cancelled a plain `router.push`.
       if (guidedPlayer) {
-        router.push(`/coach/onboarding?player=${encodeURIComponent(guidedPlayer.member.id)}`)
+        const playerId = guidedPlayer.member.id
+        navigateAfterCommit(() => {
+          router.push(`/coach/onboarding?player=${encodeURIComponent(playerId)}`)
+        })
       }
     } catch (error) {
       const failure = describeSaveFailure({
@@ -320,7 +330,7 @@ export function SessionScheduleCreate({
         </button>
         {rosterHref ? (
           <Link className="coach-schedule-roster-link" href={rosterHref}>
-            Manage roster <ArrowUpRight aria-hidden="true" />
+            View schedule <ArrowUpRight aria-hidden="true" />
           </Link>
         ) : null}
       </form>

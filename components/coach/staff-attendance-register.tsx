@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, Check, CircleMinus, X } from "lucide-react"
+import { ArrowLeft, CalendarOff, Check, CircleMinus, X } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import type { CSSProperties } from "react"
@@ -29,11 +29,14 @@ function cellKey(coachAccountId: string, dateKey: string) {
 }
 
 export function StaffAttendanceRegister({
+  holidays = [],
   initialRecords,
   juniorCoaches,
   referenceDate,
   yearOptions,
 }: {
+  /** Days the academy was closed: nobody is marked on them. */
+  holidays?: Array<{ dateKey: string; label: string }>
   initialRecords: StaffRecord[]
   juniorCoaches: StaffRow[]
   referenceDate: string
@@ -67,6 +70,10 @@ export function StaffAttendanceRegister({
   const storedByCell = useMemo(() => new Map(
     initialRecords.map((record) => [cellKey(record.coachAccountId, record.dateKey), record.choice]),
   ), [initialRecords])
+  const holidayByDate = useMemo(
+    () => new Map(holidays.map((holiday) => [holiday.dateKey, holiday.label])),
+    [holidays],
+  )
   const tableStyle = {
     "--staff-register-width": `${240 + dates.length * 54}px`,
     "--register-mobile-width": `${148 + dates.length * 54}px`,
@@ -136,6 +143,7 @@ export function StaffAttendanceRegister({
             <span><i className="is-absent" aria-hidden="true"><CircleMinus /></i>Absent</span>
             <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
             <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
+            <span><i className="is-holiday" aria-hidden="true"><CalendarOff /></i>Holiday</span>
           </div>
 
           {!juniorCoaches.length ? (
@@ -199,21 +207,32 @@ export function StaffAttendanceRegister({
                         aria-hidden="true"
                       />
                     ) : null}
-                    {visibleDates.map((date, visibleIndex) => (
-                      <th
-                        key={date.key}
-                        scope="col"
-                        data-staff-register-date={date.key}
-                        aria-colindex={visibleWindow.start + visibleIndex + 2}
-                        className={[
-                          date.key === referenceDate ? "is-today" : "",
-                          date.key > referenceDate ? "is-unavailable" : "",
-                        ].filter(Boolean).join(" ") || undefined}
-                      >
-                        <span>{date.day}</span>
-                        <strong>{date.date}</strong>
-                      </th>
-                    ))}
+                    {visibleDates.map((date, visibleIndex) => {
+                      const holiday = holidayByDate.get(date.key)
+                      return (
+                        <th
+                          key={date.key}
+                          scope="col"
+                          data-staff-register-date={date.key}
+                          aria-colindex={visibleWindow.start + visibleIndex + 2}
+                          className={[
+                            date.key === referenceDate ? "is-today" : "",
+                            date.key > referenceDate || holiday ? "is-unavailable" : "",
+                            holiday ? "is-holiday" : "",
+                          ].filter(Boolean).join(" ") || undefined}
+                          title={holiday ? `${date.label}: closed for ${holiday}` : undefined}
+                        >
+                          <span>{date.day}</span>
+                          <strong>{date.date}</strong>
+                          {holiday ? (
+                            <small className="coach-register-holiday-mark">
+                              <span className="sr-only">Closed for {holiday}</span>
+                              <CalendarOff aria-hidden="true" />
+                            </small>
+                          ) : null}
+                        </th>
+                      )
+                    })}
                     {trailingDateCount ? (
                       <th
                         className="coach-register-spacer-cell"
@@ -242,25 +261,34 @@ export function StaffAttendanceRegister({
                           || date.key > referenceDate
                           || Boolean(coach.archivedOn && date.key > coach.archivedOn)
                         const choice = resolvedChoice(coach.accountId, date.key)
-                        const state = unavailable ? "not available" : choice === "cleared" || !choice ? "not recorded" : choice
+                        // A closed day reads as closed, never as "not recorded": there was
+                        // nothing to record. A mark saved before the closure is kept but not
+                        // counted, so it is not shown either.
+                        const holiday = unavailable ? undefined : holidayByDate.get(date.key)
+                        const state = unavailable
+                          ? "not available"
+                          : holiday
+                            ? `academy closed for ${holiday}`
+                            : choice === "cleared" || !choice ? "not recorded" : choice
                         return (
                           <td
                             key={date.key}
                             aria-colindex={visibleWindow.start + visibleIndex + 2}
                             className={[
                               date.key === referenceDate ? "is-today" : "",
-                              unavailable ? "is-unavailable" : "",
+                              unavailable || holiday ? "is-unavailable" : "",
+                              holiday ? "is-holiday" : "",
                             ].filter(Boolean).join(" ") || undefined}
                           >
                             <span
-                              className={`coach-register-cell-status${choice && choice !== "cleared" ? ` is-${choice}` : ""}`}
+                              className={`coach-register-cell-status${!holiday && choice && choice !== "cleared" ? ` is-${choice}` : ""}`}
                               role="img"
                               aria-label={`${coach.fullName}, ${date.label}: ${state}.`}
                               title={`${date.label}: ${state}`}
                             >
                               {/* Same pairing as the player register: --green and --red measure
                                   1.047:1 against each other, and X is already "not available". */}
-                              {unavailable ? <X aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : <span aria-hidden="true">—</span>}
+                              {unavailable ? <X aria-hidden="true" /> : holiday ? <CalendarOff aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : <span aria-hidden="true">—</span>}
                             </span>
                           </td>
                         )

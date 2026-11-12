@@ -42,6 +42,7 @@ import {
   sessionSlotsOverlap,
   validateSeriesInput,
 } from "@/lib/sessions/domain"
+import { academyHolidaysOnDates, assertAcademyOpenOn } from "@/lib/sessions/holidays"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
 import {
@@ -212,14 +213,26 @@ export function createSessionSeriesRecords({
      * the range once. A unique violation here is a real defect and must keep
      * failing the transaction rather than being folded into an update.
      */
+    /*
+     * A day already closed for a holiday gets its session the way every other
+     * session on that day has it: cancelled by that holiday. The calendar then
+     * shows one thing for the day, nobody is expected to train or be marked,
+     * a first month's fee does not count it, and removing the holiday brings
+     * it back with the rest.
+     */
+    const holidays = academyHolidaysOnDates(tx, [...draftDates])
     const occurrenceRows: Array<typeof sessionOccurrences.$inferInsert> = occurrenceDrafts
-      .map((draft) => ({
-        id: randomUUID(),
-        ...draft,
-        status: "scheduled",
-        replacementForOccurrenceId: null,
-        createdAt: now,
-      }))
+      .map((draft) => {
+        const holiday = holidays.get(draft.occurrenceDate)
+        return {
+          id: randomUUID(),
+          ...draft,
+          status: holiday ? "cancelled" : "scheduled",
+          holidayId: holiday?.id ?? null,
+          replacementForOccurrenceId: null,
+          createdAt: now,
+        }
+      })
     // A term can select a weekday its date range never reaches, and drizzle
     // rejects an empty `values()`.
     if (occurrenceRows.length) tx.insert(sessionOccurrences).values(occurrenceRows).run()
@@ -1124,6 +1137,9 @@ export function replaceSessionOccurrence({
           "dateKey",
         )
       }
+      // A closed day cancelled every session on it; moving one there would put
+      // a session on a day the calendar and register show as closed.
+      assertAcademyOpenOn(tx, dateKey)
       const occupiedTarget = tx.select().from(sessionOccurrences).where(and(
         eq(sessionOccurrences.seriesId, occurrence.seriesId),
         eq(sessionOccurrences.occurrenceDate, dateKey),
@@ -1487,6 +1503,21 @@ export function endSessionSeriesRecords({
           inArray(sessionOccurrences.id, futureOccurrenceIds),
           eq(sessionOccurrences.status, "scheduled"),
         )).run()
+      }
+      /*
+       * A future session already off for a holiday is off for this ending too.
+       * Detached from the holiday, so removing the holiday later leaves it
+       * cancelled instead of bringing back a session of an ended schedule with
+       * nobody on it.
+       */
+      const holidaySuspendedFutureIds = occurrences.filter((occurrence) => (
+        occurrence.status === "cancelled"
+        && occurrence.holidayId !== null
+        && occurrenceIsUpcoming(occurrence, now)
+      )).map((occurrence) => occurrence.id)
+      if (holidaySuspendedFutureIds.length) {
+        tx.update(sessionOccurrences).set({ holidayId: null })
+          .where(inArray(sessionOccurrences.id, holidaySuspendedFutureIds)).run()
       }
       roster.places.forEach((assignment) => {
         tx.update(sessionAssignments).set({

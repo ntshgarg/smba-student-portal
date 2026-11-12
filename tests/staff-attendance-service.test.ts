@@ -499,6 +499,74 @@ describe("junior-coach staff attendance", () => {
   })
 })
 
+describe("staff attendance on a day the academy was closed", () => {
+  const now = new Date("2026-08-08T06:30:00.000Z")
+
+  function closeDay(dateKey: string, label = "Independence Day") {
+    database.insert(schema.academyHolidays).values({
+      createdAt: now,
+      dateKey,
+      declaredByAccountId: HEAD_COACH_ID,
+      id: `holiday-${dateKey}`,
+      label,
+    }).run()
+  }
+
+  it("refuses marking an assistant coach on a closed day, but lets an old mark be cleared", () => {
+    saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now,
+      changes: [
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-05", choice: "absent", expectedChoice: "cleared" },
+      ],
+    })
+    closeDay("2026-08-05")
+    closeDay("2026-08-06")
+
+    expect(() => saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now,
+      changes: [
+        { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-06", choice: "absent", expectedChoice: "cleared" },
+      ],
+    })).toThrowError(expect.objectContaining({
+      code: "BUSINESS_RULE",
+      message: "The academy was closed on this day for Independence Day, so there is no staff attendance to mark.",
+    }))
+    expect(saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now,
+      changes: [
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-05", choice: "cleared", expectedChoice: "absent" },
+      ],
+    })).toEqual({ applied: 1 })
+  })
+
+  it("leaves a closed day out of the attendance percentage", () => {
+    saveStaffAttendanceRecords({
+      database,
+      markedByAccountId: HEAD_COACH_ID,
+      now,
+      changes: [
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-04", choice: "present", expectedChoice: "cleared" },
+        { coachAccountId: FIRST_JUNIOR_ID, dateKey: "2026-08-05", choice: "absent", expectedChoice: "cleared" },
+      ],
+    })
+    closeDay("2026-08-05")
+
+    expect(getStaffAttendanceSummary({
+      database,
+      requesterAccountId: FIRST_JUNIOR_ID,
+      coachAccountId: FIRST_JUNIOR_ID,
+      from: "2026-08-01",
+      to: "2026-08-31",
+    })).toMatchObject({ absent: 0, percentage: 100, present: 1, recorded: 1 })
+  })
+})
+
 describe("archiving an assistant coach who has left", () => {
   const archivedAt = new Date("2026-11-12T06:30:00.000Z")
 

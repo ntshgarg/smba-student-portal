@@ -30,6 +30,8 @@ type PersonalStaffAttendanceRecord = {
 }
 
 export type JuniorCoachAttendanceView = {
+  /** Days the academy was closed; they are shown as closed, not "not recorded". */
+  holidays?: Array<{ dateKey: string; label: string }>
   joinedOn: string
   monthLabel: string
   referenceDate: string
@@ -268,6 +270,7 @@ export function JuniorCoachAttendanceCard({
                   <span><i className="is-absent" aria-hidden="true" />Absent</span>
                   <span><i className="is-pending" aria-hidden="true" />Not recorded</span>
                   <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
+                  <span><i className="is-holiday" aria-hidden="true" />Holiday</span>
                 </div>
                 <p>Use the arrows to review each month.</p>
               </div>
@@ -304,7 +307,9 @@ export function JuniorCoachAttendanceCard({
                             ? "is-pending"
                             : day.state === "unavailable"
                               ? "is-not-scheduled"
-                              : `is-${day.state}`
+                              : day.state === "closed"
+                                ? "is-not-scheduled is-holiday"
+                                : `is-${day.state}`
                           const className = [
                             "player-attendance-calendar-day",
                             styles.staffCalendarDay,

@@ -330,10 +330,11 @@ describe("recurring schedule terms", () => {
 
     // One statement, not 262: reverting to a per-row loop fails here first.
     expect(occurrenceInserts).toHaveLength(1)
-    // 262 rows x 9 columns of binds in that one statement, so the assertion
+    // 262 rows x 10 columns of binds in that one statement (the tenth is the
+    // holiday a row on a closed day is born cancelled by), so the assertion
     // also pins the batch against SQLITE_MAX_VARIABLE_NUMBER rather than
     // passing on a statement that quietly re-prepares per row.
-    expect((occurrenceInserts[0]?.match(/\?/g) ?? []).length).toBe(262 * 9)
+    expect((occurrenceInserts[0]?.match(/\?/g) ?? []).length).toBe(262 * 10)
     expect(occurrences).toHaveLength(262)
     expect(new Set(occurrences.map((occurrence) => occurrence.id)).size).toBe(262)
     expect(occurrences.every((occurrence) => occurrence.status === "scheduled")).toBe(true)

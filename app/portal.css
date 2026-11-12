@@ -12085,6 +12085,18 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--steel);
 }
 
+/* The staff roll call on a closed day says why nothing can be marked. */
+.coach-day-holiday {
+  flex-wrap: wrap;
+}
+
+.coach-day-holiday p {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--steel);
+  font-size: 0.875rem;
+}
+
 /* Month grid. */
 .coach-month-grid button.is-holiday {
   border-color: var(--navy);

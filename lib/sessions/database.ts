@@ -69,6 +69,7 @@ function occurrenceRecords(
     venue: occurrence.venue,
     status: occurrence.status,
     replacementForOccurrenceId: occurrence.replacementForOccurrenceId,
+    holidayId: occurrence.holidayId,
   }))
   return resolveOccurrenceEligibilityDates(db, occurrences)
 }

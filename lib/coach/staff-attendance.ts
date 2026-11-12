@@ -19,6 +19,7 @@ import {
   type SmbaDatabaseExecutor,
 } from "@/lib/db/client"
 import {
+  academyHolidays,
   academyIdAllocations,
   accounts,
   coachProfiles,
@@ -270,10 +271,45 @@ export function listStaffAttendanceRecords({
   }).get(coachAccountId) ?? []
 }
 
+/**
+ * Days the academy was closed in a range, for the staff screens. A closure is
+ * date-keyed precisely so it reaches staff attendance, which never reads
+ * sessions (see `academyHolidays` in lib/db/schema.ts).
+ */
+export function listAcademyClosures({
+  database = initializeDatabase(),
+  from,
+  to,
+}: {
+  database?: SmbaDatabaseExecutor
+  from: string
+  to: string
+}): Array<{ dateKey: string; label: string }> {
+  assertDateRange(from, to)
+  return database.select({
+    dateKey: academyHolidays.dateKey,
+    label: academyHolidays.label,
+  }).from(academyHolidays).where(and(
+    gte(academyHolidays.dateKey, from),
+    lte(academyHolidays.dateKey, to),
+  )).orderBy(asc(academyHolidays.dateKey)).all()
+}
+
+/**
+ * A closed day leaves the count entirely, as it does for players: nobody is
+ * absent from an academy that was shut. A mark saved before the day was closed
+ * is kept, so removing the holiday counts it again.
+ */
 export function getStaffAttendanceSummary(
   input: AttendanceReadInput,
 ): StaffAttendanceSummary {
+  const closed = new Set(listAcademyClosures({
+    database: input.database,
+    from: input.from,
+    to: input.to,
+  }).map((closure) => closure.dateKey))
   const records = listStaffAttendanceRecords(input)
+    .filter((record) => !closed.has(record.dateKey))
   const present = records.filter((record) => record.choice === "present").length
   const absent = records.filter((record) => record.choice === "absent").length
   const recorded = present + absent
@@ -400,6 +436,16 @@ export function saveStaffAttendanceRecords({
       changes.map((change) => change.coachAccountId),
     )
     const storedChoices = loadStoredStaffChoices(transaction, changes)
+    const changedDates = [...new Set(changes.map((change) => change.dateKey))]
+      .filter((dateKey) => isValidDateKey(dateKey))
+    const closures = new Map(changedDates.length
+      ? transaction.select({
+        dateKey: academyHolidays.dateKey,
+        label: academyHolidays.label,
+      }).from(academyHolidays)
+        .where(inArray(academyHolidays.dateKey, changedDates)).all()
+        .map((closure) => [closure.dateKey, closure.label])
+      : [])
     // Every validation below stays in its original position, so the change that
     // failed first still fails first with the same code. Deferring the writes is
     // invisible: an error rolls the transaction back either way, and the
@@ -461,6 +507,16 @@ export function saveStaffAttendanceRecords({
         operationalActionError(
           "BUSINESS_RULE",
           "Coach attendance cannot be marked before the joining date.",
+          "changes",
+        )
+      }
+      // Clearing an old mark stays allowed, so a mark saved before the day was
+      // closed can still be taken off.
+      const closure = closures.get(change.dateKey)
+      if (closure && change.choice !== "cleared") {
+        operationalActionError(
+          "BUSINESS_RULE",
+          `The academy was closed on this day for ${closure}, so there is no staff attendance to mark.`,
           "changes",
         )
       }
