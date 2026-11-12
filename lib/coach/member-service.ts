@@ -10,6 +10,7 @@ import {
   normalizedNameKey,
 } from "@/lib/auth/identity"
 import { normalizeEmailAddress, registrationSubjectKey } from "@/lib/auth/recovery-service"
+import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { academyToday } from "@/lib/clock"
 import type {
   ArchiveCoachInput,
@@ -494,7 +495,7 @@ export function archiveMemberRecord({
     if (accountUpdate.changes !== 1 || enrollmentUpdate.changes !== 1) {
       throw new Error("Member changed during an immediate archive transaction.")
     }
-    revokePortalAccess(tx, input.memberId, now)
+    revokePortalAccess(tx, input.memberId, now, coachId)
 
     return { ok: true, memberId: input.memberId }
   }, { behavior: "immediate" })
@@ -504,8 +505,21 @@ export function archiveMemberRecord({
  * Switches off every way an archived account signs in: the Academy ID, every
  * open session, and the credential (so activation, recovery and the PIN all
  * refuse it). Shared by player and coach archiving so the two cannot drift.
+ * It also records who archived the account in the security log, which keeps
+ * that answer even if the account row is edited later.
  */
-function revokePortalAccess(tx: SmbaDatabaseExecutor, accountId: string, now: Date) {
+function revokePortalAccess(
+  tx: SmbaDatabaseExecutor,
+  accountId: string,
+  now: Date,
+  archivedByAccountId: string,
+) {
+  writeAuthSecurityEvent({
+    accountId,
+    actorAccountId: archivedByAccountId,
+    eventType: "account_archived",
+    outcome: "success",
+  }, { database: tx, now })
   tx.update(authMethods).set({ revokedAt: now }).where(and(
     eq(authMethods.accountId, accountId),
     isNull(authMethods.revokedAt),
@@ -585,7 +599,7 @@ export function archiveCoachRecord({
     if (accountUpdate.changes !== 1) {
       throw new Error("Coach changed during an immediate archive transaction.")
     }
-    revokePortalAccess(tx, input.coachAccountId, now)
+    revokePortalAccess(tx, input.coachAccountId, now, coachId)
 
     return { ok: true, coachAccountId: input.coachAccountId }
   }, { behavior: "immediate" })

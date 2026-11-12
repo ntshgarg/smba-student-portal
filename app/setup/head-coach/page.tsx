@@ -11,6 +11,7 @@ import {
 } from "@/app/account/recovery-email/actions"
 import {
   HEAD_COACH_SETUP_COOKIE,
+  HEAD_COACH_SETUP_NAME_COOKIE,
   headCoachSetupAvailable,
   validHeadCoachSetupToken,
 } from "@/lib/auth/initial-setup"
@@ -25,11 +26,7 @@ export const metadata: Metadata = {
   robots: { follow: false, index: false },
 }
 
-export default async function HeadCoachSetupPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ name?: string }>
-}) {
+export default async function HeadCoachSetupPage() {
   const cookieStore = await cookies()
   const setupToken = cookieStore.get(HEAD_COACH_SETUP_COOKIE)?.value
   const authorized = headCoachSetupAvailable() && validHeadCoachSetupToken(setupToken)
@@ -39,7 +36,9 @@ export default async function HeadCoachSetupPage({
       subjectKey: recoverySubjectKeyForHeadSetup(setupToken),
     })
     : null
-  const defaultName = (await searchParams).name?.slice(0, 80) ?? ""
+  // Carried in a cookie scoped to this page, not the address bar, so the coach's
+  // name stays out of browser history and server logs.
+  const defaultName = cookieStore.get(HEAD_COACH_SETUP_NAME_COOKIE)?.value.slice(0, 80) ?? ""
 
   return (
     <main className="login-page">

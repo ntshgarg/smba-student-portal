@@ -22,6 +22,7 @@ import {
   ACTIVATION_CLAIM_LIFETIME_MS,
   completeAccountActivation,
   createActivationClaimToken,
+  getActivationClaimStatus,
   loginIsBlocked,
   reserveLoginAttempt,
   validateNewPassword,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/auth/security-context"
 import { clearDatabaseSession } from "@/lib/auth/session"
 import {
+  passwordStepReachable,
   type RegistrationField,
   type RegistrationFormState,
   type RegistrationValues,
@@ -47,6 +49,8 @@ const GENERIC_LOGIN_ERROR = `${ACADEMY_ID_LABEL} or password is incorrect. If th
 const GENERIC_PIN_ERROR = `${ACADEMY_ID_LABEL} or PIN is incorrect. Use your password if PIN login is unavailable.`
 const RATE_LIMITED_LOGIN_ERROR = "We couldn\u2019t sign you in. Wait a few minutes before trying again."
 const ACTIVATED_WITHOUT_SESSION_ERROR = "Your account is ready, but we couldn\u2019t sign you in. Open the sign-in page and use your new password."
+const ACTIVATION_ALREADY_COMPLETE_ERROR = "This account already has a password. Open the sign-in page and use your Academy ID and that password."
+const ACTIVATION_UNAVAILABLE_ERROR = "This password setup has run out or was replaced by a status check on another device. Check your status again on the activation page to continue."
 
 // Better Auth surfaces an endpoint refusal as an APIError carrying the status it
 // was thrown with. Both sign-in endpoints throw TOO_MANY_REQUESTS once the
@@ -274,8 +278,17 @@ export async function activateAccount(
   const token = cookieStore.get(ACTIVATION_CLAIM_COOKIE)?.value ?? ""
   const activated = await completeAccountActivation({ token, password })
   if (!activated) {
+    /*
+     * Every refusal used to say "return to registration", which sent an
+     * approved family -- or someone who had just set the password in another
+     * tab -- off to request access they already had. The two real cases are a
+     * password that already exists, and a setup that was replaced (a status
+     * check on another device) or ran out; neither is fixed by registering.
+     */
     return {
-      error: "This registration link is unavailable or has expired. Return to registration to request access again.",
+      error: getActivationClaimStatus(token).state === "active"
+        ? ACTIVATION_ALREADY_COMPLETE_ERROR
+        : ACTIVATION_UNAVAILABLE_ERROR,
       errorField: null,
     }
   }
@@ -296,7 +309,10 @@ export async function activateAccount(
       headers: requestHeaders,
     }))
   } catch {
-    cookieStore.delete(ACTIVATION_CLAIM_COOKIE)
+    // The receipt cookie is left alone here. Deleting it re-rendered /activate
+    // as a page with no receipt -- the lookup form -- so this message never
+    // reached the screen. The claim is already spent, so the cookie grants
+    // nothing; on the next visit it reads as "your account is ready".
     return { error: ACTIVATED_WITHOUT_SESSION_ERROR, errorField: null }
   }
   cookieStore.delete(ACTIVATION_CLAIM_COOKIE)
@@ -392,7 +408,13 @@ export async function confirmRegistrationCode(
   })
   if (!result) return { ...base, error: INVALID_CODE_MESSAGE, errorField: "code" }
 
-  if (result.standing === "new") {
+  /*
+   * A new request gets its receipt here. So does an existing one that is ready
+   * for its password: `confirmRegistration` minted the claim inside the code's
+   * transaction, and the form below shows the password step on the spot rather
+   * than sending the family to /activate to type everything in again.
+   */
+  if (result.standing === "new" || passwordStepReachable(result)) {
     /*
      * The activation claim still rides a cookie so the existing /activate page
      * keeps working unchanged. It is no longer the only way back -- name, email

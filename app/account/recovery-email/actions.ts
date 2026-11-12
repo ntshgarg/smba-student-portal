@@ -13,6 +13,7 @@ import {
   confirmRecoveryEmailVerification,
   getRecoveryEmail,
   HEAD_SETUP_EMAIL_COOKIE,
+  HEAD_SETUP_VERIFIED_EMAIL_LIFETIME_MS,
   recoverySubjectKeyForAccount,
   recoverySubjectKeyForHeadSetup,
   requestRecoveryEmailVerification,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/auth/recovery-service"
 import {
   HEAD_COACH_SETUP_COOKIE,
+  HEAD_COACH_SETUP_NAME_COOKIE,
   headCoachSetupAvailable,
   validHeadCoachSetupToken,
 } from "@/lib/auth/initial-setup"
@@ -46,6 +48,10 @@ export async function requestActivationRecoveryEmail(
   const token = (await cookies()).get(ACTIVATION_CLAIM_COOKIE)?.value
   const status = getActivationClaimStatus(token)
   if (status.state !== "approved") redirect("/activate")
+  // Same first-time-only rule as the signed-in enrolment below. /activate only
+  // offers this step when no address is on file, and the action has to hold
+  // that line itself: confirming upserts, so it could replace a verified one.
+  if (getRecoveryEmail(status.accountId)) redirect("/activate")
   const email = String(formData.get("email") ?? "")
   try {
     const sent = await requestRecoveryEmailVerification({
@@ -71,6 +77,7 @@ export async function confirmActivationRecoveryEmail(
   const token = (await cookies()).get(ACTIVATION_CLAIM_COOKIE)?.value
   const status = getActivationClaimStatus(token)
   if (status.state !== "approved") redirect("/activate")
+  if (getRecoveryEmail(status.accountId)) redirect("/activate")
   const email = String(formData.get("email") ?? "")
   const code = String(formData.get("code") ?? "").replace(/\s+/gu, "")
   const confirmed = confirmRecoveryEmailVerification({
@@ -285,12 +292,16 @@ export async function confirmHeadSetupRecoveryEmail(
   if (!confirmed?.receiptToken) {
     return { email, error: "That code is invalid or expired.", fullName, sent: true }
   }
-  cookieStore.set(HEAD_SETUP_EMAIL_COOKIE, confirmed.receiptToken, {
+  // Both cookies last as long as the verified email does, counted from now --
+  // the moment of verification -- not from when the code was sent.
+  const setupCookie = {
     httpOnly: true,
-    maxAge: 10 * 60,
+    maxAge: HEAD_SETUP_VERIFIED_EMAIL_LIFETIME_MS / 1000,
     path: "/setup/head-coach",
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: secureAuthCookiesRequired(),
-  })
-  redirect(`/setup/head-coach?name=${encodeURIComponent(fullName)}`)
+  }
+  cookieStore.set(HEAD_SETUP_EMAIL_COOKIE, confirmed.receiptToken, setupCookie)
+  cookieStore.set(HEAD_COACH_SETUP_NAME_COOKIE, fullName, setupCookie)
+  redirect("/setup/head-coach")
 }

@@ -373,6 +373,13 @@ export const authSecurityEvents = sqliteTable("auth_security_events", {
     enum: [
       "activation_issued",
       "academy_id_notification_sent",
+      // Who decided on a request or ended an account, and when. Read from
+      // this log only; the actor columns on `accounts` are overwritten by an
+      // undo, the log is not.
+      "registration_approved",
+      "registration_rejected",
+      "registration_rejection_undone",
+      "account_archived",
       "account_activated",
       "login_succeeded",
       "login_failed",

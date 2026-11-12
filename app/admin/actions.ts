@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 
 import { ADMIN_PREVIEW_COOKIE, createAdminPreviewToken } from "@/lib/auth/admin-preview"
-import { getRawAuthSession } from "@/lib/auth/session"
+import { clearDatabaseSession, getRawAuthSession } from "@/lib/auth/session"
 import {
   HEAD_COACH_SETUP_COOKIE,
   createHeadCoachSetupClaim,
@@ -89,6 +89,16 @@ export async function openHeadCoachSetupAction() {
     sameSite: "strict",
     secure: process.env.VERCEL === "1",
   })
+  /*
+   * This runs on the coach's device, and the device is about to be handed to
+   * them. The owner's own sign-in used to stay on it for the whole of setup --
+   * the console, dashboard previews and authenticator approvals one address-bar
+   * edit away -- and if the coach's first sign-in hiccuped, opening the sign-in
+   * page dropped them into the owner console. The setup cookie above is all
+   * the setup page needs, so the owner is signed out of this browser here.
+   */
+  cookieStore.delete(ADMIN_PREVIEW_COOKIE)
+  await clearDatabaseSession()
   redirect("/setup/head-coach")
 }
 

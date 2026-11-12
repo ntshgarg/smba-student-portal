@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm"
 
 import { formatAcademyId, identityNameParts } from "@/lib/auth/identity"
 import { academyToday } from "@/lib/clock"
@@ -17,6 +17,7 @@ import {
 } from "@/lib/db/schema"
 import {
   derivePlayerOnboardingWorkspace,
+  type OnboardingFormerRecord,
   type PlayerOnboardingSummary,
   type PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
@@ -359,10 +360,13 @@ export function getPlayerOnboardingWorkspace(
       recordRevision: player.recordRevision,
     }))
 
+  const formerRecords = pendingRequests.length ? listFormerRecordsForDuplicateHint(db) : []
+
   if (!players.length) {
     return derivePlayerOnboardingWorkspace({
       assignments: [],
       feePlans: [],
+      formerRecords,
       pendingRequests,
       players: [],
       referenceDate,
@@ -397,10 +401,48 @@ export function getPlayerOnboardingWorkspace(
   return derivePlayerOnboardingWorkspace({
     assignments,
     feePlans,
+    formerRecords,
     pendingRequests,
     players,
     referenceDate,
   })
+}
+
+/**
+ * Members who have left (players and assistant coaches) and requests the coach
+ * rejected, for the approval screen's "may be this person" hint only. Archiving
+ * frees a member's identity so they can register again, which is exactly why
+ * the returning request needs pointing at the old record: their Academy ID,
+ * attendance and fees all stay with it.
+ */
+function listFormerRecordsForDuplicateHint(
+  db: ReturnType<typeof initializeDatabase>,
+): OnboardingFormerRecord[] {
+  return db.select({
+    academyIdSerial: academyIdAllocations.serial,
+    archivedAt: accounts.archivedAt,
+    contactEmail: accounts.contactEmail,
+    dateOfBirth: accounts.dateOfBirth,
+    fullName: accounts.fullName,
+    id: accounts.id,
+  }).from(accounts)
+    .leftJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
+    .where(and(
+      inArray(accounts.requestedRole, ["player", "coach"]),
+      or(
+        and(eq(accounts.approvalStatus, "approved"), isNotNull(accounts.archivedAt)),
+        and(eq(accounts.approvalStatus, "rejected"), isNull(accounts.archivedAt)),
+      ),
+    ))
+    .all()
+    .map((record) => ({
+      academyId: record.academyIdSerial === null ? null : formatAcademyId(record.academyIdSerial),
+      contactEmail: record.contactEmail,
+      dateOfBirth: record.dateOfBirth,
+      fullName: record.fullName,
+      id: record.id,
+      standing: record.archivedAt ? "archived" as const : "rejected" as const,
+    }))
 }
 
 export function getCoachSessionSnapshot(referenceDate = academyToday()) {

@@ -8,12 +8,14 @@ import { signInWithJustWrittenPassword } from "@/lib/auth/username-login-guard"
 import {
   completeInitialHeadCoachSetup,
   HEAD_COACH_SETUP_COOKIE,
+  HEAD_COACH_SETUP_NAME_COOKIE,
   type HeadCoachSetupField,
   headCoachSetupAvailable,
   validHeadCoachSetupToken,
   validateInitialHeadCoachSetup,
 } from "@/lib/auth/initial-setup"
 import {
+  getVerifiedSetupRecoveryEmail,
   HEAD_SETUP_EMAIL_COOKIE,
   recoverySubjectKeyForHeadSetup,
 } from "@/lib/auth/recovery-service"
@@ -50,6 +52,23 @@ export async function completeHeadCoachSetupAction(
     return { error: validationError.message, errorField: validationError.field }
   }
 
+  /*
+   * The verified email has its own time limit (counted from verification). If
+   * it has run out, say so and put the email step back on screen: answering
+   * "verify the recovery email" while the page still showed it as verified
+   * left the coach nothing to press but reload.
+   */
+  if (!getVerifiedSetupRecoveryEmail({
+    receiptToken: input.recoveryEmailReceiptToken,
+    subjectKey: input.recoveryEmailSubjectKey,
+  })) {
+    cookieStore.delete(HEAD_SETUP_EMAIL_COOKIE)
+    return {
+      error: "The email check ran out. Verify the coach\u2019s email again to continue.",
+      errorField: null,
+    }
+  }
+
   let account: Awaited<ReturnType<typeof completeInitialHeadCoachSetup>>
   try {
     account = await completeInitialHeadCoachSetup(input)
@@ -60,15 +79,11 @@ export async function completeHeadCoachSetupAction(
     }
   }
 
-  // The academy exists from here on and `headCoachSetupAvailable()` is false, so
-  // both one-time cookies are spent whatever the sign-in does; keeping them only
-  // leaves a dead token in the browser and a second attempt that can only answer
-  // "already used". The sign-in itself is exempt from the login lockout because
-  // the password it presents is the one just written (lib/auth/username-login-guard.ts),
-  // and a refusal for any other reason is reported as a missing session rather
-  // than as a failed setup, which is what it is.
-  cookieStore.delete(HEAD_COACH_SETUP_COOKIE)
-  cookieStore.delete(HEAD_SETUP_EMAIL_COOKIE)
+  // The academy exists from here on and `headCoachSetupAvailable()` is false.
+  // The sign-in is exempt from the login lockout because the password it
+  // presents is the one just written (lib/auth/username-login-guard.ts), and a
+  // refusal for any other reason is reported as a missing session rather than
+  // as a failed setup, which is what it is.
   const requestHeaders = await headers()
   try {
     await signInWithJustWrittenPassword(() => getAuth().api.signInUsername({
@@ -76,11 +91,18 @@ export async function completeHeadCoachSetupAction(
       headers: requestHeaders,
     }))
   } catch {
+    // The one-time cookies are left in place on this path. They are spent --
+    // the setup claim was consumed with the account -- so they open nothing,
+    // but deleting them re-rendered this page as "setup unavailable" and hid
+    // the one message the coach needed: the account is ready, go and sign in.
     return {
       error: "The head-coach account is ready, but we couldn\u2019t sign you in."
         + " Open the sign-in page and use your new password.",
       errorField: null,
     }
   }
+  cookieStore.delete(HEAD_COACH_SETUP_COOKIE)
+  cookieStore.delete(HEAD_SETUP_EMAIL_COOKIE)
+  cookieStore.delete(HEAD_COACH_SETUP_NAME_COOKIE)
   redirect("/auth/two-factor/setup")
 }

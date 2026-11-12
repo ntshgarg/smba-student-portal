@@ -230,7 +230,28 @@ export function getActivationClaimStatus(token: string | null | undefined, {
     .where(eq(authActivationClaims.tokenHash, activationClaimHash(token)))
     .get()
 
-  if (!row || row.archivedAt || row.consumedAt) return { state: "missing" }
+  if (!row || row.archivedAt) return { state: "missing" }
+  if (row.consumedAt) {
+    /*
+     * Activation spends the receipt in the same step that sets the password, so
+     * a spent receipt on an account with a password is the browser that just
+     * activated. It used to read as "missing", which showed that browser the
+     * name-and-email lookup instead of "your account is ready, sign in" --
+     * including right after a sign-in hiccup, when that was the one thing the
+     * person needed to hear. It grants nothing: activation refuses "active".
+     */
+    return row.credentialStatus === "active"
+      && row.academyId
+      && (row.role === "coach" || row.role === "player")
+      ? {
+        academyId: row.academyId,
+        accountId: row.accountId,
+        fullName: row.fullName,
+        role: row.role,
+        state: "active",
+      }
+      : { state: "missing" }
+  }
   if (row.expiresAt <= now) return { state: "expired" }
   if (row.approvalStatus === "rejected") return { state: "rejected" }
   if (row.approvalStatus === "pending") {

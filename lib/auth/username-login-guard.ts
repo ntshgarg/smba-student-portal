@@ -68,11 +68,16 @@ function attemptedAcademyId(path: string, body: unknown) {
 
 /**
  * The account/IP lockout and the audit rows for password sign-in, spent at the
- * endpoint rather than in the caller, because `POST /sign-in/username` has two
- * callers. `loginWithAcademyId` (app/login/actions.ts) reaches it through
- * `auth.api.signInUsername`, and app/api/auth/[...all]/route.ts mounts the same
- * endpoint publicly. A guard in the server action covers the first caller and
- * leaves the second open, which is what it did: six wrong passwords driven at
+ * endpoint rather than in the caller, because `POST /sign-in/username` can have
+ * two callers. `loginWithAcademyId` (app/login/actions.ts) reaches it through
+ * `auth.api.signInUsername`; Better Auth's own HTTP router is the other, and no
+ * route mounts it today (there is no app/api/auth handler). If one is ever
+ * added, note what it would and would not inherit: archiving revokes the Academy
+ * ID in auth_methods but leaves the auth_users username row, and the archived
+ * check sits in the server action before sign-in and in the session read after
+ * it (lib/auth/session.ts), not in this guard. A guard in
+ * the server action alone covers the first caller and leaves the second open,
+ * which is what it did: six wrong passwords driven at
  * the endpoint through `auth.api.signInUsername`, bypassing the action the way
  * the router does, answered UNAUTHORIZED six times, left auth_login_attempts
  * and auth_security_events empty, and locked nothing.

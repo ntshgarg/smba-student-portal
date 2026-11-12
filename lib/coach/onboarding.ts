@@ -37,7 +37,26 @@ export type OnboardingDuplicateSignal = {
   academyId: string | null
   fullName: string
   reason: "same-contact" | "same-name-and-birthday"
-  standing: "pending" | "approved"
+  /**
+   * "archived" is someone who has left: archiving frees their identity, so a
+   * returning family arrives as a brand-new request and, before this, nothing
+   * mentioned the old record. "rejected" is a request the coach turned down,
+   * which a second request under a respelled name would otherwise hide.
+   */
+  standing: "pending" | "approved" | "archived" | "rejected"
+}
+
+/**
+ * Someone no longer in the academy, or never let in, whom a new request may
+ * still be. Only read for the duplicate hint.
+ */
+export type OnboardingFormerRecord = {
+  academyId: string | null
+  contactEmail: string | null
+  dateOfBirth: string | null
+  fullName: string
+  id: string
+  standing: "archived" | "rejected"
 }
 
 export type OnboardingPendingRequest = {
@@ -154,6 +173,8 @@ type OnboardingSummaryInput = {
 }
 
 type OnboardingWorkspaceInput = Omit<OnboardingSummaryInput, "newRequestCount" | "players"> & {
+  /** Archived members and rejected requests, compared for the duplicate hint only. */
+  formerRecords?: OnboardingFormerRecord[]
   pendingRequests: OnboardingPendingRequest[]
   players: OnboardingWorkspacePlayer[]
 }
@@ -335,7 +356,7 @@ type DuplicateCandidate = {
   dateOfBirth?: string | null
   fullName: string
   id: string
-  standing: "pending" | "approved"
+  standing: OnboardingDuplicateSignal["standing"]
 }
 
 /**
@@ -380,6 +401,7 @@ const STAGE_ORDER: Record<PlayerOnboardingStage, number> = {
 export function derivePlayerOnboardingWorkspace({
   assignments,
   feePlans,
+  formerRecords = [],
   pendingRequests,
   players,
   referenceDate,
@@ -403,6 +425,7 @@ export function derivePlayerOnboardingWorkspace({
       id: player.id,
       standing: "approved" as const,
     })),
+    ...formerRecords,
   ]
   const requestCases: PlayerOnboardingCase[] = pendingRequests.map((request) => ({
     activatedAt: null,
