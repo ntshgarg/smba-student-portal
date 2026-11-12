@@ -11,18 +11,37 @@ function longDate(dateKey: string) {
   return formatDateKey(dateKey, { day: "numeric", month: "long", weekday: undefined, year: "numeric" })
 }
 
+/** The month before a change dated the 1st, as the training panel names it. */
+function monthBefore(firstOfMonth: string) {
+  const [year, month] = firstOfMonth.split("-").map(Number)
+  return formatDateKey(new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10), {
+    day: undefined, month: "long", weekday: undefined, year: "numeric",
+  })
+}
+
 /*
  * What stands between this member and Archive, in the words of the action the
  * record offers. It used to say "Use End training above" to a coach who had
  * just booked it, with no hint that archiving opens once that end happens on
  * the 1st, or straight away with "They have left already".
+ *
+ * Archive also waits for the fee plan to stop and for nothing to be owed
+ * (archiveMemberRecord). So archiving is promised from the 1st only when the
+ * booked end stops fees, or there is no fee plan; an end that keeps the plan
+ * (a break) names Stop fees, which is offered once they are off the schedule.
  */
 export function archiveBlockedNote(
   hasActiveAssignments: boolean,
-  scheduled: { effectiveOn: string; kind: "change" | "end" } | null,
+  scheduled: { effectiveOn: string; kind: "change" | "end"; stopFees?: boolean } | null,
+  hasFeePlan = false,
 ) {
   if (hasActiveAssignments && scheduled?.kind === "end") {
-    return `Training ends on ${longDate(scheduled.effectiveOn)}, and archiving opens then. If they have left already, use End training again and tick “They have left already”.`
+    const ends = `Training ends after ${monthBefore(scheduled.effectiveOn)}`
+    const from = longDate(scheduled.effectiveOn)
+    if (scheduled.stopFees || !hasFeePlan) {
+      return `${ends}. Archiving opens from ${from}, once no fees are owed. If they have left already, use End training again and tick “They have left already”.`
+    }
+    return `${ends}, and their fee plan is kept. To archive them, use Stop fees from ${from}, once no fees are owed. If they have left already, use End training again, tick “They have left already” and choose Stop fees.`
   }
   if (hasActiveAssignments) return "Use End training above before archiving this member."
   if (scheduled?.kind === "change") {
@@ -46,8 +65,12 @@ export function MemberAccessActions({
   recoveryHref: string | undefined
   retryAction: "archive" | "save" | undefined
 }) {
-  const scheduled = useMemberTraining()?.summaries[player.member.id]?.scheduled ?? null
-  const blocked = archiveBlockedNote(hasActiveAssignments, scheduled)
+  const summary = useMemberTraining()?.summaries[player.member.id] ?? null
+  const blocked = archiveBlockedNote(
+    hasActiveAssignments,
+    summary?.scheduled ?? null,
+    Boolean(summary?.fee?.activeAgreementId),
+  )
 
   return (
     <div className="coach-member-access-actions">

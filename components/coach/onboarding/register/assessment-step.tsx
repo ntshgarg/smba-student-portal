@@ -181,7 +181,7 @@ export function AssessmentStep({
         <p className={styles.classificationLockNote} role="note">
           {item.hasRecords
             ? "Level, batch and Training plan are fixed: this player has a schedule with attendance or fees recorded. Finish onboarding on the Fee Plan step, then change them in Members."
-            : "Level, batch and Training plan are fixed while this player has a schedule. To change them, clear the schedule on the Session step first."}
+            : `Level, batch and Training plan are fixed while this player has a schedule. To change them, use ${item.assignedSession.standing === "running" ? "Clear this assignment" : "Start again"} on the Session step first.`}
         </p>
       ) : null}
       <div className={styles.threeFieldGrid}>

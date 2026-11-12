@@ -117,7 +117,7 @@ export function FeePlanStep({
     setPreview(null)
     setConfirmed(false)
     guard.navigateAfterCommit(() => onSuccess({
-      message: `${item.fullName}’s unfinished assignment was reset. Confirm the assessment again.`,
+      message: `${item.fullName}’s first schedule was cleared. Choose their first schedule and training day again on the Session step.`,
       remove: false,
     }))
   }

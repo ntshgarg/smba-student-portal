@@ -141,7 +141,7 @@ import {
   type EndFeeAgreementResult,
   type FeeAgreementView,
 } from "@/lib/finance/types"
-import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
+import { formatDateKey, getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
 import { scheduleTermFinished } from "@/lib/sessions/term"
 import { academyPlanIsValid } from "@/lib/training/academy-plans"
@@ -1234,9 +1234,32 @@ function buildOnboardingFinancePreview(
       assignment.effectiveTo !== null || assignment.seriesStatus === "ended"
     ))
   const lastMonths = usableAssignments.map(placeLastMonth)
-  const feePlanEndsAfter = placesEnded && lastMonths.every((month) => month !== null)
+  const placeEndsAfter = placesEnded && lastMonths.every((month) => month !== null)
     ? (lastMonths as string[]).sort().at(-1) ?? null
     : null
+  /*
+   * End training booked in Members while the player is still in onboarding
+   * (it stays open to them, head coach 12 Nov 2026). The plan made at
+   * completion stops with it, as that end's "Stop fees" would have stopped the
+   * plan had it existed when the end was booked. Completing before the 1st
+   * used to leave an open plan that the end, applied on the 1st, then kept --
+   * a fee plan nobody chose, which also held Archive back.
+   */
+  const waitingEnd = database.select({ effectiveOn: trainingChanges.effectiveOn })
+    .from(trainingChanges)
+    .where(and(
+      eq(trainingChanges.playerAccountId, input.playerId),
+      eq(trainingChanges.status, "scheduled"),
+      eq(trainingChanges.kind, "end"),
+    ))
+    .get()
+  const waitingEndAfter = waitingEnd ? addCalendarDays(waitingEnd.effectiveOn, -1).slice(0, 7) : null
+  const feePlanEndsAfter = [placeEndsAfter, waitingEndAfter]
+    .filter((month): month is string => month !== null)
+    .sort()[0] ?? null
+  const endedBy = feePlanEndsAfter === null
+    ? null
+    : feePlanEndsAfter === placeEndsAfter ? "place" as const : "booked-end" as const
 
   const firstEligibleDate = usableAssignments
     .map((assignment) => [
@@ -1245,38 +1268,46 @@ function buildOnboardingFinancePreview(
       assignment.seriesStartsOn,
     ].reduce((latest, value) => value > latest ? value : latest))
     .sort()[0] ?? enrollment.trainingStartOn
-  let feePlanPeriod = firstEligibleDate.slice(0, 7)
-  let firstProration = readFirstMonthSessionProration(database, {
+  /*
+   * The month an ended first place stops in is charged for the weeks actually
+   * trained (head coach, 12 Nov 2026): its sessions out of all the sessions
+   * that month would have had (`wholeMonth`), whether it is also the first
+   * month or a later one. The joining month is otherwise prorated as before.
+   */
+  const sessionProration = (period: string) => readFirstMonthSessionProration(database, {
     batch: input.batch,
-    period: feePlanPeriod,
+    period,
     playerId: input.playerId,
     programme: input.level,
     trainingStartOn: firstEligibleDate,
+    wholeMonth: period === placeEndsAfter,
   })
+  let feePlanPeriod = firstEligibleDate.slice(0, 7)
+  let firstProration = sessionProration(feePlanPeriod)
   while (feePlanPeriod <= academyPeriod
     && (firstProration.totalSessions === 0 || firstProration.remainingSessions === 0)) {
     feePlanPeriod = nextMonth(feePlanPeriod)
-    firstProration = readFirstMonthSessionProration(database, {
-      batch: input.batch,
-      period: feePlanPeriod,
-      playerId: input.playerId,
-      programme: input.level,
-      trainingStartOn: firstEligibleDate,
-    })
+    firstProration = sessionProration(feePlanPeriod)
   }
+  const lastProration = placeEndsAfter !== null && placeEndsAfter > feePlanPeriod
+    ? sessionProration(placeEndsAfter)
+    : null
   const feePlanStartOn = `${feePlanPeriod}-01`
   const relevantPeriods = feePlanPeriod <= academyPeriod
     ? monthsBetween(feePlanPeriod, academyPeriod)
     : []
   if (feePlanEndsAfter !== null) {
+    const lastMonth = formatDateKey(`${feePlanEndsAfter}-01`, {
+      day: undefined, month: "long", weekday: undefined, year: "numeric",
+    })
     if (feePlanEndsAfter < feePlanPeriod) {
-      blockers.push(
-        "The first schedule ended before any month with a session to bill. Use Start again on the Session step to choose a new one.",
-      )
+      blockers.push(endedBy === "place"
+        ? "The first schedule ended before any session it could bill. Use Reset session assignment to choose a new first schedule."
+        : `Their training is booked to end after ${lastMonth}, before their first month with a session. Cancel that booked end in Members to finish onboarding, or archive them if they are not joining.`)
     } else {
-      warnings.push(
-        `The first schedule has ended, so the Fee Plan stops after ${feePlanEndsAfter}: no monthly fee is issued after it. Change or end their training in Members afterwards.`,
-      )
+      warnings.push(endedBy === "place"
+        ? `The first schedule has ended, so the Fee Plan stops after ${lastMonth}: no monthly fee is issued after it. Change or end their training in Members afterwards.`
+        : `Their training ends after ${lastMonth}, as booked in Members, so the Fee Plan stops after ${lastMonth}: no monthly fee is issued after it.`)
     }
   }
 
@@ -1330,30 +1361,38 @@ function buildOnboardingFinancePreview(
       })
       return
     }
-    const isProrated = index === 0
-      && firstProration.totalSessions > 0
-      && firstProration.remainingSessions < firstProration.totalSessions
+    const proration = index === 0
+      ? firstProration
+      : period === placeEndsAfter ? lastProration : null
+    const isProrated = proration !== null
+      && proration.totalSessions > 0
+      && proration.remainingSessions < proration.totalSessions
     const isFirstSessionMonth = index === 0 && firstProration.totalSessions > 0
+    // The month an ended first place stopped in, after its first month.
+    const isLastTrainedMonth = index > 0 && isProrated
     const amountPaise = isProrated
       ? calculateProratedSessionFee(
           validated.amountPaise,
-          firstProration.remainingSessions,
-          firstProration.totalSessions,
+          proration.remainingSessions,
+          proration.totalSessions,
         )
       : validated.amountPaise
     if (amountPaise === 0) {
       blockers.push("The partial fee rounds to ₹0. Increase the agreed fee or review the start date.")
     }
     const normalDueDate = dateInMonth(period, validated.monthlyDueDay)
+    const counted = isFirstSessionMonth || isLastTrainedMonth ? proration : null
     lines.push({
       amountPaise,
-      denominator: isFirstSessionMonth ? firstProration.totalSessions : null,
+      denominator: counted ? counted.totalSessions : null,
       description: isFirstSessionMonth
         ? `First monthly training fee · ${firstProration.remainingSessions}/${firstProration.totalSessions} sessions`
-        : `Monthly training fee · ${period}`,
+        : counted
+          ? `Last monthly training fee · ${counted.remainingSessions}/${counted.totalSessions} sessions`
+          : `Monthly training fee · ${period}`,
       dueDate: completionReadyOn > normalDueDate ? completionReadyOn : normalDueDate,
       kind: "monthly_training",
-      numerator: isFirstSessionMonth ? firstProration.remainingSessions : null,
+      numerator: counted ? counted.remainingSessions : null,
       period,
     })
   })
@@ -1540,14 +1579,23 @@ export function completePlayerOnboardingFinance(
     })
     // The first schedule was ended before onboarding finished: the plan stops
     // after the month the place ended, as End training's "Stop fees" would
-    // have stopped it had the plan existed then.
+    // have stopped it had the plan existed then. The same for an End training
+    // booked in Members while onboarding was open: the plan stops after its
+    // last month, and the booking now says "fees stop", which it does.
     if (preview.feePlanEndsAfter !== null) {
+      const bookedEnd = tx.update(trainingChanges).set({ stopFees: true, updatedAt: now }).where(and(
+        eq(trainingChanges.playerAccountId, input.playerId),
+        eq(trainingChanges.status, "scheduled"),
+        eq(trainingChanges.kind, "end"),
+      )).run().changes > 0
       endFeeAgreementInTransaction(tx, {
         agreementId: agreementResult.agreement.id,
         effectiveThroughPeriod: preview.feePlanEndsAfter,
         expectedRevision: agreementResult.agreement.recordRevision,
         idempotencyKey: `${operationKey}:plan-end`,
-        reason: "First schedule ended before onboarding was completed",
+        reason: bookedEnd
+          ? "Training booked to end before onboarding was completed"
+          : "First schedule ended before onboarding was completed",
       }, { actorId: coachId, createId, now })
     }
     const enrollmentUpdate = tx.update(playerEnrollments).set({

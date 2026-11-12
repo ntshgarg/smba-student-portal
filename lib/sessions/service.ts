@@ -436,6 +436,48 @@ export function assignSessionRecords({
         "effectiveFrom",
       )
     }
+    /*
+     * Nor does a place the player still holds. An open place on a schedule
+     * covers its days whether or not they are marked yet, and a later start
+     * would put those days before the training start, out of attendance and
+     * billing -- the case of a Session step left open in one tab while the
+     * player was assigned in another. Only a place that is ended, or never
+     * covered a day, gives way to a later start.
+     */
+    const today = getIndiaDateKey(now)
+    const heldEarlier = database.select({
+      effectiveFrom: sessionAssignments.effectiveFrom,
+      seriesEndsOn: sessionSeries.endsOn,
+      seriesStartsOn: sessionSeries.startsOn,
+      title: sessionSeries.title,
+    }).from(sessionAssignments)
+      .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+      .where(and(
+        eq(sessionAssignments.accountId, playerId),
+        isNull(sessionAssignments.effectiveTo),
+        eq(sessionSeries.status, "active"),
+      ))
+      .all()
+      .map((held) => ({
+        ...held,
+        coversFrom: held.effectiveFrom > held.seriesStartsOn ? held.effectiveFrom : held.seriesStartsOn,
+      }))
+      .filter((held) => (
+        (held.seriesEndsOn === null || held.seriesEndsOn >= held.coversFrom)
+        && held.coversFrom < effectiveFrom
+      ))
+      .sort((left, right) => left.coversFrom.localeCompare(right.coversFrom))[0]
+    if (heldEarlier) {
+      const finishedTerm = heldEarlier.seriesEndsOn !== null && heldEarlier.seriesEndsOn < today
+      operationalActionError(
+        "BUSINESS_RULE",
+        `This player is already on ${heldEarlier.title} from ${formatTermDate(heldEarlier.coversFrom)}, `
+          + "so training cannot start later than that. Reload Player onboarding to see it; to choose "
+          + `a different first schedule, use ${finishedTerm ? "Start again" : "Clear this assignment"} `
+          + "on the Session step.",
+        "effectiveFrom",
+      )
+    }
   }
   if (series.endsOn && effectiveFrom > series.endsOn) {
     operationalActionError(

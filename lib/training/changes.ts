@@ -320,10 +320,14 @@ export function clearTrainingNotices(
   )).run()
 }
 
-function dayAfter(dateKey: string) {
+function addDays(dateKey: string, days: number) {
   const date = new Date(`${dateKey}T00:00:00.000Z`)
-  date.setUTCDate(date.getUTCDate() + 1)
+  date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
+}
+
+function dayAfter(dateKey: string) {
+  return addDays(dateKey, 1)
 }
 
 function dayBefore(dateKey: string) {
@@ -459,7 +463,7 @@ export function scheduleEndOfTraining(
 ) {
   requireHeadAdminAccess(coachId, { database })
   return database.transaction((tx) => {
-    requirePlayer(tx, input.playerId)
+    const player = requirePlayer(tx, input.playerId)
     if (!openAssignments(tx, input.playerId).length) {
       operationalActionError("BUSINESS_RULE", "This player is not on any schedule.")
     }
@@ -472,7 +476,11 @@ export function scheduleEndOfTraining(
       level: null,
       monthlyFeePaise: null,
       seriesId: null,
-      stopFees: Boolean(input.stopFees),
+      // A player still in onboarding has no fee plan yet, and the form offers
+      // no fees choice; the plan made when onboarding finishes stops with this
+      // end (lib/finance/service.ts buildOnboardingFinancePreview), so the
+      // booking says so rather than "fee plan kept".
+      stopFees: Boolean(input.stopFees) || !player.onboardingCompletedAt,
       updatedAt: now,
       weekdays: "[]",
     }
@@ -658,6 +666,16 @@ export function scheduleLabel(
   })
 }
 
+/*
+ * How many days after its own date a booked change that hit an unexpected
+ * fault (not a rule refusing it) is still tried again. A passing fault -- a
+ * dropped connection, a busy database -- clears itself within that; one that
+ * never goes away (a bad stored row, a bug) would otherwise leave the change
+ * silently waiting for ever while the player trains and is billed on the old
+ * terms. After this it fails visibly, as a refused change does.
+ */
+export const TRAINING_CHANGE_RETRY_DAYS = 2
+
 /**
  * Applies every scheduled change whose date has come. Each change is its own
  * transaction; one that can no longer be applied (its schedule ended, say) is
@@ -706,19 +724,25 @@ export function applyDueTrainingChanges({
       if (!cancelled) applied += 1
     } catch (error) {
       /*
-       * Only a change that can no longer be made (its rule refused it) is
-       * final. A passing fault -- a dropped connection, a busy database -- used
-       * to mark it failed too, so a player meant to stop on the 1st kept
-       * training and stayed billable until the coach noticed and redid it a
-       * month late. Such a change stays booked and is tried again on the next
-       * page load; nothing was written, because the transaction rolled back.
+       * A change its rule refused is final at once. A passing fault -- a
+       * dropped connection, a busy database -- used to be final too, so a
+       * player meant to stop on the 1st kept training and stayed billable
+       * until the coach noticed and redid it a month late. Such a change now
+       * stays booked and is tried again (nothing was written: the transaction
+       * rolled back), but only for TRAINING_CHANGE_RETRY_DAYS after its date.
+       * A fault still there after that is not passing, and the change fails
+       * visibly so the coach can make it another way.
        */
-      if (!(error instanceof OperationalActionError || error instanceof FinanceServiceError)) {
+      const refused = error instanceof OperationalActionError || error instanceof FinanceServiceError
+      if (!refused && today <= addDays(change.effectiveOn, TRAINING_CHANGE_RETRY_DAYS)) {
         console.error("A scheduled training change could not be applied; it will be tried again.", error)
         retry += 1
         continue
       }
-      const reason = error.message
+      if (!refused) console.error("A scheduled training change could not be applied.", error)
+      const reason = refused
+        ? error.message
+        : "Something went wrong each time it was tried. Make the change again from this record."
       database.update(trainingChanges).set({
         failureReason: reason,
         resolvedAt: now,
@@ -735,19 +759,31 @@ export function applyDueTrainingChanges({
  * the 1st of a later month, so once a server instance has looked on a given
  * day nothing else can fall due that day; the memo makes every later call that
  * day free, which matters because production reads are network round trips.
+ *
+ * A change that hit a passing fault is tried again, but not by every request:
+ * at most once every few minutes, so a fault that lasts does not put a
+ * write-locked transaction in front of every page.
  */
+const RETRY_AFTER_MS = 5 * 60 * 1000
 let checkedOn: string | null = null
+let retryAfter = 0
 
 export function ensureDueTrainingChangesApplied(now = new Date()) {
   const today = getAcademyDateKey(now)
   if (checkedOn === today) return
+  if (now.getTime() < retryAfter) return
   try {
     const { retry } = applyDueTrainingChanges({ now })
-    // A change that hit a passing fault is tried again by the next request.
-    if (!retry) checkedOn = today
+    if (retry) {
+      retryAfter = now.getTime() + RETRY_AFTER_MS
+    } else {
+      checkedOn = today
+      retryAfter = 0
+    }
   } catch (error) {
-    // Never let this stop a page from loading; the next request tries again.
+    // Never let this stop a page from loading; a later request tries again.
     console.error("Scheduled training changes could not be applied.", error)
+    retryAfter = now.getTime() + RETRY_AFTER_MS
   }
 }
 

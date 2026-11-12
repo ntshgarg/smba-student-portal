@@ -31,6 +31,8 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
   let finance: typeof import("@/lib/finance/service")
   let changes: typeof import("@/lib/training/changes")
   let fees: typeof import("@/lib/training/fees")
+  let members: typeof import("@/lib/coach/member-service")
+  let domain: typeof import("@/lib/finance/domain")
   let coachId: string
   let autumn: string
   let doomed: string
@@ -190,6 +192,8 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
     finance = await import("@/lib/finance/service")
     changes = await import("@/lib/training/changes")
     fees = await import("@/lib/training/fees")
+    members = await import("@/lib/coach/member-service")
+    domain = await import("@/lib/finance/domain")
     const { prepareDatabase } = await import("@/lib/db/setup")
     database = prepareDatabase({ seed: true })
     const coach = accounts.findApprovedAccountByAcademyId("SMBA#0001")
@@ -231,6 +235,15 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       ["registration", null],
       ["monthly_training", "2026-11"],
     ])
+    // The weeks actually trained: 2, 4, 6, 9 and 11 November, out of the 13
+    // Monday, Wednesday and Friday sessions November would have had. The
+    // place's end used to shorten the month too (5 of 5, the whole fee).
+    expect(preview.lines[1]).toMatchObject({
+      amountPaise: domain.calculateProratedSessionFee(300_000, 5, 13),
+      denominator: 13,
+      numerator: 5,
+    })
+    expect(preview.warnings.join(" ")).toContain("stops after November 2026")
     expect(result?.registrationChargeId).toBeTruthy()
     // The plan stops after November, so nothing is left for archiving to wait on.
     expect(plans(asha)).toEqual([
@@ -336,7 +349,7 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       database,
       input: { ...classification, academyPlan: "weekday-5-day", expectedRevision: revision, playerId: gita },
       now,
-    })).toThrow(/Clear this schedule on the Session step/u)
+    })).toThrow(/Use Start again on the Session step/u)
   })
 
   it("does not add a first schedule to a player whose onboarding is complete", () => {
@@ -403,6 +416,97 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
     expect(database.select().from(schema.trainingChanges)
       .where(eq(schema.trainingChanges.id, changeId)).get())
       .toMatchObject({ failureReason: null, status: "scheduled" })
+
+    // Tried again for a couple of days, then shown: a fault that never goes
+    // away used to keep the change silently waiting for good.
+    expect(changes.applyDueTrainingChanges({ database, now: new Date("2026-12-03T05:00:00.000Z") }))
+      .toMatchObject({ retry: 1 })
+    expect(changes.applyDueTrainingChanges({ database, now: new Date("2026-12-04T05:00:00.000Z") }))
+      .toMatchObject({ applied: 0, retry: 0 })
+    expect(database.select().from(schema.trainingChanges)
+      .where(eq(schema.trainingChanges.id, changeId)).get())
+      .toMatchObject({ failureReason: expect.stringContaining("Make the change again"), status: "failed" })
     consoleError.mockRestore()
+  })
+
+  it("charges an ended first term for the sessions trained, not the whole month", () => {
+    const nina = newPlayer("Nina Left Early")
+    assign(nina, autumn, "2026-11-02", new Date("2026-11-01T05:00:00.000Z"))
+    // "They have left already" on Wednesday 4 November, before that day's
+    // session was marked: the place covers Monday 2 November only.
+    changes.endTrainingNow({ playerId: nina, stopFees: true }, context(new Date("2026-11-04T05:00:00.000Z")))
+
+    const { preview } = completeOnboarding(nina)
+    expect(preview.blockers).toEqual([])
+    // It used to read "1 of 1 eligible sessions" and charge the full fee.
+    expect(preview.lines[1]).toMatchObject({
+      amountPaise: domain.calculateProratedSessionFee(300_000, 1, 13),
+      denominator: 13,
+      numerator: 1,
+      period: "2026-11",
+    })
+  })
+
+  it("stops the fee plan at an End training booked while onboarding was open", () => {
+    const mira = newPlayer("Mira Booked End")
+    assign(mira, autumn, "2026-11-02")
+    // The End form offers no fees choice to a player with no fee plan.
+    changes.scheduleEndOfTraining({ playerId: mira, stopFees: false }, context())
+    expect(database.select().from(schema.trainingChanges)
+      .where(eq(schema.trainingChanges.playerAccountId, mira)).get())
+      .toMatchObject({ kind: "end", status: "scheduled", stopFees: true })
+
+    const { preview, result } = completeOnboarding(mira)
+    expect(preview.blockers).toEqual([])
+    expect(preview.feePlanEndsAfter).toBe("2026-11")
+    expect(preview.warnings.join(" ")).toContain("as booked in Members")
+    expect(result?.registrationChargeId).toBeTruthy()
+    expect(plans(mira)).toEqual([
+      expect.objectContaining({ effectiveTo: "2026-11-30", status: "ended" }),
+    ])
+
+    // On the 1st the end happens and nothing is left open for Archive to wait on.
+    changes.applyDueTrainingChanges({ database, now: new Date("2026-12-01T05:00:00.000Z") })
+    expect(database.select().from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, mira)).get())
+      .toMatchObject({ status: "paused" })
+    expect(plans(mira)).toEqual([
+      expect.objectContaining({ effectiveTo: "2026-11-30", status: "ended" }),
+    ])
+  })
+
+  it("refuses a later start while a place the player still holds covers earlier days", () => {
+    const ravi = newPlayer("Ravi Two Tabs")
+    assign(ravi, autumn, "2026-11-02")
+    // A Session step left open in another tab, sent after the assignment.
+    let message = ""
+    try {
+      assign(ravi, winter, "2026-11-09")
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toContain("from 2 November 2026")
+    expect(message).toContain("Clear this assignment")
+    expect(places(ravi)).toHaveLength(1)
+  })
+
+  it("keeps Archive refused on the server while a start of training is booked", () => {
+    const omar = onboardedPlayer("Omar Booked Start", autumn, 9406)
+    changes.endTrainingNow({ playerId: omar, stopFees: true }, context())
+    changes.scheduleTrainingChange({
+      ...classification,
+      monthlyFeePaise: 300_000,
+      playerId: omar,
+      seriesId: winter,
+      weekdays: [1, 3, 5],
+    }, context())
+    const revision = database.select().from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, omar)).get()!.recordRevision
+    expect(members.archiveMemberRecord({
+      coachId,
+      database,
+      input: { expectedRevision: revision, memberId: omar },
+      now,
+    })).toMatchObject({ ok: false, message: expect.stringContaining("booked to start on 1 December 2026") })
   })
 })

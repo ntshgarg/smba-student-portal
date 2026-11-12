@@ -23,7 +23,8 @@ import {
   reopenReplacedFeeAgreementInTransaction,
   reverseConcession,
 } from "@/lib/finance/service"
-import { getAcademyDateKey } from "@/lib/format"
+import { formatDateKey, getAcademyDateKey } from "@/lib/format"
+import { formatTermDate } from "@/lib/sessions/term"
 import { monthStartOf, nextMonthStartOf, waitingFeeChangeOf } from "@/lib/training/changes"
 
 export { waitingFeeChangeOf }
@@ -76,6 +77,15 @@ export function feeChangeStartsOn({
     : nextMonthStartOf(today)
 }
 
+/** "November 2026" for a change dated 1 December 2026: the last month trained. */
+function lastMonthBefore(firstOfMonth: string) {
+  const date = new Date(`${firstOfMonth}T00:00:00.000Z`)
+  date.setUTCDate(0)
+  return formatDateKey(date.toISOString().slice(0, 10), {
+    day: undefined, month: "long", weekday: undefined, year: "numeric",
+  })
+}
+
 export function changeMonthlyFee(
   input: { idempotencyKey: string; monthlyFeePaise: number; playerId: string },
   { coachId, createId = randomUUID, database = initializeDatabase(), now = new Date() }: FeeContext,
@@ -95,7 +105,7 @@ export function changeMonthlyFee(
       if (waiting?.kind === "change") {
         operationalActionError(
           "CONFLICT",
-          `This player's training changes on ${waiting.effectiveOn} with its own fee. Edit that change instead.`,
+          `This player's training changes on ${formatTermDate(waiting.effectiveOn)} with its own fee. Edit that change instead.`,
         )
       }
       // A new fee starts next month, the month a waiting end that stops fees
@@ -105,7 +115,7 @@ export function changeMonthlyFee(
       if (waiting?.kind === "end" && waiting.stopFees) {
         operationalActionError(
           "CONFLICT",
-          `This player's training ends on ${waiting.effectiveOn} and their fees stop then, so there is no later fee to change. Cancel the planned end first to change their fee.`,
+          `This player's training ends after ${lastMonthBefore(waiting.effectiveOn)} and their fees stop then, so there is no later fee to change. Cancel the planned end first to change their fee.`,
         )
       }
       const enrollment = tx.select().from(playerEnrollments)

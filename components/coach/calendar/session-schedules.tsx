@@ -252,7 +252,11 @@ export function SessionSchedules({
     if (guidedTermFinishedOn) {
       return `Term finished on ${formatTermDate(guidedTermFinishedOn)}. ${changesMadeIn}`
     }
-    return "Not on any schedule. A first schedule is set in Player onboarding."
+    // A player who finished onboarding and then stopped is started again in
+    // Members; Player onboarding has no step left for them.
+    return initialPlayerInOnboarding
+      ? "Not on any schedule. A first schedule is set in Player onboarding."
+      : "Not on any schedule. Start their training again from Members."
   }
 
   async function endSchedule(series: TrainingSessionSeries, stopFees: boolean) {

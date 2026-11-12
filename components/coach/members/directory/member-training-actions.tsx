@@ -172,14 +172,18 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
 
           {scheduled ? (
             <div className={styles.scheduled}>
+              {/* Named by the change's own date: one whose day has passed
+                  without it being applied used to read as next month's. */}
               <strong>
                 {scheduled.kind === "end"
                   ? `Training ends after ${monthBefore(scheduled.effectiveOn)}`
-                  : `Scheduled for 1 ${nextMonth}`}
+                  : `Scheduled for 1 ${monthName(scheduled.effectiveOn)}`}
               </strong>
               <span>
                 {scheduled.kind === "end"
-                  ? `Paused from ${dayName(scheduled.effectiveOn)}${scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
+                  // A player still in onboarding has no fee plan to keep: the
+                  // plan made when onboarding finishes stops with this end.
+                  ? `Paused from ${dayName(scheduled.effectiveOn)}${!onboarded ? "" : scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
                   : [
                     scheduledSeries ? seriesLabel(scheduledSeries) : "New schedule",
                     dayList(scheduled.weekdays),
@@ -187,6 +191,12 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                     scheduled.monthlyFeePaise !== null ? `${formatInr(scheduled.monthlyFeePaise)} a month` : null,
                   ].filter(Boolean).join(" · ")}
               </span>
+              {/* Its day has come but it has not happened: it hit a fault and
+                  is tried again for a couple of days (TRAINING_CHANGE_RETRY_DAYS
+                  in lib/training/changes.ts), then shown as failed. */}
+              {scheduled.effectiveOn <= data.today ? (
+                <span>Not applied yet. It is tried again shortly; if this stays, cancel it and make the change again.</span>
+              ) : null}
             </div>
           ) : null}
 
@@ -620,10 +630,16 @@ function TrainingForm({
     when === "this"
       ? `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}${profileChanges ? `, ${academyPlanLabel(plan)}` : ""}`
       : `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}, ${academyPlanLabel(plan)}`,
+    // Says what the check found, and only once it has: a failed or
+    // unfinished check is not "nothing to clear" (Confirm waits for it too).
     when === "this"
-      ? marks?.length
-        ? `Clear ${marks.length} ${marks.length === 1 ? "mark" : "marks"} in the old schedule from ${dayName(startsOn)}; mark ${marks.length === 1 ? "it" : "them"} again`
-        : "No attendance marks to clear"
+      ? marksFailed
+        ? "Could not check which attendance marks are cleared"
+        : marks === null
+          ? "Checking which attendance marks are cleared…"
+          : marks.length
+            ? `Clear ${marks.length} ${marks.length === 1 ? "mark" : "marks"} in the old schedule from ${dayName(startsOn)}; mark ${marks.length === 1 ? "it" : "them"} again`
+            : "No attendance marks to clear"
       : `Keep ${thisMonth} exactly as it is`,
     ...(askFee && feePaise
       ? [when === "this"
@@ -903,7 +919,9 @@ function EndForm({
         <p className={styles.help}>
           {name} has not finished Player onboarding, so they have no fee plan and cannot sign in
           yet. Ending training keeps the days they were on their first schedule. Afterwards,
-          finish onboarding to charge the registration fee and the months they trained.
+          finish onboarding to charge the registration fee and the months they trained; no
+          monthly fee is issued after their training ends. If they leave before their first
+          training day, there is nothing to charge: archive them instead.
         </p>
       ) : null}
       <div className={styles.field}>

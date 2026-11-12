@@ -15,8 +15,10 @@ import {
   sessionAssignments,
   sessionAssignmentWeekdays,
   sessionAttendanceRecords,
+  sessionSeries,
   trainingChanges,
 } from "@/lib/db/schema"
+import { getAcademyDateKey } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanIsValid,
@@ -163,7 +165,11 @@ export function saveOnboardingAssessment({
      */
     const assignments = tx.select({
       effectiveFrom: sessionAssignments.effectiveFrom,
+      effectiveTo: sessionAssignments.effectiveTo,
+      seriesEndsOn: sessionSeries.endsOn,
+      seriesStatus: sessionSeries.status,
     }).from(sessionAssignments)
+      .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
       .where(eq(sessionAssignments.accountId, input.playerId))
       .orderBy(asc(sessionAssignments.effectiveFrom))
       .all()
@@ -174,7 +180,15 @@ export function saveOnboardingAssessment({
     )) {
       // The same rule the Assessment step locks its fields by: any schedule the
       // player holds, running or ended. The way through is named only when it
-      // exists -- clearing is refused once anything is recorded.
+      // exists -- clearing is refused once anything is recorded -- and by the
+      // Session step's own button: "Clear this assignment" for a place still
+      // running, "Start again" for one that has ended or whose term finished.
+      const today = getAcademyDateKey(now)
+      const running = assignments.some((assignment) => (
+        assignment.effectiveTo === null
+        && assignment.seriesStatus === "active"
+        && (assignment.seriesEndsOn === null || assignment.seriesEndsOn >= today)
+      ))
       operationalActionError(
         "BUSINESS_RULE",
         onboardingRecordsFor(tx, input.playerId).length
@@ -182,7 +196,8 @@ export function saveOnboardingAssessment({
             + "attendance or fees recorded. Finish onboarding on the Fee Plan step, then change "
             + "them in Members."
           : "Level, batch and Training plan are fixed while this player has a schedule. Use "
-            + "Clear this schedule on the Session step first, then change them here.",
+            + `${running ? "Clear this assignment" : "Start again"} on the Session step first, `
+            + "then change them here.",
         "academyPlan",
       )
     }

@@ -80,7 +80,7 @@ export async function changeScheduleAction(input: ChangeThisMonthInput & { when?
     if (input.when === "next" && input.startsOn !== nextMonthStart) {
       operationalActionError(
         "CONFLICT",
-        "A new month has started since this form was opened. Close it and open Change schedule again.",
+        "A new month has started since this form was opened. Close it and open it again.",
       )
     }
     if (input.startsOn === nextMonthStart) {
