@@ -20,9 +20,11 @@ describe("player assessments", () => {
   const playerId = "10000000-0000-4000-8000-0000000000a1"
   const secondPlayerId = "10000000-0000-4000-8000-0000000000a2"
   const pausedPlayerId = "10000000-0000-4000-8000-0000000000a3"
+  const newPlayerId = "10000000-0000-4000-8000-0000000000a4"
+  const archivedPlayerId = "10000000-0000-4000-8000-0000000000a5"
   const now = new Date("2026-10-04T10:00:00+05:30")
 
-  function addPlayer(id: string, name: string, status: "active" | "paused") {
+  function addPlayer(id: string, name: string, status: "active" | "paused" | "unassigned") {
     database.insert(schema.accounts).values({
       id,
       fullName: name,
@@ -66,6 +68,10 @@ describe("player assessments", () => {
     addPlayer(playerId, "Aarav Nair", "active")
     addPlayer(secondPlayerId, "Meera Iyer", "active")
     addPlayer(pausedPlayerId, "Paused Player", "paused")
+    addPlayer(newPlayerId, "New Player", "unassigned")
+    addPlayer(archivedPlayerId, "Archived Player", "paused")
+    database.update(schema.accounts).set({ archivedAt: now })
+      .where(eq(schema.accounts.id, archivedPlayerId)).run()
   })
 
   afterAll(() => {
@@ -140,8 +146,16 @@ describe("player assessments", () => {
       .toThrowError(expect.objectContaining({ code: "INVALID_INPUT", field: "ratings" }))
   })
 
-  it("is only for active players", () => {
-    expect(() => service.saveAssessmentDraft(input({ playerId: pausedPlayerId }), { coachId, database, now }))
+  it("is for players on a schedule and players off one, until they are archived", () => {
+    // Head coach, 12 Nov 2026: a player whose training ended or paused can
+    // still be written up and published for. This used to refuse them.
+    expect(service.publishAssessment(input({ playerId: pausedPlayerId }), { coachId, database, now }))
+      .toMatchObject({ assessmentId: expect.any(String) })
+    expect(queries.listPublishedAssessmentsForPlayer(pausedPlayerId, { database })).toHaveLength(1)
+    // Still in onboarding, never on a schedule: not yet.
+    expect(() => service.saveAssessmentDraft(input({ playerId: newPlayerId }), { coachId, database, now }))
+      .toThrowError(expect.objectContaining({ code: "PLAYER_UNAVAILABLE" }))
+    expect(() => service.saveAssessmentDraft(input({ playerId: archivedPlayerId }), { coachId, database, now }))
       .toThrowError(expect.objectContaining({ code: "PLAYER_UNAVAILABLE" }))
     expect(() => service.saveAssessmentDraft(input({ playerId: "missing" }), { coachId, database, now }))
       .toThrowError(expect.objectContaining({ code: "PLAYER_UNAVAILABLE" }))
@@ -167,7 +181,12 @@ describe("player assessments", () => {
   it("lists never-assessed players first, then whoever has waited longest", () => {
     service.publishAssessment(input({ assessedOn: "2026-08-01", playerId: secondPlayerId }), { coachId, database, now })
     const home = queries.listAssessmentHome(coachId, { database })
-    expect(home.players.map((player) => player.name)).toEqual(["Meera Iyer", "Aarav Nair"])
+    // Players off a schedule come after the ones training now, marked as such.
+    expect(home.players.map((player) => [player.name, player.offSchedule])).toEqual([
+      ["Meera Iyer", false],
+      ["Aarav Nair", false],
+      ["Paused Player", true],
+    ])
     service.saveAssessmentDraft(input({ playerId: secondPlayerId, ratings: { footwork: 2 } }), { coachId, database, now })
     const withDraft = queries.listAssessmentHome(coachId, { database })
     expect(withDraft.drafts).toBe(1)

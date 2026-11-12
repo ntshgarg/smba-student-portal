@@ -197,7 +197,7 @@ describe("revisiting a step whose work is already done", () => {
     const html = renderToStaticMarkup(
       <SessionStep
         item={playerCase({
-          assignedSession: { batch: "Weekday", effectiveFrom: "2026-07-01", programme: "Advanced" },
+          assignedSession: { batch: "Weekday", effectiveFrom: "2026-07-01", endsOn: null, programme: "Advanced", standing: "running" },
           stage: "feePlan",
         })}
         onSuccess={() => undefined}
@@ -213,8 +213,7 @@ describe("revisiting a step whose work is already done", () => {
     expect(html).toContain("Clear this assignment")
   })
 
-  it("still offers the assignment form when the only assignment has ended", () => {
-    // An ended assignment is exactly why a case sits at the session stage.
+  it("offers the assignment form when the player holds no schedule", () => {
     const html = renderToStaticMarkup(
       <SessionStep
         item={playerCase({ assignedSession: null, stage: "session" })}
@@ -226,6 +225,75 @@ describe("revisiting a step whose work is already done", () => {
 
     expect(html).toContain('name="effectiveFrom"')
     expect(html).not.toContain("is already assigned to")
+  })
+})
+
+describe("a first schedule that ended before onboarding finished", () => {
+  function sessionMarkup(item: PlayerOnboardingCase, onGoToFeePlan?: () => void) {
+    return renderToStaticMarkup(
+      <SessionStep
+        item={item}
+        onGoToFeePlan={onGoToFeePlan}
+        onSuccess={() => undefined}
+        referenceDate="2026-11-12"
+        sessionSeries={[SERIES]}
+      />,
+    )
+  }
+
+  it("reports the ended schedule and offers finishing with it, or starting again", () => {
+    /*
+     * This used to fall through to the blank assign form, whose every date was
+     * refused with advice to clear an assignment nothing on screen could clear
+     * (head coach, 12 Nov 2026: finish onboarding with that first term).
+     */
+    const html = sessionMarkup(playerCase({
+      assignedSession: { batch: "Weekday", effectiveFrom: "2026-11-02", endsOn: null, programme: "Advanced", standing: "ended" },
+      hasRecords: false,
+      stage: "feePlan",
+    }), () => undefined)
+
+    expect(html).toContain("first schedule, Advanced · Weekday from")
+    expect(html).toContain("has ended")
+    expect(html).toContain("Go to Fee Plan")
+    expect(html).toContain("Start again")
+    expect(html).not.toContain('name="effectiveFrom"')
+    expect(html).not.toContain("court time is set")
+  })
+
+  it("only offers to finish once attendance or fees are recorded", () => {
+    const html = sessionMarkup(playerCase({
+      assignedSession: { batch: "Weekday", effectiveFrom: "2026-09-07", endsOn: "2026-10-30", programme: "Advanced", standing: "finished" },
+      hasRecords: true,
+      stage: "feePlan",
+    }), () => undefined)
+
+    expect(html).toContain("finished on 30 October 2026")
+    expect(html).toContain("Go to Fee Plan")
+    expect(html).not.toContain("Start again")
+    expect(html).not.toContain("Clear this assignment")
+  })
+
+  it("does not call an ended schedule's court time set, nor promise edits on revisit", () => {
+    const html = editorMarkup(playerCase({
+      assignedSession: { batch: "Weekday", effectiveFrom: "2026-09-07", endsOn: "2026-10-30", programme: "Advanced", standing: "finished" },
+      stage: "feePlan",
+    }))
+
+    expect(html).toContain("first term has finished")
+    expect(html).not.toContain("Changes save as normal")
+  })
+
+  it("does not show a start date nobody has chosen yet", () => {
+    // Approval stamps the day it happened as a stand-in for the start date.
+    const html = editorMarkup(playerCase({
+      assignedSession: null,
+      stage: "session",
+      trainingStartConfirmedAt: null,
+      trainingStartOn: "2026-09-03",
+    }))
+
+    expect(html).toContain("<dt>Training start</dt><dd>Pending</dd>")
   })
 })
 

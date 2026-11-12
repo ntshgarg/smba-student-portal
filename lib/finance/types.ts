@@ -208,6 +208,12 @@ export type PlayerFeeRecord = {
   fullName: string
   archived: boolean
   feePlanSetupReady: boolean
+  /**
+   * Whether Player onboarding is finished. A player with no fee plan in force
+   * is either still in onboarding or has stopped training; the record must not
+   * tell the coach to finish onboarding for the second.
+   */
+  onboardingComplete?: boolean
   financeTrackingMonth: string | null
   registrationResolutionRequired: boolean
   status: FinanceStatus
@@ -354,6 +360,12 @@ export type OnboardingFinancePreviewLine = {
 export type OnboardingFinancePreview = {
   academyDateKey: string
   blockers: string[]
+  /**
+   * The last month the new Fee Plan bills, when the player's first schedule
+   * has already been ended (End schedule or End training before onboarding
+   * finished). Null while the place is open, a finished term included.
+   */
+  feePlanEndsAfter: string | null
   feePlanStartOn: string
   fingerprint: string
   lines: OnboardingFinancePreviewLine[]

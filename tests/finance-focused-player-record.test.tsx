@@ -218,3 +218,32 @@ describe("a fee record once fee changes live in Members", () => {
     expect(html).not.toContain("Add concession")
   })
 })
+
+/*
+ * A player who finished onboarding and then stopped training has no fee plan
+ * in force. Their record used to say "Complete this player's onboarding
+ * first", and its link opened some other player's onboarding case. Their
+ * concessions also vanished from the record once the plan ended.
+ */
+describe("a fee record for a player who has stopped training", () => {
+  const stoppedLedger: PlayerFinancialLedgerView = {
+    ...archivedLedger,
+    archived: false,
+    feePlan: null,
+    onboardingComplete: true,
+    status: "paid",
+  }
+
+  it("says no fee plan is in force and points to Members, not onboarding", () => {
+    const html = renderToStaticMarkup(
+      <PlayerLedger focused ledger={stoppedLedger} period="2026-08" />,
+    )
+
+    expect(html).toContain("No fee plan in force")
+    expect(html).toContain(`/coach/members?player=${stoppedLedger.playerId}`)
+    expect(html).not.toContain("Complete this player’s onboarding first")
+    expect(html).not.toContain("/coach/onboarding")
+    // Concessions given while they trained stay visible.
+    expect(html).toContain("Academy scholarship")
+  })
+})

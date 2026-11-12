@@ -3,7 +3,7 @@ import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import type { ScheduleGroupKey } from "@/components/coach/calendar/session-schedule-index"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { academyToday } from "@/lib/clock"
-import { listOperationalPlayerRecords } from "@/lib/coach/database"
+import { listOperationalPlayerRecords, playerIsInOnboarding } from "@/lib/coach/database"
 import { getCoachScheduleRosterSnapshot } from "@/lib/coach/session-read-models"
 
 export const metadata = { title: "Schedules & rosters" }
@@ -37,6 +37,7 @@ export default async function CoachSchedulesPage({
     >
       <SessionSchedules
         initialPlayerId={params.player ?? null}
+        initialPlayerInOnboarding={params.player ? playerIsInOnboarding(params.player) : false}
         initialProgramme={groups.find((group) => group === params.programme) ?? null}
         initialSeriesId={params.series ?? null}
         today={today}

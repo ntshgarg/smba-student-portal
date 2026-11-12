@@ -35,11 +35,25 @@ function editorCopy(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
       }
     case "session":
       // Revisited, this step reports an assignment rather than offering to make
-      // one; a heading still saying "assign" describes work that is done.
-      if (item.assignedSession) {
+      // one; a heading still saying "assign" describes work that is done. A
+      // first schedule that has run out or been ended is not "set", though:
+      // saying so sent coaches looking for a way on that was not there.
+      if (item.assignedSession?.standing === "running") {
         return {
           title: `${firstName}’s court time is set`,
           body: "The assigned schedule, and what it takes to change it.",
+        }
+      }
+      if (item.assignedSession?.standing === "finished" || item.assignedSession?.standing === "ended") {
+        return {
+          title: `${firstName}’s first term is over`,
+          body: "Finish onboarding with it on the Fee Plan step, or start again if nothing is recorded yet.",
+        }
+      }
+      if (item.assignedSession) {
+        return {
+          title: `Start ${firstName}’s court time again`,
+          body: "Their schedule ended before their first training day.",
         }
       }
       return {
@@ -49,7 +63,11 @@ function editorCopy(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
     case "feePlan":
       return {
         title: `Confirm ${firstName}’s Fee Plan`,
-        body: "Record the agreed monthly training fee to complete onboarding.",
+        body: item.assignedSession?.standing === "ended"
+          ? "Their first schedule has ended. Record the agreed monthly fee to complete onboarding for the months they trained."
+          : item.assignedSession?.standing === "finished"
+            ? "Their first term has finished. Record the agreed monthly fee to complete onboarding for the months they trained."
+            : "Record the agreed monthly training fee to complete onboarding.",
       }
   }
 }
@@ -123,9 +141,12 @@ export function OnboardingEditor({
         </div>
         <OnboardingTimeline item={item} />
         {revisiting ? (
+          /*
+           * It used to add "Changes save as normal", which the Session step
+           * (a report with one undo) and a locked Assessment cannot honour.
+           */
           <p className={styles.revisitNote} role="note">
-            You are back on a completed step. Changes save as normal — nothing is final until
-            onboarding is completed.
+            You are back on a completed step. Nothing is final until onboarding is completed.
           </p>
         ) : null}
         {viewStage === "request" ? <RequestStep item={item} onSuccess={onSuccess} /> : null}
@@ -133,6 +154,7 @@ export function OnboardingEditor({
         {viewStage === "session" ? (
           <SessionStep
             item={item}
+            onGoToFeePlan={item.stage === "feePlan" ? () => selectStage("feePlan") : undefined}
             onSuccess={onSuccess}
             referenceDate={referenceDate}
             sessionSeries={sessionSeries}

@@ -320,6 +320,12 @@ export function clearTrainingNotices(
   )).run()
 }
 
+function dayAfter(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
 function dayBefore(dateKey: string) {
   const date = new Date(`${dateKey}T00:00:00.000Z`)
   date.setUTCDate(date.getUTCDate() - 1)
@@ -669,6 +675,7 @@ export function applyDueTrainingChanges({
     lte(trainingChanges.effectiveOn, today),
   )).all()
   let applied = 0
+  let retry = 0
   for (const change of due) {
     let cancelled = false
     try {
@@ -698,9 +705,20 @@ export function applyDueTrainingChanges({
       }, { behavior: "immediate" })
       if (!cancelled) applied += 1
     } catch (error) {
-      const reason = error instanceof OperationalActionError || error instanceof FinanceServiceError
-        ? error.message
-        : "The change could not be applied."
+      /*
+       * Only a change that can no longer be made (its rule refused it) is
+       * final. A passing fault -- a dropped connection, a busy database -- used
+       * to mark it failed too, so a player meant to stop on the 1st kept
+       * training and stayed billable until the coach noticed and redid it a
+       * month late. Such a change stays booked and is tried again on the next
+       * page load; nothing was written, because the transaction rolled back.
+       */
+      if (!(error instanceof OperationalActionError || error instanceof FinanceServiceError)) {
+        console.error("A scheduled training change could not be applied; it will be tried again.", error)
+        retry += 1
+        continue
+      }
+      const reason = error.message
       database.update(trainingChanges).set({
         failureReason: reason,
         resolvedAt: now,
@@ -709,7 +727,7 @@ export function applyDueTrainingChanges({
       }).where(and(eq(trainingChanges.id, change.id), eq(trainingChanges.status, "scheduled"))).run()
     }
   }
-  return { applied, due: due.length }
+  return { applied, due: due.length, retry }
 }
 
 /*
@@ -724,8 +742,9 @@ export function ensureDueTrainingChangesApplied(now = new Date()) {
   const today = getAcademyDateKey(now)
   if (checkedOn === today) return
   try {
-    applyDueTrainingChanges({ now })
-    checkedOn = today
+    const { retry } = applyDueTrainingChanges({ now })
+    // A change that hit a passing fault is tried again by the next request.
+    if (!retry) checkedOn = today
   } catch (error) {
     // Never let this stop a page from loading; the next request tries again.
     console.error("Scheduled training changes could not be applied.", error)
@@ -829,7 +848,10 @@ export function changeScheduleThisMonth(
       if (startsOn < player.trainingStartOn) {
         operationalActionError("INVALID_INPUT", "The new schedule cannot start before the player's training started.", "startsOn")
       }
-      if (scheduledChange(tx, input.playerId)) {
+      // A waiting move would be undone by this change; a waiting end of
+      // training is not -- it still ends their training after this month, so
+      // the coach can adjust the rest of the month without cancelling it.
+      if (scheduledChange(tx, input.playerId)?.kind === "change") {
         operationalActionError(
           "CONFLICT",
           "This player has a change waiting for next month. Cancel it before changing this month.",
@@ -1018,7 +1040,8 @@ export function endTrainingNow(
     return database.transaction((tx) => {
       requirePlayer(tx, input.playerId)
       const today = getAcademyDateKey(now)
-      if (!openAssignments(tx, input.playerId).length) {
+      const open = openAssignments(tx, input.playerId)
+      if (!open.length) {
         operationalActionError("BUSINESS_RULE", "This player is not on any schedule.")
       }
       const waiting = scheduledChange(tx, input.playerId)
@@ -1026,7 +1049,24 @@ export function endTrainingNow(
         tx.update(trainingChanges).set({ resolvedAt: now, status: "cancelled", updatedAt: now })
           .where(eq(trainingChanges.id, waiting.id)).run()
       }
-      endOpenAssignments(tx, input.playerId, today)
+      /*
+       * "They have left already" takes them off today. A place's end date is
+       * the first day it no longer covers, so ending it today also took today
+       * off their record -- and a session this morning they were marked at
+       * silently vanished from their attendance. When today is already marked
+       * for them, the place ends after today instead: the mark stays, and
+       * nothing later is covered.
+       */
+      const markedToday = tx.select({ id: sessionAttendanceRecords.id }).from(sessionAttendanceRecords)
+        .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
+        .where(and(
+          eq(sessionAttendanceRecords.accountId, input.playerId),
+          ne(sessionAttendanceRecords.choice, "cleared"),
+          eq(sessionOccurrences.occurrenceDate, today),
+          inArray(sessionOccurrences.seriesId, open.map((assignment) => assignment.seriesId)),
+        ))
+        .get()
+      endOpenAssignments(tx, input.playerId, markedToday ? dayAfter(today) : today)
       clearTrainingNotices(tx, input.playerId, now)
       tx.update(playerEnrollments).set({
         recordRevision: sql`${playerEnrollments.recordRevision} + 1`,

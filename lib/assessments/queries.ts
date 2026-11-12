@@ -26,6 +26,8 @@ export type AssessmentPlayer = {
   group: string | null
   initials: string
   name: string
+  /** Off every schedule (training ended or paused), but not archived. */
+  offSchedule: boolean
   playerId: string
 }
 
@@ -75,19 +77,27 @@ function groupLabel(level: string | null, batch: string | null) {
   return parts.length > 0 ? parts.join(" · ") : null
 }
 
+/*
+ * Who can be assessed: every player on a schedule, and every player who has
+ * been on one and is off it now (training ended or paused, a schedule ended),
+ * until they are archived (head coach, 12 Nov 2026). A finished term keeps the
+ * player's place open, so they are "active" here already. A player who has
+ * never been on a schedule ("unassigned") is still in onboarding.
+ */
 function activePlayerRows(database: SmbaDatabaseExecutor) {
   return database.select({
     batch: playerEnrollments.batch,
     fullName: accounts.fullName,
     level: playerEnrollments.level,
     playerId: accounts.id,
+    status: playerEnrollments.status,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .where(and(
       eq(accounts.role, "player"),
       eq(accounts.approvalStatus, "approved"),
       isNull(accounts.archivedAt),
-      eq(playerEnrollments.status, "active"),
+      inArray(playerEnrollments.status, ["active", "paused"]),
     ))
     .all()
 }
@@ -97,6 +107,7 @@ function toPlayer(row: ReturnType<typeof activePlayerRows>[number]): AssessmentP
     group: groupLabel(row.level, row.batch),
     initials: identityNameParts(row.fullName).initials,
     name: row.fullName,
+    offSchedule: row.status === "paused",
     playerId: row.playerId,
   }
 }
@@ -137,6 +148,9 @@ export function listAssessmentHome(
       lastOverall: latest ? overallRating(parseStoredRatings(latest.ratings)) : null,
     }
   }).sort((a, b) => {
+    // Players off a schedule can still be assessed, but the ones training now
+    // come first: the list's job is to show who has been left.
+    if (a.offSchedule !== b.offSchedule) return a.offSchedule ? 1 : -1
     if (a.lastAssessedOn === b.lastAssessedOn) return a.name.localeCompare(b.name, "en-IN")
     if (a.lastAssessedOn === null) return -1
     if (b.lastAssessedOn === null) return 1

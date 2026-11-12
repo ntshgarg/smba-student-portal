@@ -116,11 +116,17 @@ function seriesLabel(series: TrainingSessionSeries) {
  */
 export function SessionSchedules({
   initialPlayerId = null,
+  initialPlayerInOnboarding = false,
   initialProgramme = null,
   initialSeriesId = null,
   today,
 }: {
   initialPlayerId?: string | null
+  /**
+   * The `?player=` player has not finished Player onboarding. Members refuses
+   * their schedule changes until then, so the note sends the coach there.
+   */
+  initialPlayerInOnboarding?: boolean
   initialProgramme?: ScheduleGroupKey | null
   initialSeriesId?: string | null
   today: string
@@ -233,15 +239,18 @@ export function SessionSchedules({
   }
 
   function guidanceNote() {
+    const changesMadeIn = initialPlayerInOnboarding
+      ? "This player has not finished Player onboarding: finish it there first, then make schedule changes from Members."
+      : "Schedule changes for a player are made from Members."
     if (guidedCurrentAssignments.length) {
       const count = guidedCurrentAssignments.length
       const finished = guidedFinishedAssignments.length
       return `On ${count === 1 ? "one schedule" : `${count} schedules`}${guidedAssignedWeekdays.length ? ` for ${assignmentDayLabel(guidedAssignedWeekdays)}` : ""}.${finished
         ? ` Still on ${finished === 1 ? "a schedule" : `${finished} schedules`} whose term has finished.`
-        : ""} Schedule changes for a player are made from Members.`
+        : ""} ${changesMadeIn}`
     }
     if (guidedTermFinishedOn) {
-      return `Term finished on ${formatTermDate(guidedTermFinishedOn)}. Schedule changes for a player are made from Members.`
+      return `Term finished on ${formatTermDate(guidedTermFinishedOn)}. ${changesMadeIn}`
     }
     return "Not on any schedule. A first schedule is set in Player onboarding."
   }

@@ -20,6 +20,7 @@ import {
   type PlayerOnboardingSummary,
   type PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
+import { readOnboardingRecords } from "@/lib/coach/onboarding-service"
 import type {
   AcademyMember,
   AcademyStaffMember,
@@ -394,11 +395,16 @@ export function getPlayerOnboardingWorkspace(
     .where(inArray(feeAgreements.playerAccountId, playerIds))
     .all()
 
+  const unfinishedIds = players
+    .filter((player) => !player.onboardingCompletedAt)
+    .map(({ id }) => id)
+
   return derivePlayerOnboardingWorkspace({
     assignments,
     feePlans,
     pendingRequests,
     players,
+    playersWithRecords: new Set(readOnboardingRecords(db, unfinishedIds).keys()),
     referenceDate,
   })
 }
@@ -410,4 +416,18 @@ export function getCoachSessionSnapshot(referenceDate = academyToday()) {
     sessionOccurrences: listSessionOccurrences(window.from, window.to),
     sessionAssignments: listSessionAssignments(),
   }
+}
+
+/**
+ * Whether an approved player has yet to finish Player onboarding. Members
+ * refuses schedule changes for them, so screens that send a coach to Members
+ * send them to onboarding instead.
+ */
+export function playerIsInOnboarding(playerId: string) {
+  const row = initializeDatabase().select({
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
+  }).from(playerEnrollments)
+    .where(eq(playerEnrollments.accountId, playerId))
+    .get()
+  return Boolean(row && !row.onboardingCompletedAt)
 }

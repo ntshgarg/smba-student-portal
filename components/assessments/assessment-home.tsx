@@ -93,6 +93,7 @@ export function AssessmentHome({
                           {player.name}
                           {player.draft ? <span className={styles.tag}>Draft</span> : null}
                           {!player.lastAssessedOn && !player.draft ? <span className={`${styles.tag} ${styles.tagQuiet}`}>New</span> : null}
+                          {player.offSchedule ? <span className={`${styles.tag} ${styles.tagQuiet}`}>Not on a schedule</span> : null}
                         </span>
                         {player.group ? <span className={styles.rowMeta}>{player.group}</span> : null}
                       </div>

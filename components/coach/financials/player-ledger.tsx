@@ -33,7 +33,7 @@ export function PlayerLedger({
         <div>
           <span>{ledger.academyId}{ledger.archived ? " · Archived" : ""}</span>
           <h2 id="selected-ledger-title">{ledger.fullName}</h2>
-          <p>{ledger.feePlan?.label ?? "Player onboarding in progress"}</p>
+          <p>{ledger.feePlan?.label ?? (ledger.onboardingComplete ? "No fee plan in force" : "Player onboarding in progress")}</p>
         </div>
         <div className={styles.ledgerBalance}>
           <span>Outstanding</span>
@@ -61,10 +61,23 @@ export function PlayerLedger({
             </p>
           )}
         </>
-      ) : ledger.archived ? null : <OnboardingFinanceSetup ledger={ledger} />}
+      ) : ledger.archived ? null : ledger.onboardingComplete ? (
+        // Onboarding is done and no fee plan is in force: they stopped
+        // training, or their fees were stopped. This used to send the coach to
+        // finish onboarding, and the link opened some other player's case.
+        <p className={styles.managedInMembers}>
+          No fee plan is in force, so no monthly fee is issued. To start training again or set a
+          fee, use the{" "}
+          <Link href={`/coach/members?player=${encodeURIComponent(ledger.playerId)}`}>
+            player&apos;s record in Members
+          </Link>.
+        </p>
+      ) : <OnboardingFinanceSetup ledger={ledger} />}
 
+      {/* Concessions stay on the record once the plan ends: their applied
+          fees can still be reversed one at a time. */}
       {(!ledger.archived && ledger.feePlan)
-        || (ledger.archived && ledger.management.concessions.length > 0) ? (
+        || ledger.management.concessions.length > 0 ? (
         <ConcessionManagement ledger={ledger} period={period} />
       ) : null}
 

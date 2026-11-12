@@ -953,7 +953,18 @@ function createAgreement(
     actorId,
     createId,
     now,
-  }: { actorId: string; createId: () => string; now: Date },
+    placeChecked = false,
+  }: {
+    actorId: string
+    createId: () => string
+    now: Date
+    /**
+     * Onboarding completion has already checked the player's place itself
+     * (buildOnboardingFinancePreview), including a first schedule that ended
+     * before onboarding finished, which this check alone would refuse.
+     */
+    placeChecked?: boolean
+  },
 ) {
   const validated = validateAgreementInput(input)
   const existingAudit = readAuditEventByIdempotencyKey(database, validated.idempotencyKey)
@@ -979,7 +990,7 @@ function createAgreement(
     || player.batch !== input.batch) {
     financeError("INVALID_INPUT", "The Fee Plan must match the player’s current training profile.")
   }
-  if (!hasCurrentOrFutureMatchingAssignment(
+  if (!placeChecked && !hasCurrentOrFutureMatchingAssignment(
     database,
     input.playerId,
     getAcademyDateKey(now),
@@ -1185,17 +1196,47 @@ function buildOnboardingFinancePreview(
       eq(sessionSeries.programme, input.level),
       eq(sessionSeries.batch, input.batch),
     )).all()
+  /*
+   * A place counts while it covers at least one day from the training start.
+   * Its `effectiveTo` is the first day it no longer covers; the schedule's last
+   * day is a day it runs. A place ended on its own first day used to count as
+   * one day of training here, the same mistake the onboarding steps made
+   * (lib/coach/onboarding.ts assignmentRange); both now read it one way.
+   */
   const usableAssignments = assignments.filter((assignment) => {
     const start = [
       enrollment.trainingStartOn,
       assignment.effectiveFrom,
       assignment.seriesStartsOn,
     ].reduce((latest, value) => value > latest ? value : latest)
-    const ends = [assignment.effectiveTo, assignment.seriesEndsOn]
-      .filter((value): value is string => value !== null)
-    return !ends.length || ends.every((value) => value >= start)
+    return (assignment.effectiveTo === null || assignment.effectiveTo > start)
+      && (assignment.seriesEndsOn === null || assignment.seriesEndsOn >= start)
   })
   if (!usableAssignments.length) blockers.push("Assign a matching session before completing fees.")
+  /*
+   * A first schedule that was ended before onboarding finished (End schedule,
+   * or End training in Members) is finished with as it was: the registration
+   * fee and the months the player trained, and no fee after the month the
+   * place ended (head coach, 12 Nov 2026). So the Fee Plan made at completion
+   * stops after that month. A term that merely ran out by date keeps an open
+   * place and an open Fee Plan; Members then shows the player as "Term
+   * finished" to move, and no fee is issued for months without a schedule.
+   */
+  const placeLastMonth = (assignment: typeof usableAssignments[number]) => {
+    const lastDays = [
+      assignment.effectiveTo === null ? null : addCalendarDays(assignment.effectiveTo, -1),
+      assignment.seriesEndsOn,
+    ].filter((value): value is string => value !== null)
+    return lastDays.length ? lastDays.sort()[0].slice(0, 7) : null
+  }
+  const placesEnded = usableAssignments.length > 0
+    && usableAssignments.every((assignment) => (
+      assignment.effectiveTo !== null || assignment.seriesStatus === "ended"
+    ))
+  const lastMonths = usableAssignments.map(placeLastMonth)
+  const feePlanEndsAfter = placesEnded && lastMonths.every((month) => month !== null)
+    ? (lastMonths as string[]).sort().at(-1) ?? null
+    : null
 
   const firstEligibleDate = usableAssignments
     .map((assignment) => [
@@ -1227,6 +1268,17 @@ function buildOnboardingFinancePreview(
   const relevantPeriods = feePlanPeriod <= academyPeriod
     ? monthsBetween(feePlanPeriod, academyPeriod)
     : []
+  if (feePlanEndsAfter !== null) {
+    if (feePlanEndsAfter < feePlanPeriod) {
+      blockers.push(
+        "The first schedule ended before any month with a session to bill. Use Start again on the Session step to choose a new one.",
+      )
+    } else {
+      warnings.push(
+        `The first schedule has ended, so the Fee Plan stops after ${feePlanEndsAfter}: no monthly fee is issued after it. Change or end their training in Members afterwards.`,
+      )
+    }
+  }
 
   const existingAgreements = database.select().from(feeAgreements)
     .where(eq(feeAgreements.playerAccountId, input.playerId)).all()
@@ -1365,6 +1417,7 @@ function buildOnboardingFinancePreview(
   return {
     academyDateKey,
     blockers,
+    feePlanEndsAfter,
     feePlanStartOn,
     fingerprint: financialPayloadFingerprint(fingerprintInput),
     lines,
@@ -1445,7 +1498,7 @@ export function completePlayerOnboardingFinance(
       ...submittedTerms,
       effectiveFrom: preview.feePlanStartOn,
       idempotencyKey: `${operationKey}:plan`,
-    }, { actorId: coachId, createId, now })
+    }, { actorId: coachId, createId, now, placeChecked: true })
     const registrationLine = preview.lines.find((line) => line.kind === "registration")
     if (!registrationLine?.amountPaise || !registrationLine.dueDate) {
       throw new Error("The registration preview is incomplete.")
@@ -1485,6 +1538,18 @@ export function completePlayerOnboardingFinance(
       })
       return [{ issued, line }]
     })
+    // The first schedule was ended before onboarding finished: the plan stops
+    // after the month the place ended, as End training's "Stop fees" would
+    // have stopped it had the plan existed then.
+    if (preview.feePlanEndsAfter !== null) {
+      endFeeAgreementInTransaction(tx, {
+        agreementId: agreementResult.agreement.id,
+        effectiveThroughPeriod: preview.feePlanEndsAfter,
+        expectedRevision: agreementResult.agreement.recordRevision,
+        idempotencyKey: `${operationKey}:plan-end`,
+        reason: "First schedule ended before onboarding was completed",
+      }, { actorId: coachId, createId, now })
+    }
     const enrollmentUpdate = tx.update(playerEnrollments).set({
       onboardingCompletedAt: now,
       onboardingCompletedByAccountId: coachId,

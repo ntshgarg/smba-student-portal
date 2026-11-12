@@ -1,10 +1,10 @@
 import "server-only"
 
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm"
 
 import { operationalActionError } from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
-import type { SmbaDatabase } from "@/lib/db/client"
+import type { SmbaDatabase, SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   accounts,
   attendanceAdjustments,
@@ -15,12 +15,76 @@ import {
   sessionAssignments,
   sessionAssignmentWeekdays,
   sessionAttendanceRecords,
+  trainingChanges,
 } from "@/lib/db/schema"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanIsValid,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
+
+/*
+ * What is recorded against players in onboarding, by kind: what stops their
+ * first schedule being cleared, because deleting it would leave these rows
+ * attached to nothing. Read once for the whole onboarding list (so the Session
+ * step offers "Start again" only when it would work) and again by the reset
+ * itself, so the two cannot disagree.
+ *
+ * A mark that was ticked and then unticked is stored as "cleared"; it records
+ * nothing, so it no longer blocks. Nor does a make-up session that was undone.
+ */
+const RECORD_KINDS = [
+  "marked attendance",
+  "attendance correction",
+  "Fee Plan",
+  "fee",
+  "payment",
+] as const
+
+export function readOnboardingRecords(
+  database: SmbaDatabaseExecutor,
+  playerIds: readonly string[],
+) {
+  const counts = new Map<string, Map<(typeof RECORD_KINDS)[number], number>>()
+  if (!playerIds.length) return counts
+  const ids = [...new Set(playerIds)]
+  const add = (playerId: string, kind: (typeof RECORD_KINDS)[number]) => {
+    const forPlayer = counts.get(playerId) ?? new Map()
+    forPlayer.set(kind, (forPlayer.get(kind) ?? 0) + 1)
+    counts.set(playerId, forPlayer)
+  }
+  database.select({ playerId: sessionAttendanceRecords.accountId }).from(sessionAttendanceRecords)
+    .where(and(
+      inArray(sessionAttendanceRecords.accountId, ids),
+      ne(sessionAttendanceRecords.choice, "cleared"),
+    )).all()
+    .forEach(({ playerId }) => add(playerId, "marked attendance"))
+  database.select({ playerId: attendanceAdjustments.playerId }).from(attendanceAdjustments)
+    .where(and(
+      inArray(attendanceAdjustments.playerId, ids),
+      isNull(attendanceAdjustments.voidedAt),
+    )).all()
+    .forEach(({ playerId }) => add(playerId, "attendance correction"))
+  database.select({ playerId: feeAgreements.playerAccountId }).from(feeAgreements)
+    .where(inArray(feeAgreements.playerAccountId, ids)).all()
+    .forEach(({ playerId }) => add(playerId, "Fee Plan"))
+  database.select({ playerId: financialCharges.playerAccountId }).from(financialCharges)
+    .where(inArray(financialCharges.playerAccountId, ids)).all()
+    .forEach(({ playerId }) => add(playerId, "fee"))
+  database.select({ playerId: payments.playerAccountId }).from(payments)
+    .where(inArray(payments.playerAccountId, ids)).all()
+    .forEach(({ playerId }) => add(playerId, "payment"))
+  return counts
+}
+
+/** One player's records, in a fixed order, for naming them in a refusal. */
+function onboardingRecordsFor(database: SmbaDatabaseExecutor, playerId: string) {
+  const counts = readOnboardingRecords(database, [playerId]).get(playerId)
+  return RECORD_KINDS.flatMap((label) => {
+    const rows = counts?.get(label) ?? 0
+    return rows ? [{ label, rows }] : []
+  })
+}
 
 export type SaveOnboardingAssessmentInput = {
   academyPlan: AcademyPlan
@@ -108,9 +172,17 @@ export function saveOnboardingAssessment({
       || player.batch !== input.batch
       || player.academyPlan !== input.academyPlan
     )) {
+      // The same rule the Assessment step locks its fields by: any schedule the
+      // player holds, running or ended. The way through is named only when it
+      // exists -- clearing is refused once anything is recorded.
       operationalActionError(
         "BUSINESS_RULE",
-        "Clear the player’s session assignment on the Session step before changing the assessment.",
+        onboardingRecordsFor(tx, input.playerId).length
+          ? "Level, batch and Training plan are fixed now that this player has a schedule with "
+            + "attendance or fees recorded. Finish onboarding on the Fee Plan step, then change "
+            + "them in Members."
+          : "Level, batch and Training plan are fixed while this player has a schedule. Use "
+            + "Clear this schedule on the Session step first, then change them here.",
         "academyPlan",
       )
     }
@@ -181,43 +253,21 @@ export function resetOnboardingSessionAssignment({
      * The refusal is correct (deleting the assignment would orphan these rows);
      * it just has to say what it is protecting.
      */
-    const blockingRecords = [
-      {
-        label: "marked attendance",
-        rows: tx.select({ id: sessionAttendanceRecords.id }).from(sessionAttendanceRecords)
-          .where(eq(sessionAttendanceRecords.accountId, playerId)).all().length,
-      },
-      {
-        label: "attendance correction",
-        rows: tx.select({ id: attendanceAdjustments.id }).from(attendanceAdjustments)
-          .where(eq(attendanceAdjustments.playerId, playerId)).all().length,
-      },
-      {
-        label: "Fee Plan",
-        rows: tx.select({ id: feeAgreements.id }).from(feeAgreements)
-          .where(eq(feeAgreements.playerAccountId, playerId)).all().length,
-      },
-      {
-        label: "fee",
-        rows: tx.select({ id: financialCharges.id }).from(financialCharges)
-          .where(eq(financialCharges.playerAccountId, playerId)).all().length,
-      },
-      {
-        label: "payment",
-        rows: tx.select({ id: payments.id }).from(payments)
-          .where(eq(payments.playerAccountId, playerId)).all().length,
-      },
-    ].filter(({ rows }) => rows > 0)
+    const blockingRecords = onboardingRecordsFor(tx, playerId)
 
     if (blockingRecords.length) {
       const named = blockingRecords
         .map(({ label, rows }) => `${rows} ${label}${rows === 1 ? "" : "s"}`)
         .join(", ")
         .replace(/, ([^,]*)$/u, " and $1")
+      // The Calendar this used to name cannot change a player's schedule.
+      // Finishing onboarding with the first schedule can, and then Members
+      // moves or ends the player like anyone else (head coach, 12 Nov 2026).
       operationalActionError(
         "BUSINESS_RULE",
-        `This player already has ${named} on record, and resetting would leave `
-          + "them attached to nothing. Change the schedule from the Calendar instead.",
+        `This player already has ${named} on record, and clearing their schedule would `
+          + "leave them attached to nothing. Finish onboarding with this schedule on the Fee "
+          + "Plan step, then change their schedule in Members.",
         "playerId",
       )
     }
@@ -235,6 +285,15 @@ export function resetOnboardingSessionAssignment({
       .run()
     tx.delete(sessionAssignments)
       .where(inArray(sessionAssignments.id, assignmentIds))
+      .run()
+    // A booking made in Members for this schedule (End training is open to a
+    // player part-way through onboarding) would otherwise land on a player
+    // with no schedule and pause them.
+    tx.update(trainingChanges).set({ resolvedAt: now, status: "cancelled", updatedAt: now })
+      .where(and(
+        eq(trainingChanges.playerAccountId, playerId),
+        eq(trainingChanges.status, "scheduled"),
+      ))
       .run()
     tx.update(playerEnrollments).set({
       recordRevision: sql`${playerEnrollments.recordRevision} + 1`,

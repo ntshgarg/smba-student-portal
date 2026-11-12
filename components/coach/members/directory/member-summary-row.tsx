@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react"
 
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import { formatJoinedDate } from "@/components/coach/members/directory/shared"
+import { shownTrainingStart } from "@/lib/coach/onboarding"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
 import { trainingStatusLabel } from "@/lib/sessions/term"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
@@ -50,7 +51,7 @@ export function MemberSummaryRow({
           ? `${activeSessionLabels.length} ${player.training.status === "finished" ? "finished" : "active"}${changeScheduled ? " · change scheduled" : ""}`
           : "Not assigned"}</span>
       </td>
-      <td className="coach-member-joined" data-label="Training from">{formatJoinedDate(player.member.trainingStartOn)}</td>
+      <td className="coach-member-joined" data-label="Training from">{shownTrainingStart(player.member) ? formatJoinedDate(player.member.trainingStartOn) : "Not set yet"}</td>
       <td className="coach-member-status-cell" data-label="Status">
         <span className={`coach-member-status is-${player.training.status}`}>
           {trainingStatusLabel(player.training.status)}

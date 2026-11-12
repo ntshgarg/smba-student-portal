@@ -84,15 +84,28 @@ export function changeMonthlyFee(
   try {
     return database.transaction((tx) => {
       if (!isFinanceActive(tx)) operationalActionError("BUSINESS_RULE", "Financial tracking is not switched on.")
-      const waiting = tx.select({ effectiveOn: trainingChanges.effectiveOn }).from(trainingChanges).where(and(
+      const waiting = tx.select({
+        effectiveOn: trainingChanges.effectiveOn,
+        kind: trainingChanges.kind,
+        stopFees: trainingChanges.stopFees,
+      }).from(trainingChanges).where(and(
         eq(trainingChanges.playerAccountId, input.playerId),
         eq(trainingChanges.status, "scheduled"),
-        eq(trainingChanges.kind, "change"),
       )).get()
-      if (waiting) {
+      if (waiting?.kind === "change") {
         operationalActionError(
           "CONFLICT",
           `This player's training changes on ${waiting.effectiveOn} with its own fee. Edit that change instead.`,
+        )
+      }
+      // A new fee starts next month, the month a waiting end that stops fees
+      // takes them off. It could only bill nothing (End training's "Stop fees"
+      // pauses a plan that has not started), so it is refused up front rather
+      // than made and quietly undone.
+      if (waiting?.kind === "end" && waiting.stopFees) {
+        operationalActionError(
+          "CONFLICT",
+          `This player's training ends on ${waiting.effectiveOn} and their fees stop then, so there is no later fee to change. Cancel the planned end first to change their fee.`,
         )
       }
       const enrollment = tx.select().from(playerEnrollments)

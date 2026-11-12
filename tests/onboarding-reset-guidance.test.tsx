@@ -71,7 +71,21 @@ describe("onboarding reset guidance", () => {
   it("names the condition that makes the reset stop working", () => {
     // resetOnboardingSessionAssignment refuses once dependent academy records exist,
     // so promising an unconditional way back would be a lie.
-    expect(render(player())).toContain("attendance, fees or a report on record")
+    expect(render(player())).toContain("attendance, fees or a payment on record")
+  })
+
+  it("does not offer a reset the server would refuse once something is recorded", () => {
+    const html = render(player({ hasRecords: true }))
+    expect(html).not.toContain("Reset session assignment")
+    expect(html).toContain("Complete onboarding, then make any change in Members")
+  })
+
+  it("says what completing does when the first schedule has ended", () => {
+    const html = render(player({
+      assignedSession: { batch: "Weekend", effectiveFrom: "2026-07-04", endsOn: null, programme: "Intermediate", standing: "ended" },
+    }))
+    expect(html).toContain("Aditi’s first schedule has ended")
+    expect(html).toContain("no monthly fee after that")
   })
 
   it("offers the ordinary fee form for a start date that has not arrived", () => {

@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, inArray, isNull } from "drizzle-orm"
 
 import {
   ASSESSMENT_TEXT_MAX_LENGTH,
@@ -104,13 +104,14 @@ function requireActivePlayer(tx: Transaction, playerId: string) {
       eq(accounts.role, "player"),
       eq(accounts.approvalStatus, "approved"),
       isNull(accounts.archivedAt),
-      eq(playerEnrollments.status, "active"),
+      // Off a schedule still counts until archived (lib/assessments/queries.ts).
+      inArray(playerEnrollments.status, ["active", "paused"]),
     ))
     .get()
   if (!player) {
     throw new AssessmentServiceError(
       "PLAYER_UNAVAILABLE",
-      "Assessments are available only for active players.",
+      "Assessments are available only for players who have trained here and are not archived.",
       "playerId",
     )
   }

@@ -170,11 +170,18 @@ export function AssessmentStep({
         * so a refused attempt also emptied two fields they then had to retype.
         * The date beside them stays editable, because moving it earlier is
         * exactly what the server does allow.
+        *
+        * `assignedSession` is any schedule the player holds, ended ones too --
+        * the same rule the server refuses by -- so the fields can no longer
+        * look editable and then refuse to save. The note names the step that
+        * can always be opened from here (Session), and the way on when
+        * clearing is no longer possible.
         */}
       {item.assignedSession ? (
         <p className={styles.classificationLockNote} role="note">
-          Level, batch and Training plan are fixed while a session is assigned. To change
-          them, reset the session assignment on the Fee Plan step.
+          {item.hasRecords
+            ? "Level, batch and Training plan are fixed: this player has a schedule with attendance or fees recorded. Finish onboarding on the Fee Plan step, then change them in Members."
+            : "Level, batch and Training plan are fixed while this player has a schedule. To change them, clear the schedule on the Session step first."}
         </p>
       ) : null}
       <div className={styles.threeFieldGrid}>

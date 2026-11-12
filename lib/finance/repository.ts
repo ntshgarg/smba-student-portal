@@ -102,6 +102,7 @@ function readFinancePlayer(database: Executor, playerId: string) {
     fullName: accounts.fullName,
     id: accounts.id,
     level: playerEnrollments.level,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
@@ -1077,6 +1078,7 @@ export function loadPlayerFeeRecord(
     academyId: formatAcademyId(player.academyIdSerial),
     fullName: player.fullName,
     archived: player.archivedAt !== null,
+    onboardingComplete: player.onboardingCompletedAt !== null,
     financeTrackingMonth: activation?.trackingMonth ?? null,
     registrationResolutionRequired,
     status: combineFinanceStatuses(activeCharges.map((charge) => charge.status)),

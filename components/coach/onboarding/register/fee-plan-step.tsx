@@ -19,6 +19,7 @@ import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
 import { formatDateKey, formatInr, parseRupeesToPaise } from "@/lib/format"
 import type { OnboardingFinancePreview } from "@/lib/finance/types"
+import { formatTermDate } from "@/lib/sessions/term"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
 
 import styles from "../player-onboarding-register.module.css"
@@ -283,8 +284,29 @@ export function FeePlanStep({
     }))
   }
 
+  const firstName = item.fullName.split(/\s+/u)[0]
+  const place = item.assignedSession
+
   return (
     <form className={styles.feePlanForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
+      {/*
+        * A first schedule that ran out or was ended before this step is
+        * finished with as it was (head coach, 12 Nov 2026): the fee timeline
+        * below bills only the months the player trained.
+        */}
+      {place?.standing === "ended" ? (
+        <p className={styles.classificationLockNote} role="note">
+          {firstName}’s first schedule has ended. Completing onboarding charges the registration
+          fee and the months {firstName} trained, and no monthly fee after that. Afterwards, start
+          them on a new schedule in Members if they carry on.
+        </p>
+      ) : place?.standing === "finished" && place.endsOn ? (
+        <p className={styles.classificationLockNote} role="note">
+          {firstName}’s first term finished on {formatTermDate(place.endsOn)}. Completing onboarding
+          charges the registration fee and the months {firstName} trained. Afterwards they show
+          as “Term finished” in Members, where you move them to their next schedule.
+        </p>
+      ) : null}
       <dl className={styles.trainingFacts}>
         <div><dt>Level</dt><dd>{item.level}</dd></div>
         <div><dt>Batch</dt><dd>{item.batch}</dd></div>
@@ -387,15 +409,17 @@ export function FeePlanStep({
         * be the only door.
         */}
       <p className={styles.feeNote}>
-        The training start date is set on the Session step, with the schedule it belongs
-        to — go back there to change it. Clearing the assignment is only for changing the
-        level, batch or Training plan, and it stops being possible once the player has
-        attendance, fees or a report on record.
+        {item.hasRecords
+          ? "The training start date and schedule are fixed now that attendance or fees are recorded. Complete onboarding, then make any change in Members."
+          : "The training start date is set on the Session step, with the schedule it belongs to. Reset the session assignment to choose them again, or to change the level, batch or Training plan. It stops being possible once the player has attendance, fees or a payment on record."}
       </p>
       <div className={styles.formActions}>
-        <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
-          {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
-        </button>
+        {/* The empty cell keeps the main button in its usual column. */}
+        {item.hasRecords ? <span aria-hidden="true" /> : (
+          <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
+            {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
+          </button>
+        )}
         <button
           className={styles.primaryButton}
           type="submit"
