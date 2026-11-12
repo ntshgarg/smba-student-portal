@@ -2,7 +2,8 @@ import "server-only"
 
 import path from "node:path"
 
-import { migrate } from "drizzle-orm/better-sqlite3/migrator"
+import { sql } from "drizzle-orm"
+import { readMigrationFiles } from "drizzle-orm/migrator"
 
 import { initializeDatabase, shouldUseTurso, type SmbaDatabase } from "@/lib/db/client"
 import { seedDatabase, seedReferenceData } from "@/lib/db/seed"
@@ -45,6 +46,50 @@ export function remoteDatabasePreparationBlocked() {
   return true
 }
 
+const MIGRATIONS_TABLE = "__drizzle_migrations"
+
+/**
+ * Applies the pending migrations in one transaction, deciding which are
+ * pending inside that transaction.
+ *
+ * Drizzle's own migrator reads the last applied migration first and only then
+ * opens its transaction, so two deploys preparing the same database at once
+ * could both decide the same migration is still to do and the second would
+ * run it again. Reading the ledger after BEGIN means the second deploy either
+ * sees the first one's work (and skips it) or is refused by the database when
+ * it tries to write over a newer state, rolling back cleanly. The ledger rows
+ * written are exactly drizzle's, so drizzle tooling still reads them.
+ */
+export function applyMigrations(database: SmbaDatabase, migrationsFolder: string) {
+  const migrations = readMigrationFiles({ migrationsFolder })
+  const table = sql.identifier(MIGRATIONS_TABLE)
+  database.run(sql`BEGIN`)
+  try {
+    database.run(sql`
+      CREATE TABLE IF NOT EXISTS ${table} (
+        id SERIAL PRIMARY KEY,
+        hash text NOT NULL,
+        created_at numeric
+      )
+    `)
+    const lastApplied = database.values<[unknown, string, number | string]>(
+      sql`SELECT id, hash, created_at FROM ${table} ORDER BY created_at DESC LIMIT 1`,
+    )[0]
+    for (const migration of migrations) {
+      if (lastApplied && Number(lastApplied[2]) >= migration.folderMillis) continue
+      for (const statement of migration.sql) database.run(sql.raw(statement))
+      database.run(sql`
+        INSERT INTO ${table} ("hash", "created_at")
+        VALUES (${migration.hash}, ${migration.folderMillis})
+      `)
+    }
+    database.run(sql`COMMIT`)
+  } catch (error) {
+    database.run(sql`ROLLBACK`)
+    throw error
+  }
+}
+
 /**
  * Deployment, development and test setup only. Request code must use
  * initializeDatabase(), which opens the prepared database without writing to it.
@@ -55,12 +100,10 @@ export function prepareDatabase({
   seed = false,
 }: PrepareDatabaseOptions = {}) {
   validateAuthEmailConfiguration()
-  migrate(database, {
-    migrationsFolder: path.resolve(
-      /* turbopackIgnore: true */ process.cwd(),
-      "drizzle",
-    ),
-  })
+  applyMigrations(database, path.resolve(
+    /* turbopackIgnore: true */ process.cwd(),
+    "drizzle",
+  ))
   if (seed) {
     if (emptyAcademy) seedReferenceData(database)
     else seedDatabase(database)
