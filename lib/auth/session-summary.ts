@@ -10,11 +10,6 @@ export type SessionSummaryResponse =
     account: {
       name: string
       initials: string
-      /*
-       * The platform owner is viewing this person's dashboard. Every form but
-       * Exit preview is switched off, so the public header's sign-out has to
-       * leave through that exit rather than the ordinary sign-out.
-       */
       previewMode?: true
       role: AccountRole
     }

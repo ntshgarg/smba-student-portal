@@ -356,11 +356,6 @@ describe("logging out other devices", () => {
 })
 
 describe("during an admin preview", () => {
-  /*
-   * Each of these acts on the identity, which during a preview is the person
-   * being viewed while the sign-in is the owner's. The proxy turns the forms
-   * away; this is the second lock, should a form ever get past it.
-   */
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getCurrentIdentity.mockResolvedValue({

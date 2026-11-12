@@ -26,7 +26,7 @@ export type HeaderAccount = {
   previewMode: boolean
 }
 
-export function accountFromSessionSummary(value: unknown): HeaderAccount | null {
+function accountFromSessionSummary(value: unknown): HeaderAccount | null {
   if (!value || typeof value !== "object") return null
 
   const summary = value as Partial<SessionSummaryResponse>
@@ -48,35 +48,6 @@ export function accountFromSessionSummary(value: unknown): HeaderAccount | null 
     dashboardLabel: role === "coach" ? "Coach Workspace" : "Player Journal",
     previewMode: summary.account.previewMode === true,
   }
-}
-
-/*
- * During an admin preview the account shown is the person being viewed and
- * every form but Exit preview is switched off, so the ordinary sign-out was
- * refused and ended on an error page. It leaves through the preview's own exit
- * instead, which ends the preview and then signs the owner out.
- */
-export function HeaderSignOut({ previewMode }: { previewMode: boolean }) {
-  if (previewMode) {
-    return (
-      <form action="/admin/preview/exit" method="post">
-        <input type="hidden" name="signOut" value="1" />
-        <button className="header-account-signout" type="submit">
-          Exit preview and sign out
-        </button>
-      </form>
-    )
-  }
-  return (
-    <form action={clearSession}>
-      <button
-        className="header-account-signout"
-        type="submit"
-      >
-        Sign out
-      </button>
-    </form>
-  )
 }
 
 export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
@@ -194,7 +165,23 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
                     <a href={account.dashboardHref} onClick={() => setAccountOpen(false)}>
                       {account.dashboardLabel}
                     </a>
-                    <HeaderSignOut previewMode={account.previewMode} />
+                    {account.previewMode ? (
+                      <form action="/admin/preview/exit" method="post">
+                        <input type="hidden" name="signOut" value="1" />
+                        <button className="header-account-signout" type="submit">
+                          Exit preview and sign out
+                        </button>
+                      </form>
+                    ) : (
+                      <form action={clearSession}>
+                        <button
+                          className="header-account-signout"
+                          type="submit"
+                        >
+                          Sign out
+                        </button>
+                      </form>
+                    )}
                   </nav>
                 ) : null}
               </>

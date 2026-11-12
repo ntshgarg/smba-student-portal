@@ -19,12 +19,7 @@ export function AccountMenu({
   publicSiteHref,
 }: {
   account: AccountIdentity
-  /*
-   * The platform owner is looking at this person's dashboard. Their account
-   * security is not the owner's to open, and every form except Exit preview is
-   * switched off, so Log out goes out through the preview's own exit and signs
-   * the owner out from there.
-   */
+  // During a preview, Log out goes through Exit preview, the one allowed form.
   previewMode?: boolean
   publicSiteHref: string
 }) {
@@ -79,8 +74,6 @@ export function AccountMenu({
           inert={!open}
         >
           <p>
-            {/* During a preview the name is the person being viewed, while
-                the sign-in -- and so Log out -- is the owner's. */}
             <span>{previewMode ? "Viewing as" : "Signed in as"}</span>
             <strong>{account.fullName}</strong>
           </p>

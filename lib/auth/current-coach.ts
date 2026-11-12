@@ -31,12 +31,10 @@ export async function requireHeadAdminAction() {
   const identity = await sessionProvider.getCurrentIdentity()
   if (!identity && !(await sessionProvider.hasActiveSession())) throw new SessionExpiredError()
   if (!identity || identity.role !== "coach") throw new Error("Head coach access is required.")
-  // The proxy already turns every form away during a preview; this is the
-  // second lock, so a change can never be saved in the head coach's name by
-  // the owner who is only looking.
+  // Second lock behind the proxy: a preview never saves in the coach's name.
   if (identity.previewMode) throw new Error("Admin preview is read-only. Exit preview before making changes.")
   requireHeadAdminAccess(identity.subjectId)
-  ensureDueTrainingChangesApplied()
+  if (!identity.previewMode) ensureDueTrainingChangesApplied()
   return identity
 }
 
@@ -47,11 +45,8 @@ export async function requireCoachPage() {
   const access = getRequestCoachAccess(identity.subjectId)
   if (!access) redirect("/login")
   // Training changes scheduled for the 1st take effect on the first request on
-  // or after that day (lib/training/changes.ts). An admin preview applies them
-  // too: they are already decided and the next real visit would apply them
-  // anyway, and skipping them showed the owner a schedule the coach no longer
-  // had.
-  ensureDueTrainingChangesApplied()
+  // or after that day (lib/training/changes.ts). An admin preview only looks.
+  if (!identity.previewMode) ensureDueTrainingChangesApplied()
   return { access, identity }
 }
 

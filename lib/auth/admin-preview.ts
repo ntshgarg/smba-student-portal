@@ -6,34 +6,14 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 
 export const ADMIN_PREVIEW_COOKIE = "smba_admin_preview"
 const PREVIEW_LIFETIME_MS = 60 * 60 * 1000
-/*
- * The cookie outlives the preview it carries by an hour. Past the hour the
- * claim inside is expired and changes nothing -- the proxy clears it on the
- * next request -- but an Exit preview pressed on a tab left open past the hour
- * still arrives with it, so the stop record can name the person who was viewed.
- */
-export const ADMIN_PREVIEW_COOKIE_MAX_AGE_SECONDS = 2 * 60 * 60
-
-/*
- * Better Auth's sign-in cookie, under both of the names it may be written with
- * (lib/auth/better-auth.ts sets the prefix and switches the secure name on in
- * production). The proxy reads it without loading the auth runtime, so the
- * names live here.
- */
+// Better Auth's sign-in cookie names, read by the proxy without the auth runtime.
 const SESSION_COOKIE = `${AUTH_COOKIE_PREFIX}.session_token`
 export const AUTH_SESSION_COOKIE_NAMES = [`__Secure-${SESSION_COOKIE}`, SESSION_COOKIE] as const
 
 type PreviewClaim = {
   actorAccountId: string
   expiresAt: number
-  /*
-   * The owner's sign-in the preview was started from, hashed. A preview lives
-   * only as long as that sign-in: once the owner signs out, or the session ends
-   * and someone signs in on the same computer, the preview cookie no longer
-   * matches and stops switching changes off. Without it, a leftover cookie kept
-   * blocking every form on the browser -- signing in included -- for up to an
-   * hour, with no Exit preview button anywhere to clear it.
-   */
+  // Hash of the owner's sign-in token: the preview ends with that sign-in.
   sessionKey: string
   targetAccountId: string
 }
@@ -77,8 +57,13 @@ export function createAdminPreviewToken(input: {
   return `${payload}.${signature(payload)}`
 }
 
-function readSignedClaim(token: string | null | undefined) {
-  if (!token) return null
+/** A signed, unexpired preview claim that belongs to the sign-in `sessionToken`. */
+export function readLiveAdminPreviewClaim(
+  token: string | null | undefined,
+  sessionToken: string | null | undefined,
+  now = new Date(),
+) {
+  if (!token || !sessionToken) return null
   const [payload, suppliedSignature, extra] = token.split(".")
   if (!payload || !suppliedSignature || extra) return null
   const expected = Buffer.from(signature(payload))
@@ -88,32 +73,13 @@ function readSignedClaim(token: string | null | undefined) {
     const claim = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as PreviewClaim
     if (!claim.actorAccountId
       || !claim.targetAccountId
-      || typeof claim.sessionKey !== "string"
-      || !Number.isFinite(claim.expiresAt)) return null
+      || claim.sessionKey !== sessionKey(sessionToken)
+      || !Number.isFinite(claim.expiresAt)
+      || claim.expiresAt <= now.getTime()) return null
     return claim
   } catch {
     return null
   }
-}
-
-/**
- * A preview claim that is signed, unexpired and belongs to the sign-in
- * `sessionToken` -- whoever it names as owner. This is the proxy's first test,
- * from cookies alone; before it refuses a form it also asks the server whether
- * that sign-in and the person being viewed are still there
- * (lib/auth/admin-preview-standing.ts).
- */
-export function readLiveAdminPreviewClaim(
-  token: string | null | undefined,
-  sessionToken: string | null | undefined,
-  now = new Date(),
-) {
-  if (!sessionToken) return null
-  const claim = readSignedClaim(token)
-  if (!claim
-    || claim.sessionKey !== sessionKey(sessionToken)
-    || claim.expiresAt <= now.getTime()) return null
-  return claim
 }
 
 export function readAdminPreviewToken(
@@ -123,20 +89,5 @@ export function readAdminPreviewToken(
   now = new Date(),
 ) {
   const claim = readLiveAdminPreviewClaim(token, sessionToken, now)
-  return claim?.actorAccountId === actorAccountId ? claim : null
-}
-
-/**
- * Who a preview cookie this owner signed was showing, however old it is. Only
- * for filing the stop record beside the start record: a preview exited after
- * its hour has run out still names the person it was opened on, and the
- * signature is what makes that name trustworthy. Never use it to decide what a
- * request may see or do.
- */
-export function readAdminPreviewRecord(
-  token: string | null | undefined,
-  actorAccountId: string,
-) {
-  const claim = readSignedClaim(token)
   return claim?.actorAccountId === actorAccountId ? claim : null
 }

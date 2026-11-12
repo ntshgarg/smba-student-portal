@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 
 import { CoachShell } from "@/components/coach/coach-shell"
-import { AdminPreviewBanner, adminPreviewLabel } from "@/components/admin-preview-banner"
+import { AdminPreviewBanner } from "@/components/admin-preview-banner"
 import { UnsavedWorkProvider } from "@/components/unsaved-work-guard"
 import { requireCoachPage } from "@/lib/auth/current-coach"
 import { recoveryEmailEnrollmentRequired } from "@/lib/auth/recovery-service"
@@ -34,18 +34,10 @@ export default async function CoachLayout({ children }: { children: React.ReactN
     initials: identity.initials,
   }
 
-  const previewBanner = identity.previewMode ? (
-    <AdminPreviewBanner label={adminPreviewLabel({
-      coachAccessLevel: access.accessLevel,
-      fullName: identity.fullName,
-      role: "coach",
-    })} />
-  ) : null
-
   if (access.accessLevel === "junior_coach") {
     return (
       <>
-        {previewBanner}
+        {identity.previewMode ? <AdminPreviewBanner label={`${identity.fullName} · Assistant coach`} /> : null}
         <UnsavedWorkProvider>
           <CoachShell coach={coach} previewMode={identity.previewMode === true}>{children}</CoachShell>
         </UnsavedWorkProvider>
@@ -55,7 +47,7 @@ export default async function CoachLayout({ children }: { children: React.ReactN
 
   return (
     <>
-      {previewBanner}
+      {identity.previewMode ? <AdminPreviewBanner label={`${identity.fullName} · Head coach`} /> : null}
       <UnsavedWorkProvider>
         <CoachShell coach={coach} previewMode={identity.previewMode === true}>{children}</CoachShell>
       </UnsavedWorkProvider>

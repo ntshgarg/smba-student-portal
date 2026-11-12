@@ -11115,7 +11115,6 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .admin-setup-panel h2,
-.admin-preview-panel h1,
 .admin-preview-panel h2 {
   margin: 0 0 6px;
   font-family: var(--font-newsreader), Georgia, serif;
@@ -11531,7 +11530,6 @@ tr.is-expanded .coach-member-row-action button svg {
     grid-column: auto;
   }
 
-  .admin-preview-panel h1,
   .admin-preview-panel h2 {
     font-size: 1.5rem;
   }

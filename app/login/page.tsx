@@ -24,9 +24,8 @@ export default async function LoginPage({
   searchParams: Promise<{ recovered?: string }>
 }) {
   const identity = await sessionProvider.getCurrentIdentity()
-  // During a preview the identity is the person being viewed, and their usual
-  // next stop (recovery email setup, say) is a page the preview cannot open.
-  if (identity?.previewMode) redirect("/admin")
+  // A preview cannot open the viewed person's next step (e.g. recovery email setup).
+  if (identity?.previewMode) redirect(identity.role === "coach" ? "/coach" : "/player")
   if (identity) {
     redirect(postAuthenticationDestination({
       accountId: identity.subjectId,
