@@ -6,9 +6,43 @@ import type {
 import type {
   ChargeView,
   CoachFinanceRapidDesk,
+  FeePlanStanding,
   PlayerFeeRecord,
 } from "@/lib/finance/types"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
+
+/*
+ * The plan in force today, not just the "active" one, which is the latest:
+ * a leaver has no active plan and used to read as "onboarding in progress",
+ * and a waiting fee change showed next month's fee as the agreed fee now.
+ */
+function feePlanView(standing: FeePlanStanding): PlayerFinancialLedgerView["feePlan"] {
+  const shown = standing.current ?? standing.upcoming ?? standing.ended
+  if (!shown) return null
+  const upcoming = standing.current && standing.upcoming
+    && standing.upcoming.agreedMonthlyFeePaise !== standing.current.agreedMonthlyFeePaise
+    ? {
+        agreedMonthlyFeePaise: standing.upcoming.agreedMonthlyFeePaise,
+        effectiveFrom: standing.upcoming.effectiveFrom,
+      }
+    : null
+  return {
+    id: shown.id,
+    academyPlan: shown.academyPlan,
+    agreedMonthlyFeePaise: shown.agreedMonthlyFeePaise,
+    batch: shown.batch,
+    effectiveFrom: shown.effectiveFrom,
+    effectiveTo: shown.effectiveTo,
+    label: `${shown.level} · ${shown.batch} · ${academyPlanLabel(shown.academyPlan)}`,
+    level: shown.level,
+    recordRevision: shown.recordRevision,
+    standing: shown === standing.current
+      ? shown.effectiveTo ? "ending" : "running"
+      : shown === standing.upcoming ? "starting" : "ended",
+    status: shown.status,
+    upcoming,
+  }
+}
 
 function chargeView(charge: ChargeView): FinancialChargeView {
   return {
@@ -46,17 +80,8 @@ export function toPlayerFinancialLedgerView(ledger: PlayerFeeRecord): PlayerFina
       .filter((charge): charge is ChargeView => Boolean(charge))
       .map(chargeView),
     feePlanSetupReady: ledger.feePlanSetupReady,
-    feePlan: ledger.feeAgreement ? {
-      id: ledger.feeAgreement.id,
-      academyPlan: ledger.feeAgreement.academyPlan,
-      agreedMonthlyFeePaise: ledger.feeAgreement.agreedMonthlyFeePaise,
-      batch: ledger.feeAgreement.batch,
-      effectiveFrom: ledger.feeAgreement.effectiveFrom,
-      label: `${ledger.feeAgreement.level} · ${ledger.feeAgreement.batch} · ${academyPlanLabel(ledger.feeAgreement.academyPlan)}`,
-      level: ledger.feeAgreement.level,
-      recordRevision: ledger.feeAgreement.recordRevision,
-      status: ledger.feeAgreement.status,
-    } : null,
+    feePlan: feePlanView(ledger.feePlans),
+    onboardingComplete: ledger.onboardingComplete,
     enrollmentDefaults: ledger.enrollmentDefaults ? {
       ...ledger.enrollmentDefaults,
       academyPlanLabel: academyPlanLabel(ledger.enrollmentDefaults.academyPlan),

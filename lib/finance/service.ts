@@ -66,6 +66,7 @@ import {
   loadChargeViews,
   loadPeriodAssignmentIndex,
   loadPlayerFeeRecord,
+  playerTrainingHasEnded,
   readActiveFeeAgreement,
   readActivePlayer,
   readAuditEventByIdempotencyKey,
@@ -127,6 +128,7 @@ import {
   type RecordRefundResult,
   type RedateConfirmedTrainingStartInput,
   type RedateConfirmedTrainingStartResult,
+  type ReissueRegistrationFeeInput,
   type ResolveExistingRegistrationFeeInput,
   type ReversePaymentInput,
   type ReverseRefundInput,
@@ -851,6 +853,27 @@ function monthlyPreparationPreview(
       : listApprovedPlayerIds(database).length - candidates.length,
     skipped: beforeCutover ? [] : monthlySkippedPlayers(database, period, prepared, () => preparedIds),
   }
+}
+
+/**
+ * The players whose fee for a month Issue fees would issue now: the panel's
+ * "ready" players. The coach's finance lists and the fee register read
+ * "Monthly fee not issued" from this one answer. They used to decide it three
+ * different ways, so the register could list a player on a break, whom fee
+ * issuing passes over, as "not issued" every month.
+ */
+function playersAwaitingMonthlyFee(
+  database: SmbaDatabaseExecutor,
+  period: string,
+  now: Date,
+): ReadonlySet<string> {
+  const activation = readFinanceActivation(database)
+  if (!activation || period < activation.trackingMonth) return new Set()
+  const { candidates } = monthlyPreparationCandidates(database, period, now)
+  const prepared = new Set(listPreparedPlayerIds(database, period))
+  return new Set(candidates
+    .filter(({ agreement, hasAssignment }) => hasAssignment && !prepared.has(agreement.playerAccountId))
+    .map(({ agreement }) => agreement.playerAccountId))
 }
 
 /**
@@ -3024,6 +3047,20 @@ function withdrawalRefundablePaymentAllocations(
     })
 }
 
+/**
+ * Head coach, 13 Nov 2026: a mid-term withdrawal refund is recorded only after
+ * the player's training has been ended in Members ("They have left already").
+ * Recording the refund ends the fee plan, so recording it for a player still
+ * on a schedule left them training with no fee plan and never billed again.
+ */
+const TRAINING_STILL_RUNNING_MESSAGE = "End this player’s training in Members first: choose End training, then “They have left already”. A mid-term withdrawal refund can only be recorded once they have left."
+
+function requireTrainingEnded(database: SmbaDatabaseExecutor, playerId: string, now: Date) {
+  if (!playerTrainingHasEnded(database, playerId, getAcademyDateKey(now))) {
+    financeError("CONFLICT", TRAINING_STILL_RUNNING_MESSAGE, "withdrawalEffectiveOn")
+  }
+}
+
 function validateWithdrawalEffectiveOn(value: unknown, now: Date) {
   if (typeof value !== "string" || !isValidDateKey(value)
     || value > getAcademyDateKey(now)) {
@@ -3093,6 +3130,19 @@ function validateRefundAllocationSet(
   return normalized
 }
 
+/**
+ * A refund as listed under the receipt it was recorded from. A refund drawn
+ * from two receipts is listed under both, each with its own share.
+ */
+function refundOnItsReceipt(
+  record: PlayerFeeRecord | null,
+  refund: { id: string; paymentId: string },
+) {
+  const listed = record?.receipts.flatMap((receipt) => receipt.refunds)
+    .filter((item) => item.id === refund.id) ?? []
+  return listed.find((item) => item.paymentId === refund.paymentId) ?? listed[0]
+}
+
 export function previewRefundAllocations(
   input: PreviewRefundAllocationsInput,
   {
@@ -3117,6 +3167,7 @@ export function previewRefundAllocations(
     financeError("NOT_FOUND", "Choose an active receipt.", "paymentId")
   }
   requireActiveFinanceTarget(database, payment.playerAccountId)
+  requireTrainingEnded(database, payment.playerAccountId, now)
   if (payment.recordRevision !== expectedPaymentRevision) {
     financeError("BALANCE_CHANGED", "Receipt changed. Review the refundable amount.")
   }
@@ -3252,8 +3303,7 @@ export function recordRefund(
         financeError("IDEMPOTENCY_CONFLICT", "This Refund request was already used differently.")
       }
       const record = loadPlayerFeeRecord(tx, replay.playerAccountId, now)
-      const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
-        .find((item) => item.id === replay.id)
+      const refund = refundOnItsReceipt(record, replay)
       if (!refund) throw new Error("The idempotent Refund is unavailable.")
       const chargeIds = new Set(legacyAllocations.flatMap((allocation) => {
         const paymentAllocation = tx.select().from(paymentAllocations)
@@ -3314,8 +3364,7 @@ export function recordRefund(
         financeError("IDEMPOTENCY_CONFLICT", "This Refund request was already used differently.")
       }
       const record = loadPlayerFeeRecord(tx, replay.playerAccountId, now)
-      const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
-        .find((item) => item.id === replay.id)
+      const refund = refundOnItsReceipt(record, replay)
       if (!refund) throw new Error("The idempotent Refund is unavailable.")
       const allocatedChargeIds = allocations.flatMap((allocation) => {
         const paymentAllocation = tx.select().from(paymentAllocations)
@@ -3335,6 +3384,7 @@ export function recordRefund(
       financeError("NOT_FOUND", "Choose an active receipt.", "paymentId")
     }
     requireActiveFinanceTarget(tx, payment.playerAccountId)
+    requireTrainingEnded(tx, payment.playerAccountId, now)
     if (payment.recordRevision !== expectedPaymentRevision) {
       financeError("BALANCE_CHANGED", "Receipt changed. Review the Refund.")
     }
@@ -3480,6 +3530,12 @@ export function recordRefund(
       || agreementUpdate.changes !== 1) {
       financeError("BALANCE_CHANGED", "Fee details changed. Review the Refund.")
     }
+    // How the plan stood before the refund ended it, so reversing the refund
+    // can put it back (reverseRefund).
+    const previousAgreement = {
+      effectiveTo: item.agreement.effectiveTo,
+      status: item.agreement.status,
+    }
     insertAudit(tx, {
       actorId: coachId,
       createId,
@@ -3493,20 +3549,114 @@ export function recordRefund(
         amountPaise,
         chargeId: item.charge.id,
         paymentId: payment.id,
+        previousAgreement,
         purpose: "mid_term_withdrawal",
         refundReference,
         withdrawalEffectiveOn,
       },
       now,
     })
+    // The refund ends the plan, so "Fee plan ended" in the activity log finds
+    // it like every other ending.
+    insertAudit(tx, {
+      actorId: coachId,
+      createId,
+      entityId: item.agreement.id,
+      entityType: "fee_agreement",
+      eventType: "fee_agreement_ended",
+      metadata: {
+        agreementId: item.agreement.id,
+        effectiveTo: withdrawalEffectiveOn,
+        playerId: item.agreement.playerAccountId,
+        previous: previousAgreement,
+        reason: `Ended by mid-term withdrawal refund ${refundReference}`,
+        refundId,
+      },
+      now,
+    })
     const record = loadPlayerFeeRecord(tx, payment.playerAccountId, now)
-    const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
-      .find((item) => item.id === refundId)
+    const refund = refundOnItsReceipt(record, { id: refundId, paymentId: payment.id })
     if (!refund) throw new Error("The recorded Refund is unavailable.")
     const updatedCharge = loadChargeView(tx, item.charge.id, now)
     const charges = updatedCharge ? [updatedCharge] : []
     return { refund, charges, reused: false }
   }, { behavior: "immediate" })
+}
+
+/**
+ * Reversing a mid-term withdrawal refund puts the fee plan back as it was
+ * before the refund ended it: still running for a player on a break with
+ * their fee plan kept, or ending with the month for one whose fees were
+ * stopped. It used to stay ended at the withdrawal date, so a refund recorded
+ * by mistake and reversed left the player silently never billed again.
+ *
+ * Nothing is put back when the refund was recorded before 13 Nov 2026 (no
+ * earlier state was kept), when the plan has changed since the refund, or when
+ * putting it back would overlap a plan made since. Fees already issued never
+ * change: the plan only covers days again that it covered before.
+ */
+function restorePlanAfterWithdrawalReversal(
+  tx: SmbaDatabaseExecutor,
+  refund: typeof refunds.$inferSelect,
+  { actorId, createId, now, reason }: { actorId: string; createId: () => string; now: Date; reason: string },
+) {
+  const recorded = tx.select({ metadata: financialAuditEvents.metadata }).from(financialAuditEvents)
+    .where(and(
+      eq(financialAuditEvents.entityType, "refund"),
+      eq(financialAuditEvents.entityId, refund.id),
+      eq(financialAuditEvents.eventType, "refund_recorded"),
+    )).get()
+  const metadata = recorded ? parseAuditMetadata<{
+    agreementId?: string
+    previousAgreement?: { effectiveTo: string | null; status: string }
+  }>(recorded.metadata) : {}
+  const previous = metadata.previousAgreement
+  const withdrawnOn = refund.withdrawalEffectiveOn
+  if (!metadata.agreementId || !previous || !withdrawnOn
+    || !["active", "ended"].includes(previous.status)
+    || (previous.status === "ended" && !previous.effectiveTo)) return
+  const agreement = tx.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, metadata.agreementId)).get()
+  if (!agreement || agreement.status !== "ended"
+    || agreement.effectiveTo !== withdrawnOn
+    || agreement.playerAccountId !== refund.playerAccountId) return
+  const restoredTo = previous.status === "active" ? null : previous.effectiveTo
+  const overlapping = tx.select({ id: feeAgreements.id }).from(feeAgreements).where(and(
+    eq(feeAgreements.playerAccountId, agreement.playerAccountId),
+    ne(feeAgreements.id, agreement.id),
+    ne(feeAgreements.status, "paused"),
+    restoredTo ? lte(feeAgreements.effectiveFrom, restoredTo) : undefined,
+    or(isNull(feeAgreements.effectiveTo), gt(feeAgreements.effectiveTo, withdrawnOn)),
+  )).get()
+  if (overlapping) return
+  if (previous.status === "active" && readActiveFeeAgreement(tx, agreement.playerAccountId)) return
+  const update = tx.update(feeAgreements).set({
+    effectiveTo: restoredTo,
+    status: previous.status === "active" ? "active" : "ended",
+    recordRevision: sql`${feeAgreements.recordRevision} + 1`,
+    updatedByAccountId: actorId,
+    updatedAt: now,
+  }).where(and(
+    eq(feeAgreements.id, agreement.id),
+    eq(feeAgreements.status, "ended"),
+    eq(feeAgreements.recordRevision, agreement.recordRevision),
+  )).run()
+  if (update.changes !== 1) return
+  insertAudit(tx, {
+    actorId,
+    createId,
+    entityId: agreement.id,
+    entityType: "fee_agreement",
+    eventType: "fee_agreement_corrected",
+    metadata: {
+      agreementId: agreement.id,
+      playerId: agreement.playerAccountId,
+      previous: { effectiveTo: agreement.effectiveTo, status: agreement.status },
+      reason: `Withdrawal refund ${refund.refundReference} reversed: ${reason}`,
+      refundId: refund.id,
+    },
+    now,
+  })
 }
 
 export function reverseRefund(
@@ -3542,8 +3692,7 @@ export function reverseRefund(
       const row = tx.select().from(refunds).where(eq(refunds.id, input.refundId)).get()
       if (!row) throw new Error("The reversed Refund is unavailable.")
       const record = loadPlayerFeeRecord(tx, row.playerAccountId, now)
-      const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
-        .find((item) => item.id === row.id)
+      const refund = refundOnItsReceipt(record, row)
       if (!refund) throw new Error("The reversed Refund is unavailable.")
       const replayChargeIds = metadata.chargeIds ?? []
       const chargeViews = loadChargeViews(tx, replayChargeIds, now)
@@ -3618,6 +3767,7 @@ export function reverseRefund(
       if (adjustmentUpdate.changes !== 1) {
         financeError("BALANCE_CHANGED", "Withdrawal credit changed. Review the Refund.")
       }
+      restorePlanAfterWithdrawalReversal(tx, refundRow, { actorId: coachId, createId, now, reason })
     }
     const paymentIds = [...new Set(allocations.map(({ paymentAllocation }) => (
       paymentAllocation.paymentId
@@ -3651,8 +3801,7 @@ export function reverseRefund(
       now,
     })
     const record = loadPlayerFeeRecord(tx, refundRow.playerAccountId, now)
-    const refund = record?.receipts.flatMap((receipt) => receipt.refunds)
-      .find((item) => item.id === refundRow.id)
+    const refund = refundOnItsReceipt(record, refundRow)
     if (!refund) throw new Error("The reversed Refund is unavailable.")
     const chargeViews = loadChargeViews(tx, chargeIds, now)
     const charges = chargeIds.map((chargeId) => chargeViews.get(chargeId))
@@ -3844,9 +3993,16 @@ function applyConcessionInTransaction(
       financeError("CONFLICT", "This Concession is already applied to the Charge.")
     }
   } else {
+    // A use on a fee that was later voided does not count: the fee it
+    // discounted no longer exists, so the concession can go on its
+    // replacement.
     const previous = database.select({ id: concessionApplications.id })
       .from(concessionApplications)
-      .where(eq(concessionApplications.concessionId, concession.id)).get()
+      .innerJoin(financialCharges, eq(financialCharges.id, concessionApplications.chargeId))
+      .where(and(
+        eq(concessionApplications.concessionId, concession.id),
+        eq(financialCharges.lifecycle, "issued"),
+      )).get()
     if (previous) {
       financeError("CONFLICT", "This one-off Concession has already been applied.")
     }
@@ -4428,9 +4584,128 @@ export function voidCharge(
       metadata: { reason },
       now,
     })
+    // A voided fee counts as nothing, so a concession on it gave nothing. Its
+    // uses are reversed with it; they used to stay "applied", and a month
+    // issued again then listed the same concession twice.
+    const applications = tx.select().from(concessionApplications).where(and(
+      eq(concessionApplications.chargeId, charge.id),
+      isNull(concessionApplications.reversedAt),
+    )).all()
+    const voidedFeeReason = `Fee ${charge.feeReference} voided: ${reason}`
+    applications.forEach((application) => {
+      tx.update(concessionApplications).set({
+        reversedByAccountId: coachId,
+        reversedAt: now,
+        reversalReason: voidedFeeReason,
+      }).where(eq(concessionApplications.id, application.id)).run()
+      tx.update(chargeAdjustments).set({
+        reversedByAccountId: coachId,
+        reversedAt: now,
+        reversalReason: voidedFeeReason,
+      }).where(and(
+        eq(chargeAdjustments.id, application.chargeAdjustmentId),
+        isNull(chargeAdjustments.reversedAt),
+      )).run()
+      tx.update(concessions).set({
+        recordRevision: sql`${concessions.recordRevision} + 1`,
+      }).where(eq(concessions.id, application.concessionId)).run()
+      insertAudit(tx, {
+        actorId: coachId,
+        createId,
+        entityId: application.id,
+        entityType: "concession_application",
+        eventType: "concession_application_reversed",
+        metadata: { applicationId: application.id, chargeId: charge.id, reason: voidedFeeReason },
+        now,
+      })
+    })
     const updated = loadChargeView(tx, charge.id, now)
     if (!updated) throw new Error("The void Charge is unavailable.")
     return updated
+  }, { behavior: "immediate" })
+}
+
+/**
+ * "Issue registration fee again" under Corrections: puts back a registration
+ * fee that was voided. Voiding one used to strand the player: nothing could
+ * issue it again, and onboarding, the only place that issues it, refuses to
+ * run twice. The new fee is a new record, for the amount and description of
+ * the one voided, due today; the voided one stays as it was.
+ */
+export function reissueRegistrationFee(
+  input: ReissueRegistrationFeeInput,
+  {
+    coachId,
+    createFeeReference = createOpaqueFeeReference,
+    createId = randomUUID,
+    database = initializeDatabase(),
+    now = new Date(),
+  }: CoachContext,
+): ChargeView {
+  const idempotencyKey = validateIdempotencyKey(input.idempotencyKey)
+  const reason = requireText(input.reason, "reason", "A reason")
+  return database.transaction((tx) => {
+    requireCoach(tx, coachId)
+    requireFinanceActive(tx)
+    const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
+    if (replay) {
+      const metadata = parseAuditMetadata<{ playerId?: string; reason?: string }>(replay.metadata)
+      if (replay.eventType !== "charge_issued" || metadata.playerId !== input.playerId
+        || metadata.reason !== reason) {
+        financeError("IDEMPOTENCY_CONFLICT", "This request was already used differently.")
+      }
+      const charge = loadChargeView(tx, replay.entityId, now)
+      if (!charge) throw new Error("The issued registration fee is unavailable.")
+      return charge
+    }
+    requireActiveFinanceTarget(tx, input.playerId)
+    const registrations = tx.select().from(financialCharges).where(and(
+      eq(financialCharges.playerAccountId, input.playerId),
+      eq(financialCharges.type, "registration"),
+    )).orderBy(desc(financialCharges.issuedAt), desc(financialCharges.id)).all()
+    if (registrations.some((charge) => charge.lifecycle === "issued")) {
+      financeError("CONFLICT", "This player already has a registration fee.")
+    }
+    const voided = registrations.find((charge) => charge.lifecycle === "void")
+    if (!voided) {
+      financeError("NOT_FOUND", "Only a voided registration fee can be issued again.")
+    }
+    const id = createId()
+    tx.insert(financialCharges).values({
+      id,
+      feeReference: nextFeeReference(tx, createFeeReference),
+      playerAccountId: input.playerId,
+      type: "registration",
+      billingPeriod: null,
+      description: voided.description,
+      originalAmountPaise: voided.originalAmountPaise,
+      currency: FINANCE_CURRENCY,
+      dueDate: getAcademyDateKey(now),
+      lifecycle: "issued",
+      recordRevision: 0,
+      issuedByAccountId: coachId,
+      issuedAt: now,
+    }).run()
+    insertAudit(tx, {
+      actorId: coachId,
+      createId,
+      entityId: id,
+      entityType: "charge",
+      eventType: "charge_issued",
+      idempotencyKey,
+      metadata: {
+        amountPaise: voided.originalAmountPaise,
+        billingPeriod: null,
+        playerId: input.playerId,
+        reason,
+        replacesChargeId: voided.id,
+        type: "registration",
+      },
+      now,
+    })
+    const charge = loadChargeView(tx, id, now)
+    if (!charge) throw new Error("The issued registration fee is unavailable.")
+    return charge
   }, { behavior: "immediate" })
 }
 
@@ -4579,6 +4854,32 @@ export function getCoachFinancePlayerRecord(
   return loadPlayerFeeRecord(database, playerId, now, true)
 }
 
+/**
+ * Whether the payment desk opens this player now, by the desk's own rule
+ * (getCoachFinanceRapidDesk). The player's fee record offers "Record payment"
+ * from this, so the button never leads to an empty desk. It used to decide
+ * from the record's balance alone and could disagree.
+ */
+export function canRecordPaymentAtDesk(
+  record: Pick<PlayerFeeRecord, "academyId" | "archived" | "playerId">,
+  {
+    coachId,
+    database = initializeDatabase(),
+    now = academyNow(),
+  }: CoachContext,
+) {
+  requireCoach(database, coachId)
+  requireFinanceActive(database)
+  if (record.archived) return false
+  const period = getAcademyMonthKey(now)
+  return listFinancePlayers(database, {
+    awaitingFeePlayerIds: playersAwaitingMonthlyFee(database, period, now),
+    now,
+    period,
+    query: record.academyId,
+  }).some((player) => player.playerId === record.playerId && player.paymentEligible)
+}
+
 export function getCoachMonthlyPreparationPreview(
   period: string,
   {
@@ -4617,7 +4918,9 @@ export function getCoachFinanceRapidDesk(
   if (!(["outstanding", "all"] satisfies FinanceRapidScope[]).includes(scope)) {
     financeError("INVALID_INPUT", "Choose a valid payment scope.")
   }
+  const awaitingFeePlayerIds = playersAwaitingMonthlyFee(database, input.period, now)
   const lookupPlayers = listFinancePlayers(database, {
+    awaitingFeePlayerIds,
     now,
     period: input.period,
     query: input.query,
@@ -4636,6 +4939,7 @@ export function getCoachFinanceRapidDesk(
     : null
   const selectedSummary = loadedSelectedLedger && !loadedSelectedLedger.archived
     ? listFinancePlayers(database, {
+      awaitingFeePlayerIds,
       now,
       period: input.period,
       query: loadedSelectedLedger.academyId,
@@ -4682,6 +4986,7 @@ export function getCoachFinanceWorkspace(
     financeError("INVALID_INPUT", "Choose a valid financial view.")
   }
   const allPlayers = listFinancePlayers(database, {
+    awaitingFeePlayerIds: playersAwaitingMonthlyFee(database, input.period, now),
     now,
     period: input.period,
     query: input.query,
@@ -4737,20 +5042,27 @@ export function getCoachFinanceDashboardSummary(
   if (!isValidMonthKey(period)) {
     financeError("INVALID_INPUT", "Choose a valid fee month.", "period")
   }
-  const players = listFinancePlayers(database, { now, period })
   const { candidates } = monthlyPreparationCandidates(database, period, now)
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
+  // The same "ready" players as playersAwaitingMonthlyFee, from the reads
+  // this summary already makes.
+  const ready = beforeCutover ? [] : candidates.filter(({ agreement, hasAssignment }) => (
+    hasAssignment && !preparedIds.has(agreement.playerAccountId)
+  ))
+  const players = listFinancePlayers(database, {
+    awaitingFeePlayerIds: new Set(ready.map(({ agreement }) => agreement.playerAccountId)),
+    now,
+    period,
+  })
   return {
     attentionCount: players.filter((player) => [
       "overdue", "not_prepared", "partially_paid", "pending", "setup_required",
     ].includes(player.status)).length,
     outstandingPaise: players.reduce((total, player) => total + player.outstandingPaise, 0),
     preparation: {
-      ready: beforeCutover ? 0 : candidates.filter(({ agreement, hasAssignment }) => (
-        hasAssignment && !preparedIds.has(agreement.playerAccountId)
-      )).length,
+      ready: ready.length,
       alreadyPrepared: beforeCutover ? 0 : candidates.filter(({ agreement }) => (
         preparedIds.has(agreement.playerAccountId)
       )).length,
@@ -4962,7 +5274,9 @@ export function getFeeRegister(
     query: validateRecordsQuery(input.query),
     cursor: validateRecordsCursor(input.cursor),
     limit: validateRecordsLimit(input.limit, 25),
-  }, now))
+  }, now, input.mode === "monthly" && input.period
+    ? playersAwaitingMonthlyFee(database, input.period, now)
+    : new Set()))
 }
 
 export function getCollectionsDayBook(

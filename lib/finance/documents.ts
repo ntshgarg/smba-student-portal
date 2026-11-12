@@ -29,6 +29,8 @@ type FinanceDocumentContext = {
 export type FinanceDocumentRefund = {
   refundReference: string
   amountPaise: number
+  /** The part of the refund paid back from this receipt (see PlayerRefundView). */
+  receiptAmountPaise: number
   refundedOn: string
   lifecycle: PaymentLifecycle
 }
@@ -124,7 +126,7 @@ function toReceiptDocument(
 ): FinanceReceiptDocument {
   const refundedPaise = receipt.refundedPaise ?? receipt.refunds
     .filter((refund) => refund.lifecycle === "recorded")
-    .reduce((total, refund) => total + refund.amountPaise, 0)
+    .reduce((total, refund) => total + refund.receiptAmountPaise, 0)
 
   return {
     paymentId: receipt.id,
@@ -150,6 +152,7 @@ function toReceiptDocument(
     refunds: receipt.refunds.map((refund) => ({
       refundReference: refund.refundReference,
       amountPaise: refund.amountPaise,
+      receiptAmountPaise: refund.receiptAmountPaise,
       refundedOn: refund.refundedOn,
       lifecycle: refund.lifecycle,
     })),

@@ -603,6 +603,9 @@ describe("End schedule closes out its players, and every kept fee plan can be st
       playerId: players.lata,
       receivedOn: "2026-12-14",
     }, context(midDecember))
+    // A withdrawal refund is recorded once the player's training has ended
+    // (head coach, 13 Nov 2026): "They have left already", fees stopped.
+    changes.endTrainingNow({ playerId: players.lata, stopFees: true }, context(midDecember))
     const preview = finance.previewRefundAllocations({
       amountPaise: 100_000,
       expectedPaymentRevision: 0,

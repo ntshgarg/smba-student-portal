@@ -94,6 +94,21 @@ describe("paging through Fee records", () => {
       trackingMonth: academyCurrentMonth(),
     }, { coachId: coach.accountId, database })
 
+    // Every player trains on one schedule, so each month's fee is one Issue
+    // fees would issue: a "Not issued" row for every player.
+    const seriesId = randomUUID()
+    database.insert(schema.sessionSeries).values({
+      batch: "Weekday",
+      createdAt,
+      createdByAccountId: coach.accountId,
+      id: seriesId,
+      programme: "Beginner",
+      startsOn: "2026-01-01",
+      status: "active",
+      title: "Paging Beginner Weekday",
+      venue: "SMBA Court",
+    }).run()
+
     // Real 36-character ids: the length is what used to break the trail.
     for (let index = 0; index < PLAYER_COUNT; index += 1) {
       const playerId = randomUUID()
@@ -141,6 +156,14 @@ describe("paging through Fee records", () => {
         status: "active",
         updatedAt: createdAt,
         updatedByAccountId: coach.accountId,
+      }).run()
+      database.insert(schema.sessionAssignments).values({
+        accountId: playerId,
+        assignedAt: createdAt,
+        assignedByAccountId: coach.accountId,
+        effectiveFrom: "2026-01-01",
+        id: randomUUID(),
+        seriesId,
       }).run()
     }
 

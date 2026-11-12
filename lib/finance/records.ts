@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, lt, lte, or, type SQL } from "drizzle-orm"
 
 import { formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -18,7 +18,6 @@ import {
   refundAllocations,
   refunds,
 } from "@/lib/db/schema"
-import { monthEnd, monthStart } from "@/lib/finance/domain"
 import { loadChargeViews } from "@/lib/finance/repository"
 import {
   FINANCE_AUDIT_EVENTS,
@@ -82,6 +81,13 @@ export function loadFeeRegister(
   database: Executor,
   input: FinanceRegisterInput & { limit: number },
   now: Date,
+  /**
+   * Players whose fee for the month Issue fees would issue now
+   * (lib/finance/service.ts playersAwaitingMonthlyFee). Only they read "Not
+   * issued"; any fee plan covering the month used to be enough, so a player
+   * on a break, whom fee issuing passes over, read "Not issued" every month.
+   */
+  awaitingFeePlayerIds: ReadonlySet<string> = new Set(),
 ): FinanceRegisterResult {
   const players = database.select({
     academyIdSerial: academyIdAllocations.serial,
@@ -114,10 +120,6 @@ export function loadFeeRegister(
       charge,
     ])
   })
-  const agreementRows = period ? database.select().from(feeAgreements).where(and(
-    lte(feeAgreements.effectiveFrom, monthEnd(period)),
-    or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, monthStart(period))),
-  )).all() : []
 
   // Every approved player contributes a row, so the views are batched ahead of
   // the row build: four queries for the whole register, not four per player.
@@ -138,12 +140,7 @@ export function loadFeeRegister(
   const rows = players.map((player, index): FinanceRegisterRow => {
     const charge = registerCharges[index]
     if (!charge) {
-      const hasAgreement = period !== null && agreementRows.some((agreement) => (
-        agreement.playerAccountId === player.playerId
-        && agreement.status !== "paused"
-        && agreement.effectiveFrom <= monthEnd(period)
-        && (agreement.effectiveTo === null || agreement.effectiveTo >= monthStart(period))
-      ))
+      const awaitingFee = period !== null && awaitingFeePlayerIds.has(player.playerId)
       return {
         playerId: player.playerId,
         academyId: formatAcademyId(player.academyIdSerial),
@@ -160,7 +157,7 @@ export function loadFeeRegister(
         receivedPaise: 0,
         outstandingPaise: 0,
         dueDate: null,
-        status: hasAgreement ? "not_prepared" : "setup_required",
+        status: awaitingFee ? "not_prepared" : "setup_required",
       }
     }
     const view = chargeViews.get(charge.id)

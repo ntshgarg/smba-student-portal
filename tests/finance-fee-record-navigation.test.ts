@@ -63,11 +63,12 @@ describe("coach Fee Records navigation", () => {
     const route = source("app/coach/financials/players/[playerId]/page.tsx")
 
     expect(records).not.toContain("showPaymentEntry")
-    expect(records).toContain("hasPayableBalance && !ledger.archived")
-    expect(records).not.toContain("hasActiveFeePlan && hasPayableBalance")
-    expect(records).toContain('charge.type === "registration"')
-    expect(records).toContain("charge.billingPeriod ?? paymentPeriod")
-    expect(route).toContain("paymentPeriod={paymentPeriod}")
+    // "Record payment" is offered exactly when the payment desk opens the
+    // player: the desk's own rule decides, not the record's balance.
+    expect(records).toContain("canRecordPayment && !ledger.archived")
+    expect(records).not.toContain("hasPayableBalance")
+    expect(route).toContain("canRecordPaymentAtDesk(record")
+    expect(route).toContain("canRecordPayment={canRecordPayment}")
     expect(records).toContain('scope: "outstanding"')
     expect(records).toContain("Download statement")
     expect(ledger).not.toContain("showPaymentEntry")

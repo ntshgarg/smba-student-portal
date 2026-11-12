@@ -5,7 +5,7 @@ import os from "node:os"
 import path from "node:path"
 
 import Database from "better-sqlite3"
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/better-sqlite3"
 import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { readMigrationFiles } from "drizzle-orm/migrator"
@@ -1458,7 +1458,7 @@ async function seedFinancials(target: string) {
   // A small immutable lifecycle set keeps each profile operationally useful.
   const phaseThreeRead = openReadonly(target)
   const refundablePayments = phaseThreeRead.prepare(`
-    select p.id as paymentId, pa.id as allocationId
+    select p.id as paymentId, pa.id as allocationId, p.player_account_id as playerId
     from payments p
     join payment_allocations pa on pa.payment_id = p.id
     join financial_charges c on c.id = pa.charge_id
@@ -1472,6 +1472,7 @@ async function seedFinancials(target: string) {
   `).all(`${prefix}.payment.2026-08.%`, CURRENT_FEE_PERIOD) as Array<{
     allocationId: string
     paymentId: string
+    playerId: string
   }>
   const concessionTargets = phaseThreeRead.prepare(`
     select c.id as chargeId, c.player_account_id as playerId, x.serial
@@ -1537,6 +1538,29 @@ async function seedFinancials(target: string) {
   if (refundablePayments.length !== 2) {
     throw new Error(`${selectedProfile.key} fixture requires two deterministic paid receipts.`)
   }
+  /*
+   * These two refunds model ones recorded before 13 Nov 2026, when a refund
+   * could be recorded while the player was still on a schedule. The service
+   * now records one only once the player's training has ended ("They have
+   * left already" in Members), so their places are closed for the call and
+   * reopened after it: every player keeps the state the fixture's checks and
+   * browser tests expect. A repeated seed pass replays the refunds, which
+   * needs no place closed, and finds nothing to reopen.
+   */
+  const reopenedPlaces = refundablePayments.flatMap(({ playerId }) => (
+    database.select({ id: dbSchema.sessionAssignments.id })
+      .from(dbSchema.sessionAssignments)
+      .where(and(
+        eq(dbSchema.sessionAssignments.accountId, playerId),
+        isNull(dbSchema.sessionAssignments.effectiveTo),
+      )).all()
+      .map(({ id }) => id)
+  ))
+  reopenedPlaces.forEach((id) => {
+    database.update(dbSchema.sessionAssignments)
+      .set({ effectiveTo: FINANCE_REFERENCE_DATE })
+      .where(eq(dbSchema.sessionAssignments.id, id)).run()
+  })
   const recordedRefunds = refundablePayments.map((payment, index) => financeService.recordRefund({
     paymentId: payment.paymentId,
     // Both source receipts begin at revision zero. Reusing the original token
@@ -1562,6 +1586,11 @@ async function seedFinancials(target: string) {
     reason: "Deterministic reversed Refund fixture",
     mutationId: mutationId(102),
   }, context)
+  reopenedPlaces.forEach((id) => {
+    database.update(dbSchema.sessionAssignments)
+      .set({ effectiveTo: null })
+      .where(eq(dbSchema.sessionAssignments.id, id)).run()
+  })
 
   if (concessionTargets.length !== 2) {
     throw new Error(`${selectedProfile.key} fixture requires two deterministic unpaid Charges.`)
@@ -2369,7 +2398,7 @@ function verify(target: string, expectedStage?: Stage) {
           (select count(*) from fee_agreements where status = 'active') as activeAgreements,
           (select count(*) from fee_agreements where status = 'ended') as endedAgreements,
           (select count(distinct player_account_id) from refunds
-            where purpose = 'mid_term_withdrawal') as withdrawalPlayers,
+            where purpose = 'mid_term_withdrawal' and lifecycle = 'recorded') as withdrawalPlayers,
           (select count(*) from refunds
             where purpose = 'mid_term_withdrawal'
               and withdrawal_effective_on is not null
@@ -2402,6 +2431,8 @@ function verify(target: string, expectedStage?: Stage) {
         || financeLifecycle.withdrawalCredits !== 2) {
         problems.push("Withdrawal Refunds must retain their dates and linked unused-training credits.")
       }
+      // A reversed withdrawal refund puts the fee plan back, so only a
+      // recorded one leaves a plan closed.
       if (financeLifecycle.activeAgreements
           !== financePlayerCount - financeLifecycle.withdrawalPlayers
         || financeLifecycle.endedAgreements < financeLifecycle.withdrawalPlayers + 1) {
