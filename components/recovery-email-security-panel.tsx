@@ -18,10 +18,53 @@ const initialRecoveryEmailEnrollmentState: RecoveryEmailEnrollmentState = {
 }
 
 export function RecoveryEmailSecurityPanel({
+  changed = false,
   maskedEmail,
   requiresSecondFactor,
 }: {
+  /** The page was reached straight after a change was confirmed. */
+  changed?: boolean
   maskedEmail: string
+  requiresSecondFactor: boolean
+}) {
+  /*
+   * Each attempt at a change is its own pair of form states. `useActionState`
+   * has no reset, so once the code step appeared nothing could take it away: a
+   * coach who mistyped the new address sat in front of a code box that could
+   * never work, with no hint of where the code had gone, until they reloaded.
+   * "Use a different address" starts a fresh attempt by remounting the pair.
+   */
+  const [attempt, setAttempt] = useState(0)
+
+  return (
+    <section className="security-panel" aria-labelledby="recovery-email-security-title">
+      <header>
+        <MailCheck aria-hidden="true" />
+        <div>
+          <p className="eyebrow">Account recovery</p>
+          <h2 id="recovery-email-security-title">Recovery email</h2>
+        </div>
+      </header>
+      <p>Verified address: <strong>{maskedEmail}</strong></p>
+      {changed && attempt === 0 ? (
+        <p className="security-success" role="status">
+          Recovery email changed. Reset links sent to the old address no longer work.
+        </p>
+      ) : null}
+      <RecoveryEmailChangeForms
+        key={attempt}
+        onStartOver={() => setAttempt((value) => value + 1)}
+        requiresSecondFactor={requiresSecondFactor}
+      />
+    </section>
+  )
+}
+
+function RecoveryEmailChangeForms({
+  onStartOver,
+  requiresSecondFactor,
+}: {
+  onStartOver: () => void
   requiresSecondFactor: boolean
 }) {
   const [requestState, requestAction, requesting] = useResilientActionState(
@@ -36,7 +79,9 @@ export function RecoveryEmailSecurityPanel({
     confirmRecoveryEmailChange,
     initialRecoveryEmailEnrollmentState,
     {
-      retained: "The code was not used and your current address is unchanged",
+      // Only what holds whether or not the request landed: a press whose
+      // answer was lost may have used the code, and confirming again will say so.
+      retained: "Your recovery email changes only once its code is accepted",
       subject: "Your verification code",
     },
   )
@@ -45,93 +90,93 @@ export function RecoveryEmailSecurityPanel({
   const sent = requestState.sent || confirmState.sent
   const email = confirmState.email || requestState.email
 
+  if (sent) {
+    return (
+      <form
+        className="security-form security-recovery-form"
+        action={confirmAction}
+        noValidate
+        onInput={(event) => {
+          if (!confirmValidationTarget) return
+          const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
+          setConfirmValidationTarget(nextInvalid?.name ?? null)
+        }}
+        onSubmit={(event) => {
+          if (event.currentTarget.checkValidity()) {
+            setConfirmValidationTarget(null)
+            return
+          }
+          event.preventDefault()
+          const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
+          setConfirmValidationTarget(nextInvalid?.name ?? null)
+          nextInvalid?.focus()
+        }}
+      >
+        <input type="hidden" name="email" value={email} />
+        <p role="status">We sent a six-digit code to <strong>{email}</strong>. If that address is wrong, use a different address below.</p>
+        <label>
+          <span>Verification code <span className="security-required-marker" aria-hidden="true">*</span></span>
+          <input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required aria-invalid={confirmValidationTarget === "code" ? true : undefined} />
+        </label>
+        {confirmValidationTarget ? <p className="security-validation-message" role="alert">Enter the highlighted six-digit verification code.</p> : null}
+        {confirmState.error ? <p className="login-error" role="alert">{confirmState.error}</p> : null}
+        <button type="submit" disabled={confirming}>{confirming ? "Verifying…" : "Confirm new email"}</button>
+        <button
+          className="security-secondary-action"
+          type="button"
+          disabled={confirming}
+          onClick={onStartOver}
+        >
+          Use a different address
+        </button>
+      </form>
+    )
+  }
+
   return (
-    <section className="security-panel" aria-labelledby="recovery-email-security-title">
-      <header>
-        <MailCheck aria-hidden="true" />
-        <div>
-          <p className="eyebrow">Account recovery</p>
-          <h2 id="recovery-email-security-title">Recovery email</h2>
-        </div>
-      </header>
-      <p>Verified address: <strong>{maskedEmail}</strong></p>
-      {sent ? (
-        <form
-          className="security-form security-recovery-form"
-          action={confirmAction}
-          noValidate
-          onInput={(event) => {
-            if (!confirmValidationTarget) return
-            const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
-            setConfirmValidationTarget(nextInvalid?.name ?? null)
-          }}
-          onSubmit={(event) => {
-            if (event.currentTarget.checkValidity()) {
-              setConfirmValidationTarget(null)
-              return
-            }
-            event.preventDefault()
-            const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
-            setConfirmValidationTarget(nextInvalid?.name ?? null)
-            nextInvalid?.focus()
-          }}
-        >
-          <input type="hidden" name="email" value={email} />
-          <label>
-            <span>Verification code <span className="security-required-marker" aria-hidden="true">*</span></span>
-            <input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required aria-invalid={confirmValidationTarget === "code" ? true : undefined} />
-          </label>
-          <p>Enter the six-digit code sent to the new address.</p>
-          {confirmValidationTarget ? <p className="security-validation-message" role="alert">Enter the highlighted six-digit verification code.</p> : null}
-          {confirmState.error ? <p className="login-error" role="alert">{confirmState.error}</p> : null}
-          <button type="submit" disabled={confirming}>{confirming ? "Verifying…" : "Confirm new email"}</button>
-        </form>
-      ) : (
-        <form
-          className="security-form security-recovery-form"
-          action={requestAction}
-          noValidate
-          onInput={(event) => {
-            if (!requestValidationTarget) return
-            const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
-            setRequestValidationTarget(nextInvalid?.name ?? null)
-          }}
-          onSubmit={(event) => {
-            if (event.currentTarget.checkValidity()) {
-              setRequestValidationTarget(null)
-              return
-            }
-            event.preventDefault()
-            const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
-            setRequestValidationTarget(nextInvalid?.name ?? null)
-            nextInvalid?.focus()
-          }}
-        >
-          <label>
-            <span>New recovery email <span className="security-required-marker" aria-hidden="true">*</span></span>
-            <input name="email" type="email" autoComplete="email" maxLength={254} required aria-invalid={requestValidationTarget === "email" ? true : undefined} />
-          </label>
-          <div className="security-password-field">
-            <label htmlFor="recovery-email-current-password">
-              <span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span>
-            </label>
-            <PasswordInput id="recovery-email-current-password" name="currentPassword" autoComplete="current-password" required aria-invalid={requestValidationTarget === "currentPassword" ? true : undefined} />
-          </div>
-          {requiresSecondFactor ? (
-            <label>
-              <span>Authenticator or backup code <span className="security-required-marker" aria-hidden="true">*</span></span>
-              <input name="secondFactor" type="text" autoComplete="one-time-code" required aria-invalid={requestValidationTarget === "secondFactor" ? true : undefined} />
-            </label>
-          ) : null}
-          <p>A new address becomes active only after its verification code is confirmed.</p>
-          {requestValidationTarget ? <p className="security-validation-message" role="alert">Complete the highlighted required field.</p> : null}
-          {requestState.error ? <p className="login-error" role="alert">{requestState.error}</p> : null}
-          <button className="security-recovery-submit" type="submit" disabled={requesting}>
-            <ShieldCheck aria-hidden="true" />
-            {requesting ? "Sending code…" : "Change recovery email"}
-          </button>
-        </form>
-      )}
-    </section>
+    <form
+      className="security-form security-recovery-form"
+      action={requestAction}
+      noValidate
+      onInput={(event) => {
+        if (!requestValidationTarget) return
+        const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
+        setRequestValidationTarget(nextInvalid?.name ?? null)
+      }}
+      onSubmit={(event) => {
+        if (event.currentTarget.checkValidity()) {
+          setRequestValidationTarget(null)
+          return
+        }
+        event.preventDefault()
+        const nextInvalid = event.currentTarget.querySelector<HTMLInputElement>("input:invalid")
+        setRequestValidationTarget(nextInvalid?.name ?? null)
+        nextInvalid?.focus()
+      }}
+    >
+      <label>
+        <span>New recovery email <span className="security-required-marker" aria-hidden="true">*</span></span>
+        <input name="email" type="email" autoComplete="email" maxLength={254} required defaultValue={requestState.email} aria-invalid={requestValidationTarget === "email" ? true : undefined} />
+      </label>
+      <div className="security-password-field">
+        <label htmlFor="recovery-email-current-password">
+          <span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span>
+        </label>
+        <PasswordInput id="recovery-email-current-password" name="currentPassword" autoComplete="current-password" required aria-invalid={requestValidationTarget === "currentPassword" ? true : undefined} />
+      </div>
+      {requiresSecondFactor ? (
+        <label>
+          <span>Authenticator or backup code <span className="security-required-marker" aria-hidden="true">*</span></span>
+          <input name="secondFactor" type="text" autoComplete="one-time-code" required aria-invalid={requestValidationTarget === "secondFactor" ? true : undefined} />
+        </label>
+      ) : null}
+      <p>A new address becomes active only after its verification code is confirmed.</p>
+      {requestValidationTarget ? <p className="security-validation-message" role="alert">Complete the highlighted required field.</p> : null}
+      {requestState.error ? <p className="login-error" role="alert">{requestState.error}</p> : null}
+      <button className="security-recovery-submit" type="submit" disabled={requesting}>
+        <ShieldCheck aria-hidden="true" />
+        {requesting ? "Sending code…" : "Change recovery email"}
+      </button>
+    </form>
   )
 }

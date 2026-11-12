@@ -39,6 +39,7 @@ export default async function RecoveryEmailSetupPage() {
         <RecoveryEmailEnrollmentForm
           requestAction={requestCurrentRecoveryEmail}
           confirmAction={confirmCurrentRecoveryEmail}
+          requireCurrentPassword
         />
         <InterstitialSignOut />
       </section>

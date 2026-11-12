@@ -22,6 +22,7 @@ import {
   authProviderAccounts,
   authRecoveryEmails,
   authRuntimeSessions,
+  authTwoFactors,
   authUsers,
   coachProfiles,
   playerEnrollments,
@@ -795,9 +796,20 @@ function countAttemptKeys(tx: AttemptTransaction, keys: AttemptKey[], now: Date)
     const outsideWindow = !current
       || now.getTime() - current.windowStartedAt.getTime() >= LOGIN_WINDOW_MS
     const failedCount = outsideWindow ? 1 : current.failedCount + 1
-    const blockedUntil = failedCount >= threshold
-      ? new Date(now.getTime() + LOGIN_BLOCK_MS)
+    /*
+     * A block outlives the window that set it: the window is counted from the
+     * first failure, the block from the last. A failure counted without a block
+     * check in front of it -- a just-written password, a code checked after its
+     * own read -- used to land in the gap, start a fresh window and write
+     * `blockedUntil: null` over a block with minutes still to run. A new count
+     * never shortens a standing block.
+     */
+    const standingBlock = current?.blockedUntil && current.blockedUntil > now
+      ? current.blockedUntil
       : null
+    const blockedUntil = failedCount >= threshold
+      ? new Date(Math.max(now.getTime() + LOGIN_BLOCK_MS, standingBlock?.getTime() ?? 0))
+      : standingBlock
     tx.insert(authLoginAttempts).values({
       key,
       blockedUntil,
@@ -1019,6 +1031,55 @@ export function recordLoginSuccess(subjectHash: string, {
       like(authLoginAttempts.key, `subject:${subjectHash}:%`),
     ))
     .run()
+}
+
+/**
+ * Ends every sign-in pause standing against this Academy ID: the password and
+ * PIN failures from any address, and the PIN's own tighter budget.
+ *
+ * For the moments the account holder has just proved who they are some other
+ * way and set a new password -- an emailed reset. Leaving the pause in place
+ * told them "Password reset complete" and then "wait a few minutes" on the
+ * first try with the new password, which reads as a reset that failed. The
+ * per-address bucket is shared with other accounts and is left alone.
+ */
+export function clearSignInPauses(academyId: string, {
+  database = initializeDatabase(),
+}: {
+  database?: SmbaDatabaseExecutor
+} = {}) {
+  const subjectHash = authSubjectHash(normalizeAcademyId(academyId))
+  recordLoginSuccess(subjectHash, { database })
+  database.delete(authLoginAttempts)
+    .where(eq(authLoginAttempts.key, `pin:${subjectHash}`))
+    .run()
+}
+
+/**
+ * Whether this account's authenticator checks are paused: Better Auth's
+ * sign-in lock on the factor, or the portal's own budget for this scope.
+ * Read-only -- it spends nothing -- so a screen can say "wait" instead of
+ * "wrong code" when a right code was refused only because of the pause.
+ */
+export function secondFactorChecksPaused(accountId: string, scope: SecondFactorScope, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  if (scope === "challenge") {
+    const factor = database.select({ lockedUntil: authTwoFactors.lockedUntil })
+      .from(authTwoFactors)
+      .where(eq(authTwoFactors.userId, accountId))
+      .get()
+    if (factor?.lockedUntil && factor.lockedUntil > now) return true
+  }
+  const row = database.select({ blockedUntil: authLoginAttempts.blockedUntil })
+    .from(authLoginAttempts)
+    .where(eq(authLoginAttempts.key, secondFactorKey(accountId, scope).key))
+    .get()
+  return Boolean(row?.blockedUntil && row.blockedUntil > now)
 }
 
 export function ensureBootstrapCredential({

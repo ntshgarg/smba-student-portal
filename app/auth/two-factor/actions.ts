@@ -5,6 +5,7 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { getAuth } from "@/lib/auth/better-auth"
+import { withdrawPendingAuthenticatorResetRequests } from "@/lib/auth/authenticator-reset-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import {
   releaseLoginAttempt,
@@ -18,6 +19,7 @@ import {
   forgetTrustedDevices,
 } from "@/lib/auth/second-factor-reset"
 import { getRawAuthSession } from "@/lib/auth/session"
+import { challengedAccountId } from "@/lib/auth/two-factor-challenge"
 import { sessionProvider } from "@/lib/data"
 import {
   authSubjectHash,
@@ -46,6 +48,8 @@ export type TotpReconnectState = {
 }
 
 const TOO_MANY_SECOND_FACTOR_ATTEMPTS = "Too many attempts. Wait a few minutes before trying again."
+const SECOND_FACTOR_LOCKED =
+  "Too many codes were tried, so code checks are paused for up to 15 minutes. Wait, then enter a fresh code from your authenticator app. Recovery codes are refused until the pause ends too."
 
 /*
  * Whether this account already has a working authenticator. The setup screens
@@ -62,59 +66,47 @@ function hasVerifiedAuthenticator(accountId: string) {
     .get())
 }
 
-const SIGN_IN_CHALLENGE_EXPIRED = "Your sign-in has expired. Sign in again."
-
 /*
- * Every value the request carries under one cookie name, read leniently: names
- * and values trimmed, surrounding quotes dropped, percent-decoded. Lenient on
- * purpose -- Next's cookie parser and the one Better Auth verifies with disagree
- * about duplicates, padding and quotes, so reading the challenge with either
- * parser alone let a crafted Cookie header show this code one value (or none)
- * while Better Auth checked another. Collecting every candidate and accepting
- * only exactly one leaves nothing for the two to disagree about.
+ * Better Auth's sign-in lock on the authenticator: eight wrong codes and every
+ * code, right or wrong, is refused for fifteen minutes. The library refuses with
+ * its own error, which these actions used to answer "That code was not
+ * accepted" -- so a coach typing the right code from the phone was told it was
+ * wrong, over and over, and then spent recovery codes that were refused the
+ * same way. The lock is read first so the coach is told to wait instead, and
+ * no guess is spent while it stands.
  */
-function cookieValues(cookieHeader: string | null, name: string) {
-  const values: string[] = []
-  for (const pair of (cookieHeader ?? "").split(";")) {
-    const separator = pair.indexOf("=")
-    if (separator === -1 || pair.slice(0, separator).trim() !== name) continue
-    let value = pair.slice(separator + 1).trim()
-    if (value.startsWith("\"")) value = value.slice(1, -1)
-    try {
-      values.push(decodeURIComponent(value))
-    } catch {
-      values.push(value)
-    }
-  }
-  return values
+function authenticatorSignInLocked(accountId: string) {
+  const factor = initializeDatabase().select({ lockedUntil: authTwoFactors.lockedUntil })
+    .from(authTwoFactors)
+    .where(eq(authTwoFactors.userId, accountId))
+    .get()
+  return Boolean(factor?.lockedUntil && factor.lockedUntil > new Date())
+}
+
+function isTooManyRequests(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+  const status = (error as { status?: unknown }).status
+  return status === "TOO_MANY_REQUESTS" || status === 429
 }
 
 /*
- * The account a half-finished sign-in is waiting on, from the challenge cookie
- * the first factor set. The cookie holds the challenge id and a signature; the
- * id is random and only issued to whoever passed the password or PIN, so it
- * cannot be made up to point at someone else's account, and Better Auth checks
- * the signature itself when it verifies the code. Null -- and the request is
- * refused -- when there is no live challenge, when the cookie appears more than
- * once, or when the lookup fails: a code is never checked here without first
- * spending the challenged account's budget.
+ * The coach has just proved they hold an authenticator, so a reset request
+ * still waiting for the owner can only do harm now: approving it would wipe
+ * the authenticator they hold and sign them out everywhere. Withdrawn here.
+ * Never allowed to change what the person sees.
  */
-async function challengedAccountId(requestHeaders: Pick<Headers, "get">) {
+function withdrawStaleResetRequest(
+  accountId: string,
+  reason: "authenticator_connected" | "signed_in_with_authenticator",
+) {
   try {
-    const authContext = await getAuth().$context
-    const name = authContext.createAuthCookie("two_factor").name
-    const values = cookieValues(requestHeaders.get("cookie"), name)
-    if (values.length !== 1) return null
-    const signatureStart = values[0]!.lastIndexOf(".")
-    if (signatureStart < 1) return null
-    const challenge = await authContext.internalAdapter
-      .findVerificationValue(values[0]!.slice(0, signatureStart))
-    if (!challenge || challenge.expiresAt <= new Date()) return null
-    return challenge.value
+    withdrawPendingAuthenticatorResetRequests(accountId, { reason })
   } catch {
-    return null
+    // The sign-in has already succeeded.
   }
 }
+
+const SIGN_IN_CHALLENGE_EXPIRED = "Your sign-in has expired. Sign in again."
 
 /*
  * The sign-in code check is for a half-finished sign-in only. With a session in
@@ -233,6 +225,18 @@ export async function beginAuthenticatorReconnect(
     }
   }
   if (!await verifyCurrentPassword({ accountId: identity.subjectId, password })) {
+    // Already counted by the reservation; recorded as every other password
+    // check on these screens is, so the security log sees the guess.
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      actorAccountId: identity.subjectId,
+      eventType: "login_failed",
+      ipHash: security.ipHash,
+      metadata: { factor: "current_password", operation: "totp_reconnect" },
+      outcome: "failure",
+      subjectHash,
+      userAgent: security.userAgent,
+    })
     return { error: "The current password could not be verified.", errorField: "password" }
   }
   releaseLoginAttempt(attempt)
@@ -364,6 +368,16 @@ export async function startTotpSetup(
       },
     }
   } catch {
+    writeAuthSecurityEvent({
+      accountId: rawSession.user.id,
+      actorAccountId: rawSession.user.id,
+      eventType: "login_failed",
+      ipHash: security.ipHash,
+      metadata: { factor: "current_password", operation: "totp_setup" },
+      outcome: "failure",
+      subjectHash,
+      userAgent: security.userAgent,
+    })
     return { error: "That password could not be verified.", setup: null }
   }
 }
@@ -420,6 +434,7 @@ export async function confirmTotpSetup(
    */
   const endedSessions = endSessionsStartedBefore(rawSession.user.id, connectedAt)
   const forgottenDevices = forgetTrustedDevices(rawSession.user.id)
+  withdrawStaleResetRequest(rawSession.user.id, "authenticator_connected")
   const security = requestSecurityContext(requestHeaders)
   writeAuthSecurityEvent({
     accountId: rawSession.user.id,
@@ -494,6 +509,10 @@ export async function verifyTotpSignIn(
   // past it. The account's own budget is spent here first, as a single step.
   const accountId = await challengedAccountId(requestHeaders)
   if (!accountId) return { error: SIGN_IN_CHALLENGE_EXPIRED }
+  if (authenticatorSignInLocked(accountId)) {
+    recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
+    return { error: SECOND_FACTOR_LOCKED }
+  }
   if (!reserveSecondFactorAttempt(accountId, "challenge")) {
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: TOO_MANY_SECOND_FACTOR_ATTEMPTS }
@@ -505,11 +524,14 @@ export async function verifyTotpSignIn(
     })
     releaseSecondFactorAttempt(response.user.id)
     recordSecondFactorSuccess(requestHeaders, response.user.id, "totp")
+    withdrawStaleResetRequest(response.user.id, "signed_in_with_authenticator")
     redirect(destinationForUser(response.user.id))
   } catch (error) {
     // Next.js redirects are intentionally thrown; do not turn a successful
     // verification into an error message.
     if (error && typeof error === "object" && "digest" in error) throw error
+    // The lock can also land between the read above and this check.
+    if (isTooManyRequests(error)) return { error: SECOND_FACTOR_LOCKED }
     recordSecondFactorFailure(requestHeaders, accountId, "totp")
     return { error: "That code was not accepted. Wait for a new code and try again." }
   }
@@ -525,6 +547,12 @@ export async function verifyBackupCodeSignIn(
   const requestHeaders = await headers()
   const accountId = await challengedAccountId(requestHeaders)
   if (!accountId) return { error: SIGN_IN_CHALLENGE_EXPIRED }
+  // While the lock stands a recovery code is refused like any other, so say
+  // so before the coach spends one.
+  if (authenticatorSignInLocked(accountId)) {
+    recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
+    return { error: SECOND_FACTOR_LOCKED }
+  }
   if (!reserveSecondFactorAttempt(accountId, "challenge")) {
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: TOO_MANY_SECOND_FACTOR_ATTEMPTS }
@@ -539,9 +567,11 @@ export async function verifyBackupCodeSignIn(
     // and each one is single-use, so any use at all is worth an alert: it is
     // either the owner who lost their phone or someone who found the codes.
     recordSecondFactorSuccess(requestHeaders, response.user.id, "backup_code")
+    withdrawStaleResetRequest(response.user.id, "signed_in_with_authenticator")
     redirect(destinationForUser(response.user.id))
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error
+    if (isTooManyRequests(error)) return { error: SECOND_FACTOR_LOCKED }
     recordSecondFactorFailure(requestHeaders, accountId, "backup_code")
     return { error: "That recovery code was not accepted." }
   }

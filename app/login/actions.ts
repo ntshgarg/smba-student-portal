@@ -13,6 +13,7 @@ import {
 import {
   findApprovedAccountByAcademyId,
   confirmRegistration,
+  registrationCodeChecksPaused,
   requestRegistration,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
@@ -80,6 +81,14 @@ export type { RegistrationFormState } from "@/lib/auth/registration-form"
 
 /** One message for every way a code can be unusable -- see confirmRegistrationCode. */
 const INVALID_CODE_MESSAGE = "That code is invalid or expired."
+/*
+ * The one exception: checks paused from this connection. Every key behind the
+ * pause was spent from here, so naming it reveals nothing about the identity,
+ * and during a sign-up session on shared wifi it is the difference between a
+ * family waiting a few minutes and a family deciding the code is broken.
+ */
+const CODE_CHECKS_PAUSED_MESSAGE =
+  "Too many codes were tried from this connection. Wait a few minutes, then enter the same code again."
 
 function registrationValuesFrom(formData: FormData): RegistrationValues {
   return {
@@ -390,7 +399,17 @@ export async function confirmRegistrationCode(
     requestedRole: values.requestedRole,
     security: requestSecurityContext(requestHeaders),
   })
-  if (!result) return { ...base, error: INVALID_CODE_MESSAGE, errorField: "code" }
+  if (!result) {
+    return {
+      ...base,
+      error: registrationCodeChecksPaused({
+        email: values.email,
+        fullName: values.fullName,
+        security: requestSecurityContext(requestHeaders),
+      }) ? CODE_CHECKS_PAUSED_MESSAGE : INVALID_CODE_MESSAGE,
+      errorField: "code",
+    }
+  }
 
   if (result.standing === "new") {
     /*

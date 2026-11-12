@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
     throw error
   }),
   requestRecoveryEmailVerification: vi.fn(),
+  verifyCurrentPasswordAttempt: vi.fn(),
 }))
 
 vi.mock("server-only", () => ({}))
@@ -37,10 +38,16 @@ vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
 vi.mock("@/lib/auth/credential-service", () => ({
   ACTIVATION_CLAIM_COOKIE: "activation",
   getActivationClaimStatus: vi.fn(),
-  verifyCurrentPasswordAttempt: vi.fn(),
+  verifyCurrentPasswordAttempt: mocks.verifyCurrentPasswordAttempt,
 }))
 vi.mock("@/lib/auth/cookie-policy", () => ({ secureAuthCookiesRequired: vi.fn() }))
 vi.mock("@/lib/auth/recovery-service", () => ({
+  EMAIL_VERIFICATION_LIFETIME_MS: 10 * 60 * 1000,
+  emailCodeChecksPaused: vi.fn(() => false),
+  freshAccountCodeChecksPaused: vi.fn(() => false),
+  normalizeEmailAddress: vi.fn((value: string) => value.trim().toLowerCase()),
+  notifyRecoveryEmailReplaced: vi.fn(async () => false),
+  recoveryEmailSendRefusal: vi.fn(() => null),
   confirmRecoveryEmailVerification: mocks.confirmRecoveryEmailVerification,
   getRecoveryEmail: mocks.getRecoveryEmail,
   HEAD_SETUP_EMAIL_COOKIE: "head-setup-email",
@@ -74,6 +81,7 @@ function enrolmentData(email: string, code?: string) {
   const formData = new FormData()
   formData.set("email", email)
   if (code) formData.set("code", code)
+  else formData.set("currentPassword", "Current secure password!")
   return formData
 }
 
@@ -84,6 +92,44 @@ describe("recovery-email enrolment is first-time only", () => {
     mocks.getRecoveryEmail.mockReturnValue(null)
     mocks.requestRecoveryEmailVerification.mockResolvedValue({ email: "new@example.com" })
     mocks.confirmRecoveryEmailVerification.mockReturnValue(true)
+    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("verified")
+  })
+
+  /*
+   * The first address decides who can reset the password from then on, so a
+   * still-signed-in phone picked up by someone else must not be enough to set
+   * it: they would add their own inbox, reset the password and keep the account.
+   */
+  it("asks for the current password before sending a first recovery address", async () => {
+    mocks.getCurrentIdentity.mockResolvedValue({
+      academyId: "SMBA-PL-0001",
+      role: "player",
+      subjectId: "player-one",
+    })
+    const withoutPassword = new FormData()
+    withoutPassword.set("email", "borrowed@example.com")
+
+    await expect(requestCurrentRecoveryEmail(initialState, withoutPassword)).resolves.toEqual({
+      email: "borrowed@example.com",
+      error: "Enter your current password.",
+      sent: false,
+    })
+    expect(mocks.requestRecoveryEmailVerification).not.toHaveBeenCalled()
+
+    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("invalid")
+    await expect(requestCurrentRecoveryEmail(initialState, enrolmentData("borrowed@example.com")))
+      .resolves.toEqual({
+        email: "borrowed@example.com",
+        error: "The current password could not be verified.",
+        sent: false,
+      })
+    expect(mocks.verifyCurrentPasswordAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      academyId: "SMBA-PL-0001",
+      accountId: "player-one",
+      operation: "add_recovery_email",
+      password: "Current secure password!",
+    }))
+    expect(mocks.requestRecoveryEmailVerification).not.toHaveBeenCalled()
   })
 
   it("will not send an enrolment code to an account that already has an address", async () => {

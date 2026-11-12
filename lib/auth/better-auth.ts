@@ -13,6 +13,7 @@ import { smbaPinLogin } from "@/lib/auth/pin-plugin"
 import {
   TRUST_DEVICE_IDENTIFIER_PREFIX,
   storedTrustDeviceIdentifier,
+  trustedDeviceDatabaseHooks,
 } from "@/lib/auth/second-factor-reset"
 import { usernameLoginHooks } from "@/lib/auth/username-login-guard"
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
@@ -86,6 +87,9 @@ function createAuth() {
   // the `/sign-in/username` handler, so this is the only place the guard can sit
   // and still cover both the login form and the public route.
   hooks: usernameLoginHooks,
+  // Holds a renewed "trust this device" to the date it was first given, so 30
+  // days means 30 days (lib/auth/second-factor-reset.ts).
+  databaseHooks: trustedDeviceDatabaseHooks,
   rateLimit: {
     enabled: true,
     max: 100,

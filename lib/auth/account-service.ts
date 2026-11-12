@@ -37,11 +37,13 @@ import {
 } from "@/lib/auth/credential-service"
 import {
   confirmRegistrationVerification,
+  emailCodeChecksPaused,
   genericAcceptedResponse,
   normalizeEmailAddress,
   registrationSubjectKey,
   requestRegistrationVerification,
 } from "@/lib/auth/recovery-service"
+import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { authRecoveryEmails } from "@/lib/db/schema"
 import type { AuthMailer } from "@/lib/auth/mailer"
 import type { RegistrationStanding } from "@/lib/auth/registration-form"
@@ -96,6 +98,29 @@ export function registrationIdentity(fullName: string, email: string) {
     normalizedName,
     subjectKey: registrationSubjectKey(normalizedEmail, normalizedName),
   }
+}
+
+/**
+ * Whether registration code checks for this name and address are paused from
+ * this connection, so a refused code can be answered "wait" rather than
+ * "invalid". Read-only, and every key behind it is spent from the requester's
+ * own address, so it says nothing about whether the identity exists.
+ */
+export function registrationCodeChecksPaused(input: {
+  email: string
+  fullName: string
+  security?: RegistrationSecurity
+}, options?: {
+  database?: SmbaDatabase
+  now?: Date
+}) {
+  const identity = registrationIdentity(normalizeFullName(input.fullName), input.email)
+  if (!identity) return false
+  return emailCodeChecksPaused({
+    kind: "registration",
+    security: input.security,
+    subjectKey: identity.subjectKey,
+  }, options)
 }
 
 export function normalizeRegistrationPhone(value: string) {
@@ -347,6 +372,14 @@ export function confirmRegistration(input: {
         createdAt: now,
         updatedAt: now,
       }).run()
+      // Recorded as every other path that sets a recovery address records it,
+      // so the security log shows where each account's address came from.
+      writeAuthSecurityEvent({
+        accountId,
+        eventType: "recovery_email_verified",
+        metadata: { source: "registration" },
+        outcome: "success",
+      }, { database: tx, now })
       if (input.activationToken) {
         saveActivationClaim({ accountId, token: input.activationToken }, { database: tx, now })
       }

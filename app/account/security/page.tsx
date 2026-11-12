@@ -1,11 +1,12 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { asc, eq } from "drizzle-orm"
+import { and, desc, eq, gt } from "drizzle-orm"
 import { redirect } from "next/navigation"
 
 import { AccountSecurityWorkspace } from "@/components/account-security-workspace"
 import { RecoveryEmailSecurityPanel } from "@/components/recovery-email-security-panel"
 import { getAuth } from "@/lib/auth/better-auth"
+import { getPendingAuthenticatorResetRequest } from "@/lib/auth/authenticator-reset-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
@@ -13,6 +14,7 @@ import { initializeDatabase } from "@/lib/db/client"
 import { authRuntimeSessions } from "@/lib/db/schema"
 import { hasPinCredential } from "@/lib/auth/credential-service"
 import { getRecoveryEmail, maskRecoveryEmail } from "@/lib/auth/recovery-service"
+import { listTrustedDevices } from "@/lib/auth/second-factor-reset"
 
 export const metadata: Metadata = {
   title: "Account security",
@@ -37,7 +39,12 @@ async function countUnusedRecoveryCodes(userId: string) {
   }
 }
 
-export default async function AccountSecurityPage() {
+export default async function AccountSecurityPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ emailChanged?: string }>
+}) {
+  const emailChanged = (await searchParams).emailChanged === "1"
   const identity = await sessionProvider.getCurrentIdentity()
   if (!identity) redirect("/login")
   if (identity.previewMode) redirect("/admin")
@@ -45,9 +52,19 @@ export default async function AccountSecurityPage() {
   if (!rawSession) redirect("/login")
 
   const database = initializeDatabase()
+  const now = new Date()
+  /*
+   * Live sign-ins only, newest first. Expired rows cannot be used, so counting
+   * them as signed-in devices made a cleared account look occupied; and the
+   * list is cut to the five most recent, so it has to start with the newest --
+   * a sign-in the coach does not recognise is the one this list exists to show.
+   */
   const sessions = database.select().from(authRuntimeSessions)
-    .where(eq(authRuntimeSessions.userId, identity.subjectId))
-    .orderBy(asc(authRuntimeSessions.createdAt))
+    .where(and(
+      eq(authRuntimeSessions.userId, identity.subjectId),
+      gt(authRuntimeSessions.expiresAt, now),
+    ))
+    .orderBy(desc(authRuntimeSessions.createdAt))
     .all()
     .map((session) => ({
       createdAt: session.createdAt.toISOString(),
@@ -66,6 +83,12 @@ export default async function AccountSecurityPage() {
   const recoveryEmail = getRecoveryEmail(identity.subjectId, { database })
   const recoverySecondFactorRequired = identity.role === "platform_admin"
     || access?.accessLevel === "head_admin"
+  const trustedBrowserExpiries = authenticatorEnabled
+    ? listTrustedDevices(identity.subjectId, { database, now }).map((expiresAt) => expiresAt.toISOString())
+    : []
+  const pendingAuthenticatorReset = access?.accessLevel === "head_admin"
+    ? getPendingAuthenticatorResetRequest(identity.subjectId, { database, now })
+    : null
 
   const returnHref = identity.role === "platform_admin"
     ? "/admin"
@@ -86,13 +109,16 @@ export default async function AccountSecurityPage() {
             || identity.role === "platform_admin")}
           pinEnabled={allowPin && hasPinCredential(identity.subjectId, { database })}
           pinRequired={identity.role === "platform_admin" || access?.accessLevel === "head_admin"}
+          pendingAuthenticatorResetRequestedAt={pendingAuthenticatorReset?.requestedAt.toISOString() ?? null}
           sessions={sessions}
+          trustedBrowserExpiries={trustedBrowserExpiries}
           unusedRecoveryCodeCount={authenticatorEnabled
             ? await countUnusedRecoveryCodes(rawSession.user.id)
             : null}
         />
         {recoveryEmail ? (
           <RecoveryEmailSecurityPanel
+            changed={emailChanged}
             maskedEmail={maskRecoveryEmail(recoveryEmail.email)}
             requiresSecondFactor={recoverySecondFactorRequired}
           />

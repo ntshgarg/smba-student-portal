@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash } from "node:crypto"
 
-import { and, eq, like, lt } from "drizzle-orm"
+import { and, asc, eq, gt, like, lt, lte } from "drizzle-orm"
 
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import { authRuntimeSessions, authSessions, authVerifications } from "@/lib/db/schema"
@@ -38,6 +38,107 @@ export function forgetTrustedDevices(
   return database.delete(authVerifications).where(and(
     eq(authVerifications.value, accountId),
     like(authVerifications.identifier, `${TRUST_DEVICE_IDENTIFIER_PREFIX}%`),
+  )).run().changes
+}
+
+/**
+ * The browsers this account currently trusts to skip the authenticator code,
+ * as the expiry of each, soonest first. Nothing identifies the browser itself
+ * -- the library stores no device details with the trust -- so the account
+ * security page can say how many there are and until when, and offer to forget
+ * them all.
+ */
+export function listTrustedDevices(
+  accountId: string,
+  {
+    database = initializeDatabase(),
+    now = new Date(),
+  }: { database?: SmbaDatabaseExecutor, now?: Date } = {},
+) {
+  return database.select({ expiresAt: authVerifications.expiresAt })
+    .from(authVerifications)
+    .where(and(
+      eq(authVerifications.value, accountId),
+      // Only rows the library can still find; older unprefixed ones no longer
+      // skip anything and just wait out their expiry.
+      like(authVerifications.identifier, `${STORED_TRUST_DEVICE_PREFIX}%`),
+      gt(authVerifications.expiresAt, now),
+    ))
+    .orderBy(asc(authVerifications.expiresAt))
+    .all()
+    .map((row) => row.expiresAt)
+}
+
+/*
+ * "Trust this private device for 30 days" has to mean 30 days.
+ *
+ * Better Auth renews a trusted browser on every password sign-in: it deletes
+ * the trust row the browser's cookie names and writes a fresh one good for
+ * another full 30 days (plugins/two-factor/index.mjs, the /sign-in after-hook).
+ * A browser used at least monthly therefore never saw the code again, which is
+ * not what the coach agreed to.
+ *
+ * The renewal is a delete followed by a create inside one request, so these
+ * two database hooks carry the old row's expiry across: the delete remembers
+ * it against the request it happened in, and the create that follows in the
+ * same request is held to it. The browser keeps its trust until the date it
+ * was first given, then is asked for a code. A brand-new trust (the checkbox
+ * on the code page) has no delete in front of it and gets the full 30 days.
+ */
+const trustExpiryBeingRenewed = new WeakMap<object, { accountId: string, expiresAt: Date }>()
+
+type TrustRow = { expiresAt: Date | number | string, identifier?: string, value?: string }
+
+function storedTrustRow(row: TrustRow | null | undefined): row is TrustRow & { identifier: string, value: string } {
+  return typeof row?.identifier === "string"
+    && row.identifier.startsWith(STORED_TRUST_DEVICE_PREFIX)
+    && typeof row.value === "string"
+}
+
+export const trustedDeviceDatabaseHooks = {
+  verification: {
+    create: {
+      async before(data: TrustRow, context: object | null | undefined) {
+        if (!context || !storedTrustRow(data)) return
+        const renewed = trustExpiryBeingRenewed.get(context)
+        if (!renewed || renewed.accountId !== data.value) return
+        trustExpiryBeingRenewed.delete(context)
+        if (new Date(data.expiresAt).getTime() <= renewed.expiresAt.getTime()) return
+        return { data: { expiresAt: renewed.expiresAt } }
+      },
+    },
+    delete: {
+      async before(row: TrustRow, context: object | null | undefined) {
+        if (!context || !storedTrustRow(row)) return
+        trustExpiryBeingRenewed.set(context, {
+          accountId: row.value,
+          expiresAt: new Date(row.expiresAt),
+        })
+      },
+    },
+  },
+}
+
+/*
+ * Clears this account's sign-ins that have already run out.
+ *
+ * An expired sign-in can no longer be used, but its row stayed: Better Auth
+ * only drops one when that same browser comes back with it. "Log out other
+ * devices" goes through the library's list of live sign-ins, so the dead rows
+ * survived it too, and the devices list went on counting them -- a coach who
+ * had just signed everything else out after losing a phone still read "6
+ * signed-in devices" and had every reason to think someone was in.
+ */
+export function endExpiredSessions(
+  accountId: string,
+  {
+    database = initializeDatabase(),
+    now = new Date(),
+  }: { database?: SmbaDatabaseExecutor, now?: Date } = {},
+) {
+  return database.delete(authRuntimeSessions).where(and(
+    eq(authRuntimeSessions.userId, accountId),
+    lte(authRuntimeSessions.expiresAt, now),
   )).run().changes
 }
 

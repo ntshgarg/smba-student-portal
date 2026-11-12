@@ -60,6 +60,7 @@ vi.mock("@/app/auth/pin/actions", () => ({
 }))
 vi.mock("@/app/recover/actions", () => ({
   completePasswordRecoveryAction: droppedRequest,
+  openPasswordRecoveryLinkAction: droppedRequest,
   requestPasswordRecoveryAction: droppedRequest,
   verifyRecoverySecondFactorAction: droppedRequest,
 }))
@@ -74,6 +75,7 @@ vi.mock("@/app/auth/two-factor/actions", () => ({
   verifyTotpSignIn: droppedRequest,
 }))
 vi.mock("@/app/auth/two-factor/recovery/actions", () => ({
+  openAuthenticatorRecoveryLinkAction: droppedRequest,
   requestAuthenticatorRecoveryAction: droppedRequest,
   submitAuthenticatorRecoveryApprovalAction: droppedRequest,
 }))
@@ -82,7 +84,9 @@ vi.mock("@/app/account/recovery-email/actions", () => ({
   requestRecoveryEmailChange: droppedRequest,
 }))
 vi.mock("@/app/account/security/actions", () => ({
+  cancelAuthenticatorResetRequestAction: droppedRequest,
   changePasswordAction: droppedRequest,
+  forgetTrustedBrowsersAction: droppedRequest,
   reissueRecoveryCodesAction: droppedRequest,
   removePinAction: droppedRequest,
   revokeOtherSessionsAction: droppedRequest,
@@ -278,7 +282,7 @@ const surfaces: Surface[] = [
         subject: "Your recovery email change",
       },
       {
-        retained: "The code was not used and your current address is unchanged",
+        retained: "Your recovery email changes only once its code is accepted",
         subject: "Your verification code",
       },
     ],

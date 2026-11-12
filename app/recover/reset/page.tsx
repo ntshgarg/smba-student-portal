@@ -33,17 +33,21 @@ export default async function RecoveryResetPage() {
           <h1 id="recovery-reset-title">
             {status.state === "missing"
               ? "This recovery link is unavailable."
-              : status.requiresSecondFactor && !status.secondFactorVerified
-                ? "Verify it’s you."
-                : "Create a new password."}
+              : status.state === "unavailable"
+                ? "This reset needs the platform admin."
+                : status.requiresSecondFactor && !status.secondFactorVerified
+                  ? "Verify it’s you."
+                  : "Create a new password."}
           </h1>
           <p>{status.state === "missing"
             ? "Request a new email from the recovery page."
-            : status.requiresSecondFactor && !status.secondFactorVerified
-              ? "This protected account also requires its existing authenticator."
-              : `Resetting ${status.academyId} will log out every device and remove its old PIN.`}</p>
+            : status.state === "unavailable"
+              ? `${status.academyId} is a protected account with no authenticator connected, so its password cannot be reset by email alone. Speak to the platform admin.`
+              : status.requiresSecondFactor && !status.secondFactorVerified
+                ? "This protected account also requires its existing authenticator."
+                : `Resetting ${status.academyId} will log out every device and remove its old PIN.`}</p>
         </div>
-        {status.state === "missing" ? (
+        {status.state === "missing" || status.state === "unavailable" ? (
           <div className="login-empty-state"><Link href="/recover">Request another link</Link></div>
         ) : status.requiresSecondFactor && !status.secondFactorVerified
           ? <RecoverySecondFactorForm />

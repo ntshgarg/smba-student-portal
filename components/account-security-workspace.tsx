@@ -5,7 +5,9 @@ import Link from "next/link"
 import { Check, ClipboardCopy, FileDown, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
 
 import {
+  cancelAuthenticatorResetRequestAction,
   changePasswordAction,
+  forgetTrustedBrowsersAction,
   reissueRecoveryCodesAction,
   removePinAction,
   revokeOtherSessionsAction,
@@ -17,6 +19,7 @@ import {
 } from "@/app/account/security/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
+import { formatAcademyDate } from "@/lib/format"
 import { PasswordInput } from "@/components/password-input"
 import {
   browserDownloadPort,
@@ -56,6 +59,15 @@ const passwordFieldIds = {
 /** Sessions shown before the list has to be expanded. */
 const sessionPreviewCount = 5
 
+/*
+ * Sign-in and expiry times in the academy's own clock, like every other date
+ * in the portal. `toLocaleString` used the viewer's machine zone, so a coach
+ * travelling, or a browser set to UTC, read times that matched nothing else.
+ */
+function academyDateTime(value: string) {
+  return formatAcademyDate(value, { hour: "numeric", minute: "2-digit" })
+}
+
 function deviceLabel(userAgent: string | null) {
   if (!userAgent) return "Unknown browser"
   if (/iPhone|iPad/iu.test(userAgent)) return "Apple mobile device"
@@ -69,17 +81,23 @@ export function AccountSecurityWorkspace({
   allowPin,
   authenticatorEnabled,
   authenticatorRequired,
+  pendingAuthenticatorResetRequestedAt = null,
   pinEnabled,
   pinRequired,
   sessions,
+  trustedBrowserExpiries = [],
   unusedRecoveryCodeCount,
 }: {
   allowPin: boolean
   authenticatorEnabled: boolean
   authenticatorRequired: boolean
+  /** When a reset of this account's authenticator was asked for, if one is waiting. */
+  pendingAuthenticatorResetRequestedAt?: string | null
   pinEnabled: boolean
   pinRequired: boolean
   sessions: SecuritySession[]
+  /** One expiry per browser trusted to skip the authenticator code, soonest first. */
+  trustedBrowserExpiries?: string[]
   /** `null` when Better Auth could not be asked; the panel then states no count. */
   unusedRecoveryCodeCount: number | null
 }) {
@@ -135,6 +153,33 @@ export function AccountSecurityWorkspace({
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null)
   const [showAllSessions, setShowAllSessions] = useState(false)
   const [sessionsFeedback, setSessionsFeedback] = useState<ActionFeedback | null>(null)
+  const [trustFeedback, setTrustFeedback] = useState<ActionFeedback | null>(null)
+  const [resetFeedback, setResetFeedback] = useState<ActionFeedback | null>(null)
+
+  /** The same failure handling as the two sign-out buttons, for a one-click action. */
+  function runOneClick(
+    run: () => Promise<void>,
+    setFeedback: (feedback: ActionFeedback | null) => void,
+    copy: { fallbackMessage: string, retained: string, subject: string, success: string },
+  ) {
+    setFeedback(null)
+    startTransition(async () => {
+      try {
+        await run()
+        setFeedback({ message: copy.success, tone: "success" })
+      } catch (error) {
+        setFeedback({
+          message: describeSaveFailure({
+            error,
+            fallbackMessage: copy.fallbackMessage,
+            retained: copy.retained,
+            subject: copy.subject,
+          }).message,
+          tone: "error",
+        })
+      }
+    })
+  }
 
   /*
    * The two revoke buttons were the only mutations in this file that did not
@@ -183,11 +228,17 @@ export function AccountSecurityWorkspace({
     document.getElementById(passwordFieldIds[field])?.focus()
   }, [passwordState])
 
-  // Keep this device visible even when the list is capped.
-  const orderedSessions = useMemo(() => [
-    ...sessions.filter((session) => session.current),
-    ...sessions.filter((session) => !session.current),
-  ], [sessions])
+  // Keep this device visible even when the list is capped, then newest first:
+  // the five shown are the five most recent, as the button below says.
+  const orderedSessions = useMemo(() => {
+    const newestFirst = [...sessions].sort((left, right) => (
+      Date.parse(right.createdAt) - Date.parse(left.createdAt)
+    ))
+    return [
+      ...newestFirst.filter((session) => session.current),
+      ...newestFirst.filter((session) => !session.current),
+    ]
+  }, [sessions])
   const visibleSessions = showAllSessions
     ? orderedSessions
     : orderedSessions.slice(0, sessionPreviewCount)
@@ -329,6 +380,69 @@ export function AccountSecurityWorkspace({
         </section>
       ) : null}
 
+      {pendingAuthenticatorResetRequestedAt ? (
+        <section className="security-panel" aria-labelledby="authenticator-reset-request-title">
+          <header>
+            <ShieldCheck aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Authenticator reset</p>
+              <h2 id="authenticator-reset-request-title">A reset request is waiting</h2>
+            </div>
+          </header>
+          <p>{`On ${formatAcademyDate(pendingAuthenticatorResetRequestedAt)} someone using your recovery email asked the platform admin to reset this account's authenticator. If the admin approves it, your authenticator stops working and every device is signed out.`}</p>
+          <p>If you did not ask for this, or you have your authenticator again, cancel the request.</p>
+          <button
+            className="security-secondary-action"
+            type="button"
+            disabled={isPending}
+            onClick={() => runOneClick(() => cancelAuthenticatorResetRequestAction(), setResetFeedback, {
+              fallbackMessage: "The request could not be cancelled",
+              retained: "It is still waiting for the platform admin",
+              subject: "The cancellation",
+              success: "Reset request cancelled. Your authenticator is unchanged.",
+            })}
+          >
+            Cancel reset request
+          </button>
+          <InlineNotice message={resetFeedback?.message} reserveSpace={false} tone={resetFeedback?.tone} />
+        </section>
+      ) : resetFeedback ? (
+        <InlineNotice message={resetFeedback.message} reserveSpace={false} tone={resetFeedback.tone} />
+      ) : null}
+
+      {authenticatorEnabled ? (
+        <section className="security-panel" aria-labelledby="trusted-browsers-title">
+          <header>
+            <ShieldCheck aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Trusted browsers</p>
+              <h2 id="trusted-browsers-title">Browsers that skip the code</h2>
+            </div>
+          </header>
+          <p>{trustedBrowserExpiries.length === 0
+            ? "No browser skips the authenticator code. Every sign-in asks for it."
+            : trustedBrowserExpiries.length === 1
+              ? `1 browser skips the authenticator code until ${formatAcademyDate(trustedBrowserExpiries[0]!)}. After that it asks again.`
+              : `${trustedBrowserExpiries.length} browsers skip the authenticator code. The first stops on ${formatAcademyDate(trustedBrowserExpiries[0]!)} and the last on ${formatAcademyDate(trustedBrowserExpiries.at(-1)!)}. After that each asks again.`}</p>
+          {trustedBrowserExpiries.length > 0 ? (
+            <button
+              className="security-secondary-action"
+              type="button"
+              disabled={isPending}
+              onClick={() => runOneClick(() => forgetTrustedBrowsersAction(), setTrustFeedback, {
+                fallbackMessage: "The trusted browsers could not be forgotten",
+                retained: "They still skip the code",
+                subject: "Forgetting trusted browsers",
+                success: "Trusted browsers forgotten. Every browser, this one included, will ask for an authenticator code at its next sign-in.",
+              })}
+            >
+              Forget trusted browsers
+            </button>
+          ) : null}
+          <InlineNotice message={trustFeedback?.message} reserveSpace={false} tone={trustFeedback?.tone} />
+        </section>
+      ) : null}
+
       <div className="security-columns">
         <section className="security-panel" aria-labelledby="change-password-title">
           <header>
@@ -366,14 +480,14 @@ export function AccountSecurityWorkspace({
           </p>
           <ul className="security-sessions">
             {visibleSessions.map((session) => {
-              const signedIn = new Date(session.createdAt).toLocaleString("en-IN")
+              const signedIn = academyDateTime(session.createdAt)
               const revoking = revokingSessionId === session.id
               return (
                 <li key={session.id}>
                   <div>
                     <strong>{deviceLabel(session.userAgent)}{session.current ? " · This device" : ""}</strong>
                     <span>Signed in {signedIn}</span>
-                    <span>Expires {new Date(session.expiresAt).toLocaleString("en-IN")}</span>
+                    <span>Expires {academyDateTime(session.expiresAt)}</span>
                   </div>
                   {!session.current ? (
                     <button

@@ -11,8 +11,14 @@ import {
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import {
   confirmRecoveryEmailVerification,
+  EMAIL_VERIFICATION_LIFETIME_MS,
+  emailCodeChecksPaused,
+  freshAccountCodeChecksPaused,
   getRecoveryEmail,
   HEAD_SETUP_EMAIL_COOKIE,
+  normalizeEmailAddress,
+  notifyRecoveryEmailReplaced,
+  recoveryEmailSendRefusal,
   recoverySubjectKeyForAccount,
   recoverySubjectKeyForHeadSetup,
   requestRecoveryEmailVerification,
@@ -37,6 +43,23 @@ export type RecoveryEmailEnrollmentState = {
 
 async function securityContext() {
   return requestSecurityContext(await headers())
+}
+
+const INVALID_CODE = "That code is invalid or expired."
+const CODE_CHECKS_PAUSED =
+  "Too many codes were tried from this connection. Wait a few minutes, then enter the same code again."
+const TOO_MANY_ATTEMPTS = "Too many attempts. Wait a few minutes before trying again."
+
+/*
+ * The answer for a refused emailed code. A pause is reported as a pause: every
+ * key behind it was spent from this connection, so saying so tells nobody
+ * anything new, and a family typing the right code during a busy sign-up
+ * session needs to be told to wait rather than that the code is wrong.
+ */
+function refusedCodeMessage(subjectKey: string, security: Awaited<ReturnType<typeof securityContext>>) {
+  return emailCodeChecksPaused({ kind: "recovery-email", security, subjectKey })
+    ? CODE_CHECKS_PAUSED
+    : INVALID_CODE
 }
 
 export async function requestActivationRecoveryEmail(
@@ -73,15 +96,17 @@ export async function confirmActivationRecoveryEmail(
   if (status.state !== "approved") redirect("/activate")
   const email = String(formData.get("email") ?? "")
   const code = String(formData.get("code") ?? "").replace(/\s+/gu, "")
+  const security = await securityContext()
+  const subjectKey = recoverySubjectKeyForAccount(status.accountId)
   const confirmed = confirmRecoveryEmailVerification({
     accountId: status.accountId,
     code,
     email,
-    security: await securityContext(),
-    subjectKey: recoverySubjectKeyForAccount(status.accountId),
+    security,
+    subjectKey,
   })
   if (!confirmed) {
-    return { email, error: "That code is invalid or expired.", sent: true }
+    return { email, error: refusedCodeMessage(subjectKey, security), sent: true }
   }
   redirect("/activate")
 }
@@ -105,12 +130,48 @@ export async function requestCurrentRecoveryEmail(
   // for the current password and, for privileged roles, a fresh second factor.
   if (getRecoveryEmail(identity.subjectId)) redirect("/account/security")
   const email = String(formData.get("email") ?? "")
+  const currentPassword = String(formData.get("currentPassword") ?? "")
+  if (!email.trim()) {
+    return { email, error: "Enter a valid recovery email address.", sent: false }
+  }
+  if (!currentPassword) {
+    return { email, error: "Enter your current password.", sent: false }
+  }
+  const security = await securityContext()
+  const subjectKey = recoverySubjectKeyForAccount(identity.subjectId)
+  // Read before the password is checked, so a refusal to send costs nothing.
+  const refusal = recoveryEmailSendRefusal({ security, subjectKey })
+  if (refusal) return { email, error: refusal, sent: false }
+  /*
+   * The first recovery address decides who can reset this account's password
+   * from then on, so it asks for the password as a change does. Without it,
+   * anyone who picked up a player's still-signed-in phone before a recovery
+   * email was added could add their own, reset the password from it and keep
+   * the account.
+   */
+  const passwordResult = await verifyCurrentPasswordAttempt({
+    academyId: identity.academyId,
+    accountId: identity.subjectId,
+    ipHash: security.ipHash,
+    operation: "add_recovery_email",
+    password: currentPassword,
+    userAgent: security.userAgent,
+  })
+  if (passwordResult !== "verified") {
+    return {
+      email,
+      error: passwordResult === "blocked"
+        ? TOO_MANY_ATTEMPTS
+        : "The current password could not be verified.",
+      sent: false,
+    }
+  }
   try {
     const sent = await requestRecoveryEmailVerification({
       accountId: identity.subjectId,
       email,
-      security: await securityContext(),
-      subjectKey: recoverySubjectKeyForAccount(identity.subjectId),
+      security,
+      subjectKey,
     })
     return { email: sent.email, error: null, sent: true }
   } catch (error) {
@@ -135,14 +196,16 @@ export async function confirmCurrentRecoveryEmail(
   if (getRecoveryEmail(identity.subjectId)) redirect("/account/security")
   const email = String(formData.get("email") ?? "")
   const code = String(formData.get("code") ?? "").replace(/\s+/gu, "")
+  const security = await securityContext()
+  const subjectKey = recoverySubjectKeyForAccount(identity.subjectId)
   const confirmed = confirmRecoveryEmailVerification({
     accountId: identity.subjectId,
     code,
     email,
-    security: await securityContext(),
-    subjectKey: recoverySubjectKeyForAccount(identity.subjectId),
+    security,
+    subjectKey,
   })
-  if (!confirmed) return { email, error: "That code is invalid or expired.", sent: true }
+  if (!confirmed) return { email, error: refusedCodeMessage(subjectKey, security), sent: true }
   redirect(identity.role === "platform_admin"
     ? "/admin"
     : identity.role === "coach" ? "/coach" : "/player")
@@ -162,6 +225,11 @@ export async function requestRecoveryEmailChange(
     return { email, error: "Enter your current password.", sent: false }
   }
   const context = await securityContext()
+  const subjectKey = recoverySubjectKeyForAccount(identity.subjectId)
+  // Read before anything is checked: a head coach used to spend a recovery
+  // code on the step below only to be told "wait one minute" here afterwards.
+  const refusal = recoveryEmailSendRefusal({ security: context, subjectKey })
+  if (refusal) return { email, error: refusal, sent: false }
   const passwordResult = await verifyCurrentPasswordAttempt({
     academyId: identity.academyId,
     accountId: identity.subjectId,
@@ -190,17 +258,24 @@ export async function requestRecoveryEmailChange(
     if (!await verifyFreshAccountSecondFactor({
       accountId: identity.subjectId,
       credential,
+      operation: "change_recovery_email",
       security: context,
     })) {
-      return { email, error: "The authenticator or backup code was not accepted.", sent: false }
+      return {
+        email,
+        error: freshAccountCodeChecksPaused({ accountId: identity.subjectId, security: context })
+          ? TOO_MANY_ATTEMPTS
+          : "The authenticator or backup code was not accepted.",
+        sent: false,
+      }
     }
   }
   try {
     const sent = await requestRecoveryEmailVerification({
       accountId: identity.subjectId,
       email,
-      security: await securityContext(),
-      subjectKey: recoverySubjectKeyForAccount(identity.subjectId),
+      security: context,
+      subjectKey,
     })
     return { email: sent.email, error: null, sent: true }
   } catch (error) {
@@ -220,14 +295,37 @@ export async function confirmRecoveryEmailChange(
   if (!getRecoveryEmail(identity.subjectId)) redirect("/account/recovery-email/setup")
   const email = String(formData.get("email") ?? "")
   const code = String(formData.get("code") ?? "").replace(/\s+/gu, "")
+  const security = await securityContext()
+  const subjectKey = recoverySubjectKeyForAccount(identity.subjectId)
   const confirmed = confirmRecoveryEmailVerification({
     accountId: identity.subjectId,
     code,
     email,
-    security: await securityContext(),
-    subjectKey: recoverySubjectKeyForAccount(identity.subjectId),
+    security,
+    subjectKey,
   })
-  if (!confirmed) return { email, error: "That code is invalid or expired.", sent: true }
+  if (!confirmed) {
+    /*
+     * A press whose answer never arrived may still have gone through, and the
+     * code is spent once it has. When the address on file is already the one
+     * this code was for, and it was confirmed moments ago, the change landed:
+     * say so, rather than calling the code invalid and inviting a fresh start.
+     */
+    const current = getRecoveryEmail(identity.subjectId)
+    const submitted = normalizeEmailAddress(email)
+    if (current && submitted && current.email === submitted
+      && Date.now() - current.verifiedAt.getTime() < EMAIL_VERIFICATION_LIFETIME_MS) {
+      redirect("/account/security?emailChanged=1")
+    }
+    return { email, error: refusedCodeMessage(subjectKey, security), sent: true }
+  }
+  // The address that was replaced hears about it; whoever reads it is either
+  // the family, who already know, or the person the change was meant to shut out.
+  await notifyRecoveryEmailReplaced({
+    accountId: identity.subjectId,
+    newEmail: confirmed.email,
+    previousEmail: confirmed.previousEmail,
+  })
   redirect("/account/security?emailChanged=1")
 }
 
@@ -276,14 +374,15 @@ export async function confirmHeadSetupRecoveryEmail(
   const fullName = normalizeFullName(String(formData.get("fullName") ?? ""))
   const email = String(formData.get("email") ?? "")
   const code = String(formData.get("code") ?? "").replace(/\s+/gu, "")
+  const security = await securityContext()
   const confirmed = confirmRecoveryEmailVerification({
     code,
     email,
-    security: await securityContext(),
+    security,
     subjectKey: context.subjectKey,
   })
   if (!confirmed?.receiptToken) {
-    return { email, error: "That code is invalid or expired.", fullName, sent: true }
+    return { email, error: refusedCodeMessage(context.subjectKey, security), fullName, sent: true }
   }
   cookieStore.set(HEAD_SETUP_EMAIL_COOKIE, confirmed.receiptToken, {
     httpOnly: true,

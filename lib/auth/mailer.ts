@@ -50,12 +50,27 @@ export type RegistrationVerificationMessage = {
   to: string
 }
 
+/**
+ * A plain account-security notice: something already happened to the account
+ * and the person it belongs to should hear about it -- the recovery address was
+ * replaced, an authenticator reset was approved or declined. Each line is one
+ * paragraph of plain text.
+ */
+export type SecurityNoticeMessage = {
+  fullName: string
+  lines: string[]
+  subject: string
+  to: string
+}
+
 export interface AuthMailer {
   sendAcademyIdIssued(message: AcademyIdIssuedMessage): Promise<void>
   sendAuthenticatorRecovery(message: AuthenticatorRecoveryMessage): Promise<void>
   sendPasswordRecovery(message: PasswordRecoveryMessage): Promise<void>
   sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage): Promise<void>
   sendRegistrationVerification(message: RegistrationVerificationMessage): Promise<void>
+  /** Optional so a mailer that cannot send notices still sends every code. */
+  sendSecurityNotice?(message: SecurityNoticeMessage): Promise<void>
 }
 
 export type CapturedAuthEmail =
@@ -64,6 +79,7 @@ export type CapturedAuthEmail =
   | ({ kind: "recovery-email-verification" } & RecoveryEmailVerificationMessage)
   | ({ kind: "password-recovery" } & PasswordRecoveryMessage)
   | ({ kind: "registration-verification" } & RegistrationVerificationMessage)
+  | ({ kind: "security-notice" } & SecurityNoticeMessage)
 
 const memoryOutbox: CapturedAuthEmail[] = []
 
@@ -136,6 +152,10 @@ class MemoryAuthMailer implements AuthMailer {
 
   async sendRegistrationVerification(message: RegistrationVerificationMessage) {
     memoryOutbox.push({ ...message, kind: "registration-verification" })
+  }
+
+  async sendSecurityNotice(message: SecurityNoticeMessage) {
+    memoryOutbox.push({ ...message, kind: "security-notice" })
   }
 }
 
@@ -214,6 +234,15 @@ class ResendAuthMailer implements AuthMailer {
       subject: "Reset your SMBA password",
       text: `Hello ${message.fullName},\n\nOpen this secure link to reset your SMBA password:\n${message.resetUrl}\n\nIt expires in ${message.expiresInMinutes} minutes. If you did not request this, you can ignore this email.`,
       html: `<p>Hello ${name},</p><p>Use the secure link below to reset your SMBA password.</p><p><a href="${resetUrl}">Reset password</a></p><p>It expires in ${message.expiresInMinutes} minutes. If you did not request this, you can ignore this email.</p>`,
+    })
+  }
+
+  async sendSecurityNotice(message: SecurityNoticeMessage) {
+    await this.send({
+      to: message.to,
+      subject: message.subject,
+      text: `Hello ${message.fullName},\n\n${message.lines.join("\n\n")}`,
+      html: `<p>Hello ${escapeHtml(message.fullName)},</p>${message.lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}`,
     })
   }
 

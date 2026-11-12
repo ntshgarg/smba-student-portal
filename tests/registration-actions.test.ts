@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
   confirmRegistration: vi.fn(),
   registerPublicAccountRequest: vi.fn(),
+  registrationCodeChecksPaused: vi.fn(() => false),
   requestRegistration: vi.fn(),
   signInPin: vi.fn(),
   signInUsername: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock("@/lib/auth/account-service", () => ({
   confirmRegistration: mocks.confirmRegistration,
   findApprovedAccountByAcademyId: mocks.findApprovedAccountByAcademyId,
   registerPublicAccountRequest: mocks.registerPublicAccountRequest,
+  registrationCodeChecksPaused: mocks.registrationCodeChecksPaused,
   requestRegistration: mocks.requestRegistration,
 }))
 
@@ -300,6 +302,25 @@ describe("public registration action", () => {
       step: "code",
     })
     expect(mocks.cookieSet).not.toHaveBeenCalled()
+  })
+
+  // The one refusal named as itself: a pause spent from this connection, which
+  // says nothing about the identity. During a sign-up session on the academy
+  // wifi, "invalid" sent families away holding the right code.
+  it("tells a family to wait, not that the code is wrong, while checks are paused here", async () => {
+    mocks.confirmRegistration.mockReturnValue(null)
+    mocks.registrationCodeChecksPaused.mockReturnValueOnce(true)
+
+    const result = await confirmRegistrationCode(
+      { ...initialState, step: "code" },
+      registrationData({ code: "123456" }),
+    )
+
+    expect(result).toMatchObject({
+      error: "Too many codes were tried from this connection. Wait a few minutes, then enter the same code again.",
+      errorField: "code",
+      step: "code",
+    })
   })
 })
 

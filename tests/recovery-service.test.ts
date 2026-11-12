@@ -154,6 +154,13 @@ function tokenFrom(message: PasswordRecoveryMessage) {
   return new URL(message.resetUrl).searchParams.get("token") ?? ""
 }
 
+/** Presses Continue on an emailed link and returns this browser's pass. */
+function claimLink(link: string, now = NOW) {
+  const pass = claimPasswordRecovery(link, { database, now })
+  expect(pass).toEqual(expect.any(String))
+  return pass!
+}
+
 async function addAuthenticator(accountId: string, backupCodes = ["BACKUP-CODE-ONE"]) {
   const secret = "JBSWY3DPEHPK3PXP"
   database.update(schema.authUsers).set({ twoFactorEnabled: true })
@@ -405,13 +412,14 @@ describe("password recovery", () => {
     }, { database, now: new Date(NOW.getTime() + 1_000) })
     const firstToken = tokenFrom(mailer.passwordRecovery[0])
     const newestToken = tokenFrom(mailer.passwordRecovery[1])
-    expect(claimPasswordRecovery(firstToken, { database, now: new Date(NOW.getTime() + 2_000) })).toBe(false)
-    expect(claimPasswordRecovery(newestToken, { database, now: new Date(NOW.getTime() + 2_000) })).toBe(true)
-    expect(claimPasswordRecovery(newestToken, { database, now: new Date(NOW.getTime() + 2_001) })).toBe(false)
+    expect(claimPasswordRecovery(firstToken, { database, now: new Date(NOW.getTime() + 2_000) })).toBeNull()
+    expect(claimPasswordRecovery(newestToken, { database, now: new Date(NOW.getTime() + 2_000) }))
+      .toEqual(expect.any(String))
+    expect(claimPasswordRecovery(newestToken, { database, now: new Date(NOW.getTime() + 2_001) })).toBeNull()
     expect(claimPasswordRecovery(newestToken, {
       database,
       now: new Date(NOW.getTime() + PASSWORD_RECOVERY_LIFETIME_MS + 1_001),
-    })).toBe(false)
+    })).toBeNull()
   })
 
   it("keeps pending, archived, mismatched and unknown accounts indistinguishable", async () => {
@@ -461,8 +469,7 @@ describe("password recovery", () => {
       email: "junior@example.com",
       mailer,
     }, { database, now: NOW })
-    const token = tokenFrom(mailer.passwordRecovery[0])
-    expect(claimPasswordRecovery(token, { database, now: NOW })).toBe(true)
+    const token = claimLink(tokenFrom(mailer.passwordRecovery[0]))
     expect(getPasswordRecoveryStatus(token, { database, now: NOW })).toMatchObject({
       requiresSecondFactor: false,
       state: "active",
@@ -516,8 +523,7 @@ describe("password recovery", () => {
     }).run()
     const mailer = new CapturingMailer()
     await requestPasswordRecovery({ academyId: "SMBA-PL-3001", email: SHARED_EMAIL, mailer }, { database, now: NOW })
-    const token = tokenFrom(mailer.passwordRecovery[0])
-    expect(claimPasswordRecovery(token, { database, now: NOW })).toBe(true)
+    const token = claimLink(tokenFrom(mailer.passwordRecovery[0]))
     expect(getPasswordRecoveryStatus(token, { database, now: NOW })).toMatchObject({
       requiresSecondFactor: false,
       state: "active",
@@ -547,8 +553,7 @@ describe("password recovery", () => {
       .where(eq(schema.authTwoFactors.userId, accountId)).get()!
     const mailer = new CapturingMailer()
     await requestPasswordRecovery({ academyId: "SMBA-HC-0001", email: "coach@example.com", mailer }, { database, now: NOW })
-    const token = tokenFrom(mailer.passwordRecovery[0])
-    expect(claimPasswordRecovery(token, { database, now: NOW })).toBe(true)
+    const token = claimLink(tokenFrom(mailer.passwordRecovery[0]))
     await expect(completePasswordRecovery({ password: NEW_PASSWORD, token }, { database, now: NOW }))
       .resolves.toBe(false)
     expect(await verifyPasswordRecoverySecondFactor({
@@ -580,8 +585,7 @@ describe("password recovery", () => {
     const secret = await addAuthenticator(accountId)
     const mailer = new CapturingMailer()
     await requestPasswordRecovery({ academyId: "SMBA-HC-0001", email: "coach@example.com", mailer }, { database, now: NOW })
-    const token = tokenFrom(mailer.passwordRecovery[0])
-    expect(claimPasswordRecovery(token, { database, now: NOW })).toBe(true)
+    const token = claimLink(tokenFrom(mailer.passwordRecovery[0]))
     const factor = () => database.select().from(schema.authTwoFactors)
       .where(eq(schema.authTwoFactors.userId, accountId)).get()!
     return { factor, secret, token }
@@ -734,8 +738,7 @@ describe("password recovery", () => {
     await addAuthenticator(accountId, ["ONLY-BACKUP-CODE"])
     const mailer = new CapturingMailer()
     await requestPasswordRecovery({ academyId: "SMBA-ADMIN-0001", email: "admin@example.com", mailer }, { database, now: NOW })
-    const token = tokenFrom(mailer.passwordRecovery[0])
-    expect(claimPasswordRecovery(token, { database, now: NOW })).toBe(true)
+    const token = claimLink(tokenFrom(mailer.passwordRecovery[0]))
     expect(await verifyPasswordRecoverySecondFactor({
       credential: "ONLY-BACKUP-CODE",
       token,
