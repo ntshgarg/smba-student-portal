@@ -34,11 +34,11 @@ async function requirePlatformOwner() {
     ))
     .get()
   if (!owner) redirect("/login")
-  return rawSession.user.id
+  return { actorAccountId: rawSession.user.id, sessionToken: rawSession.session.token }
 }
 
 export async function startAdminPreviewAction(formData: FormData) {
-  const actorAccountId = await requirePlatformOwner()
+  const { actorAccountId, sessionToken } = await requirePlatformOwner()
   const targetAccountId = String(formData.get("targetAccountId") ?? "")
   const target = initializeDatabase().select({ role: accounts.role })
     .from(accounts)
@@ -57,6 +57,7 @@ export async function startAdminPreviewAction(formData: FormData) {
   const cookieStore = await cookies()
   cookieStore.set(ADMIN_PREVIEW_COOKIE, createAdminPreviewToken({
     actorAccountId,
+    sessionToken,
     targetAccountId,
   }), {
     httpOnly: true,
@@ -75,7 +76,7 @@ export async function startAdminPreviewAction(formData: FormData) {
 }
 
 export async function openHeadCoachSetupAction() {
-  const actorAccountId = await requirePlatformOwner()
+  const { actorAccountId } = await requirePlatformOwner()
   if (!headCoachSetupAvailable()) redirect("/admin")
   const claim = createHeadCoachSetupClaim({
     claimImmediately: true,
@@ -93,7 +94,7 @@ export async function openHeadCoachSetupAction() {
 }
 
 export async function approveAuthenticatorResetRequestAction(requestId: string) {
-  const actorAccountId = await requirePlatformOwner()
+  const { actorAccountId } = await requirePlatformOwner()
   const approved = approveAuthenticatorResetRequest({ actorAccountId, requestId })
   revalidatePath("/admin")
   return approved
@@ -102,7 +103,7 @@ export async function approveAuthenticatorResetRequestAction(requestId: string) 
 }
 
 export async function rejectAuthenticatorResetRequestAction(requestId: string) {
-  const actorAccountId = await requirePlatformOwner()
+  const { actorAccountId } = await requirePlatformOwner()
   const rejected = rejectAuthenticatorResetRequest({ actorAccountId, requestId })
   revalidatePath("/admin")
   return rejected

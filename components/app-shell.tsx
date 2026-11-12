@@ -31,7 +31,11 @@ export function AppShell({
           </span>
         </Link>
 
-        <AccountMenu account={student} publicSiteHref={publicSiteUrl} />
+        <AccountMenu
+          account={student}
+          previewMode={student.previewMode === true}
+          publicSiteHref={publicSiteUrl}
+        />
       </header>
 
       <main id="main-content" tabIndex={-1}>{children}</main>

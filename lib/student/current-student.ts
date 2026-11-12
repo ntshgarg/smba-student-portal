@@ -7,7 +7,9 @@ import { ensureDueTrainingChangesApplied } from "@/lib/training/changes"
 export const getCurrentStudent = cache(async () => {
   const session = await sessionProvider.getCurrentIdentity()
   if (!session || session.role !== "player") return null
-  if (!session.previewMode) ensureDueTrainingChangesApplied()
+  // Applied during an admin preview as well: these changes are already due,
+  // and the preview should show the schedule the player actually has.
+  ensureDueTrainingChangesApplied()
 
   const identity = createStudentIdentity(session)
 

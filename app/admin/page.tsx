@@ -7,7 +7,10 @@ import { redirect } from "next/navigation"
 import { AccountMenu } from "@/components/account-menu"
 import { AdminDashboardDirectory } from "@/components/admin/admin-dashboard-directory"
 import { AdminAuthenticatorRecoveryQueue } from "@/components/admin/admin-authenticator-recovery-queue"
+import { AdminPreviewBanner } from "@/components/admin-preview-banner"
 import { openHeadCoachSetupAction } from "@/app/admin/actions"
+import type { SessionIdentity } from "@/lib/auth/identity"
+import { adminPreviewBlocksChanges } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
 import { initializeDatabase } from "@/lib/db/client"
 import {
@@ -28,12 +31,43 @@ export const metadata: Metadata = {
   robots: { follow: false, index: false },
 }
 
+/*
+ * Every page a preview may not show -- account security, PIN and recovery
+ * setup, the sign-in page -- sends the owner here. While a preview is open the
+ * signed-in identity is the person being viewed, so this page used to send them
+ * on to /login, which sent them to that person's dashboard or, for a player
+ * still owing a recovery email, back here again until the browser gave up. It
+ * now says where they are and offers the way out.
+ */
+function PreviewStillOpen({ identity }: { identity: SessionIdentity }) {
+  const dashboard = identity.role === "coach" ? "/coach" : "/player"
+  const roleLabel = identity.role === "coach" ? "Coach" : "Player"
+  return (
+    <>
+      <AdminPreviewBanner label={`${identity.fullName} · ${roleLabel}`} />
+      <main id="main-content" className="admin-page page-shell" tabIndex={-1}>
+        <section className="admin-preview-panel" aria-labelledby="admin-preview-title">
+          <header>
+            <h2 id="admin-preview-title">You are still viewing {identity.firstName}’s dashboard</h2>
+            <p>The owner console and account settings open again once you exit the preview.</p>
+          </header>
+          <p>
+            <Link href={dashboard}>Back to {identity.firstName}’s dashboard</Link>
+          </p>
+        </section>
+      </main>
+    </>
+  )
+}
+
 export default async function AdminPage() {
   const identity = await sessionProvider.getCurrentIdentity()
+  if (identity?.previewMode) return <PreviewStillOpen identity={identity} />
   if (!identity || identity.role !== "platform_admin") redirect("/login")
   if (recoveryEmailEnrollmentRequired(identity.subjectId)) {
     redirect("/account/recovery-email/setup")
   }
+  const previewStillBlocksChanges = await adminPreviewBlocksChanges()
   const database = initializeDatabase()
   const targets = database.select({
     academyId: authMethods.identifier,
@@ -70,6 +104,7 @@ export default async function AdminPage() {
 
   return (
     <>
+      {previewStillBlocksChanges ? <AdminPreviewBanner label={null} /> : null}
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>

@@ -15,9 +15,17 @@ type AccountIdentity = {
 
 export function AccountMenu({
   account,
+  previewMode = false,
   publicSiteHref,
 }: {
   account: AccountIdentity
+  /*
+   * The platform owner is looking at this person's dashboard. Their account
+   * security is not the owner's to open, and every form except Exit preview is
+   * switched off, so Log out goes out through the preview's own exit and signs
+   * the owner out from there.
+   */
+  previewMode?: boolean
   publicSiteHref: string
 }) {
   const [open, setOpen] = useState(false)
@@ -77,15 +85,27 @@ export function AccountMenu({
           <Link href={publicSiteHref} onClick={() => setOpen(false)}>
             Return to academy
           </Link>
-          <Link href="/account/security" onClick={() => setOpen(false)}>
-            Account security
-          </Link>
-          <form action={clearSession} data-unsaved-work-navigation="true">
-            <button type="submit">
-              Log out
-              <LogOut aria-hidden="true" />
-            </button>
-          </form>
+          {previewMode ? null : (
+            <Link href="/account/security" onClick={() => setOpen(false)}>
+              Account security
+            </Link>
+          )}
+          {previewMode ? (
+            <form action="/admin/preview/exit" method="post">
+              <input type="hidden" name="signOut" value="1" />
+              <button type="submit">
+                Log out
+                <LogOut aria-hidden="true" />
+              </button>
+            </form>
+          ) : (
+            <form action={clearSession} data-unsaved-work-navigation="true">
+              <button type="submit">
+                Log out
+                <LogOut aria-hidden="true" />
+              </button>
+            </form>
+          )}
         </div>
       ) : null}
     </div>

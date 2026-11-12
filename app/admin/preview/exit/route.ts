@@ -1,13 +1,24 @@
 import { and, eq, isNull } from "drizzle-orm"
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
-import { ADMIN_PREVIEW_COOKIE } from "@/lib/auth/admin-preview"
-import { getRawAuthSession } from "@/lib/auth/session"
+import { ADMIN_PREVIEW_COOKIE, readAdminPreviewToken } from "@/lib/auth/admin-preview"
+import { clearDatabaseSession, getRawAuthSession } from "@/lib/auth/session"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
+import { publicSiteUrl } from "@/lib/config"
 import { initializeDatabase } from "@/lib/db/client"
 import { accounts } from "@/lib/db/schema"
 
+/*
+ * The one door out of a preview, and so also where Log out goes while one is
+ * open: every other form is switched off by the proxy, including the ordinary
+ * Log out, which used to end on an error page with the owner still signed in.
+ * `signOut` ends the preview and then the owner's sign-in.
+ */
 export async function POST(request: Request) {
+  const signOut = await request.formData()
+    .then((form) => form.get("signOut") === "1")
+    .catch(() => false)
   const rawSession = await getRawAuthSession()
   const actorAccountId = rawSession?.user?.id
   const owner = actorAccountId
@@ -18,18 +29,28 @@ export async function POST(request: Request) {
       isNull(accounts.archivedAt),
     )).get()
     : null
-  const response = NextResponse.redirect(
-    new URL(owner ? "/admin" : "/login", request.url),
-    303,
-  )
-  response.cookies.delete(ADMIN_PREVIEW_COOKIE)
-  if (owner) {
+  const claim = owner && actorAccountId
+    ? readAdminPreviewToken(
+      (await cookies()).get(ADMIN_PREVIEW_COOKIE)?.value,
+      actorAccountId,
+      rawSession?.session?.token,
+    )
+    : null
+  if (owner && actorAccountId) {
+    // Filed under the person who was being viewed, beside the start record.
     writeAuthSecurityEvent({
-      accountId: actorAccountId,
+      accountId: claim?.targetAccountId ?? actorAccountId,
       actorAccountId,
       eventType: "admin_preview_stopped",
+      metadata: signOut ? { signedOut: true } : undefined,
       outcome: "success",
     })
   }
+  if (signOut) await clearDatabaseSession()
+  const response = NextResponse.redirect(
+    new URL(signOut ? publicSiteUrl : owner ? "/admin" : "/login", request.url),
+    303,
+  )
+  response.cookies.delete(ADMIN_PREVIEW_COOKIE)
   return response
 }

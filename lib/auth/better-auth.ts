@@ -15,7 +15,7 @@ import {
   storedTrustDeviceIdentifier,
 } from "@/lib/auth/second-factor-reset"
 import { usernameLoginHooks } from "@/lib/auth/username-login-guard"
-import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
+import { AUTH_COOKIE_PREFIX, secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import { resolveAuthSecret } from "@/lib/auth/auth-secret"
 
 const LOCAL_ONLY_AUTH_SECRET = "smba-local-only-auth-secret-change-before-deployment-2026"
@@ -99,7 +99,7 @@ function createAuth() {
     },
   },
   advanced: {
-    cookiePrefix: "smba",
+    cookiePrefix: AUTH_COOKIE_PREFIX,
     ipAddress: {
       ipAddressHeaders: ["x-vercel-forwarded-for", "cf-connecting-ip", "x-forwarded-for"],
       ipv6Subnet: 64,

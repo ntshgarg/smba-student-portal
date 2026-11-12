@@ -8,9 +8,11 @@ import { publicSiteUrl } from "@/lib/config"
 export function CoachShell({
   children,
   coach,
+  previewMode = false,
 }: {
   children: React.ReactNode
   coach: CoachProfile
+  previewMode?: boolean
 }) {
   return (
     <>
@@ -31,7 +33,7 @@ export function CoachShell({
           </span>
         </Link>
 
-        <AccountMenu account={coach} publicSiteHref={publicSiteUrl} />
+        <AccountMenu account={coach} previewMode={previewMode} publicSiteHref={publicSiteUrl} />
       </header>
 
       <main id="coach-main-content" tabIndex={-1}>{children}</main>

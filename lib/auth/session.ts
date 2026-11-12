@@ -4,7 +4,13 @@ import { and, eq, isNull } from "drizzle-orm"
 import { cookies, headers } from "next/headers"
 
 import { getAuth, principalTotpRequired } from "@/lib/auth/better-auth"
-import { ADMIN_PREVIEW_COOKIE, readAdminPreviewToken } from "@/lib/auth/admin-preview"
+import {
+  ADMIN_PREVIEW_COOKIE,
+  AUTH_SESSION_COOKIE_NAMES,
+  readAdminPreviewToken,
+  readLiveAdminPreviewClaim,
+  sessionTokenFromCookieValue,
+} from "@/lib/auth/admin-preview"
 import { createSessionIdentity, type SessionIdentity } from "@/lib/auth/identity"
 import { requestSecurityContext, writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { initializeDatabase } from "@/lib/db/client"
@@ -73,7 +79,7 @@ export class DatabaseSessionProvider implements SessionProvider {
       && !rawSession.user.twoFactorEnabled) return null
     if (result.role === "platform_admin") {
       const previewToken = (await cookies()).get(ADMIN_PREVIEW_COOKIE)?.value
-      const claim = readAdminPreviewToken(previewToken, result.accountId)
+      const claim = readAdminPreviewToken(previewToken, result.accountId, rawSession.session?.token)
       if (claim) {
         const target = initializeDatabase().select({
           accountId: accounts.id,
@@ -128,4 +134,23 @@ export async function clearDatabaseSession() {
   const cookieStore = await cookies()
   cookieStore.delete(LEGACY_SESSION_COOKIE)
   cookieStore.delete(LEGACY_PROTOTYPE_SESSION_COOKIE)
+  // A preview belongs to the sign-in that started it, so it ends with it.
+  cookieStore.delete(ADMIN_PREVIEW_COOKIE)
+}
+
+/**
+ * Whether this browser holds a preview that still switches changes off --
+ * the same test the proxy applies -- so a page can offer Exit preview when the
+ * person being viewed is no longer available and the owner console is showing
+ * instead of their dashboard.
+ */
+export async function adminPreviewBlocksChanges() {
+  const cookieStore = await cookies()
+  const sessionCookie = AUTH_SESSION_COOKIE_NAMES
+    .map((name) => cookieStore.get(name)?.value)
+    .find(Boolean)
+  return Boolean(readLiveAdminPreviewClaim(
+    cookieStore.get(ADMIN_PREVIEW_COOKIE)?.value,
+    sessionTokenFromCookieValue(sessionCookie),
+  ))
 }
