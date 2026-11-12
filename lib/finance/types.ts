@@ -110,6 +110,11 @@ export type CoachReceiptView = Omit<PlayerReceiptView, "allocations"> & {
    * is ended in Members (head coach, 13 Nov 2026).
    */
   refundNeedsTrainingEnded: boolean
+  /**
+   * The player has no place but a start is booked in Members, so the booked
+   * start, not End training, is what has to be cancelled before a refund.
+   */
+  refundBlockedByBookedStart: boolean
   /** The days the member's withdrawal can be dated, when a refund is possible. */
   refundWindow: { earliest: string; latest: string } | null
   recordRevision: number
@@ -256,6 +261,12 @@ export type PlayerFeeRecord = {
   feePlans: FeePlanStanding
   /** Player onboarding has finished, so a missing fee plan is not onboarding's to set. */
   onboardingComplete: boolean
+  /**
+   * Coach view only (always false for the family): the player finished
+   * onboarding and is on a schedule this month with no fee plan for it, so no
+   * monthly fee will be issued (listPlayersTrainingWithoutFeePlan).
+   */
+  trainsWithoutFeePlan: boolean
   enrollmentDefaults?: FeeSetupDefaults | null
   setupDefaults: FeeSetupDefaults | null
   registrationCharge: ChargeView | null
@@ -568,6 +579,11 @@ export type RecordRefundResult = {
   refund: PlayerRefundView
   charges: ChargeView[]
   reused: boolean
+  /**
+   * Reversing a withdrawal refund only: whether the fee plan went back to how
+   * it was before the refund. False when it stays ended.
+   */
+  feePlanRestored?: boolean
 }
 
 export type ReverseRefundInput = {

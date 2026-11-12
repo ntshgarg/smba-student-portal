@@ -11,6 +11,10 @@ import type {
 } from "@/lib/finance/types"
 import { academyPlanLabel } from "@/lib/training/academy-plans"
 
+function planLabel(plan: NonNullable<FeePlanStanding["current"]>) {
+  return `${plan.level} · ${plan.batch} · ${academyPlanLabel(plan.academyPlan)}`
+}
+
 /*
  * The plan in force today, not just the "active" one, which is the latest:
  * a leaver has no active plan and used to read as "onboarding in progress",
@@ -20,10 +24,12 @@ function feePlanView(standing: FeePlanStanding): PlayerFinancialLedgerView["feeP
   const shown = standing.current ?? standing.upcoming ?? standing.ended
   if (!shown) return null
   const upcoming = standing.current && standing.upcoming
-    && standing.upcoming.agreedMonthlyFeePaise !== standing.current.agreedMonthlyFeePaise
     ? {
         agreedMonthlyFeePaise: standing.upcoming.agreedMonthlyFeePaise,
         effectiveFrom: standing.upcoming.effectiveFrom,
+        feeChanges: standing.upcoming.agreedMonthlyFeePaise
+          !== standing.current.agreedMonthlyFeePaise,
+        label: planLabel(standing.upcoming),
       }
     : null
   return {
@@ -33,7 +39,7 @@ function feePlanView(standing: FeePlanStanding): PlayerFinancialLedgerView["feeP
     batch: shown.batch,
     effectiveFrom: shown.effectiveFrom,
     effectiveTo: shown.effectiveTo,
-    label: `${shown.level} · ${shown.batch} · ${academyPlanLabel(shown.academyPlan)}`,
+    label: planLabel(shown),
     level: shown.level,
     recordRevision: shown.recordRevision,
     standing: shown === standing.current
@@ -82,6 +88,7 @@ export function toPlayerFinancialLedgerView(ledger: PlayerFeeRecord): PlayerFina
     feePlanSetupReady: ledger.feePlanSetupReady,
     feePlan: feePlanView(ledger.feePlans),
     onboardingComplete: ledger.onboardingComplete,
+    trainsWithoutFeePlan: ledger.trainsWithoutFeePlan,
     enrollmentDefaults: ledger.enrollmentDefaults ? {
       ...ledger.enrollmentDefaults,
       academyPlanLabel: academyPlanLabel(ledger.enrollmentDefaults.academyPlan),

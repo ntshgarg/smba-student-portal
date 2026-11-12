@@ -119,6 +119,7 @@ function feeRecord(overrides: Partial<PlayerFeeRecord> = {}): PlayerFeeRecord {
     concessionEntries: [],
     termFeeResumesOn: null,
     termFinishedOn: null,
+    trainsWithoutFeePlan: false,
     ...overrides,
   }
 }
@@ -228,6 +229,7 @@ function coachReceipt(overrides: Partial<CoachReceiptView> = {}): CoachReceiptVi
     internalNote: null,
     recordRevision: 0,
     refundNeedsTrainingEnded: false,
+    refundBlockedByBookedStart: false,
     refundWindow: null,
     refundablePaise: 0,
     ...overrides,
@@ -249,6 +251,7 @@ function ledger(overrides: Partial<PlayerFinancialLedgerView> = {}): PlayerFinan
     playerId: "player-money",
     setupDefaults: null,
     status: "paid",
+    trainsWithoutFeePlan: false,
     ...overrides,
   }
 }
@@ -270,9 +273,27 @@ describe("the coach's fee record", () => {
         refunds: [],
       },
     })} period="2026-08" />)
-    expect(html).toContain("first end the player&#x27;s training in")
+    // Worded for a leaver: it shows on every refundable receipt.
+    expect(html).toContain("If this player is leaving")
+    expect(html).toContain("end their training in Members first")
     expect(html).toContain('href="/coach/members?player=player-money"')
     expect(html).not.toContain("Record mid-term withdrawal refund")
+  })
+
+  it("sends the coach to cancel a booked start when that is what blocks a refund", () => {
+    const html = renderToStaticMarkup(<PlayerLedger ledger={ledger({
+      management: {
+        concessions: [],
+        receipts: [coachReceipt({
+          refundBlockedByBookedStart: true,
+          refundNeedsTrainingEnded: true,
+          refundablePaise: 100_000,
+        })],
+        refunds: [],
+      },
+    })} period="2026-08" />)
+    expect(html).toContain("Cancel scheduled change")
+    expect(html).not.toContain("End training")
   })
 
   it("shows a leaver's ended fee plan instead of an onboarding prompt", () => {
@@ -313,12 +334,68 @@ describe("the coach's fee record", () => {
         recordRevision: 1,
         standing: "ending",
         status: "ended",
-        upcoming: { agreedMonthlyFeePaise: 450_000, effectiveFrom: "2026-11-01" },
+        upcoming: {
+          agreedMonthlyFeePaise: 450_000,
+          effectiveFrom: "2026-11-01",
+          feeChanges: true,
+          label: "Beginner · Weekday · 5-day plan",
+        },
       },
     })} period="2026-10" />)
     expect(html).toContain("₹4,000")
     expect(html).toContain("From November 2026 the agreed fee")
     expect(html).toContain("₹4,500")
+  })
+
+  it("does not make a same-fee plan change read like a player leaving", () => {
+    const html = renderToStaticMarkup(<PlayerLedger ledger={ledger({
+      feePlan: {
+        academyPlan: "weekday-5-day",
+        agreedMonthlyFeePaise: 650_000,
+        batch: "Weekday",
+        effectiveFrom: "2026-07-01",
+        effectiveTo: "2026-11-30",
+        id: "plan-weekday",
+        label: "Beginner · Weekday · 5-day plan",
+        level: "Beginner",
+        recordRevision: 1,
+        standing: "ending",
+        status: "ended",
+        upcoming: {
+          agreedMonthlyFeePaise: 650_000,
+          effectiveFrom: "2026-12-01",
+          feeChanges: false,
+          label: "Beginner · Weekend · Weekend plan",
+        },
+      },
+    })} period="2026-11" />)
+    expect(html).not.toContain("Ends 30 Nov 2026")
+    expect(html).toContain("Active until 30 Nov 2026, then the next plan")
+    expect(html).toContain("From December 2026 the fee plan is Beginner · Weekend · Weekend plan, at the same fee")
+  })
+
+  it("warns that a player still on a schedule after their plan ended is not being billed", () => {
+    const html = renderToStaticMarkup(<PlayerLedger ledger={ledger({
+      feePlan: {
+        academyPlan: "weekday-5-day",
+        agreedMonthlyFeePaise: 400_000,
+        batch: "Weekday",
+        effectiveFrom: "2026-07-01",
+        effectiveTo: "2026-10-04",
+        id: "plan-ended-early",
+        label: "Beginner · Weekday · 5-day plan",
+        level: "Beginner",
+        recordRevision: 2,
+        standing: "ended",
+        status: "ended",
+        upcoming: null,
+      },
+      status: "setup_required",
+      trainsWithoutFeePlan: true,
+    })} period="2026-11" />)
+    expect(html).toContain("Ended 4 Oct 2026")
+    expect(html).toContain("This player is training with no fee plan")
+    expect(html).toContain('href="/coach/members?player=player-money"')
   })
 
   it("tells the coach an onboarded player has no fee plan, not to finish onboarding", () => {

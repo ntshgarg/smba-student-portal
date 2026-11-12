@@ -44,6 +44,7 @@ const FINANCE_STATUSES: FinanceStatus[] = [
   "overdue",
   "paid",
   "not_prepared",
+  "setup_required",
   "void",
 ]
 

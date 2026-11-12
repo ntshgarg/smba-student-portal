@@ -41,6 +41,9 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     split: "31000000-0000-4000-8000-0000000000c8",
     stopper: "31000000-0000-4000-8000-0000000000c9",
     waived: "31000000-0000-4000-8000-0000000000ca",
+    legacy: "31000000-0000-4000-8000-0000000000cb",
+    returner: "31000000-0000-4000-8000-0000000000cc",
+    rejoiner: "31000000-0000-4000-8000-0000000000cd",
   }
   const serials: Record<string, number> = {}
   let nextMutation = 0
@@ -286,8 +289,83 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     const left = viewModel.toPlayerFinancialLedgerView(coachRecord(players.stopper))
     expect(left.feePlan).toMatchObject({ agreedMonthlyFeePaise: 400_000, standing: "ended" })
 
+    // Stop fees had already ended the plan; the refund only moved its end
+    // date, so the activity log does not show the plan ending twice.
+    const planEntries = database.select().from(schema.financialAuditEvents)
+      .where(eq(schema.financialAuditEvents.entityId, plan(players.stopper)[0]!.id)).all()
+    expect(planEntries.filter((entry) => entry.eventType === "fee_agreement_ended")).toHaveLength(1)
+    expect(planEntries.find((entry) => entry.eventType === "fee_agreement_corrected")?.metadata)
+      .toContain("End date moved to 4 Oct 2026")
+
     reverse(recorded.refund.id)
     expect(plan(players.stopper)[0]).toMatchObject({ effectiveTo: "2026-10-31", status: "ended" })
+  })
+
+  it("sends the coach to cancel a booked start, not to End training, before a refund", () => {
+    const payment = pay(players.returner, 400_000, "2026-10-02")
+    changes.endTrainingNow({ playerId: players.returner, stopFees: true }, context())
+    // A return booked for 1 November, with no place now: Members offers no End
+    // training for this player, and the server refuses it.
+    const bookedId = "booked-return-returner"
+    database.insert(schema.trainingChanges).values({
+      id: bookedId,
+      playerAccountId: players.returner,
+      kind: "change",
+      effectiveOn: "2026-11-01",
+      status: "scheduled",
+      ...fiveDay,
+      seriesId: morning,
+      weekdays: "[1,2,3,4,5]",
+      monthlyFeePaise: 400_000,
+      createdByAccountId: coachId,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    expect(coachRecord(players.returner).coachManagement!.receipts[0]).toMatchObject({
+      canRefund: false,
+      refundBlockedByBookedStart: true,
+      refundNeedsTrainingEnded: true,
+    })
+    expect(() => finance.previewRefundAllocations({
+      amountPaise: 50_000,
+      expectedPaymentRevision: 0,
+      paymentId: payment.receipt.id,
+      withdrawalEffectiveOn: "2026-10-04",
+    }, context())).toThrow(expect.objectContaining({
+      code: "CONFLICT",
+      message: expect.stringContaining("Cancel scheduled change"),
+    }))
+
+    changes.cancelTrainingChange({ changeId: bookedId }, context())
+    expect(coachRecord(players.returner).coachManagement!.receipts[0]).toMatchObject({
+      canRefund: true,
+      refundBlockedByBookedStart: false,
+    })
+  })
+
+  it("says the fee plan stays ended when a newer plan stops a reversal putting it back", () => {
+    const payment = pay(players.rejoiner, 400_000, "2026-10-02")
+    changes.endTrainingNow({ playerId: players.rejoiner, stopFees: false }, context())
+    const recorded = refund(payment.receipt.id, 50_000, "2026-10-04")
+    expect(coachRecord(players.rejoiner).coachManagement!.refunds[0]).toMatchObject({
+      restoresFeePlan: true,
+    })
+    // Back from 1 November on a new fee plan.
+    finance.createOrReplaceFeeAgreement({
+      ...fiveDay,
+      agreedMonthlyFeePaise: 450_000,
+      effectiveFrom: "2026-11-01",
+      idempotencyKey: "plan-rejoiner-november",
+      playerId: players.rejoiner,
+    }, context())
+    // The confirmation used to promise the plan back, and the reversal then
+    // quietly left it ended.
+    expect(coachRecord(players.rejoiner).coachManagement!.refunds[0]).toMatchObject({
+      restoresFeePlan: false,
+    })
+    expect(reverse(recorded.refund.id)).toMatchObject({ feePlanRestored: false })
+    expect(plan(players.rejoiner).find((row) => row.effectiveFrom === "2026-07-01"))
+      .toMatchObject({ effectiveTo: "2026-10-04", status: "ended" })
   })
 
   it("lists a refund drawn from two receipts under both, each with its own share", () => {
@@ -454,6 +532,51 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     expect(register.rows.find((row) => row.playerId === players.changer)?.status).toBe("not_prepared")
     expect(deskRow(players.breaker, "2026-11", secondNovember)?.status).not.toBe("not_prepared")
     expect(deskRow(players.changer, "2026-11", secondNovember)?.status).toBe("not_prepared")
+  })
+
+  it("shows a player who trains with no fee plan as Setup required even with fees from before", () => {
+    // A withdrawal refund recorded before 13 Nov 2026 while the player stayed
+    // on a schedule: the fee plan ended on the withdrawal date, and October's
+    // fee was already paid.
+    pay(players.legacy, 400_000, "2026-10-02")
+    const [legacyPlan] = plan(players.legacy)
+    database.update(schema.feeAgreements)
+      .set({ effectiveTo: "2026-10-04", status: "ended" })
+      .where(eq(schema.feeAgreements.id, legacyPlan!.id)).run()
+    // October is still covered by the plan.
+    expect(deskRow(players.legacy, "2026-10")?.status).toBe("paid")
+
+    const secondNovember = new Date("2026-11-02T05:00:00.000Z")
+    // Their paid fees used to read "Paid", leaving them off every list.
+    expect(deskRow(players.legacy, "2026-11", secondNovember)).toMatchObject({
+      feePlanEnded: true,
+      status: "setup_required",
+    })
+    const workspace = finance.getCoachFinanceWorkspace(
+      { period: "2026-11", view: "attention" },
+      context(secondNovember),
+    )
+    expect(workspace.players.map((player) => player.playerId)).toContain(players.legacy)
+    expect(finance.getCoachFinanceDashboardSummary("2026-11", context(secondNovember)).attentionCount)
+      .toBe(workspace.summary.attentionCount)
+    // The dashboard count leads to the fee register, which lists them.
+    const register = finance.getFeeRegister(
+      { mode: "monthly", period: "2026-11", limit: 100 },
+      context(secondNovember),
+    )
+    expect(register.rows.find((row) => row.playerId === players.legacy))
+      .toMatchObject({ chargeId: null, status: "setup_required" })
+    expect(finance.getFeeRegister(
+      { mode: "monthly", period: "2026-11", limit: 100, statuses: ["setup_required"] },
+      context(secondNovember),
+    ).rows.map((row) => row.playerId)).toContain(players.legacy)
+    // A player on a break with the fee plan kept is not missing a plan.
+    expect(register.rows.find((row) => row.playerId === players.breaker)).toBeUndefined()
+
+    const record = coachRecord(players.legacy, secondNovember)
+    expect(record).toMatchObject({ status: "setup_required", trainsWithoutFeePlan: true })
+    expect(finance.getPlayerFeeRecord(players.legacy, { database, now: secondNovember }))
+      .toMatchObject({ trainsWithoutFeePlan: false })
   })
 
   it("does not offer a refund on the 1st, when every withdrawal date would be refused", () => {

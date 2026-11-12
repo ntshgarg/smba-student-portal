@@ -1,5 +1,6 @@
 "use client"
 
+import { CircleAlert } from "lucide-react"
 import Link from "next/link"
 
 import { formatAcademyDate, formatDateKey, formatInr } from "@/lib/format"
@@ -25,9 +26,53 @@ function planDate(dateKey: string | null) {
 
 function planStanding(plan: NonNullable<PlayerFinancialLedgerView["feePlan"]>) {
   if (plan.standing === "running") return "Active"
+  // A plan followed by the next one is changing, not ending: "Ends 30 Nov"
+  // read like a player leaving.
+  if (plan.standing === "ending" && plan.upcoming) {
+    return `Active until ${planDate(plan.effectiveTo)}, then the next plan`
+  }
   if (plan.standing === "ending") return `Ends ${planDate(plan.effectiveTo)}`
   if (plan.standing === "starting") return `Starts ${planDate(plan.effectiveFrom)}`
   return `Ended ${planDate(plan.effectiveTo)}`
+}
+
+function upcomingPlanNote(
+  label: string,
+  upcoming: NonNullable<NonNullable<PlayerFinancialLedgerView["feePlan"]>["upcoming"]>,
+) {
+  const month = periodLabel(upcoming.effectiveFrom.slice(0, 7))
+  const fee = formatInr(upcoming.agreedMonthlyFeePaise)
+  const planChanges = upcoming.label !== label
+  if (planChanges && upcoming.feeChanges) {
+    return `From ${month} the fee plan is ${upcoming.label} and the agreed fee is ${fee} a month.`
+  }
+  if (planChanges) return `From ${month} the fee plan is ${upcoming.label}, at the same fee of ${fee} a month.`
+  if (upcoming.feeChanges) return `From ${month} the agreed fee is ${fee} a month.`
+  return `From ${month} a new fee plan starts at the same fee of ${fee} a month.`
+}
+
+/*
+ * A player still on a schedule after their fee plan ended (a withdrawal
+ * refund recorded before 13 Nov 2026 could do this): no monthly fee is issued
+ * for them, and the plan's "Ended" date alone did not say so.
+ */
+function TrainsWithoutFeePlan({ ledger }: { ledger: PlayerFinancialLedgerView }) {
+  return (
+    <section className={styles.setupState}>
+      <CircleAlert aria-hidden="true" />
+      <div>
+        <strong>This player is training with no fee plan</strong>
+        <p>
+          They are on a schedule this month, but their fee plan has ended, so no monthly fee is
+          issued for them. Set their fee with a schedule change from their record in Members, or
+          end their training there if they have left.
+        </p>
+        <Link href={`/coach/members?player=${encodeURIComponent(ledger.playerId)}`}>
+          Open the player&apos;s record in Members
+        </Link>
+      </div>
+    </section>
+  )
 }
 
 export function PlayerLedger({
@@ -68,9 +113,11 @@ export function PlayerLedger({
           </dl>
           {ledger.feePlan.upcoming ? (
             <p className={styles.managedInMembers}>
-              From {periodLabel(ledger.feePlan.upcoming.effectiveFrom.slice(0, 7))} the agreed fee
-              is {formatInr(ledger.feePlan.upcoming.agreedMonthlyFeePaise)} a month.
+              {upcomingPlanNote(ledger.feePlan.label, ledger.feePlan.upcoming)}
             </p>
+          ) : null}
+          {ledger.trainsWithoutFeePlan && !ledger.archived ? (
+            <TrainsWithoutFeePlan ledger={ledger} />
           ) : null}
           {ledger.archived ? null : (
             // Fee changes, concessions and ending training are made from the

@@ -343,28 +343,39 @@ export function hasCurrentOrFutureMatchingAssignment(
 }
 
 /**
- * Whether a player's training has been ended: no place on any schedule after
- * today, and no move booked that would start one. "They have left already"
+ * A player's training has ended when they have no place on any schedule after
+ * today and no move booked that would start one. "They have left already"
  * under End training in Members does exactly this (lib/training/changes.ts
  * endTrainingNow).
  *
  * Head coach, 13 Nov 2026: a mid-term withdrawal refund is recorded only once
- * this is true. The refund ends the fee plan, and recording it while the
+ * training has ended. The refund ends the fee plan, and recording it while the
  * player was still on a schedule left them training with no fee plan, so they
  * were silently never billed again.
+ *
+ * Returns what keeps a player's training from having ended, so the coach is sent to
+ * the step that clears it: "on_schedule" (End training in Members, which also
+ * cancels any booked move), or "booked_start" for a player with no place who
+ * has a start booked. End training is not offered to that player, and the
+ * server refuses it ("not on any schedule"), so the booked start has to be
+ * cancelled instead. Null once training has ended.
  */
-export function playerTrainingHasEnded(database: Executor, playerId: string, todayKey: string) {
+export function playerTrainingEndBlocker(
+  database: Executor,
+  playerId: string,
+  todayKey: string,
+): "on_schedule" | "booked_start" | null {
   const place = database.select({ id: sessionAssignments.id }).from(sessionAssignments).where(and(
     eq(sessionAssignments.accountId, playerId),
     or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, todayKey)),
   )).get()
-  if (place) return false
+  if (place) return "on_schedule"
   const bookedMove = database.select({ id: trainingChanges.id }).from(trainingChanges).where(and(
     eq(trainingChanges.playerAccountId, playerId),
     eq(trainingChanges.status, "scheduled"),
     eq(trainingChanges.kind, "change"),
   )).get()
-  return !bookedMove
+  return bookedMove ? "booked_start" : null
 }
 
 export function readAuditEventByIdempotencyKey(database: Executor, idempotencyKey: string) {
@@ -670,26 +681,66 @@ function loadReceiptRefunds(database: Executor, paymentIds: string[]) {
  * recorded from 13 Nov 2026 keeps the plan as it was before the refund in its
  * audit entry (lib/finance/service.ts recordRefund).
  */
-function loadPlanRestoringRefundIds(database: Executor, refundIds: string[]) {
-  const restoring = new Set<string>()
-  if (!refundIds.length) return restoring
-  database.select({
-    entityId: financialAuditEvents.entityId,
-    metadata: financialAuditEvents.metadata,
-  }).from(financialAuditEvents).where(and(
-    eq(financialAuditEvents.entityType, "refund"),
-    eq(financialAuditEvents.eventType, "refund_recorded"),
-    inArray(financialAuditEvents.entityId, refundIds),
-  )).all().forEach((row) => {
-    try {
-      const metadata: unknown = JSON.parse(row.metadata)
-      if (metadata && typeof metadata === "object" && "previousAgreement" in metadata
-        && metadata.previousAgreement) restoring.add(row.entityId)
-    } catch {
-      // An unreadable entry restores nothing.
-    }
-  })
-  return restoring
+/**
+ * How reversing a mid-term withdrawal refund would put its fee plan back, or
+ * null when it would not. The reversal (lib/finance/service.ts reverseRefund)
+ * applies exactly this, and the coach's confirmation says what it will do from
+ * the same answer: it used to promise the plan back whenever the refund kept
+ * the plan's earlier state, though the reversal then quietly left it ended.
+ *
+ * Nothing is put back when the refund was recorded before 13 Nov 2026 (no
+ * earlier state was kept), when the plan has changed since the refund, or when
+ * putting it back would overlap a plan made since (a booked return, say). Fees
+ * already issued never change: the plan only covers days again that it
+ * covered before.
+ */
+export function planRestoreAfterWithdrawalReversal(
+  database: Executor,
+  refund: Pick<typeof refunds.$inferSelect, "id" | "playerAccountId" | "withdrawalEffectiveOn">,
+) {
+  const recorded = database.select({ metadata: financialAuditEvents.metadata })
+    .from(financialAuditEvents)
+    .where(and(
+      eq(financialAuditEvents.entityType, "refund"),
+      eq(financialAuditEvents.entityId, refund.id),
+      eq(financialAuditEvents.eventType, "refund_recorded"),
+    )).get()
+  let metadata: {
+    agreementId?: string
+    previousAgreement?: { effectiveTo: string | null; status: string }
+  } = {}
+  try {
+    metadata = recorded ? JSON.parse(recorded.metadata) as typeof metadata : {}
+  } catch {
+    // An unreadable entry restores nothing.
+  }
+  const previous = metadata.previousAgreement
+  const withdrawnOn = refund.withdrawalEffectiveOn
+  if (!metadata.agreementId || !previous || !withdrawnOn
+    || !["active", "ended"].includes(previous.status)
+    || (previous.status === "ended" && !previous.effectiveTo)) return null
+  const agreement = database.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, metadata.agreementId)).get()
+  if (!agreement || agreement.status !== "ended"
+    || agreement.effectiveTo !== withdrawnOn
+    || agreement.playerAccountId !== refund.playerAccountId) return null
+  const restoredTo = previous.status === "active" ? null : previous.effectiveTo
+  const overlapping = database.select({ id: feeAgreements.id }).from(feeAgreements).where(and(
+    eq(feeAgreements.playerAccountId, agreement.playerAccountId),
+    ne(feeAgreements.id, agreement.id),
+    ne(feeAgreements.status, "paused"),
+    restoredTo ? lte(feeAgreements.effectiveFrom, restoredTo) : undefined,
+    or(isNull(feeAgreements.effectiveTo), gt(feeAgreements.effectiveTo, withdrawnOn)),
+  )).get()
+  if (overlapping) return null
+  if (previous.status === "active" && readActiveFeeAgreement(database, agreement.playerAccountId)) {
+    return null
+  }
+  return {
+    agreement,
+    effectiveTo: restoredTo,
+    status: previous.status === "active" ? "active" as const : "ended" as const,
+  }
 }
 
 function loadRecordedRefundPaiseByPayment(database: Executor, paymentIds: string[]) {
@@ -882,10 +933,12 @@ function loadCoachReceiptContext(
       allocationRows.map(({ charge }) => charge.playerAccountId),
     )]),
     recordedWithdrawalChargeIds: loadRecordedWithdrawalChargeIds(database, chargeIds),
-    planRestoringRefundIds: loadPlanRestoringRefundIds(
-      database,
-      [...new Set(refundRows.map((refund) => refund.id))],
-    ),
+    // A few recorded withdrawal refunds per player at most.
+    planRestoringRefundIds: new Set(refundRows.filter((refund) => (
+      refund.lifecycle === "recorded"
+      && refund.purpose === "mid_term_withdrawal"
+      && planRestoreAfterWithdrawalReversal(database, refund) !== null
+    )).map((refund) => refund.id)),
     refundBreakdowns: loadRefundBreakdowns(database, [...new Set(refundRows.map((refund) => refund.id))]),
     refundedPaiseByAllocation: loadRecordedRefundPaiseByAllocation(
       database,
@@ -916,9 +969,10 @@ function loadPlayerPhaseTwoHistory(
       [...refundsByPayment.values()].flat().map(({ refund }) => refund),
     )
     : null
-  const trainingEnded = includeInternal
-    ? playerTrainingHasEnded(database, playerId, todayKey)
-    : false
+  const trainingEndBlocker = includeInternal
+    ? playerTrainingEndBlocker(database, playerId, todayKey)
+    : "on_schedule"
+  const trainingEnded = trainingEndBlocker === null
   const receiptPairs = paymentRows.map((payment) => {
     const allocations = allocationsByPayment.get(payment.id) ?? []
     const paymentRefunds = refundsByPayment.get(payment.id) ?? []
@@ -1062,6 +1116,7 @@ function loadPlayerPhaseTwoHistory(
         ),
         canRefund: refundable && trainingEnded,
         refundNeedsTrainingEnded: refundable && !trainingEnded,
+        refundBlockedByBookedStart: refundable && trainingEndBlocker === "booked_start",
         refundWindow: coachAllocations.find((allocation) => allocation.refundWindow)?.refundWindow ?? null,
         recordRevision: payment.recordRevision,
         internalNote: payment.internalNote,
@@ -1253,6 +1308,14 @@ export function loadPlayerFeeRecord(
     },
   ))
   const phaseTwoHistory = loadPlayerPhaseTwoHistory(database, playerId, includeInternal, todayKey)
+  const feeStatus = combineFinanceStatuses(activeCharges.map((charge) => charge.status))
+  // The coach's lists read "Setup required" for this player
+  // (listFinancePlayers); the fee record says the same and why.
+  const trainsWithoutFeePlan = includeInternal && listPlayersTrainingWithoutFeePlan(
+    database,
+    todayKey.slice(0, 7),
+    playerId,
+  ).has(playerId)
 
   return {
     playerId,
@@ -1261,7 +1324,8 @@ export function loadPlayerFeeRecord(
     archived: player.archivedAt !== null,
     financeTrackingMonth: activation?.trackingMonth ?? null,
     registrationResolutionRequired,
-    status: combineFinanceStatuses(activeCharges.map((charge) => charge.status)),
+    status: trainsWithoutFeePlan && feeStatus !== "overdue" ? "setup_required" : feeStatus,
+    trainsWithoutFeePlan,
     currentBalancePaise: activeCharges.reduce(
       (total, charge) => total + charge.outstandingPaise,
       0,
@@ -1308,6 +1372,58 @@ function termFeeMonths(database: Executor, playerId: string, todayKey: string) {
 }
 
 /**
+ * Players who finished onboarding and are on a schedule in `period` with no
+ * fee plan for it: nothing will ever issue them a monthly fee. The coach's
+ * finance lists show them as "Setup required" (listFinancePlayers, and the fee
+ * register in lib/finance/records.ts), and the dashboard counts them as
+ * needing attention.
+ *
+ * Left out: a player with a fee plan in force or still to start (a first fee
+ * month after this one, a booked return), including one whose fees were
+ * stopped before that plan started; a stopped plan that never began is not a
+ * missing one. A withdrawal refund recorded before 13 Nov 2026 for a player
+ * who kept training is the case this finds: it ended their plan and nothing
+ * showed it.
+ */
+export function listPlayersTrainingWithoutFeePlan(
+  database: Executor,
+  period: string,
+  playerId?: string,
+) {
+  const rows = database.select({ playerId: accounts.id }).from(accounts)
+    .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
+    .where(and(
+      playerId === undefined ? undefined : eq(accounts.id, playerId),
+      eq(accounts.role, "player"),
+      eq(accounts.approvalStatus, "approved"),
+      isNull(accounts.archivedAt),
+      sql`${playerEnrollments.onboardingCompletedAt} is not null`,
+      sql`exists (
+        select 1 from ${sessionAssignments}
+        inner join ${sessionSeries} on ${sessionSeries.id} = ${sessionAssignments.seriesId}
+        where ${sessionAssignments.accountId} = ${accounts.id}
+          and ${sessionAssignments.effectiveFrom} <= ${monthEnd(period)}
+          and (${sessionAssignments.effectiveTo} is null
+            or (${sessionAssignments.effectiveTo} > ${monthStart(period)}
+              and ${sessionAssignments.effectiveTo} > ${sessionAssignments.effectiveFrom}))
+          and ${sessionSeries.startsOn} <= ${monthEnd(period)}
+          and (${sessionSeries.endsOn} is null or ${sessionSeries.endsOn} >= ${monthStart(period)})
+      )`,
+      sql`not exists (
+        select 1 from ${feeAgreements}
+        where ${feeAgreements.playerAccountId} = ${accounts.id}
+          and (${feeAgreements.status} = 'active'
+            or ${feeAgreements.effectiveFrom} > ${monthEnd(period)}
+            or (${feeAgreements.status} != 'paused'
+              and ${feeAgreements.effectiveFrom} <= ${monthEnd(period)}
+              and (${feeAgreements.effectiveTo} is null
+                or ${feeAgreements.effectiveTo} >= ${monthStart(period)})))
+      )`,
+    )).all()
+  return new Set(rows.map((row) => row.playerId))
+}
+
+/**
  * The players on the coach's finance lists for a month: the payment desk, the
  * dashboard's "needs attention" count and the (unused) finance workspace.
  *
@@ -1320,10 +1436,14 @@ function termFeeMonths(database: Executor, playerId: string, todayKey: string) {
  * - A player with fees is never left off. A player with an active fee plan but
  *   no registration fee (one voided from Corrections, say) used to be marked
  *   "setup required" and dropped, which took them off the payment desk too.
- * - A player with no fees yet is listed only when the head coach has something
- *   to do: their month's fee is waiting to be issued, or they finished
- *   onboarding and train this month with no fee plan ("Setup required").
- *   Players still in onboarding are left to the onboarding register.
+ * - A player who finished onboarding and trains this month with no fee plan
+ *   reads "Setup required" (listPlayersTrainingWithoutFeePlan), whether or
+ *   not they have fees from before: almost every player has a registration
+ *   fee, and it used to hide the missing plan behind "Paid". Only an overdue
+ *   fee reads first. A player with no fees yet is listed only when the head
+ *   coach has something to do: their month's fee is waiting to be issued, or
+ *   their fee plan is missing. Players still in onboarding are left to the
+ *   onboarding register.
  */
 export function listFinancePlayers(
   database: Executor,
@@ -1379,30 +1499,17 @@ export function listFinancePlayers(
     where ${feeAgreements.playerAccountId} = ${accounts.id}
       and ${feeAgreements.status} in ('active', 'ended')
   )`
-  const hasPeriodAgreement = sql<number>`exists (
+  // Any fee plan at all, a stopped one included: End training's "Stop fees"
+  // pauses a plan that had not started yet.
+  const hasAnyAgreement = sql<number>`exists (
     select 1 from ${feeAgreements}
     where ${feeAgreements.playerAccountId} = ${accounts.id}
-      and ${feeAgreements.status} != 'paused'
-      and ${feeAgreements.effectiveFrom} <= ${monthEnd(period)}
-      and (${feeAgreements.effectiveTo} is null
-        or ${feeAgreements.effectiveTo} >= ${monthStart(period)})
   )`
-  const hasPeriodAssignment = sql<number>`exists (
-    select 1 from ${sessionAssignments}
-    inner join ${sessionSeries} on ${sessionSeries.id} = ${sessionAssignments.seriesId}
-    where ${sessionAssignments.accountId} = ${accounts.id}
-      and ${sessionAssignments.effectiveFrom} <= ${monthEnd(period)}
-      and (${sessionAssignments.effectiveTo} is null
-        or (${sessionAssignments.effectiveTo} > ${monthStart(period)}
-          and ${sessionAssignments.effectiveTo} > ${sessionAssignments.effectiveFrom}))
-      and ${sessionSeries.startsOn} <= ${monthEnd(period)}
-      and (${sessionSeries.endsOn} is null or ${sessionSeries.endsOn} >= ${monthStart(period)})
-  )`
+  const withoutFeePlan = listPlayersTrainingWithoutFeePlan(database, period)
   const rows = database.select({
     academyIdSerial: academyIdAllocations.serial,
     fullName: accounts.fullName,
     archivedAt: accounts.archivedAt,
-    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
     playerId: accounts.id,
     chargeId: financialCharges.id,
     chargeType: financialCharges.type,
@@ -1415,9 +1522,8 @@ export function listFinancePlayers(
     debitTotal,
     creditTotal,
     hasActiveAgreement,
+    hasAnyAgreement,
     hasPaymentAgreementHistory,
-    hasPeriodAgreement,
-    hasPeriodAssignment,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
@@ -1492,19 +1598,16 @@ export function listFinancePlayers(
     const hasPaymentHistory = Number(player.hasPaymentAgreementHistory) > 0
     const awaitingFee = awaitingFeePlayerIds.has(player.playerId)
     const archived = player.archivedAt !== null
+    const trainsWithoutPlan = !awaitingFee && withoutFeePlan.has(player.playerId)
     const base = {
       playerId: player.playerId,
       academyId: formatAcademyId(player.academyIdSerial),
       fullName: player.fullName,
       archived,
       hasActiveFeePlan: hasAgreement,
-      feePlanEnded: hasPaymentHistory && !hasAgreement,
+      feePlanEnded: Number(player.hasAnyAgreement) > 0 && !hasAgreement,
     }
     if (!chargeRows.length) {
-      const trainsWithoutPlan = player.onboardingCompletedAt !== null
-        && Number(player.hasPeriodAssignment) > 0
-        && Number(player.hasPeriodAgreement) === 0
-        && !hasAgreement
       if (!awaitingFee && !trainsWithoutPlan) return []
       return [{
         ...base,
@@ -1518,10 +1621,11 @@ export function listFinancePlayers(
     const hasPayableRegistration = chargeRows.some((row) => (
       row.chargeType === "registration" && row.outstanding > 0
     ))
-    const status = combineFinanceStatuses([
+    const feeStatus = combineFinanceStatuses([
       ...chargeRows.map((row) => row.status),
       ...(awaitingFee ? ["not_prepared" as const] : []),
     ])
+    const status = trainsWithoutPlan && feeStatus !== "overdue" ? "setup_required" : feeStatus
     const representative = [...chargeRows].sort((left, right) => {
       const leftSettled = left.outstanding === 0 ? 1 : 0
       const rightSettled = right.outstanding === 0 ? 1 : 0

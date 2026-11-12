@@ -5,7 +5,7 @@ import os from "node:os"
 import path from "node:path"
 
 import Database from "better-sqlite3"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, inArray, isNull } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/better-sqlite3"
 import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { readMigrationFiles } from "drizzle-orm/migrator"
@@ -1543,10 +1543,36 @@ async function seedFinancials(target: string) {
    * could be recorded while the player was still on a schedule. The service
    * now records one only once the player's training has ended ("They have
    * left already" in Members), so their places are closed for the call and
-   * reopened after it: every player keeps the state the fixture's checks and
-   * browser tests expect. A repeated seed pass replays the refunds, which
-   * needs no place closed, and finds nothing to reopen.
+   * reopened after it. Before that rule a refund kept no record of the fee
+   * plan's earlier state, so that record is taken off again (legacyRefunds
+   * below) and the reversed refund leaves its plan ended, as such a reversal
+   * does: both players keep training with an ended plan, the state the coach
+   * now sees as "Setup required". A repeated seed pass replays the refunds,
+   * which needs no place closed, and finds nothing to reopen.
    */
+  // A refund recorded before 13 Nov 2026 stored no `previousAgreement` and
+  // wrote no fee plan entry of its own (lib/finance/service.ts recordRefund).
+  const legacyRefunds = (refundIds: string[]) => {
+    const auditRows = database.select().from(dbSchema.financialAuditEvents)
+      .where(inArray(dbSchema.financialAuditEvents.entityType, ["refund", "fee_agreement"])).all()
+    auditRows.forEach((row) => {
+      const metadata = JSON.parse(row.metadata) as Record<string, unknown>
+      if (row.entityType === "refund" && row.eventType === "refund_recorded"
+        && refundIds.includes(row.entityId) && "previousAgreement" in metadata) {
+        delete metadata.previousAgreement
+        database.update(dbSchema.financialAuditEvents)
+          .set({ metadata: JSON.stringify(metadata) })
+          .where(eq(dbSchema.financialAuditEvents.id, row.id)).run()
+      }
+      if (row.entityType === "fee_agreement"
+        && typeof metadata.refundId === "string" && refundIds.includes(metadata.refundId)
+        && (row.eventType === "fee_agreement_ended" || row.eventType === "fee_agreement_corrected")
+        && String(metadata.reason ?? "").includes("by mid-term withdrawal refund")) {
+        database.delete(dbSchema.financialAuditEvents)
+          .where(eq(dbSchema.financialAuditEvents.id, row.id)).run()
+      }
+    })
+  }
   const reopenedPlaces = refundablePayments.flatMap(({ playerId }) => (
     database.select({ id: dbSchema.sessionAssignments.id })
       .from(dbSchema.sessionAssignments)
@@ -1580,6 +1606,7 @@ async function seedFinancials(target: string) {
     }],
     mutationId: mutationId(100 + index),
   }, context))
+  legacyRefunds(recordedRefunds.map(({ refund }) => refund.id))
   financeService.reverseRefund({
     refundId: recordedRefunds[1].refund.id,
     expectedRefundRevision: 0,
@@ -2398,7 +2425,7 @@ function verify(target: string, expectedStage?: Stage) {
           (select count(*) from fee_agreements where status = 'active') as activeAgreements,
           (select count(*) from fee_agreements where status = 'ended') as endedAgreements,
           (select count(distinct player_account_id) from refunds
-            where purpose = 'mid_term_withdrawal' and lifecycle = 'recorded') as withdrawalPlayers,
+            where purpose = 'mid_term_withdrawal') as withdrawalPlayers,
           (select count(*) from refunds
             where purpose = 'mid_term_withdrawal'
               and withdrawal_effective_on is not null
@@ -2431,8 +2458,8 @@ function verify(target: string, expectedStage?: Stage) {
         || financeLifecycle.withdrawalCredits !== 2) {
         problems.push("Withdrawal Refunds must retain their dates and linked unused-training credits.")
       }
-      // A reversed withdrawal refund puts the fee plan back, so only a
-      // recorded one leaves a plan closed.
+      // Both fixture refunds model ones recorded before 13 Nov 2026, so the
+      // reversed one leaves its plan closed too.
       if (financeLifecycle.activeAgreements
           !== financePlayerCount - financeLifecycle.withdrawalPlayers
         || financeLifecycle.endedAgreements < financeLifecycle.withdrawalPlayers + 1) {

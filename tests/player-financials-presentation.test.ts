@@ -140,6 +140,7 @@ function feeRecord(overrides: Partial<PlayerFeeRecord> = {}): PlayerFeeRecord {
     concessionEntries: [],
     termFeeResumesOn: null,
     termFinishedOn: null,
+    trainsWithoutFeePlan: false,
     ...overrides,
   }
 }

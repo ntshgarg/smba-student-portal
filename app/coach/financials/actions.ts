@@ -211,7 +211,16 @@ export async function reverseRefundAction(
 ): Promise<FinanceActionResult> {
   return runFinanceAction((coachId) => {
     const result = reverseRefund(input, { coachId })
-    return { message: result.reused ? "Refund already reversed" : "Refund reversed" }
+    if (result.reused) return { message: "Refund already reversed" }
+    // The coach is told when the fee plan did not go back, so a player still
+    // training is not silently left with no fee plan.
+    if (result.feePlanRestored === false) {
+      return { message: "Refund reversed. The fee plan stays ended" }
+    }
+    if (result.feePlanRestored) {
+      return { message: "Refund reversed. The fee plan is back as it was before the refund" }
+    }
+    return { message: "Refund reversed" }
   })
 }
 

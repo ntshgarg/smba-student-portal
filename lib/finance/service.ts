@@ -66,7 +66,8 @@ import {
   loadChargeViews,
   loadPeriodAssignmentIndex,
   loadPlayerFeeRecord,
-  playerTrainingHasEnded,
+  planRestoreAfterWithdrawalReversal,
+  playerTrainingEndBlocker,
   readActiveFeeAgreement,
   readActivePlayer,
   readAuditEventByIdempotencyKey,
@@ -143,7 +144,7 @@ import {
   type EndFeeAgreementResult,
   type FeeAgreementView,
 } from "@/lib/finance/types"
-import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
+import { formatDateKey, getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
 import { scheduleTermFinished } from "@/lib/sessions/term"
 import { academyPlanIsValid } from "@/lib/training/academy-plans"
@@ -3054,10 +3055,18 @@ function withdrawalRefundablePaymentAllocations(
  * on a schedule left them training with no fee plan and never billed again.
  */
 const TRAINING_STILL_RUNNING_MESSAGE = "End this player’s training in Members first: choose End training, then “They have left already”. A mid-term withdrawal refund can only be recorded once they have left."
+// End training is not offered to a player with no place, so a booked start
+// is cancelled instead (Cancel scheduled change in Members).
+const BOOKED_START_MESSAGE = "This player has a start booked in Members. If they have left, open their record in Members and choose Cancel scheduled change first. A mid-term withdrawal refund can only be recorded once they have left."
 
 function requireTrainingEnded(database: SmbaDatabaseExecutor, playerId: string, now: Date) {
-  if (!playerTrainingHasEnded(database, playerId, getAcademyDateKey(now))) {
-    financeError("CONFLICT", TRAINING_STILL_RUNNING_MESSAGE, "withdrawalEffectiveOn")
+  const blocker = playerTrainingEndBlocker(database, playerId, getAcademyDateKey(now))
+  if (blocker) {
+    financeError(
+      "CONFLICT",
+      blocker === "booked_start" ? BOOKED_START_MESSAGE : TRAINING_STILL_RUNNING_MESSAGE,
+      "withdrawalEffectiveOn",
+    )
   }
 }
 
@@ -3557,19 +3566,28 @@ export function recordRefund(
       now,
     })
     // The refund ends the plan, so "Fee plan ended" in the activity log finds
-    // it like every other ending.
+    // it like every other ending. A plan that had already ended (Stop fees)
+    // only has its end date moved, which is a correction, not a second ending.
+    const planWasEnded = item.agreement.status === "ended"
     insertAudit(tx, {
       actorId: coachId,
       createId,
       entityId: item.agreement.id,
       entityType: "fee_agreement",
-      eventType: "fee_agreement_ended",
+      eventType: planWasEnded ? "fee_agreement_corrected" : "fee_agreement_ended",
       metadata: {
         agreementId: item.agreement.id,
         effectiveTo: withdrawalEffectiveOn,
         playerId: item.agreement.playerAccountId,
         previous: previousAgreement,
-        reason: `Ended by mid-term withdrawal refund ${refundReference}`,
+        reason: planWasEnded
+          ? `End date moved to ${formatDateKey(withdrawalEffectiveOn, {
+            day: "numeric",
+            month: "short",
+            weekday: undefined,
+            year: "numeric",
+          })} by mid-term withdrawal refund ${refundReference}`
+          : `Ended by mid-term withdrawal refund ${refundReference}`,
         refundId,
       },
       now,
@@ -3588,51 +3606,21 @@ export function recordRefund(
  * before the refund ended it: still running for a player on a break with
  * their fee plan kept, or ending with the month for one whose fees were
  * stopped. It used to stay ended at the withdrawal date, so a refund recorded
- * by mistake and reversed left the player silently never billed again.
- *
- * Nothing is put back when the refund was recorded before 13 Nov 2026 (no
- * earlier state was kept), when the plan has changed since the refund, or when
- * putting it back would overlap a plan made since. Fees already issued never
- * change: the plan only covers days again that it covered before.
+ * by mistake and reversed left the player silently never billed again. When
+ * the plan cannot be put back (planRestoreAfterWithdrawalReversal says why),
+ * returns false, and the coach is told the plan stays ended.
  */
 function restorePlanAfterWithdrawalReversal(
   tx: SmbaDatabaseExecutor,
   refund: typeof refunds.$inferSelect,
   { actorId, createId, now, reason }: { actorId: string; createId: () => string; now: Date; reason: string },
 ) {
-  const recorded = tx.select({ metadata: financialAuditEvents.metadata }).from(financialAuditEvents)
-    .where(and(
-      eq(financialAuditEvents.entityType, "refund"),
-      eq(financialAuditEvents.entityId, refund.id),
-      eq(financialAuditEvents.eventType, "refund_recorded"),
-    )).get()
-  const metadata = recorded ? parseAuditMetadata<{
-    agreementId?: string
-    previousAgreement?: { effectiveTo: string | null; status: string }
-  }>(recorded.metadata) : {}
-  const previous = metadata.previousAgreement
-  const withdrawnOn = refund.withdrawalEffectiveOn
-  if (!metadata.agreementId || !previous || !withdrawnOn
-    || !["active", "ended"].includes(previous.status)
-    || (previous.status === "ended" && !previous.effectiveTo)) return
-  const agreement = tx.select().from(feeAgreements)
-    .where(eq(feeAgreements.id, metadata.agreementId)).get()
-  if (!agreement || agreement.status !== "ended"
-    || agreement.effectiveTo !== withdrawnOn
-    || agreement.playerAccountId !== refund.playerAccountId) return
-  const restoredTo = previous.status === "active" ? null : previous.effectiveTo
-  const overlapping = tx.select({ id: feeAgreements.id }).from(feeAgreements).where(and(
-    eq(feeAgreements.playerAccountId, agreement.playerAccountId),
-    ne(feeAgreements.id, agreement.id),
-    ne(feeAgreements.status, "paused"),
-    restoredTo ? lte(feeAgreements.effectiveFrom, restoredTo) : undefined,
-    or(isNull(feeAgreements.effectiveTo), gt(feeAgreements.effectiveTo, withdrawnOn)),
-  )).get()
-  if (overlapping) return
-  if (previous.status === "active" && readActiveFeeAgreement(tx, agreement.playerAccountId)) return
+  const restore = planRestoreAfterWithdrawalReversal(tx, refund)
+  if (!restore) return false
+  const { agreement } = restore
   const update = tx.update(feeAgreements).set({
-    effectiveTo: restoredTo,
-    status: previous.status === "active" ? "active" : "ended",
+    effectiveTo: restore.effectiveTo,
+    status: restore.status,
     recordRevision: sql`${feeAgreements.recordRevision} + 1`,
     updatedByAccountId: actorId,
     updatedAt: now,
@@ -3641,7 +3629,7 @@ function restorePlanAfterWithdrawalReversal(
     eq(feeAgreements.status, "ended"),
     eq(feeAgreements.recordRevision, agreement.recordRevision),
   )).run()
-  if (update.changes !== 1) return
+  if (update.changes !== 1) return false
   insertAudit(tx, {
     actorId,
     createId,
@@ -3657,6 +3645,7 @@ function restorePlanAfterWithdrawalReversal(
     },
     now,
   })
+  return true
 }
 
 export function reverseRefund(
@@ -3755,6 +3744,7 @@ export function reverseRefund(
       eq(refunds.recordRevision, expectedRefundRevision),
     )).run()
     if (update.changes !== 1) financeError("BALANCE_CHANGED", "Refund changed. Review it.")
+    let feePlanRestored: boolean | undefined
     if (withdrawalAdjustment) {
       const adjustmentUpdate = tx.update(chargeAdjustments).set({
         reversedByAccountId: coachId,
@@ -3767,7 +3757,11 @@ export function reverseRefund(
       if (adjustmentUpdate.changes !== 1) {
         financeError("BALANCE_CHANGED", "Withdrawal credit changed. Review the Refund.")
       }
-      restorePlanAfterWithdrawalReversal(tx, refundRow, { actorId: coachId, createId, now, reason })
+      feePlanRestored = restorePlanAfterWithdrawalReversal(
+        tx,
+        refundRow,
+        { actorId: coachId, createId, now, reason },
+      )
     }
     const paymentIds = [...new Set(allocations.map(({ paymentAllocation }) => (
       paymentAllocation.paymentId
@@ -3806,7 +3800,12 @@ export function reverseRefund(
     const chargeViews = loadChargeViews(tx, chargeIds, now)
     const charges = chargeIds.map((chargeId) => chargeViews.get(chargeId))
       .filter((charge): charge is ChargeView => Boolean(charge))
-    return { refund, charges, reused: false }
+    return {
+      refund,
+      charges,
+      reused: false,
+      ...(feePlanRestored === undefined ? {} : { feePlanRestored }),
+    }
   }, { behavior: "immediate" })
 }
 

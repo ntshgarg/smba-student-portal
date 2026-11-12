@@ -18,7 +18,7 @@ import {
   refundAllocations,
   refunds,
 } from "@/lib/db/schema"
-import { loadChargeViews } from "@/lib/finance/repository"
+import { listPlayersTrainingWithoutFeePlan, loadChargeViews } from "@/lib/finance/repository"
 import {
   FINANCE_AUDIT_EVENTS,
   type ChargeView,
@@ -137,11 +137,19 @@ export function loadFeeRegister(
     true,
   )
 
-  const rows = players.map((player, index): FinanceRegisterRow => {
+  // A player with no fee this month is listed only when the coach has
+  // something to do: the fee is waiting to be issued ("Not issued"), or they
+  // train this month with no fee plan ("Setup required"), which the
+  // dashboard's needs-attention count includes and used to lead nowhere.
+  const withoutFeePlan = period === null
+    ? new Set<string>()
+    : listPlayersTrainingWithoutFeePlan(database, period)
+  const rows = players.flatMap((player, index): FinanceRegisterRow[] => {
     const charge = registerCharges[index]
     if (!charge) {
       const awaitingFee = period !== null && awaitingFeePlayerIds.has(player.playerId)
-      return {
+      if (!awaitingFee && !withoutFeePlan.has(player.playerId)) return []
+      return [{
         playerId: player.playerId,
         academyId: formatAcademyId(player.academyIdSerial),
         fullName: player.fullName,
@@ -158,12 +166,12 @@ export function loadFeeRegister(
         outstandingPaise: 0,
         dueDate: null,
         status: awaitingFee ? "not_prepared" : "setup_required",
-      }
+      }]
     }
     const view = chargeViews.get(charge.id)
     if (!view) throw new Error("The fee-register Charge is unavailable.")
     const adjustments = activeAdjustmentTotals(view.adjustments)
-    return {
+    return [{
       playerId: player.playerId,
       academyId: formatAcademyId(player.academyIdSerial),
       fullName: player.fullName,
@@ -180,12 +188,11 @@ export function loadFeeRegister(
       outstandingPaise: view.outstandingPaise,
       dueDate: view.dueDate,
       status: view.status,
-    }
+    }]
   })
 
   const query = normalizeSearch(input.query)
   const filtered = rows.filter((row) => {
-    if (row.status === "setup_required") return false
     if ((input.playerScope ?? "active") === "active" && row.archived) return false
     if (input.playerScope === "archived" && !row.archived) return false
     if (input.statuses?.length && !input.statuses.includes(row.status)) return false
