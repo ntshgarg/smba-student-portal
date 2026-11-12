@@ -67,11 +67,11 @@ retained exception is documented with its reason and review date.
 | Archived identity, attendance and coaching reports | 3 years after the end of membership | Delete or anonymize unless a documented dispute requires more time |
 | Charges, payments, concessions, refunds and financial audit history | 8 financial years after the relevant financial year | Confirm with the academy's accountant, then securely delete |
 | Expired/withdrawn announcements | 1 year after expiry or withdrawal | Delete |
-| Authentication security events | 180 days | Delete unless attached to an open incident |
+| Authentication security events | 180 days | Delete automatically; events an open incident needs are first copied into that incident's record |
 | Sanitized application-error events, server and browser | 90 days | Delete after operational review |
-| Expired email challenges, sessions and rate-limit records | No more than 90 days after expiry | Delete |
+| Expired email challenges (including codes from registrations that were never finished), sessions and rate-limit records | No more than 90 days after expiry | Delete automatically |
 | Verified recovery email | While the account remains recoverable | Remove after account closure and required record reconciliation |
-| Encrypted logical backups | 35 days | Automatic artifact expiry; monitor daily freshness and monthly stored restoration |
+| Encrypted logical backups | 30 days | Deleted automatically by the nightly backup, which always keeps the newest; monitor daily freshness and monthly stored restoration |
 | Turso point-in-time recovery | Provider-plan window | Let the provider expire it automatically |
 | Security incident record | 3 years after closure | Review, then securely delete |
 
@@ -82,14 +82,15 @@ written confirmation.
 ## Security and providers
 
 - Production changes pass the protected GitHub regression gate before merge.
-- Vercel hosts the application, Turso stores the database, Resend sends authentication email, and GitHub
-  retains only encrypted scheduled backups.
+- Vercel hosts the application, Turso stores the database, Resend sends authentication email, and a
+  separate private GitHub repository retains only the encrypted nightly backups.
 - Production health and security signals are monitored; operational alerts contain counts and links, not
   personal details.
 - Backups are encrypted before upload. The passphrase is stored separately from GitHub and production
   credentials.
-- GitHub workflow artifacts are the only long-term backup store in this phase; deleting a backup workflow
-  run can delete its encrypted artifact and must be treated as a controlled data-recovery action.
+- The private backup repository is the only long-term backup store in this phase. It must never be made
+  public; the backup job checks it is private before every upload. Deleting a backup there by hand must
+  be treated as a controlled data-recovery action.
 - Suspected incidents follow `docs/PRODUCTION-OPERATIONS.md`; affected sessions and secrets are revoked
   before normal operation resumes.
 

@@ -1,16 +1,27 @@
 name: Encrypted production backup
 
+# Every night: copy the production database, check the copy, lock it with the
+# backup passphrase and keep the locked file in a separate PRIVATE GitHub
+# repository for 30 days. The monthly "Encrypted backup restore verification"
+# fetches the newest one and proves it can be brought back.
+#
+# Never as a workflow artifact. This repository is public, and any GitHub
+# account can download a public repository's artifacts: that is how fifteen
+# encrypted copies of the academy -- children's names, dates of birth, guardian
+# phone numbers, password hashes and authenticator secrets -- were downloadable
+# by anyone until 3 September 2026. .github/scripts/backup-store.js checks that
+# the store is private before every upload and refuses otherwise, and
+# tests/ci-security-controls.test.ts fails if this file ever uploads an artifact.
+#
+# Setting up the store, and the secrets this needs:
+# docs/PRODUCTION-OPERATIONS.md, "Scheduled encrypted backups". Until the store
+# is set up, every run fails at its first step and says so, without reading the
+# database.
+
 on:
-  # The nightly schedule is off. This job's only destination was
-  # actions/upload-artifact, and on a public repository that means any GitHub
-  # account can download the snapshot -- which held children's names, dates of
-  # birth and guardian phone numbers, plus password hashes and plaintext TOTP
-  # secrets. Fifteen snapshots were live and have been deleted.
-  #
-  # Do not re-enable the schedule until the final "Refuse to publish the
-  # snapshot" step is replaced by an upload to storage where a read is
-  # authenticated, logged and revocable. Until then this workflow fails on
-  # purpose after creating the snapshot, so no run reads as a successful backup.
+  schedule:
+    # Every night at 02:47 India Standard Time.
+    - cron: "17 21 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -22,15 +33,46 @@ permissions:
 
 jobs:
   snapshot:
-    name: Create and verify encrypted snapshot
+    name: Create, verify and store encrypted snapshot
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Require the private backup store
+        env:
+          SMBA_BACKUP_STORE_TOKEN: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
+        run: |
+          if [ -z "$SMBA_BACKUP_STORE_TOKEN" ]; then
+            {
+              echo "### No backup was taken"
+              echo
+              echo "There is no private place to keep backups yet, so the database was not read."
+              echo "Beyond Turso's one-day rewind, the academy has no copy of its records that could be restored."
+              echo
+              echo "Set up the store: docs/PRODUCTION-OPERATIONS.md, \"Scheduled encrypted backups\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::No private backup store is set up (the SMBA_BACKUP_STORE_TOKEN secret is missing). No backup was taken."
+            exit 1
+          fi
+
       - name: Check out trusted default-branch backup code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
+
+      - name: Check the backup store is private
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          STORE_REPOSITORY: ${{ vars.SMBA_BACKUP_STORE_REPOSITORY || format('{0}/smba-backups', github.repository_owner) }}
+        with:
+          github-token: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
+          script: |
+            const backupStore = require("./.github/scripts/backup-store.js")
+            await backupStore.assertPrivateStore({
+              github,
+              publicRepository: `${context.repo.owner}/${context.repo.repo}`,
+              store: backupStore.parseStoreRepository(process.env.STORE_REPOSITORY),
+            })
 
       - name: Use Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -55,33 +97,57 @@ jobs:
         run: |
           npm run db:snapshot:verify -- .data/backup-run/smba-production.db
 
+      # Each run is a fresh runner, so fixed names cannot collide. Nothing from
+      # the run is spliced into this shell: it holds the passphrase.
       - name: Encrypt snapshot and manifest
         env:
           SMBA_BACKUP_PASSPHRASE: ${{ secrets.SMBA_BACKUP_PASSPHRASE }}
         run: |
           test "${#SMBA_BACKUP_PASSPHRASE}" -ge 24 || { echo "SMBA_BACKUP_PASSPHRASE must contain at least 24 characters."; exit 1; }
-          tar -C .data/backup-run -czf .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz \
+          tar -C .data/backup-run -czf .data/smba-production-backup.tar.gz \
             smba-production.db smba-production.db.manifest.json
           printf '%s' "$SMBA_BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
             --passphrase-fd 0 \
             --symmetric --cipher-algo AES256 --s2k-digest-algo SHA512 \
-            --output .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz.gpg \
-            .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
+            --output .data/smba-production-backup.tar.gz.gpg \
+            .data/smba-production-backup.tar.gz
 
       - name: Remove plaintext copies
         if: always()
         run: |
-          rm -f .data/smba-production-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
+          rm -f .data/smba-production-backup.tar.gz
           rm -rf .data/backup-run
 
-      # There is deliberately nowhere to put the file yet. It was kept with
-      # actions/upload-artifact, which on a public repository is readable by any
-      # GitHub account; see the note at the top of this file. Replace this step
-      # with an upload to private, access-controlled, logged storage (for example
-      # an object-storage bucket written with a write-only key) and delete the
-      # failure below. Until then a run that reached here has produced a snapshot
-      # that is about to be thrown away, and says so instead of reporting success.
-      - name: Refuse to publish the snapshot
-        run: |
-          echo "::error::No private storage is configured for backups. The encrypted snapshot was not saved anywhere."
-          exit 1
+      # Checks the store is still private, uploads, and only then deletes stored
+      # backups older than 30 days -- never the newest complete one, so a month
+      # of failed nights cannot leave the academy with nothing.
+      - name: Keep the encrypted snapshot in the private store
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          BACKUP_FILE: .data/smba-production-backup.tar.gz.gpg
+          STORE_REPOSITORY: ${{ vars.SMBA_BACKUP_STORE_REPOSITORY || format('{0}/smba-backups', github.repository_owner) }}
+        with:
+          github-token: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
+          script: |
+            const backupStore = require("./.github/scripts/backup-store.js")
+            const store = backupStore.parseStoreRepository(process.env.STORE_REPOSITORY)
+            const stored = await backupStore.storeBackup({
+              filePath: process.env.BACKUP_FILE,
+              github,
+              publicRepository: `${context.repo.owner}/${context.repo.repo}`,
+              sourceRun: `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`,
+              store,
+            })
+            const pruned = await backupStore.pruneStoredBackups({ github, store })
+            await core.summary
+              .addHeading("Encrypted production backup", 2)
+              .addList([
+                `Stored: ${stored.name} (${stored.size} bytes)`,
+                `Encrypted file SHA-256: ${stored.sha256}`,
+                `Older than ${backupStore.RETENTION_DAYS} days and removed: ${pruned.length ? pruned.join(", ") : "none"}`,
+              ])
+              .write()
+
+      - name: Remove the encrypted copy from the runner
+        if: always()
+        run: rm -f .data/smba-production-backup.tar.gz.gpg

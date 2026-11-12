@@ -1,8 +1,28 @@
+// Builds the source that reset-empty-academy.mjs loads into the live database:
+// a local copy of the academy holding the platform owner and nothing else.
+//
+// It reads the remote and never writes to it. The copy keeps the owner's
+// account, password, PIN, recovery email and Academy ID allocation, plus the
+// batch catalogue and the update history. It does not keep the owner's
+// authenticator app: a handover must not pass on a phone that is still paired to
+// the outgoing operator, so whoever holds the account next pairs their own on
+// the next sign-in. scripts/database/reset-academy.ts -- the "Empty the academy"
+// button -- does exactly the same, so both routes hand over the same account.
+//
+// Procedure: docs/PRODUCTION-OPERATIONS.md, "Resetting the academy to an empty
+// state".
+
 import fs from "node:fs"
 import path from "node:path"
 
 import BetterSqlite3 from "better-sqlite3"
 import LibsqlDatabase from "libsql"
+
+import {
+  PLATFORM_OWNER_ACADEMY_ID,
+  readConsistently,
+  soleOwnerQuery,
+} from "./academy-owner.mjs"
 
 const CONFIRMATION = "PREPARE-ADMIN-ONLY-SNAPSHOT"
 const outputArgument = process.argv[2]
@@ -33,7 +53,6 @@ const PRESERVED_TABLES = new Set([
   "auth_pin_credentials",
   "auth_provider_accounts",
   "auth_recovery_emails",
-  "auth_two_factors",
   "auth_users",
   "batches",
 ])
@@ -86,45 +105,41 @@ function count(database, query, ...parameters) {
 let completed = false
 
 try {
-  const schema = schemaObjects(source)
+  // One read transaction, so every table is copied as of the same moment. Read
+  // table by table on a live site, a row could arrive in one table after its
+  // neighbour had already been copied, and the copy would fail its own checks.
+  const { rows, schema } = readConsistently(source, () => {
+    const schema = schemaObjects(source)
+    return {
+      rows: Object.fromEntries(schema.tables.map(({ name }) => [
+        name,
+        source.prepare(`SELECT * FROM ${quoteIdentifier(name)}`).all(),
+      ])),
+      schema,
+    }
+  })
   let copiedRows = 0
 
   snapshot.pragma("foreign_keys = OFF")
   const clone = snapshot.transaction(() => {
     for (const table of schema.tables) snapshot.exec(table.sql)
-    for (const table of schema.tables) {
-      copiedRows += insertRows(
-        snapshot,
-        table.name,
-        source.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all(),
-      )
-    }
+    for (const table of schema.tables) copiedRows += insertRows(snapshot, table.name, rows[table.name])
     for (const index of schema.indexes) snapshot.exec(index.sql)
   })
   clone.immediate()
 
-  const admins = snapshot.prepare(`
-    SELECT accounts.id, auth_methods.identifier
-    FROM accounts
-    INNER JOIN auth_methods
-      ON auth_methods.account_id = accounts.id
-      AND auth_methods.revoked_at IS NULL
-    WHERE accounts.role = 'platform_admin'
-  `).all()
-  if (admins.length !== 1) {
-    throw new Error(`Expected exactly one active platform admin, found ${admins.length}.`)
+  // The same rule scripts/database/reset-academy.ts uses to name the owner, so
+  // the two routes can never disagree about which account survives.
+  const owners = snapshot.prepare(soleOwnerQuery).all()
+  if (owners.length !== 1) {
+    throw new Error(`Expected exactly one approved platform owner, found ${owners.length}.`)
   }
-
-  const admin = admins[0]
-  const adminUsers = snapshot.prepare(`
-    SELECT id
-    FROM auth_users
-    WHERE id = ? OR username = ?
-  `).all(admin.id, admin.identifier)
-  if (adminUsers.length !== 1) {
-    throw new Error(`Expected exactly one platform-admin auth user, found ${adminUsers.length}.`)
+  const owner = owners[0]
+  if (owner.username !== PLATFORM_OWNER_ACADEMY_ID) {
+    throw new Error(
+      `The platform owner signs in as ${owner.username ?? "(no username)"}, not ${PLATFORM_OWNER_ACADEMY_ID}.`,
+    )
   }
-  const adminUserId = adminUsers[0].id
 
   const sanitize = snapshot.transaction(() => {
     for (const table of schema.tables) {
@@ -133,9 +148,12 @@ try {
       }
     }
 
-    snapshot.prepare("DELETE FROM auth_two_factors WHERE user_id <> ?").run(adminUserId)
-    snapshot.prepare("DELETE FROM auth_provider_accounts WHERE user_id <> ?").run(adminUserId)
-    snapshot.prepare("DELETE FROM auth_users WHERE id <> ?").run(adminUserId)
+    snapshot.prepare("DELETE FROM auth_provider_accounts WHERE user_id <> ?").run(owner.id)
+    snapshot.prepare("DELETE FROM auth_users WHERE id <> ?").run(owner.id)
+    // The authenticator row went with every other non-preserved table above.
+    // The flag has to fall with it: an account claiming an authenticator it no
+    // longer has cannot sign in at all.
+    snapshot.prepare("UPDATE auth_users SET two_factor_enabled = 0 WHERE id = ?").run(owner.id)
 
     for (const table of [
       "academy_id_allocations",
@@ -144,9 +162,9 @@ try {
       "auth_pin_credentials",
       "auth_recovery_emails",
     ]) {
-      snapshot.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE account_id <> ?`).run(admin.id)
+      snapshot.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE account_id <> ?`).run(owner.id)
     }
-    snapshot.prepare("DELETE FROM accounts WHERE id <> ?").run(admin.id)
+    snapshot.prepare("DELETE FROM accounts WHERE id <> ?").run(owner.id)
     snapshot.prepare("DELETE FROM sqlite_sequence").run()
   })
   sanitize.immediate()
@@ -154,13 +172,14 @@ try {
 
   const result = {
     accounts: count(snapshot, "SELECT count(*) AS count FROM accounts"),
+    authenticators: count(snapshot, "SELECT count(*) AS count FROM auth_two_factors"),
+    authenticatorFlag: count(snapshot, "SELECT count(*) AS count FROM auth_users WHERE two_factor_enabled <> 0"),
     batches: count(snapshot, "SELECT count(*) AS count FROM batches"),
     headCoaches: count(snapshot, "SELECT count(*) AS count FROM coach_profiles"),
-    pinCredentials: count(snapshot, "SELECT count(*) AS count FROM auth_pin_credentials WHERE account_id = ?", admin.id),
+    pinCredentials: count(snapshot, "SELECT count(*) AS count FROM auth_pin_credentials WHERE account_id = ?", owner.id),
     platformAdmins: count(snapshot, "SELECT count(*) AS count FROM accounts WHERE role = 'platform_admin'"),
     players: count(snapshot, "SELECT count(*) AS count FROM player_enrollments"),
-    recoveryEmails: count(snapshot, "SELECT count(*) AS count FROM auth_recovery_emails WHERE account_id = ?", admin.id),
-    verifiedFactors: count(snapshot, "SELECT count(*) AS count FROM auth_two_factors WHERE user_id = ? AND verified = 1", adminUserId),
+    recoveryEmails: count(snapshot, "SELECT count(*) AS count FROM auth_recovery_emails WHERE account_id = ?", owner.id),
   }
   if (result.accounts !== 1
     || result.platformAdmins !== 1
@@ -168,7 +187,8 @@ try {
     || result.players !== 0
     || result.pinCredentials !== 1
     || result.recoveryEmails !== 1
-    || result.verifiedFactors !== 1) {
+    || result.authenticators !== 0
+    || result.authenticatorFlag !== 0) {
     throw new Error(`Admin-only snapshot verification failed: ${JSON.stringify(result)}`)
   }
 

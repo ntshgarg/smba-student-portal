@@ -4,10 +4,23 @@
 // attendance mark, fee, payment and refund the academy holds, and the backup
 // written to backupArgument is the only recovery, so give that a durable path.
 //
-// Four guards stand in front of that, all of them before the first DELETE:
-// SMBA_CONFIRM_REMOTE_EMPTY_RESET must equal CONFIRMATION, the source must
-// already be a zero-member academy, the two schemas must name exactly the same
-// tables, and the remote backup must pass an integrity check.
+// Guards, all of them before the first DELETE:
+//
+// - SMBA_CONFIRM_REMOTE_EMPTY_RESET must equal CONFIRMATION;
+// - the source must already be a zero-member academy with no authenticator;
+// - the live database must still be the one the source was prepared from:
+//   the same table layout, the same update history, the same owner, and the
+//   owner's password, PIN, recovery email and sign-in names unchanged. Time
+//   can pass between preparing the copy and running this. An update released
+//   in between used to be rolled back in the update history while its changes
+//   stayed, which broke every later deploy; an owner who changed their PIN in
+//   between had the old one silently brought back;
+// - the backup of the live database must pass an integrity check.
+//
+// The backup and the replacement happen inside one write transaction on the
+// live database, so the backup is exactly what is replaced: nothing a coach or
+// parent saves while this runs can fall between the two. The update history
+// (__drizzle_migrations) is never deleted or rewritten.
 //
 // Procedure and preconditions: docs/PRODUCTION-OPERATIONS.md, "Resetting the
 // academy to an empty state". prepare-admin-only-snapshot.mjs builds the source
@@ -19,7 +32,14 @@ import path from "node:path"
 import BetterSqlite3 from "better-sqlite3"
 import LibsqlDatabase from "libsql"
 
+import {
+  PLATFORM_OWNER_ACADEMY_ID,
+  ownerSignInDetails,
+  soleOwnerQuery,
+} from "./academy-owner.mjs"
+
 const CONFIRMATION = "RESET-TO-EMPTY-ACADEMY"
+const UPDATE_HISTORY_TABLE = "__drizzle_migrations"
 const sourceArgument = process.argv[2]
 const backupArgument = process.argv[3]
 const databaseUrl = process.env.TURSO_DATABASE_URL?.trim()
@@ -40,7 +60,7 @@ fs.mkdirSync(path.dirname(backupPath), { recursive: true })
 
 const source = new BetterSqlite3(sourcePath, { readonly: true, fileMustExist: true })
 const target = new LibsqlDatabase(databaseUrl, { authToken })
-const backup = new BetterSqlite3(backupPath)
+let backup = null
 const INSERT_BATCH_SIZE = 50
 
 function quoteIdentifier(identifier) {
@@ -65,6 +85,32 @@ function schemaObjects(database) {
     ORDER BY name
   `).all()
   return { indexes, tables }
+}
+
+function layout(schema) {
+  const describe = (objects) => objects
+    .map((object) => `${object.name}\n${object.sql}`)
+    .sort()
+  return JSON.stringify({ indexes: describe(schema.indexes), tables: describe(schema.tables) })
+}
+
+function updateHistory(database) {
+  return JSON.stringify(database.prepare(`
+    SELECT hash, created_at AS createdAt
+    FROM ${quoteIdentifier(UPDATE_HISTORY_TABLE)}
+    ORDER BY created_at, id
+  `).all().map((row) => [row.hash, String(row.createdAt)]))
+}
+
+function soleOwner(database, where) {
+  const owners = database.prepare(soleOwnerQuery).all()
+  if (owners.length !== 1) {
+    throw new Error(`Expected exactly one approved platform owner in the ${where}, found ${owners.length}.`)
+  }
+  if (owners[0].username !== PLATFORM_OWNER_ACADEMY_ID) {
+    throw new Error(`The ${where}'s platform owner does not sign in as ${PLATFORM_OWNER_ACADEMY_ID}.`)
+  }
+  return owners[0]
 }
 
 function orderTablesByDependencies(database, tables) {
@@ -135,6 +181,12 @@ function restoreSequences(database, rows) {
   `).run(...rows.flatMap((row) => [row.name, row.seq]))
 }
 
+// Set immediately before the first DELETE. Until then the live database is
+// untouched, so a backup file left by a failed attempt is worthless and only
+// blocks a retry. After it, the backup is kept whatever happens: a lost
+// connection can hide a change that did commit.
+let liveDatabaseTouched = false
+
 try {
   const sourceCounts = {
     accounts: count(source, "SELECT count(*) AS count FROM accounts"),
@@ -148,39 +200,73 @@ try {
     || sourceCounts.players !== 0) {
     throw new Error(`The source is not a zero-member academy: ${JSON.stringify(sourceCounts)}`)
   }
-
-  const sourceSchema = schemaObjects(source)
-  const targetSchema = schemaObjects(target)
-  const sourceSequences = sequenceRows(source)
-  const targetSequences = sequenceRows(target)
-  const sourceNames = sourceSchema.tables.map((table) => table.name).sort()
-  const targetNames = targetSchema.tables.map((table) => table.name).sort()
-  if (JSON.stringify(sourceNames) !== JSON.stringify(targetNames)) {
-    throw new Error("The Turso schema does not exactly match the prepared empty-academy schema.")
+  if (count(source, "SELECT count(*) AS count FROM auth_two_factors") !== 0) {
+    throw new Error(
+      "The prepared copy still holds the owner's authenticator. Prepare it again with the current "
+      + "prepare-admin-only-snapshot.mjs, which removes it.",
+    )
   }
+  const sourceSchema = schemaObjects(source)
+  const sourceOwner = soleOwner(source, "prepared copy")
+  const sourceSequences = sequenceRows(source)
+  const orderedTables = orderTablesByDependencies(source, sourceSchema.tables)
+    .filter((table) => table.name !== UPDATE_HISTORY_TABLE)
+
+  fs.closeSync(fs.openSync(backupPath, "wx", 0o600))
+  backup = new BetterSqlite3(backupPath)
 
   let backupRows = 0
-  backup.pragma("foreign_keys = OFF")
-  const createBackup = backup.transaction(() => {
-    for (const table of targetSchema.tables) backup.exec(table.sql)
-    for (const table of targetSchema.tables) {
-      backupRows += insertRows(
-        backup,
-        table.name,
-        target.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all(),
+  let restoredRows = 0
+  // BEGIN IMMEDIATE takes the live database's write lock first, so everything
+  // below -- the checks, the backup and the replacement -- sees one moment.
+  const reset = target.transaction(() => {
+    const targetSchema = schemaObjects(target)
+    if (layout(sourceSchema) !== layout(targetSchema)) {
+      throw new Error(
+        "The live database's table layout differs from the prepared copy. An update may have been "
+        + "released since the copy was made. Nothing was changed: prepare the copy again from this database.",
       )
     }
-    restoreSequences(backup, targetSequences)
-    for (const index of targetSchema.indexes) backup.exec(index.sql)
-  })
-  createBackup.immediate()
-  backup.pragma("foreign_keys = ON")
-  const backupIntegrity = backup.pragma("integrity_check", { simple: true })
-  if (backupIntegrity !== "ok") throw new Error(`Backup integrity check failed: ${backupIntegrity}`)
+    if (updateHistory(source) !== updateHistory(target)) {
+      throw new Error(
+        "The live database has had an update since the prepared copy was made. Nothing was changed: "
+        + "prepare the copy again from this database.",
+      )
+    }
+    const targetOwner = soleOwner(target, "live database")
+    if (targetOwner.id !== sourceOwner.id) {
+      throw new Error(
+        "The prepared copy was made from a different academy: its owner is not this database's owner. "
+        + "Nothing was changed.",
+      )
+    }
+    if (ownerSignInDetails(source, sourceOwner.id) !== ownerSignInDetails(target, targetOwner.id)) {
+      throw new Error(
+        "The owner's password, PIN, recovery email or sign-in name changed after the prepared copy was "
+        + "made. Nothing was changed: prepare the copy again so the new ones are kept.",
+      )
+    }
 
-  const orderedTables = orderTablesByDependencies(source, sourceSchema.tables)
-  let restoredRows = 0
-  const reset = target.transaction(() => {
+    const targetSequences = sequenceRows(target)
+    backup.pragma("foreign_keys = OFF")
+    const createBackup = backup.transaction(() => {
+      for (const table of targetSchema.tables) backup.exec(table.sql)
+      for (const table of targetSchema.tables) {
+        backupRows += insertRows(
+          backup,
+          table.name,
+          target.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all(),
+        )
+      }
+      restoreSequences(backup, targetSequences)
+      for (const index of targetSchema.indexes) backup.exec(index.sql)
+    })
+    createBackup.immediate()
+    backup.pragma("foreign_keys = ON")
+    const backupIntegrity = backup.pragma("integrity_check", { simple: true })
+    if (backupIntegrity !== "ok") throw new Error(`Backup integrity check failed: ${backupIntegrity}`)
+
+    liveDatabaseTouched = true
     for (const table of [...orderedTables].reverse()) {
       target.prepare(`DELETE FROM ${quoteIdentifier(table.name)}`).run()
     }
@@ -205,8 +291,16 @@ try {
     throw new Error(`Remote verification failed: ${JSON.stringify(result)}`)
   }
   console.log(JSON.stringify({ backupPath, backupRows, restoredRows, result }))
+} catch (error) {
+  if (backup?.open) backup.close()
+  if (!liveDatabaseTouched) {
+    for (const leftover of [backupPath, `${backupPath}-journal`, `${backupPath}-wal`, `${backupPath}-shm`]) {
+      fs.rmSync(leftover, { force: true })
+    }
+  }
+  throw error
 } finally {
   source.close()
   target.close()
-  backup.close()
+  if (backup?.open) backup.close()
 }

@@ -50,7 +50,23 @@ jobs:
           BACKUP_CONFIRMED: ${{ inputs.backup_confirmed }}
         run: |
           if [ "$BACKUP_CONFIRMED" != "true" ]; then
-            echo "::error::Tick 'backup_confirmed'. This workflow no longer keeps a copy of the database: a copy stored as a workflow artifact on a public repository is downloadable by any GitHub account."
+            echo "::error::Tick 'backup_confirmed'. This workflow keeps no copy of the database itself: it relies on the nightly backup in the private backup store, which the next step checks."
+            exit 1
+          fi
+
+      - name: Require the private backup store
+        env:
+          SMBA_BACKUP_STORE_TOKEN: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
+        run: |
+          if [ -z "$SMBA_BACKUP_STORE_TOKEN" ]; then
+            {
+              echo "### Nothing was deleted"
+              echo
+              echo "There is no private backup store yet, so there is no copy of the academy to fall back on."
+              echo "Set up the store (docs/PRODUCTION-OPERATIONS.md, \"Scheduled encrypted backups\"),"
+              echo "run \"Encrypted production backup\", then run this again."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::No private backup store is set up, so the tick box cannot be checked. Nothing was deleted."
             exit 1
           fi
 
@@ -58,6 +74,39 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # The tick box is a person's word; this is the evidence. Everything below
+      # deletes, and after Turso's one-day rewind the stored backup is the only
+      # way back, so it has to exist and be recent before anything is touched.
+      # Anything saved since that backup is not in it: for an up-to-the-minute
+      # copy, run "Encrypted production backup" by hand first.
+      - name: Require a backup from the last 30 hours
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          STORE_REPOSITORY: ${{ vars.SMBA_BACKUP_STORE_REPOSITORY || format('{0}/smba-backups', github.repository_owner) }}
+        with:
+          github-token: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
+          script: |
+            const backupStore = require("./.github/scripts/backup-store.js")
+            try {
+              const store = backupStore.parseStoreRepository(process.env.STORE_REPOSITORY)
+              await backupStore.assertPrivateStore({
+                github,
+                publicRepository: `${context.repo.owner}/${context.repo.repo}`,
+                store,
+              })
+              const newest = backupStore.newestCompleteBackup(
+                await backupStore.listStoredBackups({ github, store }),
+              )
+              const ageHours = backupStore.requireRecentBackup(newest, new Date())
+              core.notice(`Newest stored backup: ${newest.name}, made ${ageHours} hours ago.`)
+            } catch (error) {
+              await core.summary
+                .addHeading("Nothing was deleted", 3)
+                .addRaw(error.message)
+                .write()
+              core.setFailed(error.message)
+            }
 
       - name: Use Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -75,7 +124,8 @@ jobs:
       # repository's artifacts, so that put a copy of every child's record in
       # front of anyone who wanted it, protected only by one passphrase. The
       # `backup_confirmed` input above makes a person say, before this runs, that a
-      # copy already exists somewhere access-controlled.
+      # copy already exists somewhere access-controlled, and "Require a backup
+      # from the last 30 hours" checks the private backup store for it.
       - name: Check the database can be read first
         env:
           SMBA_DATABASE_SNAPSHOT_SOURCE: ${{ secrets.SMBA_BACKUP_DATABASE_URL }}

@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm"
+import { and, eq, ne } from "drizzle-orm"
 
-import type { SmbaDatabase } from "@/lib/db/client"
+import type { SmbaDatabase, SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   academyIdAllocations,
   accounts,
   authMethods,
+  authProviderAccounts,
   batches,
   coachProfiles,
 } from "@/lib/db/schema"
@@ -26,13 +27,37 @@ const batchSeed = [
   { id: "weekday-elite", schedule: "Weekday", programme: "Elite" },
 ] as const
 
-export function seedReferenceData(db: SmbaDatabase) {
+export function seedReferenceData(db: SmbaDatabaseExecutor) {
   db.insert(batches).values(batchSeed.map((batch) => ({ ...batch, active: true })))
     .onConflictDoNothing()
     .run()
 }
 
+/**
+ * The demo academy: the reference batches plus a ready-made head coach,
+ * SMBA#0001, for local work and tests. One all-or-nothing step, so a failure
+ * part-way never leaves half a coach behind.
+ *
+ * A database that already has its own head coach -- one created through the
+ * one-time setup -- keeps that coach as the only one; the demo coach is not
+ * added beside it. And a demo coach whose password was changed keeps the
+ * changed password: the default is written only when there is none yet.
+ */
 export function seedDatabase(db: SmbaDatabase) {
+  db.transaction((tx) => {
+    const otherHeadCoach = tx.select({ accountId: coachProfiles.accountId })
+      .from(coachProfiles)
+      .where(and(
+        eq(coachProfiles.accessLevel, "head_admin"),
+        ne(coachProfiles.accountId, INITIAL_COACH_ACCOUNT_ID),
+      ))
+      .get()
+    if (!otherHeadCoach) seedDemoHeadCoach(tx)
+    seedReferenceData(tx)
+  })
+}
+
+function seedDemoHeadCoach(db: SmbaDatabaseExecutor) {
   const now = new Date()
 
   db.insert(accounts).values({
@@ -66,7 +91,14 @@ export function seedDatabase(db: SmbaDatabase) {
     createdAt: now,
   }).onConflictDoNothing().run()
 
-  if (process.env.NODE_ENV !== "production" && process.env.VERCEL !== "1") {
+  const existingPassword = db.select({ id: authProviderAccounts.id })
+    .from(authProviderAccounts)
+    .where(and(
+      eq(authProviderAccounts.accountId, INITIAL_COACH_ACCOUNT_ID),
+      eq(authProviderAccounts.providerId, "credential"),
+    ))
+    .get()
+  if (!existingPassword && process.env.NODE_ENV !== "production" && process.env.VERCEL !== "1") {
     provisionDevelopmentCredential({
       academyId: "SMBA#0001",
       accountId: INITIAL_COACH_ACCOUNT_ID,
@@ -86,6 +118,4 @@ export function seedDatabase(db: SmbaDatabase) {
     createdAt: coachAccount?.approvedAt ?? coachAccount?.createdAt ?? now,
     updatedAt: now,
   }).onConflictDoNothing().run()
-
-  seedReferenceData(db)
 }

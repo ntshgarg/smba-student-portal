@@ -125,6 +125,10 @@ export function createDatabaseSnapshot({
 
   const sourceDatabase = openSource(source, authToken)
   let snapshot = null
+  // Set once the copy has been moved to the requested name. From then until the
+  // manifest is written, a failure would otherwise leave a copy nobody can
+  // check sitting on the one path a retry has to use.
+  let promoted = false
 
   try {
     const readConsistentSource = sourceDatabase.transaction(() => {
@@ -171,6 +175,7 @@ export function createDatabaseSnapshot({
     snapshot.close()
     snapshot = null
     fs.renameSync(temporaryPath, resolvedOutput)
+    promoted = true
     fs.chmodSync(resolvedOutput, 0o600)
 
     const manifest = {
@@ -191,6 +196,14 @@ export function createDatabaseSnapshot({
   } catch (error) {
     if (snapshot?.open) snapshot.close()
     fs.rmSync(temporaryPath, { force: true })
+    // The manifest is the last thing written, so reaching here means it is not
+    // ours to keep either. A snapshot without one cannot be verified, so it is
+    // removed rather than left to be trusted or to block the same path.
+    if (promoted) {
+      fs.rmSync(resolvedOutput, { force: true })
+      // A manifest that appeared under this name meanwhile is someone else's.
+      if (error?.code !== "EEXIST") fs.rmSync(manifestPath, { force: true })
+    }
     throw error
   } finally {
     sourceDatabase.close()
