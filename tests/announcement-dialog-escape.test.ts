@@ -135,7 +135,7 @@ vi.mock("@/app/coach/announcements/actions", () => ({
   withdrawAnnouncementAction: () => (controls.withdrawReply ?? controls.stalled)(),
 }))
 
-const { AnnouncementComposer } = await import(
+const { AnnouncementComposer, publicationForReview } = await import(
   "@/components/coach/announcements/announcement-composer"
 )
 const { PublishedAnnouncementDetail } = await import(
@@ -165,7 +165,7 @@ const announcement: CoachAnnouncementDetail = {
 }
 
 function composer() {
-  return AnnouncementComposer({ academyToday: "2026-08-24" })
+  return AnnouncementComposer({ academyNowMs: Date.parse("2026-08-24T10:00:00+05:30") })
 }
 
 function detail() {
@@ -450,9 +450,14 @@ describe("an announcement action that settles after its dialog is gone", () => {
 
     expect(noticeIn(updates)?.tone).toBe("success")
     expect(noticeIn(updates)?.message).toContain("does not need sending again")
-    // Published, so the beforeunload guard stops asking the coach to discard a
-    // notice the academy can already read.
-    expect(updates).toContain(true)
+    // Recorded as the live version, with what it said, so the beforeunload
+    // guard stops asking the coach to discard a notice the academy can already
+    // read -- and starts again as soon as they change it.
+    expect(updates).toContainEqual({
+      announcementId: announcement.id,
+      key: controls.publication.key,
+      payload: expect.any(String),
+    })
     // And no navigation: the coach is typing somewhere behind this, and the
     // whole reason the exits were opened was to stop yanking them around.
     expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
@@ -505,5 +510,134 @@ describe("the publication key a retry reuses", () => {
     // The server rejects a reused key outright once the fingerprint disagrees,
     // so reuse has to end exactly where the announcement changes.
     expect(publicationIn(press(reviewButton(composer())))?.key).not.toBe(minted?.key)
+  })
+})
+
+describe("a publish whose outcome is unknown when the coach edits the notice", () => {
+  const sent = { key: "a3c1d5e2-7b4f-4c8e-9a1d-2f6e8b0c4d17", payload: "first wording" }
+  const mint = () => "fresh-key"
+
+  it("keeps the key of a sent publish across an edit, so only one version can go live", () => {
+    // Before: an edit always minted a new key, so the stalled original and the
+    // corrected version were two different publications and both went live.
+    expect(publicationForReview(sent, "corrected wording", { keyLive: false, keySent: true }, mint))
+      .toEqual({ key: sent.key, payload: "corrected wording" })
+  })
+
+  it("mints a fresh key for an edit when nothing was sent, or once the first version is live", () => {
+    expect(publicationForReview(sent, "corrected wording", { keyLive: false, keySent: false }, mint))
+      .toEqual({ key: "fresh-key", payload: "corrected wording" })
+    expect(publicationForReview(sent, "corrected wording", { keyLive: true, keySent: true }, mint))
+      .toEqual({ key: "fresh-key", payload: "corrected wording" })
+    expect(publicationForReview(sent, sent.payload, { keyLive: true, keySent: true }, mint))
+      .toBe(sent)
+  })
+})
+
+describe("an earlier version that went live first", () => {
+  const earlierId = "7d2e9c41-0b5a-4f3e-8c6d-1a2b3c4d5e6f"
+
+  function noticesIn(updates: unknown[]) {
+    return updates.filter((update): update is Notice => (
+      isRecord(update) && typeof update.message === "string" && typeof update.tone === "string"
+    ))
+  }
+
+  it("records the live version and says so in the open review when the server refuses a second one", async () => {
+    vi.useFakeTimers()
+    controls.publishReply = () => Promise.resolve({
+      announcementId: earlierId,
+      code: "PUBLICATION_CONFLICT",
+      field: "publicationKey",
+      message: "An earlier version of this announcement was already published before your changes.",
+      ok: false,
+    })
+    const { tree } = openIdleDialog(composer(), "onPublished")
+
+    const updates = await pressAndWait(button(tree, "Publish announcement"), 0)
+
+    expect(updates).toContainEqual({
+      announcementId: earlierId,
+      key: controls.publication.key,
+      payload: null,
+    })
+    const notices = noticesIn(updates)
+    // The composer's notice links to the live one...
+    expect(notices).toContainEqual(expect.objectContaining({
+      action: { href: `/coach/announcements/${earlierId}`, label: "Open it" },
+    }))
+    // ...and the dialog the coach is looking at says it too.
+    expect(notices.map((notice) => notice.message)).toContain(
+      "An earlier version of this announcement was already published before your changes.",
+    )
+    expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
+  })
+
+  it("puts the warning inside the review dialog, not only behind it", () => {
+    const { host } = openDialog(composer(), "onPublished")
+    const render = host.type as (props: Record<string, unknown>) => ReactNode
+    const warned = render({ ...host.props, earlierAnnouncementId: earlierId })
+
+    const link = element(warned, (node) => node.props.href === `/coach/announcements/${earlierId}`)
+    expect(captionOf(link)).toBe("Open the earlier notice")
+    expect(descendants(render({ ...host.props, earlierAnnouncementId: null }))
+      .some((node) => node.props.href === `/coach/announcements/${earlierId}`)).toBe(false)
+  })
+})
+
+describe("a publish that answers after its deadline", () => {
+  function lateReply(afterMs: number, reply: unknown) {
+    return () => new Promise((resolve) => setTimeout(() => resolve(reply), afterMs))
+  }
+
+  it("takes the coach to the notice when it lands while the review is still open", async () => {
+    vi.useFakeTimers()
+    controls.publishReply = lateReply(deadlineMs + 5_000, {
+      announcement: { id: announcement.id },
+      ok: true,
+      reusedPublication: false,
+    })
+    const { tree } = openIdleDialog(composer(), "onPublished")
+
+    await pressAndWait(button(tree, "Publish announcement"), deadlineMs)
+    expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
+
+    // Before: the answer after the deadline went nowhere, so the coach was left
+    // on "not confirmed in time" with a notice already live.
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(guard.navigateAfterCommit).toHaveBeenCalledOnce()
+  })
+
+  it("reports a late landing on the composer once the review has been left", async () => {
+    vi.useFakeTimers()
+    controls.publishReply = lateReply(deadlineMs + 5_000, {
+      announcement: { id: announcement.id },
+      ok: true,
+      reusedPublication: false,
+    })
+    const { tree } = openIdleDialog(composer(), "onPublished")
+    const publish = button(tree, "Publish announcement")
+    retireDialog()
+
+    await pressAndWait(publish, deadlineMs)
+    controls.stateUpdates.length = 0
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(controls.stateUpdates).toContainEqual({
+      announcementId: announcement.id,
+      key: controls.publication.key,
+      payload: expect.any(String),
+    })
+    expect(noticeIn(controls.stateUpdates)?.message).toContain("does not need sending again")
+    expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
+  })
+})
+
+describe("the composer's today", () => {
+  it("is the academy date of the instant the server rendered with", () => {
+    // 20:00 UTC is already the next day in the academy's time zone.
+    const surface = AnnouncementComposer({ academyNowMs: Date.parse("2026-08-24T20:00:00Z") })
+    expect(element(surface, (node) => node.props.id === "announcement-expires-on").props.min)
+      .toBe("2026-08-25")
   })
 })

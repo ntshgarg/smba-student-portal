@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, randomUUID } from "node:crypto"
 
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 
 import {
   ANNOUNCEMENT_CHANNELS,
@@ -33,16 +33,20 @@ const DATE_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u
 export class AnnouncementServiceError extends Error {
   readonly code: AnnouncementMutationCode
   readonly field?: AnnouncementMutationField
+  /** The announcement the refusal is about, when the coach may want to open it. */
+  readonly announcementId?: string
 
   constructor(
     code: AnnouncementMutationCode,
     message: string,
     field?: AnnouncementMutationField,
+    announcementId?: string,
   ) {
     super(message)
     this.name = "AnnouncementServiceError"
     this.code = code
     this.field = field
+    this.announcementId = announcementId
   }
 }
 
@@ -208,10 +212,17 @@ export async function publishAnnouncement(
       .get()
     if (existing) {
       if (existing.payloadFingerprint !== validated.fingerprint) {
-        fail(
+        // The composer keeps one publication key for as long as an earlier
+        // publish of this notice might still land, even when the coach edits
+        // it in the meantime. Reaching here means that earlier version did
+        // land, so this one is refused rather than becoming a second live
+        // notice, and the coach is pointed at the one that is live.
+        throw new AnnouncementServiceError(
           "PUBLICATION_CONFLICT",
-          "This publication request was already used for a different announcement.",
+          "An earlier version of this announcement was already published before your changes."
+            + " Nothing new was published.",
           "publicationKey",
+          existing.id,
         )
       }
       return { announcementId: existing.id, reusedPublication: true }
@@ -276,6 +287,7 @@ export async function setAnnouncementPinned(
   const result = database.transaction((tx) => {
     requireHeadAdminAccess(coachId, { database: tx })
     const current = tx.select({
+      expiresOn: broadcasts.expiresOn,
       pinned: broadcasts.pinned,
       presentationRevision: broadcasts.presentationRevision,
       withdrawnAt: broadcastWithdrawals.withdrawnAt,
@@ -291,6 +303,9 @@ export async function setAnnouncementPinned(
       fail("ALREADY_WITHDRAWN", "A withdrawn announcement cannot be pinned.", "announcementId")
     }
     if (current.pinned === input.pinned) return { reused: true }
+    if (input.pinned && current.expiresOn && current.expiresOn < getAcademyDateKey(now)) {
+      fail("INVALID_INPUT", "An expired announcement cannot be pinned.", "announcementId")
+    }
     if (current.presentationRevision !== input.expectedPresentationRevision) {
       fail(
         "REVISION_CONFLICT",
@@ -370,6 +385,14 @@ export async function withdrawAnnouncement(
       withdrawnByAccountId: coachId,
       withdrawnAt: now,
     }).run()
+    // A withdrawn notice is shown nowhere, so it is no longer pinned either;
+    // leaving the flag set kept a pin on it in the coach's history.
+    tx.update(broadcasts).set({
+      pinned: false,
+      presentationRevision: sql`${broadcasts.presentationRevision} + 1`,
+      presentationUpdatedByAccountId: coachId,
+      presentationUpdatedAt: now,
+    }).where(and(eq(broadcasts.id, announcementId), eq(broadcasts.pinned, true))).run()
     return { reused: false }
   }, { behavior: "immediate" })
 

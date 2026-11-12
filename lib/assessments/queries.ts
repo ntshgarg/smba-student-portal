@@ -7,7 +7,12 @@ import {
   overallRating,
   parseStoredRatings,
 } from "@/lib/assessments/rubric"
-import type { AssessmentRecord } from "@/lib/assessments/contracts"
+import {
+  previousForDate,
+  type AssessmentRecord,
+  type PreviousAssessment,
+  type PreviousAssessmentOption,
+} from "@/lib/assessments/contracts"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { identityNameParts } from "@/lib/auth/identity"
 import {
@@ -35,12 +40,7 @@ export type AssessmentHomePlayer = AssessmentPlayer & {
   lastOverall: number | null
 }
 
-/** The most recent published assessment before another, for "last time" and for change. */
-export type PreviousAssessment = {
-  assessedOn: string
-  overall: number | null
-  ratings: Record<string, number>
-}
+export type { PreviousAssessment, PreviousAssessmentOption }
 
 function toRecord(row: AssessmentRow, playerName: string): AssessmentRecord {
   const ratings = parseStoredRatings(row.ratings)
@@ -146,11 +146,7 @@ export function listAssessmentHome(
   return { drafts: home.filter((player) => player.draft).length, players: home }
 }
 
-function previousPublished(
-  database: SmbaDatabaseExecutor,
-  playerId: string,
-  { before, excludeId }: { before?: string; excludeId?: string },
-) {
+function publishedNewestFirst(database: SmbaDatabaseExecutor, playerId: string) {
   return database.select().from(playerAssessments)
     .where(and(
       eq(playerAssessments.playerAccountId, playerId),
@@ -158,7 +154,31 @@ function previousPublished(
     ))
     .orderBy(desc(playerAssessments.assessedOn), desc(playerAssessments.createdAt))
     .all()
-    .find((row) => row.id !== excludeId && (before === undefined || row.assessedOn <= before))
+}
+
+/**
+ * Every published assessment that could serve as "previous" for `self` (or for a
+ * new assessment when `self` is absent), whatever date the coach ends up picking.
+ */
+function previousOptions(
+  database: SmbaDatabaseExecutor,
+  playerId: string,
+  self?: AssessmentRow,
+): PreviousAssessmentOption[] {
+  return publishedNewestFirst(database, playerId)
+    .filter((row) => row.id !== self?.id)
+    .map((row) => ({
+      ...toPrevious(row),
+      createdBefore: self === undefined || row.createdAt < self.createdAt,
+    }))
+}
+
+function previousPublished(
+  database: SmbaDatabaseExecutor,
+  playerId: string,
+  self: AssessmentRow,
+) {
+  return previousForDate(previousOptions(database, playerId, self), self.assessedOn)
 }
 
 /** What the "new assessment" screen needs: the player, their open draft if any, and last time's scores. */
@@ -176,11 +196,13 @@ export function getAssessmentStart(
       eq(playerAssessments.status, "draft"),
     ))
     .get()
-  const previous = previousPublished(database, playerId, {})
+  const options = previousOptions(database, playerId)
   return {
     draftId: draft?.id ?? null,
     player: toPlayer(row),
-    previous: previous ? toPrevious(previous) : null,
+    previous: options[0] ? previousForDate(options, options[0].assessedOn) : null,
+    previousOptions: options,
+    publishedCount: options.length,
   }
 }
 
@@ -205,14 +227,12 @@ export function getCoachAssessment(
   }).from(playerEnrollments)
     .where(eq(playerEnrollments.accountId, row.playerAccountId))
     .get()
-  const previous = previousPublished(database, row.playerAccountId, {
-    before: row.assessedOn,
-    excludeId: row.id,
-  })
+  const options = previousOptions(database, row.playerAccountId, row)
   return {
     assessment: toRecord(row, player.fullName),
     group: groupLabel(enrollment?.level ?? null, enrollment?.batch ?? null),
-    previous: previous ? toPrevious(previous) : null,
+    previous: previousForDate(options, row.assessedOn),
+    previousOptions: options,
   }
 }
 
@@ -277,12 +297,8 @@ export function getPublishedAssessmentForPlayer(
     .where(eq(accounts.id, playerId))
     .get()
   if (!player) return null
-  const previous = previousPublished(database, playerId, {
-    before: row.assessedOn,
-    excludeId: row.id,
-  })
   return {
     assessment: toRecord(row, player.fullName),
-    previous: previous ? toPrevious(previous) : null,
+    previous: previousPublished(database, playerId, row),
   }
 }

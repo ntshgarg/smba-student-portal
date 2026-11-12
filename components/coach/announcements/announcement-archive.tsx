@@ -68,17 +68,25 @@ function detailHref(id: string, query: AnnouncementArchiveQuery) {
 export function PublishedAnnouncementArchive({
   announcements,
   currentMonth,
+  firstMonth = null,
   hasPublishedAnnouncements,
   query,
+  stillShowing = [],
 }: {
   announcements: CoachAnnouncementSummary[]
   currentMonth: string
+  /** The month of the first announcement ever published; nothing exists before it. */
+  firstMonth?: string | null
   hasPublishedAnnouncements: boolean
   query: AnnouncementArchiveQuery
+  /** Live notices published before this month, listed on the current month only. */
+  stillShowing?: CoachAnnouncementSummary[]
 }) {
   const monthLabel = formatMonth(query.month)
   const nextDisabled = query.month >= currentMonth
+  const previousDisabled = firstMonth !== null && query.month <= firstMonth
   const filtersActive = query.status !== "all" || query.channel !== "all"
+  const resultCount = announcements.length + stillShowing.length
 
   return (
     <div className={`${styles.workspace} page-shell`}>
@@ -95,12 +103,16 @@ export function PublishedAnnouncementArchive({
 
         {hasPublishedAnnouncements ? (
           <div className={styles.monthControl} role="group" aria-label="Choose announcement month">
-            <Link
-              href={archiveHref(query, { month: shiftMonth(query.month, -1) })}
-              aria-label={`Show ${formatMonth(shiftMonth(query.month, -1))}`}
-            >
-              <ChevronLeft aria-hidden="true" />
-            </Link>
+            {previousDisabled ? (
+              <span className={styles.disabledMonthControl} aria-hidden="true"><ChevronLeft /></span>
+            ) : (
+              <Link
+                href={archiveHref(query, { month: shiftMonth(query.month, -1) })}
+                aria-label={`Show ${formatMonth(shiftMonth(query.month, -1))}`}
+              >
+                <ChevronLeft aria-hidden="true" />
+              </Link>
+            )}
             <div>
               <span>Publication month</span>
               <strong>{monthLabel}</strong>
@@ -190,68 +202,111 @@ export function PublishedAnnouncementArchive({
 
           {query.query || filtersActive ? (
             <div className={styles.resultBar} aria-live="polite">
-              <p>{announcements.length} {announcements.length === 1 ? "result" : "results"}</p>
+              <p>{resultCount} {resultCount === 1 ? "result" : "results"}</p>
               {query.query ? <Link href={archiveHref(query, { query: "" })}>Clear search</Link> : null}
             </div>
           ) : null}
 
+          {stillShowing.length > 0 ? (
+            <>
+              <div className={styles.listHeading}>
+                <h3>Still showing from earlier months</h3>
+                <p>Published before {monthLabel} and still live where they were sent.</p>
+              </div>
+              <AnnouncementRows
+                announcements={stillShowing}
+                label="Still showing from earlier months"
+                query={query}
+              />
+              <div className={styles.listHeading}>
+                <h3>Published in {monthLabel}</h3>
+              </div>
+            </>
+          ) : null}
+
           {announcements.length === 0 ? (
-            <div className={`${styles.emptyState} ${styles.compactEmptyState}`}>
-              <Megaphone aria-hidden="true" />
-              <h3>No matching announcements.</h3>
-              <p>Try another month, search, or filter.</p>
-              <Link href={archiveHref({ month: query.month, status: "all", channel: "all", query: "" })}>
-                Clear search and filters
-              </Link>
-            </div>
+            stillShowing.length > 0 && !query.query && !filtersActive ? (
+              <p className={styles.listEmptyLine}>Nothing new has been published this month.</p>
+            ) : (
+              <div className={`${styles.emptyState} ${styles.compactEmptyState}`}>
+                <Megaphone aria-hidden="true" />
+                <h3>No matching announcements.</h3>
+                <p>Try another month, search, or filter.</p>
+                <Link href={archiveHref({ month: query.month, status: "all", channel: "all", query: "" })}>
+                  Clear search and filters
+                </Link>
+              </div>
+            )
           ) : (
-            <ol className={styles.announcementList} aria-label={`${monthLabel} announcements`}>
-              {announcements.map((announcement) => (
-                <li key={announcement.id}>
-                  <article className={styles.announcementRow}>
-                    <div className={styles.announcementIdentity}>
-                      <div>
-                        {announcement.pinned ? <Pin aria-label="Pinned announcement" /> : null}
-                        <h3>{announcement.title}</h3>
-                      </div>
-                      <p>{announcement.preview}</p>
-                      <div className={styles.channelPills}>
-                        {announcement.channels.map((channel) => (
-                          <span key={channel}>{announcementChannelLabel(channel)}</span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <dl className={styles.rowMeta}>
-                      <div>
-                        <dt>Status</dt>
-                        <dd data-status={announcement.status}>{announcementStatusLabel(announcement.status)}</dd>
-                      </div>
-                      <div>
-                        <dt>Published</dt>
-                        <dd>
-                          <time dateTime={announcement.publishedAt}>
-                            {formatAcademyDate(announcement.publishedAt, {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </time>
-                        </dd>
-                      </div>
-                    </dl>
-
-                    <Link className={styles.rowAction} href={detailHref(announcement.id, query)}>
-                      Open
-                      <ArrowUpRight aria-hidden="true" />
-                    </Link>
-                  </article>
-                </li>
-              ))}
-            </ol>
+            <AnnouncementRows
+              announcements={announcements}
+              label={`${monthLabel} announcements`}
+              query={query}
+            />
           )}
         </section>
       )}
     </div>
+  )
+}
+
+function AnnouncementRows({
+  announcements,
+  label,
+  query,
+}: {
+  announcements: CoachAnnouncementSummary[]
+  label: string
+  query: AnnouncementArchiveQuery
+}) {
+  return (
+    <ol className={styles.announcementList} aria-label={label}>
+      {announcements.map((announcement) => (
+        <li key={announcement.id}>
+          <article className={styles.announcementRow}>
+            <div className={styles.announcementIdentity}>
+              <div>
+                {/* Pinning only orders live notices, so it is not shown on one
+                    that has expired or been withdrawn. */}
+                {announcement.pinned && announcement.status === "active"
+                  ? <Pin aria-label="Pinned announcement" />
+                  : null}
+                <h3>{announcement.title}</h3>
+              </div>
+              <p>{announcement.preview}</p>
+              <div className={styles.channelPills}>
+                {announcement.channels.map((channel) => (
+                  <span key={channel}>{announcementChannelLabel(channel)}</span>
+                ))}
+              </div>
+            </div>
+
+            <dl className={styles.rowMeta}>
+              <div>
+                <dt>Status</dt>
+                <dd data-status={announcement.status}>{announcementStatusLabel(announcement.status)}</dd>
+              </div>
+              <div>
+                <dt>Published</dt>
+                <dd>
+                  <time dateTime={announcement.publishedAt}>
+                    {formatAcademyDate(announcement.publishedAt, {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </time>
+                </dd>
+              </div>
+            </dl>
+
+            <Link className={styles.rowAction} href={detailHref(announcement.id, query)}>
+              Open
+              <ArrowUpRight aria-hidden="true" />
+            </Link>
+          </article>
+        </li>
+      ))}
+    </ol>
   )
 }

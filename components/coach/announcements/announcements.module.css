@@ -777,6 +777,7 @@
 }
 
 .monthControl > a:first-child,
+.monthControl > .disabledMonthControl:first-child,
 .monthControl > div {
   border-right: 1px solid var(--line);
 }
@@ -965,6 +966,35 @@
   color: var(--navy);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* Separates the live notices carried over from earlier months from the ones
+   published in the month being viewed. Same rail and rule as the result bar. */
+.listHeading {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-copy) clamp(20px, 3vw, 34px) var(--space-tight);
+  border-bottom: 1px solid var(--line);
+}
+
+.listHeading h3 {
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  font-weight: 780;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.listHeading p,
+.listEmptyLine {
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  line-height: var(--leading-body);
+}
+
+.listEmptyLine {
+  margin: 0;
+  padding: var(--space-group) clamp(20px, 3vw, 34px);
 }
 
 .announcementList {

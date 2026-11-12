@@ -105,6 +105,8 @@ export type AnnouncementActionResult =
     }
   | {
       ok: false
+      /** Set on PUBLICATION_CONFLICT: the earlier version that is already live. */
+      announcementId?: string
       code: AnnouncementMutationCode
       field?: AnnouncementMutationField
       message: string
@@ -113,6 +115,8 @@ export type AnnouncementActionResult =
 export type CoachAnnouncementArchiveFilters = {
   channel?: AnnouncementChannel | "all"
   month?: string
+  /** Only announcements published in an academy month before this one. */
+  publishedBeforeMonth?: string
   search?: string
   status?: AnnouncementStatus | "all"
 }

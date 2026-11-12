@@ -2,16 +2,18 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 
 import {
   ASSESSMENT_TEXT_MAX_LENGTH,
   countRated,
+  parseStoredRatings,
   validateAssessmentRatings,
 } from "@/lib/assessments/rubric"
 import type {
   AssessmentErrorCode,
   AssessmentField,
+  AssessmentStatus,
   DiscardAssessmentInput,
   SaveAssessmentInput,
 } from "@/lib/assessments/contracts"
@@ -22,16 +24,25 @@ import { accounts, playerAssessments, playerEnrollments } from "@/lib/db/schema"
 import { getAcademyDateKey } from "@/lib/format"
 
 const DATE_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 
 export class AssessmentServiceError extends Error {
   readonly code: AssessmentErrorCode
   readonly field?: AssessmentField
+  /** What the assessment is now, when it was changed somewhere else. */
+  readonly currentStatus?: AssessmentStatus
 
-  constructor(code: AssessmentErrorCode, message: string, field?: AssessmentField) {
+  constructor(
+    code: AssessmentErrorCode,
+    message: string,
+    field?: AssessmentField,
+    currentStatus?: AssessmentStatus,
+  ) {
     super(message)
     this.name = "AssessmentServiceError"
     this.code = code
     this.field = field
+    this.currentStatus = currentStatus
   }
 }
 
@@ -57,6 +68,17 @@ function isRealDateKey(value: string) {
  * not make and is refused, not trimmed.
  */
 function validate(input: SaveAssessmentInput, now: Date, { publishing }: { publishing: boolean }) {
+  if (input.newAssessmentId !== undefined
+    && (typeof input.newAssessmentId !== "string" || !UUID_PATTERN.test(input.newAssessmentId))) {
+    throw new AssessmentServiceError("INVALID_INPUT", "The assessment could not be read. Reload and try again.")
+  }
+  if (input.expectedPublishedCount !== undefined
+    && (!Number.isSafeInteger(input.expectedPublishedCount) || input.expectedPublishedCount < 0)) {
+    throw new AssessmentServiceError("INVALID_INPUT", "The assessment could not be read. Reload and try again.")
+  }
+  if (input.expectedUpdatedAt !== undefined && typeof input.expectedUpdatedAt !== "string") {
+    throw new AssessmentServiceError("INVALID_INPUT", "The assessment could not be read. Reload and try again.")
+  }
   if (typeof input.playerId !== "string" || !input.playerId.trim()) {
     throw new AssessmentServiceError("INVALID_INPUT", "Choose a player.", "playerId")
   }
@@ -129,6 +151,24 @@ function loadExisting(tx: Transaction, assessmentId: string, playerId: string) {
   return existing
 }
 
+function sameContent(
+  existing: typeof playerAssessments.$inferSelect,
+  content: { assessedOn: string; comments: string; improvements: string; ratings: string; strengths: string },
+) {
+  return existing.assessedOn === content.assessedOn
+    && existing.comments === content.comments
+    && existing.improvements === content.improvements
+    && existing.strengths === content.strengths
+    && sameRatings(existing.ratings, content.ratings)
+}
+
+function sameRatings(stored: string, incoming: string) {
+  const left = parseStoredRatings(stored)
+  const right = parseStoredRatings(incoming)
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  return [...keys].every((key) => left[key] === right[key])
+}
+
 function save(
   input: SaveAssessmentInput,
   { publishing }: { publishing: boolean },
@@ -149,8 +189,22 @@ function save(
   return database.transaction((tx) => {
     requireActivePlayer(tx, input.playerId)
 
-    if (input.assessmentId) {
-      const existing = loadExisting(tx, input.assessmentId, input.playerId)
+    // A repeat of a first save whose answer never arrived: the assessment it
+    // created is already here, so this save continues it rather than adding
+    // a second copy for the player.
+    const targetId = input.assessmentId
+      ?? (input.newAssessmentId && tx.select({ id: playerAssessments.id }).from(playerAssessments)
+        .where(eq(playerAssessments.id, input.newAssessmentId))
+        .get()?.id)
+
+    if (targetId) {
+      const existing = loadExisting(tx, targetId, input.playerId)
+      const intended = publishing ? "published" : "draft"
+      if (existing.status === intended && sameContent(existing, content)) {
+        // Already exactly this: a repeated save, or a second press. Nothing to
+        // write, and nothing for the player to see change.
+        return existing.id
+      }
       if (existing.status === "published" && !publishing) {
         // A published assessment is changed by publishing the change, so the
         // player never sees a half-edited version and a "save" cannot quietly
@@ -158,13 +212,27 @@ function save(
         throw new AssessmentServiceError(
           "CONFLICT",
           "This assessment is already published. Publish your changes to update it.",
+          undefined,
+          "published",
+        )
+      }
+      if (input.expectedUpdatedAt !== undefined
+        && existing.updatedAt.toISOString() !== input.expectedUpdatedAt) {
+        throw new AssessmentServiceError(
+          "CONFLICT",
+          "This assessment was changed in another window after you opened it."
+            + " Open the latest version before saving, so neither set of changes is lost.",
+          undefined,
+          existing.status,
         )
       }
       tx.update(playerAssessments).set(publishing
         ? {
           ...content,
           publishedAt: existing.publishedAt ?? now,
-          publishedByAccountId: coachId,
+          // Kept with `publishedAt`: both describe the first publish. Later
+          // changes are recorded as updates.
+          publishedByAccountId: existing.publishedByAccountId ?? coachId,
           revision: existing.revision + 1,
           status: "published" as const,
         }
@@ -174,22 +242,37 @@ function save(
       return existing.id
     }
 
-    if (!publishing) {
-      const draft = tx.select({ id: playerAssessments.id }).from(playerAssessments)
+    const draft = tx.select({ id: playerAssessments.id }).from(playerAssessments)
+      .where(and(
+        eq(playerAssessments.playerAccountId, input.playerId),
+        eq(playerAssessments.status, "draft"),
+      ))
+      .get()
+    if (draft) {
+      // A draft this form does not know about was saved somewhere else. A new
+      // draft would collide with it and a new publish would leave it behind.
+      throw new AssessmentServiceError(
+        "CONFLICT",
+        "This player already has a draft, perhaps from another window. Continue that one instead.",
+      )
+    }
+    if (publishing && input.expectedPublishedCount !== undefined) {
+      const published = tx.select({ total: sql<number>`count(*)` }).from(playerAssessments)
         .where(and(
           eq(playerAssessments.playerAccountId, input.playerId),
-          eq(playerAssessments.status, "draft"),
+          eq(playerAssessments.status, "published"),
         ))
-        .get()
-      if (draft) {
+        .get()?.total ?? 0
+      if (published !== input.expectedPublishedCount) {
         throw new AssessmentServiceError(
           "CONFLICT",
-          "This player already has a draft. Continue that one instead.",
+          "Another assessment for this player was published after you opened this one,"
+            + " perhaps in another window. Check their assessments before publishing again.",
         )
       }
     }
 
-    const id = createId()
+    const id = input.newAssessmentId ?? createId()
     tx.insert(playerAssessments).values({
       ...content,
       createdAt: now,
