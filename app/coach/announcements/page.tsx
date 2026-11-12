@@ -62,10 +62,8 @@ export default async function PublishedAnnouncementsPage({
     search,
     status,
   }, context)
-  // The dashboard counts every live notice, whenever it was published, so the
-  // current month's view also lists the ones from earlier months that players
-  // or the homepage can still see. Without this the dashboard could say
-  // "3 active" while this page opened on one.
+  // The dashboard counts every live notice, so the current month also lists
+  // live ones published earlier.
   const stillShowing = month === currentMonth && (status === "all" || status === "active")
     ? listCoachAnnouncements({
       channel,

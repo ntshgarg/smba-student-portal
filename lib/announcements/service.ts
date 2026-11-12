@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash, randomUUID } from "node:crypto"
 
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 import {
   ANNOUNCEMENT_CHANNELS,
@@ -213,13 +213,8 @@ export async function publishAnnouncement(
       .get()
     if (existing) {
       if (existing.payloadFingerprint !== validated.fingerprint) {
-        // The composer keeps one publication key for as long as an earlier
-        // publish of this notice might still land, even when the coach edits
-        // it in the meantime. Reaching here means another version sent under
-        // the key got here first, so this one is refused rather than becoming
-        // a second live notice, and the coach is pointed at the one that is
-        // live. "Another", not "earlier": on a slow connection the corrected
-        // version can arrive before the stalled original.
+        // Another version sent under this key got here first; refuse this one
+        // rather than put up a second live notice, and name the live one.
         throw new AnnouncementServiceError(
           "PUBLICATION_CONFLICT",
           "Another version of this announcement was already published. Nothing new was published.",
@@ -387,14 +382,6 @@ export async function withdrawAnnouncement(
       withdrawnByAccountId: coachId,
       withdrawnAt: now,
     }).run()
-    // A withdrawn notice is shown nowhere, so it is no longer pinned either;
-    // leaving the flag set kept a pin on it in the coach's history.
-    tx.update(broadcasts).set({
-      pinned: false,
-      presentationRevision: sql`${broadcasts.presentationRevision} + 1`,
-      presentationUpdatedByAccountId: coachId,
-      presentationUpdatedAt: now,
-    }).where(and(eq(broadcasts.id, announcementId), eq(broadcasts.pinned, true))).run()
     return { reused: false }
   }, { behavior: "immediate" })
 

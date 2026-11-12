@@ -356,15 +356,6 @@ button.textLink {
   font-weight: 700;
 }
 
-/* Said under the date only when moving a published assessment's date. */
-.metaNote {
-  display: block;
-  margin-top: 6px;
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  line-height: var(--leading-body);
-}
-
 .layout {
   display: grid;
   grid-template-columns: minmax(240px, 0.46fr) minmax(0, 1.54fr);

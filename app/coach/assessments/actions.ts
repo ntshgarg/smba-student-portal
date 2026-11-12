@@ -31,11 +31,9 @@ function failure(error: AssessmentServiceError): AssessmentActionResult {
     ok: false,
     code: error.code,
     ...(error.currentStatus ? { currentStatus: error.currentStatus } : {}),
-    ...(error.currentUpdatedAt ? { currentUpdatedAt: error.currentUpdatedAt } : {}),
     ...(error.currentPublishedCount !== undefined
       ? { currentPublishedCount: error.currentPublishedCount }
       : {}),
-    ...(error.currentDraftId ? { currentDraftId: error.currentDraftId } : {}),
     field: error.field,
     message: error.message,
   }

@@ -105,7 +105,7 @@ export type AnnouncementActionResult =
     }
   | {
       ok: false
-      /** Set on PUBLICATION_CONFLICT: the earlier version that is already live. */
+      /** Set on PUBLICATION_CONFLICT: the version that is already live. */
       announcementId?: string
       code: AnnouncementMutationCode
       field?: AnnouncementMutationField

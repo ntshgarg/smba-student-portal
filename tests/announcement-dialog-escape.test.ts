@@ -141,7 +141,6 @@ vi.mock("@/app/coach/announcements/actions", () => ({
 
 const {
   AnnouncementComposer,
-  inferLiveWording,
   liveVersionNotice,
   publicationForReview,
   publicationPayload,
@@ -173,7 +172,7 @@ const announcement: CoachAnnouncementDetail = {
 }
 
 function composer() {
-  return AnnouncementComposer({ academyNowMs: Date.parse("2026-08-24T10:00:00+05:30") })
+  return AnnouncementComposer({ academyToday: "2026-08-24" })
 }
 
 function detail() {
@@ -473,9 +472,7 @@ describe("an announcement action that settles after its dialog is gone", () => {
 
     const updates = await pressAndWait(publish, 0)
 
-    // Recorded as the live version, with what it said, so the beforeunload
-    // guard stops asking the coach to discard a notice the academy can already
-    // read -- and starts again as soon as they change it.
+    // Recorded as the live version, with what it said.
     const [live] = liveVersionsIn(updates)
     expect(live).toEqual({
       announcementId: announcement.id,
@@ -561,16 +558,6 @@ describe("a publish whose outcome is unknown when the coach edits the notice", (
     expect(publicationForReview(sent, sent.payload, { keySent: true, liveVersions: live }, mint))
       .toBe(sent)
   })
-
-  it("goes back to the live notice's key when an edit is undone back to its wording", () => {
-    // The late publish landed (K1 live), the coach edited and reviewed (fresh
-    // key F, never sent), then undid the edit. Before: another fresh key, no
-    // warning, and Publish put up a second identical notice.
-    const edited = { key: "edited-key", payload: "corrected wording" }
-
-    expect(publicationForReview(edited, sent.payload, { keySent: false, liveVersions: live }, mint))
-      .toEqual({ key: sent.key, payload: sent.payload })
-  })
 })
 
 describe("an earlier version that went live first", () => {
@@ -597,8 +584,7 @@ describe("an earlier version that went live first", () => {
 
     const updates = await pressAndWait(button(tree, "Publish announcement"), 0)
 
-    // Only the refused wording was sent under this key from here, so which
-    // version is live cannot be told.
+    // Which wording went live cannot be told from here.
     const [live] = liveVersionsIn(updates)
     expect(live).toEqual({ announcementId: earlierId, key: controls.publication.key, payload: null })
     // The composer's notice links to the live one, beside the editor...
@@ -668,42 +654,18 @@ describe("what the composer says about a live version", () => {
     })
   })
 
-  it("names the earlier wording once the coach has changed the message", () => {
+  it("stops saying published once the coach has changed the message", () => {
     // Before: "does not need sending again" even with the correction on
     // screen, while only the uncorrected notice was live.
     const notice = liveVersionNotice(version, wording.b)
     expect(notice.tone).toBe("info")
-    expect(notice.message).toContain("earlier wording, not what is on screen now")
+    expect(notice.message).toContain("Another version of this announcement is already live")
     expect(notice.message).not.toContain("does not need sending again")
-  })
-
-  it("works out which wording went live when the other one is refused", () => {
-    // The correction reached the server first under the shared key and the
-    // stalled original was refused: the live one is the correction, so the
-    // review of it must not warn that publishing it adds a second notice.
-    expect(inferLiveWording(new Set([wording.a, wording.b]), wording.a)).toBe(wording.b)
-    expect(inferLiveWording(new Set([wording.a]), wording.a)).toBeNull()
-    expect(inferLiveWording(new Set([wording.a, wording.b, "third"]), wording.a)).toBeNull()
   })
 })
 
 describe("a composer that already has a live version", () => {
   const liveId = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
-
-  it("reviews an undone edit under the live notice's key, with no second-notice warning", () => {
-    const livePayload = publicationPayload(controls.composed as never)
-    controls.liveVersions = [{ announcementId: liveId, key: "live-key", payload: livePayload }]
-    // The coach edited after the landing and reviewed, which minted a fresh key.
-    controls.publication = { key: "edited-key", payload: "the edited wording" }
-
-    const minted = publicationIn(press(button(composer(), "Review announcement")))
-    expect(minted).toEqual({ key: "live-key", payload: livePayload })
-
-    controls.publication = minted as { key: string; payload: unknown }
-    const { host } = openDialog(composer(), "onPublished")
-    expect(host.props.publicationKey).toBe("live-key")
-    expect(host.props.otherLiveAnnouncementId).toBeNull()
-  })
 
   it("warns in the review when the wording on screen is not the live one", () => {
     controls.liveVersions = [{ announcementId: liveId, key: "live-key", payload: "the stalled original" }]
@@ -761,14 +723,5 @@ describe("a publish that answers after its deadline", () => {
       payload: publicationPayload(controls.composed as never),
     }])
     expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
-  })
-})
-
-describe("the composer's today", () => {
-  it("is the academy date of the instant the server rendered with", () => {
-    // 20:00 UTC is already the next day in the academy's time zone.
-    const surface = AnnouncementComposer({ academyNowMs: Date.parse("2026-08-24T20:00:00Z") })
-    expect(element(surface, (node) => node.props.id === "announcement-expires-on").props.min)
-      .toBe("2026-08-25")
   })
 })

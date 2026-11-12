@@ -14,7 +14,7 @@ import {
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { AnnouncementActionResult } from "@/lib/announcements/contracts"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
-import { formatDateKey, getAcademyDateKey } from "@/lib/format"
+import { formatDateKey } from "@/lib/format"
 
 import {
   announcementChannelAudience,
@@ -55,33 +55,19 @@ const publishDeadlineMs = 20_000
 /**
  * Said on the composer, not in the dialog: by the time this is true the dialog
  * has gone and the coach is back in the editor with the message still in it.
- * Only said while what is on screen is exactly what went live: the second
- * sentence is the one that matters, and it is only true of that wording.
+ * The second sentence is the one that matters — the notice is already on every
+ * channel it was addressed to, so publishing again is work, not insurance.
  */
-const publishedAfterExitMessage = "Announcement published. A publish you left in the"
-  + " review finished on its own, so what is on screen is live and does not need sending again."
+const publishedAfterExitMessage = "Announcement published. The publish you left in"
+  + " the review finished on its own, so the notice is live and does not need sending again."
 
-/**
- * Said when a version of this notice went live and the coach has changed the
- * message since. The coach must not read "published" as "my correction is out".
- */
-const earlierWordingLiveMessage = "This announcement went live with its earlier wording,"
-  + " not what is on screen now. Open it to check it, and withdraw it if the new wording replaces it."
-
-/**
- * Said when a version of this notice is live but this screen cannot tell which
- * of the wordings sent under one publication key it was.
- */
+/** Said when a version of this notice is live and it may not be what is on screen. */
 const otherVersionLiveMessage = "Another version of this announcement is already live."
   + " Open it to check it, and withdraw it if this one replaces it."
 
 type Notice = ActionFeedback & { action?: InlineNoticeAction }
 
-/**
- * A version of this notice that is known to be live: one whose publish landed
- * after the review was left, or the version a later publish ran into.
- * `payload` is what that version said, when this screen knows it.
- */
+/** A version of this notice known to be live; `payload` is what it said, when known. */
 export type LiveVersion = {
   announcementId: string
   key: string
@@ -92,33 +78,14 @@ function announcementHref(announcementId: string) {
   return `/coach/announcements/${encodeURIComponent(announcementId)}`
 }
 
-/**
- * What the composer says about a live version, worked out against what is on
- * screen each time it renders rather than once when the version landed, so an
- * edit made before or after the landing is never described as published.
- */
+/** Worked out on each render, so an edit made since is never called published. */
 export function liveVersionNotice(version: LiveVersion, onScreen: string): Notice {
-  // Opened beside the editor: following it in place would ask the coach to
-  // discard the wording they have not published yet.
+  // Opened beside the editor, so checking it does not discard unpublished wording.
   const action = { href: announcementHref(version.announcementId), label: "Open it", newTab: true }
   if (version.payload === onScreen) {
     return { action, message: publishedAfterExitMessage, tone: "success" }
   }
-  return {
-    action,
-    message: version.payload === null ? otherVersionLiveMessage : earlierWordingLiveMessage,
-    tone: "info",
-  }
-}
-
-/**
- * Which wording went live when the server refused `refused` because another
- * version sent under the same key got there first. It is one of the other
- * wordings sent under that key; when there is exactly one, it is that one.
- */
-export function inferLiveWording(sentUnderKey: ReadonlySet<string> | undefined, refused: string) {
-  const others = [...(sentUnderKey ?? [])].filter((payload) => payload !== refused)
-  return others.length === 1 ? others[0] : null
+  return { action, message: otherVersionLiveMessage, tone: "info" }
 }
 
 function createMutationKey() {
@@ -147,20 +114,11 @@ export function publicationPayload(values: ComposerValues) {
 }
 
 /**
- * The publication key a review should publish with.
- *
- * Exactly the wording of a version already live: that version's key, so
- * publishing resolves to the live notice instead of putting up an identical
- * second one. This holds even after the coach edited and changed it back, by
- * which time the composer had moved on to another key.
- * Unchanged message: the same key, so a retry resolves to the same notice.
- * Changed message, key never sent: a fresh key, because the server refuses a
- * key reused for different content. Changed message, key sent and its outcome
- * still unknown: the same key. That publish may yet land, and with one key the
- * server takes whichever version arrives first and refuses the other, so a
- * corrected version and the stalled original can never both go live. Once the
- * key is known to have produced a live notice it is spent, so a changed
- * message gets a fresh one.
+ * The publication key a review should publish with. Unchanged message: the
+ * same key, so a retry resolves to the same notice. Changed message whose key
+ * was sent and may still land: the same key, so the server takes whichever
+ * version arrives first and refuses the other. Otherwise a fresh key, because
+ * the server refuses a key reused for different content.
  */
 export function publicationForReview(
   current: { key: string; payload: string },
@@ -168,12 +126,6 @@ export function publicationForReview(
   { keySent, liveVersions }: { keySent: boolean; liveVersions: readonly LiveVersion[] },
   mint: () => string = createMutationKey,
 ) {
-  const live = liveVersions.find((version) => version.payload === payload)
-  if (live) {
-    return current.key === live.key && current.payload === payload
-      ? current
-      : { key: live.key, payload }
-  }
   if (current.payload === payload) return current
   const keyLive = liveVersions.some((version) => version.key === current.key)
   if (keySent && !keyLive) return { key: current.key, payload }
@@ -201,20 +153,14 @@ function ReviewDialog({
   values,
 }: {
   onBack: () => void
-  /**
-   * The server refused `refusedPayload` because another version sent under the
-   * same key got there first and is the live notice.
-   */
-  onConflict: (refusal: { announcementId: string; key: string; refusedPayload: string }) => void
-  /**
-   * A version of this notice went live without this dialog taking the coach to
-   * it: the publish finished after the dialog was left.
-   */
+  /** Another version sent under the same key got there first and is live. */
+  onConflict: (refusal: { announcementId: string; key: string }) => void
+  /** A publish finished after the dialog was left. */
   onLive: (version: LiveVersion) => void
   onFailureAfterExit: (feedback: ActionFeedback) => void
   onPublished: (announcementId: string) => void
-  /** A publish with this key and wording has left the browser and may land at any time. */
-  onSent: (publicationKey: string, payload: string) => void
+  /** A publish with this key has left the browser and may land at any time. */
+  onSent: (publicationKey: string) => void
   onValidationFailure: (field: FieldName, message: string) => void
   /** A different version of this notice that is already live. */
   otherLiveAnnouncementId: string | null
@@ -258,12 +204,7 @@ function ReviewDialog({
     }
   }, [])
 
-  /**
-   * Acts on what the server said about one publish. It runs either when the
-   * request answers inside the deadline or, after a "not confirmed in time"
-   * message, whenever the abandoned request finally answers: that answer is
-   * the only way the coach learns the notice went live after all.
-   */
+  /** Acts on a publish's answer, inside the deadline or whenever it arrives after it. */
   function settle(
     result: AnnouncementActionResult,
     sent: { key: string; payload: string },
@@ -277,15 +218,8 @@ function ReviewDialog({
       return
     }
     if (result.code === "PUBLICATION_CONFLICT" && result.announcementId) {
-      // Another version sent under this key is the one that went live. The
-      // composer records it, so this dialog shows the warning beside the
-      // publish button, the button says it would add a second notice, and the
-      // next press is a deliberate one.
-      onConflict({
-        announcementId: result.announcementId,
-        key: sent.key,
-        refusedPayload: sent.payload,
-      })
+      // The composer records it, so this dialog warns beside the button.
+      onConflict({ announcementId: result.announcementId, key: sent.key })
       if (dismissed.current) return
       setFeedback({ message: result.message, tone: "error" })
       // Not the publish button: pressing it again now puts up a second notice,
@@ -317,7 +251,7 @@ function ReviewDialog({
     setPending(true)
     setFeedback(null)
     const sent = { key: publicationKey, payload: publicationPayload(values) }
-    onSent(sent.key, sent.payload)
+    onSent(sent.key)
     const request = publishAnnouncementAction({
       channels: values.channels,
       content: values.content.trim(),
@@ -336,9 +270,7 @@ function ReviewDialog({
         subject: "The announcement",
       })
       if (failure.kind === "timeout") {
-        // The deadline only stopped the waiting; the request is still running.
-        // Whatever it ends with is acted on when it arrives, so a notice that
-        // goes live late is never left unreported.
+        // The request is still running; report whatever it ends with.
         request.then((result) => settle(result, sent), () => {})
       }
       if (dismissed.current) {
@@ -368,11 +300,7 @@ function ReviewDialog({
    * by canonical payload rather than by object identity. The publish button is
    * held for the length of one attempt; a coach who dismisses this dialog and
    * re-enters gets a fresh one that can start a second, and the shared key is
-   * what makes that land on the first publication instead of beside it. The
-   * key also survives an edit made after a publish was sent (see
-   * `reviewAnnouncement`), so a corrected version and the stalled original can
-   * never both go live: whichever reaches the server first is the notice, and
-   * the other is refused and reported here.
+   * what makes that land on the first publication instead of beside it.
    */
   return (
     <dialog
@@ -445,13 +373,7 @@ function ReviewDialog({
         ) : null}
 
         {otherLiveAnnouncementId ? (
-          /*
-           * Inside the dialog, not only on the composer behind it: a modal
-           * dialog covers the page, so a warning placed there is not read until
-           * after the second notice has already gone out. The link opens in a
-           * new tab so checking the live notice does not cost the coach the
-           * wording they have not published.
-           */
+          // In the dialog, because the modal covers the composer's own notice.
           <p className={styles.publicWarning} id="announcement-review-live-warning" role="note">
             <strong>Another version is already live.</strong> Publishing this one adds a
             second notice. Withdraw the other one if this replaces it.{" "}
@@ -492,7 +414,7 @@ function ReviewDialog({
   )
 }
 
-export function AnnouncementComposer({ academyNowMs }: { academyNowMs: number }) {
+export function AnnouncementComposer({ academyToday }: { academyToday: string }) {
   const [values, setValues] = useState(EMPTY_VALUES)
   const [reviewing, setReviewing] = useState(false)
   const [published, setPublished] = useState(false)
@@ -502,93 +424,48 @@ export function AnnouncementComposer({ academyNowMs }: { academyNowMs: number })
    * here rather than inside the dialog so that dismissing a stalled publish and
    * reviewing again retries the same key. `publishAnnouncement` treats a reused
    * key as the same publication only while the payload fingerprint matches and
-   * refuses it once it does not, which is what `reviewAnnouncement` relies on:
-   * a key is reminted when the payload changes, unless a publish already sent
-   * with it might still land (see `sentPayloads`), or the new payload is
-   * exactly a live version's, which takes that version's key.
+   * refuses it once it does not; see `publicationForReview`.
    */
   const [publication, setPublication] = useState(() => ({
     key: createMutationKey(),
     payload: publicationPayload(EMPTY_VALUES),
   }))
   // Reports a publish that failed after the review dialog had gone. A live
-  // version is reported from `liveVersions` instead, worked out on each render.
-  // While the dialog is up it carries its own notice.
+  // version is reported from `liveVersions` instead.
   const [feedback, setFeedback] = useState<Notice | null>(null)
   /** Versions of this notice known to be live while the coach is still here, oldest first. */
   const [liveVersions, setLiveVersions] = useState<LiveVersion[]>([])
-  /**
-   * Every publication key a publish has been sent with, and each wording sent
-   * under it. Until the composer knows what became of that publish, it may
-   * still land, so the key is kept across edits instead of being swapped for a
-   * fresh one that could put a second, corrected notice beside the first. The
-   * wordings are what tell the composer which version went live when the
-   * server refuses one of them.
-   */
-  const sentPayloads = useRef<Map<string, Set<string>>>(new Map())
+  /** Keys a publish was sent with; until its outcome is known it may still land. */
+  const sentKeys = useRef<Set<string>>(new Set())
   /** Set once the composer starts leaving for the published notice. */
   const leaving = useRef<string | null>(null)
-  /**
-   * The academy's "now", advanced from the instant the server rendered with by
-   * however much time has passed, rather than read from this device's clock --
-   * the same approach as the attendance register. A composer left open
-   * overnight then knows the date has moved on.
-   */
-  const [referenceInstant, setReferenceInstant] = useState(academyNowMs)
-  const mountedAt = useRef<number | null>(null)
-  const academyToday = getAcademyDateKey(new Date(referenceInstant))
   const titleRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
   const channelGroupRef = useRef<HTMLFieldSetElement>(null)
   const expiryRef = useRef<HTMLInputElement>(null)
   const currentPayload = publicationPayload(values)
-  // What is on screen is exactly a version that is already live, so there is
-  // nothing unsaved to warn about. Any further edit is new work again.
-  const liveOnScreen = liveVersions.find((version) => version.payload === currentPayload) ?? null
-  const isDirty = !published && liveOnScreen === null && (
+  const isDirty = !published && (
     values.title !== ""
     || values.content !== ""
     || values.channels.length > 0
     || values.pinned
     || values.expiresOn !== ""
   )
-  // Warn in the review only when publishing would add a second notice: a
-  // review of exactly a live version publishes with that version's key and
-  // resolves to it instead (see `publicationForReview`).
+  // Warn in the review when publishing would add a second notice.
   const latestLive = liveVersions.at(-1) ?? null
-  const otherLiveAnnouncementId = latestLive
-    && !liveVersions.some((version) => version.payload === publication.payload)
+  const otherLiveAnnouncementId = latestLive && latestLive.payload !== publication.payload
     ? latestLive.announcementId
     : null
-  const notice = feedback
-    ?? (latestLive ? liveVersionNotice(liveOnScreen ?? latestLive, currentPayload) : null)
+  const notice = feedback ?? (latestLive ? liveVersionNotice(latestLive, currentPayload) : null)
 
   const { navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty,
-    // Once a version is live, "has not been published" would read as "nothing
-    // went out", which is not true.
     message: latestLive
       ? "Your latest changes have not been published; only the earlier wording is live."
         + " Leave and discard them?"
       : "This announcement has not been published. Leave and discard it?",
     scope: "announcement-composer",
   })
-
-  useEffect(() => {
-    const startedAt = Date.now()
-    mountedAt.current = startedAt
-    const timer = window.setInterval(
-      () => setReferenceInstant(academyNowMs + (Date.now() - startedAt)),
-      30_000,
-    )
-    return () => window.clearInterval(timer)
-  }, [academyNowMs])
-
-  function currentInstant() {
-    return mountedAt.current === null
-      ? referenceInstant
-      : academyNowMs + (Date.now() - mountedAt.current)
-  }
 
   function updateValues(next: Partial<ComposerValues>) {
     setValues((current) => ({ ...current, ...next }))
@@ -618,17 +495,13 @@ export function AnnouncementComposer({ academyNowMs }: { academyNowMs: number })
   }
 
   function reviewAnnouncement() {
-    // Read at the moment of review, not from the last 30-second tick.
-    const instant = currentInstant()
-    const today = getAcademyDateKey(new Date(instant))
-    if (today !== academyToday) setReferenceInstant(instant)
-    const invalid = firstInvalidField(values, today)
+    const invalid = firstInvalidField(values, academyToday)
     if (invalid) {
       const nextErrors: Partial<Record<FieldName, string>> = {}
       if (!values.title.trim()) nextErrors.title = "Enter an announcement title."
       if (!values.content.trim()) nextErrors.content = "Enter an announcement message."
       if (values.channels.length === 0) nextErrors.channels = "Choose where the announcement should appear."
-      if (values.expiresOn && values.expiresOn < today) {
+      if (values.expiresOn && values.expiresOn < academyToday) {
         nextErrors.expiresOn = "Expiry cannot be before today."
       }
       setErrors(nextErrors)
@@ -636,7 +509,7 @@ export function AnnouncementComposer({ academyNowMs }: { academyNowMs: number })
       return
     }
     const next = publicationForReview(publication, currentPayload, {
-      keySent: sentPayloads.current.has(publication.key),
+      keySent: sentKeys.current.has(publication.key),
       liveVersions,
     })
     if (next !== publication) setPublication(next)
@@ -656,38 +529,27 @@ export function AnnouncementComposer({ academyNowMs }: { academyNowMs: number })
     })
   }
 
-  function recordSent(key: string, payload: string) {
-    const wordings = sentPayloads.current.get(key) ?? new Set<string>()
-    wordings.add(payload)
-    sentPayloads.current.set(key, wordings)
+  function recordSent(key: string) {
+    sentKeys.current.add(key)
   }
 
   function recordLiveVersion(version: LiveVersion) {
-    // Functional: this runs when a request answers, from callbacks captured by
-    // whichever render started it.
     setLiveVersions((current) => [
       ...current.filter((known) => known.announcementId !== version.announcementId),
       version,
     ])
-    // If the review on screen is about to send something different under the
-    // key that is now spent, give it a fresh key: the warning beside the button
-    // already says that publishing adds a second notice.
+    // The key is spent: a different wording under it needs a fresh one.
     setPublication((current) => (
       current.key === version.key && current.payload !== version.payload
         ? { key: createMutationKey(), payload: current.payload }
         : current
     ))
-    // The composer's notice now describes this version (`liveVersionNotice`).
     setFeedback(null)
   }
 
-  function recordConflict(
-    { announcementId, key, refusedPayload }: { announcementId: string; key: string; refusedPayload: string },
-  ) {
-    const wordings = sentPayloads.current.get(key)
-    // The refused wording certainly did not go live under this key.
-    wordings?.delete(refusedPayload)
-    recordLiveVersion({ announcementId, key, payload: inferLiveWording(wordings, refusedPayload) })
+  function recordConflict({ announcementId, key }: { announcementId: string; key: string }) {
+    // Which wording went live is not known here.
+    recordLiveVersion({ announcementId, key, payload: null })
   }
 
   function handleServerValidation(field: FieldName, message: string) {

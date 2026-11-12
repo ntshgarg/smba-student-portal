@@ -7,12 +7,7 @@ import {
   overallRating,
   parseStoredRatings,
 } from "@/lib/assessments/rubric"
-import {
-  previousForDate,
-  type AssessmentRecord,
-  type PreviousAssessment,
-  type PreviousAssessmentOption,
-} from "@/lib/assessments/contracts"
+import type { AssessmentRecord } from "@/lib/assessments/contracts"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { identityNameParts } from "@/lib/auth/identity"
 import {
@@ -40,7 +35,12 @@ export type AssessmentHomePlayer = AssessmentPlayer & {
   lastOverall: number | null
 }
 
-export type { PreviousAssessment, PreviousAssessmentOption }
+/** The most recent published assessment before another, for "last time" and for change. */
+export type PreviousAssessment = {
+  assessedOn: string
+  overall: number | null
+  ratings: Record<string, number>
+}
 
 function toRecord(row: AssessmentRow, playerName: string): AssessmentRecord {
   const ratings = parseStoredRatings(row.ratings)
@@ -156,30 +156,13 @@ function publishedNewestFirst(database: SmbaDatabaseExecutor, playerId: string) 
     .all()
 }
 
-/**
- * Every published assessment that could serve as "previous" for `self` (or for a
- * new assessment when `self` is absent), whatever date the coach ends up picking.
- */
-function previousOptions(
-  database: SmbaDatabaseExecutor,
-  playerId: string,
-  self?: AssessmentRow,
-): PreviousAssessmentOption[] {
-  return publishedNewestFirst(database, playerId)
-    .filter((row) => row.id !== self?.id)
-    .map((row) => ({
-      ...toPrevious(row),
-      createdBefore: self === undefined || row.createdAt < self.createdAt,
-      id: row.id,
-    }))
-}
-
-function previousPublished(
-  database: SmbaDatabaseExecutor,
-  playerId: string,
-  self: AssessmentRow,
-) {
-  return previousForDate(previousOptions(database, playerId, self), self.assessedOn)
+/** Dated earlier, or on the same date but written earlier, so two on one date are not each other's previous. */
+function previousPublished(published: AssessmentRow[], self: AssessmentRow) {
+  const found = published.find((row) => row.id !== self.id && (
+    row.assessedOn < self.assessedOn
+    || (row.assessedOn === self.assessedOn && row.createdAt < self.createdAt)
+  ))
+  return found ? toPrevious(found) : null
 }
 
 /** What the "new assessment" screen needs: the player, their open draft if any, and last time's scores. */
@@ -197,13 +180,12 @@ export function getAssessmentStart(
       eq(playerAssessments.status, "draft"),
     ))
     .get()
-  const options = previousOptions(database, playerId)
+  const published = publishedNewestFirst(database, playerId)
   return {
     draftId: draft?.id ?? null,
     player: toPlayer(row),
-    previous: options[0] ? previousForDate(options, options[0].assessedOn) : null,
-    previousOptions: options,
-    publishedCount: options.length,
+    previous: published[0] ? toPrevious(published[0]) : null,
+    publishedCount: published.length,
   }
 }
 
@@ -228,17 +210,12 @@ export function getCoachAssessment(
   }).from(playerEnrollments)
     .where(eq(playerEnrollments.accountId, row.playerAccountId))
     .get()
-  const options = previousOptions(database, row.playerAccountId, row)
+  const published = publishedNewestFirst(database, row.playerAccountId)
   return {
     assessment: toRecord(row, player.fullName),
     group: groupLabel(enrollment?.level ?? null, enrollment?.batch ?? null),
-    previous: previousForDate(options, row.assessedOn),
-    previousOptions: options,
-    /**
-     * How many published assessments the player has, this one included. A
-     * draft's first publish is checked against it, as a new form's is.
-     */
-    publishedCount: options.length + (row.status === "published" ? 1 : 0),
+    previous: previousPublished(published, row),
+    publishedCount: published.length,
   }
 }
 
@@ -305,6 +282,6 @@ export function getPublishedAssessmentForPlayer(
   if (!player) return null
   return {
     assessment: toRecord(row, player.fullName),
-    previous: previousPublished(database, playerId, row),
+    previous: previousPublished(publishedNewestFirst(database, playerId), row),
   }
 }

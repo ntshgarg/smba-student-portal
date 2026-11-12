@@ -14,7 +14,6 @@ import type {
 } from "@/lib/announcements/contracts"
 import {
   announcementPreview,
-  earliestLiveExpiry,
   getAnnouncementStatus,
   isAnnouncementNew,
 } from "@/lib/announcements/domain"
@@ -31,7 +30,7 @@ import {
   broadcasts,
   broadcastWithdrawals,
 } from "@/lib/db/schema"
-import { getAcademyMonthKey } from "@/lib/format"
+import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 
 type AnnouncementQueryOptions = {
   database?: SmbaDatabaseExecutor
@@ -131,18 +130,11 @@ function coachAnnouncementFromRow(
   }
 }
 
-/**
- * The database form of "live": not withdrawn, and not past its last academy
- * day. It is `getAnnouncementStatus(...) === "active"` written as a query
- * condition, and it takes its cut-off from the same `earliestLiveExpiry`, so
- * the dashboard count, the homepage, the players' notice board and the
- * archive's status cannot drift apart. Every query that uses it must left-join
- * `broadcastWithdrawals`.
- */
+/** `getAnnouncementStatus(...) === "active"` as a query condition; needs the `broadcastWithdrawals` left join. */
 function isLiveAnnouncement(now: Date) {
   return and(
     isNull(broadcastWithdrawals.broadcastId),
-    or(isNull(broadcasts.expiresOn), gte(broadcasts.expiresOn, earliestLiveExpiry(now))),
+    or(isNull(broadcasts.expiresOn), gte(broadcasts.expiresOn, getAcademyDateKey(now))),
   )
 }
 
@@ -288,11 +280,7 @@ export function listCoachAnnouncements(
   })
 }
 
-/**
- * The academy month of the first announcement ever published, or null when
- * there is none. The archive stops its "earlier month" control here, so a coach
- * cannot step back into years that hold nothing.
- */
+/** The academy month of the first announcement, or null; the archive's earliest month. */
 export function firstCoachAnnouncementMonth({
   coachId,
   database = initializeDatabase(),

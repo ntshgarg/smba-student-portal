@@ -270,20 +270,7 @@ describe("announcement presentation and withdrawal", () => {
     })
   })
 
-  it("unpins a notice when it is withdrawn and refuses to pin one that has expired", async () => {
-    const pinned = await publishAnnouncement({
-      title: "Pinned event",
-      content: "The event begins at 9 am.",
-      channels: ["player_dashboard"],
-      pinned: true,
-      publicationKey: "45454545-4545-4545-8545-454545454545",
-    }, { coachId: HEAD_COACH_ID, createId: () => FIRST_ANNOUNCEMENT_ID, database, now: NOW })
-    const withdrawn = await withdrawAnnouncement({
-      announcementId: pinned.announcement.id,
-      reason: "Event cancelled",
-    }, { coachId: HEAD_COACH_ID, createId: () => WITHDRAWAL_ID, database, now: NOW })
-    expect(withdrawn.announcement).toMatchObject({ pinned: false, status: "withdrawn" })
-
+  it("refuses to pin a notice that has expired", async () => {
     const expiring = await publishAnnouncement({
       title: "Today only",
       content: "Courts close early today.",
