@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
+import { redirect } from "next/navigation"
 
 import { SessionExpiredError } from "@/lib/actions/operational-result"
 import { getAuth } from "@/lib/auth/better-auth"
@@ -31,6 +32,7 @@ import {
 } from "@/lib/auth/security-context"
 import { initializeDatabase } from "@/lib/db/client"
 import { authRuntimeSessions } from "@/lib/db/schema"
+import { PASSWORD_CHANGED_LOGIN_NOTICE } from "@/lib/auth/login-notices"
 
 /** Which input an error belongs to, so the form can flag and focus it. */
 export type PasswordChangeField = "currentPassword" | "newPassword" | "confirmPassword"
@@ -141,10 +143,13 @@ export async function changePasswordAction(
   }
   /*
    * The current password was verified just above, so a throw from here is not
-   * a wrong password. Better Auth writes the new password and deletes every
-   * session before it mints this browser's replacement, and that last step can
-   * still fail -- so the new password is asked directly whether it took, rather
-   * than the person being told their current password was wrong.
+   * a wrong password. Better Auth runs with no transaction (lib/auth/
+   * better-auth.ts) and changes the password in three writes: it deletes every
+   * session, this one included, then writes the new password, then mints this
+   * browser's replacement session. Any of them can throw, and nothing before it
+   * is undone -- so the new password is asked directly whether it took, and the
+   * session table whether this browser is still signed in, rather than the
+   * person being told their current password was wrong.
    */
   let signedOutHere = false
   try {
@@ -158,13 +163,19 @@ export async function changePasswordAction(
       password: newPassword,
     }).catch(() => false)
     if (!changed) {
+      const stillSignedIn = await sessionProvider.hasActiveSession().catch(() => true)
       return {
-        error: "Your password could not be changed. Your current password still works. Try again.",
+        error: stillSignedIn
+          ? "Your password could not be changed. Your current password still works. Try again."
+          : "Your password could not be changed, but every device, this one included, was"
+            + " logged out. Your current password still works: sign in again with it, then try again.",
         errorField: null,
         success: null,
       }
     }
-    signedOutHere = true
+    // The throw may have come after this browser's replacement session was
+    // written, in which case it is still signed in; the session table says.
+    signedOutHere = !(await sessionProvider.hasActiveSession().catch(() => false))
   }
 
   /*
@@ -179,8 +190,12 @@ export async function changePasswordAction(
     removePinCredential(identity.subjectId)
   } catch {
     return {
-      error: "Your password was changed and other devices were logged out, but your PIN"
-        + " could not be removed. Change your password again to remove it.",
+      error: signedOutHere
+        ? "Your password was changed and every device, this one included, was logged out,"
+          + " but your PIN could not be removed. Sign in with your new password, then change"
+          + " it once more to remove the PIN."
+        : "Your password was changed and other devices were logged out, but your PIN"
+          + " could not be removed. Change your password again to remove it.",
       errorField: null,
       success: null,
     }
@@ -197,13 +212,17 @@ export async function changePasswordAction(
   } catch {
     // The password has already changed; a failed audit write must not say otherwise.
   }
+  /*
+   * When this browser's own session went with the others, the security page has
+   * nothing left to render for it: re-rendering it after the action redirects
+   * to a bare sign-in page, which would swallow any message returned here. So
+   * the sign-in page is where the news goes, carried by its own notice.
+   */
+  if (signedOutHere) redirect(`/login?notice=${PASSWORD_CHANGED_LOGIN_NOTICE}`)
   revalidatePath("/account/security")
   return {
     error: null,
-    success: signedOutHere
-      ? "Password changed. Every device, this one included, was logged out and any PIN was"
-        + " removed. Sign in again with your new password."
-      : "Password changed. Other devices were logged out and any PIN was removed.",
+    success: "Password changed. Other devices were logged out and any PIN was removed.",
   }
 }
 

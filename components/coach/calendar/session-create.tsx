@@ -175,11 +175,11 @@ export function SessionScheduleCreate({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The schedule could not be created",
         retained: "Your schedule details are still on screen",
         subject: "The schedule",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -308,6 +308,7 @@ export function SessionScheduleCreate({
           })}
         </fieldset>
         <InlineNotice
+          action={feedback?.action}
           className="coach-series-form-notice"
           id={feedbackId}
           message={feedback?.message}

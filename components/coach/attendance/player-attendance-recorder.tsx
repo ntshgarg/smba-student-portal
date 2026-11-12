@@ -435,13 +435,13 @@ export function PlayerAttendanceRecorder({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Attendance could not be saved",
         retained: "Your marks are still on screen",
         subject: "Attendance",
       })
       setFeedback({
         message: failure.message,
         offerRetry: failure.offerRetry,
+        signIn: failure.signIn,
         tone: "error",
       })
     } finally {

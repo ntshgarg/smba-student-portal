@@ -220,6 +220,7 @@ export function MemberEditForm({
 
       <div className="coach-member-form-actions">
         <InlineNotice
+          action={feedback?.action}
           className="coach-member-editor-notice"
           message={feedback
             ? feedback.message

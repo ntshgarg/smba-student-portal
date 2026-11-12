@@ -4,14 +4,14 @@ import { CalendarOff, CircleAlert, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { useSessionPortal } from "@/components/coach/coach-portal-provider"
-import { InlineNotice } from "@/components/inline-notice"
+import { InlineNotice, type InlineNoticeAction } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import { formatDateKey } from "@/lib/format"
 import type { HolidayImpact } from "@/lib/sessions/holidays"
 
 const MAX_DATES = 31
 
-type Feedback = { message: string; tone: "error" | "info" | "success" }
+type Feedback = { action?: InlineNoticeAction; message: string; tone: "error" | "info" | "success" }
 
 /**
  * Every date from `from` to `to` inclusive. A closure is declared over calendar
@@ -103,11 +103,10 @@ export function HolidayComposer({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The closure could not be checked",
         retained: "Your dates are still on screen",
         subject: "The check",
       })
-      setFeedback({ message: failure.message, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setBusy(false)
     }
@@ -132,11 +131,10 @@ export function HolidayComposer({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The academy could not be closed",
         retained: "Your dates and holiday name are still on screen",
         subject: "The closure",
       })
-      setFeedback({ message: failure.message, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setBusy(false)
     }
@@ -303,7 +301,7 @@ export function HolidayComposer({
           </div>
         ) : null}
 
-        <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+        <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
 
         <div className="coach-holiday-actions">
           <button type="button" onClick={onClose} disabled={busy}>Cancel</button>

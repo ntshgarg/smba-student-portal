@@ -191,12 +191,11 @@ export function SessionStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The session assignment could not be cleared",
         retained: "Nothing has changed on this player",
         unconfirmed: "Check the connection, then reload the page to see whether the session assignment was cleared",
         subject: "Clearing the session assignment",
       })
-      setFeedback({ message: failure.message, offerRetry: failure.offerRetry, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, offerRetry: failure.offerRetry, tone: "error" })
       return
     } finally {
       setBusy(false)
@@ -243,11 +242,11 @@ export function SessionStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The session could not be assigned",
         retained: "Your chosen session and days are still on screen",
         subject: "The session assignment",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -306,7 +305,7 @@ export function SessionStep({
           * work it undoes, and sending a coach two steps forward to undo the
           * step they are standing on was a detour with nothing to recommend it.
           */}
-        <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+        <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
         <button disabled={busy} onClick={() => void resetAssignment()} type="button">
           {busy ? "Clearing…" : "Clear this assignment"}
         </button>
@@ -404,7 +403,7 @@ export function SessionStep({
           </small>
         </label>
       </div>
-      <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice action={feedback?.action} id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {rangeViolation ? (
         <p className={styles.backdateNote} id={rangeNoteId} role="alert">
           {rangeViolation}

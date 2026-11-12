@@ -191,18 +191,17 @@ function ReviewDialog({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The announcement could not be published",
         retained: "Your message is still here",
         subject: "The announcement",
       })
       if (dismissed.current) {
         onOutcomeAfterExit({
-          feedback: { message: failure.message, tone: "error" },
+          feedback: { action: failure.signIn, message: failure.message, tone: "error" },
           published: false,
         })
         return
       }
-      setFeedback({ message: failure.message, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
       publishButtonRef.current?.focus()
     } finally {
       setPending(false)
@@ -298,6 +297,7 @@ function ReviewDialog({
         ) : null}
 
         <InlineNotice
+          action={feedback?.action}
           className={styles.dialogNotice}
           message={feedback?.message}
           tone={feedback?.tone}
@@ -451,6 +451,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
       </header>
 
       <InlineNotice
+        action={feedback?.action}
         className={styles.composerNotice}
         message={feedback?.message}
         reserveSpace={false}

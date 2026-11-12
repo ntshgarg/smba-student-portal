@@ -13,9 +13,17 @@ export type InlineNoticeTone = "success" | "error" | "info"
 export type InlineNoticeAction = {
   href: string
   label: string
+  /**
+   * Opens in a new tab, leaving this one -- and whatever is typed into it --
+   * where it is. Signing in from a new tab renews the cookie this tab sends,
+   * so the coach can come back and save.
+   */
+  newTab?: boolean
 }
 
 export type ActionFeedback = {
+  /** A way out the screen cannot offer itself, shown beside the message. */
+  action?: InlineNoticeAction
   message: string
   tone: InlineNoticeTone
 }
@@ -76,7 +84,12 @@ export function InlineNotice({
             <Icon key={normalizedMessage} aria-hidden="true" />
             <span>{normalizedMessage}</span>
             {action ? (
-              <Link className="inline-notice-action" href={action.href}>
+              <Link
+                className="inline-notice-action"
+                href={action.href}
+                rel={action.newTab ? "noopener" : undefined}
+                target={action.newTab ? "_blank" : undefined}
+              >
                 {action.label}
               </Link>
             ) : null}

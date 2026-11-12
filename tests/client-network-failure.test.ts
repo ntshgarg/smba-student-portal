@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs"
+import { join } from "node:path"
+
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const { reportClientError } = vi.hoisted(() => ({ reportClientError: vi.fn() }))
@@ -17,7 +20,6 @@ beforeEach(() => {
 })
 
 const attendanceCopy = {
-  fallbackMessage: "Attendance could not be saved",
   retained: "Your marks are still on screen",
   subject: "Attendance",
 }
@@ -149,7 +151,6 @@ describe("describeSaveFailure", () => {
   it("swaps a claim about the academy for a way to check, and offers no blind retry", () => {
     expect(describeSaveFailure({
       error: new TypeError("Failed to fetch"),
-      fallbackMessage: "The member could not be archived",
       isOnline: true,
       retained: "The member is still active",
       subject: "The member archive",
@@ -176,15 +177,15 @@ describe("describeSaveFailure", () => {
     )
     expect(describeSaveFailure({
       error: expired,
-      fallbackMessage: "The payment could not be recorded",
       retained: "The payment details are still on screen",
       subject: "The payment",
     })).toEqual({
       kind: "session-expired",
-      message: "The payment was not saved because your sign-in has expired."
+      message: "The payment did not go through because your sign-in has expired."
         + " The payment details are still on screen."
         + " Sign in again in a new tab, then come back here and try again.",
       offerRetry: false,
+      signIn: { href: "/login", label: "Sign in in a new tab", newTab: true },
     })
   })
 
@@ -195,16 +196,52 @@ describe("describeSaveFailure", () => {
     expect(isSessionExpiry(new Error("Your sign-in expired."))).toBe(false)
   })
 
+  /*
+   * A server fault can come after the write committed -- an action that saves
+   * and then fails to reload what it saved -- so it is not called a failure.
+   */
   it("puts plain advice where a server fault would show React's placeholder", () => {
     const serverFault = Object.assign(
       new Error("An error occurred in the Server Components render. The specific message is"
         + " omitted in production builds to avoid leaking sensitive details."),
       { digest: "2410981234" },
     )
-    expect(describeSaveFailure({ ...attendanceCopy, error: serverFault, isOnline: true })).toEqual({
+    const description = describeSaveFailure({ ...attendanceCopy, error: serverFault, isOnline: true })
+    expect(description).toEqual({
       kind: "unknown",
-      message: "Attendance could not be saved. Something unexpected went wrong."
+      message: "Attendance ran into an unexpected problem, so it may or may not have gone"
+        + " through. Your marks are still on screen."
         + " Try again, and if it keeps happening, reload the page.",
+      offerRetry: false,
+    })
+    expect(description.message).not.toContain("could not be saved")
+    expect(reportClientError).not.toHaveBeenCalled()
+  })
+
+  it("asks the coach to look first after a server fault where the academy may have changed", () => {
+    expect(describeSaveFailure({
+      error: Object.assign(new Error("omitted"), { digest: "998877" }),
+      retained: "No fees have been issued",
+      subject: "The monthly fee issue",
+      unconfirmed: "Reload the page to see whether the fees were issued before trying again",
+    })).toEqual({
+      kind: "unknown",
+      message: "The monthly fee issue ran into an unexpected problem, so it may or may not have"
+        + " gone through. Reload the page to see whether the fees were issued before trying again.",
+      offerRetry: false,
+    })
+  })
+
+  it("does not promise a deadline retry is safe where the academy may have changed", () => {
+    expect(describeSaveFailure({
+      error: new SaveTimeoutError(),
+      retained: "No fees have been issued",
+      subject: "The monthly fee issue",
+      unconfirmed: "Reload the page to see whether the fees were issued before trying again",
+    })).toEqual({
+      kind: "timeout",
+      message: "The monthly fee issue was not confirmed in time, so it may or may not have gone"
+        + " through. Reload the page to see whether the fees were issued before trying again.",
       offerRetry: false,
     })
   })
@@ -243,7 +280,6 @@ describe("describeSaveFailure", () => {
   it("names the staff subject in the deadline copy", () => {
     expect(describeSaveFailure({
       error: new SaveTimeoutError(),
-      fallbackMessage: "Staff attendance could not be saved",
       isOnline: true,
       retained: "Your marks are still on screen",
       subject: "Staff attendance",
@@ -261,28 +297,48 @@ describe("describeSaveFailure", () => {
     expect(describeSaveFailure({ ...attendanceCopy, error: foreign }).kind).toBe("timeout")
   })
 
-  it("passes an unexpected error through without offering a retry", () => {
-    expect(describeSaveFailure({
-      ...attendanceCopy,
-      error: new Error("The selected session is unavailable."),
-      isOnline: false,
-    })).toEqual({
+  /*
+   * Next.js raises a plain Error of its own for a reply it cannot read -- a
+   * platform timeout page, a proxy's JSON 403 -- and a timeout can arrive after
+   * the write landed. Its sentence is not for coaches and says nothing of that.
+   */
+  it.each([
+    ["Next's unreadable-reply error", new Error("An unexpected response was received from the server.")],
+    ["a text/plain error page", new Error("FUNCTION_INVOCATION_TIMEOUT")],
+    ["a thrown value that is not an Error", "boom"],
+  ])("does not show %s word for word", (_case, error) => {
+    expect(describeSaveFailure({ ...attendanceCopy, error, isOnline: true })).toEqual({
       kind: "unknown",
-      message: "The selected session is unavailable.",
-      offerRetry: false,
-    })
-  })
-
-  it("falls back when the thrown value is not an Error", () => {
-    expect(describeSaveFailure({
-      ...attendanceCopy,
-      error: "boom",
-      isOnline: true,
-    })).toEqual({
-      kind: "unknown",
-      message: "Attendance could not be saved. Something unexpected went wrong."
+      message: "Attendance ran into an unexpected problem, so it may or may not have gone"
+        + " through. Your marks are still on screen."
         + " Try again, and if it keeps happening, reload the page.",
       offerRetry: false,
     })
+  })
+})
+
+/*
+ * The expiry sentence tells the coach to sign in again in a new tab. A screen
+ * that drops the link beside it leaves a coach on a phone typing the portal
+ * address by hand, so every screen that describes a save failure carries it.
+ */
+describe("the sign-in link beside an expired-sign-in notice", () => {
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) return sourceFiles(path)
+      return /\.tsx?$/.test(entry.name) ? [path] : []
+    })
+  }
+
+  it("is passed on by every screen that describes a save failure", () => {
+    const callers = sourceFiles(join(process.cwd(), "components"))
+      .filter((path) => readFileSync(path, "utf8").includes("describeSaveFailure("))
+    expect(callers.length).toBeGreaterThan(20)
+    const missing = callers
+      // The owner's guard redirects to sign-in rather than throwing an expiry.
+      .filter((path) => !path.endsWith("admin-authenticator-recovery-queue.tsx"))
+      .filter((path) => !/failure\.signIn\b/.test(readFileSync(path, "utf8")))
+    expect(missing).toEqual([])
   })
 })

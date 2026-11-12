@@ -7,6 +7,7 @@ import { useSessionPortal } from "@/components/coach/coach-portal-provider"
 import { FormShell } from "@/components/coach/members/directory/form-shell"
 import formStyles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { InlineNotice } from "@/components/inline-notice"
+import { isSessionExpiry, signInInNewTab } from "@/lib/client/network-failure"
 import { formatDateKey } from "@/lib/format"
 import { formatTermDate } from "@/lib/sessions/term"
 import type {
@@ -127,7 +128,7 @@ export function EndSchedulePanel({
 }) {
   const { previewEndSessionSeries } = useSessionPortal()
   const [preview, setPreview] = useState<EndSchedulePreview | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
+  const [failure, setFailure] = useState<{ expired: boolean; message: string } | null>(null)
   const [stopFees, setStopFees] = useState(true)
   const thisMonth = monthName(today)
 
@@ -136,9 +137,21 @@ export function EndSchedulePanel({
     previewEndSessionSeries(seriesId).then((result) => {
       if (!live) return
       if (result.ok) setPreview(result.data)
-      else setFailure(result.message)
-    }).catch(() => {
-      if (live) setFailure("Could not check who is on this schedule. Check your connection and try again.")
+      else setFailure({ expired: false, message: result.message })
+    }).catch((error: unknown) => {
+      if (!live) return
+      // Looking changes nothing, so an expired sign-in is the only cause with a
+      // fix off this screen; a new tab renews it without closing the panel.
+      setFailure(isSessionExpiry(error)
+        ? {
+          expired: true,
+          message: "Could not check who is on this schedule because your sign-in has expired."
+            + " Sign in again in a new tab, then close this panel and open it again.",
+        }
+        : {
+          expired: false,
+          message: "Could not check who is on this schedule. Check your connection and try again.",
+        })
     })
     return () => {
       live = false
@@ -192,7 +205,12 @@ export function EndSchedulePanel({
         title={`End ${label}`}
       >
         {failure ? (
-          <InlineNotice message={failure} reserveSpace={false} tone="error" />
+          <InlineNotice
+            action={failure.expired ? signInInNewTab : undefined}
+            message={failure.message}
+            reserveSpace={false}
+            tone="error"
+          />
         ) : !preview ? (
           <p className={formStyles.help}>Checking who is on this schedule…</p>
         ) : (

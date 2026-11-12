@@ -119,11 +119,11 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The refund could not be reviewed",
         retained: "Your refund details are still on screen",
         subject: "The refund review",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -176,11 +176,11 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The refund could not be recorded",
         retained: "Your refund details are still on screen",
         subject: "The refund",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -267,7 +267,7 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
 
         {reviewedAmountPaise === null ? (
           <div className={styles.paymentFooter}>
-            <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+            <InlineNotice action={feedback?.action} className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
             <button className={styles.quietButton} type="button" disabled={Boolean(pending)} onClick={() => void review()}>
               {pending === "preview"
                 ? "Reviewing…"
@@ -311,6 +311,7 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
             </div>
             <div className={styles.paymentFooter}>
               <InlineNotice
+                action={feedback?.action}
                 className={styles.notice}
                 id={allocationFeedbackId}
                 message={feedback?.message ?? (allocationValidation && !allocationValidation.ok ? allocationValidation.message : undefined)}

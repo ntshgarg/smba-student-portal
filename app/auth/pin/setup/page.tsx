@@ -3,6 +3,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import { skipPinSetupAction } from "@/app/auth/pin/actions"
 import { InterstitialSignOut } from "@/components/interstitial-sign-out"
 import { PinSetupForm } from "@/components/pin-setup-form"
 import { hasPinCredential } from "@/lib/auth/credential-service"
@@ -51,10 +52,20 @@ export default async function PinSetupPage() {
             : "Use it for faster sign-in. Your password will always continue to work."}</p>
         </div>
         {canSetPin ? <PinSetupForm allowSkip={!mandatory} /> : (
-          <p className="login-error" role="status">
-            For your security, a PIN can only be set within a few minutes of signing in.
-            Sign out below, then sign in again to set it.
-          </p>
+          <>
+            <p className="login-error" role="status">
+              For your security, a PIN can only be set within a few minutes of signing in.
+              {mandatory
+                ? " Sign out below, then sign in again to set it."
+                : " Skip it for now, or sign out below and sign in again to set it."}
+            </p>
+            {/* An optional PIN must never stand between someone and their journal. */}
+            {mandatory ? null : (
+              <form className="pin-setup-actions" action={skipPinSetupAction}>
+                <button className="login-secondary" type="submit">Skip for now</button>
+              </form>
+            )}
+          </>
         )}
         <InterstitialSignOut />
       </section>

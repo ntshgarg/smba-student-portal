@@ -324,7 +324,7 @@ const surfaces: Surface[] = [
       { subject: "Your PIN" },
       { subject: "Your PIN removal" },
       {
-        subject: "Your new recovery codes",
+        subject: "Your request for new recovery codes",
       },
     ],
   },
@@ -522,10 +522,13 @@ describe("the wrapper's contract", () => {
     const expired = Object.assign(new Error("omitted in production"), {
       digest: "SMBA_SESSION_EXPIRED",
     })
-    const action = resilientAction<CapturedState>(() => Promise.reject(expired), copy)
+    const action = resilientAction<CapturedState>(() => Promise.reject(expired), {
+      ...copy,
+      subject: "Your new PIN",
+    })
 
     await expect(action({ error: null }, new FormData())).resolves.toEqual({
-      error: "Your sign-in was not saved because your sign-in has expired. Nothing was changed."
+      error: "Your new PIN did not go through because your sign-in has expired. Nothing was changed."
         + " Sign in again to continue.",
     })
     // An expiry is an everyday event on a seven-day clock, not a fault.

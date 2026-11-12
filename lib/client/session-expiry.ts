@@ -9,6 +9,15 @@ import type { OperationalActionErrorCode } from "@/lib/actions/operational-resul
 const sessionExpiredCode: OperationalActionErrorCode = "SESSION_EXPIRED"
 
 /**
+ * True for a refused save *result* whose cause is an expired sign-in. Actions
+ * that convert the guard's throw into a value (the registers, and every
+ * training and fee change in Members) carry it as this code.
+ */
+export function refusedForExpiredSignIn(result: { code?: string }) {
+  return result.code === sessionExpiredCode
+}
+
+/**
  * The login page takes no return path -- `app/login/page.tsx` reads only
  * `recovered`, and `postAuthenticationDestination` decides where a signed-in
  * coach lands -- so this is the whole href. Giving it one would mean accepting

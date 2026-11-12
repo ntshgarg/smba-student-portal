@@ -45,11 +45,11 @@ export function RequestStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Approval could not be saved",
         retained: "The request is still on screen",
         subject: "The approval",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: "approve",
@@ -84,11 +84,11 @@ export function RequestStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The rejection could not be saved",
         retained: "The request is still on screen",
         subject: "The rejection",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: "reject",
@@ -167,7 +167,7 @@ export function RequestStep({
           </p>
         </div>
       ) : null}
-      <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <button type="button" disabled={Boolean(busy)} onClick={() => void reject()}>
           <X aria-hidden="true" /> {busy === "reject"

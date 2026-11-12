@@ -95,6 +95,21 @@ describe("the PIN setup page", () => {
   it("offers the form to a sign-in that has just proved a password", async () => {
     expect(await render()).toContain('name="pin"')
   })
+
+  it("still lets someone whose PIN is optional skip it on an older sign-in", async () => {
+    mocks.getCoachAccessProfile.mockReturnValue({ accessLevel: "junior_coach" })
+    mocks.sessionFreshEnoughForPinSetup.mockResolvedValue(false)
+
+    const markup = await render()
+    expect(markup).not.toContain('name="pin"')
+    expect(markup).toContain("Skip for now")
+  })
+
+  it("offers no skip to a head coach, whose PIN is required", async () => {
+    mocks.sessionFreshEnoughForPinSetup.mockResolvedValue(false)
+
+    expect(await render()).not.toContain("Skip for now")
+  })
 })
 
 describe("the sign-in page", () => {
@@ -113,6 +128,19 @@ describe("the sign-in page", () => {
 
     const markup = renderToStaticMarkup(await LoginPage({ searchParams: Promise.resolve({}) }))
     expect(markup).toContain('name="academyId"')
+    expect(markup).not.toContain("Password changed")
+  })
+
+  it("says the password changed when the change also signed this browser out", async () => {
+    mocks.getCurrentIdentity.mockResolvedValue(null)
+    const { PASSWORD_CHANGED_LOGIN_NOTICE } = await import("@/lib/auth/login-notices")
+    const { default: LoginPage } = await import("@/app/login/page")
+
+    const markup = renderToStaticMarkup(await LoginPage({
+      searchParams: Promise.resolve({ notice: PASSWORD_CHANGED_LOGIN_NOTICE }),
+    }))
+    expect(markup).toContain("Password changed")
+    expect(markup).toContain("Sign in with your new password")
   })
 })
 
@@ -152,6 +180,24 @@ describe("the head-coach-only notice", () => {
     expect(addressWithoutNotice("https://portal.example/coach?notice=head-coach-only&tab=week"))
       .toBe("/coach?tab=week")
     expect(addressWithoutNotice("https://portal.example/coach?tab=week")).toBeNull()
+  })
+
+  it("hands Next.js no state of its own, so the router drops the notice too", async () => {
+    const { dropNoticeFromAddress } = await import("@/components/coach/coach-access-notice")
+    const replaceState = vi.fn()
+
+    dropNoticeFromAddress({
+      history: { replaceState },
+      location: { href: "https://portal.example/coach?notice=head-coach-only&month=2026-11" },
+    })
+
+    // Next skips its router for a state carrying its `__NA` flag, which is what
+    // `history.state` holds on every page it rendered.
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/coach?month=2026-11")
+
+    replaceState.mockClear()
+    dropNoticeFromAddress({ history: { replaceState }, location: { href: "https://portal.example/coach" } })
+    expect(replaceState).not.toHaveBeenCalled()
   })
 })
 

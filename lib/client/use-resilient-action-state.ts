@@ -3,7 +3,11 @@
 import { unstable_rethrow } from "next/navigation"
 import { useActionState } from "react"
 
-import { classifySaveFailure, networkFailureCause } from "@/lib/client/network-failure"
+import {
+  classifySaveFailure,
+  networkFailureCause,
+  type SaveFailureKind,
+} from "@/lib/client/network-failure"
 import { reportClientError } from "@/lib/telemetry/report-client-error"
 
 /**
@@ -41,10 +45,15 @@ export type ResilientActionOptions<State> = {
    * Rewrites the state on screen so it carries `message`. The default replaces
    * `error`, which is all a state needs when `error` is its only failure
    * channel. Supply one where the shape also carries a field-level verdict or a
-   * success notice, neither of which may outlive the failure.
+   * success notice, neither of which may outlive the failure. `kind` says what
+   * went wrong; only a `"session-expired"` is known to have changed nothing.
    */
-  fold?: (state: State, message: string) => State
-  /** What was being submitted. No trailing punctuation. */
+  fold?: (state: State, message: string, kind: SaveFailureKind) => State
+  /**
+   * What was being submitted, as a singular noun phrase ("Your request for new
+   * recovery codes"): the sentence around it says "was" and "it". No trailing
+   * punctuation.
+   */
   subject: string
   /**
    * What the person should do when the request may or may not have gone
@@ -118,7 +127,7 @@ export function resilientAction<State extends ActionErrorState>(
         reportClientError({ boundary: "window", error, eventType: "unhandled_rejection" })
       }
 
-      return fold(state, describeUnconfirmedSubmission(kind, { subject, unconfirmed }))
+      return fold(state, describeUnconfirmedSubmission(kind, { subject, unconfirmed }), kind)
     }
   }
 }
@@ -134,11 +143,11 @@ export function resilientAction<State extends ActionErrorState>(
  * fixed technical sentence anyway.
  */
 export function describeUnconfirmedSubmission(
-  kind: ReturnType<typeof classifySaveFailure>,
+  kind: SaveFailureKind,
   { subject, unconfirmed }: Pick<ResilientActionOptions<unknown>, "subject" | "unconfirmed">,
 ) {
   if (kind === "session-expired") {
-    return `${subject} was not saved because your sign-in has expired. Nothing was changed.`
+    return `${subject} did not go through because your sign-in has expired. Nothing was changed.`
       + " Sign in again to continue."
   }
   const cause = kind === "offline" || kind === "unreachable"

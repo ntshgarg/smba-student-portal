@@ -254,13 +254,13 @@ export function StaffRollCall({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Staff attendance could not be saved",
         retained: "Your marks are still on screen",
         subject: "Staff attendance",
       })
       setFeedback({
         message: failure.message,
         offerRetry: failure.offerRetry,
+        signIn: failure.signIn,
         tone: "error",
       })
     } finally {

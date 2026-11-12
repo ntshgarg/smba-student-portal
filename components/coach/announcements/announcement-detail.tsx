@@ -106,7 +106,6 @@ function WithdrawDialog({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The announcement could not be withdrawn",
         retained: "Your reason is still here",
         subject: "The withdrawal",
       })
@@ -114,7 +113,7 @@ function WithdrawDialog({
         onFailureAfterExit(failure.message)
         return
       }
-      setFeedback({ message: failure.message, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
       reasonRef.current?.focus()
     } finally {
       setPending(false)
@@ -178,7 +177,7 @@ function WithdrawDialog({
             {reason.length}/250 · visible only to the head coach
           </small>
         </label>
-        <InlineNotice message={feedback?.message} tone={feedback?.tone} />
+        <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} />
         <div className={styles.dialogActions}>
           <button type="button" onClick={onClose}>Keep announcement</button>
           <button
@@ -234,8 +233,14 @@ export function PublishedAnnouncementDetail({
         tone: "success",
       })
       router.refresh()
-    } catch {
-      setFeedback({ message: "The display priority could not be updated.", tone: "error" })
+    } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        retained: "Nothing was changed",
+        subject: announcement.pinned ? "Unpinning the announcement" : "Pinning the announcement",
+        unconfirmed: "Reload the page to see whether it changed",
+      })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPinPending(false)
     }
@@ -263,7 +268,7 @@ export function PublishedAnnouncementDetail({
         </span>
       </header>
 
-      <InlineNotice className={styles.detailNotice} message={feedback?.message} tone={feedback?.tone} />
+      <InlineNotice action={feedback?.action} className={styles.detailNotice} message={feedback?.message} tone={feedback?.tone} />
 
       <article className={styles.detailPanel}>
         <div className={styles.detailMessage}>

@@ -44,11 +44,11 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Financial tracking could not be activated",
         retained: "Your tracking month is still on screen",
         subject: "Financial tracking",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -106,7 +106,7 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
             </span>
           </label>
 
-          <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+          <InlineNotice action={feedback?.action} className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
           <button className={styles.primaryButton} type="submit" disabled={!confirmed || pending}>
             {pending
               ? "Starting…"

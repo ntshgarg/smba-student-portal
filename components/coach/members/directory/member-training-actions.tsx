@@ -23,7 +23,8 @@ import styles from "@/components/coach/members/directory/member-training-actions
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
-import { isSessionExpiry } from "@/lib/client/network-failure"
+import { describeSaveFailure, signInInNewTab } from "@/lib/client/network-failure"
+import { refusedForExpiredSignIn } from "@/lib/client/session-expiry"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
 import type { MemberFeeSummary, MemberScheduledChange } from "@/lib/training/member-summaries"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
@@ -134,6 +135,8 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   const nextMonth = monthName(data.nextMonthStart)
   const thisMonth = monthName(data.today)
 
+  const formKept = "Anything you entered is still on screen"
+
   async function submit<T>(
     action: () => Promise<OperationalActionResult<T>>,
     success: (data: T) => string,
@@ -144,20 +147,34 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
     try {
       const result = await action()
       if (!result.ok) {
-        setNotice({ message: result.message, tone: "error" })
+        // `run` in training-actions returns an expired sign-in as a value, so
+        // it is told apart here rather than in the catch. Signing in in this
+        // tab would close the form and lose what was typed into it.
+        setNotice(refusedForExpiredSignIn(result)
+          ? {
+            action: signInInNewTab,
+            message: `This change did not go through because your sign-in has expired. ${formKept}.`
+              + " Sign in again in a new tab, then come back here and try again.",
+            tone: "error",
+          }
+          : { message: result.message, tone: "error" })
         return
       }
       setNotice({ message: success(result.data), tone: "success" })
       setOpen(null)
       router.refresh()
     } catch (error) {
-      setNotice({
-        message: isSessionExpiry(error)
-          ? "This was not saved because your sign-in has expired."
-            + " Sign in again in a new tab, then come back here and try again."
-          : "This could not be saved. Check your connection and try again.",
-        tone: "error",
+      // Fees, concessions and places: a reply lost after the server finished
+      // must not read as "not saved", or a second submit from a reopened form
+      // (with a new key) would apply it twice. So the coach looks first.
+      const failure = describeSaveFailure({
+        error,
+        retained: formKept,
+        subject: "This change",
+        unconfirmed: "Check the connection, then reload the page to see whether it was"
+          + " saved before trying again",
       })
+      setNotice({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setBusy(false)
     }
@@ -385,7 +402,13 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
         ) : null}
       </div>
 
-      <InlineNotice className={styles.notice} message={notice?.message} reserveSpace={false} tone={notice?.tone} />
+      <InlineNotice
+        action={notice?.action}
+        className={styles.notice}
+        message={notice?.message}
+        reserveSpace={false}
+        tone={notice?.tone}
+      />
 
       {open === "change" || open === "start" ? (
         <TrainingForm

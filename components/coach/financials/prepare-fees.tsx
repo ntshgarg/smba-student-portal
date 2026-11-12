@@ -119,12 +119,12 @@ export function PrepareFees({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Monthly fees could not be issued",
         retained: "No fees have been issued",
         unconfirmed: "Check the connection, then reload the page to see whether this month's fees were issued",
         subject: "The monthly fee issue",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -191,7 +191,7 @@ export function PrepareFees({
         </div>
       ) : null}
 
-      <InlineNotice className={styles.notice} message={feedback?.message} reserveSpace={!compact} tone={feedback?.tone} />
+      <InlineNotice action={feedback?.action} className={styles.notice} message={feedback?.message} reserveSpace={!compact} tone={feedback?.tone} />
     </section>
   )
 }

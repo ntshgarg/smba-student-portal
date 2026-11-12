@@ -105,6 +105,9 @@ vi.mock("@/lib/data", () => ({
 vi.mock("@/lib/auth/session", () => ({
   getRawAuthSession: async () => ({ user: { id: headCoach.subjectId, twoFactorEnabled: false } }),
 }))
+// A sign-in made moments ago, so the PIN page offers its form rather than the
+// "sign in again" notice for an old one.
+vi.mock("@/lib/auth/pin-setup-freshness", () => ({ sessionFreshEnoughForPinSetup: async () => true }))
 vi.mock("@/lib/auth/recovery-service", () => ({ getRecoveryEmail: () => null }))
 vi.mock("@/lib/auth/credential-service", () => ({ hasPinCredential: () => false }))
 vi.mock("@/lib/auth/coach-access", () => ({

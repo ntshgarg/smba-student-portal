@@ -143,10 +143,17 @@ export function AccountSecurityWorkspace({
     {
       // Codes from an earlier press may have been superseded by the press that
       // failed, and a dead code presented as live is what locks a coach out, so
-      // they go with the failure. Neither credential was rejected, so neither
-      // field is flagged.
-      fold: (state, error) => ({ ...state, codes: null, error, errorField: null }),
-      subject: "Your new recovery codes",
+      // they go with the failure. An expired sign-in is the exception: the
+      // guard refuses before the stored set is touched, so codes on screen are
+      // still the live set and the only readable copy of it. Neither credential
+      // was rejected, so neither field is flagged.
+      fold: (state, error, kind) => ({
+        ...state,
+        codes: kind === "session-expired" ? state.codes : null,
+        error,
+        errorField: null,
+      }),
+      subject: "Your request for new recovery codes",
       // A finished reissue overwrites the stored set before the reply is sent,
       // so the codes the coach holds may already be dead. Only a set that was
       // actually shown can be trusted, so the way out is another reissue.
@@ -186,8 +193,7 @@ export function AccountSecurityWorkspace({
    */
   function revokeSessions(
     run: () => Promise<void>,
-    { fallbackMessage, retained, subject, success }: {
-      fallbackMessage: string
+    { retained, subject, success }: {
       retained: string
       subject: string
       success?: string
@@ -199,18 +205,15 @@ export function AccountSecurityWorkspace({
         await run()
         if (success) setSessionsFeedback({ message: success, tone: "success" })
       } catch (error) {
-        setSessionsFeedback({
-          message: describeSaveFailure({
-            error,
-            fallbackMessage,
-            retained,
-            subject,
-            // "It is still signed in" is only true if the request never
-            // arrived; a dropped reply cannot say which.
-            unconfirmed: "Reload this page to see which devices are still signed in",
-          }).message,
-          tone: "error",
+        const failure = describeSaveFailure({
+          error,
+          retained,
+          subject,
+          // "It is still signed in" is only true if the request never
+          // arrived; a dropped reply cannot say which.
+          unconfirmed: "Reload this page to see which devices are still signed in",
         })
+        setSessionsFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
       } finally {
         setRevokingSessionId(null)
       }
@@ -427,7 +430,6 @@ export function AccountSecurityWorkspace({
                       onClick={() => {
                         setRevokingSessionId(session.id)
                         revokeSessions(() => revokeSessionAction(session.id), {
-                          fallbackMessage: "That device could not be signed out",
                           retained: "It is still signed in",
                           subject: "The sign-out",
                         })
@@ -457,7 +459,6 @@ export function AccountSecurityWorkspace({
               className="security-secondary-action"
               type="button"
               onClick={() => revokeSessions(() => revokeOtherSessionsAction(), {
-                fallbackMessage: "The other devices could not be signed out",
                 retained: "They are still signed in",
                 subject: "The sign-out",
                 // Trusted browsers are forgotten too (app/account/security/actions.ts).
@@ -471,6 +472,7 @@ export function AccountSecurityWorkspace({
             </button>
           ) : null}
           <InlineNotice
+            action={sessionsFeedback?.action}
             message={sessionsFeedback?.message}
             reserveSpace={false}
             tone={sessionsFeedback?.tone}

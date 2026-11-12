@@ -58,11 +58,11 @@ export function ConcessionApplicationReversal({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The concession application could not be reversed",
         retained: "Your reason is still on screen",
         subject: "The concession reversal",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -79,7 +79,7 @@ export function ConcessionApplicationReversal({
         <span>Reason</span>
         <textarea name="reason" ref={reasonRef} rows={2} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); setDirty(true); setFeedback(null); requestKey.reset() }} />
       </label>
-      <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+      <InlineNotice action={feedback?.action} className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.correctionButton} type="button" disabled={pending} onClick={() => void reverse()}>
         {pending ? "Reversing…" : feedback?.offerRetry ? "Reverse application again" : "Reverse application"}
       </button>

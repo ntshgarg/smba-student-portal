@@ -21,7 +21,7 @@ import type {
   SaveAssessmentInput,
 } from "@/lib/assessments/contracts"
 import { formatAssessmentDate, sectionTone } from "@/lib/assessments/display"
-import { isSessionExpiry } from "@/lib/client/network-failure"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PreviousAssessment } from "@/lib/assessments/queries"
 import {
   ASSESSMENT_RATING_LABELS,
@@ -237,6 +237,7 @@ export function AssessmentForm({
   const overall = overallRating(values.ratings)
   const busy = pending !== null
   const firstName = player.name.split(" ")[0]
+  const ratingsKept = "Your ratings and notes are still on screen"
 
   function change(patch: Partial<FormValues>) {
     setValues((current) => ({ ...current, ...patch }))
@@ -288,19 +289,20 @@ export function AssessmentForm({
         tone: "success",
       })
     } catch (error) {
-      setNotice(isSessionExpiry(error)
-        ? {
-          // Leaving for /login would take the ratings with it; a new tab renews
-          // the sign-in this tab saves with, so the work stays put.
-          message: "This was not saved because your sign-in has expired. Your ratings and notes"
-            + " are still on screen. Sign in again in a new tab, then come back here and save.",
-          tone: "error",
-        }
-        : {
-          action: { href: "/login", label: "Sign in again" },
-          message: "This could not be saved. Check your connection, or sign in again if it keeps happening.",
-          tone: "error",
-        })
+      // An edit of a saved assessment goes by its id, so sending it again is
+      // safe. The first save of a new one is not: if the lost reply was for a
+      // publish that landed, a second press publishes a second assessment. And
+      // no way out here leads to /login -- leaving takes the ratings with it,
+      // while a new tab renews the sign-in this tab saves with.
+      const failure = describeSaveFailure({
+        error,
+        retained: ratingsKept,
+        subject: "The assessment",
+        unconfirmed: assessmentId ? undefined : `${ratingsKept}. Check the connection, then`
+          + ` open ${firstName}'s assessments in a new tab to see whether it was saved before`
+          + " saving again",
+      })
+      setNotice({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPending(null)
     }
@@ -318,8 +320,14 @@ export function AssessmentForm({
       }
       setDiscarded(true)
       navigateAfterCommit(() => window.location.replace("/coach/assessments"))
-    } catch {
-      setNotice({ message: "The draft could not be discarded. Try again.", tone: "error" })
+    } catch (error) {
+      // Sending it again is harmless: a draft already gone is refused by name.
+      const failure = describeSaveFailure({
+        error,
+        retained: ratingsKept,
+        subject: "Discarding the draft",
+      })
+      setNotice({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPending(null)
     }

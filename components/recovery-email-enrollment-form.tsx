@@ -99,10 +99,14 @@ export function RecoveryEmailEnrollmentForm({
     {
       fold: foldPastRetirement(retired?.confirm),
       subject: "Your verification code",
-      // A confirmed address moves the person on from this page, so a reload
-      // answers the question a retry would only muddle.
-      unconfirmed: "Reload this page before trying again: if your address was confirmed,"
-        + " you will be taken straight on",
+      // A reload answers the question a retry would only muddle -- but not the
+      // same way everywhere. Signed in or activating, a confirmed address moves
+      // the person on. In the one-time head-coach setup the confirmation lives
+      // only in a cookie on the lost reply, so a reload shows the email step
+      // again with the code already spent.
+      unconfirmed: "Reload this page before trying again. If you are taken straight on, your"
+        + " address was confirmed. If it asks for your email again, send a new code: the one"
+        + " you entered may already have been used",
     },
   )
   // A retired result speaks for nothing: not the step, not the address the code

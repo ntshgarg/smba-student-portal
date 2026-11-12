@@ -155,6 +155,28 @@ describe("pressing Reissue again after a set is on screen", () => {
     expect(next.codes).toBeNull()
   })
 
+  it("keeps them when the sign-in expired, which is refused before the set changes", async () => {
+    const { SESSION_EXPIRED_DIGEST } = await import("@/lib/actions/operational-result")
+    mocks.reissueRecoveryCodesAction.mockRejectedValue(Object.assign(
+      new Error("An error occurred in the Server Components render."),
+      { digest: SESSION_EXPIRED_DIGEST },
+    ))
+    const action = await reissueAction()
+
+    const next = await action({ codes: shown, error: null, errorField: null }, new FormData())
+    expect(next.codes).toEqual(shown)
+    expect(next.error).toContain("did not go through because your sign-in has expired")
+  })
+
+  it("clears them when the reply was lost, since the set may have been replaced", async () => {
+    mocks.reissueRecoveryCodesAction.mockRejectedValue(new TypeError("Failed to fetch"))
+    const action = await reissueAction()
+
+    const next = await action({ codes: shown, error: null, errorField: null }, new FormData())
+    expect(next.codes).toBeNull()
+    expect(next.error).toContain("Your request for new recovery codes was not confirmed")
+  })
+
   it("warns that a later reissue, here or elsewhere, retires the set on screen", async () => {
     const { AccountSecurityWorkspace } = await import("@/components/account-security-workspace")
     mocks.renderedState = { codes: shown, error: null, errorField: null, success: null }

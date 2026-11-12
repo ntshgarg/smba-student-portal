@@ -8,6 +8,7 @@ import { LoginForm } from "@/components/login-form"
 import { sessionProvider } from "@/lib/data"
 import { publicSiteUrl } from "@/lib/config"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
+import { PASSWORD_CHANGED_LOGIN_NOTICE } from "@/lib/auth/login-notices"
 import { sessionOwesAuthenticatorSetup } from "@/lib/auth/session"
 
 export const metadata: Metadata = {
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ recovered?: string }>
+  searchParams: Promise<{ notice?: string; recovered?: string }>
 }) {
   const identity = await sessionProvider.getCurrentIdentity()
   if (identity) {
@@ -33,7 +34,9 @@ export default async function LoginPage({
     }))
   }
   if (await sessionOwesAuthenticatorSetup()) redirect("/auth/two-factor/setup")
-  const recovered = (await searchParams).recovered === "1"
+  const query = await searchParams
+  const recovered = query.recovered === "1"
+  const passwordChanged = query.notice === PASSWORD_CHANGED_LOGIN_NOTICE
 
   return (
     <main className="login-page">
@@ -60,6 +63,11 @@ export default async function LoginPage({
         {recovered ? (
           <p className="security-success login-recovery-success" role="status">
             Password reset complete. Sign in with the new password.
+          </p>
+        ) : passwordChanged ? (
+          <p className="security-success login-recovery-success" role="status">
+            Password changed. Every device, this one included, was logged out and any PIN was
+            removed. Sign in with your new password.
           </p>
         ) : null}
         <LoginForm />
