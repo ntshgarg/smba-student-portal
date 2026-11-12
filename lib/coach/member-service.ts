@@ -10,6 +10,7 @@ import {
   normalizedNameKey,
 } from "@/lib/auth/identity"
 import { normalizeEmailAddress, registrationSubjectKey } from "@/lib/auth/recovery-service"
+import { academyToday } from "@/lib/clock"
 import type {
   ArchiveCoachInput,
   ArchiveCoachResult,
@@ -34,6 +35,9 @@ import {
   sessionSeries,
 } from "@/lib/db/schema"
 import { readPlayerFinancialCloseoutState } from "@/lib/finance/service"
+import { getAcademyDateKey } from "@/lib/format"
+import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import { playerTrainingStatus } from "@/lib/sessions/term"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   type AcademyPlan,
@@ -180,6 +184,7 @@ function validateMemberUpdate(input: UpdateMemberInput):
 export function readCanonicalPlayerRecord(
   database: SmbaDatabaseExecutor,
   memberId: string,
+  today = academyToday(),
 ): PlayerMemberRecord | null {
   const row = database.select({
     activatedAt: authCredentialStates.activatedAt,
@@ -213,17 +218,15 @@ export function readCanonicalPlayerRecord(
     .get()
   if (!row) return null
 
-  const activeSessionIds = database.select({ seriesId: sessionAssignments.seriesId })
-    .from(sessionAssignments)
-    .where(and(
-      eq(sessionAssignments.accountId, memberId),
-      isNull(sessionAssignments.effectiveTo),
-    ))
-    .all()
-    .map((assignment) => assignment.seriesId)
-  const status = activeSessionIds.length
-    ? "active" as const
-    : row.status === "unassigned" ? "unassigned" as const : "paused" as const
+  // The same rule as the directory read (lib/coach/database.ts), so a saved
+  // edit cannot turn a term-finished player back into an "active" one.
+  const openPlaces = loadOpenPlaces(database, [memberId]).get(memberId) ?? []
+  const activeSessionIds = openPlaces.map((place) => place.seriesId)
+  const { status, termFinishedOn } = playerTrainingStatus({
+    enrollmentStatus: row.status,
+    openPlaces,
+    today,
+  })
 
   return {
     member: {
@@ -253,6 +256,7 @@ export function readCanonicalPlayerRecord(
       activeSessionIds,
       recordRevision: row.recordRevision,
       status,
+      termFinishedOn,
     },
   }
 }
@@ -261,13 +265,17 @@ export function updateMemberRecord({
   coachId,
   database,
   input,
-  now = new Date(),
+  now: requestedNow,
 }: {
   coachId: string
   database: SmbaDatabase
   input: UpdateMemberInput
   now?: Date
 }): MemberMutationResult {
+  const now = requestedNow ?? new Date()
+  // Only the read-back below uses the academy's today; what is written keeps
+  // its own timestamp.
+  const today = requestedNow ? getAcademyDateKey(requestedNow) : academyToday()
   requireHeadAdminAccess(coachId, { database })
   if (!input || typeof input !== "object") {
     return memberFailure("VALIDATION", "The member update is invalid.")
@@ -391,7 +399,7 @@ export function updateMemberRecord({
       throw new Error("Member account changed during an immediate transaction.")
     }
 
-    const record = readCanonicalPlayerRecord(tx, input.memberId)
+    const record = readCanonicalPlayerRecord(tx, input.memberId, today)
     if (!record) return memberFailure("NOT_FOUND", "Player account was not found.")
     return { ok: true, record }
   }, { behavior: "immediate" })

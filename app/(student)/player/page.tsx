@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react"
 
 import { PlayerAnnouncementsCard } from "@/components/announcements/player-announcements"
 import { PlayerAttendanceCard } from "@/components/dashboard/player-attendance-card"
+import { playerDashboardState } from "@/components/dashboard/player-dashboard-state"
 import { WelcomeHero } from "@/components/dashboard/welcome-hero"
 import { PlayerFeeRecordCard } from "@/components/financials/player-fee-record-card"
 import { Reveal } from "@/components/reveal"
@@ -13,6 +14,7 @@ import { getPlayerFinanceDashboardSummary } from "@/lib/finance/service"
 import { formatSessionDate } from "@/lib/format"
 import { currentGreeting } from "@/lib/greeting"
 import { listActivePlayerAnnouncements } from "@/lib/announcements/queries"
+import { termFinishedMessage } from "@/lib/sessions/term"
 import { getCurrentStudent } from "@/lib/student/current-student"
 import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 
@@ -59,23 +61,21 @@ export default async function DashboardPage() {
   const session = dashboard.nextSession
     ? formatSessionDate(dashboard.nextSession.startsAt)
     : null
-  const playerState = dashboard.player.level === "Assessment pending"
-    ? "assessment-pending"
-    : dashboard.player.status === "paused"
-      ? "paused"
-      : dashboard.player.status === "unassigned"
-        ? "schedule-pending"
-        : "active"
+  const termFinishedOn = dashboard.player.termFinishedOn
+  const playerState = playerDashboardState(dashboard.player)
   const scrollLabel = {
     "assessment-pending": "Your starting point",
     "schedule-pending": "Your training plan",
+    "term-finished": "Your training record",
     active: "Your training week",
     paused: "Your training record",
   }[playerState]
   const sessionDateParts = session?.date.split(" ") ?? []
   const sessionStamp = session
     ? `${session.weekday.slice(0, 3)} · ${sessionDateParts[0]} ${sessionDateParts[1]?.slice(0, 3) ?? ""}`.trim()
-    : playerState === "paused" ? "Paused" : "Pending"
+    : playerState === "paused"
+      ? "Paused"
+      : playerState === "term-finished" ? "Term finished" : "Pending"
 
   return (
     <>
@@ -128,7 +128,9 @@ export default async function DashboardPage() {
                       ? "Schedule pending"
                       : playerState === "paused"
                         ? "Training paused"
-                        : "No upcoming session"}
+                        : playerState === "term-finished"
+                          ? "Term finished"
+                          : "No upcoming session"}
                 </h3>
                 <p className="empty-card-copy">
                   {playerState === "assessment-pending"
@@ -137,7 +139,9 @@ export default async function DashboardPage() {
                       ? "Your coach is preparing your first training schedule."
                       : playerState === "paused"
                         ? "Your next session will appear when training resumes."
-                        : "Your next session will appear here as soon as it is scheduled."}
+                        : playerState === "term-finished" && termFinishedOn
+                          ? termFinishedMessage(termFinishedOn, dashboard.player.nextScheduleStartsOn)
+                          : "Your next session will appear here as soon as it is scheduled."}
                 </p>
                 {playerState === "assessment-pending" ? (
                   <a className="empty-card-link" href={`${publicSiteUrl}#trial`}>
@@ -153,6 +157,7 @@ export default async function DashboardPage() {
             attendance={dashboard.attendance}
             playerState={playerState}
             record={dashboard.attendanceRecord}
+            termFinishedOn={termFinishedOn}
           />
 
           <Reveal

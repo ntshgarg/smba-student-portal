@@ -20,11 +20,12 @@ import {
   playerAttendanceSearch,
   shiftPlayerAttendanceMonth,
 } from "@/components/dashboard/player-attendance-query"
+import type { PlayerDashboardState } from "@/components/dashboard/player-dashboard-state"
 import { Reveal } from "@/components/reveal"
 import { formatDateKey } from "@/lib/format"
+import { formatTermDate } from "@/lib/sessions/term"
 import type { AttendanceSummary, PlayerAttendanceRecord } from "@/lib/types"
 
-type PlayerState = "assessment-pending" | "schedule-pending" | "active" | "paused"
 
 function visibleStateLabel(state: PlayerAttendanceCalendarSessionState) {
   if (state === "rescheduled") return "Rescheduled"
@@ -58,10 +59,13 @@ export function PlayerAttendanceCard({
   attendance,
   playerState,
   record,
+  termFinishedOn = null,
 }: {
   attendance: AttendanceSummary | null
-  playerState: PlayerState
+  playerState: PlayerDashboardState
   record: PlayerAttendanceRecord
+  /** Set when the player's term has finished (lib/sessions/term.ts). */
+  termFinishedOn?: string | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -184,14 +188,20 @@ export function PlayerAttendanceCard({
                 ? "No sessions yet this month"
                 : playerState === "paused"
                   ? "Training paused"
-                  : "Not started"}
+                  : playerState === "term-finished"
+                    ? "Term finished"
+                    : "Not started"}
             </strong>
             <p className="empty-card-copy">
               {playerState === "active"
                 ? "This month’s record begins when your first session starts."
                 : playerState === "paused"
                   ? "Your existing attendance record remains available while training is paused."
-                  : "Your attendance record begins when your first session starts."}
+                  : playerState === "term-finished"
+                    ? termFinishedOn
+                      ? `Your term finished on ${formatTermDate(termFinishedOn)}. Your attendance from it stays in your record.`
+                      : "Your attendance from your last term stays in your record."
+                    : "Your attendance record begins when your first session starts."}
             </p>
           </>
         )}

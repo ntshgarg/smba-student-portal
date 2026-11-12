@@ -220,6 +220,19 @@ export type PlayerFeeRecord = {
   receipts: PlayerReceiptView[]
   concessionEntries: PlayerConcessionEntryView[]
   coachManagement?: CoachFinanceManagementView
+  /**
+   * The last day of the player's term while every place they hold is on a
+   * schedule that has run out (lib/sessions/term.ts); otherwise null. No fee
+   * is issued for the months after it, and the fee page says why.
+   */
+  termFinishedOn: string | null
+  /**
+   * The 1st of the month a move booked in Members starts (a scheduled
+   * training change), while the term has finished; otherwise null. That
+   * month and those after it are billed as usual, so only the months between
+   * the term's end and this one have no fee.
+   */
+  termFeeResumesOn: string | null
 }
 
 export type PlayerFinanceDashboardSummary = {

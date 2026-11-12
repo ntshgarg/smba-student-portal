@@ -14,6 +14,7 @@ import {
   playerEnrollments,
   playerAssessments,
   sessionSeries,
+  trainingChanges,
 } from "@/lib/db/schema"
 import { academyCurrentMonth, academyNow, academyToday } from "@/lib/clock"
 import { coachMessage } from "@/lib/data/portal-content"
@@ -34,6 +35,8 @@ import {
   listSessionOccurrencesForSeries,
 } from "@/lib/sessions/database"
 import { resolveNextAssignedOccurrence } from "@/lib/sessions/domain"
+import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import { termFinishedOn } from "@/lib/sessions/term"
 import { academyPlanSummary } from "@/lib/training/academy-plans"
 
 function indiaMonthKey() {
@@ -121,6 +124,20 @@ function toPlayerProfile(accountId: string): PlayerProfile | null {
   const player = findPlayer(accountId)
   if (!player) return null
   const names = identityNameParts(player.fullName)
+  // The stored status stays "active" when a schedule simply runs out, so the
+  // finished term is read from the places the player still holds.
+  const database = initializeDatabase()
+  const openPlaces = loadOpenPlaces(database, [accountId]).get(accountId) ?? []
+  const finishedOn = termFinishedOn(openPlaces, academyToday())
+  // Once the head coach has booked their move, the family is told when it
+  // starts rather than to wait for a schedule that is already confirmed.
+  const bookedMove = finishedOn
+    ? database.select({ effectiveOn: trainingChanges.effectiveOn }).from(trainingChanges).where(and(
+      eq(trainingChanges.playerAccountId, accountId),
+      eq(trainingChanges.status, "scheduled"),
+      eq(trainingChanges.kind, "change"),
+    )).get()
+    : undefined
 
   return {
     id: player.id,
@@ -135,6 +152,8 @@ function toPlayerProfile(accountId: string): PlayerProfile | null {
     memberSince: player.trainingStartOn,
     currentFocus: player.status === "unassigned" ? "First assessment" : "Current training block",
     status: player.status,
+    termFinishedOn: finishedOn,
+    nextScheduleStartsOn: bookedMove?.effectiveOn ?? null,
   }
 }
 

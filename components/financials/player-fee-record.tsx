@@ -16,6 +16,7 @@ import {
   paymentMethodLabel,
 } from "@/components/financials/player-finance-presentation"
 import { formatInr, getAcademyMonthKey } from "@/lib/format"
+import { monthAfterFinishedTerm } from "@/lib/sessions/term"
 import styles from "@/components/financials/player-financials.module.css"
 
 const MONTHS = [
@@ -151,6 +152,23 @@ function withdrawalForCharge(
   })[0] ?? null
 }
 
+/*
+ * A month after the term's last day gets no fee: fee issuing only bills a
+ * month the player's schedule reaches into, and a term-finished player has no
+ * running place (lib/sessions/term.ts). "Not issued" would read as a fee still
+ * to come, so the month says why there is none. A move already booked in
+ * Members is billed from its month as usual, so that month and later ones
+ * keep "Not issued" until the fee is issued.
+ */
+function afterFinishedTerm(record: PlayerFeeRecord, period: string) {
+  return monthAfterFinishedTerm({
+    feeResumesOn: record.termFeeResumesOn,
+    termFinishedOn: record.termFinishedOn,
+  }, period)
+}
+
+const TERM_FINISHED_LABEL = "No fee: term finished"
+
 function monthState(
   record: PlayerFeeRecord,
   period: string,
@@ -169,6 +187,9 @@ function monthState(
     }
     if (agreementEnd && period > agreementEnd) {
       return { detail: "", label: "Plan ended", tone: "quiet" as const }
+    }
+    if (afterFinishedTerm(record, period)) {
+      return { detail: "", label: TERM_FINISHED_LABEL, tone: "quiet" as const }
     }
     return { detail: "", label: "Not issued", tone: "quiet" as const }
   }
@@ -382,7 +403,7 @@ function MonthDetail({
           <dl className={styles.monthFacts}>
             <div>
               <dt>Monthly fee</dt>
-              <dd>Not issued</dd>
+              <dd>{afterFinishedTerm(record, period) ? TERM_FINISHED_LABEL : "Not issued"}</dd>
             </div>
           </dl>
         )}

@@ -11,6 +11,13 @@ export type PlayerProfile = {
   memberSince: string
   currentFocus: string
   status: "unassigned" | "active" | "paused"
+  /**
+   * The last day of the player's term when every place they still hold is on
+   * a schedule that has run out (lib/sessions/term.ts); otherwise null.
+   */
+  termFinishedOn: string | null
+  /** The 1st a move booked in Members takes a term-finished player onto their next schedule. */
+  nextScheduleStartsOn: string | null
 }
 
 export type CoachMessage = {

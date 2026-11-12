@@ -14,6 +14,7 @@ import { MembersCard } from "@/components/coach/members-card"
 import { PlayerOnboardingCard } from "@/components/coach/player-onboarding-card"
 import { AssessmentsCard } from "@/components/coach/assessments-card"
 import { SessionsCard } from "@/components/coach/sessions-card"
+import { TermFinishedCard } from "@/components/coach/term-finished-card"
 import { CoachAccessNotice } from "@/components/coach/coach-access-notice"
 import {
   HEAD_COACH_ONLY_NOTICE,
@@ -46,6 +47,8 @@ import {
 } from "@/lib/format"
 import { currentGreeting } from "@/lib/greeting"
 import { resolveNextScheduledOccurrence } from "@/lib/sessions/domain"
+import { scheduleIsRunning } from "@/lib/sessions/term"
+import { listTermFinishedPlayersToMove } from "@/lib/training/member-summaries"
 
 export const metadata = {
   title: "Coach dashboard",
@@ -185,7 +188,13 @@ export default async function CoachDashboardPage({
     coachId: identity.subjectId,
     now,
   })
-  const playerRecords = listOperationalPlayerRecords()
+  const playerRecords = listOperationalPlayerRecords(undefined, today)
+  // Players still on a schedule whose last day has passed. Nothing moves them
+  // by itself, so they are the head coach's to-do until a move or an end is
+  // booked for them in Members (or happens straight away).
+  const termFinishedCount = listTermFinishedPlayersToMove(playerRecords.trainingProfiles).length
+  // Ended schedules and ones whose term has finished are not counted.
+  const runningScheduleCount = series.filter((item) => scheduleIsRunning(item, today)).length
   const assessments = listAssessmentHome(identity.subjectId)
   const assessedCount = assessments.players.filter((player) => player.lastAssessedOn).length
   const onboardingSummary = getPlayerOnboardingSummary(today)
@@ -211,7 +220,8 @@ export default async function CoachDashboardPage({
         sessionPosition={sessionPosition}
       />
       <CoachDashboardStack id="attendance">
-        <AttendanceCard scheduleCount={series.length} />
+        <TermFinishedCard playerCount={termFinishedCount} />
+        <AttendanceCard scheduleCount={runningScheduleCount} />
         <PlayerOnboardingCard summary={onboardingSummary} />
         <SessionsCard
           nextSessionLabel={nextSessionLabel}
