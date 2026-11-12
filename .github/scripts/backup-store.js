@@ -217,12 +217,22 @@ function selectBackup(backups, requestedName) {
 /**
  * Throws, in words the person running the workflow can act on, unless the
  * newest backup is less than 30 hours old: last night's, or one just run by
- * hand. Returns its age in whole hours.
+ * hand. Measured to the millisecond, the same way the operations monitor
+ * measures it, so the two never disagree about the same backup. A backup whose
+ * notes claim a time in the future is not trusted. Returns its age in whole
+ * hours.
  */
 function requireRecentBackup(backup, now, maxHours = RECENT_BACKUP_HOURS) {
   if (!backup) throw new Error(NO_BACKUP_MESSAGE)
-  const ageHours = Math.floor((now.getTime() - Date.parse(backup.createdAt)) / HOUR_MS)
-  if (!(ageHours <= maxHours)) {
+  const ageMs = now.getTime() - Date.parse(backup.createdAt)
+  if (!Number.isFinite(ageMs) || ageMs < -5 * 60 * 1000) {
+    throw new Error(
+      `The newest stored backup says it was made at ${backup.createdAt}, which is not a time that has `
+      + 'passed. Run "Encrypted production backup" by hand, wait for it to finish, then try again.',
+    )
+  }
+  const ageHours = Math.max(0, Math.floor(ageMs / HOUR_MS))
+  if (!(ageMs < maxHours * HOUR_MS)) {
     throw new Error(
       `The newest stored backup is from ${backup.createdAt}, ${ageHours} hours ago. Run `
       + '"Encrypted production backup" by hand, wait for it to finish, then try again.',

@@ -5,6 +5,19 @@ const MAX_RESTORE_AGE_MS = 35 * 24 * 60 * 60 * 1000
 const SETUP_GUIDE = 'docs/PRODUCTION-OPERATIONS.md, "Scheduled encrypted backups"'
 
 /*
+ * The day backups started going to the private store. Every earlier run of
+ * either workflow belongs to the public-artifact era: fifteen successful
+ * backup runs up to 3 Sep 2026, and restore checks of those copies up to
+ * 1 Oct 2026. Those copies were deleted, so none of those runs is a backup the
+ * academy holds or a restore check of one. Counting them would call the newest
+ * of them "last night's backup" and alert every half hour before the store is
+ * even set up, and would make the first real restore check overdue the moment
+ * the first stored backup lands. Nothing on main could store a backup before
+ * this date: until then its backup workflow failed on purpose.
+ */
+const PRIVATE_STORE_SINCE = Date.parse("2026-11-13T00:00:00Z")
+
+/*
  * This gate asks whether a backup was stored last night. It is muted only if
  * the nightly schedule in encrypted-production-backup.yml is switched off on
  * purpose -- it was, from 2026-09-03 until the head coach decided on 13 Nov
@@ -38,10 +51,21 @@ function backupScheduleIsEnabled(source) {
   return false
 }
 
-function latestSuccessfulMain(runs, { defaultBranch, repository }) {
-  return runs.find((run) => run.conclusion === "success"
+function isSuccessfulMain(run, { defaultBranch, repository }) {
+  return run.conclusion === "success"
     && run.head_branch === defaultBranch
-    && run.head_repository?.full_name === repository)
+    && run.head_repository?.full_name === repository
+}
+
+function startedAt(run) {
+  const time = Date.parse(run.created_at)
+  if (!Number.isFinite(time)) throw new Error("A workflow run has an invalid timestamp.")
+  return time
+}
+
+/** Successful runs on main since the private store began, newest first. */
+function storeEraRuns(runs, { defaultBranch, repository, since = PRIVATE_STORE_SINCE }) {
+  return runs.filter((run) => isSuccessfulMain(run, { defaultBranch, repository }) && startedAt(run) >= since)
 }
 
 function ageMilliseconds(timestamp, now) {
@@ -89,8 +113,13 @@ module.exports = async function checkBackupFreshness({
       workflowId: "encrypted-backup-restore.yml",
     }),
   ])
-  const backup = latestSuccessfulMain(backupRuns, { defaultBranch, repository })
-  const restore = latestSuccessfulMain(restoreRuns, { defaultBranch, repository })
+  const storedBackups = storeEraRuns(backupRuns, { defaultBranch, repository })
+  const backup = storedBackups[0]
+  const firstBackup = storedBackups.at(-1)
+  // A restore check can only be of a stored backup once one exists.
+  const restore = firstBackup
+    ? storeEraRuns(restoreRuns, { defaultBranch, repository, since: startedAt(firstBackup) })[0]
+    : undefined
 
   if (!scheduled) {
     return {
@@ -130,7 +159,6 @@ module.exports = async function checkBackupFreshness({
     // The first restore check runs on the 1st of the month after backups
     // begin, so it is only overdue once backups are older than the 35 days
     // allowed between checks.
-    const firstBackup = backupRuns.filter((run) => latestSuccessfulMain([run], { defaultBranch, repository })).at(-1)
     if (ageMilliseconds(firstBackup.updated_at || firstBackup.created_at, now) > MAX_RESTORE_AGE_MS) {
       throw new Error(
         "Backups have been stored for more than 35 days and none has been restored and checked. Open the "
@@ -160,4 +188,5 @@ module.exports = async function checkBackupFreshness({
 
 module.exports.ageMilliseconds = ageMilliseconds
 module.exports.backupScheduleIsEnabled = backupScheduleIsEnabled
-module.exports.latestSuccessfulMain = latestSuccessfulMain
+module.exports.PRIVATE_STORE_SINCE = PRIVATE_STORE_SINCE
+module.exports.storeEraRuns = storeEraRuns

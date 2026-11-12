@@ -17,10 +17,16 @@
 //   between had the old one silently brought back;
 // - the backup of the live database must pass an integrity check.
 //
-// The backup and the replacement happen inside one write transaction on the
-// live database, so the backup is exactly what is replaced: nothing a coach or
-// parent saves while this runs can fall between the two. The update history
-// (__drizzle_migrations) is never deleted or rewritten.
+// The backup is read in one read transaction, so it is of one moment, without
+// taking the write lock: Turso ends a write transaction after a few seconds,
+// and reading a real academy over the network takes longer than that. Only
+// then does this take the write lock, check every guard again, and check that
+// nothing was saved since the backup -- one summary of every row, worked out
+// by the database in a single request and compared with the same summary taken
+// alongside the backup. If anything changed, nothing is deleted. So the backup
+// is exactly what is replaced, and the lock is held only for those checks and
+// the replacement. The update history (__drizzle_migrations) is never deleted
+// or rewritten.
 //
 // Procedure and preconditions: docs/PRODUCTION-OPERATIONS.md, "Resetting the
 // academy to an empty state". prepare-admin-only-snapshot.mjs builds the source
@@ -34,7 +40,10 @@ import LibsqlDatabase from "libsql"
 
 import {
   PLATFORM_OWNER_ACADEMY_ID,
+  contentFingerprint,
+  contentFingerprintQuery,
   ownerSignInDetails,
+  readConsistently,
   soleOwnerQuery,
 } from "./academy-owner.mjs"
 
@@ -215,11 +224,9 @@ try {
   fs.closeSync(fs.openSync(backupPath, "wx", 0o600))
   backup = new BetterSqlite3(backupPath)
 
-  let backupRows = 0
-  let restoredRows = 0
-  // BEGIN IMMEDIATE takes the live database's write lock first, so everything
-  // below -- the checks, the backup and the replacement -- sees one moment.
-  const reset = target.transaction(() => {
+  // Every guard, asked of the live database. Run once alongside the backup and
+  // again under the write lock, so nothing can change in between unnoticed.
+  function checkLiveDatabase() {
     const targetSchema = schemaObjects(target)
     if (layout(sourceSchema) !== layout(targetSchema)) {
       throw new Error(
@@ -242,29 +249,58 @@ try {
     }
     if (ownerSignInDetails(source, sourceOwner.id) !== ownerSignInDetails(target, targetOwner.id)) {
       throw new Error(
-        "The owner's password, PIN, recovery email or sign-in name changed after the prepared copy was "
-        + "made. Nothing was changed: prepare the copy again so the new ones are kept.",
+        "The owner's password, PIN, recovery email or sign-in name changed, or their sign-in was marked for "
+        + "reset or revoked, after the prepared copy was made. Nothing was changed: prepare the copy again "
+        + "so the current ones are kept.",
       )
     }
+    return targetSchema
+  }
 
-    const targetSequences = sequenceRows(target)
-    backup.pragma("foreign_keys = OFF")
-    const createBackup = backup.transaction(() => {
-      for (const table of targetSchema.tables) backup.exec(table.sql)
-      for (const table of targetSchema.tables) {
-        backupRows += insertRows(
-          backup,
-          table.name,
-          target.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all(),
-        )
-      }
-      restoreSequences(backup, targetSequences)
-      for (const index of targetSchema.indexes) backup.exec(index.sql)
-    })
-    createBackup.immediate()
-    backup.pragma("foreign_keys = ON")
-    const backupIntegrity = backup.pragma("integrity_check", { simple: true })
-    if (backupIntegrity !== "ok") throw new Error(`Backup integrity check failed: ${backupIntegrity}`)
+  // Step 1, no write lock: the guards, the backup and the summary of what it
+  // holds, all from one read transaction.
+  const snapshot = readConsistently(target, () => {
+    const targetSchema = checkLiveDatabase()
+    const fingerprintQuery = contentFingerprintQuery(target, targetSchema.tables.map((table) => table.name))
+    return {
+      fingerprint: contentFingerprint(target, fingerprintQuery),
+      fingerprintQuery,
+      rows: Object.fromEntries(targetSchema.tables.map(({ name }) => [
+        name,
+        target.prepare(`SELECT * FROM ${quoteIdentifier(name)}`).all(),
+      ])),
+      sequences: sequenceRows(target),
+      targetSchema,
+    }
+  })
+
+  let backupRows = 0
+  let restoredRows = 0
+  backup.pragma("foreign_keys = OFF")
+  const createBackup = backup.transaction(() => {
+    for (const table of snapshot.targetSchema.tables) backup.exec(table.sql)
+    for (const table of snapshot.targetSchema.tables) {
+      backupRows += insertRows(backup, table.name, snapshot.rows[table.name])
+    }
+    restoreSequences(backup, snapshot.sequences)
+    for (const index of snapshot.targetSchema.indexes) backup.exec(index.sql)
+  })
+  createBackup.immediate()
+  backup.pragma("foreign_keys = ON")
+  const backupIntegrity = backup.pragma("integrity_check", { simple: true })
+  if (backupIntegrity !== "ok") throw new Error(`Backup integrity check failed: ${backupIntegrity}`)
+  backup.close()
+
+  // Step 2, under the write lock and kept short: the guards again, proof that
+  // nothing was saved since the backup, then the replacement.
+  const reset = target.transaction(() => {
+    checkLiveDatabase()
+    if (contentFingerprint(target, snapshot.fingerprintQuery) !== snapshot.fingerprint) {
+      throw new Error(
+        "Something was saved in the live database after the backup was taken, so the backup would not "
+        + "hold it. Nothing was changed: run the reset again when nobody is using the academy.",
+      )
+    }
 
     liveDatabaseTouched = true
     for (const table of [...orderedTables].reverse()) {

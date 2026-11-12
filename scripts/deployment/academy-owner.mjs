@@ -31,9 +31,11 @@ export function readConsistently(database, read) {
 
 /**
  * Everything the owner signs in with that a handover keeps: the password hash,
- * the PIN hash, the recovery email and the sign-in names. Compared between the
- * prepared copy and the live database, so a change made in between is noticed
- * rather than silently undone.
+ * the PIN hash, the recovery email, the sign-in names and whether the sign-in
+ * is active, must be reset or has been revoked. Compared between the prepared
+ * copy and the live database, so a change made in between -- a new PIN, or an
+ * owner locked out after a suspected compromise -- is noticed rather than
+ * silently undone.
  */
 export function ownerSignInDetails(database, ownerId) {
   const password = database.prepare(`
@@ -52,5 +54,41 @@ export function ownerSignInDetails(database, ownerId) {
   `).all(ownerId).map((row) => `${row.method}:${row.identifier}`)
   const username = database.prepare("SELECT username FROM auth_users WHERE id = ?")
     .all(ownerId).map((row) => row.username)
-  return JSON.stringify({ password, pin, recoveryEmail, signInNames, username })
+  const credentialState = database.prepare("SELECT status FROM auth_credential_states WHERE account_id = ?")
+    .all(ownerId).map((row) => row.status)
+  return JSON.stringify({ credentialState, password, pin, recoveryEmail, signInNames, username })
+}
+
+function quoteIdentifier(identifier) {
+  return `"${identifier.replaceAll('"', '""')}"`
+}
+
+/**
+ * One SQL statement that summarises every row of the named tables -- how many
+ * rows, and for each column the total size, numeric total and first-character
+ * total of its values. The database works it out and sends back one short line
+ * per table, so it costs a single round trip however large the academy is.
+ *
+ * It is not a cryptographic hash. It exists to notice that somebody saved
+ * something in the seconds between the reset's backup and its write lock, and
+ * any insert, delete or ordinary edit changes it.
+ */
+export function contentFingerprintQuery(database, tableNames) {
+  if (!tableNames.length) throw new Error("There are no tables to fingerprint.")
+  const parts = tableNames.map((tableName, position) => {
+    const columns = database.prepare(`PRAGMA table_info(${quoteIdentifier(tableName)})`).all()
+      .map((column) => quoteIdentifier(String(column.name)))
+    const measures = columns.flatMap((column) => [
+      `total(length(quote(${column})))`,
+      `total(CASE WHEN typeof(${column}) = 'integer' THEN ${column} END)`,
+      `total(unicode(${column}))`,
+    ])
+    return `(SELECT json_array(count(*)${measures.map((measure) => `, ${measure}`).join("")}) `
+      + `FROM ${quoteIdentifier(tableName)}) AS t${position}`
+  })
+  return `SELECT ${parts.join(",\n  ")}`
+}
+
+export function contentFingerprint(database, query) {
+  return JSON.stringify(database.prepare(query).all())
 }

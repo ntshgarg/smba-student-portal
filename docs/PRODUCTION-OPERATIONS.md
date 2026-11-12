@@ -34,11 +34,15 @@ conversation resolution and force-push/deletion prevention. Do not weaken those 
 
 Vercel runs `vercel-build` for every deployment, production and preview alike. It builds the new
 version first (`next build`) and only then runs `db:prepare:empty`, which migrates and seeds whichever
-database `TURSO_DATABASE_URL` names in that environment. A build that fails therefore never changes
-the database. Once the build succeeds, the database update runs and Vercel then switches traffic to the
-new version, so the version already live meets the updated database for those few seconds only. Keep
-every migration safe for the version before it during that window: add tables and columns freely, but
-remove or rename something only in a later release, once nothing live still uses it. The academy
+database `TURSO_DATABASE_URL` names in that environment. A build that fails therefore leaves the
+database alone. A build that succeeds updates the database before Vercel's own deploy steps that come
+after the build (bundling the functions, checking their size limits, uploading the output) and before
+traffic moves to the new version. Normally the version already live meets the updated database for
+those few seconds. If one of those later deploy steps fails, though, the database stays updated while
+the old version keeps serving, until the next deploy succeeds. So keep every migration safe for the
+version before it: add tables and columns freely, but remove or rename something only in a later
+release, once nothing live still uses it. That rule, not the build order, is what keeps the live
+version working. The academy
 database must be reachable from Production only:
 
 | Variable | Production | Preview | Development |
@@ -181,7 +185,11 @@ and says plainly that the academy has no restorable copy beyond Turso's one-day 
 Operations Monitor fails when the latest successful backup run is older than 30 hours or the latest
 successful restore check is older than 35 days, and says what that means in plain words. Until the first
 backup has been stored it only warns, because each failed night already fails the backup workflow and
-raises its own alert; and it allows the first restore check up to 35 days after backups begin.
+raises its own alert; and it allows the first restore check up to 35 days after backups begin. It
+counts only runs from 13 November 2026 onward, when backups started going to the private store: the
+older successful runs in the history kept their copies as public workflow files, which no longer exist,
+so they are neither a backup nor a restore check of one. A restore check counts only if it ran after the
+first stored backup.
 
 ### Quarterly remote restore drill
 
@@ -227,15 +235,18 @@ TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<read token> \
 
 `reset-empty-academy.mjs` is the destructive half. It DELETEs every row of every table in the database
 `TURSO_DATABASE_URL` names, except the update history, and re-inserts the source, so against production
-it destroys every account, enrollment, attendance mark, fee, payment and refund the academy holds. It
-takes the live database's write lock first, so its checks, its backup and the replacement all see one
-moment. Before the first delete it requires the source to be a zero-member academy with no
-authenticator, and refuses, changing nothing and leaving no backup file, unless the live database is
-still the one the source was prepared from: the same tables and indexes, the same update history (an
-update released in between used to be rolled back in that history and break every later deploy), the
-same owner, and the owner's password, PIN, recovery email and sign-in names unchanged. It then writes and
-integrity-checks a complete local backup of the remote. That backup is the only recovery path from a
-mistake here; give it a durable location and handle it as a snapshot.
+it destroys every account, enrollment, attendance mark, fee, payment and refund the academy holds.
+Before the first delete it requires the source to be a zero-member academy with no authenticator, and
+refuses, changing nothing and leaving no backup file, unless the live database is still the one the
+source was prepared from: the same tables and indexes, the same update history (an update released in
+between used to be rolled back in that history and break every later deploy), the same owner, and the
+owner's password, PIN, recovery email, sign-in names and sign-in standing (active, to be reset or
+revoked) unchanged. It writes and integrity-checks a complete local backup of the remote, read as of one
+moment without locking anyone out. Only then does it take the live database's write lock, which Turso
+allows for a few seconds at a time: it checks everything again, checks that nothing was saved since the
+backup, and replaces the data. If anything was saved in between it changes nothing and asks you to run
+it again when nobody is using the academy. That backup is the only recovery path from a mistake here;
+give it a durable location and handle it as a snapshot.
 
 ```bash
 TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<write token> \

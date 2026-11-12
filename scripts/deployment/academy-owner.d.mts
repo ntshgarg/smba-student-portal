@@ -12,3 +12,7 @@ export const soleOwnerQuery: string
 export function readConsistently<T>(database: ReadableDatabase, read: () => T): T
 
 export function ownerSignInDetails(database: ReadableDatabase, ownerId: string): string
+
+export function contentFingerprintQuery(database: ReadableDatabase, tableNames: string[]): string
+
+export function contentFingerprint(database: ReadableDatabase, query: string): string

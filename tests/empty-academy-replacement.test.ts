@@ -14,7 +14,11 @@ vi.mock("server-only", () => ({}))
 import { PLATFORM_ADMIN_ACADEMY_ID } from "@/lib/auth/identity"
 import * as schema from "@/lib/db/schema"
 import { seedReferenceData } from "@/lib/db/seed"
-import { PLATFORM_OWNER_ACADEMY_ID } from "@/scripts/deployment/academy-owner.mjs"
+import {
+  PLATFORM_OWNER_ACADEMY_ID,
+  contentFingerprint,
+  contentFingerprintQuery,
+} from "@/scripts/deployment/academy-owner.mjs"
 
 /*
  * The manual way to empty the academy is two scripts run some time apart:
@@ -218,6 +222,55 @@ describe("the manual empty-academy route", () => {
     await expect(replaceLive(live, copy, backup)).rejects.toThrow(/PIN, recovery email or sign-in name changed/u)
     expect(total(live, "select count(*) as total from accounts")).toBe(3)
   }, 60_000)
+
+  it("refuses rather than undo locking the owner out after a suspected compromise", async () => {
+    const directory = workspace()
+    const live = liveAcademy(directory)
+    const sqlite = new Database(live)
+    sqlite.prepare("insert into auth_credential_states (account_id, status, activated_at, updated_at) values (?, 'active', ?, ?)")
+      .run(OWNER_ID, NOW, NOW)
+    sqlite.close()
+    const copy = path.join(directory, "owner-only.db")
+    const backup = path.join(directory, "pre-reset.db")
+    await prepareCopy(live, copy)
+
+    const after = new Database(live)
+    after.prepare("update auth_credential_states set status = 'revoked' where account_id = ?").run(OWNER_ID)
+    after.close()
+
+    await expect(replaceLive(live, copy, backup)).rejects.toThrow(/sign-in was marked for reset or revoked/u)
+    expect(total(live, "select status as total from auth_credential_states where account_id = ?", OWNER_ID))
+      .toBe("revoked")
+    expect(fs.existsSync(backup)).toBe(false)
+  }, 60_000)
+
+  /*
+   * The backup is read without the write lock, because Turso ends a write
+   * transaction after a few seconds. The reset then proves under the lock that
+   * nothing was saved since, using this one-request summary of every row.
+   */
+  it("notices anything saved after the backup was read", () => {
+    const directory = workspace()
+    const sqlite = new Database(liveAcademy(directory))
+    const tables = (sqlite.prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%'")
+      .all() as Array<{ name: string }>).map((table) => table.name)
+    const query = contentFingerprintQuery(sqlite, tables)
+    const before = contentFingerprint(sqlite, query)
+    expect(contentFingerprint(sqlite, query)).toBe(before)
+
+    // A status edit that keeps the same length still shows.
+    sqlite.prepare("update accounts set approval_status = 'rejected' where id = ?").run("player-one")
+    const edited = contentFingerprint(sqlite, query)
+    expect(edited).not.toBe(before)
+
+    // So does a new row, and a changed amount or time.
+    account(sqlite, "player-two", "player")
+    const added = contentFingerprint(sqlite, query)
+    expect(added).not.toBe(edited)
+    sqlite.prepare("update accounts set updated_at = updated_at + 1 where id = ?").run("player-two")
+    expect(contentFingerprint(sqlite, query)).not.toBe(added)
+    sqlite.close()
+  })
 
   it("refuses a copy prepared from a different academy", async () => {
     const directory = workspace()

@@ -250,6 +250,12 @@ describe("finding and keeping stored backups", () => {
     expect(backupStore.requireRecentBackup(newest, new Date("2026-11-13T09:17:00Z"))).toBe(12)
     expect(() => backupStore.requireRecentBackup(newest, new Date("2026-11-14T05:17:00Z")))
       .toThrow(/32 hours ago\. Run "Encrypted production backup" by hand/u)
+    // 30 hours and 45 minutes is not "less than 30 hours", whatever the rounding.
+    expect(() => backupStore.requireRecentBackup(newest, new Date("2026-11-14T04:02:00Z")))
+      .toThrow(/30 hours ago/u)
+    // A backup that claims to come from the future is not trusted.
+    expect(() => backupStore.requireRecentBackup(newest, new Date("2026-11-12T09:17:00Z")))
+      .toThrow(/not a time that has passed/u)
   })
 
   it("fetches a stored backup only if it is the file that was stored", async () => {
@@ -277,13 +283,13 @@ describe("finding and keeping stored backups", () => {
 function trustedRun(overrides: Record<string, unknown> = {}) {
   return {
     conclusion: "success",
-    created_at: "2026-08-22T01:00:00Z",
+    created_at: "2027-01-22T01:00:00Z",
     head_branch: "main",
     head_repository: { full_name: "owner/repo" },
     id: 101,
     name: "Encrypted production backup",
     run_attempt: 2,
-    updated_at: "2026-08-22T01:05:00Z",
+    updated_at: "2027-01-22T01:05:00Z",
     ...overrides,
   }
 }
@@ -309,7 +315,7 @@ describe("backup freshness monitor", () => {
       backupWorkflowSource: SCHEDULED_WORKFLOW,
       defaultBranch: "main",
       github: runsMock(),
-      now: new Date("2026-08-23T00:00:00Z"),
+      now: new Date("2027-01-23T00:00:00Z"),
       owner: "owner",
       repo: "repo",
     })
@@ -318,8 +324,8 @@ describe("backup freshness monitor", () => {
     await expect(checkBackupFreshness({
       backupWorkflowSource: SCHEDULED_WORKFLOW,
       defaultBranch: "main",
-      github: runsMock({ backupRuns: [trustedRun({ updated_at: "2026-08-20T00:00:00Z" })] }),
-      now: new Date("2026-08-23T00:00:00Z"),
+      github: runsMock({ backupRuns: [trustedRun({ created_at: "2027-01-19T23:55:00Z", updated_at: "2027-01-20T00:00:00Z" })] }),
+      now: new Date("2027-01-23T00:00:00Z"),
       owner: "owner",
       repo: "repo",
     })).rejects.toThrow("more than 30 hours old")
@@ -336,12 +342,75 @@ describe("backup freshness monitor", () => {
       backupWorkflowSource: SCHEDULED_WORKFLOW,
       defaultBranch: "main",
       github: runsMock({ backupRuns: [trustedRun({ conclusion: "failure" })] }),
-      now: new Date("2026-08-23T00:00:00Z"),
+      now: new Date("2027-01-23T00:00:00Z"),
       owner: "owner",
       repo: "repo",
     })
     expect(result).toMatchObject({ backupRunId: null, muted: true })
     expect(result.message).toMatch(/Beyond Turso's one-day rewind, the academy has no copy/u)
+  })
+
+  /*
+   * GitHub still lists the successful runs from before the private store: the
+   * fifteen public-artifact backups up to 3 Sep 2026 and restore checks of
+   * them up to 1 Oct 2026. Those copies are gone, so the monitor must not
+   * treat them as backups or restore checks.
+   */
+  it("ignores the runs from before the private store existed", async () => {
+    const artifactEraBackup = trustedRun({
+      created_at: "2026-09-03T21:17:00Z",
+      id: 15,
+      updated_at: "2026-09-03T21:25:00Z",
+    })
+    const artifactEraRestore = trustedRun({
+      created_at: "2026-10-01T04:47:00Z",
+      id: 16,
+      name: "Encrypted backup restore verification",
+      updated_at: "2026-10-01T05:10:00Z",
+    })
+
+    // The store is not set up yet: every night fails, and the monitor only warns.
+    const beforeStore = await checkBackupFreshness({
+      backupWorkflowSource: SCHEDULED_WORKFLOW,
+      defaultBranch: "main",
+      github: runsMock({
+        backupRuns: [trustedRun({ conclusion: "failure", created_at: "2026-11-20T21:17:00Z" }), artifactEraBackup],
+        restoreRuns: [artifactEraRestore],
+      }),
+      now: new Date("2026-11-21T00:00:00Z"),
+      owner: "owner",
+      repo: "repo",
+    })
+    expect(beforeStore).toMatchObject({ backupRunId: null, muted: true })
+    expect(beforeStore.message).toMatch(/No backup has been stored yet/u)
+
+    // The first stored backup lands: the old restore check does not count,
+    // and the first real one is not due for 35 days.
+    const firstStored = trustedRun({
+      created_at: "2026-11-21T21:17:00Z",
+      id: 300,
+      updated_at: "2026-11-21T21:25:00Z",
+    })
+    const afterStore = await checkBackupFreshness({
+      backupWorkflowSource: SCHEDULED_WORKFLOW,
+      defaultBranch: "main",
+      github: runsMock({ backupRuns: [firstStored, artifactEraBackup], restoreRuns: [artifactEraRestore] }),
+      now: new Date("2026-11-22T00:00:00Z"),
+      owner: "owner",
+      repo: "repo",
+    })
+    expect(afterStore).toMatchObject({ backupRunId: 300, muted: false, restoreRunId: null })
+
+    // A restore check run before the first stored backup cannot have checked one.
+    const earlyRestore = trustedRun({ created_at: "2026-11-15T04:47:00Z", id: 301, updated_at: "2026-11-15T05:00:00Z" })
+    await expect(checkBackupFreshness({
+      backupWorkflowSource: SCHEDULED_WORKFLOW,
+      defaultBranch: "main",
+      github: runsMock({ backupRuns: [firstStored], restoreRuns: [earlyRestore] }),
+      now: new Date("2026-11-22T00:00:00Z"),
+      owner: "owner",
+      repo: "repo",
+    })).resolves.toMatchObject({ restoreRunId: null })
   })
 
   it("waits for the first monthly restore check, then insists on it", async () => {
@@ -350,10 +419,10 @@ describe("backup freshness monitor", () => {
       backupWorkflowSource: SCHEDULED_WORKFLOW,
       defaultBranch: "main",
       github: runsMock({
-        backupRuns: [trustedRun(), trustedRun({ id: 90, updated_at: "2026-08-15T01:05:00Z" })],
+        backupRuns: [trustedRun(), trustedRun({ created_at: "2027-01-15T01:00:00Z", id: 90, updated_at: "2027-01-15T01:05:00Z" })],
         restoreRuns: [],
       }),
-      now: new Date("2026-08-23T00:00:00Z"),
+      now: new Date("2027-01-23T00:00:00Z"),
       owner: "owner",
       repo: "repo",
     })
@@ -365,10 +434,10 @@ describe("backup freshness monitor", () => {
       backupWorkflowSource: SCHEDULED_WORKFLOW,
       defaultBranch: "main",
       github: runsMock({
-        backupRuns: [trustedRun(), trustedRun({ id: 60, updated_at: "2026-07-10T01:05:00Z" })],
+        backupRuns: [trustedRun(), trustedRun({ created_at: "2026-11-29T01:00:00Z", id: 60, updated_at: "2026-11-29T01:05:00Z" })],
         restoreRuns: [],
       }),
-      now: new Date("2026-08-23T00:00:00Z"),
+      now: new Date("2027-01-23T00:00:00Z"),
       owner: "owner",
       repo: "repo",
     })).rejects.toThrow(/none has been restored and checked/u)
@@ -395,8 +464,8 @@ describe("backup freshness and the nightly schedule", () => {
     await expect(checkBackupFreshness({
       backupWorkflowSource: UNSCHEDULED_WORKFLOW,
       defaultBranch: "main",
-      github: runsMock({ backupRuns: [trustedRun({ updated_at: "2026-08-20T00:00:00Z" })] }),
-      now: new Date("2026-08-23T00:00:00Z"),
+      github: runsMock({ backupRuns: [trustedRun({ created_at: "2027-01-19T23:55:00Z", updated_at: "2027-01-20T00:00:00Z" })] }),
+      now: new Date("2027-01-23T00:00:00Z"),
       owner: "owner",
       repo: "repo",
     })).resolves.toEqual({ backupAgeHours: 72, backupRunId: 101, muted: true })
