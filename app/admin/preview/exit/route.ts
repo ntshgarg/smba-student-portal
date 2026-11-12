@@ -2,7 +2,7 @@ import { and, eq, isNull } from "drizzle-orm"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
-import { ADMIN_PREVIEW_COOKIE, readAdminPreviewToken } from "@/lib/auth/admin-preview"
+import { ADMIN_PREVIEW_COOKIE, readAdminPreviewRecord } from "@/lib/auth/admin-preview"
 import { clearDatabaseSession, getRawAuthSession } from "@/lib/auth/session"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { publicSiteUrl } from "@/lib/config"
@@ -29,12 +29,10 @@ export async function POST(request: Request) {
       isNull(accounts.archivedAt),
     )).get()
     : null
+  // Read for the record only, so an Exit pressed after the hour ran out still
+  // names the person who was being viewed.
   const claim = owner && actorAccountId
-    ? readAdminPreviewToken(
-      (await cookies()).get(ADMIN_PREVIEW_COOKIE)?.value,
-      actorAccountId,
-      rawSession?.session?.token,
-    )
+    ? readAdminPreviewRecord((await cookies()).get(ADMIN_PREVIEW_COOKIE)?.value, actorAccountId)
     : null
   if (owner && actorAccountId) {
     // Filed under the person who was being viewed, beside the start record.

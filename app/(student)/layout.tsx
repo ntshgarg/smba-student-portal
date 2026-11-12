@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { AppShell } from "@/components/app-shell"
-import { AdminPreviewBanner } from "@/components/admin-preview-banner"
+import { AdminPreviewBanner, adminPreviewLabel } from "@/components/admin-preview-banner"
 import { getCurrentStudent } from "@/lib/student/current-student"
 import { recoveryEmailEnrollmentRequired } from "@/lib/auth/recovery-service"
 
@@ -35,7 +35,7 @@ export default async function StudentLayout({
   return (
     <>
       {student.identity.previewMode ? (
-        <AdminPreviewBanner label={`${student.identity.fullName} · Player`} />
+        <AdminPreviewBanner label={adminPreviewLabel({ fullName: student.identity.fullName, role: "player" })} />
       ) : null}
       <AppShell student={student.identity}>{children}</AppShell>
     </>

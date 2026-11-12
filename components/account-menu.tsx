@@ -79,7 +79,9 @@ export function AccountMenu({
           inert={!open}
         >
           <p>
-            <span>Signed in as</span>
+            {/* During a preview the name is the person being viewed, while
+                the sign-in -- and so Log out -- is the owner's. */}
+            <span>{previewMode ? "Viewing as" : "Signed in as"}</span>
             <strong>{account.fullName}</strong>
           </p>
           <Link href={publicSiteHref} onClick={() => setOpen(false)}>
@@ -94,7 +96,7 @@ export function AccountMenu({
             <form action="/admin/preview/exit" method="post">
               <input type="hidden" name="signOut" value="1" />
               <button type="submit">
-                Log out
+                Exit preview and log out
                 <LogOut aria-hidden="true" />
               </button>
             </form>

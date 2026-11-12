@@ -64,6 +64,22 @@ describe("public session summary", () => {
     },
   )
 
+  it("marks an admin preview, so the public header signs out through Exit preview", async () => {
+    mocks.getCurrentIdentity.mockResolvedValueOnce({ ...identity, actorSubjectId: "owner", previewMode: true })
+
+    const response = await GET()
+
+    expect(await response.json()).toEqual({
+      status: "authenticated",
+      account: {
+        initials: "AB",
+        name: "Aarav Bhat",
+        previewMode: true,
+        role: "player",
+      },
+    })
+  })
+
   it("returns a generic unavailable summary when session lookup fails", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
     mocks.getCurrentIdentity.mockRejectedValueOnce(

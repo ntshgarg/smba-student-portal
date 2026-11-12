@@ -1,11 +1,23 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { renderToStaticMarkup } from "react-dom/server"
 
+const standing = vi.hoisted(() => ({
+  adminPreviewStillStands: vi.fn<(input: {
+    actorAccountId: string
+    sessionToken: string
+    targetAccountId: string
+  }) => boolean>(() => true),
+}))
+
 vi.mock("server-only", () => ({}))
+// The server half of the proxy's test is held to a real database in
+// tests/admin-preview-standing.test.ts; here it is a switch.
+vi.mock("@/lib/auth/admin-preview-standing", () => standing)
 
 import {
   createAdminPreviewToken,
+  readAdminPreviewRecord,
   readAdminPreviewToken,
   readLiveAdminPreviewClaim,
   sessionTokenFromCookieValue,
@@ -35,6 +47,11 @@ function post(path: string, cookie: string) {
 function clearsPreviewCookie(response: Response) {
   return /smba_admin_preview=;/u.test(response.headers.get("set-cookie") ?? "")
 }
+
+beforeEach(() => {
+  standing.adminPreviewStillStands.mockReset()
+  standing.adminPreviewStillStands.mockReturnValue(true)
+})
 
 describe("platform-owner preview claims", () => {
   it("binds a short-lived signed preview to its owner, target and sign-in", () => {
@@ -113,6 +130,42 @@ describe("platform-owner preview claims", () => {
     expect(clearsPreviewCookie(expired)).toBe(true)
   })
 
+  it("lets forms through once the owner's sign-in was ended from another device", () => {
+    // Log out other devices, Revoke, a password change or recovery on the
+    // phone: the laptop keeps its old sign-in cookie, which still matches the
+    // preview, but the server no longer has that sign-in.
+    standing.adminPreviewStillStands.mockReturnValue(false)
+    const response = post("/login", `${livePreviewCookie()}; ${SESSION_COOKIE}`)
+    expect(response.status).toBe(200)
+    expect(clearsPreviewCookie(response)).toBe(true)
+    expect(standing.adminPreviewStillStands).toHaveBeenCalledWith({
+      actorAccountId: "owner",
+      sessionToken: SESSION_TOKEN,
+      targetAccountId: "player",
+    })
+  })
+
+  it("asks the server only before refusing a form, and stays read-only if it cannot answer", () => {
+    const cookie = `${livePreviewCookie()}; ${SESSION_COOKIE}`
+    proxy(new NextRequest("http://localhost:3000/coach", { headers: { cookie }, method: "GET" }))
+    post("/admin/preview/exit", cookie)
+    expect(standing.adminPreviewStillStands).not.toHaveBeenCalled()
+
+    standing.adminPreviewStillStands.mockImplementation(() => {
+      throw new Error("database unavailable")
+    })
+    expect(post("/coach/actions", cookie).status).toBe(403)
+  })
+
+  it("still names the person viewed for the stop record after the hour runs out", () => {
+    const started = new Date(Date.now() - 65 * 60 * 1000)
+    const token = livePreviewCookie(started).split("=")[1]
+    expect(readAdminPreviewToken(token, "owner", SESSION_TOKEN)).toBeNull()
+    expect(readAdminPreviewRecord(token, "owner")).toMatchObject({ targetAccountId: "player" })
+    expect(readAdminPreviewRecord(token, "someone-else")).toBeNull()
+    expect(readAdminPreviewRecord(`${token}tampered`, "owner")).toBeNull()
+  })
+
   it("does not expose preview exit as a prefetchable GET link", () => {
     const markup = renderToStaticMarkup(AdminPreviewBanner({ label: "Head coach" }))
     expect(markup).toContain('action="/admin/preview/exit"')
@@ -120,10 +173,10 @@ describe("platform-owner preview claims", () => {
     expect(markup).not.toContain('href="/admin/preview/exit"')
   })
 
-  it("still offers Exit preview when the person being viewed is no longer available", () => {
+  it("says so, and offers to close the preview, when the person being viewed is no longer available", () => {
     const markup = renderToStaticMarkup(AdminPreviewBanner({ label: null }))
     expect(markup).toContain("no longer")
-    expect(markup).toContain("Exit preview")
+    expect(markup).toContain("Close preview")
     expect(markup).toContain('action="/admin/preview/exit"')
   })
 })

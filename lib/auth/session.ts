@@ -11,6 +11,7 @@ import {
   readLiveAdminPreviewClaim,
   sessionTokenFromCookieValue,
 } from "@/lib/auth/admin-preview"
+import { findAdminPreviewTarget } from "@/lib/auth/admin-preview-standing"
 import { createSessionIdentity, type SessionIdentity } from "@/lib/auth/identity"
 import { requestSecurityContext, writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { initializeDatabase } from "@/lib/db/client"
@@ -80,35 +81,14 @@ export class DatabaseSessionProvider implements SessionProvider {
     if (result.role === "platform_admin") {
       const previewToken = (await cookies()).get(ADMIN_PREVIEW_COOKIE)?.value
       const claim = readAdminPreviewToken(previewToken, result.accountId, rawSession.session?.token)
-      if (claim) {
-        const target = initializeDatabase().select({
-          accountId: accounts.id,
-          academyId: authMethods.identifier,
-          credentialStatus: authCredentialStates.status,
-          fullName: accounts.fullName,
-          role: accounts.role,
-        }).from(accounts)
-          .innerJoin(authMethods, and(
-            eq(authMethods.accountId, accounts.id),
-            eq(authMethods.method, "academy_id"),
-            isNull(authMethods.revokedAt),
-          ))
-          .innerJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
-          .where(and(
-            eq(accounts.id, claim.targetAccountId),
-            eq(accounts.approvalStatus, "approved"),
-            isNull(accounts.archivedAt),
-            eq(authCredentialStates.status, "active"),
-          ))
-          .get()
-        if (target?.role === "coach" || target?.role === "player") {
-          return createSessionIdentity({
-            ...target,
-            actorSubjectId: result.accountId,
-            previewMode: true,
-            role: target.role,
-          })
-        }
+      const target = claim ? findAdminPreviewTarget(claim.targetAccountId) : null
+      if (target) {
+        return createSessionIdentity({
+          ...target,
+          actorSubjectId: result.accountId,
+          previewMode: true,
+          role: target.role,
+        })
       }
     }
     return createSessionIdentity({ ...result, role: result.role })
@@ -139,12 +119,14 @@ export async function clearDatabaseSession() {
 }
 
 /**
- * Whether this browser holds a preview that still switches changes off --
- * the same test the proxy applies -- so a page can offer Exit preview when the
- * person being viewed is no longer available and the owner console is showing
- * instead of their dashboard.
+ * Whether this browser still holds the owner's preview cookie although the
+ * person it was showing can no longer be shown -- archived, or their sign-in
+ * revoked, mid-preview. Asked only once the request is already the owner's
+ * own: had that person still been there, it would be theirs instead. Such a
+ * preview no longer switches anything off (lib/auth/admin-preview-standing.ts),
+ * so the owner console says what happened and offers to close it.
  */
-export async function adminPreviewBlocksChanges() {
+export async function adminPreviewTargetGone() {
   const cookieStore = await cookies()
   const sessionCookie = AUTH_SESSION_COOKIE_NAMES
     .map((name) => cookieStore.get(name)?.value)

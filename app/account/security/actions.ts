@@ -57,9 +57,25 @@ export type RecoveryCodeReissueState = {
   errorField?: "currentPassword" | "secondFactor" | null
 }
 
-async function requireIdentity() {
+async function requireSignedIn() {
   const identity = await sessionProvider.getCurrentIdentity()
   if (!identity) throw new Error("Authentication is required.")
+  return identity
+}
+
+/*
+ * Every action here works on `identity.subjectId`, which during an admin
+ * preview is the person being viewed while the sign-in is the owner's. So
+ * Revoke would end that person's real sign-in, and Log out other devices would
+ * end the owner's while recording it as that person's act. The proxy already
+ * turns these forms away during a preview and the page sends a preview to
+ * /admin; this is the second lock, so read-only does not rest on one layer.
+ */
+async function requireIdentity() {
+  const identity = await requireSignedIn()
+  if (identity.previewMode) {
+    throw new Error("Admin preview is read-only. Exit preview before making changes.")
+  }
   return identity
 }
 
@@ -308,7 +324,7 @@ export async function reissueRecoveryCodesAction(
   _previousState: RecoveryCodeReissueState,
   formData: FormData,
 ): Promise<RecoveryCodeReissueState> {
-  const identity = await requireIdentity()
+  const identity = await requireSignedIn()
   // A previewing platform admin holds their own session while `identity`
   // describes the coach on screen, so the credential gates below would test one
   // account and Better Auth would reissue the other's codes. The page redirects

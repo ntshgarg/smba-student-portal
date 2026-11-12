@@ -5,7 +5,11 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 
-import { ADMIN_PREVIEW_COOKIE, createAdminPreviewToken } from "@/lib/auth/admin-preview"
+import {
+  ADMIN_PREVIEW_COOKIE,
+  ADMIN_PREVIEW_COOKIE_MAX_AGE_SECONDS,
+  createAdminPreviewToken,
+} from "@/lib/auth/admin-preview"
 import { getRawAuthSession } from "@/lib/auth/session"
 import {
   HEAD_COACH_SETUP_COOKIE,
@@ -61,7 +65,7 @@ export async function startAdminPreviewAction(formData: FormData) {
     targetAccountId,
   }), {
     httpOnly: true,
-    maxAge: 60 * 60,
+    maxAge: ADMIN_PREVIEW_COOKIE_MAX_AGE_SECONDS,
     path: "/",
     sameSite: "strict",
     secure: process.env.VERCEL === "1",

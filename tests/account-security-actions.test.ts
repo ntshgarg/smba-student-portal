@@ -72,9 +72,11 @@ vi.mock("@/lib/data", () => ({
 }))
 
 import {
+  changePasswordAction,
   reissueRecoveryCodesAction,
   removePinAction,
   revokeOtherSessionsAction,
+  revokeSessionAction,
   savePinAction,
 } from "@/app/account/security/actions"
 
@@ -350,5 +352,47 @@ describe("logging out other devices", () => {
     }))
     // Still never touches the PIN; see the action's own comment.
     expect(mocks.removePinCredential).not.toHaveBeenCalled()
+  })
+})
+
+describe("during an admin preview", () => {
+  /*
+   * Each of these acts on the identity, which during a preview is the person
+   * being viewed while the sign-in is the owner's. The proxy turns the forms
+   * away; this is the second lock, should a form ever get past it.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getCurrentIdentity.mockResolvedValue({
+      academyId: "SMBA-PL-0004",
+      actorSubjectId: "owner",
+      previewMode: true,
+      role: "player",
+      subjectId: "player-4",
+    })
+    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("verified")
+  })
+
+  it("refuses every account security change, before any credential or session is touched", async () => {
+    const pinForm = passwordData()
+    pinForm.set("pin", "482916")
+    pinForm.set("confirmPin", "482916")
+    const passwordForm = passwordData()
+    passwordForm.set("newPassword", "A brand new secure password!")
+    passwordForm.set("confirmPassword", "A brand new secure password!")
+
+    await expect(revokeSessionAction("player-session")).rejects.toThrow(/read-only/u)
+    await expect(revokeOtherSessionsAction()).rejects.toThrow(/read-only/u)
+    await expect(savePinAction({ error: null, success: null }, pinForm)).rejects.toThrow(/read-only/u)
+    await expect(removePinAction({ error: null, success: null }, passwordData())).rejects.toThrow(/read-only/u)
+    await expect(changePasswordAction({ error: null, success: null }, passwordForm))
+      .rejects.toThrow(/read-only/u)
+
+    expect(mocks.revokeOtherSessions).not.toHaveBeenCalled()
+    expect(mocks.forgetTrustedDevices).not.toHaveBeenCalled()
+    expect(mocks.verifyCurrentPasswordAttempt).not.toHaveBeenCalled()
+    expect(mocks.setPinCredential).not.toHaveBeenCalled()
+    expect(mocks.removePinCredential).not.toHaveBeenCalled()
+    expect(mocks.writeAuthSecurityEvent).not.toHaveBeenCalled()
   })
 })

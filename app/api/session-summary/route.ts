@@ -27,6 +27,7 @@ export async function GET() {
       account: {
         name: identity.fullName,
         initials: identity.initials,
+        ...(identity.previewMode ? { previewMode: true as const } : {}),
         role: identity.role,
       },
     })

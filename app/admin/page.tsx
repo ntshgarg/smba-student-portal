@@ -7,10 +7,12 @@ import { redirect } from "next/navigation"
 import { AccountMenu } from "@/components/account-menu"
 import { AdminDashboardDirectory } from "@/components/admin/admin-dashboard-directory"
 import { AdminAuthenticatorRecoveryQueue } from "@/components/admin/admin-authenticator-recovery-queue"
-import { AdminPreviewBanner } from "@/components/admin-preview-banner"
+import { AdminPreviewBanner, adminPreviewLabel } from "@/components/admin-preview-banner"
 import { openHeadCoachSetupAction } from "@/app/admin/actions"
 import type { SessionIdentity } from "@/lib/auth/identity"
-import { adminPreviewBlocksChanges } from "@/lib/auth/session"
+import { getCoachAccessProfile } from "@/lib/auth/coach-access"
+import { adminPreviewTargetGone } from "@/lib/auth/session"
+import { publicSiteUrl } from "@/lib/config"
 import { sessionProvider } from "@/lib/data"
 import { initializeDatabase } from "@/lib/db/client"
 import {
@@ -26,9 +28,13 @@ import {
 } from "@/lib/auth/recovery-service"
 import { listPendingAuthenticatorResetRequests } from "@/lib/auth/authenticator-reset-service"
 
-export const metadata: Metadata = {
-  title: "Platform owner",
-  robots: { follow: false, index: false },
+export async function generateMetadata(): Promise<Metadata> {
+  const identity = await sessionProvider.getCurrentIdentity()
+  return {
+    // While a preview is open this page is not the owner console.
+    title: identity?.previewMode ? "Admin preview" : "Platform owner",
+    robots: { follow: false, index: false },
+  }
 }
 
 /*
@@ -39,16 +45,45 @@ export const metadata: Metadata = {
  * still owing a recovery email, back here again until the browser gave up. It
  * now says where they are and offers the way out.
  */
-function PreviewStillOpen({ identity }: { identity: SessionIdentity }) {
+function PreviewStillOpen({ identity }: {
+  identity: SessionIdentity & { role: "coach" | "player" }
+}) {
   const dashboard = identity.role === "coach" ? "/coach" : "/player"
-  const roleLabel = identity.role === "coach" ? "Coach" : "Player"
+  const label = adminPreviewLabel({
+    coachAccessLevel: identity.role === "coach"
+      ? getCoachAccessProfile(identity.subjectId)?.accessLevel
+      : null,
+    fullName: identity.fullName,
+    role: identity.role,
+  })
   return (
     <>
-      <AdminPreviewBanner label={`${identity.fullName} · ${roleLabel}`} />
+      <AdminPreviewBanner label={label} />
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+      <header className="portal-header">
+        <Link className="portal-brand" href={dashboard} aria-label={`Back to ${identity.firstName}’s dashboard`}>
+          <Image
+            src="/images/smba-logo.png"
+            alt="Sathiya Moorthy Badminton Academy"
+            width={720}
+            height={488}
+            priority
+          />
+          <span>
+            Admin <em>Preview</em>
+          </span>
+        </Link>
+
+        {/* The same preview menu as on the person's own pages: its Log out
+            leaves through Exit preview, the one form the preview allows. */}
+        <AccountMenu account={identity} previewMode publicSiteHref={publicSiteUrl} />
+      </header>
       <main id="main-content" className="admin-page page-shell" tabIndex={-1}>
         <section className="admin-preview-panel" aria-labelledby="admin-preview-title">
           <header>
-            <h2 id="admin-preview-title">You are still viewing {identity.firstName}’s dashboard</h2>
+            <h1 id="admin-preview-title">You are still viewing {identity.firstName}’s dashboard</h1>
             <p>The owner console and account settings open again once you exit the preview.</p>
           </header>
           <p>
@@ -62,12 +97,14 @@ function PreviewStillOpen({ identity }: { identity: SessionIdentity }) {
 
 export default async function AdminPage() {
   const identity = await sessionProvider.getCurrentIdentity()
-  if (identity?.previewMode) return <PreviewStillOpen identity={identity} />
+  if (identity?.previewMode && identity.role !== "platform_admin") {
+    return <PreviewStillOpen identity={{ ...identity, role: identity.role }} />
+  }
   if (!identity || identity.role !== "platform_admin") redirect("/login")
   if (recoveryEmailEnrollmentRequired(identity.subjectId)) {
     redirect("/account/recovery-email/setup")
   }
-  const previewStillBlocksChanges = await adminPreviewBlocksChanges()
+  const previewTargetGone = await adminPreviewTargetGone()
   const database = initializeDatabase()
   const targets = database.select({
     academyId: authMethods.identifier,
@@ -104,7 +141,7 @@ export default async function AdminPage() {
 
   return (
     <>
-      {previewStillBlocksChanges ? <AdminPreviewBanner label={null} /> : null}
+      {previewTargetGone ? <AdminPreviewBanner label={null} /> : null}
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
