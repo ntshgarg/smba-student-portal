@@ -522,6 +522,17 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     }
   }
 
+  // The staff list is server data, so the archived coach's row leaves when the
+  // page refreshes; this closes it and says what happened in the meantime.
+  function noteStaffArchived(staffMember: AcademyStaffMember) {
+    setExpandedMemberId(null)
+    setDirectoryFeedback({
+      message: `${staffMember.fullName} archived and their sign-in switched off`,
+      tone: "success",
+    })
+    focusAfterRender(() => directorySummaryRef.current)
+  }
+
   function planForClassification(
     nextLevel: MemberDraft["level"],
     nextBatch: MemberDraft["batch"],
@@ -600,6 +611,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     hasDirectoryCriteria,
     hasMoreMembers,
     memberFeedback,
+    noteStaffArchived,
     openMember,
     players,
     resetFilters,

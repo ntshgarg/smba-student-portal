@@ -71,6 +71,39 @@ export function monthEnd(period: string) {
   return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10)
 }
 
+/**
+ * Whether a mid-month withdrawal refund on a month's fee may still close the
+ * fee plan that fee was issued under. Recording the refund ends the plan on the
+ * withdrawal date, so the plan must be one that a withdrawal can still end:
+ *
+ * - it is still running; or
+ * - an earlier withdrawal refund ended it and was then reversed, so the refund
+ *   is being recorded again; or
+ * - training was ended with fees stopped after this month ("They have left
+ *   already" in Members), which ends the plan on the last day of the month. The
+ *   family left during the month, so the unused days can still be refunded, and
+ *   the refund moves the plan's end back to the day they left. A plan that ended
+ *   only because a newer one replaced it is not this case: the player is still
+ *   training, so nothing is refunded.
+ */
+export function withdrawalCanClosePlan({
+  agreement,
+  laterPlanExists,
+  period,
+  reversedRefundOn,
+}: {
+  agreement: { effectiveTo: string | null; status: string } | null | undefined
+  laterPlanExists: boolean
+  period: string
+  reversedRefundOn: string | null | undefined
+}) {
+  if (!agreement) return false
+  if (agreement.status === "active") return true
+  if (agreement.status !== "ended" || !agreement.effectiveTo) return false
+  if (reversedRefundOn === agreement.effectiveTo) return true
+  return agreement.effectiveTo === monthEnd(period) && !laterPlanExists
+}
+
 export function calculateUnusedMonthRefundLimit(
   effectiveAmountPaise: number,
   billingPeriod: string,

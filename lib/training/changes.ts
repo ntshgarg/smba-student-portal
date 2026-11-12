@@ -34,6 +34,12 @@ import {
   isFinanceActive,
 } from "@/lib/finance/service"
 import { loadChargeView } from "@/lib/finance/repository"
+import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
+import {
+  SCHEDULE_CHANGE_CONCESSION_KEY,
+  SCHEDULE_CHANGE_FEE_KEY,
+  planThisMonthFeeCorrection,
+} from "@/lib/training/this-month-fee-plan"
 import { getAcademyDateKey } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
@@ -563,7 +569,8 @@ export type ChangeThisMonthInput = TrainingSelection & {
 export type ChangeThisMonthResult = {
   adjustment: { amountPaise: number; kind: "manual_credit" | "manual_debit" } | null
   clearedMarks: Array<{ choice: string; occurrenceDate: string }>
-  refundNeededPaise: number
+  /** What is due for this month after the change, when its fee was corrected. */
+  newAmountPaise: number | null
   startsOn: string
 }
 
@@ -725,7 +732,7 @@ export function changeScheduleThisMonth(
       const result: ChangeThisMonthResult = {
         adjustment: null,
         clearedMarks: marks.map((mark) => ({ choice: mark.choice, occurrenceDate: mark.occurrenceDate })),
-        refundNeededPaise: 0,
+        newAmountPaise: null,
         startsOn,
       }
       // A change of session time alone leaves the fee exactly as it is.
@@ -767,36 +774,45 @@ export function changeScheduleThisMonth(
       }
 
       if (!monthCharge || covering.agreedMonthlyFeePaise === fee) return result
-      // A first month may have been charged for part of the month, so the
-      // corrected amount keeps that same share of the new fee.
-      const corrected = Math.round(
-        monthCharge.charge.originalAmountPaise * fee / covering.agreedMonthlyFeePaise,
-      )
-      const delta = corrected - monthCharge.charge.originalAmountPaise
-      if (delta === 0) return result
-      if (delta > 0) {
-        applyChargeAdjustmentInTransaction(tx, {
-          amountPaise: delta,
-          chargeId: monthCharge.charge.id,
-          idempotencyKey: `schedule-change-adj:${createId()}`,
-          kind: "manual_debit",
+      // Nothing has been paid on this month's fee (a payment locks the level,
+      // batch and plan above), so the whole correction lands on what is due.
+      const basis = loadThisMonthFeeBases(tx, [{
+        feePaise: covering.agreedMonthlyFeePaise,
+        id: monthCharge.charge.id,
+        originalAmountPaise: monthCharge.charge.originalAmountPaise,
+      }]).get(monthCharge.charge.id)
+      if (!basis) return result
+      const plan = planThisMonthFeeCorrection(basis, fee)
+      const posts = [
+        {
+          amountPaise: plan.grossDeltaPaise,
+          key: SCHEDULE_CHANGE_FEE_KEY,
           reason,
-        }, { actorId: coachId, createId, now })
-        result.adjustment = { amountPaise: delta, kind: "manual_debit" }
-        return result
-      }
-      const credit = Math.min(-delta, monthCharge.outstandingPaise)
-      if (credit > 0) {
+        },
+        {
+          // More concession is a credit, less is a debit.
+          amountPaise: -plan.concessionDeltaPaise,
+          key: SCHEDULE_CHANGE_CONCESSION_KEY,
+          reason: `Concession recalculated for the new fee in ${monthLabel}`,
+        },
+      ].filter((post) => post.amountPaise !== 0)
+        // Debits first, so a credit never runs ahead of what is due.
+        .sort((first, second) => second.amountPaise - first.amountPaise)
+      for (const post of posts) {
+        const due = thisMonthCharge(tx, input.playerId, monthStart, now)?.outstandingPaise ?? 0
+        const amountPaise = post.amountPaise > 0 ? post.amountPaise : Math.min(-post.amountPaise, due)
+        if (amountPaise <= 0) continue
+        const kind = post.amountPaise > 0 ? "manual_debit" as const : "manual_credit" as const
         applyChargeAdjustmentInTransaction(tx, {
-          amountPaise: credit,
+          amountPaise,
           chargeId: monthCharge.charge.id,
-          idempotencyKey: `schedule-change-adj:${createId()}`,
-          kind: "manual_credit",
-          reason,
+          idempotencyKey: `${post.key}${createId()}`,
+          kind,
+          reason: post.reason,
         }, { actorId: coachId, createId, now })
-        result.adjustment = { amountPaise: credit, kind: "manual_credit" }
+        if (post.key === SCHEDULE_CHANGE_FEE_KEY) result.adjustment = { amountPaise, kind }
       }
-      result.refundNeededPaise = -delta - credit
+      result.newAmountPaise = thisMonthCharge(tx, input.playerId, monthStart, now)?.outstandingPaise ?? null
       return result
     }, { behavior: "immediate" })
   } catch (error) {

@@ -41,6 +41,8 @@ describe("Financials V1 service", () => {
 
   const coachId = "00000000-0000-4000-8000-000000000001"
   const now = new Date("2026-08-08T10:00:00+05:30")
+  // A month's fees can be issued once that month has begun.
+  const monthBegun = (period: string) => new Date(`${period}-01T10:00:00+05:30`)
   const ids = valueFactory("finance")
   const references = referenceFactory()
   let legacyPlayerId = ""
@@ -806,7 +808,7 @@ describe("Financials V1 service", () => {
     const september = finance.prepareMonthlyCharges({
       period: "2026-09",
       idempotencyKey: "prepare-2026-09",
-    }, { coachId, createFeeReference: references, createId: ids, database, now })
+    }, { coachId, createFeeReference: references, createId: ids, database, now: monthBegun("2026-09") })
     expect(september.ready).toBe(2)
     expect(database.select().from(schema.financialCharges).where(and(
       eq(schema.financialCharges.playerAccountId, activePlayerId),
@@ -818,7 +820,7 @@ describe("Financials V1 service", () => {
     const november = finance.prepareMonthlyCharges({
       period: "2026-11",
       idempotencyKey: "prepare-2026-11",
-    }, { coachId, createFeeReference: references, createId: ids, database, now })
+    }, { coachId, createFeeReference: references, createId: ids, database, now: monthBegun("2026-11") })
     expect(november.createdChargeIds).toHaveLength(0)
     expect(november.awaitingAssignment).toBeGreaterThan(0)
     expect(database.select().from(schema.financialCharges).where(and(
@@ -1072,7 +1074,7 @@ describe("Financials V1 service", () => {
     finance.prepareMonthlyCharges({
       period: "2026-09",
       idempotencyKey: "prepare-programme-transition-stale-agreement",
-    }, { coachId, createFeeReference, createId: ids, database, now })
+    }, { coachId, createFeeReference, createId: ids, database, now: monthBegun("2026-09") })
     expect(database.select().from(schema.financialCharges).where(and(
       eq(schema.financialCharges.playerAccountId, playerId),
       eq(schema.financialCharges.billingPeriod, "2026-09"),
@@ -1130,7 +1132,7 @@ describe("Financials V1 service", () => {
     const prepared = finance.prepareMonthlyCharges({
       period: "2026-09",
       idempotencyKey: "prepare-programme-transition-matching-profile",
-    }, { coachId, createFeeReference, createId: ids, database, now })
+    }, { coachId, createFeeReference, createId: ids, database, now: monthBegun("2026-09") })
     expect(prepared).toMatchObject({ ready: 1, reused: false })
     expect(prepared.createdChargeIds).toHaveLength(1)
     const charges = database.select().from(schema.financialCharges).where(and(
@@ -1148,7 +1150,7 @@ describe("Financials V1 service", () => {
     expect(finance.prepareMonthlyCharges({
       period: "2026-09",
       idempotencyKey: "prepare-programme-transition-matching-profile",
-    }, { coachId, createFeeReference, createId: ids, database, now })).toMatchObject({
+    }, { coachId, createFeeReference, createId: ids, database, now: monthBegun("2026-09") })).toMatchObject({
       createdChargeIds: prepared.createdChargeIds,
       ready: 1,
       reused: true,

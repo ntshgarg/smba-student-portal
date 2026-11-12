@@ -136,6 +136,18 @@ export type ArchiveMemberInput = {
   expectedRevision: number
 }
 
+export type ArchiveCoachInput = {
+  coachAccountId: string
+}
+
+export type ArchiveCoachResult =
+  | { ok: true; coachAccountId: string }
+  | {
+      ok: false
+      code: "HEAD_COACH" | "NOT_FOUND" | "SELF"
+      message: string
+    }
+
 export type ArchiveMemberResult =
   | { ok: true; memberId: string }
   | {
