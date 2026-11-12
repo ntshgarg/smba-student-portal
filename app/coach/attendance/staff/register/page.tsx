@@ -3,10 +3,10 @@ import { buildAttendanceRegisterYearOptions } from "@/lib/attendance/register-wo
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { academyToday } from "@/lib/clock"
 import {
-  listAcademyClosures,
   listJuniorCoachAttendanceRegisterProfiles,
   listStaffAttendanceRecordsByCoach,
 } from "@/lib/coach/staff-attendance"
+import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
 
 export const metadata = {
   title: "Staff attendance register",
@@ -34,7 +34,7 @@ export default async function StaffAttendanceRegisterPage() {
 
   return (
     <StaffAttendanceRegister
-      holidays={listAcademyClosures({ from, to })}
+      holidays={listAcademyHolidaysInWindow(from, to)}
       referenceDate={referenceDate}
       yearOptions={yearOptions}
       juniorCoaches={juniorCoaches.map((coach) => ({

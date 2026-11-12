@@ -19,12 +19,13 @@ import {
   type SmbaDatabaseExecutor,
 } from "@/lib/db/client"
 import {
-  academyHolidays,
   academyIdAllocations,
   accounts,
   coachProfiles,
   staffAttendanceRecords,
 } from "@/lib/db/schema"
+import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
+import { academyHolidaysOnDates } from "@/lib/sessions/holidays"
 
 export type StaffAttendanceChoice = "present" | "absent" | "cleared"
 
@@ -271,43 +272,12 @@ export function listStaffAttendanceRecords({
   }).get(coachAccountId) ?? []
 }
 
-/**
- * Days the academy was closed in a range, for the staff screens. A closure is
- * date-keyed precisely so it reaches staff attendance, which never reads
- * sessions (see `academyHolidays` in lib/db/schema.ts).
- */
-export function listAcademyClosures({
-  database = initializeDatabase(),
-  from,
-  to,
-}: {
-  database?: SmbaDatabaseExecutor
-  from: string
-  to: string
-}): Array<{ dateKey: string; label: string }> {
-  assertDateRange(from, to)
-  return database.select({
-    dateKey: academyHolidays.dateKey,
-    label: academyHolidays.label,
-  }).from(academyHolidays).where(and(
-    gte(academyHolidays.dateKey, from),
-    lte(academyHolidays.dateKey, to),
-  )).orderBy(asc(academyHolidays.dateKey)).all()
-}
-
-/**
- * A closed day leaves the count entirely, as it does for players: nobody is
- * absent from an academy that was shut. A mark saved before the day was closed
- * is kept, so removing the holiday counts it again.
- */
+/** A closed day leaves the count, as it does for players. */
 export function getStaffAttendanceSummary(
   input: AttendanceReadInput,
 ): StaffAttendanceSummary {
-  const closed = new Set(listAcademyClosures({
-    database: input.database,
-    from: input.from,
-    to: input.to,
-  }).map((closure) => closure.dateKey))
+  const closed = new Set(listAcademyHolidaysInWindow(input.from, input.to, input.database)
+    .map((holiday) => holiday.dateKey))
   const records = listStaffAttendanceRecords(input)
     .filter((record) => !closed.has(record.dateKey))
   const present = records.filter((record) => record.choice === "present").length
@@ -436,16 +406,7 @@ export function saveStaffAttendanceRecords({
       changes.map((change) => change.coachAccountId),
     )
     const storedChoices = loadStoredStaffChoices(transaction, changes)
-    const changedDates = [...new Set(changes.map((change) => change.dateKey))]
-      .filter((dateKey) => isValidDateKey(dateKey))
-    const closures = new Map(changedDates.length
-      ? transaction.select({
-        dateKey: academyHolidays.dateKey,
-        label: academyHolidays.label,
-      }).from(academyHolidays)
-        .where(inArray(academyHolidays.dateKey, changedDates)).all()
-        .map((closure) => [closure.dateKey, closure.label])
-      : [])
+    const closures = academyHolidaysOnDates(transaction, changes.map((change) => change.dateKey))
     // Every validation below stays in its original position, so the change that
     // failed first still fails first with the same code. Deferring the writes is
     // invisible: an error rolls the transaction back either way, and the
@@ -510,14 +471,12 @@ export function saveStaffAttendanceRecords({
           "changes",
         )
       }
-      // Only a new mark is refused. Clearing records nothing on the closed day,
-      // so it is let through; no screen offers it, because a mark saved before
-      // the closure is kept, hidden and uncounted, and returns with the day.
+      // Clearing records nothing, so only a new mark is refused.
       const closure = closures.get(change.dateKey)
       if (closure && change.choice !== "cleared") {
         operationalActionError(
           "BUSINESS_RULE",
-          `The academy was closed on this day for ${closure}, so there is no staff attendance to mark.`,
+          `The academy was closed on this day for ${closure.label}, so there is no staff attendance to mark.`,
           "changes",
         )
       }

@@ -31,7 +31,7 @@ type PersonalStaffAttendanceRecord = {
 
 export type JuniorCoachAttendanceView = {
   /** Days the academy was closed; they are shown as closed, not "not recorded". */
-  holidays?: Array<{ dateKey: string; label: string }>
+  holidays: Array<{ dateKey: string; label: string }>
   joinedOn: string
   monthLabel: string
   referenceDate: string

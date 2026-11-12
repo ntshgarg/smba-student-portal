@@ -80,14 +80,14 @@ type SaveFeedback = ActionFeedback & {
 const saveDeadlineMs = 15_000
 
 export function StaffRollCall({
-  closedFor = null,
+  closedFor,
   initialDate,
   initialRecords,
   juniorCoaches,
   referenceDate,
 }: {
   /** The holiday's name when the academy was closed on this date. */
-  closedFor?: string | null
+  closedFor: string | null
   initialDate: string
   initialRecords: StaffRecord[]
   juniorCoaches: StaffMember[]
@@ -118,14 +118,8 @@ export function StaffRollCall({
     [drafts],
   )
   const futureDate = selectedDate > referenceDate
-  // The page is keyed by date, so this is always the closure for the date on
-  // screen. Nothing is marked on a closed day, so nobody is shown as missing.
-  //
-  // A mark saved before the day was closed is kept but does not count, exactly
-  // as for players, so it is not shown here either: the register shows the
-  // same cell as Holiday, and removing the holiday brings the mark back. Marks
-  // made on this device but never saved are left where they are for the same
-  // reason, and are not offered for saving on a day nothing can be saved on.
+  // Nothing is marked on a closed day; a mark saved before the closure is
+  // kept, uncounted and hidden, and returns if the holiday is removed.
   const closedDay = Boolean(closedFor) && selectedDate === initialDate
   // Carried on the save button as `aria-disabled` rather than `disabled`:
   // disabling the element that currently holds focus hands focus to `<body>`,

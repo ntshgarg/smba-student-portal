@@ -31,7 +31,6 @@ import {
 } from "@/lib/coach/database"
 import {
   getStaffAttendanceSummary,
-  listAcademyClosures,
   listStaffAttendanceRecords,
 } from "@/lib/coach/staff-attendance"
 import {
@@ -47,6 +46,7 @@ import {
   formatSessionLabel,
 } from "@/lib/format"
 import { currentGreeting } from "@/lib/greeting"
+import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
 import { resolveNextScheduledOccurrence } from "@/lib/sessions/domain"
 import { scheduleIsRunning } from "@/lib/sessions/term"
 import { listTermFinishedPlayersToMove } from "@/lib/training/member-summaries"
@@ -97,10 +97,10 @@ export default async function CoachDashboardPage({
       to: `${years[years.length - 1]}-12-31`,
     })
     const attendance: JuniorCoachAttendanceView = {
-      holidays: listAcademyClosures({
-        from: `${years[0]}-01-01`,
-        to: `${years[years.length - 1]}-12-31`,
-      }),
+      holidays: listAcademyHolidaysInWindow(
+        `${years[0]}-01-01`,
+        `${years[years.length - 1]}-12-31`,
+      ),
       joinedOn: access.joinedOn,
       monthLabel: formatDateKey(`${month}-01`, {
         day: undefined,

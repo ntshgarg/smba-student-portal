@@ -116,11 +116,6 @@ export function holidayRemovedMessage(
   return parts.join(" ")
 }
 
-/** A removal the server turned down, naming the day it was for. */
-export function holidayRemovalRefusedMessage(dateKey: string, reason: string) {
-  return `The holiday on ${formatDateKey(dateKey)} was not removed. ${reason}`
-}
-
 /**
  * Why a cancelled session is off, as far as this screen can tell: a holiday, a
  * move to another day or time (when the session it ended up as is in the loaded
@@ -479,7 +474,7 @@ export function SessionCalendar({
                     .then((result) => {
                       if (!result.ok) {
                         setHolidayFeedback({
-                          message: holidayRemovalRefusedMessage(dateKey, result.message),
+                          message: `The holiday on ${day} was not removed. ${result.message}`,
                           tone: "error",
                         })
                         return
@@ -830,10 +825,8 @@ function MonthGrid({
          * sessions" -- the same as a Sunday, which is the confusion the whole
          * feature exists to remove.
          *
-         * A closed day should hold no live session (every way onto it now
-         * cancels or refuses one, and drizzle/0038 repaired the ones left from
-         * before). If one is there anyway it is shown, not hidden behind
-         * "Holiday", so the grid never disagrees with the day view.
+         * A live session on a closed day (left from before such moves were
+         * refused) is shown, so the grid never disagrees with the day view.
          */
         const label = holiday
           ? `${formatDateKey(dateKey)}, closed for ${holiday.label}${count ? `, but ${count} ${count === 1 ? "session is" : "sessions are"} still scheduled` : ""}`

@@ -12,7 +12,6 @@ import {
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { formatSessionLabel } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import { academyBatchesFor, academyPlanLabel } from "@/lib/training/academy-plans"
@@ -75,18 +74,17 @@ export function SessionScheduleCreate({
   initialBatch,
   initialPlayerId = null,
   initialProgramme,
-  today: academyToday,
+  today,
 }: {
   initialBatch?: TrainingBatch
   initialPlayerId?: string | null
   initialProgramme?: TrainingProgramme
   /** The academy's date from the server, so a wrong phone clock cannot move the default start. */
-  today?: string
+  today: string
 }) {
   const { players } = useMemberPortal()
   const { createSessionSeries } = useSessionPortal()
   const router = useRouter()
-  const today = academyToday ?? getIndiaDateKey()
   const guidedPlayer = initialPlayerId
     ? players.find((player) => player.member.id === initialPlayerId) ?? null
     : null

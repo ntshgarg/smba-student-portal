@@ -487,6 +487,7 @@ describe("attendance registers restore their own drafts", () => {
 
     stubBrowser(storage).mount(
       <StaffRollCall
+        closedFor={null}
         initialDate="2026-08-21"
         initialRecords={[]}
         juniorCoaches={[{
@@ -545,6 +546,7 @@ describe("attendance registers restore their own drafts", () => {
   function mountRollCall(storage: Storage) {
     return stubBrowser(storage).mount(
       <StaffRollCall
+        closedFor={null}
         initialDate="2026-08-21"
         initialRecords={[{ choice: "present", coachAccountId: "coach-1" }]}
         juniorCoaches={[{

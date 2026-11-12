@@ -9,7 +9,7 @@ export type JuniorCoachAttendanceCalendarState =
   | "closed"
 
 type JuniorCoachAttendanceCalendarSource = {
-  holidays?: Array<{ dateKey: string; label: string }>
+  holidays: Array<{ dateKey: string; label: string }>
   joinedOn: string
   records: Array<{
     choice: "present" | "absent" | "cleared"
@@ -50,7 +50,7 @@ export function buildJuniorCoachAttendanceCalendar(
     if (record.choice !== "cleared") choices.set(record.dateKey, record.choice)
   })
   const dateKeys = buildPlayerAttendanceCalendarDates(activeYear, activeMonth)
-  const holidayByDate = new Map((attendance.holidays ?? []).map(
+  const holidayByDate = new Map(attendance.holidays.map(
     (holiday) => [holiday.dateKey, holiday.label],
   ))
 

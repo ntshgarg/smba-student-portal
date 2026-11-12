@@ -64,6 +64,7 @@ function auditedAugustLedger() {
   const referenceYear = Number(referenceDate.slice(0, 4))
   return buildJuniorCoachAttendanceCalendar(
     {
+      holidays: [],
       joinedOn: "2026-07-01",
       records: recordedLedgerDays,
       referenceDate,

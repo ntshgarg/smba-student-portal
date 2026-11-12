@@ -191,11 +191,6 @@
       "tag": "0037_training_change_notices",
       "when": 1794506060556,
       "sha256": "81b412a51e0f7a79c5806b4975d55da7c0c523997d3bf61708e09b5df78dacaf"
-    },
-    {
-      "tag": "0038_repair_sessions_on_closed_days",
-      "when": 1794521911561,
-      "sha256": "4172904fbc051eb0a338886092853fc0d023c738ed54cd7767f271e5cc7022fe"
     }
   ]
 }

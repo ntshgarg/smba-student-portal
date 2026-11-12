@@ -5,10 +5,10 @@ import { isValidDateKey } from "@/lib/attendance/domain"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { academyToday } from "@/lib/clock"
 import {
-  listAcademyClosures,
   listJuniorCoachProfiles,
   listStaffAttendanceRecordsByCoach,
 } from "@/lib/coach/staff-attendance"
+import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
 
 export const metadata = {
   title: "Staff roll call",
@@ -49,7 +49,7 @@ export default async function StaffRollCallPage({
   return (
     <StaffRollCall
       key={selectedDate}
-      closedFor={listAcademyClosures({ from: selectedDate, to: selectedDate })[0]?.label ?? null}
+      closedFor={listAcademyHolidaysInWindow(selectedDate, selectedDate)[0]?.label ?? null}
       initialDate={selectedDate}
       initialRecords={records.map((record) => ({
         choice: record.choice,

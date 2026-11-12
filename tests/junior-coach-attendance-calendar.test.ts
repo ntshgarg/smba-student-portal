@@ -5,6 +5,7 @@ import { buildJuniorCoachAttendanceCalendar } from "@/components/coach/junior-co
 describe("Assistant coach attendance month calendar", () => {
   it("builds a Monday-first grid and preserves each daily attendance state", () => {
     const calendar = buildJuniorCoachAttendanceCalendar({
+      holidays: [],
       joinedOn: "2026-08-01",
       referenceDate: "2026-08-11",
       records: [

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm"
 
 import { operationalActionError } from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
@@ -9,7 +9,6 @@ import type { SmbaDatabase, SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   academyHolidays,
   attendanceAdjustments,
-  sessionAssignments,
   sessionAttendanceRecords,
   sessionOccurrences,
   sessionSeries,
@@ -380,13 +379,8 @@ export function markAcademyHolidays({
 export type RetractAcademyHolidayResult = {
   dateKey: string
   restoredSessions: number
-  /**
-   * Sessions the closure had cancelled that stay off: their schedule has since
-   * been ended, or the schedule already has a session on this day because one
-   * was moved onto it.
-   */
+  /** Suspended sessions left cancelled: their schedule has ended or already has a session that day. */
   keptCancelledSessions: number
-  /** Make-ups the closure had flagged for review, now back as they were. */
   reviewFlagsCleared: number
 }
 
@@ -395,29 +389,8 @@ export type RetractAcademyHolidayResult = {
  *
  * Restoring only rows carrying this holiday's id is what keeps the operation
  * honest: a session the coach had cancelled individually before the holiday was
- * declared has a null `holiday_id` and stays cancelled.
- *
- * Two kinds of suspended session stay off rather than come back:
- *
- * - One of a schedule that has been ended, on a day that came after it ended.
- *   Ending a schedule cancels its future sessions and closes every player's
- *   place, so reviving one would put a session with nobody on it back on the
- *   calendar. `endSessionSeriesRecords` now detaches these itself when the
- *   schedule is ended; this covers schedules ended before it did. Nothing
- *   records when a schedule was ended, but ending it closes every place on the
- *   day it ends, so a day that no place on the schedule covers is a day after
- *   the end (or one nobody was ever on). That holds whether the day is still
- *   ahead or has already passed by the time the holiday is removed.
- * - One whose schedule already has a session on this day, because a session was
- *   moved onto it while the day was closed (possible before moves onto a closed
- *   day were refused). That moved session stands for the schedule on this day.
- *   This used to refuse the whole removal, and once the day had passed nothing
- *   could clear the way, so the holiday could never be removed. If the moved
- *   session was itself cancelled by this holiday (the one-off repair in
- *   drizzle/0038 does that), it is the one that comes back.
- *
- * Either way the row is detached from the holiday and left as an ordinary
- * cancellation, exactly as if it had been cancelled on its own.
+ * declared has a null `holiday_id` and stays cancelled. A session of a schedule
+ * ended since, or whose schedule already has a session that day, stays off.
  */
 export function retractAcademyHoliday({
   coachId,
@@ -444,7 +417,6 @@ export function retractAcademyHoliday({
 
     const suspended = tx.select({
       id: sessionOccurrences.id,
-      replacementForOccurrenceId: sessionOccurrences.replacementForOccurrenceId,
       seriesId: sessionOccurrences.seriesId,
       startsAt: sessionOccurrences.startsAt,
     }).from(sessionOccurrences)
@@ -457,66 +429,23 @@ export function retractAcademyHoliday({
         eq(sessionSeries.status, "ended"),
       )).all().map((series) => series.id)
       : [])
-    // Ended schedules with a place that still covered this day: the day came
-    // before the schedule ended, so its session is part of the record.
-    const endedSeriesOpenThatDay = new Set(endedSeries.size
-      ? tx.select({ seriesId: sessionAssignments.seriesId }).from(sessionAssignments).where(and(
-        inArray(sessionAssignments.seriesId, [...endedSeries]),
-        lte(sessionAssignments.effectiveFrom, dateKey),
-        or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, dateKey)),
-      )).all().map((place) => place.seriesId)
-      : [])
     // `session_occurrences_series_date_idx` is unique on (series, date) over
-    // scheduled rows, so reviving into an occupied slot would also fail outright.
+    // scheduled rows, so a schedule that already has a session here keeps it.
     const occupiedSeries = new Set(suspended.length
       ? tx.select({ seriesId: sessionOccurrences.seriesId }).from(sessionOccurrences).where(and(
         eq(sessionOccurrences.occurrenceDate, dateKey),
         eq(sessionOccurrences.status, "scheduled"),
       )).all().map((row) => row.seriesId)
       : [])
-    // `session_occurrences_active_replacement_idx` likewise allows one live
-    // replacement per original session.
-    const movedOriginals = [...new Set(suspended
-      .map((occurrence) => occurrence.replacementForOccurrenceId)
-      .filter((id): id is string => id !== null))]
-    const liveReplacementFor = new Set(movedOriginals.length
-      ? tx.select({ originalId: sessionOccurrences.replacementForOccurrenceId })
-        .from(sessionOccurrences).where(and(
-          inArray(sessionOccurrences.replacementForOccurrenceId, movedOriginals),
-          eq(sessionOccurrences.status, "scheduled"),
-        )).all().map((row) => row.originalId)
-      : [])
 
-    const scheduleEndedBeforeThisDay = (occurrence: (typeof suspended)[number]) => (
-      endedSeries.has(occurrence.seriesId)
-      && (!endedSeriesOpenThatDay.has(occurrence.seriesId) || occurrenceIsUpcoming(occurrence, now))
-    )
-    /*
-     * At most one session per schedule comes back on this day. A moved session
-     * goes first: it is the coach's latest word on when that schedule trains.
-     */
-    const candidates = suspended
-      .filter((occurrence) => !occupiedSeries.has(occurrence.seriesId))
-      .filter((occurrence) => !scheduleEndedBeforeThisDay(occurrence))
-      .filter((occurrence) => (
-        occurrence.replacementForOccurrenceId === null
-        || !liveReplacementFor.has(occurrence.replacementForOccurrenceId)
-      ))
-      .sort((first, second) => (
-        Number(first.replacementForOccurrenceId === null)
-          - Number(second.replacementForOccurrenceId === null)
-        || first.startsAt.getTime() - second.startsAt.getTime()
-        || first.id.localeCompare(second.id)
-      ))
-    const restoringSeries = new Set<string>()
-    const restore = candidates.filter((occurrence) => {
-      if (restoringSeries.has(occurrence.seriesId)) return false
-      restoringSeries.add(occurrence.seriesId)
-      return true
-    }).map((occurrence) => occurrence.id)
-    const restoreIds = new Set(restore)
-    const stayOff = suspended.filter((occurrence) => !restoreIds.has(occurrence.id))
-      .map((occurrence) => occurrence.id)
+    // Ending a schedule cancels all its future sessions, so an upcoming one of
+    // an ended schedule must stay off.
+    const restore = suspended.filter((occurrence) => (
+      !occupiedSeries.has(occurrence.seriesId)
+      && !(endedSeries.has(occurrence.seriesId) && occurrenceIsUpcoming(occurrence, now))
+    )).map((occurrence) => occurrence.id)
+    const stayOff = suspended.map((occurrence) => occurrence.id)
+      .filter((id) => !restore.includes(id))
 
     if (stayOff.length) {
       tx.update(sessionOccurrences).set({ holidayId: null })
@@ -525,24 +454,20 @@ export function retractAcademyHoliday({
     const restoredSessions = restore.length
       ? tx.update(sessionOccurrences)
         .set({ holidayId: null, status: "scheduled" })
-        .where(and(
-          inArray(sessionOccurrences.id, restore),
-          eq(sessionOccurrences.holidayId, holiday.id),
-        )).run().changes
+        .where(inArray(sessionOccurrences.id, restore)).run().changes
       : 0
 
-    /*
-     * `markAcademyHolidays` flags a make-up completed on the closed day with the
-     * closure's own timestamp, and only one that was not already flagged.
-     * Matching that exact timestamp clears what this closure raised and leaves a
-     * flag raised for any other reason in place.
-     */
+    // Clear the review flags this closure raised (stamped with its createdAt):
+    // make-ups completed on this day, or making up a session it suspended.
     const reviewFlagsCleared = tx.update(attendanceAdjustments)
       .set({ reviewRequiredAt: null })
       .where(and(
-        eq(attendanceAdjustments.completedOn, dateKey),
         isNull(attendanceAdjustments.voidedAt),
         eq(attendanceAdjustments.reviewRequiredAt, holiday.createdAt),
+        or(
+          eq(attendanceAdjustments.completedOn, dateKey),
+          inArray(attendanceAdjustments.sourceOccurrenceId, suspended.map((occurrence) => occurrence.id)),
+        ),
       )).run().changes
 
     tx.delete(academyHolidays).where(eq(academyHolidays.id, holiday.id)).run()

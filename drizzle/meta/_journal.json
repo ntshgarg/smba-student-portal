@@ -267,13 +267,6 @@
       "when": 1794506060556,
       "tag": "0037_training_change_notices",
       "breakpoints": true
-    },
-    {
-      "idx": 38,
-      "version": "6",
-      "when": 1794521911561,
-      "tag": "0038_repair_sessions_on_closed_days",
-      "breakpoints": true
     }
   ]
 }

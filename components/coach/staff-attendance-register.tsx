@@ -29,14 +29,14 @@ function cellKey(coachAccountId: string, dateKey: string) {
 }
 
 export function StaffAttendanceRegister({
-  holidays = [],
+  holidays,
   initialRecords,
   juniorCoaches,
   referenceDate,
   yearOptions,
 }: {
   /** Days the academy was closed: nobody is marked on them. */
-  holidays?: Array<{ dateKey: string; label: string }>
+  holidays: Array<{ dateKey: string; label: string }>
   initialRecords: StaffRecord[]
   juniorCoaches: StaffRow[]
   referenceDate: string
