@@ -153,16 +153,18 @@ export function AccountSecurityWorkspace({
    */
   function revokeSessions(
     run: () => Promise<void>,
-    { fallbackMessage, retained, subject }: {
+    { fallbackMessage, retained, subject, success }: {
       fallbackMessage: string
       retained: string
       subject: string
+      success?: string
     },
   ) {
     setSessionsFeedback(null)
     startTransition(async () => {
       try {
         await run()
+        if (success) setSessionsFeedback({ message: success, tone: "success" })
       } catch (error) {
         setSessionsFeedback({
           message: describeSaveFailure({ error, fallbackMessage, retained, subject }).message,
@@ -414,6 +416,10 @@ export function AccountSecurityWorkspace({
                 fallbackMessage: "The other devices could not be signed out",
                 retained: "They are still signed in",
                 subject: "The sign-out",
+                // Trusted browsers are forgotten too (app/account/security/actions.ts).
+                success: authenticatorEnabled
+                  ? "Other devices were logged out. Every browser, this one included, will ask for an authenticator code at its next sign-in."
+                  : "Other devices were logged out.",
               })}
               disabled={isPending}
             >

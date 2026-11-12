@@ -17,6 +17,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   enableTwoFactor: vi.fn(),
+  endSessionsStartedBefore: vi.fn<(accountId: string, startedBefore: Date) => number>(() => 0),
+  forgetTrustedDevices: vi.fn<(accountId: string) => number>(() => 0),
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   getRawAuthSession: vi.fn(),
@@ -76,6 +78,10 @@ vi.mock("@/lib/auth/security-context", () => ({
   writeAuthSecurityEvent: mocks.writeAuthSecurityEvent,
 }))
 vi.mock("@/lib/auth/session", () => ({ getRawAuthSession: mocks.getRawAuthSession }))
+vi.mock("@/lib/auth/second-factor-reset", () => ({
+  endSessionsStartedBefore: mocks.endSessionsStartedBefore,
+  forgetTrustedDevices: mocks.forgetTrustedDevices,
+}))
 vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
 }))
@@ -127,6 +133,31 @@ describe("authenticator enrolment does not grant a trusted device", () => {
     // Pinned explicitly: `undefined` would let better-auth fall back to its own
     // default, which is not the same guarantee as an explicit refusal.
     expect(mocks.verifyTOTP.mock.calls[0]?.[0]?.body?.trustDevice).toBe(false)
+  })
+
+  it("ends sign-ins made before the authenticator was connected and forgets trusted browsers", async () => {
+    let checkedAt = 0
+    mocks.verifyTOTP.mockImplementationOnce(async () => {
+      checkedAt = Date.now()
+      return { user: { id: "head-coach" } }
+    })
+    await expect(confirmTotpSetup(initialState, codeData("123456")))
+      .rejects.toThrow("NEXT_REDIRECT:/coach")
+
+    expect(mocks.endSessionsStartedBefore).toHaveBeenCalledWith("head-coach", expect.any(Date))
+    // Taken before the code is checked, so the session Better Auth creates as it
+    // confirms is newer and survives.
+    const connectedAt = mocks.endSessionsStartedBefore.mock.calls[0]![1]
+    expect(connectedAt.getTime()).toBeLessThanOrEqual(checkedAt)
+    expect(mocks.forgetTrustedDevices).toHaveBeenCalledWith("head-coach")
+  })
+
+  it("leaves other sign-ins and trusted browsers alone when the code is wrong", async () => {
+    mocks.verifyTOTP.mockRejectedValueOnce(new Error("invalid code"))
+    await confirmTotpSetup(initialState, codeData("123456"))
+
+    expect(mocks.endSessionsStartedBefore).not.toHaveBeenCalled()
+    expect(mocks.forgetTrustedDevices).not.toHaveBeenCalled()
   })
 
   it("still records the enrolment as successful", async () => {

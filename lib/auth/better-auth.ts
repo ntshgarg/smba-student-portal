@@ -10,6 +10,10 @@ import { siteOrigin } from "@/lib/config"
 import { initializeDatabase, shouldUseTurso } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
 import { smbaPinLogin } from "@/lib/auth/pin-plugin"
+import {
+  TRUST_DEVICE_IDENTIFIER_PREFIX,
+  storedTrustDeviceIdentifier,
+} from "@/lib/auth/second-factor-reset"
 import { usernameLoginHooks } from "@/lib/auth/username-login-guard"
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import { resolveAuthSecret } from "@/lib/auth/auth-secret"
@@ -70,7 +74,13 @@ function createAuth() {
   },
   verification: {
     modelName: "authVerifications",
-    storeIdentifier: "hashed",
+    storeIdentifier: {
+      default: "hashed",
+      // Still hashed, behind a readable prefix, so every browser an account
+      // trusts can be forgotten at once (lib/auth/second-factor-reset.ts).
+      // Rows written before this lose their trust and ask for a code once.
+      overrides: { [TRUST_DEVICE_IDENTIFIER_PREFIX]: { hash: storedTrustDeviceIdentifier } },
+    },
   },
   // The password door's per-account lockout and audit rows. Better Auth owns
   // the `/sign-in/username` handler, so this is the only place the guard can sit
