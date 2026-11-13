@@ -26,6 +26,8 @@ export type AssessmentPlayer = {
   group: string | null
   initials: string
   name: string
+  /** Off every schedule (training ended or paused), but not archived. */
+  offSchedule: boolean
   playerId: string
 }
 
@@ -75,19 +77,21 @@ function groupLabel(level: string | null, batch: string | null) {
   return parts.length > 0 ? parts.join(" · ") : null
 }
 
+// Players on a schedule or off one (paused) until archived; "unassigned" is still in onboarding.
 function activePlayerRows(database: SmbaDatabaseExecutor) {
   return database.select({
     batch: playerEnrollments.batch,
     fullName: accounts.fullName,
     level: playerEnrollments.level,
     playerId: accounts.id,
+    status: playerEnrollments.status,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .where(and(
       eq(accounts.role, "player"),
       eq(accounts.approvalStatus, "approved"),
       isNull(accounts.archivedAt),
-      eq(playerEnrollments.status, "active"),
+      inArray(playerEnrollments.status, ["active", "paused"]),
     ))
     .all()
 }
@@ -97,6 +101,7 @@ function toPlayer(row: ReturnType<typeof activePlayerRows>[number]): AssessmentP
     group: groupLabel(row.level, row.batch),
     initials: identityNameParts(row.fullName).initials,
     name: row.fullName,
+    offSchedule: row.status === "paused",
     playerId: row.playerId,
   }
 }

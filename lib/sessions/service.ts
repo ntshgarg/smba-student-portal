@@ -273,12 +273,21 @@ export function assignSessionRecords({
     batch: playerEnrollments.batch,
     level: playerEnrollments.level,
     academyPlan: playerEnrollments.academyPlan,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
   }).from(accounts).innerJoin(
     playerEnrollments,
     eq(playerEnrollments.accountId, accounts.id),
   ).where(and(eq(accounts.id, playerId), eq(accounts.role, "player"))).get()
   if (!player || player.approvalStatus !== "approved" || player.archivedAt) {
     operationalActionError("NOT_FOUND", "Approved player was not found.", "playerId")
+  }
+  // The Session step only sets a first schedule; later changes are made in Members.
+  if (confirmTrainingStart && player.onboardingCompletedAt) {
+    operationalActionError(
+      "CONFLICT",
+      "This player’s onboarding is already complete. Change their schedule in Members.",
+      "playerId",
+    )
   }
   if (!player.level || !player.batch) {
     operationalActionError(
@@ -394,20 +403,58 @@ export function assignSessionRecords({
    * eligibility is `eligibilityDate >= trainingStartOn`, so present days would
    * vanish from the player's month with the rows still in the table.
    */
+  // Only days really recorded, or a place still held, hold the start back.
   if (confirmTrainingStart) {
-    const heldAssignments = database.select({
-      effectiveFrom: sessionAssignments.effectiveFrom,
-    }).from(sessionAssignments)
-      .where(eq(sessionAssignments.accountId, playerId))
+    const firstMarked = database.select({ occurrenceDate: sessionOccurrences.occurrenceDate })
+      .from(sessionAttendanceRecords)
+      .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
+      .where(and(
+        eq(sessionAttendanceRecords.accountId, playerId),
+        ne(sessionAttendanceRecords.choice, "cleared"),
+      ))
       .all()
-    const earliestHeld = heldAssignments
-      .map((held) => held.effectiveFrom)
+      .map((row) => row.occurrenceDate)
       .sort()[0]
-    if (earliestHeld !== undefined && effectiveFrom > earliestHeld) {
+    if (firstMarked !== undefined && effectiveFrom > firstMarked) {
       operationalActionError(
         "BUSINESS_RULE",
-        "Clear the player’s existing session assignment before starting them later "
-          + "— days already recorded against it sit before this date.",
+        `Attendance is already marked for this player from ${formatTermDate(firstMarked)}, so `
+          + "training cannot start later than that. Finish onboarding with their first schedule "
+          + "on the Fee Plan step, then move them in Members.",
+        "effectiveFrom",
+      )
+    }
+    const today = getIndiaDateKey(now)
+    const heldEarlier = database.select({
+      effectiveFrom: sessionAssignments.effectiveFrom,
+      seriesEndsOn: sessionSeries.endsOn,
+      seriesStartsOn: sessionSeries.startsOn,
+      title: sessionSeries.title,
+    }).from(sessionAssignments)
+      .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+      .where(and(
+        eq(sessionAssignments.accountId, playerId),
+        isNull(sessionAssignments.effectiveTo),
+        eq(sessionSeries.status, "active"),
+      ))
+      .all()
+      .map((held) => ({
+        ...held,
+        coversFrom: held.effectiveFrom > held.seriesStartsOn ? held.effectiveFrom : held.seriesStartsOn,
+      }))
+      .filter((held) => (
+        (held.seriesEndsOn === null || held.seriesEndsOn >= held.coversFrom)
+        && held.coversFrom < effectiveFrom
+      ))
+      .sort((left, right) => left.coversFrom.localeCompare(right.coversFrom))[0]
+    if (heldEarlier) {
+      const finishedTerm = heldEarlier.seriesEndsOn !== null && heldEarlier.seriesEndsOn < today
+      operationalActionError(
+        "BUSINESS_RULE",
+        `This player is already on ${heldEarlier.title} from ${formatTermDate(heldEarlier.coversFrom)}, `
+          + "so training cannot start later than that. Reload Player onboarding to see it; to choose "
+          + `a different first schedule, use ${finishedTerm ? "Start again" : "Clear this assignment"} `
+          + "on the Session step.",
         "effectiveFrom",
       )
     }

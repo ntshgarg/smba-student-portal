@@ -237,12 +237,15 @@ export function readFirstMonthSessionProration(
     playerId,
     programme,
     trainingStartOn,
+    wholeMonth = false,
   }: {
     batch: typeof feeAgreements.$inferSelect.batch
     period: string
     playerId: string
     programme: typeof feeAgreements.$inferSelect.level
     trainingStartOn: string
+    /** Count every session the month would have had, including ones End schedule cancelled. */
+    wholeMonth?: boolean
   },
 ) {
   const assignments = database.select({
@@ -250,6 +253,7 @@ export function readFirstMonthSessionProration(
     effectiveTo: sessionAssignments.effectiveTo,
     id: sessionAssignments.id,
     seriesId: sessionAssignments.seriesId,
+    seriesStatus: sessionSeries.status,
   }).from(sessionAssignments)
     .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
     .where(and(
@@ -273,24 +277,40 @@ export function readFirstMonthSessionProration(
       .map((weekday) => weekday.weekday)),
   ]))
   const seriesIds = [...new Set(assignments.map((assignment) => assignment.seriesId))]
-  const occurrences = resolveOccurrenceEligibilityDates(
-    database,
-    database.select().from(sessionOccurrences).where(and(
-      inArray(sessionOccurrences.seriesId, seriesIds),
-      eq(sessionOccurrences.status, "scheduled"),
-    )).orderBy(asc(sessionOccurrences.startsAt), asc(sessionOccurrences.id)).all(),
-  ).filter((occurrence) => (
+  const rows = database.select().from(sessionOccurrences).where(and(
+    inArray(sessionOccurrences.seriesId, seriesIds),
+    wholeMonth
+      // A holiday's cancellations never count; End schedule's do (see below).
+      ? or(
+        eq(sessionOccurrences.status, "scheduled"),
+        and(eq(sessionOccurrences.status, "cancelled"), isNull(sessionOccurrences.holidayId)),
+      )
+      : eq(sessionOccurrences.status, "scheduled"),
+  )).orderBy(asc(sessionOccurrences.startsAt), asc(sessionOccurrences.id)).all()
+  // A session moved to another day counts once, as the session it became.
+  const replaced = new Set(rows.flatMap((row) => (
+    row.replacementForOccurrenceId ? [row.replacementForOccurrenceId] : []
+  )))
+  const occurrences = resolveOccurrenceEligibilityDates(database, rows).filter((occurrence) => (
     occurrence.eligibilityDate >= monthStart(period)
     && occurrence.eligibilityDate <= monthEnd(period)
   ))
 
   const totalOccurrences = occurrences.filter((occurrence) => assignments.some((assignment) => (
     assignment.seriesId === occurrence.seriesId
-    && (assignment.effectiveTo === null || occurrence.eligibilityDate < assignment.effectiveTo)
     && weekdaysByAssignment.get(assignment.id)?.has(weekdayForDateKey(occurrence.eligibilityDate))
+    && (occurrence.status === "scheduled"
+      ? wholeMonth || assignment.effectiveTo === null || occurrence.eligibilityDate < assignment.effectiveTo
+      // Only with `wholeMonth`: a session the schedule's ending cancelled,
+      // on or after the day the player's place on it ended.
+      : !replaced.has(occurrence.id)
+        && assignment.seriesStatus === "ended"
+        && assignment.effectiveTo !== null
+        && occurrence.eligibilityDate >= assignment.effectiveTo)
   )))
   const remainingOccurrences = totalOccurrences.filter((occurrence) => (
-    assignments.some((assignment) => (
+    occurrence.status === "scheduled"
+    && assignments.some((assignment) => (
       assignment.seriesId === occurrence.seriesId
       && occurrence.eligibilityDate >= trainingStartOn
       && occurrence.eligibilityDate >= assignment.effectiveFrom

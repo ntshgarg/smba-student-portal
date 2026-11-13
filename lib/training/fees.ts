@@ -24,6 +24,7 @@ import {
   reverseConcession,
 } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
+import { formatTermDate } from "@/lib/sessions/term"
 import { monthStartOf, nextMonthStartOf, waitingFeeChangeOf } from "@/lib/training/changes"
 
 export { waitingFeeChangeOf }
@@ -84,15 +85,25 @@ export function changeMonthlyFee(
   try {
     return database.transaction((tx) => {
       if (!isFinanceActive(tx)) operationalActionError("BUSINESS_RULE", "Financial tracking is not switched on.")
-      const waiting = tx.select({ effectiveOn: trainingChanges.effectiveOn }).from(trainingChanges).where(and(
+      const waiting = tx.select({
+        effectiveOn: trainingChanges.effectiveOn,
+        kind: trainingChanges.kind,
+        stopFees: trainingChanges.stopFees,
+      }).from(trainingChanges).where(and(
         eq(trainingChanges.playerAccountId, input.playerId),
         eq(trainingChanges.status, "scheduled"),
-        eq(trainingChanges.kind, "change"),
       )).get()
-      if (waiting) {
+      if (waiting?.kind === "change") {
         operationalActionError(
           "CONFLICT",
-          `This player's training changes on ${waiting.effectiveOn} with its own fee. Edit that change instead.`,
+          `This player's training changes on ${formatTermDate(waiting.effectiveOn)} with its own fee. Edit that change instead.`,
+        )
+      }
+      // A new fee could only start after a waiting end that stops fees.
+      if (waiting?.kind === "end" && waiting.stopFees) {
+        operationalActionError(
+          "CONFLICT",
+          `This player's training ends and their fees stop from ${formatTermDate(waiting.effectiveOn)}, so there is no later fee to change. Cancel the planned end first to change their fee.`,
         )
       }
       const enrollment = tx.select().from(playerEnrollments)

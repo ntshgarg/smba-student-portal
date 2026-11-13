@@ -205,9 +205,9 @@ describe("training changes from the player's record", () => {
 
   it("applies the change on or after the 1st, dated the 1st, all in one go", () => {
     expect(changes.applyDueTrainingChanges({ database, now: new Date("2026-10-31T05:00:00.000Z") }))
-      .toEqual({ applied: 0, due: 0 })
+      .toEqual({ applied: 0, due: 0, retry: 0 })
     expect(changes.applyDueTrainingChanges({ database, now: new Date("2026-11-03T05:00:00.000Z") }))
-      .toEqual({ applied: 1, due: 1 })
+      .toEqual({ applied: 1, due: 1, retry: 0 })
 
     const all = database.select().from(schema.sessionAssignments)
       .where(eq(schema.sessionAssignments.accountId, players.aarav)).all()

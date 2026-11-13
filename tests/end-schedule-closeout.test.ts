@@ -503,7 +503,7 @@ describe("End schedule closes out its players, and every kept fee plan can be st
       .where(eq(schema.playerEnrollments.accountId, players.nina)).run()
     // On the 1st: Chitra's and Jay's booked ends and Dev's new start apply.
     // The bookings End schedule cancelled are not among them, so nothing fails.
-    expect(changes.applyDueTrainingChanges({ database, now: firstDecember })).toEqual({ applied: 3, due: 3 })
+    expect(changes.applyDueTrainingChanges({ database, now: firstDecember })).toEqual({ applied: 3, due: 3, retry: 0 })
     expect(database.select().from(schema.trainingChanges)
       .where(eq(schema.trainingChanges.status, "failed")).all()
       .map((row) => row.playerAccountId).sort()).toEqual([players.om, players.priya].sort())
@@ -643,7 +643,7 @@ describe("End schedule closes out its players, and every kept fee plan can be st
       updatedAt: october,
     }).run()
     const firstJanuary = new Date("2027-01-01T05:00:00.000Z")
-    expect(changes.applyDueTrainingChanges({ database, now: firstJanuary })).toEqual({ applied: 0, due: 1 })
+    expect(changes.applyDueTrainingChanges({ database, now: firstJanuary })).toEqual({ applied: 0, due: 1, retry: 0 })
     expect(bookings(players.esha).find((row) => row.id === `stale-${players.esha}`)).toMatchObject({ status: "cancelled" })
     const esha = summaryOf(players.esha, firstJanuary)
     expect(esha.failed).toBeNull()

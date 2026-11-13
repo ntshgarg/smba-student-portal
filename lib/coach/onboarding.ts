@@ -85,19 +85,17 @@ export type PlayerOnboardingCase = {
   duplicateSignals?: OnboardingDuplicateSignal[]
   academyPlan: AcademyPlan | null
   /**
-   * The open session assignment, when there is one. Null at the "session" stage
-   * by construction -- that stage exists because no current assignment was
-   * found -- so this is only ever set on a case the coach has stepped BACK to.
-   * Without it the Session step cannot tell "assign one" from "one already
-   * exists" and renders a pristine form whose submit the server refuses.
+   * The player's first schedule (their place on it), when they hold one: the
+   * open place if there is one, otherwise the latest ended one. Without it the
+   * Session step cannot tell "assign one" from "one already exists" and renders
+   * a pristine form whose submit the server refuses. An ended or finished
+   * place still counts as "has a schedule" everywhere in onboarding.
    */
-  assignedSession: {
-    batch: TrainingBatch
-    effectiveFrom: string
-    programme: TrainingProgramme
-  } | null
+  assignedSession: OnboardingPlace | null
   batch: TrainingBatch | null
   feePlanRecorded: boolean
+  /** Marked attendance, a correction, fee plan, fee or payment exists. */
+  hasRecords?: boolean
   fullName: string
   id: string
   onboardingCompletedAt?: string | null
@@ -109,6 +107,27 @@ export type PlayerOnboardingCase = {
   requestedRole: "player" | "coach"
   requestedAt: string | null
   stage: PlayerOnboardingStage
+}
+
+/**
+ * Where a player's first schedule stands today.
+ *
+ *   running    an open place on a schedule that is still running
+ *   finished   an open place on a schedule whose last day has passed
+ *              (lib/sessions/term.ts); `endsOn` is that last day
+ *   ended      the place or its schedule was ended (End schedule, End training)
+ *   unusable   the place never covered a day: its schedule ended before the
+ *              player's first training day
+ */
+export type OnboardingPlaceStanding = "running" | "finished" | "ended" | "unusable"
+
+export type OnboardingPlace = {
+  batch: TrainingBatch
+  effectiveFrom: string
+  /** The schedule's last day, for a finished term. */
+  endsOn: string | null
+  programme: TrainingProgramme
+  standing: OnboardingPlaceStanding
 }
 
 export type PlayerOnboardingWorkspace = {
@@ -156,6 +175,8 @@ type OnboardingSummaryInput = {
 type OnboardingWorkspaceInput = Omit<OnboardingSummaryInput, "newRequestCount" | "players"> & {
   pendingRequests: OnboardingPendingRequest[]
   players: OnboardingWorkspacePlayer[]
+  /** Players with anything recorded yet (see `PlayerOnboardingCase.hasRecords`). */
+  playersWithRecords?: ReadonlySet<string>
 }
 
 function groupByPlayer<T extends { playerId: string }>(items: T[]) {
@@ -178,9 +199,19 @@ function earliestDate(...values: Array<string | null>) {
     : null
 }
 
+function dayBefore(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() - 1)
+  return date.toISOString().slice(0, 10)
+}
+
+// The days a place covers, both ends included (`effectiveTo` is exclusive), or null.
 function assignmentRange(assignment: OnboardingAssignment) {
   const start = latestDate(assignment.effectiveFrom, assignment.seriesStartsOn)
-  const end = earliestDate(assignment.effectiveTo, assignment.seriesEndsOn)
+  const end = earliestDate(
+    assignment.effectiveTo === null ? null : dayBefore(assignment.effectiveTo),
+    assignment.seriesEndsOn,
+  )
   return end !== null && end < start ? null : { end, start }
 }
 
@@ -237,28 +268,50 @@ function trainingStartIsConfirmed(player: OnboardingPlayer) {
     || player.trainingStartConfirmedAt !== null
 }
 
-function hasCurrentOrFutureAssignment(
+// "Session done": a place matching level and batch that covers a day, running or not.
+function hasMatchingPlace(
   assignments: OnboardingAssignment[],
   player: OnboardingPlayer,
-  referenceDate: string,
 ) {
   if (!player.level || !player.batch) return false
 
-  return assignments.some((assignment) => {
-    const range = assignmentRange(assignment)
-    return range !== null
-      && assignment.programme === player.level
-      && assignment.batch === player.batch
-      && assignment.seriesStatus === "active"
-      && (range.end === null || range.end >= referenceDate)
-  })
+  return assignments.some((assignment) => (
+    assignmentRange(assignment) !== null
+    && assignment.programme === player.level
+    && assignment.batch === player.batch
+  ))
+}
+
+/** The place the Session step reports: the open one, else the latest. */
+function onboardingPlace(
+  assignments: OnboardingAssignment[],
+  referenceDate: string,
+): OnboardingPlace | null {
+  const place = assignments.find((assignment) => assignment.effectiveTo === null)
+    ?? [...assignments].sort((left, right) => (
+      right.effectiveFrom.localeCompare(left.effectiveFrom)
+    ))[0]
+  if (!place) return null
+  const standing: OnboardingPlaceStanding = assignmentRange(place) === null
+    ? "unusable"
+    : place.effectiveTo !== null || place.seriesStatus === "ended"
+      ? "ended"
+      : place.seriesEndsOn !== null && place.seriesEndsOn < referenceDate
+        ? "finished"
+        : "running"
+  return {
+    batch: place.batch,
+    effectiveFrom: place.effectiveFrom,
+    endsOn: standing === "finished" ? place.seriesEndsOn : null,
+    programme: place.programme,
+    standing,
+  }
 }
 
 function onboardingStage(
   assignments: OnboardingAssignment[],
   feePlans: OnboardingFeePlan[],
   player: OnboardingPlayer,
-  referenceDate: string,
 ): Exclude<PlayerOnboardingStage, "request"> | null {
   if (player.onboardingCompletedAt !== undefined
     ? player.onboardingCompletedAt !== null
@@ -271,7 +324,7 @@ function onboardingStage(
    * Plan step, where an unconfirmed start is refused anyway
    * (lib/finance/service.ts:967).
    */
-  if (!hasCurrentOrFutureAssignment(assignments, player, referenceDate)
+  if (!hasMatchingPlace(assignments, player)
     || !trainingStartIsConfirmed(player)) return "session"
   return "feePlan"
 }
@@ -281,7 +334,6 @@ export function derivePlayerOnboardingSummary({
   feePlans,
   newRequestCount,
   players,
-  referenceDate,
 }: OnboardingSummaryInput): PlayerOnboardingSummary {
   const summary: PlayerOnboardingSummary = {
     assessment: 0,
@@ -301,7 +353,6 @@ export function derivePlayerOnboardingSummary({
       playerAssignments,
       playerFeePlans,
       player,
-      referenceDate,
     )
     if (!stage) {
       summary.onboarded += 1
@@ -382,6 +433,7 @@ export function derivePlayerOnboardingWorkspace({
   feePlans,
   pendingRequests,
   players,
+  playersWithRecords = new Set<string>(),
   referenceDate,
 }: OnboardingWorkspaceInput): PlayerOnboardingWorkspace {
   const assignmentsByPlayer = groupByPlayer(assignments)
@@ -423,6 +475,7 @@ export function derivePlayerOnboardingWorkspace({
       assignedSession: null,
       batch: null,
       feePlanRecorded: false,
+      hasRecords: false,
     fullName: request.fullName,
     id: request.id,
     onboardingCompletedAt: null,
@@ -442,29 +495,18 @@ export function derivePlayerOnboardingWorkspace({
       playerAssignments,
       playerFeePlans,
       player,
-      referenceDate,
     )
     if (!stage) return []
-
-    // Only an open assignment counts. An ended one is exactly why a case can sit
-    // at the "session" stage, and presenting it as current would block the
-    // assignment the coach is there to make.
-    const openAssignment = playerAssignments.find((assignment) => !assignment.effectiveTo) ?? null
 
     return [{
       activatedAt: player.activatedAt,
       academyId: player.academyId,
       approvedAt: player.approvedAt,
       academyPlan: player.academyPlan,
-      assignedSession: openAssignment
-        ? {
-          batch: openAssignment.batch,
-          effectiveFrom: openAssignment.effectiveFrom,
-          programme: openAssignment.programme,
-        }
-        : null,
+      assignedSession: onboardingPlace(playerAssignments, referenceDate),
       batch: player.batch,
       feePlanRecorded: playerFeePlans.length > 0,
+      hasRecords: playersWithRecords.has(player.id),
       fullName: player.fullName,
       id: player.id,
       onboardingCompletedAt: player.onboardingCompletedAt,
@@ -498,14 +540,21 @@ export function derivePlayerOnboardingWorkspace({
     // keeps only those with an outstanding stage, so a completed player never
     // reaches this reduce and has to be counted from the source list.
     onboarded: players.filter((player) => !onboardingStage(
-      groupByPlayer(assignments).get(player.id) ?? [],
-      groupByPlayer(feePlans).get(player.id) ?? [],
+      assignmentsByPlayer.get(player.id) ?? [],
+      feePlansByPlayer.get(player.id) ?? [],
       player,
-      referenceDate,
     )).length,
     session: 0,
     total: 0,
   })
 
   return { cases, summary }
+}
+
+/** The training start to show, or null while it is approval's stand-in date. */
+export function shownTrainingStart(player: {
+  trainingStartConfirmedAt?: string | null
+  trainingStartOn?: string | null
+}) {
+  return player.trainingStartConfirmedAt === null ? null : player.trainingStartOn ?? null
 }

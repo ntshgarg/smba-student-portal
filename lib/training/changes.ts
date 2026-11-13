@@ -34,6 +34,7 @@ import {
   isFinanceActive,
   pauseUnstartedFeeAgreementInTransaction,
 } from "@/lib/finance/service"
+import { addCalendarDays } from "@/lib/finance/domain"
 import { loadChargeView } from "@/lib/finance/repository"
 import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
 import {
@@ -453,7 +454,7 @@ export function scheduleEndOfTraining(
 ) {
   requireHeadAdminAccess(coachId, { database })
   return database.transaction((tx) => {
-    requirePlayer(tx, input.playerId)
+    const player = requirePlayer(tx, input.playerId)
     if (!openAssignments(tx, input.playerId).length) {
       operationalActionError("BUSINESS_RULE", "This player is not on any schedule.")
     }
@@ -466,7 +467,8 @@ export function scheduleEndOfTraining(
       level: null,
       monthlyFeePaise: null,
       seriesId: null,
-      stopFees: Boolean(input.stopFees),
+      // In onboarding the plan made at completion stops with this end.
+      stopFees: Boolean(input.stopFees) || !player.onboardingCompletedAt,
       updatedAt: now,
       weekdays: "[]",
     }
@@ -652,6 +654,9 @@ export function scheduleLabel(
   })
 }
 
+// Days after its date that a change hit by an unexpected fault is tried again.
+const TRAINING_CHANGE_RETRY_DAYS = 2
+
 /**
  * Applies every scheduled change whose date has come. Each change is its own
  * transaction; one that can no longer be applied (its schedule ended, say) is
@@ -669,6 +674,7 @@ export function applyDueTrainingChanges({
     lte(trainingChanges.effectiveOn, today),
   )).all()
   let applied = 0
+  let retry = 0
   for (const change of due) {
     let cancelled = false
     try {
@@ -698,9 +704,17 @@ export function applyDueTrainingChanges({
       }, { behavior: "immediate" })
       if (!cancelled) applied += 1
     } catch (error) {
-      const reason = error instanceof OperationalActionError || error instanceof FinanceServiceError
+      // A refused change is final; any other fault is retried for a few days.
+      const refused = error instanceof OperationalActionError || error instanceof FinanceServiceError
+      if (!refused && today <= addCalendarDays(change.effectiveOn, TRAINING_CHANGE_RETRY_DAYS)) {
+        console.error("A scheduled training change could not be applied; it will be tried again.", error)
+        retry += 1
+        continue
+      }
+      if (!refused) console.error("A scheduled training change could not be applied.", error)
+      const reason = refused
         ? error.message
-        : "The change could not be applied."
+        : "Something went wrong each time it was tried. Make the change again from this record."
       database.update(trainingChanges).set({
         failureReason: reason,
         resolvedAt: now,
@@ -709,7 +723,7 @@ export function applyDueTrainingChanges({
       }).where(and(eq(trainingChanges.id, change.id), eq(trainingChanges.status, "scheduled"))).run()
     }
   }
-  return { applied, due: due.length }
+  return { applied, due: due.length, retry }
 }
 
 /*
@@ -717,18 +731,28 @@ export function applyDueTrainingChanges({
  * the 1st of a later month, so once a server instance has looked on a given
  * day nothing else can fall due that day; the memo makes every later call that
  * day free, which matters because production reads are network round trips.
+ * A change being retried is looked at again at most every few minutes.
  */
+const RETRY_AFTER_MS = 5 * 60 * 1000
 let checkedOn: string | null = null
+let retryAfter = 0
 
 export function ensureDueTrainingChangesApplied(now = new Date()) {
   const today = getAcademyDateKey(now)
   if (checkedOn === today) return
+  if (now.getTime() < retryAfter) return
   try {
-    applyDueTrainingChanges({ now })
-    checkedOn = today
+    const { retry } = applyDueTrainingChanges({ now })
+    if (retry) {
+      retryAfter = now.getTime() + RETRY_AFTER_MS
+    } else {
+      checkedOn = today
+      retryAfter = 0
+    }
   } catch (error) {
-    // Never let this stop a page from loading; the next request tries again.
+    // Never let this stop a page from loading; a later request tries again.
     console.error("Scheduled training changes could not be applied.", error)
+    retryAfter = now.getTime() + RETRY_AFTER_MS
   }
 }
 
@@ -829,7 +853,8 @@ export function changeScheduleThisMonth(
       if (startsOn < player.trainingStartOn) {
         operationalActionError("INVALID_INPUT", "The new schedule cannot start before the player's training started.", "startsOn")
       }
-      if (scheduledChange(tx, input.playerId)) {
+      // A waiting end of training still applies after this month.
+      if (scheduledChange(tx, input.playerId)?.kind === "change") {
         operationalActionError(
           "CONFLICT",
           "This player has a change waiting for next month. Cancel it before changing this month.",
@@ -1018,7 +1043,8 @@ export function endTrainingNow(
     return database.transaction((tx) => {
       requirePlayer(tx, input.playerId)
       const today = getAcademyDateKey(now)
-      if (!openAssignments(tx, input.playerId).length) {
+      const open = openAssignments(tx, input.playerId)
+      if (!open.length) {
         operationalActionError("BUSINESS_RULE", "This player is not on any schedule.")
       }
       const waiting = scheduledChange(tx, input.playerId)
@@ -1026,7 +1052,17 @@ export function endTrainingNow(
         tx.update(trainingChanges).set({ resolvedAt: now, status: "cancelled", updatedAt: now })
           .where(eq(trainingChanges.id, waiting.id)).run()
       }
-      endOpenAssignments(tx, input.playerId, today)
+      // If today is already marked for them, end the place after today so the mark stays.
+      const markedToday = tx.select({ id: sessionAttendanceRecords.id }).from(sessionAttendanceRecords)
+        .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
+        .where(and(
+          eq(sessionAttendanceRecords.accountId, input.playerId),
+          ne(sessionAttendanceRecords.choice, "cleared"),
+          eq(sessionOccurrences.occurrenceDate, today),
+          inArray(sessionOccurrences.seriesId, open.map((assignment) => assignment.seriesId)),
+        ))
+        .get()
+      endOpenAssignments(tx, input.playerId, markedToday ? addCalendarDays(today, 1) : today)
       clearTrainingNotices(tx, input.playerId, now)
       tx.update(playerEnrollments).set({
         recordRevision: sql`${playerEnrollments.recordRevision} + 1`,

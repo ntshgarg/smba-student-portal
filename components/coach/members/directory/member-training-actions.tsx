@@ -59,7 +59,7 @@ function monthName(dateKey: string) {
 }
 
 /** The month a change dated the 1st follows: training ends after this one. */
-function monthBefore(firstOfMonth: string) {
+export function monthBefore(firstOfMonth: string) {
   const [year, month] = firstOfMonth.split("-").map(Number)
   return monthName(new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10))
 }
@@ -175,11 +175,12 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
               <strong>
                 {scheduled.kind === "end"
                   ? `Training ends after ${monthBefore(scheduled.effectiveOn)}`
-                  : `Scheduled for 1 ${nextMonth}`}
+                  : `Scheduled for 1 ${monthName(scheduled.effectiveOn)}`}
               </strong>
               <span>
                 {scheduled.kind === "end"
-                  ? `Paused from ${dayName(scheduled.effectiveOn)}${scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
+                  // In onboarding there is no fee plan to keep yet.
+                  ? `Paused from ${dayName(scheduled.effectiveOn)}${!onboarded ? "" : scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
                   : [
                     scheduledSeries ? seriesLabel(scheduledSeries) : "New schedule",
                     dayList(scheduled.weekdays),
@@ -220,7 +221,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
             {!onboarded ? (
               <>
                 <p className={styles.help}>
-                  Finish <Link href="/coach/onboarding">Player onboarding</Link> first. It sets this player&apos;s first schedule and fee plan.
+                  Finish <Link href={`/coach/onboarding?player=${encodeURIComponent(memberId)}`}>Player onboarding</Link> first. It sets this player&apos;s first schedule and fee plan.
                 </p>
                 {/* A player who leaves part-way through can still be taken off their schedule. */}
                 {current.length ? (
@@ -309,14 +310,21 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                 New fee of {formatInr(fee.waitingFeeChange.feePaise)} starts with {monthName(fee.waitingFeeChange.startsOn)}&apos;s fee. Cancel it to keep {formatInr(fee.waitingFeeChange.previousFeePaise)} a month.
               </p>
             ) : null}
-            {fee?.activeAgreementId && !hasRunningPlace && scheduled?.kind === "change" ? (
+            {fee?.activeAgreementId && scheduled?.kind === "change" ? (
               <p className={styles.help}>
                 Their fee from {monthName(scheduled.effectiveOn)} is set in the scheduled change.
               </p>
             ) : null}
+            {fee?.activeAgreementId && scheduled?.kind === "end" && scheduled.stopFees ? (
+              <p className={styles.help}>
+                Fees stop after {monthBefore(scheduled.effectiveOn)} with the planned end of training.
+              </p>
+            ) : null}
             {fee?.activeAgreementId ? (
               <div className={styles.actions}>
-                {hasRunningPlace ? (
+                {/* Not while a booked change or fee-stopping end decides the fee. */}
+                {hasRunningPlace && !(scheduled?.kind === "change")
+                  && !(scheduled?.kind === "end" && scheduled.stopFees) ? (
                   <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
                     Change fee
                   </button>
@@ -402,6 +410,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
         <EndForm
           busy={busy}
           financeActive={data.financeActive && Boolean(fee?.activeAgreementId)}
+          inOnboarding={!onboarded}
           name={player.member.fullName}
           nextMonthStart={data.nextMonthStart}
           onCancel={() => setOpen(null)}
@@ -492,8 +501,10 @@ function TrainingForm({
     batch: player.training.batch as TrainingBatch,
     level: player.training.level as TrainingProgramme,
   }
-  // A paused player restarts from next month; an edit of a waiting change stays there.
-  const canStartThisMonth = mode === "change" && !editing
+  // A paused player restarts from next month; an edit of a waiting change stays
+  // there; a player who starts after today has no day this month.
+  const canStartThisMonth = mode === "change" && !editing && player.member.trainingStartOn <= today
+  const endWaiting = scheduled?.kind === "end"
   const [when, setWhen] = useState<"next" | "this">(canStartThisMonth ? "this" : "next")
   const [date, setDate] = useState(today)
   const startsOn = when === "next" ? nextMonthStart : date
@@ -514,6 +525,7 @@ function TrainingForm({
   const [feeText, setFeeText] = useState("")
   const [feeTouched, setFeeTouched] = useState(false)
   const [marks, setMarks] = useState<Array<{ choice: string; occurrenceDate: string }> | null>(null)
+  const [marksFailed, setMarksFailed] = useState(false)
 
   useEffect(() => {
     if (when !== "this" || !date) return
@@ -521,7 +533,7 @@ function TrainingForm({
     void previewScheduleChangeAction({ playerId: player.member.id, startsOn: date }).then((preview) => {
       if (live) setMarks(preview.marks)
     }).catch(() => {
-      if (live) setMarks([])
+      if (live) setMarksFailed(true)
     })
     return () => {
       live = false
@@ -529,7 +541,10 @@ function TrainingForm({
   }, [date, player.member.id, when])
 
   function chooseWhen(next: "next" | "this") {
-    if (next === "this" && when !== "this") setMarks(null)
+    if (next === "this" && when !== "this") {
+      setMarks(null)
+      setMarksFailed(false)
+    }
     setWhen(next)
     if (next === "this" && thisMonthPaid) {
       // A paid month keeps its level, batch and plan; only the session time moves.
@@ -598,9 +613,13 @@ function TrainingForm({
       ? `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}${profileChanges ? `, ${academyPlanLabel(plan)}` : ""}`
       : `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}, ${academyPlanLabel(plan)}`,
     when === "this"
-      ? marks?.length
-        ? `Clear ${marks.length} ${marks.length === 1 ? "mark" : "marks"} in the old schedule from ${dayName(startsOn)}; mark ${marks.length === 1 ? "it" : "them"} again`
-        : "No attendance marks to clear"
+      ? marksFailed
+        ? "Could not check which attendance marks are cleared"
+        : marks === null
+          ? "Checking which attendance marks are cleared…"
+          : marks.length
+            ? `Clear ${marks.length} ${marks.length === 1 ? "mark" : "marks"} in the old schedule from ${dayName(startsOn)}; mark ${marks.length === 1 ? "it" : "them"} again`
+            : "No attendance marks to clear"
       : `Keep ${thisMonth} exactly as it is`,
     ...(askFee && feePaise
       ? [when === "this"
@@ -613,7 +632,7 @@ function TrainingForm({
     <FormShell
       busy={busy}
       confirmLabel={when === "next" ? (editing ? "Save scheduled change" : "Schedule the change") : "Change schedule"}
-      disabled={!chosen || !daysOk || !feeOk || !dateOk || (when === "this" && marks === null)}
+      disabled={!chosen || !daysOk || !feeOk || !dateOk || (when === "this" && (marks === null || marksFailed))}
       eyebrow={mode === "start" ? "Start training" : "Change schedule"}
       onCancel={onCancel}
       onConfirm={() => {
@@ -628,6 +647,7 @@ function TrainingForm({
             seriesId: chosen.id,
             startsOn,
             weekdays,
+            when,
           }),
           (outcome) => {
             if (outcome.kind === "scheduled") return `Scheduled for ${dayName(outcome.startsOn)}`
@@ -668,6 +688,7 @@ function TrainingForm({
               value={date}
               onChange={(event) => {
                 setMarks(null)
+                setMarksFailed(false)
                 setDate(event.target.value)
               }}
             />
@@ -677,9 +698,15 @@ function TrainingForm({
           <input name={`when-${player.member.id}`} type="radio" checked={when === "next"} onChange={() => chooseWhen("next")} />
           <span>
             <strong>From {dayName(nextMonthStart)}</strong>
-            <small>Next month. {thisMonth} stays exactly as it is.</small>
+            <small>
+              Next month. {thisMonth} stays exactly as it is.
+              {endWaiting ? " This replaces the planned end of training." : ""}
+            </small>
           </span>
         </label>
+        {endWaiting && when === "this" ? (
+          <p className={styles.help}>Their training still ends after {thisMonth}, as planned.</p>
+        ) : null}
       </fieldset>
 
       <div className={styles.field}>
@@ -787,7 +814,9 @@ function TrainingForm({
       {when === "this" ? (
         <div className={styles.field}>
           <span className={styles.label}>Attendance that will be cleared</span>
-          {marks === null ? <p className={styles.help}>Checking…</p> : marks.length ? (
+          {marksFailed ? (
+            <p className={styles.help}>Could not check which marks would be cleared. Check your connection and open the form again.</p>
+          ) : marks === null ? <p className={styles.help}>Checking…</p> : marks.length ? (
             <ul className={styles.marks}>
               {marks.map((item) => (
                 <li key={item.occurrenceDate}><span>{dayName(item.occurrenceDate)}</span><s>{item.choice === "present" ? "Present" : "Absent"}</s></li>
@@ -804,6 +833,7 @@ function TrainingForm({
 function EndForm({
   busy,
   financeActive,
+  inOnboarding,
   name,
   nextMonthStart,
   onCancel,
@@ -814,6 +844,7 @@ function EndForm({
 }: {
   busy: boolean
   financeActive: boolean
+  inOnboarding: boolean
   name: string
   nextMonthStart: string
   onCancel: () => void
@@ -849,6 +880,15 @@ function EndForm({
     >
       {termFinishedOn ? (
         <p className={styles.help}>Their term finished on {formatTermDate(termFinishedOn)}.</p>
+      ) : null}
+      {inOnboarding ? (
+        <p className={styles.help}>
+          {name} has not finished Player onboarding, so they have no fee plan and cannot sign in
+          yet. Ending training keeps the days they were on their first schedule. Afterwards,
+          finish onboarding to charge the registration fee and the months they trained; no
+          monthly fee is issued after their training ends. If they leave before their first
+          training day, there is nothing to charge: archive them instead.
+        </p>
       ) : null}
       <div className={styles.field}>
         <span className={styles.label}>Last month of training</span>

@@ -74,7 +74,7 @@ export function endScheduleSummary(closeout: EndScheduleResult, thisMonth: strin
       ? `Fees stop after ${thisMonth}: ${names(closeout.feesStopped)}`
       : null,
     closeout.inOnboarding.length
-      ? `Still in Player onboarding: ${names(closeout.inOnboarding)}`
+      ? `Still in Player onboarding (finish it there): ${names(closeout.inOnboarding)}`
       : null,
   ].filter((line): line is string => Boolean(line))
 }
@@ -215,7 +215,7 @@ export function EndSchedulePanel({
               ) : <p className={formStyles.help}>No players are left on this schedule.</p>}
               {inOnboarding.length ? (
                 <p className={formStyles.help}>
-                  {names(inOnboarding)} {inOnboarding.length === 1 ? "has" : "have"} not finished Player onboarding. Ending the schedule takes them off it too.
+                  {names(inOnboarding)} {inOnboarding.length === 1 ? "has" : "have"} not finished Player onboarding. Ending the schedule takes them off it too; finish their onboarding afterwards.
                 </p>
               ) : null}
             </div>

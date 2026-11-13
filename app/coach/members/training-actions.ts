@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import {
   OperationalActionError,
+  operationalActionError,
   operationalActionFailure,
   type OperationalActionResult,
 } from "@/lib/actions/operational-result"
@@ -70,9 +71,17 @@ async function run<T>(operation: (coachId: string) => T): Promise<OperationalAct
  * change anything; starting on a day this month it happens now, under the
  * paid-fee rule in lib/training/changes.ts.
  */
-export async function changeScheduleAction(input: ChangeThisMonthInput) {
+export async function changeScheduleAction(input: ChangeThisMonthInput & { when?: "next" | "this" }) {
   return run((coachId) => {
-    if (input.startsOn === nextMonthStartOf(getAcademyDateKey(academyNow()))) {
+    const nextMonthStart = nextMonthStartOf(getAcademyDateKey(academyNow()))
+    // A "next month" form sent after midnight on the last day must not apply at once.
+    if (input.when === "next" && input.startsOn !== nextMonthStart) {
+      operationalActionError(
+        "CONFLICT",
+        "A new month has started since this form was opened. Close it and open it again.",
+      )
+    }
+    if (input.startsOn === nextMonthStart) {
       const scheduled = scheduleTrainingChange(input, { coachId })
       return { kind: "scheduled" as const, startsOn: scheduled.effectiveOn, result: null }
     }

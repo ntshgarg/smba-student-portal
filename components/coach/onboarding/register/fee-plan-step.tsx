@@ -116,7 +116,7 @@ export function FeePlanStep({
     setPreview(null)
     setConfirmed(false)
     guard.navigateAfterCommit(() => onSuccess({
-      message: `${item.fullName}’s unfinished assignment was reset. Confirm the assessment again.`,
+      message: `${item.fullName}’s first schedule was cleared. Choose their first schedule and training day again on the Session step.`,
       remove: false,
     }))
   }
@@ -387,15 +387,16 @@ export function FeePlanStep({
         * be the only door.
         */}
       <p className={styles.feeNote}>
-        The training start date is set on the Session step, with the schedule it belongs
-        to — go back there to change it. Clearing the assignment is only for changing the
-        level, batch or Training plan, and it stops being possible once the player has
-        attendance, fees or a report on record.
+        {item.hasRecords
+          ? "The training start date and schedule are fixed now that attendance or fees are recorded. Complete onboarding, then make any change in Members."
+          : "The training start date is set on the Session step, with the schedule it belongs to. Reset the session assignment to choose them again, or to change the level, batch or Training plan. It stops being possible once the player has attendance, fees or a payment on record."}
       </p>
       <div className={styles.formActions}>
-        <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
-          {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
-        </button>
+        {item.hasRecords ? <span aria-hidden="true" /> : (
+          <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
+            {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
+          </button>
+        )}
         <button
           className={styles.primaryButton}
           type="submit"

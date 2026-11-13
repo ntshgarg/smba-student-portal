@@ -3,6 +3,7 @@
 import { Eye, Phone } from "lucide-react"
 
 import { formatJoinedDate } from "@/components/coach/members/directory/shared"
+import { shownTrainingStart } from "@/lib/coach/onboarding"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
 
 const timelineInstantFormat = new Intl.DateTimeFormat("en-IN", {
@@ -45,7 +46,7 @@ export function MemberProfilePanel({
         </div>
         <div>
           <dt>Training from</dt>
-          <dd>{formatJoinedDate(player.member.trainingStartOn)}</dd>
+          <dd>{shownTrainingStart(player.member) ? formatJoinedDate(player.member.trainingStartOn) : "Not set yet"}</dd>
         </div>
         <div>
           <dt>Account activated</dt>

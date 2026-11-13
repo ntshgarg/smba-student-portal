@@ -33,11 +33,12 @@ import {
   playerEnrollments,
   sessionAssignments,
   sessionSeries,
+  trainingChanges,
 } from "@/lib/db/schema"
 import { readPlayerFinancialCloseoutState } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
-import { playerTrainingStatus } from "@/lib/sessions/term"
+import { formatTermDate, playerTrainingStatus } from "@/lib/sessions/term"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   type AcademyPlan,
@@ -456,6 +457,22 @@ export function archiveMemberRecord({
         ok: false,
         code: "ACTIVE_ASSIGNMENTS",
         message: "End the player’s active sessions before archiving their membership.",
+      }
+    }
+    // A booked start of training would put an archived player back on a schedule.
+    const bookedStart = tx.select({ effectiveOn: trainingChanges.effectiveOn })
+      .from(trainingChanges)
+      .where(and(
+        eq(trainingChanges.playerAccountId, input.memberId),
+        eq(trainingChanges.status, "scheduled"),
+        eq(trainingChanges.kind, "change"),
+      ))
+      .get()
+    if (bookedStart) {
+      return {
+        ok: false,
+        code: "ACTIVE_ASSIGNMENTS",
+        message: `Training is booked to start on ${formatTermDate(bookedStart.effectiveOn)}. Cancel that booked change in Members before archiving this member.`,
       }
     }
 
