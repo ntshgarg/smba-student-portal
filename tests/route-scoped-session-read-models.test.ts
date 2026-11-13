@@ -149,6 +149,27 @@ describe("route-scoped coach session read models", () => {
     expect(snapshot.sessionOccurrences).toEqual([occurrence])
   })
 
+  it("adds the replacement of a session moved into another month, after the roster is chosen", () => {
+    const cancelled = { ...occurrence, id: "occurrence-cancelled", status: "cancelled" as const }
+    const moved = {
+      ...occurrence,
+      id: "occurrence-moved",
+      occurrenceDate: "2026-09-01",
+      replacementForOccurrenceId: "occurrence-cancelled",
+    }
+    const query = emptyAdjustmentQuery()
+    query.all.mockReturnValueOnce([{ id: "occurrence-moved" }] as never)
+    mocks.initializeDatabase.mockReturnValue({ select: vi.fn(() => query) })
+    mocks.listSessionOccurrences.mockReturnValue([cancelled])
+    mocks.listSessionOccurrencesByIds.mockReturnValue([moved])
+
+    const snapshot = getCoachCalendarMonthSnapshot("2026-08")
+
+    expect(mocks.listSessionOccurrencesByIds).toHaveBeenCalledWith(["occurrence-moved"])
+    expect(snapshot.sessionOccurrences).toEqual([cancelled, moved])
+    expect(mocks.listSessionAssignmentsForSeries).toHaveBeenCalledWith(["beginner-weekday"])
+  })
+
   it("loads the attendance recorder for one exact day and its occurrence roster", () => {
     const snapshot = getCoachAttendanceRecorderSnapshot("2026-08-03")
 
