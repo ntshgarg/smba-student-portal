@@ -9,7 +9,7 @@ import {
   latestAuthenticatorResetOutcome,
   type AuthenticatorResetOutcome,
 } from "@/lib/auth/authenticator-reset-service"
-import { challengedAccountId } from "@/lib/auth/two-factor-challenge"
+import { challengeStartedWithPin, challengedAccountId } from "@/lib/auth/two-factor-challenge"
 import { sessionProvider } from "@/lib/data"
 import { publicSiteUrl } from "@/lib/config"
 import { formatAcademyDate } from "@/lib/format"
@@ -54,6 +54,7 @@ export default async function TwoFactorPage() {
     }))
   }
   const resetNotice = await pendingResetNotice()
+  const pinSignIn = await challengeStartedWithPin(await headers())
 
   return (
     <main className="login-page">
@@ -68,7 +69,8 @@ export default async function TwoFactorPage() {
           <p>Your authenticator is already connected. Enter its current code or use a saved recovery code.</p>
         </div>
         {resetNotice ? <p className="login-helper" role="status">{resetNotice}</p> : null}
-        <TwoFactorVerificationForm />
+        <TwoFactorVerificationForm canTrustDevice={!pinSignIn} />
+        <Link className="login-back" href="/login">← Back to sign in</Link>
       </section>
     </main>
   )

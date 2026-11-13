@@ -1,8 +1,33 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { renderToStaticMarkup } from "react-dom/server"
 
+// What the proxy finds when it checks a preview is still showing.
+const database = vi.hoisted(() => ({ lookupFails: false, signedIn: true, viewed: true }))
+
 vi.mock("server-only", () => ({}))
+vi.mock("@/lib/db/client", async () => {
+  const { authRuntimeSessions } = await import("@/lib/db/schema")
+  return {
+    initializeDatabase: () => ({
+      select: () => ({
+        from: (table: unknown) => {
+          const query = {
+            innerJoin: () => query,
+            where: () => query,
+            get: () => {
+              if (database.lookupFails) throw new Error("database unavailable")
+              return (table === authRuntimeSessions ? database.signedIn : database.viewed)
+                ? { id: "row" }
+                : undefined
+            },
+          }
+          return query
+        },
+      }),
+    }),
+  }
+})
 import {
   createAdminPreviewToken,
   readAdminPreviewToken,
@@ -33,6 +58,12 @@ function clearsPreviewCookie(response: Response) {
   return /smba_admin_preview=;/u.test(response.headers.get("set-cookie") ?? "")
 }
 
+beforeEach(() => {
+  database.lookupFails = false
+  database.signedIn = true
+  database.viewed = true
+})
+
 describe("platform-owner preview claims", () => {
   it("binds a short-lived signed preview to its owner, target and sign-in", () => {
     const now = new Date("2026-08-18T12:00:00Z")
@@ -57,33 +88,33 @@ describe("platform-owner preview claims", () => {
     )).toBeNull()
   })
 
-  it("blocks mutations during a live preview while allowing the explicit preview-exit post", () => {
+  it("blocks mutations during a live preview while allowing the explicit preview-exit post", async () => {
     const cookie = `${livePreviewCookie()}; ${SESSION_COOKIE}`
-    expect(post("/coach/actions", cookie).status).toBe(403)
-    expect(post("/login", cookie).status).toBe(403)
-    expect(post("/admin/preview/exit", cookie).status).toBe(200)
+    expect((await post("/coach/actions", cookie)).status).toBe(403)
+    expect((await post("/login", cookie)).status).toBe(403)
+    expect((await post("/admin/preview/exit", cookie)).status).toBe(200)
 
-    const navigation = proxy(new NextRequest("http://localhost:3000/coach", {
+    const navigation = await proxy(new NextRequest("http://localhost:3000/coach", {
       method: "GET",
       headers: { cookie },
     }))
     expect(navigation.status).toBe(200)
   })
 
-  it("keeps the secure sign-in cookie name working as well", () => {
+  it("keeps the secure sign-in cookie name working as well", async () => {
     const secureCookie = SESSION_COOKIE.replace("smba.session_token", "__Secure-smba.session_token")
-    expect(post("/coach/actions", `${livePreviewCookie()}; ${secureCookie}`).status).toBe(403)
+    expect((await post("/coach/actions", `${livePreviewCookie()}; ${secureCookie}`)).status).toBe(403)
   })
 
-  it("clears a leftover preview cookie instead of blocking every form on the browser", () => {
+  it("clears a leftover preview cookie instead of blocking every form on the browser", async () => {
     // The owner's sign-in is gone: signing in again (or registering, or
     // recovering a password) must still work on this computer.
-    const signedOut = post("/login", livePreviewCookie())
+    const signedOut = await post("/login", livePreviewCookie())
     expect(signedOut.status).toBe(200)
     expect(clearsPreviewCookie(signedOut)).toBe(true)
 
     // Someone else signed in on the same browser.
-    const otherSignIn = post(
+    const otherSignIn = await post(
       "/coach/actions",
       `${livePreviewCookie()}; smba.session_token=someoneElse0123456789.sig`,
     )
@@ -91,13 +122,35 @@ describe("platform-owner preview claims", () => {
     expect(clearsPreviewCookie(otherSignIn)).toBe(true)
 
     // Unsigned or expired values.
-    expect(post("/login", `smba_admin_preview=present; ${SESSION_COOKIE}`).status).toBe(200)
-    const expired = post(
+    expect((await post("/login", `smba_admin_preview=present; ${SESSION_COOKIE}`)).status).toBe(200)
+    const expired = await post(
       "/login",
       `${livePreviewCookie(new Date(Date.now() - 2 * 60 * 60 * 1000))}; ${SESSION_COOKIE}`,
     )
     expect(expired.status).toBe(200)
     expect(clearsPreviewCookie(expired)).toBe(true)
+  })
+
+  it("stops blocking once the owner's sign-in row is gone or the viewed person is archived", async () => {
+    const cookie = `${livePreviewCookie()}; ${SESSION_COOKIE}`
+
+    // "Log out other devices" deleted this browser's sign-in while it previewed.
+    database.signedIn = false
+    const signedOut = await post("/login", cookie)
+    expect(signedOut.status).toBe(200)
+    expect(clearsPreviewCookie(signedOut)).toBe(true)
+
+    // The previewed person was archived: Log out and approvals must still go through.
+    database.signedIn = true
+    database.viewed = false
+    const archived = await post("/coach/actions", cookie)
+    expect(archived.status).toBe(200)
+    expect(clearsPreviewCookie(archived)).toBe(true)
+  })
+
+  it("keeps the preview read-only when the lookup itself fails", async () => {
+    database.lookupFails = true
+    expect((await post("/coach/actions", `${livePreviewCookie()}; ${SESSION_COOKIE}`)).status).toBe(403)
   })
 
   it("does not expose preview exit as a prefetchable GET link", () => {

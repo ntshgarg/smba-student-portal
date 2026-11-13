@@ -38,14 +38,14 @@ function accountFromSessionSummary(value: unknown): HeaderAccount | null {
     || !name.trim()
     || typeof initials !== "string"
     || !initials.trim()
-    || (role !== "coach" && role !== "player")
+    || (role !== "coach" && role !== "player" && role !== "platform_admin")
   ) return null
 
   return {
     name,
     initials,
-    dashboardHref: role === "coach" ? "/coach" : "/player",
-    dashboardLabel: role === "coach" ? "Coach Workspace" : "Player Journal",
+    dashboardHref: role === "coach" ? "/coach" : role === "player" ? "/player" : "/admin",
+    dashboardLabel: role === "coach" ? "Coach Workspace" : role === "player" ? "Player Journal" : "Admin",
     previewMode: summary.account.previewMode === true,
   }
 }

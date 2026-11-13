@@ -13,6 +13,8 @@
  * does (components/two-factor-verification-form.tsx:102), and the last case
  * here keeps that opt-in alive so the fix cannot be "flip every call to false".
  */
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -100,6 +102,8 @@ vi.mock("@/lib/db/client", async () => {
 })
 
 import { confirmTotpSetup, startTotpSetup, verifyTotpSignIn } from "@/app/auth/two-factor/actions"
+import { TwoFactorVerificationForm } from "@/components/two-factor-verification-form"
+import { challengeStartedWithPin } from "@/lib/auth/two-factor-challenge"
 
 const initialState = { error: null }
 
@@ -203,6 +207,21 @@ describe("authenticator enrolment does not grant a trusted device", () => {
     }))
   })
 
+  it("tells a PIN sign-in's challenge from a password one, because only the latter honours trust", async () => {
+    const challenge = (value: string) => new Headers({ cookie: `smba.two_factor=${value}` })
+    await expect(challengeStartedWithPin(challenge("2fa-pin-id.sig%3D"))).resolves.toBe(true)
+    await expect(challengeStartedWithPin(challenge("2fa-id.sig%3D"))).resolves.toBe(false)
+    await expect(challengeStartedWithPin(new Headers())).resolves.toBe(false)
+  })
+
+  it("offers the trust tick on a password sign-in and says why it is missing on a PIN one", () => {
+    const password = renderToStaticMarkup(createElement(TwoFactorVerificationForm))
+    expect(password).toContain('name="trustDevice"')
+
+    const pin = renderToStaticMarkup(createElement(TwoFactorVerificationForm, { canTrustDevice: false }))
+    expect(pin).not.toContain('name="trustDevice"')
+    expect(pin).toContain("only works when you sign in with your password")
+  })
 })
 
 /*

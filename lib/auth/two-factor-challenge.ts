@@ -45,3 +45,16 @@ export async function challengedAccountId(requestHeaders: Pick<Headers, "get">) 
     return null
   }
 }
+
+// Whether the half-finished sign-in began with a PIN. Better Auth skips the code for a
+// trusted device on a password sign-in only, so a PIN one is always asked for it.
+export async function challengeStartedWithPin(requestHeaders: Pick<Headers, "get">) {
+  try {
+    const authContext = await getAuth().$context
+    const name = authContext.createAuthCookie("two_factor").name
+    const values = cookieValues(requestHeaders.get("cookie"), name)
+    return values.length === 1 && values[0]!.startsWith("2fa-pin-")
+  } catch {
+    return false
+  }
+}
