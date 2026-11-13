@@ -545,13 +545,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         unconfirmed: "Check the connection, then reload the page to see whether the make-up was kept",
         subject: "Keeping the make-up",
       })
-      setFeedback({
-        action: failure.signIn,
-        message: failure.message,
-        offerRetry: failure.offerRetry,
-        retryAction: pendingKey,
-        tone: "error",
-      })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPendingAction(null)
     }
@@ -935,6 +929,14 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   const requiresReview = Boolean(adjustment.reviewRequiredAt) && !isVoided
                   const isExpanded = adjustment.id === expandedAdjustmentId
                   const keepKey = `keep:${adjustment.id}`
+                  const reviewCause = source?.status === "cancelled"
+                    ? "Its missed session was cancelled afterwards."
+                    : resolvedOccurrence && resolvedOccurrence.status !== "scheduled"
+                      ? "Its make-up session was cancelled."
+                      : resolvedOccurrence
+                        && attendanceRecords[resolvedOccurrence.id]?.[adjustment.playerId] !== "present"
+                        ? "The player’s Present mark on the make-up session was removed."
+                        : "A session it rests on has changed since it was recorded."
 
                   return (
                     <article
@@ -987,7 +989,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                           {requiresReview ? (
                             <div className="coach-adjustment-review-warning">
                               <CircleAlert aria-hidden="true" />
-                              <p><strong>This adjustment requires review.</strong> A session it rests on has changed since it was recorded. Keep the make-up if the player trained, or void it.</p>
+                              <p><strong>This adjustment requires review.</strong> {reviewCause} Keep the make-up if the player trained and is still marked Present on the make-up session, or void it.</p>
                             </div>
                           ) : null}
                           <dl>
@@ -1005,11 +1007,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                               onClick={() => void keepAdjustment(adjustment)}
                             >
                               <Check aria-hidden="true" />
-                              {pendingAction === keepKey
-                                ? "Keeping…"
-                                : retryAction === keepKey
-                                  ? "Keep make-up again"
-                                  : "Keep make-up"}
+                              {pendingAction === keepKey ? "Keeping…" : "Keep make-up"}
                             </button>
                           ) : null}
                           {!isVoided ? (

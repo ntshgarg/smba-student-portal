@@ -52,8 +52,6 @@ export type VoidAttendanceAdjustmentInput = DatabaseOption & {
   now?: Date
 }
 
-export type KeepAttendanceAdjustmentInput = VoidAttendanceAdjustmentInput
-
 export type ReconcileAttendanceAdjustmentReviewInput = {
   database: SmbaDatabase
   playerId: string
@@ -520,7 +518,7 @@ export function keepAttendanceAdjustment({
   adjustmentId,
   coachId,
   database = initializeDatabase(),
-}: KeepAttendanceAdjustmentInput): AttendanceAdjustmentRecord {
+}: VoidAttendanceAdjustmentInput): AttendanceAdjustmentRecord {
   assertApprovedCoach(database, coachId)
   return database.transaction((tx) => {
     const adjustment = tx.select().from(attendanceAdjustments)
@@ -611,12 +609,12 @@ export function reconcileAttendanceAdjustmentReviewStates({
   // Two players can complete the same make-up session, so this is a set. Missed
   // sessions are read too: one cancelled since is the coach's to settle, so a
   // Present on the completion session must not clear that flag.
-  const completionOccurrenceIds = [...new Set([
+  const occurrenceIds = [...new Set([
     ...active.map((adjustment) => adjustment.completionOccurrenceId)
       .filter((occurrenceId): occurrenceId is string => Boolean(occurrenceId)),
     ...active.map((adjustment) => adjustment.sourceOccurrenceId),
   ])]
-  const completionRows = completionOccurrenceIds.length
+  const occurrenceRows = occurrenceIds.length
     ? database.select({
       accountId: sessionAttendanceRecords.accountId,
       occurrenceId: sessionOccurrences.id,
@@ -627,12 +625,12 @@ export function reconcileAttendanceAdjustmentReviewStates({
         eq(sessionAttendanceRecords.choice, "present"),
         inArray(sessionAttendanceRecords.accountId, playerIds),
       ))
-      .where(inArray(sessionOccurrences.id, completionOccurrenceIds)).all()
+      .where(inArray(sessionOccurrences.id, occurrenceIds)).all()
     : []
-  const cancelledCompletionIds = new Set(completionRows
+  const cancelledOccurrenceIds = new Set(occurrenceRows
     .filter((row) => row.status !== "scheduled")
     .map((row) => row.occurrenceId))
-  const presenceByPlayerCompletion = new Set(completionRows.flatMap((row) => (
+  const presenceByPlayerCompletion = new Set(occurrenceRows.flatMap((row) => (
     row.status === "scheduled" && row.accountId
       ? [pairKey(row.accountId, row.occurrenceId)]
       : []
@@ -664,7 +662,7 @@ export function reconcileAttendanceAdjustmentReviewStates({
   const reviewRequiredIds: string[] = []
   active.forEach((adjustment) => {
     if (adjustment.completionOccurrenceId
-      && cancelledCompletionIds.has(adjustment.completionOccurrenceId)) return
+      && cancelledOccurrenceIds.has(adjustment.completionOccurrenceId)) return
     const hasOrdinaryPresence = adjustment.completionOccurrenceId
       ? presenceByPlayerCompletion.has(
         pairKey(adjustment.playerId, adjustment.completionOccurrenceId),
@@ -672,7 +670,7 @@ export function reconcileAttendanceAdjustmentReviewStates({
       : presenceByPlayerDate.has(pairKey(adjustment.playerId, adjustment.completedOn))
     if (hasOrdinaryPresence) {
       if (adjustment.reviewRequiredAt
-        && !cancelledCompletionIds.has(adjustment.sourceOccurrenceId)) {
+        && !cancelledOccurrenceIds.has(adjustment.sourceOccurrenceId)) {
         clearedIds.push(adjustment.id)
       }
       return

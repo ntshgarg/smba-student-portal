@@ -273,10 +273,10 @@ export function PlayerAttendanceRecorder({
   // shown. The expectation each mark carries is the one part of a draft that
   // does not merely age: a week is long enough for the register to be written
   // elsewhere, and a mark expecting what the cell held that evening is then
-  // unsaveable — see `rebaseRestoredAttendanceDraft`. The rebase stays in memory
-  // and storage keeps the draft as it was marked: rebasing again on the next
-  // read costs nothing, while overwriting the stored expectation would erase
-  // what the warning below is counted from. This component is keyed on the
+  // unsaveable — see `rebaseRestoredAttendanceDraft`. The rebase is not written
+  // back on restore, so a reload before any tap warns again; the next mark
+  // persists the rebased expectations, once the coach has seen the warning.
+  // This component is keyed on the
   // selection, so the navigation `chooseOccurrence` fires remounts it and reads
   // the draft a second time within the same tap.
   //

@@ -700,7 +700,7 @@ describe("attendance registers restore their own drafts", () => {
     ])
     expect(restore.notice).toBe(
       "1 unsaved change restored from an earlier visit."
-      + " 2 marks were left out because those players can no longer be marked here."
+      + " 2 marks were left out because they can no longer be marked here."
       + " Nothing is recorded until you save attendance",
     )
   })
@@ -716,7 +716,7 @@ describe("attendance registers restore their own drafts", () => {
     expect(restore.marks).toEqual([])
     expect(restore.notice).toBe(
       "Unsaved marks from an earlier visit were found."
-      + " 1 mark was left out because that player can no longer be marked here.",
+      + " 1 mark was left out because it can no longer be marked here.",
     )
     expect(entries.has(playerAttendanceDraftKey("occurrence-1"))).toBe(false)
   })
@@ -753,7 +753,7 @@ describe("attendance registers restore their own drafts", () => {
       { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "present" },
     ])
     expect(restore.notice).toContain(
-      "1 mark was left out because that assistant coach can no longer be marked here.",
+      "1 mark was left out because it can no longer be marked here.",
     )
   })
 })

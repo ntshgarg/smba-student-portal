@@ -347,6 +347,16 @@ export function rebaseRestoredAttendanceDraft<Change extends {
   return { changedUnderneath, changes }
 }
 
+function leftOutClause(leftOut: number) {
+  return `${leftOut} ${leftOut === 1 ? "mark was" : "marks were"} left out because`
+    + ` ${leftOut === 1 ? "it" : "they"} can no longer be marked here.`
+}
+
+/** Every restored mark was left out. */
+export function leftOutAttendanceDraftNotice(leftOut: number) {
+  return `Unsaved marks from an earlier visit were found. ${leftOutClause(leftOut)}`
+}
+
 /**
  * A silent restore is its own hazard: marks that look saved but are not. The
  * count reuses the wording the register already shows for unsaved work, and the
@@ -357,36 +367,18 @@ export function rebaseRestoredAttendanceDraft<Change extends {
  * last: what is on screen, then what changed beneath it, then that none of it is
  * recorded yet.
  */
-export type DraftSubjects = { one: string; many: string }
-
-const playerSubjects: DraftSubjects = { one: "that player", many: "those players" }
-
-function leftOutClause(leftOut: number, subjects: DraftSubjects) {
-  return `${leftOut} ${leftOut === 1 ? "mark was" : "marks were"} left out because`
-    + ` ${leftOut === 1 ? subjects.one : subjects.many} can no longer be marked here.`
-}
-
-/** Every restored mark was left out. */
-export function leftOutAttendanceDraftNotice(
-  leftOut: number,
-  subjects: DraftSubjects = playerSubjects,
-) {
-  return `Unsaved marks from an earlier visit were found. ${leftOutClause(leftOut, subjects)}`
-}
-
 export function restoredAttendanceDraftNotice(
   count: number,
   saveAction: string,
   changedUnderneath = 0,
   leftOut = 0,
-  subjects: DraftSubjects = playerSubjects,
 ) {
   return `${count} unsaved ${count === 1 ? "change" : "changes"} restored from an`
     + ` earlier visit.${changedUnderneath
       ? ` ${changedUnderneath} ${changedUnderneath === 1 ? "was" : "were"} marked`
         + " differently elsewhere since."
       : ""}${leftOut
-      ? ` ${leftOutClause(leftOut, subjects)}`
+      ? ` ${leftOutClause(leftOut)}`
       : ""}`
     + ` Nothing is recorded until you ${saveAction}`
 }

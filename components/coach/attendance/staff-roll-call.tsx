@@ -88,11 +88,6 @@ type SaveFeedback = ActionFeedback & {
  */
 const saveDeadlineMs = 15_000
 
-/** A date change not arrived by now is treated as lost. */
-const dateChangeDeadlineMs = 20_000
-
-const staffSubjects = { one: "that assistant coach", many: "those assistant coaches" }
-
 export function StaffRollCall({
   closedFor,
   initialDate,
@@ -196,7 +191,7 @@ export function StaffRollCall({
         if (leftOut) {
           discardStaffAttendanceDraft(selectedDate)
           setFeedback({
-            message: leftOutAttendanceDraftNotice(leftOut, staffSubjects),
+            message: leftOutAttendanceDraftNotice(leftOut),
             tone: "info",
           })
         }
@@ -210,7 +205,6 @@ export function StaffRollCall({
           "save staff attendance",
           rebased.changedUnderneath,
           leftOut,
-          staffSubjects,
         ),
         tone: "info",
       })
@@ -218,21 +212,6 @@ export function StaffRollCall({
 
     return () => window.clearTimeout(timer)
   }, [closedDay, isChangingDate, juniorCoaches, referenceDate, selectedDate, storedByCoach])
-
-  // If the new date never arrives, go back to the day on screen and say so.
-  useEffect(() => {
-    if (!isChangingDate) return
-    const pendingDate = selectedDate
-    const timer = window.setTimeout(() => {
-      setSelectedDate(initialDate)
-      setSelectionNotice({
-        message: `The roll call for ${formatDateKey(pendingDate)} did not load.`
-          + " Check the connection and choose the date again.",
-        tone: "error",
-      })
-    }, dateChangeDeadlineMs)
-    return () => window.clearTimeout(timer)
-  }, [initialDate, isChangingDate, selectedDate])
 
   function resolvedChoice(coachAccountId: string) {
     if (closedDay) return "cleared"
