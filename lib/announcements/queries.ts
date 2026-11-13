@@ -341,22 +341,20 @@ export function getActiveHomepageAnnouncement(
   announcementId: string,
   options: AnnouncementQueryOptions = {},
 ): PublicAnnouncementDetail | null {
-  try {
-    const database = options.database ?? initializeDatabase()
-    const now = options.now ?? academyNow()
-    const row = activeChannelRows("homepage", database, now)
-      .find(({ id }) => id === announcementId)
-    if (!row) return null
-    return {
-      id: row.id,
-      title: row.title,
-      content: row.content,
-      publishedAt: row.publishedAt.toISOString(),
-      expiresOn: row.expiresOn,
-      pinned: row.pinned,
-    }
-  } catch {
-    return null
+  // No catch here: only a notice that is not live is null. A database fault
+  // surfaces as a logged server error, not a "not found".
+  const database = options.database ?? initializeDatabase()
+  const now = options.now ?? academyNow()
+  const row = activeChannelRows("homepage", database, now)
+    .find(({ id }) => id === announcementId)
+  if (!row) return null
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    publishedAt: row.publishedAt.toISOString(),
+    expiresOn: row.expiresOn,
+    pinned: row.pinned,
   }
 }
 

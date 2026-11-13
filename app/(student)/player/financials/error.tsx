@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useTransition } from "react"
 import { ArrowLeft, CircleAlert } from "lucide-react"
 
 import styles from "@/components/financials/player-financials.module.css"
@@ -14,6 +16,8 @@ export default function PlayerFinancialsError({
   reset: () => void
 }) {
   useErrorReport("player_financials", error)
+  const router = useRouter()
+  const [, startRetry] = useTransition()
 
   return (
     <div className={`${styles.page} interior-page page-shell`}>
@@ -30,7 +34,16 @@ export default function PlayerFinancialsError({
         <CircleAlert aria-hidden="true" />
         <h2>Fee record unavailable.</h2>
         <p>Your record could not be loaded just now. No financial information has been changed.</p>
-        <button className={styles.retryButton} onClick={reset} type="button">Try again</button>
+        <button
+          className={styles.retryButton}
+          onClick={() => startRetry(() => {
+            router.refresh()
+            reset()
+          })}
+          type="button"
+        >
+          Try again
+        </button>
       </section>
     </div>
   )

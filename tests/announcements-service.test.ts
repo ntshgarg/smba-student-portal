@@ -391,4 +391,10 @@ describe("homepage announcements when the database fails", () => {
     sqlite.close()
     expect(() => listActiveHomepageAnnouncements({ database, now: NOW })).toThrow()
   })
+
+  it("lets the fault through on a single notice instead of answering not found", () => {
+    sqlite.close()
+    expect(() => getActiveHomepageAnnouncement(FIRST_ANNOUNCEMENT_ID, { database, now: NOW }))
+      .toThrow()
+  })
 })

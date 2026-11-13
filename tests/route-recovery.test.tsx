@@ -14,6 +14,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: navigation.refresh }),
 }))
 
+// The finance boundaries are called as plain functions below, outside a render,
+// where the error-report effect cannot run.
+vi.mock("@/lib/telemetry/use-error-report", () => ({ useErrorReport: () => {} }))
+
 // Called as a plain function below, outside a render, so the button's pending
 // hook is stood in for: never pending, and the transition runs straight away.
 vi.mock("react", async () => {
@@ -165,6 +169,24 @@ describe("authenticated route recovery", () => {
     // without this failing.
     expect(navigation.refresh).toHaveBeenCalledTimes(1)
     expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  // The two finance boundaries draw their own screen, so the shared state's retry
+  // test above does not cover them.
+  it.each([
+    ["/coach/financials", CoachFinancialsError],
+    ["/player/financials", PlayerFinancialsError],
+  ])("retries %s by refreshing the route and clearing the boundary", (_route, Boundary) => {
+    const reset = vi.fn()
+    navigation.refresh.mockClear()
+
+    const retry = retryHandler(Boundary({ error: fault(), reset }))
+
+    expect(retry).toBeTypeOf("function")
+    retry?.()
+
+    expect(navigation.refresh).toHaveBeenCalledTimes(1)
+    expect(reset).toHaveBeenCalledTimes(1)
   })
 
   it.each(loadingBoundaries)(
