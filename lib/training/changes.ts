@@ -710,7 +710,11 @@ export function applyDueTrainingChanges({
         resolvedAt: now,
         status: "failed",
         updatedAt: now,
-      }).where(and(eq(trainingChanges.id, change.id), eq(trainingChanges.status, "scheduled"))).run()
+      }).where(and(
+        eq(trainingChanges.id, change.id),
+        eq(trainingChanges.status, "scheduled"),
+        lte(trainingChanges.effectiveOn, today),
+      )).run()
     }
   }
   return { applied, due: due.length, retry }
