@@ -1,14 +1,13 @@
 "use client"
 
 import { ArrowUpRight, Check } from "lucide-react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 import { prepareMonthlyChargesAction } from "@/app/coach/financials/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import type { MonthlyPreparationPreview, MonthlyPreparationSkip } from "@/lib/finance/types"
+import type { MonthlyPreparationPreview } from "@/lib/finance/types"
 
 import {
   periodLabel,
@@ -29,55 +28,6 @@ function monthOnly(period: string) {
   const [year, month] = period.split("-").map(Number)
   if (!year || !month) return period
   return monthOnlyFormat.format(new Date(Date.UTC(year, month - 1, 1)))
-}
-
-const skipGroups: Array<{ folded: boolean; reason: MonthlyPreparationSkip["reason"]; title: string }> = [
-  { folded: false, reason: "term_finished", title: "Term finished" },
-  { folded: false, reason: "level_changed", title: "Level changed since the fee plan" },
-  // A break is chosen on purpose and can last months, so it is folded away.
-  { folded: true, reason: "on_break", title: "On a break (fee plan kept)" },
-]
-
-/*
- * Who this month's fee issue passes over although they have a fee plan, by
- * name, so nobody is skipped without a word (head coach, 12 Nov 2026). Fee
- * issuing itself is unchanged: a month is billed only for a schedule that
- * reaches into it. Each name opens the player's record in Members, where they
- * are moved on, ended, or their fees stopped.
- */
-function SkippedPlayers({ period, skipped }: { period: string; skipped: MonthlyPreparationSkip[] }) {
-  if (!skipped.length) return null
-  return (
-    <div className={styles.preparationSkipped}>
-      <p>
-        <strong>Not issued: {skipped.length} {skipped.length === 1 ? "player has" : "players have"} a fee plan but no schedule in {monthOnly(period)}</strong>
-      </p>
-      {skipGroups.map(({ folded, reason, title }) => {
-        const group = skipped.filter((item) => item.reason === reason)
-        if (!group.length) return null
-        const list = (
-          <ul>
-            {group.map((item) => (
-              <li key={item.playerId}>
-                <Link href={`/coach/members?player=${encodeURIComponent(item.playerId)}`}>{item.fullName}</Link>
-              </li>
-            ))}
-          </ul>
-        )
-        return folded ? (
-          <details key={reason}>
-            <summary>{title} · {group.length}</summary>
-            {list}
-          </details>
-        ) : (
-          <div key={reason}>
-            <span>{title} · {group.length}</span>
-            {list}
-          </div>
-        )
-      })}
-    </div>
-  )
 }
 
 export function PrepareFees({
@@ -163,8 +113,6 @@ export function PrepareFees({
         <div><dt>Ready to issue</dt><dd>{preparation.ready}</dd></div>
         <div><dt>Already issued</dt><dd>{preparation.alreadyPrepared}</dd></div>
       </dl>
-
-      {notYet ? null : <SkippedPlayers period={period} skipped={preparation.skipped} />}
 
       {notYet ? (
         <p className={styles.preparationNote}>

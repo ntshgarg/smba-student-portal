@@ -3,8 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { PlayerMemberRecord } from "@/lib/coach/types"
-import type { MonthlyPreparationPreview } from "@/lib/finance/types"
-import type { EndScheduleResult, EndScheduleRosterPlayer } from "@/lib/sessions/service"
+import type { EndScheduleRosterPlayer } from "@/lib/sessions/service"
 import type { SessionAssignment, TrainingSessionSeries } from "@/lib/sessions/types"
 import type {
   MemberFeeSummary,
@@ -54,9 +53,7 @@ vi.mock("@/app/coach/financials/actions", () => ({}))
 import {
   EndSchedulePanel,
   endScheduleGroups,
-  endScheduleSummary,
 } from "@/components/coach/calendar/end-schedule-panel"
-import { PrepareFees } from "@/components/coach/financials/prepare-fees"
 import { MemberTrainingActions } from "@/components/coach/members/directory/member-training-actions"
 import { MemberTrainingProvider } from "@/components/coach/members/directory/member-training-context"
 import {
@@ -230,43 +227,6 @@ describe("a player's record in Members", () => {
   })
 })
 
-describe("Issue fees", () => {
-  function preparation(overrides: Partial<MonthlyPreparationPreview> = {}): MonthlyPreparationPreview {
-    return {
-      alreadyPrepared: 0,
-      awaitingAssignment: 3,
-      ready: 6,
-      setupRequired: 1,
-      skipped: [
-        { fullName: "Chitra Nair", playerId: "chitra", reason: "on_break" },
-        { fullName: "Mohan Reddy", playerId: "mohan", reason: "term_finished" },
-        { fullName: "Nina George", playerId: "nina", reason: "level_changed" },
-      ],
-      ...overrides,
-    }
-  }
-
-  it("names who it skips, with the reason and a link to each record; a break is folded away", () => {
-    const html = renderToStaticMarkup(
-      <PrepareFees compact currentPeriod="2026-12" period="2026-12" preparation={preparation()} />,
-    )
-    expect(html).toContain("Not issued: 3 players have a fee plan but no schedule in December")
-    expect(html).toContain("Term finished · 1")
-    expect(html).toContain("Level changed since the fee plan · 1")
-    expect(html).toContain('<details><summary>On a break (fee plan kept) · 1</summary>')
-    expect(html).toContain('href="/coach/members?player=mohan">Mohan Reddy</a>')
-    expect(html).toContain('href="/coach/members?player=chitra">Chitra Nair</a>')
-    expect(html.indexOf("Mohan Reddy")).toBeLessThan(html.indexOf("Chitra Nair"))
-  })
-
-  it("says nothing extra when nobody is skipped", () => {
-    const html = renderToStaticMarkup(
-      <PrepareFees compact currentPeriod="2026-12" period="2026-12" preparation={preparation({ skipped: [] })} />,
-    )
-    expect(html).not.toContain("Not issued:")
-  })
-})
-
 describe("End schedule's confirm panel", () => {
   it("asks first, in place of a browser confirm box", () => {
     const html = renderToStaticMarkup(
@@ -274,7 +234,6 @@ describe("End schedule's confirm panel", () => {
         busy={false}
         finished={false}
         label="Beginner · Weekday · 6–7 am"
-        lastDay="2027-03-31"
         onCancel={() => undefined}
         onConfirm={() => undefined}
         seriesId="season"
@@ -285,49 +244,6 @@ describe("End schedule's confirm panel", () => {
     expect(html).toContain("Checking who is on this schedule")
     // Nothing can be ended until it knows who is on it.
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>End schedule<\/button>/u)
-  })
-
-  it("sums up what End schedule did from the lists it returned", () => {
-    const person = (fullName: string) => ({ fullName, playerId: fullName })
-    const closeout: EndScheduleResult = {
-      alreadyEnded: false,
-      bookingCancelled: [{ ...person("Esha Das"), schedule: "Beginner · Weekday · 6–7 pm" }],
-      bookingKept: [person("Chitra Nair")],
-      cancelledOccurrences: 4,
-      closedAssignments: 3,
-      endsPlacesOn: today,
-      feesStopped: [person("Asha Rao")],
-      inOnboarding: [],
-      keptActive: [person("Bala Iyer")],
-      takenOff: [person("Asha Rao"), person("Bala Iyer"), person("Chitra Nair")],
-    }
-    expect(endScheduleSummary(closeout, "November 2026")).toEqual([
-      "Taken off: Asha Rao, Bala Iyer, Chitra Nair",
-      "Still training on another schedule, fees unchanged: Bala Iyer",
-      "Booked change kept as arranged: Chitra Nair",
-      "Booking onto this schedule cancelled (their record says so): Esha Das",
-      "Fees stop after November 2026: Asha Rao",
-    ])
-  })
-
-  it("says a repeat press changed nothing, instead of claiming nobody was on it", () => {
-    const repeat: EndScheduleResult = {
-      alreadyEnded: true,
-      bookingCancelled: [],
-      bookingKept: [],
-      cancelledOccurrences: 0,
-      closedAssignments: 0,
-      endsPlacesOn: null,
-      feesStopped: [],
-      inOnboarding: [],
-      keptActive: [],
-      takenOff: [],
-    }
-    const lines = endScheduleSummary(repeat, "November 2026")
-    expect(lines).toEqual([
-      "This schedule had already been ended, so nothing more was changed. Each player's record in Members shows what changed.",
-    ])
-    expect(lines.join(" ")).not.toContain("Nobody was on it")
   })
 
   it("counts as paused everyone the write pauses, booked change or not", () => {
@@ -364,7 +280,6 @@ describe("End schedule's confirm panel", () => {
         busy={false}
         finished={false}
         label="Beginner · Weekday · 6–7 am"
-        lastDay="2027-03-31"
         onCancel={() => undefined}
         onConfirm={onConfirm}
         seriesId="season"

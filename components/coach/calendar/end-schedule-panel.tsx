@@ -9,10 +9,8 @@ import formStyles from "@/components/coach/members/directory/member-training-act
 import { InlineNotice } from "@/components/inline-notice"
 import { isSessionExpiry, signInInNewTab } from "@/lib/client/network-failure"
 import { formatDateKey } from "@/lib/format"
-import { formatTermDate } from "@/lib/sessions/term"
 import type {
   EndSchedulePreview,
-  EndScheduleResult,
   EndScheduleRosterPlayer,
 } from "@/lib/sessions/service"
 
@@ -49,38 +47,6 @@ function playerNote(player: EndScheduleRosterPlayer) {
 }
 
 /**
- * The plain summary shown after End schedule, from the lists the server
- * returned (lib/sessions/service.ts endSessionSeriesRecords).
- */
-export function endScheduleSummary(closeout: EndScheduleResult, thisMonth: string) {
-  // A repeat press (a lost reply, or a second tab) finds it already ended and
-  // changes nothing; its empty lists say nothing about who was on it.
-  if (closeout.alreadyEnded) {
-    return ["This schedule had already been ended, so nothing more was changed. Each player's record in Members shows what changed."]
-  }
-  return [
-    closeout.takenOff.length
-      ? `Taken off: ${names(closeout.takenOff)}`
-      : "Nobody was on it",
-    closeout.keptActive.length
-      ? `Still training on another schedule, fees unchanged: ${names(closeout.keptActive)}`
-      : null,
-    closeout.bookingKept.length
-      ? `Booked change kept as arranged: ${names(closeout.bookingKept)}`
-      : null,
-    closeout.bookingCancelled.length
-      ? `Booking onto this schedule cancelled (their record says so): ${names(closeout.bookingCancelled)}`
-      : null,
-    closeout.feesStopped.length
-      ? `Fees stop after ${thisMonth}: ${names(closeout.feesStopped)}`
-      : null,
-    closeout.inOnboarding.length
-      ? `Still in Player onboarding (finish it there): ${names(closeout.inOnboarding)}`
-      : null,
-  ].filter((line): line is string => Boolean(line))
-}
-
-/**
  * The groups the confirm panel counts, classified the way
  * endSessionSeriesRecords writes them: anyone with no place left on another
  * schedule (running or term-finished) is paused, booked change or not; the
@@ -107,7 +73,6 @@ export function EndSchedulePanel({
   busy,
   finished,
   label,
-  lastDay,
   onCancel,
   onConfirm,
   retry = false,
@@ -118,7 +83,6 @@ export function EndSchedulePanel({
   /** The schedule's last day has passed: there are no sessions left to cancel. */
   finished: boolean
   label: string
-  lastDay: string | null
   onCancel: () => void
   onConfirm: (stopFees: boolean) => void
   /** The last try did not reach the server; the button says to try again. */
@@ -171,9 +135,7 @@ export function EndSchedulePanel({
         ? `Cancel ${preview.upcomingSessions} upcoming ${preview.upcomingSessions === 1 ? "session" : "sessions"}`
         : "Cancel its upcoming sessions (none are left)",
     roster.length
-      ? finished && lastDay
-        ? `Take ${players(roster.length)} off it after its last day, ${formatTermDate(lastDay)}`
-        : `Take ${players(roster.length)} off it today`
+      ? `Take ${players(roster.length)} off it today`
       : "Close it: nobody is on it",
     ...(keptActive.length ? [`Keep ${players(keptActive.length)} training on their other schedule`] : []),
     ...(keptBooking.length ? [`Leave the booked change of ${players(keptBooking.length)} as arranged`] : []),

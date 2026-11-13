@@ -362,9 +362,9 @@ describe("End schedule closes out its players, and every kept fee plan can be st
     expect(activePlan(players.farhan)).toBeNull()
   })
 
-  it("ends a finished schedule's places at its last day, and Keep the fee plan keeps it", () => {
+  it("ends a finished schedule's places today, and Keep the fee plan keeps it", () => {
     expect(sessions.previewEndSessionSeries({ coachId, database, now, seriesId: finishedEarly }))
-      .toMatchObject({ endsPlacesOn: "2026-11-01", termFinished: true, upcomingSessions: 0 })
+      .toMatchObject({ endsPlacesOn: "2026-11-12", termFinished: true, upcomingSessions: 0 })
     const result = sessions.endSessionSeriesRecords({
       coachId,
       database,
@@ -373,10 +373,9 @@ describe("End schedule closes out its players, and every kept fee plan can be st
       stopFees: false,
     })
 
-    expect(result).toMatchObject({ cancelledOccurrences: 0, endsPlacesOn: "2026-11-01", feesStopped: [] })
-    // Covered through 31 October, its last day, not stretched to today.
+    expect(result).toMatchObject({ cancelledOccurrences: 0, endsPlacesOn: "2026-11-12", feesStopped: [] })
     expect(database.select().from(schema.sessionAssignments)
-      .where(eq(schema.sessionAssignments.accountId, players.hari)).get()?.effectiveTo).toBe("2026-11-01")
+      .where(eq(schema.sessionAssignments.accountId, players.hari)).get()?.effectiveTo).toBe("2026-11-12")
     expect(enrollment(players.hari).status).toBe("paused")
     expect(activePlan(players.hari)).toMatchObject({ effectiveTo: null, status: "active" })
   })
@@ -496,7 +495,7 @@ describe("End schedule closes out its players, and every kept fee plan can be st
     expect(summaryOf(players.esha).note).toBeNull()
   })
 
-  it("names the players Issue fees skips, with the reason, and still issues the same fees", () => {
+  it("issues December's fees only to players still on a schedule with a running fee plan", () => {
     // Nina is on a break with her fee plan kept, then her level changes.
     changes.endTrainingNow({ playerId: players.nina, stopFees: false }, context())
     database.update(schema.playerEnrollments).set({ level: "Intermediate" })
@@ -515,17 +514,11 @@ describe("End schedule closes out its players, and every kept fee plan can be st
     ])
 
     const preview = finance.getCoachMonthlyPreparationPreview("2026-12", context(secondDecember))
-    expect(preview.skipped).toEqual([
-      { fullName: "Chitra Nair", playerId: players.chitra, reason: "on_break" },
-      { fullName: "Mohan Reddy", playerId: players.mohan, reason: "term_finished" },
-      { fullName: "Nina George", playerId: players.nina, reason: "level_changed" },
-    ])
 
     const prepared = finance.prepareMonthlyCharges({
       period: "2026-12",
       idempotencyKey: "prepare-december-closeout",
     }, context(secondDecember))
-    expect(prepared.skipped).toEqual(preview.skipped)
     expect(prepared.createdChargeIds).toHaveLength(preview.ready)
     const billed = database.select().from(schema.financialCharges)
       .where(eq(schema.financialCharges.billingPeriod, "2026-12")).all()
@@ -651,7 +644,7 @@ describe("End schedule closes out its players, and every kept fee plan can be st
     expect(openPlaces(players.esha).map((place) => place.seriesId)).toEqual([morning])
   })
 
-  it("does not point a new player whose first fee starts next month to a button they do not have, and will not widen a stopped plan", () => {
+  it("does not point a new player whose first fee starts next month to a button they do not have", () => {
     addPlayer(players.roshan, "Roshan Kumar", 9218, [morning])
     database.update(schema.playerEnrollments).set({ trainingStartOn: "2026-12-01" })
       .where(eq(schema.playerEnrollments.accountId, players.roshan)).run()
@@ -674,16 +667,5 @@ describe("End schedule closes out its players, and every kept fee plan can be st
     // End training with Stop fees pauses the plan that had not started.
     changes.endTrainingNow({ playerId: players.roshan, stopFees: true }, context())
     expect(plans(players.roshan)).toEqual([expect.objectContaining({ effectiveFrom: "2026-12-01", status: "paused" })])
-
-    // Correcting the start into November would reopen a month that never bills.
-    expect(() => finance.redateConfirmedTrainingStart({
-      expectedRevision: enrollment(players.roshan).recordRevision,
-      idempotencyKey: "redate-roshan",
-      playerId: players.roshan,
-      reason: "Began training earlier",
-      trainingStartOn: "2026-11-16",
-    }, context())).toThrow("This player's fee plan was stopped before it started. Set up a fee plan for the months to bill first.")
-    expect(plans(players.roshan)).toEqual([expect.objectContaining({ effectiveFrom: "2026-12-01", status: "paused" })])
-    expect(enrollment(players.roshan).trainingStartOn).toBe("2026-12-01")
   })
 })

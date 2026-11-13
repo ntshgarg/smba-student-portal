@@ -471,10 +471,6 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     // On a break with the fee plan kept: fee issuing passes them over.
     changes.endTrainingNow({ playerId: players.breaker, stopFees: false }, context())
     const secondNovember = new Date("2026-11-02T05:00:00.000Z")
-    const preview = finance.getCoachMonthlyPreparationPreview("2026-11", context(secondNovember))
-    expect(preview.skipped).toEqual(expect.arrayContaining([
-      expect.objectContaining({ playerId: players.breaker, reason: "on_break" }),
-    ]))
     const register = finance.getFeeRegister({ mode: "monthly", period: "2026-11", limit: 100 }, context(secondNovember))
     // The register used to list them as "Not issued" every month.
     expect(register.rows.find((row) => row.playerId === players.breaker)).toBeUndefined()

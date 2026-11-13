@@ -247,15 +247,9 @@ function validateFee(monthlyFeePaise: number | null, financeActive: boolean) {
 }
 
 /*
- * "Stop fees after <month>": the one way End training (booked or "has left
- * already"), End schedule and Stop fees end a player's fees, so the four
- * cannot drift apart. The plan in force ends with that month, so that month's
- * fee is the last. A plan due to start after it -- a fee change made this
- * month, or a new player whose first fee month is next month -- is paused, so
- * it never bills (lib/finance/service.ts pauseUnstartedFeeAgreementInTransaction
- * says why that state). It used to be skipped quietly, and the family was
- * billed the new fee anyway. Fees already issued never change. Returns whether
- * a plan was stopped.
+ * "Stop fees after <month>", shared by End training, End schedule and Stop
+ * fees: the plan in force ends with that month, and a plan due to start after
+ * it is paused so it never bills. Returns whether a plan was stopped.
  */
 export function stopFeesAfterMonth(
   tx: Executor,
@@ -329,8 +323,8 @@ function dayBefore(dateKey: string) {
 
 /**
  * The plan a waiting fee change replaced, when the change can still be
- * cancelled: the plan in force starts after today and nothing has been issued
- * on it, and the plan before it was closed on the day before it, which is
+ * cancelled: the plan in force starts after today (so no fee is issued on it
+ * yet), and the plan before it was closed on the day before it, which is
  * what a fee change does (createAgreement in lib/finance/service.ts). Shared
  * with the Members summary, so the button is offered exactly when this allows
  * it.
@@ -340,9 +334,9 @@ export function waitingFeeChangeOf<Plan extends {
   effectiveTo: string | null
   id: string
   status: string
-}>(plans: readonly Plan[], today: string, issuedPlanIds: ReadonlySet<string>) {
+}>(plans: readonly Plan[], today: string) {
   const change = plans.find((plan) => plan.status === "active")
-  if (!change || change.effectiveFrom <= today || issuedPlanIds.has(change.id)) return null
+  if (!change || change.effectiveFrom <= today) return null
   const replaced = plans.find((plan) => (
     plan.status === "ended" && plan.effectiveTo === dayBefore(change.effectiveFrom)
   ))
@@ -360,11 +354,7 @@ function nextMonthFeeRefusal(tx: Executor, playerId: string, today: string, then
     eq(feeAgreements.playerAccountId, playerId),
     ne(feeAgreements.status, "paused"),
   )).all()
-  const issued = new Set(tx.select({ planId: financialCharges.feeAgreementId }).from(financialCharges).where(and(
-    eq(financialCharges.playerAccountId, playerId),
-    eq(financialCharges.lifecycle, "issued"),
-  )).all().flatMap((row) => (row.planId ? [row.planId] : [])))
-  if (waitingFeeChangeOf(plans, today, issued)) {
+  if (waitingFeeChangeOf(plans, today)) {
     operationalActionError(
       "CONFLICT",
       `A new fee already starts next month. Use Cancel this fee change under Monthly fee first, then ${then}.`,
@@ -1097,13 +1087,9 @@ export function endTrainingNow(
 /* ------------------------------------------------------------------ */
 
 /*
- * A fee plan kept for a break ("Keep the fee plan" on End training or End
- * schedule) has to be ended some day, or the player can never be archived
- * (head coach, 12 Nov 2026). Stop fees is that way: for a player on no
- * schedule with nothing booked, it ends the plan after this month exactly as
- * End training's "Stop fees" does. A player still holding a place, even on a
- * schedule whose term has finished, uses End training instead; a player with
- * a booking keeps what was arranged.
+ * Stop fees, for a player on no schedule with nothing booked: ends a fee plan
+ * kept for a break after this month, as End training's "Stop fees" does, so
+ * the player can be archived.
  */
 export function stopFeePlan(
   input: { playerId: string },

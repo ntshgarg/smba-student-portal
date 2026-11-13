@@ -27,8 +27,6 @@ import { getAcademyDateKey } from "@/lib/format"
 import { formatTermDate } from "@/lib/sessions/term"
 import { monthStartOf, nextMonthStartOf, waitingFeeChangeOf } from "@/lib/training/changes"
 
-export { waitingFeeChangeOf }
-
 /*
  * Fee changes and concessions made from a player's record in Members. The head
  * coach's rule (23 Sept 2026, kept on 5 Oct): a new fee and a concession start
@@ -180,11 +178,7 @@ export function cancelFeeChange(
         eq(feeAgreements.playerAccountId, input.playerId),
         ne(feeAgreements.status, "paused"),
       )).all()
-      const issued = new Set(tx.select({ planId: financialCharges.feeAgreementId }).from(financialCharges).where(and(
-        eq(financialCharges.playerAccountId, input.playerId),
-        eq(financialCharges.lifecycle, "issued"),
-      )).all().flatMap((row) => (row.planId ? [row.planId] : [])))
-      const waiting = waitingFeeChangeOf(plans, today, issued)
+      const waiting = waitingFeeChangeOf(plans, today)
       if (!waiting || waiting.change.id !== input.agreementId) {
         operationalActionError(
           "CONFLICT",

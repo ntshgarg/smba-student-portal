@@ -6382,49 +6382,6 @@ tr.is-expanded .coach-member-row-action button svg {
   opacity: 0.55;
 }
 
-/* What the last End schedule did. The ended schedule leaves the rosters, so
-   the summary sits above them; empty, it takes no room but stays a live
-   region. */
-.coach-series-ended-summary {
-  display: grid;
-  gap: var(--space-tight);
-  margin-top: 22px;
-  padding: var(--space-copy) 18px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--navy);
-  background: var(--white);
-  color: var(--ink);
-  font-size: 0.8125rem;
-  line-height: 1.55;
-}
-
-.coach-series-ended-summary:empty {
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.coach-series-ended-summary strong {
-  color: var(--navy);
-  font-size: 0.9375rem;
-}
-
-.coach-series-ended-summary ul {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.coach-series-ended-summary button {
-  justify-self: start;
-  min-height: 44px;
-  padding: 0 var(--space-copy);
-  border: 1px solid var(--line-control);
-  background: var(--white);
-  color: var(--navy);
-  font-size: 0.75rem;
-  font-weight: 750;
-}
-
 .coach-member-form-status {
   display: grid;
   align-content: center;

@@ -20,8 +20,8 @@ import {
   termFinishedOn,
   termFinishedToMove,
 } from "@/lib/sessions/term"
-import { nextMonthStartOf } from "@/lib/training/changes"
-import { feeChangeStartsOn, waitingFeeChangeOf } from "@/lib/training/fees"
+import { nextMonthStartOf, waitingFeeChangeOf } from "@/lib/training/changes"
+import { feeChangeStartsOn } from "@/lib/training/fees"
 import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
 import type { ThisMonthFeeBasis } from "@/lib/training/this-month-fee-plan"
 
@@ -219,16 +219,6 @@ export function listMemberTrainingSummaries(
     eq(financialCharges.billingPeriod, thisPeriod),
     eq(financialCharges.lifecycle, "issued"),
   )).all()
-  // A fee change waiting for next month can be cancelled only while nothing
-  // has been issued on it.
-  const activeIds = agreements.filter((agreement) => agreement.status === "active")
-    .map((agreement) => agreement.id)
-  const issuedPlanIds = new Set(activeIds.length
-    ? database.select({ planId: financialCharges.feeAgreementId }).from(financialCharges).where(and(
-      inArray(financialCharges.feeAgreementId, activeIds),
-      eq(financialCharges.lifecycle, "issued"),
-    )).all().flatMap((row) => (row.planId ? [row.planId] : []))
-    : [])
   // Whether this month's fee has any payment decides what a schedule change
   // this month may alter (lib/training/changes.ts), so the form needs it.
   const chargeViews = loadChargeViews(database, charges.map((charge) => charge.id), now)
@@ -284,7 +274,7 @@ export function listMemberTrainingSummaries(
       scheduleIsRunning(place, today)
       && placeReachesWindow(place, place, nextMonthStart, monthAfterNextStart)
     )))
-    const waitingFee = waitingFeeChangeOf(own, today, issuedPlanIds)
+    const waitingFee = waitingFeeChangeOf(own, today)
     summaries[playerId].fee = {
       activeAgreementId: active?.id ?? null,
       activeAgreementRevision: active?.recordRevision ?? null,

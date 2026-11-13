@@ -321,25 +321,11 @@ export type CoachFinanceDashboardSummary = Pick<
 
 export type FinanceRapidScope = "outstanding" | "all"
 
-/**
- * A player with a fee plan for the month whom fee issuing passes over because
- * they have no schedule in it, and why: their term finished, they are on a
- * break with their fee plan kept, or their level, batch or plan changed after
- * the fee plan was made.
- */
-export type MonthlyPreparationSkip = {
-  fullName: string
-  playerId: string
-  reason: "term_finished" | "on_break" | "level_changed"
-}
-
 export type MonthlyPreparationPreview = {
   ready: number
   alreadyPrepared: number
   awaitingAssignment: number
   setupRequired: number
-  /** Named for the Issue fees panel; fee issuing itself is unchanged by it. */
-  skipped: MonthlyPreparationSkip[]
 }
 
 export type CoachFinanceWorkspace = {

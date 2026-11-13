@@ -839,15 +839,8 @@ export const playerAssessments = sqliteTable("player_assessments", {
  *
  * One scheduled row per player at a time; editing replaces it.
  *
- * A row that did not happen leaves a notice on the player's record in Members
- * (lib/training/member-summaries.ts): a failed row shows its `failure_reason`
- * in red, and a booking that End schedule cancelled because it was onto the
- * schedule being ended (lib/sessions/service.ts) is `cancelled` with that
- * explanation in `failure_reason` and shows as a plain note. A booking the
- * coach cancelled has no reason and leaves no notice. `dismissed_at` is when
- * the notice stopped showing: the coach dismissed it, or a later change to
- * the player's schedule (or, for the note, a new booking) dealt with it
- * (head coach, 12 Nov 2026).
+ * A failed row, or a booking End schedule cancelled (failure_reason set),
+ * shows a notice in Members until dismissed_at is set.
  */
 export const trainingChanges = sqliteTable("training_changes", {
   id: text("id").primaryKey(),
