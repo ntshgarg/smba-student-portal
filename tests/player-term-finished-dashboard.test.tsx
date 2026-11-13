@@ -62,7 +62,7 @@ const attendanceRecord: PlayerAttendanceRecord = {
   years: [2026],
 }
 
-function dashboard(termFinishedOn: string | null) {
+function dashboard(termFinishedOn: string | null, player: Record<string, unknown> = {}) {
   return {
     announcements: [],
     attendance: null,
@@ -82,6 +82,7 @@ function dashboard(termFinishedOn: string | null) {
       memberSince: "2026-07-01",
       status: "active",
       termFinishedOn,
+      ...player,
     },
   }
 }
@@ -116,6 +117,24 @@ describe("the player's dashboard after a schedule runs out", () => {
     // The attendance card does not read as if nothing had started.
     expect(html).not.toContain("No sessions yet this month")
     expect(html).toContain("Your term finished on 31 October 2026. Your attendance from it stays in your record.")
+  })
+
+  it("tells the family what the coach has booked, for a finished term or a paused player", async () => {
+    mocks.getDashboard.mockResolvedValue(dashboard("2026-10-31", { trainingEndsOn: "2026-12-01" }))
+    expect(renderToStaticMarkup(await DashboardPage())).toContain(
+      "Your term finished on 31 October 2026. Your training ends on 1 December 2026.",
+    )
+
+    const paused = { status: "paused", termFinishedOn: null }
+    mocks.getDashboard.mockResolvedValue(dashboard(null, { ...paused, nextScheduleStartsOn: "2026-12-01" }))
+    const booked = renderToStaticMarkup(await DashboardPage())
+    expect(booked).toContain("Your next schedule starts on 1 December 2026.")
+    expect(booked).not.toContain("Speak to your coach")
+
+    mocks.getDashboard.mockResolvedValue(dashboard(null, paused))
+    expect(renderToStaticMarkup(await DashboardPage())).toContain(
+      "No sessions are booked for you. Speak to your coach if you want to train again.",
+    )
   })
 
   it("keeps today's wording while the term is still running", async () => {

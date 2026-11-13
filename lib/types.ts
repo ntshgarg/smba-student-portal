@@ -16,8 +16,10 @@ export type PlayerProfile = {
    * a schedule that has run out (lib/sessions/term.ts); otherwise null.
    */
   termFinishedOn: string | null
-  /** The 1st a move booked in Members takes a term-finished player onto their next schedule. */
+  /** The 1st a move booked in Members takes a term-finished or paused player onto their next schedule. */
   nextScheduleStartsOn: string | null
+  /** The 1st an end of training booked in Members takes effect, for a term-finished or paused player. */
+  trainingEndsOn: string | null
 }
 
 export type CoachMessage = {

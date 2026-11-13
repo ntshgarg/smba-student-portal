@@ -307,7 +307,26 @@ describe("term-finished players across the coach's and the family's records", ()
         termFinishedOn: "2026-10-31",
       })
       expect(await repository.getPlayer(players.mixed)).toMatchObject({ termFinishedOn: null })
+      // What the head coach has booked is what the family is told.
+      expect(await repository.getPlayer(players.booked)).toMatchObject({
+        nextScheduleStartsOn: "2026-12-01",
+        trainingEndsOn: null,
+      })
+      expect(await repository.getPlayer(players.ending)).toMatchObject({
+        nextScheduleStartsOn: null,
+        trainingEndsOn: "2026-12-01",
+      })
+      // A paused player has no open place, but a booked return still counts.
+      expect(await repository.getPlayer(players.resting)).toMatchObject({ nextScheduleStartsOn: null })
+      bookChange(players.resting, "change", season)
+      expect(await repository.getPlayer(players.resting)).toMatchObject({
+        nextScheduleStartsOn: "2026-12-01",
+        status: "paused",
+        trainingEndsOn: null,
+      })
     } finally {
+      database.delete(schema.trainingChanges)
+        .where(eq(schema.trainingChanges.playerAccountId, players.resting)).run()
       vi.useRealTimers()
     }
   })

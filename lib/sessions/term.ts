@@ -128,15 +128,26 @@ export function formatTermDate(dateKey: string) {
   return formatDateKey(dateKey, { weekday: undefined, year: "numeric" })
 }
 
+/** What a family is told once the head coach has booked their next schedule or the end of their training. */
+export function bookedStepMessage(nextScheduleStartsOn: string | null = null, trainingEndsOn: string | null = null) {
+  if (nextScheduleStartsOn) return `Your next schedule starts on ${formatTermDate(nextScheduleStartsOn)}.`
+  if (trainingEndsOn) return `Your training ends on ${formatTermDate(trainingEndsOn)}.`
+  return null
+}
+
 /**
  * What a family sees in place of their next session once the term is over:
- * when the next schedule starts if the head coach has already booked it,
- * otherwise that it will appear once confirmed.
+ * what the head coach has already booked, otherwise that the next schedule
+ * will appear once confirmed.
  */
-export function termFinishedMessage(dateKey: string, nextScheduleStartsOn: string | null = null) {
-  return nextScheduleStartsOn
-    ? `Your term finished on ${formatTermDate(dateKey)}. Your next schedule starts on ${formatTermDate(nextScheduleStartsOn)}.`
-    : `Your term finished on ${formatTermDate(dateKey)}. Your next schedule will appear here once your coach confirms it.`
+export function termFinishedMessage(
+  dateKey: string,
+  nextScheduleStartsOn: string | null = null,
+  trainingEndsOn: string | null = null,
+) {
+  const booked = bookedStepMessage(nextScheduleStartsOn, trainingEndsOn)
+    ?? "Your next schedule will appear here once your coach confirms it."
+  return `Your term finished on ${formatTermDate(dateKey)}. ${booked}`
 }
 
 /** "Term finished" or the plain status word Members has always shown. */
