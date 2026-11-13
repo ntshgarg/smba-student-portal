@@ -100,7 +100,7 @@ describe("coach dashboard Court Operations Board", () => {
     expect(populated).toContain("39 enrolled players")
     expect(empty).toContain("Setup")
     expect(empty).toContain("0 enrolled players")
-    expect(empty).toContain("Approved players and staff appear here once onboarding is complete.")
+    expect(empty).toContain("Players appear here once their onboarding is complete.")
     expect(empty).not.toContain("up to date")
   })
 

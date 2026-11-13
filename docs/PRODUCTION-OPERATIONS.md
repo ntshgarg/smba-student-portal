@@ -79,7 +79,9 @@ default branch rather than event-controlled deployment code.
 
 `.github/workflows/operations-monitor.yml` checks sanitized server-error counts, authentication-email
 API failures, repeated login lockouts, backup age and restore-verification age
-twice per hour. `.github/workflows/production-alerts.yml`
+twice per hour. It also alerts on any recovery-code sign-in, any authenticator reset request, approval or
+reconnect, and repeated failed second-factor attempts. Your own recovery-code sign-in or authenticator
+reset raises this alert too; if it was you, nothing needs doing. `.github/workflows/production-alerts.yml`
 turns failed default-branch quality, accessibility, health, monitoring, backup and production-deployment
 events into one assigned, deduplicated `production-alert` issue. Pull-request and fork runs cannot open or
 resolve production incidents. A successful default-branch recovery closes the corresponding issue. The repository

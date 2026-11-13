@@ -21,11 +21,6 @@ import { purgeExpiredTelemetryOccasionally } from "@/lib/telemetry/retention"
 const DUPLICATE_WINDOW_MS = 10 * 60_000
 
 /*
- * A refused authorization is a decision, not a fault. Recording one costs a
- * durable row for something working exactly as designed -- and these are the
- * cheapest rows to force, because provoking a refusal needs no credential.
- */
-/*
  * Anchored, and matched against the framework's own digest shape rather than
  * against prose. Unanchored it did both halves of the wrong thing: a genuine
  * fault whose message happened to contain "Authentication required" was thrown

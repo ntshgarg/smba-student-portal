@@ -32,7 +32,7 @@ export async function completeHeadCoachSetupAction(
   const setupToken = cookieStore.get(HEAD_COACH_SETUP_COOKIE)?.value
   if (!validHeadCoachSetupToken(setupToken) || !headCoachSetupAvailable()) {
     return {
-      error: "This one-time setup session is unavailable or has already been used.",
+      error: "This setup session has expired, was replaced by a newer one opened on another device, or has already been completed. Ask the academy owner to open setup again if you still need it.",
       errorField: null,
     }
   }

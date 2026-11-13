@@ -112,6 +112,22 @@ describe("coach Financials entry points", () => {
     expect(html).toContain("/coach/financials/records?view=fees&amp;mode=monthly&amp;period=2026-08")
   })
 
+  it("says what needs doing when players need attention but nothing is owed", () => {
+    const html = renderToStaticMarkup(
+      <FinancialsCard
+        active
+        attentionCount={3}
+        outstandingPaise={0}
+        period="2026-08"
+        preparation={{ alreadyPrepared: 0, ready: 3 }}
+      />,
+    )
+
+    expect(html).toContain("3 attention")
+    expect(html).toContain("Some players need a fee plan or this month’s fee")
+    expect(html).not.toContain("outstanding")
+  })
+
   it("preserves activation at the legacy root until Financials is active", async () => {
     mocks.getFinanceActivation.mockReturnValue(null)
 

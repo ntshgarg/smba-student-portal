@@ -335,7 +335,7 @@ export async function completeInitialHeadCoachSetup(
 
   return database.transaction((tx) => {
     if (!consumeHeadCoachSetupClaim(input.setupToken, { database: tx, now })) {
-      throw new Error("This one-time setup session is unavailable or has already been used.")
+      throw new Error("This setup session has expired, was replaced by a newer one opened on another device, or has already been completed. Ask the academy owner to open setup again if you still need it.")
     }
     if (!headCoachSetupAvailable({ database: tx })) {
       throw new Error("The head-coach account has already been configured.")

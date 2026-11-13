@@ -668,14 +668,15 @@ export function applyDueTrainingChanges({
     let cancelled = false
     try {
       database.transaction((tx) => {
-        const current = tx.select({ status: trainingChanges.status }).from(trainingChanges)
+        // Apply the row as it is now: a coach may have edited it since `due` was read.
+        const current = tx.select().from(trainingChanges)
           .where(eq(trainingChanges.id, change.id)).get()
-        if (current?.status !== "scheduled") return
+        if (current?.status !== "scheduled" || current.effectiveOn > today) return
         // A booking onto a schedule that has since ended (one booked before
         // End schedule cancelled such bookings, or a race with it) is
         // cancelled with a plain note, not marked as a red failure.
-        const target = change.kind === "change" && change.seriesId
-          ? tx.select().from(sessionSeries).where(eq(sessionSeries.id, change.seriesId)).get()
+        const target = current.kind === "change" && current.seriesId
+          ? tx.select().from(sessionSeries).where(eq(sessionSeries.id, current.seriesId)).get()
           : undefined
         if (target?.status === "ended") {
           tx.update(trainingChanges).set({
@@ -687,7 +688,7 @@ export function applyDueTrainingChanges({
           cancelled = true
           return
         }
-        applyChange(tx, change, { createId, now })
+        applyChange(tx, current, { createId, now })
         tx.update(trainingChanges).set({ resolvedAt: now, status: "applied", updatedAt: now })
           .where(eq(trainingChanges.id, change.id)).run()
       }, { behavior: "immediate" })

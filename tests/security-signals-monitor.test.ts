@@ -68,7 +68,7 @@ describe("production security-signal monitor", () => {
 
     const result = runMonitor()
     expect(result.status).toBe(1)
-    expect(result.stderr).toMatch(/1 server application error/u)
+    expect(result.stderr).toMatch(/1 server application error\(s\) \(the same error on the same page counts once per 10 minutes\)/u)
   })
 
   it("fails at the configured email and lockout thresholds", () => {

@@ -176,7 +176,7 @@ describe("empty-academy first-run security", () => {
       confirmPin: "739251",
       setupToken: claim.token,
       ...verifiedEmail,
-    }, { database, now: NOW })).rejects.toThrow("one-time setup session")
+    }, { database, now: NOW })).rejects.toThrow("This setup session has expired, was replaced by a newer one")
     expect(validHeadCoachSetupToken(claim.token, { database, now: NOW })).toBe(false)
   })
 

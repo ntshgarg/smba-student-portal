@@ -230,6 +230,30 @@ describe("training changes from the player's record", () => {
     expect(openAssignments(players.ravi)).toHaveLength(1)
   })
 
+  it("applies a waiting change as it stands, not as it was before an edit that just landed", () => {
+    const { changeId } = changes.scheduleTrainingChange({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: players.ravi,
+      seriesId: evening,
+    }, context())
+    // The coach moves the change to December after the due list was read.
+    const transaction = database.transaction.bind(database)
+    const spy = vi.spyOn(database, "transaction").mockImplementationOnce((run, options) => {
+      database.update(schema.trainingChanges).set({ effectiveOn: "2026-12-01" })
+        .where(eq(schema.trainingChanges.id, changeId)).run()
+      return transaction(run, options)
+    })
+    changes.applyDueTrainingChanges({ database, now: new Date("2026-11-03T05:00:00.000Z") })
+    spy.mockRestore()
+
+    expect(openAssignments(players.ravi).map((item) => item.seriesId)).toEqual([morning])
+    expect(database.select().from(schema.trainingChanges)
+      .where(eq(schema.trainingChanges.id, changeId)).get())
+      .toMatchObject({ effectiveOn: "2026-12-01", status: "scheduled" })
+    changes.cancelTrainingChange({ changeId }, context())
+  })
+
   it("refuses a schedule that does not fit the plan or the level", () => {
     expect(() => changes.scheduleTrainingChange({
       ...threeDayEvenings,

@@ -153,8 +153,8 @@ npm run preview:seed:turso
 ```
 
 The copier omits authentication sessions, one-time codes and security telemetry and refuses to modify a database
-containing application data. It accepts either a completely empty database or an
-empty schema already prepared by the Vercel build.
+containing application data. Run it on a completely empty database, before any deployment prepares it: a
+prepared database already holds the standard batches, so the copier refuses it.
 
 A Vercel **Production** deployment runs migrations and the idempotent reference-data
 bootstrap as an explicit build step before starting application functions. Request

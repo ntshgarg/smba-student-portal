@@ -77,7 +77,7 @@ try {
 
   const alerts = []
   if (result.applicationErrors >= applicationErrorThreshold) {
-    alerts.push(`${result.applicationErrors} server application error(s)`)
+    alerts.push(`${result.applicationErrors} server application error(s) (the same error on the same page counts once per 10 minutes)`)
   }
   if (result.emailDeliveryFailures >= emailFailureThreshold) {
     alerts.push(`${result.emailDeliveryFailures} authentication email delivery failure(s)`)
