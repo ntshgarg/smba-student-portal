@@ -94,7 +94,20 @@ describe("assessment saves that are repeated or race", () => {
 
     expect(repeat.assessmentId).toBe(first.assessmentId)
     expect(rows()).toHaveLength(1)
-    expect(rows()[0]).toMatchObject({ id: firstId, status: "published" })
+    expect(rows()[0]).toMatchObject({ id: firstId, revision: 1, status: "published" })
+  })
+
+  it("counts a repeated first publish as an update only when something was changed", () => {
+    service.publishAssessment(
+      input({ expectedPublishedCount: 0, newAssessmentId: firstId }),
+      { coachId, database, now },
+    )
+    service.publishAssessment(
+      input({ expectedPublishedCount: 0, newAssessmentId: firstId, strengths: "Added before pressing again" }),
+      { coachId, database, now: new Date("2026-10-04T10:01:00+05:30") },
+    )
+
+    expect(rows()).toEqual([expect.objectContaining({ revision: 2, strengths: "Added before pressing again" })])
   })
 
   it("refuses a first publish from a second window once another has been published", () => {
