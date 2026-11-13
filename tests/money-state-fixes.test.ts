@@ -532,4 +532,17 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
       refundWindow: null,
     })
   })
+  it("reads a voided month as not issued in the register, as everywhere else", () => {
+    const firstNovember = new Date("2026-11-01T05:00:00.000Z")
+    const november = charge(players.changer, "2026-11")
+    finance.voidCharge({
+      chargeId: november.id,
+      expectedChargeRevision: november.recordRevision,
+      idempotencyKey: "void-changer-november",
+      reason: "Issued at the wrong fee",
+    }, context(firstNovember))
+    const register = finance.getFeeRegister({ mode: "monthly", period: "2026-11", limit: 100 }, context(firstNovember))
+    expect(register.rows.find((row) => row.playerId === players.changer)?.status).toBe("not_prepared")
+    expect(deskRow(players.changer, "2026-11", firstNovember)?.status).toBe("not_prepared")
+  })
 })

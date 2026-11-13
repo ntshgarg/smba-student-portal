@@ -36,7 +36,7 @@ import {
   sessionSeries,
   trainingChanges,
 } from "@/lib/db/schema"
-import { readPlayerFinancialCloseoutState } from "@/lib/finance/service"
+import { readFirstUnissuedMonthLabel, readPlayerFinancialCloseoutState } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
 import { formatTermDate, playerTrainingStatus } from "@/lib/sessions/term"
@@ -489,6 +489,14 @@ export function archiveMemberRecord({
         ok: false,
         code: "FINANCIAL_CLOSEOUT_REQUIRED",
         ...financialCloseout,
+      }
+    }
+    const unissuedMonth = readFirstUnissuedMonthLabel(tx, input.memberId, now)
+    if (unissuedMonth) {
+      return {
+        ok: false,
+        code: "FEES_NOT_ISSUED",
+        message: `${unissuedMonth} fees are not issued for this member yet (a voided fee counts as not issued). Issue them in Financials before archiving, or they can never be billed.`,
       }
     }
 

@@ -4624,6 +4624,25 @@ export function readPlayerFinancialCloseoutState(
   }
 }
 
+/**
+ * The first month, from when tracking began, whose fee Issue fees would still
+ * issue for this player. Archiving drops a player from Issue fees, so a month
+ * left unissued then could never be billed.
+ */
+export function readFirstUnissuedMonthLabel(
+  database: SmbaDatabaseExecutor,
+  playerId: string,
+  now = new Date(),
+) {
+  const activation = readFinanceActivation(database)
+  if (!activation) return null
+  const current = getAcademyMonthKey(now)
+  for (let period = activation.trackingMonth; period <= current; period = nextMonth(period)) {
+    if (playersAwaitingMonthlyFee(database, period, now).has(playerId)) return monthKeyLabel(period)
+  }
+  return null
+}
+
 export function resolveExistingRegistrationFee(
   input: ResolveExistingRegistrationFeeInput,
   {

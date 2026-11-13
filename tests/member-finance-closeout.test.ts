@@ -272,4 +272,39 @@ describe("member archival financial closeout", () => {
       outstandingPaise: 0,
     })
   })
+  it("refuses to archive a player whose trained month was never billed", () => {
+    const { agreement, playerId } = createPlayer("Unbilled Month Player", "SMBA-CLSEABCF")
+    // They trained 1-10 August and left before any August fee was issued.
+    database.update(schema.sessionAssignments).set({ effectiveFrom: "2026-08-01", effectiveTo: "2026-08-10" })
+      .where(eq(schema.sessionAssignments.accountId, playerId)).run()
+    database.update(schema.playerEnrollments).set({ trainingStartOn: "2026-08-01" })
+      .where(eq(schema.playerEnrollments.accountId, playerId)).run()
+    database.update(schema.sessionOccurrences)
+      .set({ occurrenceDate: "2026-08-05", startsAt: new Date("2026-08-05T06:00:00+05:30") })
+      .where(eq(schema.sessionOccurrences.id, `${playerId}:occurrence`)).run()
+    database.update(schema.feeAgreements).set({ effectiveFrom: "2026-08-01" })
+      .where(eq(schema.feeAgreements.id, agreement.id)).run()
+    const charge = finance.getCoachFinancePlayerRecord(playerId, { coachId, database, now })?.registrationCharge
+    if (!charge) throw new Error("The registration Charge is unavailable.")
+    finance.applyChargeAdjustment({
+      chargeId: charge.id,
+      kind: "manual_credit",
+      amountPaise: charge.outstandingPaise,
+      reason: "Approved registration waiver",
+      idempotencyKey: "member-closeout-unbilled-waiver",
+    }, { coachId, createId, database, now })
+    finance.endFeeAgreement({
+      agreementId: agreement.id,
+      effectiveThroughPeriod: "2026-09",
+      reason: "Player is leaving the academy",
+      expectedRevision: agreement.recordRevision,
+      idempotencyKey: "member-closeout-unbilled-end-plan",
+    }, { coachId, createId, database, now })
+
+    expect(archive(playerId)).toMatchObject({
+      ok: false,
+      code: "FEES_NOT_ISSUED",
+      message: expect.stringContaining("August 2026"),
+    })
+  })
 })
