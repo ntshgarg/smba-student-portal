@@ -162,7 +162,6 @@ describe("the coach registers' 30-second reference clock", () => {
     ["the session calendar", () => {
       renderToStaticMarkup(
         <SessionCalendar
-          referenceDate="2026-08-17"
           referenceInstant={PINNED_SERVER_INSTANT}
           selectedDate="2026-08-20"
         />,

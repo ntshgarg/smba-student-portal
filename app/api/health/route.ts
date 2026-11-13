@@ -27,7 +27,21 @@ export async function GET() {
   // the server log it already sanitizes and uploads.
   const fixtureClock = pinnedAccessibilityDateKey()
   try {
-    initializeDatabase().run(sql`select 1`)
+    // Reachable is not the same as ready. A blank file, a database whose tables
+    // were never created, or one whose set-up step was skipped all answer
+    // `select 1`, and every signed-in page on them fails. Every prepared
+    // academy -- empty or loaded -- has its batches, so reading one proves the
+    // tables exist and the set-up ran.
+    const prepared = initializeDatabase().get<{ ready: number }>(
+      sql`select 1 as ready from batches limit 1`,
+    )
+    if (!prepared) {
+      console.error("Health check found a database that has not been set up.")
+      return Response.json({ status: "unavailable" }, {
+        headers: responseHeaders,
+        status: 503,
+      })
+    }
 
     return Response.json({ status: "ok", ...fixtureClock ? { fixtureClock } : {} }, {
       headers: responseHeaders,

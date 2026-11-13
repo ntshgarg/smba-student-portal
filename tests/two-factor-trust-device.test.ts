@@ -67,6 +67,7 @@ vi.mock("@/lib/auth/credential-service", () => ({
   releaseSecondFactorAttempt: mocks.releaseSecondFactorAttempt,
   reserveLoginAttempt: mocks.reserveLoginAttempt,
   reserveSecondFactorAttempt: mocks.reserveSecondFactorAttempt,
+  secondFactorChecksPaused: vi.fn(() => false),
   verifyCurrentPassword: vi.fn(),
 }))
 vi.mock("@/lib/auth/post-auth-destination", () => ({

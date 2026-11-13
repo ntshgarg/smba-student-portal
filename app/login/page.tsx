@@ -8,6 +8,7 @@ import { LoginForm } from "@/components/login-form"
 import { sessionProvider } from "@/lib/data"
 import { publicSiteUrl } from "@/lib/config"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
+import { sessionOwesAuthenticatorSetup } from "@/lib/auth/session"
 
 export const metadata: Metadata = {
   title: "Portal login",
@@ -21,9 +22,11 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ recovered?: string }>
+  searchParams: Promise<{ notice?: string; recovered?: string }>
 }) {
   const identity = await sessionProvider.getCurrentIdentity()
+  // A preview cannot open the viewed person's next step (e.g. recovery email setup).
+  if (identity?.previewMode) redirect(identity.role === "coach" ? "/coach" : "/player")
   if (identity) {
     redirect(postAuthenticationDestination({
       accountId: identity.subjectId,
@@ -31,7 +34,10 @@ export default async function LoginPage({
       twoFactorEnabled: true,
     }))
   }
-  const recovered = (await searchParams).recovered === "1"
+  if (await sessionOwesAuthenticatorSetup()) redirect("/auth/two-factor/setup")
+  const query = await searchParams
+  const recovered = query.recovered === "1"
+  const passwordChanged = query.notice === "password-changed"
 
   return (
     <main className="login-page">
@@ -58,6 +64,11 @@ export default async function LoginPage({
         {recovered ? (
           <p className="security-success login-recovery-success" role="status">
             Password reset complete. Sign in with the new password.
+          </p>
+        ) : passwordChanged ? (
+          <p className="security-success login-recovery-success" role="status">
+            Password changed. Every device, this one included, was logged out and any PIN was
+            removed. Sign in with your new password.
           </p>
         ) : null}
         <LoginForm />

@@ -138,8 +138,8 @@ describe("regression fixture repeatability", () => {
       stage: "default",
       schema: {
         current: true,
-        latestMigrationTag: "0036_better_auth_1_7_schema",
-        migrationCount: 37,
+        latestMigrationTag: "0037_training_change_notices",
+        migrationCount: 38,
         missingColumns: [],
         missingTables: [],
       },
@@ -250,7 +250,8 @@ describe("regression fixture repeatability", () => {
         from player_enrollments e
         join accounts a on a.id = e.account_id
       `).get() as { active: number; archived: number; paused: number; unassigned: number }
-      expect(lifecycle).toEqual({ active: 94, archived: 1, paused: 3, unassigned: 2 })
+      // Two of the players are paused after a withdrawal refund.
+      expect(lifecycle).toEqual({ active: 92, archived: 1, paused: 5, unassigned: 2 })
       expect(scalar(db, `
         select count(*) as count
         from player_enrollments enrollment

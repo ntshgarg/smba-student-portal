@@ -60,6 +60,24 @@ describe("academy-time dashboard greetings", () => {
     expect(html).not.toContain('href="#onboarding"')
   })
 
+  it("does not say there are no more sessions while the last one is on court", () => {
+    const html = renderToStaticMarkup(
+      <CoachWelcomeHero
+        coachName="Sathiya"
+        dateLabel="Monday, 10 August"
+        dateTime="2026-08-10"
+        greeting="Good evening"
+        upcomingSession={null}
+        sessionCount={2}
+        sessionOnCourt
+        sessionPosition="next"
+      />,
+    )
+
+    expect(html).toContain("The last session of the day is on court now.")
+    expect(html).not.toContain("No more sessions today.")
+  })
+
   it("renders today’s session as a scoreboard ribbon", () => {
     const html = renderToStaticMarkup(
       <CoachWelcomeHero

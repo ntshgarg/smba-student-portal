@@ -23,6 +23,7 @@ import {
 import { JuniorCoachWelcomeHero } from "@/components/coach/junior-coach-welcome-hero"
 
 const attendance: JuniorCoachAttendanceView = {
+  holidays: [],
   joinedOn: "2026-08-01",
   monthLabel: "August 2026",
   referenceDate: "2026-08-11",

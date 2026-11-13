@@ -11,6 +11,7 @@ import {
   sessionSeries,
 } from "@/lib/db/schema"
 import { buildOccurrenceDrafts } from "@/lib/sessions/domain"
+import { academyHolidaysOnDates } from "@/lib/sessions/holidays"
 
 export type SessionOccurrenceBackfillResult = {
   examinedSeries: number
@@ -62,10 +63,15 @@ export function backfillSessionOccurrences({
         // Any occurrence at the recurrence identity is historical truth. In
         // particular, a cancelled row is a tombstone and must not be revived.
         if (existingDates.has(draft.occurrenceDate)) return
+        // A day closed for a holiday holds no live session; see
+        // createSessionSeriesRecords.
+        const holiday = academyHolidaysOnDates(tx, [draft.occurrenceDate])
+          .get(draft.occurrenceDate)
         tx.insert(sessionOccurrences).values({
           id: randomUUID(),
           ...draft,
-          status: "scheduled",
+          holidayId: holiday?.id ?? null,
+          status: holiday ? "cancelled" : "scheduled",
           replacementForOccurrenceId: null,
           createdAt: now,
         }).run()

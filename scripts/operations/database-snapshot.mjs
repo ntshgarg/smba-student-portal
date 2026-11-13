@@ -125,6 +125,8 @@ export function createDatabaseSnapshot({
 
   const sourceDatabase = openSource(source, authToken)
   let snapshot = null
+  // Set once the copy has been moved to the requested name.
+  let promoted = false
 
   try {
     const readConsistentSource = sourceDatabase.transaction(() => {
@@ -171,6 +173,7 @@ export function createDatabaseSnapshot({
     snapshot.close()
     snapshot = null
     fs.renameSync(temporaryPath, resolvedOutput)
+    promoted = true
     fs.chmodSync(resolvedOutput, 0o600)
 
     const manifest = {
@@ -191,6 +194,11 @@ export function createDatabaseSnapshot({
   } catch (error) {
     if (snapshot?.open) snapshot.close()
     fs.rmSync(temporaryPath, { force: true })
+    // No manifest means the copy cannot be verified; remove both so a retry can reuse the path.
+    if (promoted) {
+      fs.rmSync(resolvedOutput, { force: true })
+      fs.rmSync(manifestPath, { force: true })
+    }
     throw error
   } finally {
     sourceDatabase.close()

@@ -5,20 +5,25 @@ import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
 import {
+  cancelFeeChangeAction,
   cancelTrainingChangeAction,
   changeMonthlyFeeAction,
   changeScheduleAction,
+  dismissTrainingNoticeAction,
   endTrainingNowAction,
   giveConcessionAction,
   previewScheduleChangeAction,
   scheduleEndOfTrainingAction,
   stopConcessionAction,
+  stopFeePlanAction,
 } from "@/app/coach/members/training-actions"
 import { useMemberDirectoryPortal } from "@/components/coach/coach-portal-provider"
+import { FormShell } from "@/components/coach/members/directory/form-shell"
 import styles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
+import { describeSaveFailure, signInInNewTab } from "@/lib/client/network-failure"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
 import type { MemberFeeSummary, MemberScheduledChange } from "@/lib/training/member-summaries"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
@@ -46,7 +51,7 @@ const DAYS = [
   { label: "Sun", value: 0 },
 ]
 
-type OpenForm = "change" | "concession" | "end" | "fee" | "start" | null
+type OpenForm = "change" | "concession" | "end" | "fee" | "start" | "stop-fees" | null
 
 function monthName(dateKey: string) {
   return formatDateKey(`${dateKey.slice(0, 7)}-01`, {
@@ -55,7 +60,7 @@ function monthName(dateKey: string) {
 }
 
 /** The month a change dated the 1st follows: training ends after this one. */
-function monthBefore(firstOfMonth: string) {
+export function monthBefore(firstOfMonth: string) {
   const [year, month] = firstOfMonth.split("-").map(Number)
   return monthName(new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10))
 }
@@ -119,8 +124,17 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   // player on no schedule, or whose term has finished, has no fee to change:
   // the server refuses it, so the button is not offered.
   const hasRunningPlace = player.training.status === "active"
+  // Stop fees is for a kept fee plan with nothing else to end it: no place at
+  // all (End training is offered while there is one, and stops fees too) and
+  // nothing booked (a booking keeps what was arranged).
+  const canStopFees = data.financeActive
+    && Boolean(summary.fee?.activeAgreementId)
+    && !current.length
+    && !summary.scheduled
   const nextMonth = monthName(data.nextMonthStart)
   const thisMonth = monthName(data.today)
+
+  const formKept = "Anything you entered is still on screen"
 
   async function submit<T>(
     action: () => Promise<OperationalActionResult<T>>,
@@ -132,14 +146,30 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
     try {
       const result = await action()
       if (!result.ok) {
-        setNotice({ message: result.message, tone: "error" })
+        // An expired sign-in comes back as a value, not a throw.
+        setNotice(result.code === "SESSION_EXPIRED"
+          ? {
+            action: signInInNewTab,
+            message: `This change did not go through because your sign-in has expired. ${formKept}.`
+              + " Sign in again in a new tab, then come back here and try again.",
+            tone: "error",
+          }
+          : { message: result.message, tone: "error" })
         return
       }
       setNotice({ message: success(result.data), tone: "success" })
       setOpen(null)
       router.refresh()
-    } catch {
-      setNotice({ message: "This could not be saved. Check your connection and try again.", tone: "error" })
+    } catch (error) {
+      // A resubmit could apply the change twice, so the coach checks first.
+      const failure = describeSaveFailure({
+        error,
+        retained: formKept,
+        subject: "This change",
+        unconfirmed: "Check the connection, then reload the page to see whether it was"
+          + " saved before trying again",
+      })
+      setNotice({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setBusy(false)
     }
@@ -164,11 +194,12 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
               <strong>
                 {scheduled.kind === "end"
                   ? `Training ends after ${monthBefore(scheduled.effectiveOn)}`
-                  : `Scheduled for 1 ${nextMonth}`}
+                  : `Scheduled for 1 ${monthName(scheduled.effectiveOn)}`}
               </strong>
               <span>
                 {scheduled.kind === "end"
-                  ? `Paused from ${dayName(scheduled.effectiveOn)}${scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
+                  // Without a fee plan there is nothing to stop or keep.
+                  ? `Paused from ${dayName(scheduled.effectiveOn)}${!fee?.activeAgreementId ? "" : scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
                   : [
                     scheduledSeries ? seriesLabel(scheduledSeries) : "New schedule",
                     dayList(scheduled.weekdays),
@@ -179,19 +210,37 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
             </div>
           ) : null}
 
-          {summary.failed ? (
-            <InlineNotice
-              message={`The change for ${dayName(summary.failed.effectiveOn)} could not be applied: ${summary.failed.reason}`}
-              reserveSpace={false}
-              tone="error"
-            />
+          {/* A change that did not happen. The red notice and the plain note
+              go once the schedule is changed or ended afterwards (the note
+              also once something new is booked), or when dismissed. */}
+          {summary.failed || summary.note ? (
+            <div className={styles.trainingNotice}>
+              <InlineNotice
+                message={summary.failed
+                  ? `The change for ${dayName(summary.failed.effectiveOn)} could not be applied: ${summary.failed.reason}`
+                  : summary.note}
+                reserveSpace={false}
+                tone={summary.failed ? "error" : "info"}
+              />
+              <button
+                className={styles.button}
+                disabled={busy}
+                onClick={() => void submit(
+                  () => dismissTrainingNoticeAction({ playerId: memberId }),
+                  () => "Notice dismissed",
+                )}
+                type="button"
+              >
+                Dismiss
+              </button>
+            </div>
           ) : null}
 
           <div className={styles.actions}>
             {!onboarded ? (
               <>
                 <p className={styles.help}>
-                  Finish <Link href="/coach/onboarding">Player onboarding</Link> first. It sets this player&apos;s first schedule and fee plan.
+                  Finish <Link href={`/coach/onboarding?player=${encodeURIComponent(memberId)}`}>Player onboarding</Link> first. It sets this player&apos;s first schedule and fee plan.
                 </p>
                 {/* A player who leaves part-way through can still be taken off their schedule. */}
                 {current.length ? (
@@ -244,7 +293,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                       ? "paid"
                       : fee.thisMonth.receivedPaise > 0
                         ? `${formatInr(fee.thisMonth.receivedPaise)} paid`
-                        : `due ${dayName(fee.thisMonth.dueDate)}`}`
+                        : `${fee.thisMonth.dueDate < data.today ? "overdue, was due" : "due"} ${dayName(fee.thisMonth.dueDate)}`}`
                     : "Not issued yet"}</dd>
                 </div>
                 <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthNoFee === "term-finished"
@@ -260,24 +309,72 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                 </div>
               </dl>
             ) : (
-              <p className={styles.help}>No fee plan yet. It is set during Player onboarding.</p>
+              <p className={styles.help}>{onboarded
+                ? "No fee plan."
+                : "No fee plan yet. It is set during Player onboarding."}</p>
             )}
             {/* Without a running place there is no fee to change. A booked
                 move carries its own fee, edited with that change; a booked
-                end needs nothing more. */}
+                end needs nothing more. A player on no schedule at all, with
+                nothing booked, can have their kept fee plan stopped; one
+                still holding a place (a finished term, say) uses End
+                training, which stops fees too. */}
             {fee?.activeAgreementId && !hasRunningPlace && !scheduled ? (
-              <p className={styles.help}>Move them to a schedule first to change their fee.</p>
+              <p className={styles.help}>
+                {canStopFees
+                  ? "Not on a schedule, so no fee is issued. Move them to a schedule to change their fee, or stop fees to end the fee plan."
+                  : "Move them to a schedule first to change their fee."}
+              </p>
             ) : null}
-            {fee?.activeAgreementId && !hasRunningPlace && scheduled?.kind === "change" ? (
+            {fee?.waitingFeeChange ? (
+              <p className={styles.help}>
+                New fee of {formatInr(fee.waitingFeeChange.feePaise)} starts with {monthName(fee.waitingFeeChange.startsOn)}&apos;s fee. Cancel it to keep {formatInr(fee.waitingFeeChange.previousFeePaise)} a month.
+              </p>
+            ) : null}
+            {fee?.activeAgreementId && scheduled?.kind === "change" ? (
               <p className={styles.help}>
                 Their fee from {monthName(scheduled.effectiveOn)} is set in the scheduled change.
               </p>
             ) : null}
+            {fee?.activeAgreementId && scheduled?.kind === "end" && scheduled.stopFees
+              && fee.feeChangeStartsOn >= scheduled.effectiveOn ? (
+              <p className={styles.help}>
+                Fees stop after {monthBefore(scheduled.effectiveOn)} with the planned end of training.
+              </p>
+            ) : null}
             {fee?.activeAgreementId ? (
               <div className={styles.actions}>
-                {hasRunningPlace ? (
+                {/* Not while a booked change or fee-stopping end decides the fee. */}
+                {hasRunningPlace && !(scheduled?.kind === "change")
+                  && !(scheduled?.kind === "end" && scheduled.stopFees && fee.feeChangeStartsOn >= scheduled.effectiveOn) ? (
                   <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
                     Change fee
+                  </button>
+                ) : null}
+                {fee.waitingFeeChange ? (
+                  <button
+                    className={styles.button}
+                    disabled={busy}
+                    onClick={() => {
+                      const waiting = fee.waitingFeeChange
+                      if (!waiting) return
+                      void submit(
+                        () => cancelFeeChangeAction({
+                          agreementId: waiting.agreementId,
+                          expectedRevision: waiting.revision,
+                          playerId: memberId,
+                        }),
+                        (result) => `Fee change cancelled. ${formatInr(result.monthlyFeePaise)} a month carries on`,
+                      )
+                    }}
+                    type="button"
+                  >
+                    Cancel this fee change
+                  </button>
+                ) : null}
+                {canStopFees ? (
+                  <button className={`${styles.button} ${styles.danger}`} disabled={busy} onClick={() => toggle("stop-fees")} type="button">
+                    Stop fees
                   </button>
                 ) : null}
                 {fee.concession ? (
@@ -285,7 +382,9 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                     className={styles.button}
                     disabled={busy}
                     onClick={() => {
-                      if (!fee.concession) return
+                      if (!fee.concession || !window.confirm(
+                        `Stop ${player.member.fullName}’s concession? Fees issued from now on are at the full amount; fees already issued keep it.`,
+                      )) return
                       const concession = fee.concession
                       void submit(
                         () => stopConcessionAction({
@@ -311,7 +410,13 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
         ) : null}
       </div>
 
-      <InlineNotice className={styles.notice} message={notice?.message} reserveSpace={false} tone={notice?.tone} />
+      <InlineNotice
+        action={notice?.action}
+        className={styles.notice}
+        message={notice?.message}
+        reserveSpace={false}
+        tone={notice?.tone}
+      />
 
       {open === "change" || open === "start" ? (
         <TrainingForm
@@ -335,11 +440,13 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
         <EndForm
           busy={busy}
           financeActive={data.financeActive && Boolean(fee?.activeAgreementId)}
+          inOnboarding={!onboarded}
           name={player.member.fullName}
           nextMonthStart={data.nextMonthStart}
           onCancel={() => setOpen(null)}
           onSubmit={submit}
           playerId={memberId}
+          scheduled={scheduled}
           termFinishedOn={player.training.termFinishedOn}
           thisMonth={thisMonth}
         />
@@ -357,10 +464,21 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           thisMonth={thisMonth}
         />
       ) : null}
+      {open === "stop-fees" && canStopFees ? (
+        <StopFeesForm
+          busy={busy}
+          name={player.member.fullName}
+          nextMonth={nextMonth}
+          onCancel={() => setOpen(null)}
+          onSubmit={submit}
+          playerId={memberId}
+          thisMonth={thisMonth}
+        />
+      ) : null}
       {open === "concession" && fee ? (
         <ConcessionForm
           busy={busy}
-          monthlyFee={fee.nextMonthFeePaise ?? fee.monthlyFeePaise}
+          monthlyFee={fee.nextMonthNoFee ? null : fee.nextMonthFeePaise}
           name={player.member.fullName}
           nextMonth={nextMonth}
           onCancel={() => setOpen(null)}
@@ -376,59 +494,6 @@ type Submit = <T>(
   action: () => Promise<OperationalActionResult<T>>,
   success: (data: T) => string,
 ) => Promise<void>
-
-function FormShell({
-  busy,
-  children,
-  confirmLabel,
-  danger = false,
-  disabled = false,
-  eyebrow,
-  onCancel,
-  onConfirm,
-  summary,
-  title,
-}: {
-  busy: boolean
-  children: React.ReactNode
-  confirmLabel: string
-  danger?: boolean
-  disabled?: boolean
-  eyebrow: string
-  onCancel: () => void
-  onConfirm: () => void
-  summary: string[]
-  title: string
-}) {
-  return (
-    <div className={styles.form} role="group" aria-label={title}>
-      <div className={styles.formHead}>
-        <span className={styles.eyebrow}>{eyebrow}</span>
-        <h4>{title}</h4>
-      </div>
-      <div className={styles.formBody}>
-        {children}
-        {summary.length ? (
-          <div className={styles.summary}>
-            <span>You are about to</span>
-            <ul>{summary.map((line) => <li key={line}>{line}</li>)}</ul>
-          </div>
-        ) : null}
-      </div>
-      <div className={styles.formFoot}>
-        <button className={styles.button} disabled={busy} onClick={onCancel} type="button">Cancel</button>
-        <button
-          className={`${styles.button} ${danger ? styles.dangerSolid : styles.primary}`}
-          disabled={busy || disabled}
-          onClick={onConfirm}
-          type="button"
-        >
-          {busy ? "Saving…" : confirmLabel}
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function TrainingForm({
   busy,
@@ -467,8 +532,10 @@ function TrainingForm({
     batch: player.training.batch as TrainingBatch,
     level: player.training.level as TrainingProgramme,
   }
-  // A paused player restarts from next month; an edit of a waiting change stays there.
-  const canStartThisMonth = mode === "change" && !editing
+  // A paused player restarts from next month; an edit of a waiting change stays
+  // there; a player who starts after today has no day this month.
+  const canStartThisMonth = mode === "change" && !editing && player.member.trainingStartOn <= today
+  const endWaiting = scheduled?.kind === "end"
   const [when, setWhen] = useState<"next" | "this">(canStartThisMonth ? "this" : "next")
   const [date, setDate] = useState(today)
   const startsOn = when === "next" ? nextMonthStart : date
@@ -489,6 +556,7 @@ function TrainingForm({
   const [feeText, setFeeText] = useState("")
   const [feeTouched, setFeeTouched] = useState(false)
   const [marks, setMarks] = useState<Array<{ choice: string; occurrenceDate: string }> | null>(null)
+  const [marksFailed, setMarksFailed] = useState(false)
 
   useEffect(() => {
     if (when !== "this" || !date) return
@@ -496,7 +564,7 @@ function TrainingForm({
     void previewScheduleChangeAction({ playerId: player.member.id, startsOn: date }).then((preview) => {
       if (live) setMarks(preview.marks)
     }).catch(() => {
-      if (live) setMarks([])
+      if (live) setMarksFailed(true)
     })
     return () => {
       live = false
@@ -504,7 +572,10 @@ function TrainingForm({
   }, [date, player.member.id, when])
 
   function chooseWhen(next: "next" | "this") {
-    if (next === "this" && when !== "this") setMarks(null)
+    if (next === "this" && when !== "this") {
+      setMarks(null)
+      setMarksFailed(false)
+    }
     setWhen(next)
     if (next === "this" && thisMonthPaid) {
       // A paid month keeps its level, batch and plan; only the session time moves.
@@ -537,8 +608,9 @@ function TrainingForm({
     ? scheduled.monthlyFeePaise
     : !profileChanges && fee?.monthlyFeePaise ? fee.monthlyFeePaise : standard ?? fee?.monthlyFeePaise ?? null
   const feePaise = feeTouched ? parseRupeesToPaise(feeText) : suggestedFee
-  // This month, a fee is asked for only when the level, batch or plan changes.
-  const askFee = financeActive && (when === "next" || profileChanges)
+  // This month, a fee is asked for only when the level, batch or plan changes
+  // and a fee plan is in force to change.
+  const askFee = financeActive && (when === "next" || (profileChanges && fee?.monthlyFeePaise != null))
   const feeOk = !askFee || (feePaise !== null && feePaise > 0)
   const dateOk = when === "next" || (date >= monthStart && date <= today && date >= player.member.trainingStartOn)
 
@@ -573,22 +645,27 @@ function TrainingForm({
       ? `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}${profileChanges ? `, ${academyPlanLabel(plan)}` : ""}`
       : `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}, ${academyPlanLabel(plan)}`,
     when === "this"
-      ? marks?.length
-        ? `Clear ${marks.length} ${marks.length === 1 ? "mark" : "marks"} in the old schedule from ${dayName(startsOn)}; mark ${marks.length === 1 ? "it" : "them"} again`
-        : "No attendance marks to clear"
+      ? marksFailed
+        ? "Could not check which attendance marks are cleared"
+        : marks === null
+          ? "Checking which attendance marks are cleared…"
+          : marks.length
+            ? `Clear ${marks.length} ${marks.length === 1 ? "mark" : "marks"} in the old schedule from ${dayName(startsOn)}; mark ${marks.length === 1 ? "it" : "them"} again`
+            : "No attendance marks to clear"
       : `Keep ${thisMonth} exactly as it is`,
     ...(askFee && feePaise
       ? [when === "this"
         ? `Monthly fee ${formatInr(feePaise)}${correctedThisMonth !== null && thisMonthFee !== null && correctedThisMonth !== thisMonthFee ? `; ${thisMonth}'s fee becomes ${formatInr(correctedThisMonth)}` : thisMonthFee === null ? `; ${thisMonth}'s fee is issued at this amount` : ""}`
         : `From ${monthName(startsOn)}: ${formatInr(feePaise)} a month`]
-      : financeActive && when === "this" ? ["Keep the fee as it is"] : []),
+      : financeActive && when === "this" && fee?.monthlyFeePaise != null ? ["Keep the fee as it is"] : []),
+    ...(when === "next" && scheduled?.kind === "end" ? ["Drop the end of training planned for next month"] : []),
   ] : []
 
   return (
     <FormShell
       busy={busy}
       confirmLabel={when === "next" ? (editing ? "Save scheduled change" : "Schedule the change") : "Change schedule"}
-      disabled={!chosen || !daysOk || !feeOk || !dateOk || (when === "this" && marks === null)}
+      disabled={!chosen || !daysOk || !feeOk || !dateOk || (when === "this" && (marks === null || marksFailed))}
       eyebrow={mode === "start" ? "Start training" : "Change schedule"}
       onCancel={onCancel}
       onConfirm={() => {
@@ -603,6 +680,7 @@ function TrainingForm({
             seriesId: chosen.id,
             startsOn,
             weekdays,
+            when,
           }),
           (outcome) => {
             if (outcome.kind === "scheduled") return `Scheduled for ${dayName(outcome.startsOn)}`
@@ -643,6 +721,7 @@ function TrainingForm({
               value={date}
               onChange={(event) => {
                 setMarks(null)
+                setMarksFailed(false)
                 setDate(event.target.value)
               }}
             />
@@ -652,9 +731,15 @@ function TrainingForm({
           <input name={`when-${player.member.id}`} type="radio" checked={when === "next"} onChange={() => chooseWhen("next")} />
           <span>
             <strong>From {dayName(nextMonthStart)}</strong>
-            <small>Next month. {thisMonth} stays exactly as it is.</small>
+            <small>
+              Next month. {thisMonth} stays exactly as it is.
+              {endWaiting ? " This replaces the planned end of training." : ""}
+            </small>
           </span>
         </label>
+        {endWaiting && when === "this" ? (
+          <p className={styles.help}>Their training still ends after {thisMonth}, as planned.</p>
+        ) : null}
       </fieldset>
 
       <div className={styles.field}>
@@ -762,7 +847,9 @@ function TrainingForm({
       {when === "this" ? (
         <div className={styles.field}>
           <span className={styles.label}>Attendance that will be cleared</span>
-          {marks === null ? <p className={styles.help}>Checking…</p> : marks.length ? (
+          {marksFailed ? (
+            <p className={styles.help}>Could not check which marks would be cleared. Check your connection and open the form again.</p>
+          ) : marks === null ? <p className={styles.help}>Checking…</p> : marks.length ? (
             <ul className={styles.marks}>
               {marks.map((item) => (
                 <li key={item.occurrenceDate}><span>{dayName(item.occurrenceDate)}</span><s>{item.choice === "present" ? "Present" : "Absent"}</s></li>
@@ -779,27 +866,32 @@ function TrainingForm({
 function EndForm({
   busy,
   financeActive,
+  inOnboarding,
   name,
   nextMonthStart,
   onCancel,
   onSubmit,
   playerId,
+  scheduled,
   termFinishedOn,
   thisMonth,
 }: {
   busy: boolean
   financeActive: boolean
+  inOnboarding: boolean
   name: string
   nextMonthStart: string
   onCancel: () => void
   onSubmit: Submit
   playerId: string
+  scheduled: MemberScheduledChange | null
   /** Set when the player's term has finished; the ending itself is unchanged. */
   termFinishedOn: string | null
   thisMonth: string
 }) {
   const [leftAlready, setLeftAlready] = useState(false)
-  const [stopFees, setStopFees] = useState(true)
+  // Reopened, the form keeps the fee choice of the end already planned.
+  const [stopFees, setStopFees] = useState(scheduled?.kind === "end" ? scheduled.stopFees : true)
   return (
     <FormShell
       busy={busy}
@@ -819,11 +911,19 @@ function EndForm({
         leftAlready ? "Take them off their schedule today" : `Keep them on their schedule until the end of ${thisMonth}`,
         leftAlready ? "Pause them from today" : `Pause them from ${dayName(nextMonthStart)}`,
         ...(financeActive ? [stopFees ? `Stop fees after ${thisMonth}` : "Keep the fee plan"] : []),
+        ...(scheduled?.kind === "change" ? ["Drop the change planned for next month"] : []),
       ]}
       title={`${name} stops training`}
     >
       {termFinishedOn ? (
         <p className={styles.help}>Their term finished on {formatTermDate(termFinishedOn)}.</p>
+      ) : null}
+      {inOnboarding ? (
+        <p className={styles.help}>
+          {name} has not finished Player onboarding. Afterwards, finish it to charge the
+          registration fee and the months they trained; if they leave before their first
+          training day, archive them instead.
+        </p>
       ) : null}
       <div className={styles.field}>
         <span className={styles.label}>Last month of training</span>
@@ -846,6 +946,57 @@ function EndForm({
         <input name="leftAlready" type="checkbox" checked={leftAlready} onChange={(event) => setLeftAlready(event.target.checked)} />
         <span><strong>They have left already.</strong> Take them off their schedule today instead of at the end of the month.</span>
       </label>
+    </FormShell>
+  )
+}
+
+/*
+ * Stop fees for a player on no schedule whose fee plan was kept (head coach,
+ * 12 Nov 2026). The same ending as End training's "Stop fees": the plan ends
+ * after this month, a plan due to start next month never bills, and fees
+ * already issued do not change. Archive then has nothing left to wait for
+ * but money owed.
+ */
+function StopFeesForm({
+  busy,
+  name,
+  nextMonth,
+  onCancel,
+  onSubmit,
+  playerId,
+  thisMonth,
+}: {
+  busy: boolean
+  name: string
+  nextMonth: string
+  onCancel: () => void
+  onSubmit: Submit
+  playerId: string
+  thisMonth: string
+}) {
+  return (
+    <FormShell
+      busy={busy}
+      confirmLabel="Stop fees"
+      danger
+      eyebrow="Stop fees"
+      onCancel={onCancel}
+      onConfirm={() => {
+        void onSubmit(
+          () => stopFeePlanAction({ playerId }),
+          () => `Fees stop after ${thisMonth}`,
+        )
+      }}
+      summary={[
+        `Stop fees after ${thisMonth}`,
+        `Issue no fee from ${nextMonth}`,
+        "Leave fees already issued as they are",
+      ]}
+      title={`Stop fees for ${name}`}
+    >
+      <p className={styles.help}>
+        They are not on a schedule. To train again later, use Start training, which sets a new fee.
+      </p>
     </FormShell>
   )
 }

@@ -16,8 +16,10 @@ import {
   getFeeRegister,
   getFinanceActivation,
   getFinancialActivity,
+  isStaleRecordsCursor,
   listFinanceActivityCoaches,
 } from "@/lib/finance/service"
+import { readRecordsTrail, recordsTrailCanGrow } from "@/lib/finance/records-trail"
 import {
   FINANCE_AUDIT_EVENT_TYPES,
   FINANCE_AUDIT_EVENTS,
@@ -42,6 +44,7 @@ const FINANCE_STATUSES: FinanceStatus[] = [
   "overdue",
   "paid",
   "not_prepared",
+  "setup_required",
   "void",
 ]
 
@@ -72,12 +75,6 @@ function validScope(value: string): FinancePlayerScope {
   return value === "archived" || value === "all" ? value : "active"
 }
 
-function cursorTrail(value: string) {
-  if (!value) return []
-  const values = value.split(",").filter((item) => item.length > 0 && item.length <= 200)
-  return values.length <= 20 ? values : []
-}
-
 function recordsUrl(view: FinancialRecordsView, params: Record<string, string | undefined>) {
   const search = new URLSearchParams({ view })
   Object.entries(params).forEach(([key, value]) => {
@@ -103,9 +100,13 @@ function pagination({
 }): FinancialRecordsPagination {
   const first = trail.length * pageSize + (count ? 1 : 0)
   const last = trail.length * pageSize + count
+  const canGrow = recordsTrailCanGrow(trail)
   return {
+    endNote: nextCursor && !canGrow
+      ? "This is as far as the list pages. Narrow the search, filters or dates to see later records."
+      : null,
     label: count ? `${first}–${last}` : "No records",
-    nextHref: nextCursor
+    nextHref: nextCursor && canGrow
       ? recordsUrl(view, { ...base, cursors: [...trail, nextCursor].join(",") })
       : null,
     previousHref: trail.length
@@ -114,6 +115,20 @@ function pagination({
         cursors: trail.slice(0, -1).join(",") || undefined,
       })
       : null,
+  }
+}
+
+// A stale page anchor restarts the list at page 1; any other error still reaches the error screen.
+function readPage<T>(
+  trail: string[],
+  restartHref: string,
+  load: (cursor: string | undefined) => T,
+): T {
+  try {
+    return load(trail.at(-1))
+  } catch (error) {
+    if (trail.length && isStaleRecordsCursor(error)) redirect(restartHref)
+    throw error
   }
 }
 
@@ -155,8 +170,7 @@ export default async function FinancialRecordsPage({
   const query = queryValue(params, "q")
   const periodValue = queryValue(params, "period")
   const period = isValidMonthKey(periodValue) ? periodValue : academyCurrentMonth()
-  const trail = cursorTrail(queryValue(params, "cursors"))
-  const cursor = trail.at(-1)
+  const trail = readRecordsTrail(params.cursors)
 
   if (view === "fees") {
     const mode = validMode(queryValue(params, "mode"))
@@ -172,7 +186,7 @@ export default async function FinancialRecordsPage({
       scope,
       status,
     }
-    const register = getFeeRegister({
+    const register = readPage(trail, recordsUrl(view, base), (cursor) => getFeeRegister({
       cursor,
       limit: PAGE_SIZE,
       mode,
@@ -180,7 +194,7 @@ export default async function FinancialRecordsPage({
       playerScope: scope,
       query,
       statuses: status === "all" ? undefined : [status],
-    }, { coachId: identity.subjectId, database })
+    }, { coachId: identity.subjectId, database }))
     const preparation = mode === "monthly"
       ? getCoachMonthlyPreparationPreview(period, {
         coachId: identity.subjectId,
@@ -233,12 +247,12 @@ export default async function FinancialRecordsPage({
         to: selectedRange.to,
         includeReversed: includeReversed ? "true" : undefined,
       }
-      const dayBook = getCollectionsDayBook({
+      const dayBook = readPage(trail, recordsUrl(view, base), (cursor) => getCollectionsDayBook({
         ...selectedRange,
         cursor,
         includeReversed,
         limit: COLLECTION_PAGE_SIZE,
-      }, { coachId: identity.subjectId, database })
+      }, { coachId: identity.subjectId, database }))
 
       return (
         <FinancialRecordsWorkspace
@@ -284,7 +298,7 @@ export default async function FinancialRecordsPage({
     from: validDates ? from || undefined : undefined,
     to: validDates ? to || undefined : undefined,
   }
-  const activity = getFinancialActivity({
+  const activity = readPage(trail, recordsUrl(view, base), (cursor) => getFinancialActivity({
     coachId: coachId === "all" ? undefined : coachId,
     cursor,
     eventTypes: eventType === "all" ? undefined : [eventType],
@@ -292,7 +306,7 @@ export default async function FinancialRecordsPage({
     limit: ACTIVITY_PAGE_SIZE,
     query,
     to: validDates ? to || undefined : undefined,
-  }, { coachId: identity.subjectId, database })
+  }, { coachId: identity.subjectId, database }))
 
   return (
     <FinancialRecordsWorkspace

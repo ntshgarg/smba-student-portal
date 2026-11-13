@@ -30,6 +30,8 @@ vi.mock("@/lib/finance/service", () => ({
   },
   getFeeRegister: mocks.getFeeRegister,
   getFinancialActivity: mocks.getFinancialActivity,
+  isStaleRecordsCursor: (error: unknown) => error instanceof Error
+    && error.message === "The financial-records cursor is invalid.",
 }))
 
 import { GET as downloadActivity } from "@/app/coach/financials/records/activity.csv/route"
@@ -339,8 +341,8 @@ describe("Financials Phase 3 record export routes", () => {
       .mockReturnValueOnce({ nextCursor: "player-42", rows: [registerRow], summary: {} })
       .mockImplementationOnce(() => {
         throw new FinanceServiceError(
-          "INVALID_INPUT",
-          "The financial-records cursor is invalid.",
+          "FINANCE_NOT_ACTIVE",
+          "Financial tracking has not been activated.",
         )
       })
 
@@ -350,12 +352,32 @@ describe("Financials Phase 3 record export routes", () => {
     const rows = (await response.text()).split("\r\n").filter(Boolean)
 
     expect(rows[2]).toContain("EXPORT INCOMPLETE")
-    expect(rows[2]).toContain("The financial-records cursor is invalid.")
+    expect(rows[2]).toContain("Financial tracking has not been activated.")
     expect(rows[2]).not.toContain("Run the export again.")
     expect(consoleError).toHaveBeenCalledWith(
       "Financial fee-register export stopped before its last row.",
       expect.objectContaining({ rowsWritten: 1 }),
     )
+
+    consoleError.mockRestore()
+  })
+
+  it("asks for a fresh download when the records changed mid-download", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    mocks.getFeeRegister
+      .mockReturnValueOnce({ nextCursor: "player-42", rows: [registerRow], summary: {} })
+      .mockImplementationOnce(() => {
+        throw new FinanceServiceError("INVALID_INPUT", "The financial-records cursor is invalid.")
+      })
+
+    const response = await downloadFeeRegister(new Request(
+      "https://academy.example/coach/financials/records/fees.csv?mode=registration",
+    ))
+    const rows = (await response.text()).split("\r\n").filter(Boolean)
+
+    expect(rows[2]).toContain("EXPORT INCOMPLETE")
+    expect(rows[2]).toContain("Download it again.")
+    expect(rows[2]).not.toContain("cursor")
 
     consoleError.mockRestore()
   })

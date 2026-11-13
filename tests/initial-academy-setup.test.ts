@@ -26,6 +26,8 @@ import {
 } from "@/lib/auth/initial-setup"
 import {
   confirmRecoveryEmailVerification,
+  getVerifiedSetupRecoveryEmail,
+  HEAD_SETUP_VERIFIED_EMAIL_LIFETIME_MS,
   recoverySubjectKeyForHeadSetup,
   requestRecoveryEmailVerification,
 } from "@/lib/auth/recovery-service"
@@ -174,8 +176,77 @@ describe("empty-academy first-run security", () => {
       confirmPin: "739251",
       setupToken: claim.token,
       ...verifiedEmail,
-    }, { database, now: NOW })).rejects.toThrow("one-time setup session")
+    }, { database, now: NOW })).rejects.toThrow("This setup session has expired, was replaced by a newer one")
     expect(validHeadCoachSetupToken(claim.token, { database, now: NOW })).toBe(false)
+  })
+
+  /*
+   * The verified email kept the code's own expiry -- ten minutes from when the
+   * code was sent -- so a coach who verified late and then took a few minutes
+   * over a password and PIN was told to verify an email the page still showed
+   * as verified. The time limit now starts at verification.
+   */
+  it("keeps a verified setup email usable for its own window after verification", async () => {
+    await completeInitialPlatformAdminSetup({
+      fullName: "Nitish Gupta",
+      password: ADMIN_PASSWORD,
+      confirmPassword: ADMIN_PASSWORD,
+      pin: "739251",
+      confirmPin: "739251",
+    }, { database, now: NOW })
+    const claim = createHeadCoachSetupClaim({
+      claimImmediately: true,
+      createdByAccountId: PLATFORM_ADMIN_ACCOUNT_ID,
+    }, { database, now: NOW })
+    const subjectKey = recoverySubjectKeyForHeadSetup(claim.token)
+    let verificationCode = ""
+    await requestRecoveryEmailVerification({
+      email: "head.coach@example.com",
+      fullName: "Sathiya Moorthy",
+      mailer: {
+        async sendAcademyIdIssued() {},
+        async sendAuthenticatorRecovery() {},
+        async sendPasswordRecovery() {},
+        async sendRecoveryEmailVerification(message) {
+          verificationCode = message.code
+        },
+        async sendRegistrationVerification() {},
+      },
+      subjectKey,
+    }, { database, now: NOW })
+    const minutes = (count: number) => new Date(NOW.getTime() + count * 60_000)
+    const verified = confirmRecoveryEmailVerification({
+      code: verificationCode,
+      email: "head.coach@example.com",
+      subjectKey,
+    }, { database, now: minutes(8) })
+    if (!verified?.receiptToken) throw new Error("Test recovery email was not verified.")
+
+    // Twelve minutes after verifying, twenty after the code was sent.
+    const later = minutes(20)
+    expect(getVerifiedSetupRecoveryEmail({
+      receiptToken: verified.receiptToken,
+      subjectKey,
+    }, { database, now: later })).toBe("head.coach@example.com")
+    // ...but not for ever.
+    expect(getVerifiedSetupRecoveryEmail({
+      receiptToken: verified.receiptToken,
+      subjectKey,
+    }, {
+      database,
+      now: new Date(minutes(8).getTime() + HEAD_SETUP_VERIFIED_EMAIL_LIFETIME_MS + 1),
+    })).toBeNull()
+
+    await expect(completeInitialHeadCoachSetup({
+      fullName: "Sathiya Moorthy",
+      password: HEAD_PASSWORD,
+      confirmPassword: HEAD_PASSWORD,
+      pin: "482916",
+      confirmPin: "482916",
+      recoveryEmailReceiptToken: verified.receiptToken,
+      recoveryEmailSubjectKey: subjectKey,
+      setupToken: claim.token,
+    }, { database, now: later })).resolves.toMatchObject({ academyId: HEAD_COACH_ACADEMY_ID })
   })
 
   it("stores expiring single-use head-coach setup claims and invalidates older links", async () => {

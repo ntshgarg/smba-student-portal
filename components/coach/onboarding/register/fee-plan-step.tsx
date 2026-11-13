@@ -95,11 +95,12 @@ export function FeePlanStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The session assignment could not be reset",
         retained: "Nothing has changed on this player",
+        unconfirmed: "Check the connection, then reload the page to see whether the session assignment was reset",
         subject: "The session assignment reset",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: "reset",
@@ -116,7 +117,7 @@ export function FeePlanStep({
     setPreview(null)
     setConfirmed(false)
     guard.navigateAfterCommit(() => onSuccess({
-      message: `${item.fullName}’s unfinished assignment was reset. Confirm the assessment again.`,
+      message: `${item.fullName}’s first schedule was cleared. Choose their first schedule and training day again on the Session step.`,
       remove: false,
     }))
   }
@@ -198,11 +199,11 @@ export function FeePlanStep({
       } catch (error) {
         const failure = describeSaveFailure({
           error,
-          fallbackMessage: "The Fee Plan could not be saved",
           retained: "The agreed monthly fee is still on screen",
           subject: "The fee timeline",
         })
         setFeedback({
+          action: failure.signIn,
           message: failure.message,
           offerRetry: failure.offerRetry,
           retryAction: "submit",
@@ -250,11 +251,11 @@ export function FeePlanStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The Fee Plan could not be saved",
         retained: "The fee timeline is still on screen",
         subject: "The Fee Plan",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: "submit",
@@ -376,7 +377,7 @@ export function FeePlanStep({
           )}
         </section>
       ) : null}
-      <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice action={feedback?.action} id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {/*
         * This used to read "there is no other way back to it", which was true
         * while the step list was a picture. It is navigation now, so moving the
@@ -387,15 +388,16 @@ export function FeePlanStep({
         * be the only door.
         */}
       <p className={styles.feeNote}>
-        The training start date is set on the Session step, with the schedule it belongs
-        to — go back there to change it. Clearing the assignment is only for changing the
-        level, batch or Training plan, and it stops being possible once the player has
-        attendance, fees or a report on record.
+        {item.hasRecords
+          ? "The training start date and schedule are fixed now that attendance or fees are recorded. Complete onboarding, then make any change in Members."
+          : "The training start date is set on the Session step, with the schedule it belongs to. Reset the session assignment to choose them again, or to change the level, batch or Training plan. It stops being possible once the player has attendance, fees or a payment on record."}
       </p>
       <div className={styles.formActions}>
-        <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
-          {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
-        </button>
+        {item.hasRecords ? <span aria-hidden="true" /> : (
+          <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
+            {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
+          </button>
+        )}
         <button
           className={styles.primaryButton}
           type="submit"

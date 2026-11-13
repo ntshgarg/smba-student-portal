@@ -14,6 +14,16 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: navigation.refresh }),
 }))
 
+// Called as a plain function below, outside a render, so the button's pending
+// hook is stood in for: never pending, and the transition runs straight away.
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react")
+  return {
+    ...actual,
+    useTransition: () => [false, (run: () => void) => run()],
+  }
+})
+
 import PlayerError from "@/app/(student)/error"
 import PlayerLoading from "@/app/(student)/loading"
 import PlayerFinancialsError from "@/app/(student)/player/financials/error"
@@ -62,7 +72,7 @@ function fault() {
  * element tree the component returns rather than by dispatching a click.
  * Calling a component as a plain function is the idiom at
  * tests/admin-preview-token.test.ts:52; it works here because RouteErrorState's
- * only hook call is the mocked useRouter.
+ * only hook calls are the mocked useRouter and useTransition.
  */
 function retryHandler(node: ReactNode): (() => void) | null {
   if (!isValidElement<{ children?: ReactNode; onClick?: () => void }>(node)) return null

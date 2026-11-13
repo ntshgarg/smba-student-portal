@@ -6,6 +6,7 @@ import {
   listJuniorCoachAttendanceRegisterProfiles,
   listStaffAttendanceRecordsByCoach,
 } from "@/lib/coach/staff-attendance"
+import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
 
 export const metadata = {
   title: "Staff attendance register",
@@ -33,6 +34,7 @@ export default async function StaffAttendanceRegisterPage() {
 
   return (
     <StaffAttendanceRegister
+      holidays={listAcademyHolidaysInWindow(from, to)}
       referenceDate={referenceDate}
       yearOptions={yearOptions}
       juniorCoaches={juniorCoaches.map((coach) => ({

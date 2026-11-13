@@ -15,16 +15,19 @@ import {
 } from "react"
 
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
-import type {
-  PlayerOnboardingCase,
-  PlayerOnboardingStage,
-  PlayerOnboardingWorkspace,
+import type { RejectedRegistration } from "@/lib/auth/registration-form"
+import {
+  shownTrainingStart,
+  type PlayerOnboardingCase,
+  type PlayerOnboardingStage,
+  type PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
 import type { TrainingSessionSeries } from "@/lib/sessions/types"
 
 import styles from "./player-onboarding-register.module.css"
 import { OnboardingEditor } from "./register/onboarding-editor"
 import { folio, shortDate, STAGES } from "./register/shared"
+import { RejectedRequests } from "./rejected-requests"
 
 function onboardingHref(
   pathname: string,
@@ -46,9 +49,10 @@ function rowMeta(item: PlayerOnboardingCase) {
   if (item.stage === "request" && item.requestedAt) {
     return `Requested ${shortDate(item.requestedAt)}`
   }
+  const trainingStart = shownTrainingStart(item)
   return [
     item.academyId,
-    item.trainingStartOn ? `Training from ${shortDate(item.trainingStartOn)}` : null,
+    trainingStart ? `Training from ${shortDate(trainingStart)}` : null,
   ].filter(Boolean).join(" · ")
 }
 
@@ -72,11 +76,13 @@ function nextAction(item: PlayerOnboardingCase) {
 export function PlayerOnboardingRegister({
   financeActive,
   referenceDate,
+  rejectedRequests = [],
   sessionSeries,
   workspace,
 }: {
   financeActive: boolean
   referenceDate: string
+  rejectedRequests?: RejectedRegistration[]
   sessionSeries: TrainingSessionSeries[]
   workspace: PlayerOnboardingWorkspace
 }) {
@@ -89,15 +95,10 @@ export function PlayerOnboardingRegister({
   const registerTitleRef = useRef<HTMLHeadingElement>(null)
   const previousSelectionRef = useRef<string | null>(null)
 
+  // A link to someone with no onboarding step left opens nothing and says why.
+  const missingPlayerId = selectedId && !selectedItem ? selectedId : null
+
   useEffect(() => {
-    if (selectedId && !selectedItem) {
-      const firstCase = workspace.cases[0]
-      router.replace(
-        onboardingHref(pathname, new URLSearchParams(searchParams.toString()), firstCase?.id ?? null),
-        { scroll: false },
-      )
-      return
-    }
     if (!selectedItem) return
     const focusChanged = previousSelectionRef.current !== `${selectedItem.id}:${selectedItem.stage}`
     previousSelectionRef.current = `${selectedItem.id}:${selectedItem.stage}`
@@ -107,7 +108,7 @@ export function PlayerOnboardingRegister({
         preventScroll: true,
       })
     })
-  }, [pathname, router, searchParams, selectedId, selectedItem, workspace.cases])
+  }, [selectedItem])
 
   function handleSuccess(input: {
     message: string
@@ -145,6 +146,18 @@ export function PlayerOnboardingRegister({
         tone={notice?.tone}
         reserveSpace={false}
       />
+      {missingPlayerId && !notice ? (
+        <div className={styles.workspaceNotice}>
+          <InlineNotice
+            message="This player has no onboarding step left: their onboarding is finished, or their request was already handled."
+            tone="info"
+            reserveSpace={false}
+          />
+          <Link href={`/coach/members?player=${encodeURIComponent(missingPlayerId)}`}>
+            Open their record in Members
+          </Link>
+        </div>
+      ) : null}
 
       <section className={styles.stageSummary} aria-label="Onboarding stage totals">
         {STAGES.map((stage) => {
@@ -225,6 +238,8 @@ export function PlayerOnboardingRegister({
           </div>
         )}
       </section>
+
+      <RejectedRequests onRestored={handleSuccess} requests={rejectedRequests} />
     </div>
   )
 }

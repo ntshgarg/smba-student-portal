@@ -4,14 +4,14 @@ import { CalendarOff, CircleAlert, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { useSessionPortal } from "@/components/coach/coach-portal-provider"
-import { InlineNotice } from "@/components/inline-notice"
+import { InlineNotice, type ActionFeedback, type InlineNoticeAction } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import { formatDateKey } from "@/lib/format"
 import type { HolidayImpact } from "@/lib/sessions/holidays"
 
 const MAX_DATES = 31
 
-type Feedback = { message: string; tone: "error" | "info" | "success" }
+type Feedback = { action?: InlineNoticeAction; message: string; tone: "error" | "info" | "success" }
 
 /**
  * Every date from `from` to `to` inclusive. A closure is declared over calendar
@@ -31,18 +31,61 @@ export function expandDateRange(from: string, to: string): string[] {
   return dates
 }
 
-function pluralSessions(count: number) {
+export function pluralSessions(count: number) {
   return `${count} ${count === 1 ? "session" : "sessions"}`
+}
+
+/**
+ * What the closure did, from the saved result rather than the earlier check:
+ * sessions can be added or moved between the check and the save.
+ */
+export function holidayClosedMessage(
+  label: string,
+  {
+    adjustmentsFlaggedForReview,
+    cancelledSessions,
+    closedDates,
+    skippedDates,
+  }: {
+    adjustmentsFlaggedForReview: number
+    cancelledSessions: number
+    closedDates: string[]
+    skippedDates: string[]
+  },
+) {
+  const name = label.trim().replace(/\s+/gu, " ")
+  if (!closedDates.length) {
+    return `Nothing changed. ${skippedDates.length === 1 ? "That day was" : "Those days were"} already a holiday.`
+  }
+  const days = closedDates.length === 1
+    ? formatDateKey(closedDates[0])
+    : `${closedDates.length} days`
+  const parts = [
+    `Closed ${days} for ${name}. ${cancelledSessions ? `${pluralSessions(cancelledSessions)} cancelled.` : "No sessions needed cancelling."}`,
+  ]
+  if (skippedDates.length) {
+    parts.push(`${skippedDates.length} ${skippedDates.length === 1 ? "day was" : "days were"} already a holiday and left as ${skippedDates.length === 1 ? "it was" : "they were"}.`)
+  }
+  if (adjustmentsFlaggedForReview) {
+    parts.push(`${adjustmentsFlaggedForReview} make-up${adjustmentsFlaggedForReview === 1 ? " is" : "s are"} waiting for review on Attendance adjustments.`)
+  }
+  return parts.join(" ")
 }
 
 export function HolidayComposer({
   onClose,
+  onNotice,
   selectedDate,
   today,
+  viewMonth,
 }: {
   onClose: () => void
+  /** The calendar's own notice: what a saved closure actually did. */
+  onNotice: (feedback: ActionFeedback) => void
   selectedDate: string
   today: string
+  /** The month the calendar has on screen. */
+  viewMonth: string
 }) {
   const { markAcademyHolidays, previewAcademyHolidays } = useSessionPortal()
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -103,11 +146,10 @@ export function HolidayComposer({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The closure could not be checked",
         retained: "Your dates are still on screen",
         subject: "The check",
       })
-      setFeedback({ message: failure.message, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setBusy(false)
     }
@@ -123,23 +165,30 @@ export function HolidayComposer({
     setBusy(true)
     setFeedback(null)
     try {
-      const result = await markAcademyHolidays({ dateKeys: dates, label })
+      const result = await markAcademyHolidays({ dateKeys: dates, label, viewMonth })
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
         return
       }
+      onNotice({ message: holidayClosedMessage(label, result.data), tone: "success" })
       onClose()
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The academy could not be closed",
         retained: "Your dates and holiday name are still on screen",
         subject: "The closure",
       })
-      setFeedback({ message: failure.message, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setBusy(false)
     }
+  }
+
+  // While a closure is being saved the panel stays: closing it would not stop
+  // the save, and the coach would lose sight of whether it went through.
+  function dismiss() {
+    if (busy) return
+    onClose()
   }
 
   const closingPast = impact?.dates.some(
@@ -170,10 +219,10 @@ export function HolidayComposer({
       aria-labelledby="holiday-composer-title"
       onCancel={(event) => {
         event.preventDefault()
-        onClose()
+        dismiss()
       }}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
+        if (event.target === event.currentTarget) dismiss()
       }}
     >
       <section className="coach-holiday-panel" onMouseDown={(event) => event.stopPropagation()}>
@@ -181,7 +230,8 @@ export function HolidayComposer({
           ref={closeButtonRef}
           className="coach-holiday-close"
           type="button"
-          onClick={onClose}
+          onClick={dismiss}
+          disabled={busy}
           aria-label="Close holiday panel"
         >
           <X aria-hidden="true" />
@@ -303,7 +353,7 @@ export function HolidayComposer({
           </div>
         ) : null}
 
-        <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+        <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
 
         <div className="coach-holiday-actions">
           <button type="button" onClick={onClose} disabled={busy}>Cancel</button>

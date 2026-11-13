@@ -36,6 +36,8 @@ import {
 import { getAcademyDateKey } from "@/lib/format"
 
 export const HEAD_COACH_SETUP_COOKIE = "smba_head_coach_setup"
+/** The coach's typed name, carried from the email step to the account step. */
+export const HEAD_COACH_SETUP_NAME_COOKIE = "smba_head_coach_setup_name"
 export const HEAD_COACH_SETUP_CLAIM_LIFETIME_MS = 60 * 60 * 1_000
 
 function setupClaimHash(token: string) {
@@ -333,7 +335,7 @@ export async function completeInitialHeadCoachSetup(
 
   return database.transaction((tx) => {
     if (!consumeHeadCoachSetupClaim(input.setupToken, { database: tx, now })) {
-      throw new Error("This one-time setup session is unavailable or has already been used.")
+      throw new Error("This setup session has expired, was replaced by a newer one opened on another device, or has already been completed. Ask the academy owner to open setup again if you still need it.")
     }
     if (!headCoachSetupAvailable({ database: tx })) {
       throw new Error("The head-coach account has already been configured.")
@@ -379,7 +381,7 @@ export async function completeInitialHeadCoachSetup(
       subjectKey: input.recoveryEmailSubjectKey,
     }, { database: tx, now })
     if (!recoveryEmail) {
-      throw new Error("Verify the recovery email before creating the head-coach account.")
+      throw new Error("The email check ran out. Reload this page to verify the coach’s email again.")
     }
     upsertPasswordCredential({
       academyId: HEAD_COACH_ACADEMY_ID,

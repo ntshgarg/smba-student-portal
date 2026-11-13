@@ -127,6 +127,15 @@ The configured origin is used by canonical metadata, Open Graph URLs, `robots.tx
 header. Keep the locality-only address in structured data until SMBA's full street
 address, postal code and coordinates have been verified.
 
+## Backups
+
+Every night a GitHub Actions job copies the production database, encrypts it and keeps it for 30 days
+in a separate **private** GitHub repository; once a month another job proves the newest copy can be
+restored. Nothing is backed up until the owner sets that repository up and adds these Actions secrets:
+`SMBA_BACKUP_STORE_TOKEN`, `SMBA_BACKUP_DATABASE_URL`, `SMBA_BACKUP_DATABASE_TOKEN` and
+`SMBA_BACKUP_PASSPHRASE`. The steps are in
+[`docs/PRODUCTION-OPERATIONS.md`](docs/PRODUCTION-OPERATIONS.md), "Scheduled encrypted backups".
+
 ## Remote development preview
 
 The Vercel deployment is available at
@@ -144,8 +153,8 @@ npm run preview:seed:turso
 ```
 
 The copier omits authentication sessions, one-time codes and security telemetry and refuses to modify a database
-containing application data. It accepts either a completely empty database or an
-empty schema already prepared by the Vercel build.
+containing application data. Run it on a completely empty database, before any deployment prepares it: a
+prepared database already holds the standard batches, so the copier refuses it.
 
 A Vercel **Production** deployment runs migrations and the idempotent reference-data
 bootstrap as an explicit build step before starting application functions. Request

@@ -869,4 +869,233 @@ describe("attendance adjustments", () => {
     expect(readAdjustment("register-bystander-adjustment")?.reviewRequiredAt)
       .toEqual(bystanderReviewRequiredAt)
   })
+
+  const readAdjustmentRow = (id: string) => database.select()
+    .from(schema.attendanceAdjustments)
+    .where(eq(schema.attendanceAdjustments.id, id)).get()
+
+  /*
+   * A holiday declared on the completed day cancels that session and puts the
+   * make-up in review. Before "Keep make-up" the only ways out were Void --
+   * losing the player's credit -- or a mark change that cannot be made on a
+   * cancelled session.
+   */
+  it("lets the coach keep a make-up whose completed session was later cancelled", () => {
+    const fixture = createScenario("keep-after-holiday")
+    const published = adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
+      playerId: fixture.playerId,
+      sourceOccurrenceId: fixture.sourceOccurrenceId,
+    })
+    const flaggedAt = new Date("2026-08-21T09:00:00+05:30")
+    database.update(schema.sessionOccurrences).set({ status: "cancelled" })
+      .where(eq(schema.sessionOccurrences.id, fixture.completionOccurrenceId)).run()
+    database.update(schema.attendanceAdjustments).set({ reviewRequiredAt: flaggedAt })
+      .where(eq(schema.attendanceAdjustments.id, published.id)).run()
+
+    // A save elsewhere on that date must not quietly clear the holiday's flag
+    // because a Present still sits on the cancelled session.
+    expect(adjustments.reconcileAttendanceAdjustmentReviewState({
+      completedOn: fixture.completedOn,
+      database,
+      lostFinalPresence: false,
+      now,
+      playerId: fixture.playerId,
+    })).toBe(0)
+    expect(readAdjustmentRow(published.id)?.reviewRequiredAt).toEqual(flaggedAt)
+
+    const kept = adjustments.keepAttendanceAdjustment({
+      adjustmentId: published.id,
+      coachId,
+      database,
+    })
+    expect(kept).toMatchObject({ reviewRequiredAt: null, voidedAt: null })
+
+    // ...and a later save on that date does not undo the coach's decision.
+    adjustments.reconcileAttendanceAdjustmentReviewState({
+      completedOn: fixture.completedOn,
+      database,
+      lostFinalPresence: true,
+      now,
+      playerId: fixture.playerId,
+    })
+    expect(readAdjustmentRow(published.id)?.reviewRequiredAt).toBeNull()
+  })
+
+  it("refuses to keep a make-up whose Present mark was removed, and keeps its review time on void", async () => {
+    const fixture = createScenario("keep-without-presence")
+    const { saveSessionAttendanceRecords } = await import("@/lib/sessions/service")
+    const published = adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
+      playerId: fixture.playerId,
+      sourceOccurrenceId: fixture.sourceOccurrenceId,
+    })
+    saveSessionAttendanceRecords({
+      database,
+      coachId,
+      now,
+      referenceDate: "2026-08-20",
+      changes: [{
+        playerId: fixture.playerId,
+        occurrenceId: fixture.completionOccurrenceId,
+        choice: "absent",
+        expectedChoice: "present",
+      }],
+    })
+    expect(readAdjustmentRow(published.id)?.reviewRequiredAt).toEqual(now)
+
+    expect(() => adjustments.keepAttendanceAdjustment({
+      adjustmentId: published.id,
+      coachId,
+      database,
+    })).toThrowError(expect.objectContaining({
+      code: "BUSINESS_RULE",
+      message: expect.stringContaining("no Present mark"),
+    }))
+
+    // Every later save that still finds no Present keeps the first review time.
+    adjustments.reconcileAttendanceAdjustmentReviewState({
+      completedOn: fixture.completedOn,
+      database,
+      lostFinalPresence: true,
+      now: new Date("2026-08-22T12:00:00+05:30"),
+      playerId: fixture.playerId,
+    })
+    expect(readAdjustmentRow(published.id)?.reviewRequiredAt).toEqual(now)
+
+    const voided = adjustments.voidAttendanceAdjustment({
+      adjustmentId: published.id,
+      coachId,
+      database,
+      now: new Date("2026-08-23T12:00:00+05:30"),
+    })
+    expect(voided.reviewRequiredAt).toEqual(now)
+    expect(() => adjustments.keepAttendanceAdjustment({
+      adjustmentId: published.id,
+      coachId,
+      database,
+    })).toThrow("already been voided")
+  })
+
+  /*
+   * Its Present was changed to Absent, so the session now reads as an absence
+   * -- but it is still the proof of the first make-up, which is in review, not
+   * gone.
+   */
+  it("does not let one make-up's completed session become another's missed session", () => {
+    const fixture = createScenario("proof-as-source")
+    adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
+      playerId: fixture.playerId,
+      sourceOccurrenceId: fixture.sourceOccurrenceId,
+    })
+    database.update(schema.sessionAttendanceRecords).set({ choice: "absent" }).where(and(
+      eq(schema.sessionAttendanceRecords.accountId, fixture.playerId),
+      eq(schema.sessionAttendanceRecords.occurrenceId, fixture.completionOccurrenceId),
+    )).run()
+
+    expect(() => adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: "proof-as-source-any-later-session",
+      playerId: fixture.playerId,
+      sourceOccurrenceId: fixture.completionOccurrenceId,
+    })).toThrowError(expect.objectContaining({
+      code: "BUSINESS_RULE",
+      field: "sourceOccurrenceId",
+    }))
+  })
+
+  function addPresentSession(prefix: string, playerId: string, dateKey: string, hour: string) {
+    database.insert(schema.sessionSeries).values({
+      id: `${prefix}-series`,
+      title: `${prefix}`,
+      programme: "Adult",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: "2026-08-01",
+      endsOn: "2026-08-31",
+      status: "active",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionOccurrences).values({
+      id: `${prefix}-occurrence`,
+      seriesId: `${prefix}-series`,
+      occurrenceDate: dateKey,
+      startsAt: new Date(`${dateKey}T${hour}:00+05:30`),
+      durationMinutes: 60,
+      venue: "SMBA Court",
+      status: "scheduled",
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionAssignments).values({
+      id: `${prefix}-assignment`,
+      accountId: playerId,
+      seriesId: `${prefix}-series`,
+      effectiveFrom: "2026-08-01",
+      effectiveTo: null,
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
+    database.insert(schema.sessionAssignmentWeekdays).values({
+      id: `${prefix}-weekday`,
+      assignmentId: `${prefix}-assignment`,
+      weekday: new Date(`${dateKey}T00:00:00.000Z`).getUTCDay(),
+    }).run()
+    database.insert(schema.sessionAttendanceRecords).values({
+      id: `${prefix}-attendance`,
+      accountId: playerId,
+      occurrenceId: `${prefix}-occurrence`,
+      choice: "present",
+      markedByAccountId: coachId,
+      createdAt: now,
+      updatedAt: now,
+    }).run()
+    return `${prefix}-occurrence`
+  }
+
+  /*
+   * A holiday on the missed session's day flags the make-up so the coach can
+   * decide. A later save on the completion day still finds the Present there,
+   * but that Present says nothing about why the make-up was flagged.
+   */
+  it("keeps a missed-day holiday's flag through a later save on the completion day", async () => {
+    const fixture = createScenario("missed-holiday")
+    const { saveSessionAttendanceRecords } = await import("@/lib/sessions/service")
+    const published = adjustments.publishMakeupAttendanceAdjustment({
+      coachId,
+      database,
+      now,
+      completionOccurrenceId: fixture.completionOccurrenceId,
+      playerId: fixture.playerId,
+      sourceOccurrenceId: fixture.sourceOccurrenceId,
+    })
+    const evening = addPresentSession("missed-holiday-evening", fixture.playerId, fixture.completedOn, "18:00")
+    const flaggedAt = new Date("2026-08-21T09:00:00+05:30")
+    database.update(schema.sessionOccurrences).set({ status: "cancelled" })
+      .where(eq(schema.sessionOccurrences.id, fixture.sourceOccurrenceId)).run()
+    database.update(schema.attendanceAdjustments).set({ reviewRequiredAt: flaggedAt })
+      .where(eq(schema.attendanceAdjustments.id, published.id)).run()
+
+    saveSessionAttendanceRecords({
+      database,
+      coachId,
+      now,
+      referenceDate: "2026-08-20",
+      changes: [{ playerId: fixture.playerId, occurrenceId: evening, choice: "absent", expectedChoice: "present" }],
+    })
+
+    expect(readAdjustmentRow(published.id)?.reviewRequiredAt).toEqual(flaggedAt)
+  })
 })

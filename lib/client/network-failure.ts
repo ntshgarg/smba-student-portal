@@ -1,11 +1,24 @@
+import type { InlineNoticeAction } from "@/components/inline-notice"
+import { SESSION_EXPIRED_DIGEST } from "@/lib/actions/operational-result"
+import { reportClientError } from "@/lib/telemetry/report-client-error"
+
 export type NetworkFailureKind = "offline" | "unreachable"
 
-export type SaveFailureKind = NetworkFailureKind | "timeout" | "unknown"
+export type SaveFailureKind = NetworkFailureKind | "session-expired" | "timeout" | "unknown"
 
 export type SaveFailureDescription = {
   kind: SaveFailureKind
   message: string
   offerRetry: boolean
+  /** Set for an expired sign-in only: the way back, opened beside this tab. */
+  signIn?: InlineNoticeAction
+}
+
+/** Opens in a new tab so the work on this screen is kept. */
+export const signInInNewTab: InlineNoticeAction = {
+  href: "/login",
+  label: "Sign in in a new tab",
+  newTab: true,
 }
 
 function deviceIsOnline() {
@@ -50,14 +63,24 @@ export function withSaveDeadline<T>(save: Promise<T>, timeoutMs: number) {
   })
 }
 
+/** `TypeError` wordings that mean a bug in this page, not a dropped request. */
+const programmingErrorShape = new RegExp([
+  "cannot (read|set) propert",
+  "cannot destructure",
+  "can't access property",
+  "is not an? (function|constructor|object)",
+  "is not iterable",
+  "is (undefined|null)\\b",
+].join("|"), "iu")
+
 /**
- * A request that never reached the server rejects with a `TypeError` regardless
- * of wording: "Failed to fetch" (Chrome), "NetworkError when attempting to
- * fetch resource." (Firefox), "Load failed" (Safari). The constructor is the
- * stable signal across browsers, so the message is never inspected. `name` is
- * compared as well because an error crossing a realm boundary fails
- * `instanceof`. Anything else — including a server-thrown error — is not a
- * transport failure and returns `null`.
+ * A request that did not complete rejects with a `TypeError` whose wording
+ * varies: "Failed to fetch" (Chrome), "NetworkError when attempting to fetch
+ * resource." (Firefox), "Load failed" (Safari). The constructor is the signal,
+ * and `name` is compared as well because an error crossing a realm boundary
+ * fails `instanceof`. A bug-shaped message (`programmingErrorShape`) and
+ * anything else -- including a server-thrown error -- returns `null`.
+ * The server may still have received the request.
  *
  * `navigator.onLine` only reports whether a network interface exists, so it
  * cannot prove reachability. It is used solely to choose between the two
@@ -70,6 +93,7 @@ export function classifyNetworkFailure(
   const isTransportFailure = error instanceof TypeError
     || (error instanceof Error && error.name === "TypeError")
   if (!isTransportFailure) return null
+  if (programmingErrorShape.test(error.message)) return null
   return isOnline ? "unreachable" : "offline"
 }
 
@@ -78,57 +102,86 @@ function isSaveTimeout(error: unknown) {
     || (error instanceof Error && error.name === "SaveTimeoutError")
 }
 
+function errorDigest(error: unknown) {
+  if (typeof error !== "object" || error === null) return null
+  const digest = (error as { digest?: unknown }).digest
+  return typeof digest === "string" ? digest : null
+}
+
+/** True when the save was refused because the sign-in has run out. */
+export function isSessionExpiry(error: unknown) {
+  return errorDigest(error) === SESSION_EXPIRED_DIGEST
+}
+
+export function classifySaveFailure(
+  error: unknown,
+  isOnline?: boolean,
+): SaveFailureKind {
+  if (isSessionExpiry(error)) return "session-expired"
+  if (isSaveTimeout(error)) return "timeout"
+  return classifyNetworkFailure(error, isOnline) ?? "unknown"
+}
+
 /**
- * Turns a rejected save into operational copy. `subject` names what was being
- * saved, `retained` states what is still on screen, and `fallbackMessage`
- * covers a non-`Error` throw. Both sentences are supplied without trailing
- * punctuation.
- *
- * A timeout is deliberately never described as a failure, because the write may
- * have landed. Offline and unreachable are safe to call failures: the request
- * never reached the server, so nothing can have been recorded.
+ * Turns a rejected save into operational copy. `subject` (singular, no trailing
+ * punctuation) names what was being saved; `retained` states what is still on
+ * screen. Only an expired sign-in is called a failure: anything else may have
+ * landed. Where `retained` would be false if the save landed, the caller passes
+ * `unconfirmed` (how to find out) instead, and no retry is offered.
  */
 export function describeSaveFailure({
   error,
-  fallbackMessage,
   isOnline,
   retained,
   subject,
+  unconfirmed,
 }: {
   error: unknown
-  fallbackMessage: string
   isOnline?: boolean
   retained: string
   subject: string
+  unconfirmed?: string
 }): SaveFailureDescription {
-  if (isSaveTimeout(error)) {
+  const kind = classifySaveFailure(error, isOnline)
+
+  if (kind === "session-expired") {
     return {
-      kind: "timeout",
+      kind,
+      message: `${subject} did not go through because your sign-in has expired. ${retained}.`
+        + " Sign in again in a new tab, then come back here and try again.",
+      offerRetry: false,
+      signIn: signInInNewTab,
+    }
+  }
+
+  if (kind === "timeout" && !unconfirmed) {
+    return {
+      kind,
       message: `${subject} was not confirmed in time and may or may not have been`
         + ` recorded. ${retained}. Saving again is safe and will confirm the result.`,
       offerRetry: true,
     }
   }
 
-  const failure = classifyNetworkFailure(error, isOnline)
-  if (!failure) {
-    return {
-      kind: "unknown",
-      message: error instanceof Error ? error.message : fallbackMessage,
-      offerRetry: false,
-    }
+  if (kind === "unknown") {
+    reportClientError({ boundary: "window", error, eventType: "unhandled_rejection" })
   }
 
-  const cause = failure === "offline"
-    ? "this device is offline"
-    : "the request did not complete"
-  const nextStep = failure === "offline"
+  const cause = kind === "offline" || kind === "unreachable"
+    ? `was not confirmed because ${kind === "offline" ? "this device is offline" : "the connection dropped"}`
+    : kind === "timeout"
+      ? "was not confirmed in time"
+      : "ran into an unexpected problem"
+  const nextStep = kind === "offline"
     ? "Try again when the connection returns"
-    : "Check the connection and try again"
+    : kind === "unknown"
+      ? "Try again, and if it keeps happening, reload the page"
+      : "Check the connection and try again"
 
   return {
-    kind: failure,
-    message: `${subject} could not be saved because ${cause}. ${retained}. ${nextStep}.`,
-    offerRetry: true,
+    kind,
+    message: `${subject} ${cause}, so it may or may not have gone through. `
+      + (unconfirmed ? `${unconfirmed}.` : `${retained}. ${nextStep}.`),
+    offerRetry: !unconfirmed && kind !== "unknown",
   }
 }

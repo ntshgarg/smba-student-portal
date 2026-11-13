@@ -5,7 +5,7 @@ import os from "node:os"
 import path from "node:path"
 
 import Database from "better-sqlite3"
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/better-sqlite3"
 import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { readMigrationFiles } from "drizzle-orm/migrator"
@@ -569,6 +569,7 @@ async function applicationModules(target: string) {
     announcementService,
     credentialService,
     holidayService,
+    trainingChanges,
   ] = await Promise.all([
     import("../../lib/db/client"),
     import("../../lib/auth/account-service"),
@@ -581,6 +582,7 @@ async function applicationModules(target: string) {
     import("../../lib/announcements/service"),
     import("../../lib/auth/credential-service"),
     import("../../lib/sessions/holidays"),
+    import("../../lib/training/changes"),
   ])
   return {
     database: initializeDatabase(),
@@ -594,6 +596,7 @@ async function applicationModules(target: string) {
     announcementService,
     credentialService,
     holidayService,
+    trainingChanges,
   }
 }
 
@@ -1247,6 +1250,7 @@ async function seedFinancials(target: string) {
     dbSchema,
     financeConfig,
     financeService,
+    trainingChanges,
   } = await applicationModules(target)
   const now = new Date(`${FINANCE_REFERENCE_DATE}T12:00:00+05:30`)
   const createFeeReference = deterministicFeeReferenceGenerator()
@@ -1458,7 +1462,7 @@ async function seedFinancials(target: string) {
   // A small immutable lifecycle set keeps each profile operationally useful.
   const phaseThreeRead = openReadonly(target)
   const refundablePayments = phaseThreeRead.prepare(`
-    select p.id as paymentId, pa.id as allocationId
+    select p.id as paymentId, pa.id as allocationId, p.player_account_id as playerId
     from payments p
     join payment_allocations pa on pa.payment_id = p.id
     join financial_charges c on c.id = pa.charge_id
@@ -1472,6 +1476,7 @@ async function seedFinancials(target: string) {
   `).all(`${prefix}.payment.2026-08.%`, CURRENT_FEE_PERIOD) as Array<{
     allocationId: string
     paymentId: string
+    playerId: string
   }>
   const concessionTargets = phaseThreeRead.prepare(`
     select c.id as chargeId, c.player_account_id as playerId, x.serial
@@ -1537,13 +1542,23 @@ async function seedFinancials(target: string) {
   if (refundablePayments.length !== 2) {
     throw new Error(`${selectedProfile.key} fixture requires two deterministic paid receipts.`)
   }
+  // A withdrawal refund is recorded only once the player's training has ended.
+  refundablePayments.forEach(({ playerId }) => {
+    const onSchedule = database.select({ id: dbSchema.sessionAssignments.id })
+      .from(dbSchema.sessionAssignments)
+      .where(and(
+        eq(dbSchema.sessionAssignments.accountId, playerId),
+        isNull(dbSchema.sessionAssignments.effectiveTo),
+      )).get()
+    if (onSchedule) trainingChanges.endTrainingNow({ playerId, stopFees: true }, context)
+  })
   const recordedRefunds = refundablePayments.map((payment, index) => financeService.recordRefund({
     paymentId: payment.paymentId,
     // Both source receipts begin at revision zero. Reusing the original token
     // is required for an identical idempotent command on later seed passes.
     expectedPaymentRevision: 0,
     expectedChargeRevision: 1,
-    expectedAgreementRevision: 0,
+    expectedAgreementRevision: 1,
     amountPaise: index === 0 ? 50_000 : 25_000,
     withdrawalEffectiveOn: FINANCE_REFERENCE_DATE,
     refundedOn: FINANCE_REFERENCE_DATE,
@@ -2228,12 +2243,18 @@ function verify(target: string, expectedStage?: Stage) {
       if (summary.assignments !== expectedAssignments) {
         problems.push(`Loaded ${selectedProfile.key} profile must contain ${expectedAssignments} assignments.`)
       }
+      // Players given a withdrawal refund (seedFinancials) have left training.
+      const withdrawn = db.prepare(`
+        select count(*) as players, coalesce(sum(batch = 'Weekday'), 0) as weekday
+        from player_enrollments
+        where account_id in (select player_account_id from refunds where purpose = 'mid_term_withdrawal')
+      `).get() as { players: number; weekday: number }
       const activeAssignmentCount = db.prepare(`
         select count(*) as count from session_assignments where effective_to is null
       `).get() as { count: number }
-      if (activeAssignmentCount.count !== expectedActiveAssignments) {
+      if (activeAssignmentCount.count !== expectedActiveAssignments - withdrawn.players) {
         problems.push(
-          `Loaded ${selectedProfile.key} profile must contain ${expectedActiveAssignments} active assignments.`,
+          `Loaded ${selectedProfile.key} profile must contain ${expectedActiveAssignments - withdrawn.players} active assignments.`,
         )
       }
       const lifecycle = db.prepare(`
@@ -2244,8 +2265,8 @@ function verify(target: string, expectedStage?: Stage) {
           sum(case when a.archived_at is not null then 1 else 0 end) as archived
         from player_enrollments e join accounts a on a.id = e.account_id
       `).get() as { active: number; archived: number; paused: number; unassigned: number }
-      if (lifecycle.active !== players.length - 6
-        || lifecycle.paused !== 3
+      if (lifecycle.active !== players.length - 6 - withdrawn.players
+        || lifecycle.paused !== 3 + withdrawn.players
         || lifecycle.unassigned !== 2
         || lifecycle.archived !== 1) {
         problems.push(
@@ -2293,7 +2314,7 @@ function verify(target: string, expectedStage?: Stage) {
       })
       const expectedWeekdayAssignments = players.filter((player) => (
         player.batch === "Weekday" && player.finalState === "active"
-      )).length
+      )).length - withdrawn.weekday
       if (weekdayCoverage.length !== expectedWeekdayAssignments) {
         problems.push(
           `Loaded stage contains ${weekdayCoverage.length} Weekday assignments instead of ${expectedWeekdayAssignments}.`,

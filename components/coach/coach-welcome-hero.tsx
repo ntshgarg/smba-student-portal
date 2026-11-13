@@ -9,6 +9,7 @@ export function CoachWelcomeHero({
   greeting,
   upcomingSession,
   sessionCount,
+  sessionOnCourt = false,
   sessionPosition,
 }: {
   coachName: string
@@ -21,6 +22,7 @@ export function CoachWelcomeHero({
     venue: string
   } | null
   sessionCount: number
+  sessionOnCourt?: boolean
   sessionPosition: "first" | "next"
 }) {
   // Split before rendering rather than inside the markup: `upcomingSession` is
@@ -94,7 +96,9 @@ export function CoachWelcomeHero({
             </>
           ) : (
             <p className="coach-welcome-empty">
-              {sessionCount ? "No more sessions today." : "No sessions scheduled today."}
+              {sessionOnCourt
+                ? "The last session of the day is on court now."
+                : sessionCount ? "No more sessions today." : "No sessions scheduled today."}
             </p>
           )}
         </aside>

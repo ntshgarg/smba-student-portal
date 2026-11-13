@@ -138,7 +138,7 @@ export default async function DashboardPage() {
                     : playerState === "schedule-pending"
                       ? "Your coach is preparing your first training schedule."
                       : playerState === "paused"
-                        ? "Your next session will appear when training resumes."
+                        ? "No sessions are booked for you. Speak to your coach if you want to train again."
                         : playerState === "term-finished" && termFinishedOn
                           ? termFinishedMessage(termFinishedOn, dashboard.player.nextScheduleStartsOn)
                           : "Your next session will appear here as soon as it is scheduled."}

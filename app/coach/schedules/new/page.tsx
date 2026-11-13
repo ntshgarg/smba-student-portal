@@ -1,6 +1,7 @@
 import { SessionScheduleCreate } from "@/components/coach/calendar/session-create"
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
+import { academyToday } from "@/lib/clock"
 import { listOperationalPlayerRecords } from "@/lib/coach/database"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 
@@ -35,6 +36,7 @@ export default async function CoachCreateSchedulePage({
         initialBatch={batches.find((batch) => batch === params.batch)}
         initialPlayerId={params.player ?? null}
         initialProgramme={programmes.find((programme) => programme === params.programme)}
+        today={academyToday()}
       />
     </CoachPortalProvider>
   )

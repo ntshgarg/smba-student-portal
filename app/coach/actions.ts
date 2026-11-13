@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import {
   approveRegistration,
   rejectRegistration,
+  undoRegistrationRejection,
 } from "@/lib/auth/account-service"
 import { runCoachAction } from "@/lib/actions/coach-session"
 import {
@@ -38,6 +39,7 @@ import {
   archiveMemberRecord,
   updateMemberRecord,
 } from "@/lib/coach/member-service"
+import { isValidDateKey } from "@/lib/date-keys"
 import { initializeDatabase } from "@/lib/db/client"
 import {
   findScheduledOccurrence,
@@ -52,8 +54,10 @@ import {
   cancelSessionOccurrence,
   createSessionSeriesRecords,
   endSessionSeriesRecords,
+  previewEndSessionSeries,
   replaceSessionOccurrence,
   saveSessionAttendanceRecords,
+  type EndSchedulePreview,
 } from "@/lib/sessions/service"
 import type {
   CreateSessionSeriesInput,
@@ -206,6 +210,23 @@ export async function rejectRegistrationAction(registrationId: string) {
   })
 }
 
+/** Puts a rejected request back in the review queue. Approving it is still a separate step. */
+export async function undoRegistrationRejectionAction(registrationId: string) {
+  const coach = await requireCoach()
+  return runOperationalAction(() => {
+    if (typeof registrationId !== "string" || !registrationId.trim()) {
+      throw new OperationalActionError(
+        "NOT_FOUND",
+        "This request is no longer rejected. Refresh the page to see where it stands.",
+        "registrationId",
+      )
+    }
+    undoRegistrationRejection(registrationId, coach.subjectId)
+    revalidateAcademyData()
+    return null
+  })
+}
+
 export async function saveMemberAction(
   input: UpdateMemberInput,
 ): Promise<MemberMutationResult> {
@@ -300,17 +321,38 @@ export async function createSessionSeriesAction(input: CreateSessionSeriesInput)
   })
 }
 
-export async function endSessionSeriesAction(seriesId: string) {
+/** What End schedule would do, for its confirm panel. Changes nothing. */
+export async function previewEndSessionSeriesAction(
+  seriesId: string,
+): Promise<OperationalActionResult<EndSchedulePreview>> {
+  const coach = await requireCoach()
+  return runOperationalAction(() => previewEndSessionSeries({
+    coachId: coach.subjectId,
+    database: initializeDatabase(),
+    now: new Date(),
+    seriesId,
+  }))
+}
+
+/*
+ * End schedule also pauses players, ends or keeps their fee plans and cancels
+ * bookings onto the schedule (lib/sessions/service.ts), so the fee screens and
+ * the players' records are refreshed along with the academy's sessions.
+ */
+export async function endSessionSeriesAction(input: { seriesId: string; stopFees: boolean }) {
   const coach = await requireCoach()
   return runOperationalAction(() => {
-    endSessionSeriesRecords({
+    const closeout = endSessionSeriesRecords({
       coachId: coach.subjectId,
       database: initializeDatabase(),
       now: new Date(),
-      seriesId,
+      seriesId: input?.seriesId,
+      stopFees: input?.stopFees === true,
     })
     revalidateAcademyData()
-    return getCoachScheduleMutationSnapshot()
+    revalidatePath("/coach/financials/records")
+    revalidatePath("/coach/financials/players/[playerId]", "page")
+    return { ...getCoachScheduleMutationSnapshot(), closeout }
   })
 }
 
@@ -337,9 +379,10 @@ export async function cancelSessionOccurrenceAction(occurrenceId: string) {
  * backwards, so it is split into a read and a write. The read reports what the
  * closure would touch -- in particular attendance already recorded, which no
  * other cancellation path can ever encounter -- and the coach confirms against
- * it. Preview and apply deliberately do not share a token: a stale preview
- * over-reports at worst, and refusing the write on a changed preview would
- * block a holiday for the sake of a count.
+ * it. Preview and apply deliberately do not share a token: a stale preview can
+ * miss marks taken since the check (they come back if the holiday is removed),
+ * and refusing the write on a changed preview would block a holiday for the
+ * sake of a count.
  */
 export async function previewAcademyHolidaysAction(
   dateKeys: string[],
@@ -355,6 +398,8 @@ export async function previewAcademyHolidaysAction(
 export async function markAcademyHolidaysAction(input: {
   dateKeys: string[]
   label: string
+  /** The month on screen; the returned snapshot is that month's. */
+  viewMonth?: string
 }) {
   const coach = await requireCoach()
   return runOperationalAction(() => {
@@ -366,12 +411,12 @@ export async function markAcademyHolidaysAction(input: {
       now: new Date(),
     })
     revalidateAcademyData()
-    // The earliest closed date decides which month to reload, so a range that
-    // starts in the previous month does not return a snapshot missing its own
-    // first day.
-    const anchorDate = result.closedDates[0] ?? input.dateKeys.slice().sort()[0]
+    const viewMonth = typeof input.viewMonth === "string"
+      && isValidDateKey(`${input.viewMonth}-01`)
+      ? input.viewMonth
+      : (result.closedDates[0] ?? input.dateKeys.slice().sort()[0]).slice(0, 7)
     return {
-      ...getCoachCalendarMonthSessionSnapshot(anchorDate.slice(0, 7)),
+      ...getCoachCalendarMonthSessionSnapshot(viewMonth),
       ...result,
     }
   })
@@ -384,6 +429,7 @@ export async function retractAcademyHolidayAction(dateKey: string) {
       coachId: coach.subjectId,
       database: initializeDatabase(),
       dateKey,
+      now: new Date(),
     })
     revalidateAcademyData()
     return {

@@ -5,7 +5,9 @@ import Link from "next/link"
 import { Check, ClipboardCopy, FileDown, KeyRound, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
 
 import {
+  cancelAuthenticatorResetRequestAction,
   changePasswordAction,
+  forgetTrustedBrowsersAction,
   reissueRecoveryCodesAction,
   removePinAction,
   revokeOtherSessionsAction,
@@ -16,7 +18,8 @@ import {
   type RecoveryCodeReissueState,
 } from "@/app/account/security/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
-import { describeSaveFailure } from "@/lib/client/network-failure"
+import { describeSaveFailure, signInInNewTab } from "@/lib/client/network-failure"
+import { formatAcademyDate } from "@/lib/format"
 import { PasswordInput } from "@/components/password-input"
 import {
   browserDownloadPort,
@@ -53,8 +56,39 @@ const passwordFieldIds = {
   newPassword: "security-new-password",
 } as const
 
+/** A credential refusal leaves the stored set alone, so the codes on screen stay. */
+async function reissueKeepingCodesOnRefusal(
+  state: RecoveryCodeReissueState,
+  formData: FormData,
+): Promise<RecoveryCodeReissueState> {
+  const next = await reissueRecoveryCodesAction(state, formData)
+  return next.codes === null && next.errorField ? { ...next, codes: state.codes } : next
+}
+
 /** Sessions shown before the list has to be expanded. */
 const sessionPreviewCount = 5
+
+/*
+ * Sign-in and expiry times in the academy's own clock, like every other date
+ * in the portal. `toLocaleString` used the viewer's machine zone, so a coach
+ * travelling, or a browser set to UTC, read times that matched nothing else.
+ */
+/** The way out of an expired sign-in, beside the error that names it. */
+function SignInLink({ shown }: { shown?: boolean }) {
+  if (!shown) return null
+  return (
+    <>
+      {" "}
+      <a href={signInInNewTab.href} rel="noopener" target="_blank">
+        {signInInNewTab.label}<span className="sr-only"> (opens in a new tab)</span>
+      </a>
+    </>
+  )
+}
+
+function academyDateTime(value: string) {
+  return formatAcademyDate(value, { hour: "numeric", minute: "2-digit" })
+}
 
 function deviceLabel(userAgent: string | null) {
   if (!userAgent) return "Unknown browser"
@@ -69,17 +103,23 @@ export function AccountSecurityWorkspace({
   allowPin,
   authenticatorEnabled,
   authenticatorRequired,
+  pendingAuthenticatorResetRequestedAt = null,
   pinEnabled,
   pinRequired,
   sessions,
+  trustedBrowserExpiries = [],
   unusedRecoveryCodeCount,
 }: {
   allowPin: boolean
   authenticatorEnabled: boolean
   authenticatorRequired: boolean
+  /** When a reset of this account's authenticator was asked for, if one is waiting. */
+  pendingAuthenticatorResetRequestedAt?: string | null
   pinEnabled: boolean
   pinRequired: boolean
   sessions: SecuritySession[]
+  /** One expiry per browser trusted to skip the authenticator code, soonest first. */
+  trustedBrowserExpiries?: string[]
   /** `null` when Better Auth could not be asked; the panel then states no count. */
   unusedRecoveryCodeCount: number | null
 }) {
@@ -89,37 +129,54 @@ export function AccountSecurityWorkspace({
     {
       // No field was rejected and nothing succeeded, so clear both verdicts
       // rather than leave a stale one beside the failure.
-      fold: (state, error) => ({ ...state, error, errorField: null, success: null }),
-      retained: "Your current password still works",
+      fold: (state, error, kind) => ({
+        ...state,
+        error,
+        errorField: null,
+        signInExpired: kind === "session-expired",
+        success: null,
+      }),
       subject: "Your new password",
+      unconfirmed: "If it went through, your new password is now the one that works and"
+        + " other devices were signed out. Reload this page: if you are asked to sign in,"
+        + " use your new password",
     },
   )
   const [pinState, pinAction, pinPending] = useResilientActionState(savePinAction, initialPinState, {
-    fold: (state, error) => ({ ...state, error, success: null }),
-    retained: "Your current sign-in options are unchanged",
+    fold: (state, error, kind) => ({ ...state, error, signInExpired: kind === "session-expired", success: null }),
     subject: "Your PIN",
+    unconfirmed: "Your password still signs you in either way. Reload this page to see"
+      + " whether the PIN changed before trying again",
   })
   const [removeState, removeAction, removePending] = useResilientActionState(
     removePinAction,
     initialPinState,
     {
-      fold: (state, error) => ({ ...state, error, success: null }),
-      retained: "Your PIN still works",
+      fold: (state, error, kind) => ({ ...state, error, signInExpired: kind === "session-expired", success: null }),
       subject: "Your PIN removal",
+      unconfirmed: "Your password still signs you in either way. Reload this page to see"
+        + " whether the PIN was removed",
     },
   )
   const [reissueState, reissueAction, reissuePending] = useResilientActionState(
-    reissueRecoveryCodesAction,
+    reissueKeepingCodesOnRefusal,
     initialReissueState,
     {
       // Codes from an earlier press may have been superseded by the press that
       // failed, and a dead code presented as live is what locks a coach out, so
-      // they go with the failure. Neither credential was rejected, so neither
-      // field is flagged. What the sentence keeps is the invariant of this
-      // action, which holds whether or not the request reached the server.
-      fold: (state, error) => ({ ...state, codes: null, error, errorField: null }),
-      retained: "No device was signed out and your authenticator app is unchanged",
-      subject: "Your new recovery codes",
+      // they go with the failure, unless the sign-in had expired (nothing was
+      // touched). Neither field is flagged.
+      fold: (state, error, kind) => ({
+        ...state,
+        codes: kind === "session-expired" ? state.codes : null,
+        error,
+        errorField: null,
+        signInExpired: kind === "session-expired",
+      }),
+      subject: "Your request for new recovery codes",
+      unconfirmed: "If it went through, your old codes no longer work and the new ones could"
+        + " not be shown. Check the connection and reissue again to get a set you can save."
+        + " No device was signed out and your authenticator app is unchanged",
     },
   )
   // The notice names a set -- "All 10 recovery codes are on the clipboard" --
@@ -135,6 +192,26 @@ export function AccountSecurityWorkspace({
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null)
   const [showAllSessions, setShowAllSessions] = useState(false)
   const [sessionsFeedback, setSessionsFeedback] = useState<ActionFeedback | null>(null)
+  const [trustFeedback, setTrustFeedback] = useState<ActionFeedback | null>(null)
+  const [resetFeedback, setResetFeedback] = useState<ActionFeedback | null>(null)
+
+  /** The same failure handling as the two sign-out buttons, for a one-click action. */
+  function runOneClick(
+    run: () => Promise<void>,
+    setFeedback: (feedback: ActionFeedback | null) => void,
+    copy: { retained: string, subject: string, success: string, unconfirmed: string },
+  ) {
+    setFeedback(null)
+    startTransition(async () => {
+      try {
+        await run()
+        setFeedback({ message: copy.success, tone: "success" })
+      } catch (error) {
+        const failure = describeSaveFailure({ error, ...copy })
+        setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
+      }
+    })
+  }
 
   /*
    * The two revoke buttons were the only mutations in this file that did not
@@ -153,8 +230,7 @@ export function AccountSecurityWorkspace({
    */
   function revokeSessions(
     run: () => Promise<void>,
-    { fallbackMessage, retained, subject, success }: {
-      fallbackMessage: string
+    { retained, subject, success }: {
       retained: string
       subject: string
       success?: string
@@ -166,10 +242,13 @@ export function AccountSecurityWorkspace({
         await run()
         if (success) setSessionsFeedback({ message: success, tone: "success" })
       } catch (error) {
-        setSessionsFeedback({
-          message: describeSaveFailure({ error, fallbackMessage, retained, subject }).message,
-          tone: "error",
+        const failure = describeSaveFailure({
+          error,
+          retained,
+          subject,
+          unconfirmed: "Reload this page to see which devices are still signed in",
         })
+        setSessionsFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
       } finally {
         setRevokingSessionId(null)
       }
@@ -287,7 +366,7 @@ export function AccountSecurityWorkspace({
                 still hold. A recovery code used here is replaced with the rest.
               </p>
             </div>
-            {reissueState.error ? <p className="login-error" id={RECOVERY_CODES_ERROR_ID} role="alert">{reissueState.error}</p> : null}
+            {reissueState.error ? <p className="login-error" id={RECOVERY_CODES_ERROR_ID} role="alert">{reissueState.error}<SignInLink shown={reissueState.signInExpired} /></p> : null}
             <button type="submit" disabled={reissuePending}>{reissuePending ? "Reissuing…" : "Reissue recovery codes"}</button>
           </form>
           {reissuedCodes ? (
@@ -298,6 +377,7 @@ export function AccountSecurityWorkspace({
             <div className="totp-backup-codes">
               <h3>Your new recovery codes</h3>
               <p role="status">{`${reissuedCodes.length} new codes replaced the old set. Save them before you leave this page; they are not shown again.`}</p>
+              <p>If new codes are issued again, here or on another device, these stop working.</p>
               <ul>{reissuedCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul>
               <div className="totp-backup-actions">
                 <button
@@ -329,6 +409,69 @@ export function AccountSecurityWorkspace({
         </section>
       ) : null}
 
+      {pendingAuthenticatorResetRequestedAt ? (
+        <section className="security-panel" aria-labelledby="authenticator-reset-request-title">
+          <header>
+            <ShieldCheck aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Authenticator reset</p>
+              <h2 id="authenticator-reset-request-title">A reset request is waiting</h2>
+            </div>
+          </header>
+          <p>{`On ${formatAcademyDate(pendingAuthenticatorResetRequestedAt)} someone using your recovery email asked the platform admin to reset this account's authenticator. If the admin approves it, your authenticator stops working and every device is signed out.`}</p>
+          <p>If you did not ask for this, or you have your authenticator again, cancel the request.</p>
+          <button
+            className="security-secondary-action"
+            type="button"
+            disabled={isPending}
+            onClick={() => runOneClick(() => cancelAuthenticatorResetRequestAction(), setResetFeedback, {
+              retained: "It is still waiting for the platform admin",
+              subject: "The cancellation",
+              success: "Reset request cancelled. Your authenticator is unchanged.",
+              unconfirmed: "Reload this page to see whether the request is still waiting",
+            })}
+          >
+            Cancel reset request
+          </button>
+          <InlineNotice action={resetFeedback?.action} message={resetFeedback?.message} reserveSpace={false} tone={resetFeedback?.tone} />
+        </section>
+      ) : resetFeedback ? (
+        <InlineNotice action={resetFeedback.action} message={resetFeedback.message} reserveSpace={false} tone={resetFeedback.tone} />
+      ) : null}
+
+      {authenticatorEnabled ? (
+        <section className="security-panel" aria-labelledby="trusted-browsers-title">
+          <header>
+            <ShieldCheck aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Trusted browsers</p>
+              <h2 id="trusted-browsers-title">Browsers that skip the code</h2>
+            </div>
+          </header>
+          <p>{trustedBrowserExpiries.length === 0
+            ? "No browser skips the authenticator code. Every sign-in asks for it."
+            : trustedBrowserExpiries.length === 1
+              ? `1 browser skips the authenticator code until ${formatAcademyDate(trustedBrowserExpiries[0]!)}. After that it asks again.`
+              : `${trustedBrowserExpiries.length} browsers skip the authenticator code. The first stops on ${formatAcademyDate(trustedBrowserExpiries[0]!)} and the last on ${formatAcademyDate(trustedBrowserExpiries.at(-1)!)}. After that each asks again.`}</p>
+          {trustedBrowserExpiries.length > 0 ? (
+            <button
+              className="security-secondary-action"
+              type="button"
+              disabled={isPending}
+              onClick={() => runOneClick(() => forgetTrustedBrowsersAction(), setTrustFeedback, {
+                retained: "They still skip the code",
+                subject: "Forgetting trusted browsers",
+                success: "Trusted browsers forgotten. Every browser, this one included, will ask for an authenticator code at its next sign-in.",
+                unconfirmed: "Reload this page to see whether any browser still skips the code",
+              })}
+            >
+              Forget trusted browsers
+            </button>
+          ) : null}
+          <InlineNotice action={trustFeedback?.action} message={trustFeedback?.message} reserveSpace={false} tone={trustFeedback?.tone} />
+        </section>
+      ) : null}
+
       <div className="security-columns">
         <section className="security-panel" aria-labelledby="change-password-title">
           <header>
@@ -348,7 +491,7 @@ export function AccountSecurityWorkspace({
               <label htmlFor="security-confirm-password"><span>Confirm new password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
               <PasswordInput id="security-confirm-password" name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required {...passwordFieldProps("confirmPassword")} />
             </div>
-            {passwordState.error ? <p className="login-error" id={PASSWORD_ERROR_ID} role="alert">{passwordState.error}</p> : null}
+            {passwordState.error ? <p className="login-error" id={PASSWORD_ERROR_ID} role="alert">{passwordState.error}<SignInLink shown={passwordState.signInExpired} /></p> : null}
             {passwordState.success ? <p className="security-success" role="status">{passwordState.success}</p> : null}
             <button type="submit" disabled={passwordPending}>{passwordPending ? "Changing…" : "Change password"}</button>
           </form>
@@ -366,14 +509,14 @@ export function AccountSecurityWorkspace({
           </p>
           <ul className="security-sessions">
             {visibleSessions.map((session) => {
-              const signedIn = new Date(session.createdAt).toLocaleString("en-IN")
+              const signedIn = academyDateTime(session.createdAt)
               const revoking = revokingSessionId === session.id
               return (
                 <li key={session.id}>
                   <div>
                     <strong>{deviceLabel(session.userAgent)}{session.current ? " · This device" : ""}</strong>
                     <span>Signed in {signedIn}</span>
-                    <span>Expires {new Date(session.expiresAt).toLocaleString("en-IN")}</span>
+                    <span>Expires {academyDateTime(session.expiresAt)}</span>
                   </div>
                   {!session.current ? (
                     <button
@@ -383,7 +526,6 @@ export function AccountSecurityWorkspace({
                       onClick={() => {
                         setRevokingSessionId(session.id)
                         revokeSessions(() => revokeSessionAction(session.id), {
-                          fallbackMessage: "That device could not be signed out",
                           retained: "It is still signed in",
                           subject: "The sign-out",
                         })
@@ -413,7 +555,6 @@ export function AccountSecurityWorkspace({
               className="security-secondary-action"
               type="button"
               onClick={() => revokeSessions(() => revokeOtherSessionsAction(), {
-                fallbackMessage: "The other devices could not be signed out",
                 retained: "They are still signed in",
                 subject: "The sign-out",
                 // Trusted browsers are forgotten too (app/account/security/actions.ts).
@@ -427,6 +568,7 @@ export function AccountSecurityWorkspace({
             </button>
           ) : null}
           <InlineNotice
+            action={sessionsFeedback?.action}
             message={sessionsFeedback?.message}
             reserveSpace={false}
             tone={sessionsFeedback?.tone}
@@ -475,7 +617,7 @@ export function AccountSecurityWorkspace({
             <label><span>{pinEnabled ? "New PIN" : "PIN"} <span className="security-required-marker" aria-hidden="true">*</span></span><input className="login-pin-input" name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required aria-invalid={pinValidationTarget === "pin" ? true : undefined} /></label>
             <label><span>Confirm PIN <span className="security-required-marker" aria-hidden="true">*</span></span><input className="login-pin-input" name="confirmPin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required aria-invalid={pinValidationTarget === "confirmPin" ? true : undefined} /></label>
             {pinValidationTarget ? <p className="security-validation-message" role="alert">Complete the highlighted required field.</p> : null}
-            {pinState.error ? <p className="login-error" role="alert">{pinState.error}</p> : null}
+            {pinState.error ? <p className="login-error" role="alert">{pinState.error}<SignInLink shown={pinState.signInExpired} /></p> : null}
             {pinState.success ? <p className="security-success" role="status">{pinState.success}</p> : null}
             <button type="submit" disabled={pinPending}>{pinPending ? "Saving…" : pinEnabled ? "Change PIN" : "Enable PIN login"}</button>
           </form>
@@ -485,7 +627,7 @@ export function AccountSecurityWorkspace({
                 <label htmlFor="pin-remove-current-password"><span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
                 <PasswordInput id="pin-remove-current-password" name="currentPassword" autoComplete="current-password" required />
               </div>
-              {removeState.error ? <p className="login-error" role="alert">{removeState.error}</p> : null}
+              {removeState.error ? <p className="login-error" role="alert">{removeState.error}<SignInLink shown={removeState.signInExpired} /></p> : null}
               {removeState.success ? <p className="security-success" role="status">{removeState.success}</p> : null}
               <button className="security-secondary-action" type="submit" disabled={removePending}>{removePending ? "Removing…" : "Remove PIN"}</button>
             </form>

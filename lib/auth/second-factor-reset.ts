@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash } from "node:crypto"
 
-import { and, eq, like, lt } from "drizzle-orm"
+import { and, asc, eq, gt, like, lt } from "drizzle-orm"
 
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import { authRuntimeSessions, authSessions, authVerifications } from "@/lib/db/schema"
@@ -39,6 +39,68 @@ export function forgetTrustedDevices(
     eq(authVerifications.value, accountId),
     like(authVerifications.identifier, `${TRUST_DEVICE_IDENTIFIER_PREFIX}%`),
   )).run().changes
+}
+
+// Expiries of the browsers this account trusts to skip the authenticator, soonest first.
+export function listTrustedDevices(
+  accountId: string,
+  {
+    database = initializeDatabase(),
+    now = new Date(),
+  }: { database?: SmbaDatabaseExecutor, now?: Date } = {},
+) {
+  return database.select({ expiresAt: authVerifications.expiresAt })
+    .from(authVerifications)
+    .where(and(
+      eq(authVerifications.value, accountId),
+      // Only rows the library can still find; older unprefixed ones no longer
+      // skip anything and just wait out their expiry.
+      like(authVerifications.identifier, `${STORED_TRUST_DEVICE_PREFIX}%`),
+      gt(authVerifications.expiresAt, now),
+    ))
+    .orderBy(asc(authVerifications.expiresAt))
+    .all()
+    .map((row) => row.expiresAt)
+}
+
+// Better Auth renews a trusted browser on each sign-in (delete then create in one request).
+// These hooks carry the old expiry across, so trust ends 30 days after it was first given.
+const trustExpiryBeingRenewed = new WeakMap<object, { accountId: string, expiresAt: Date }>()
+
+type TrustRow = { expiresAt: Date | number | string, identifier?: string, value?: string }
+
+function storedTrustRow(row: TrustRow | null | undefined): row is TrustRow & { identifier: string, value: string } {
+  return typeof row?.identifier === "string"
+    && row.identifier.startsWith(STORED_TRUST_DEVICE_PREFIX)
+    && typeof row.value === "string"
+}
+
+export const trustedDeviceDatabaseHooks = {
+  verification: {
+    create: {
+      async before(data: TrustRow, context: object | null | undefined) {
+        if (!context || !storedTrustRow(data)) return
+        const renewed = trustExpiryBeingRenewed.get(context)
+        if (!renewed || renewed.accountId !== data.value) return
+        trustExpiryBeingRenewed.delete(context)
+        if (new Date(data.expiresAt).getTime() <= renewed.expiresAt.getTime()) return
+        return { data: { expiresAt: renewed.expiresAt } }
+      },
+    },
+    delete: {
+      async before(row: TrustRow, context: object | null | undefined) {
+        if (!context || !storedTrustRow(row)) return
+        // Better Auth also deletes rows that have already run out, as cleanup
+        // during any lookup. That is not a renewal, and carrying its past date
+        // over would make a trust ticked in the same request expire at once.
+        if (new Date(row.expiresAt).getTime() <= Date.now()) return
+        trustExpiryBeingRenewed.set(context, {
+          accountId: row.value,
+          expiresAt: new Date(row.expiresAt),
+        })
+      },
+    },
+  },
 }
 
 /*

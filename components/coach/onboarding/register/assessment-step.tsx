@@ -122,11 +122,11 @@ export function AssessmentStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The assessment could not be saved",
         retained: "Your assessment details are still on screen",
         subject: "The assessment",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -173,8 +173,9 @@ export function AssessmentStep({
         */}
       {item.assignedSession ? (
         <p className={styles.classificationLockNote} role="note">
-          Level, batch and Training plan are fixed while a session is assigned. To change
-          them, reset the session assignment on the Fee Plan step.
+          {item.hasRecords
+            ? "Level, batch and Training plan are fixed: this player has a schedule with attendance or fees recorded. Finish onboarding on the Fee Plan step, then change them in Members."
+            : `Level, batch and Training plan are fixed while this player has a schedule. To change them, use ${item.assignedSession.standing === "running" ? "Clear this assignment" : "Start again"} on the Session step first.`}
         </p>
       ) : null}
       <div className={styles.threeFieldGrid}>
@@ -230,7 +231,7 @@ export function AssessmentStep({
           {errors.academyPlan ? <small id={`onboarding-${item.id}-plan-error`}>{errors.academyPlan}</small> : null}
         </label>
       </div>
-      <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <Link href={`/coach/members?player=${encodeURIComponent(item.id)}`}>View member record</Link>
         <button

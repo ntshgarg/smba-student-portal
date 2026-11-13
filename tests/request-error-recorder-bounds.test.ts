@@ -107,3 +107,24 @@ describe("what an anonymous caller cannot make the error recorder do", () => {
     expect(events()).toHaveLength(1)
   })
 })
+
+describe("clearing out old server error records", () => {
+  it("removes rows past the 90-day limit when a new server error is recorded", async () => {
+    const { resetTelemetryPurgeThrottle } = await import("@/lib/telemetry/retention")
+    resetTelemetryPurgeThrottle()
+    // Nobody has signed in and no screen has reported an error for months, so
+    // nothing else has run the clear-out.
+    database.insert(schema.operationalEvents).values({
+      eventType: "application_error",
+      fingerprint: "old",
+      id: "old",
+      occurredAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
+      routePath: "/coach",
+    }).run()
+
+    await recordRequestError(new Error("TypeError: fresh fault"), {} as never, context("/coach"))
+
+    expect(events().map((row) => row.id)).not.toContain("old")
+    expect(events()).toHaveLength(1)
+  })
+})

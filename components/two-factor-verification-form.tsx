@@ -19,16 +19,17 @@ export function TwoFactorVerificationForm() {
     verifyTotpSignIn,
     initialState,
     {
-      retained: "The code was not used and you are still signed out",
       subject: "Your six-digit code",
+      unconfirmed: "Check the connection and try again with a fresh code from your app",
     },
   )
   const [backupState, backupAction, backupPending] = useResilientActionState(
     verifyBackupCodeSignIn,
     initialState,
     {
-      retained: "The code was not used and is still valid",
       subject: "Your recovery code",
+      unconfirmed: "Check the connection and try again. Each recovery code works only once,"
+        + " so if this one is refused, use a different one",
     },
   )
   const codeRef = useRef<HTMLInputElement>(null)

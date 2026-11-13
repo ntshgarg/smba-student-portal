@@ -10,6 +10,7 @@ export type SessionSummaryResponse =
     account: {
       name: string
       initials: string
+      previewMode?: true
       role: AccountRole
     }
   }

@@ -3,8 +3,11 @@
 import { and, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
+import { redirect } from "next/navigation"
 
+import { SessionExpiredError } from "@/lib/actions/operational-result"
 import { getAuth } from "@/lib/auth/better-auth"
+import { withdrawPendingAuthenticatorResetRequests } from "@/lib/auth/authenticator-reset-service"
 import {
   hasPinCredential,
   releaseLoginAttempt,
@@ -37,11 +40,14 @@ export type PasswordChangeField = "currentPassword" | "newPassword" | "confirmPa
 export type PasswordChangeState = {
   error: string | null
   errorField?: PasswordChangeField | null
+  /** Set on screen when the error is an expired sign-in, so a sign-in link is shown. */
+  signInExpired?: boolean
   success: string | null
 }
 
 export type PinManagementState = {
   error: string | null
+  signInExpired?: boolean
   success: string | null
 }
 
@@ -55,11 +61,22 @@ export type RecoveryCodeReissueState = {
   error: string | null
   /** Which credential the reissue form should flag; `null` marks neither. */
   errorField?: "currentPassword" | "secondFactor" | null
+  signInExpired?: boolean
 }
 
-async function requireIdentity() {
+// These pages render only when signed in, so a missing identity is an expired sign-in.
+async function requireSignedIn() {
   const identity = await sessionProvider.getCurrentIdentity()
-  if (!identity) throw new Error("Authentication is required.")
+  if (!identity) throw new SessionExpiredError()
+  return identity
+}
+
+// Second lock behind the proxy: during a preview `subjectId` is the person viewed.
+async function requireIdentity() {
+  const identity = await requireSignedIn()
+  if (identity.previewMode) {
+    throw new Error("Admin preview is read-only. Exit preview before making changes.")
+  }
   return identity
 }
 
@@ -119,17 +136,31 @@ export async function changePasswordAction(
       success: null,
     }
   }
+  // The current password was verified above, so a throw here is not a wrong
+  // password: ask whether the new one took and whether this browser is signed in.
+  let signedOutHere = false
   try {
     await getAuth().api.changePassword({
       body: { currentPassword, newPassword, revokeOtherSessions: true },
       headers: confirmation.requestHeaders,
     })
   } catch {
-    return {
-      error: "The current password could not be verified.",
-      errorField: "currentPassword",
-      success: null,
+    const changed = await verifyCurrentPassword({
+      accountId: identity.subjectId,
+      password: newPassword,
+    }).catch(() => false)
+    if (!changed) {
+      const stillSignedIn = await sessionProvider.hasActiveSession().catch(() => true)
+      return {
+        error: stillSignedIn
+          ? "Your password could not be changed. Your current password still works. Try again."
+          : "Your password could not be changed, but every device, this one included, was"
+            + " logged out. Your current password still works: sign in again with it, then try again.",
+        errorField: null,
+        success: null,
+      }
     }
+    signedOutHere = !(await sessionProvider.hasActiveSession().catch(() => false))
   }
 
   /*
@@ -149,6 +180,8 @@ export async function changePasswordAction(
     outcome: "success",
     userAgent: confirmation.security.userAgent,
   })
+  // This browser was signed out too, so the security page cannot show the result.
+  if (signedOutHere) redirect("/login?notice=password-changed")
   revalidatePath("/account/security")
   return {
     error: null,
@@ -197,17 +230,56 @@ export async function revokeSessionAction(sessionId: string) {
   const identity = await requireIdentity()
   if (typeof sessionId !== "string" || !sessionId.trim()) return
   const database = initializeDatabase()
-  database.delete(authRuntimeSessions).where(and(
+  const ended = database.delete(authRuntimeSessions).where(and(
     eq(authRuntimeSessions.id, sessionId),
     eq(authRuntimeSessions.userId, identity.subjectId),
-  )).run()
-  writeAuthSecurityEvent({
-    accountId: identity.subjectId,
-    actorAccountId: identity.subjectId,
-    eventType: "sessions_revoked",
-    metadata: { scope: "one_device" },
-    outcome: "success",
-  })
+  )).run().changes
+  // Recorded only when a device was actually signed out: a second press, or an
+  // id that is not this account's, ends nothing and is not a security event.
+  if (ended > 0) {
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      actorAccountId: identity.subjectId,
+      eventType: "sessions_revoked",
+      metadata: { scope: "one_device" },
+      outcome: "success",
+    })
+  }
+  revalidatePath("/account/security")
+}
+
+/**
+ * Forgets every browser trusted to skip the authenticator code, this one
+ * included. Until now the only way to undo a "trust this device" was to log
+ * every other device out as well, and nothing showed which browsers were
+ * trusted in the first place.
+ */
+export async function forgetTrustedBrowsersAction() {
+  const identity = await requireIdentity()
+  const forgottenDevices = forgetTrustedDevices(identity.subjectId)
+  if (forgottenDevices > 0) {
+    const security = requestSecurityContext(await headers())
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      actorAccountId: identity.subjectId,
+      eventType: "sessions_revoked",
+      ipHash: security.ipHash,
+      metadata: { forgottenDevices, scope: "trusted_browsers" },
+      outcome: "success",
+      userAgent: security.userAgent,
+    })
+  }
+  revalidatePath("/account/security")
+}
+
+/**
+ * Withdraws an authenticator reset request still waiting for the owner --
+ * the coach found the phone, or never asked and someone holding the recovery
+ * inbox did. Nothing else about the account changes.
+ */
+export async function cancelAuthenticatorResetRequestAction() {
+  const identity = await requireIdentity()
+  withdrawPendingAuthenticatorResetRequests(identity.subjectId, { reason: "cancelled_by_coach" })
   revalidatePath("/account/security")
 }
 
@@ -308,7 +380,7 @@ export async function reissueRecoveryCodesAction(
   _previousState: RecoveryCodeReissueState,
   formData: FormData,
 ): Promise<RecoveryCodeReissueState> {
-  const identity = await requireIdentity()
+  const identity = await requireSignedIn()
   // A previewing platform admin holds their own session while `identity`
   // describes the coach on screen, so the credential gates below would test one
   // account and Better Auth would reissue the other's codes. The page redirects

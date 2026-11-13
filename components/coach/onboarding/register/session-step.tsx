@@ -13,6 +13,7 @@ import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
 import { formatDateKey, formatSessionTimeRange } from "@/lib/format"
+import { formatTermDate } from "@/lib/sessions/term"
 import type { TrainingSessionSeries } from "@/lib/sessions/types"
 import {
   academyPlanAssignmentLimit,
@@ -102,13 +103,58 @@ type SessionStepFeedback = SaveFeedback & {
   field?: "weekdays" | "effectiveFrom"
 }
 
+/** What the Session step says about a first schedule the player already holds. */
+function placeReport(item: PlayerOnboardingCase) {
+  const place = item.assignedSession
+  if (!place) return null
+  const firstName = item.fullName.split(/\s+/u)[0]
+  const schedule = `${place.programme} · ${place.batch}`
+  const from = formatDateKey(place.effectiveFrom)
+  const canFinish = item.stage === "feePlan"
+  switch (place.standing) {
+    case "running":
+      return {
+        heading: `${item.fullName} is already assigned to ${schedule}, from ${from}.`,
+        body: item.hasRecords
+          ? `A schedule cannot be swapped in place, and this one now has attendance or fees recorded, so it stays. Finish onboarding on the Fee Plan step, then change ${firstName}’s schedule in Members.`
+          : "A schedule cannot be swapped in place. Clearing this one lets a different schedule and first training day be chosen. Nothing is recorded for this player yet, so nothing is lost.",
+        canFinish,
+        clearLabel: "Clear this assignment",
+      }
+    case "finished":
+      return {
+        heading: `${firstName}’s first term, ${schedule} from ${from}, finished on ${formatTermDate(place.endsOn ?? place.effectiveFrom)}.`,
+        body: `Finish onboarding with this first term: the Fee Plan step charges the registration fee and the months ${firstName} trained. Afterwards ${firstName} shows as “Term finished” in Members, where you move them to their next schedule.`,
+        canFinish,
+        clearLabel: "Start again",
+      }
+    case "ended":
+      return {
+        heading: `${firstName}’s first schedule, ${schedule} from ${from}, has ended.`,
+        body: `Finish onboarding with this first term: the Fee Plan step charges the registration fee and the months ${firstName} trained, and no monthly fee after that. Afterwards, start ${firstName} on a new schedule in Members if they carry on.`,
+        canFinish,
+        clearLabel: "Start again",
+      }
+    case "unusable":
+      return {
+        heading: `${firstName}’s schedule, ${schedule} from ${from}, ended before their first training day.`,
+        body: "It covers no day of training, so onboarding cannot be finished with it. Start again to choose a new first schedule and first training day.",
+        canFinish: false,
+        clearLabel: "Start again",
+      }
+  }
+}
+
 export function SessionStep({
   item,
+  onGoToFeePlan,
   onSuccess,
   referenceDate,
   sessionSeries,
 }: {
   item: PlayerOnboardingCase
+  /** Opens the Fee Plan step; offered when the case has reached it. */
+  onGoToFeePlan?: () => void
   onSuccess: (input: { message: string }) => void
   referenceDate: string
   sessionSeries: TrainingSessionSeries[]
@@ -178,7 +224,7 @@ export function SessionStep({
 
   /*
    * Undoing this step, from this step. The server refuses once the player has
-   * attendance, fees or a report on record and now names which -- so the coach
+   * attendance, fees or a payment on record and names which -- so the coach
    * learns what is protecting the assignment rather than that "records" exist.
    */
   async function resetAssignment() {
@@ -191,11 +237,11 @@ export function SessionStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The session assignment could not be cleared",
         retained: "Nothing has changed on this player",
+        unconfirmed: "Check the connection, then reload the page to see whether the session assignment was cleared",
         subject: "Clearing the session assignment",
       })
-      setFeedback({ message: failure.message, offerRetry: failure.offerRetry, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, offerRetry: failure.offerRetry, tone: "error" })
       return
     } finally {
       setBusy(false)
@@ -205,7 +251,7 @@ export function SessionStep({
       return
     }
     onSuccess({
-      message: `${item.fullName}’s session assignment is cleared. Choose a schedule again.`,
+      message: `${item.fullName}’s schedule is cleared. Choose a schedule and first training day again.`,
     })
   }
 
@@ -242,11 +288,11 @@ export function SessionStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The session could not be assigned",
         retained: "Your chosen session and days are still on screen",
         subject: "The session assignment",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -285,30 +331,33 @@ export function SessionStep({
    * is that changing the schedule means undoing this one. Say what is assigned
    * and name the control that undoes it rather than offering a form that cannot
    * work.
+   * Ended places included; clearing is offered only while nothing is recorded.
    */
-  if (item.assignedSession) {
+  const report = placeReport(item)
+  if (report) {
+    const canClear = !item.hasRecords
     return (
       <div className={styles.recoveryPanel}>
-        <strong>
-          {item.fullName} is already assigned to {item.assignedSession.programme}
-          {" · "}{item.assignedSession.batch}, from{" "}
-          {formatDateKey(item.assignedSession.effectiveFrom)}.
-        </strong>
-        <p>
-          A schedule cannot be swapped in place — clearing this assignment is what lets a
-          different one be made, and it reopens the assessment too. It stops being possible
-          once the player has attendance, fees or a report on record, because those would be
-          left attached to nothing.
-        </p>
+        <strong>{report.heading}</strong>
+        <p>{report.body}</p>
         {/*
           * The reset lives here as well as on Fee Plan. This is the step whose
           * work it undoes, and sending a coach two steps forward to undo the
           * step they are standing on was a detour with nothing to recommend it.
           */}
-        <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
-        <button disabled={busy} onClick={() => void resetAssignment()} type="button">
-          {busy ? "Clearing…" : "Clear this assignment"}
-        </button>
+        <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+        <div className={styles.formActions}>
+          {canClear ? (
+            <button disabled={busy} onClick={() => void resetAssignment()} type="button">
+              {busy ? "Clearing…" : report.clearLabel}
+            </button>
+          ) : <span aria-hidden="true" />}
+          {report.canFinish && onGoToFeePlan ? (
+            <button className={styles.primaryButton} disabled={busy} onClick={onGoToFeePlan} type="button">
+              Go to Fee Plan <ArrowRight aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
       </div>
     )
   }
@@ -403,7 +452,7 @@ export function SessionStep({
           </small>
         </label>
       </div>
-      <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice action={feedback?.action} id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {rangeViolation ? (
         <p className={styles.backdateNote} id={rangeNoteId} role="alert">
           {rangeViolation}

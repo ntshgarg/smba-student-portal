@@ -6,9 +6,10 @@ import { useState } from "react"
 
 import { archiveCoachAction } from "@/app/coach/actions"
 import { formatJoinedDate } from "@/components/coach/members/directory/shared"
-import { InlineNotice } from "@/components/inline-notice"
+import { InlineNotice, type InlineNoticeAction } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { AcademyStaffMember } from "@/lib/coach/types"
+import { getAcademyDateKey } from "@/lib/format"
 
 export function staffAccessLabel(accessLevel: AcademyStaffMember["accessLevel"]) {
   return accessLevel === "head_admin" ? "Head coach" : "Assistant coach"
@@ -101,6 +102,7 @@ function StaffAccessActions({
   const router = useRouter()
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [signIn, setSignIn] = useState<InlineNoticeAction | undefined>(undefined)
 
   async function archive() {
     if (pending) return
@@ -110,6 +112,7 @@ function StaffAccessActions({
     if (!confirmed) return
     setPending(true)
     setMessage(null)
+    setSignIn(undefined)
     try {
       const result = await archiveCoachAction({ coachAccountId: staff.id })
       if (!result.ok) {
@@ -119,12 +122,14 @@ function StaffAccessActions({
       onArchived(staff)
       router.refresh()
     } catch (error) {
-      setMessage(describeSaveFailure({
+      const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The coach could not be archived",
         retained: "The coach can still sign in",
+        unconfirmed: "Check the connection, then reload the page to see whether the coach was archived",
         subject: "The coach archive",
-      }).message)
+      })
+      setMessage(failure.message)
+      setSignIn(failure.signIn)
     } finally {
       setPending(false)
     }
@@ -142,6 +147,7 @@ function StaffAccessActions({
         </button>
       </div>
       <InlineNotice
+        action={signIn}
         className="coach-member-save-notice"
         message={message}
         reserveSpace={false}
@@ -197,13 +203,13 @@ export function StaffDetailRow({
                 <div>
                   <dt>Coach approved</dt>
                   <dd>{staff.approvedAt
-                    ? formatJoinedDate(staff.approvedAt.slice(0, 10))
+                    ? formatJoinedDate(getAcademyDateKey(staff.approvedAt))
                     : "Not recorded"}</dd>
                 </div>
                 <div>
                   <dt>Account activated</dt>
                   <dd>{staff.activatedAt
-                    ? formatJoinedDate(staff.activatedAt.slice(0, 10))
+                    ? formatJoinedDate(getAcademyDateKey(staff.activatedAt))
                     : "Not yet activated"}</dd>
                 </div>
               </dl>

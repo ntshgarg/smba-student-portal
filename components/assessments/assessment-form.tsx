@@ -21,6 +21,7 @@ import type {
   SaveAssessmentInput,
 } from "@/lib/assessments/contracts"
 import { formatAssessmentDate, sectionTone } from "@/lib/assessments/display"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PreviousAssessment } from "@/lib/assessments/queries"
 import {
   ASSESSMENT_RATING_LABELS,
@@ -201,12 +202,15 @@ export function AssessmentForm({
   group,
   player,
   previous,
+  publishedCount,
   today,
 }: {
   assessment: AssessmentRecord | null
   group: string | null
   player: FormPlayer
   previous: PreviousAssessment | null
+  /** How many assessments the player had published when this opened. */
+  publishedCount: number
   today: string
 }) {
   const initial: FormValues = {
@@ -219,6 +223,17 @@ export function AssessmentForm({
   const [values, setValues] = useState<FormValues>(initial)
   const [saved, setSaved] = useState(() => serialise(initial))
   const [assessmentId, setAssessmentId] = useState(assessment?.id ?? null)
+  /**
+   * The id a brand-new assessment will have, chosen here so that a save repeated
+   * after a dropped connection finds what the first attempt created.
+   */
+  const [newAssessmentId] = useState(() => globalThis.crypto.randomUUID())
+  /**
+   * The published count this form opened with, kept rather than read from the
+   * prop, which a refresh after saving a draft would move on. Moved on only by
+   * a refusal that has told the coach why.
+   */
+  const [expectedPublishedCount, setExpectedPublishedCount] = useState(publishedCount)
   const [published, setPublished] = useState(assessment?.status === "published")
   const [pending, setPending] = useState<"discard" | "draft" | "publish" | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
@@ -236,6 +251,7 @@ export function AssessmentForm({
   const overall = overallRating(values.ratings)
   const busy = pending !== null
   const firstName = player.name.split(" ")[0]
+  const ratingsKept = "Your ratings and notes are still on screen"
 
   function change(patch: Partial<FormValues>) {
     setValues((current) => ({ ...current, ...patch }))
@@ -254,10 +270,17 @@ export function AssessmentForm({
 
   function payload(): SaveAssessmentInput {
     return {
-      ...(assessmentId ? { assessmentId } : {}),
+      ...(assessmentId ? { assessmentId } : { newAssessmentId }),
+      ...(!published ? { expectedPublishedCount } : {}),
       ...values,
       playerId: player.playerId,
     }
+  }
+
+  const historyAction: InlineNoticeAction = {
+    href: `/coach/assessments/players/${encodeURIComponent(player.playerId)}`,
+    label: `Open ${firstName}’s assessments`,
+    newTab: true,
   }
 
   async function submit(kind: "draft" | "publish") {
@@ -273,7 +296,15 @@ export function AssessmentForm({
         ? publishAssessmentAction(payload())
         : saveAssessmentDraftAction(payload()))
       if (!result.ok) {
-        setNotice({ message: result.message, tone: "error" })
+        // Published elsewhere: stop showing a draft. A new count is taken on
+        // once the coach has been told, so publishing again goes through.
+        if (result.currentStatus === "published") setPublished(true)
+        if (result.currentPublishedCount !== undefined) {
+          setExpectedPublishedCount(result.currentPublishedCount)
+        }
+        setNotice(result.code === "CONFLICT"
+          ? { action: historyAction, message: result.message, tone: "error" }
+          : { message: result.message, tone: "error" })
         return
       }
       if ("discarded" in result) return
@@ -286,12 +317,14 @@ export function AssessmentForm({
           : "Draft saved. Nothing reaches the player until you publish.",
         tone: "success",
       })
-    } catch {
-      setNotice({
-        action: { href: "/login", label: "Sign in again" },
-        message: "This could not be saved. Check your connection, or sign in again if it keeps happening.",
-        tone: "error",
+    } catch (error) {
+      // Saving again carries the same id, so it cannot make a second copy.
+      const failure = describeSaveFailure({
+        error,
+        retained: ratingsKept,
+        subject: "The assessment",
       })
+      setNotice({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPending(null)
     }
@@ -303,14 +336,29 @@ export function AssessmentForm({
     try {
       const result = await discardAssessmentDraftAction({ assessmentId, playerId: player.playerId })
       if (!result.ok) {
-        setNotice({ message: result.message, tone: "error" })
+        if (result.code === "NOT_FOUND") {
+          // Already gone, discarded somewhere else: what the coach asked for.
+          setDiscarded(true)
+          navigateAfterCommit(() => window.location.replace("/coach/assessments"))
+          return
+        }
+        // Published somewhere else, so it stays on the record. The screen
+        // stops calling it a draft, and the coach is pointed at the list.
+        if (result.currentStatus === "published") setPublished(true)
+        setNotice({ action: historyAction, message: result.message, tone: "error" })
         setConfirmingDiscard(false)
         return
       }
       setDiscarded(true)
       navigateAfterCommit(() => window.location.replace("/coach/assessments"))
-    } catch {
-      setNotice({ message: "The draft could not be discarded. Try again.", tone: "error" })
+    } catch (error) {
+      // Sending it again is harmless: a draft already gone is refused by name.
+      const failure = describeSaveFailure({
+        error,
+        retained: ratingsKept,
+        subject: "Discarding the draft",
+      })
+      setNotice({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPending(null)
     }
@@ -356,7 +404,7 @@ export function AssessmentForm({
 
       <header className={styles.header}>
         <div>
-          <span className="eyebrow">{published ? "Published assessment" : "New assessment"}</span>
+          <span className="eyebrow">{published ? "Published assessment" : assessmentId ? "Draft assessment" : "New assessment"}</span>
           <h1>{player.name}</h1>
         </div>
       </header>

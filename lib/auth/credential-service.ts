@@ -22,6 +22,7 @@ import {
   authProviderAccounts,
   authRecoveryEmails,
   authRuntimeSessions,
+  authTwoFactors,
   authUsers,
   coachProfiles,
   playerEnrollments,
@@ -230,7 +231,21 @@ export function getActivationClaimStatus(token: string | null | undefined, {
     .where(eq(authActivationClaims.tokenHash, activationClaimHash(token)))
     .get()
 
-  if (!row || row.archivedAt || row.consumedAt) return { state: "missing" }
+  if (!row || row.archivedAt) return { state: "missing" }
+  if (row.consumedAt) {
+    // A spent receipt on an account with a password: this browser just activated.
+    return row.credentialStatus === "active"
+      && row.academyId
+      && (row.role === "coach" || row.role === "player")
+      ? {
+        academyId: row.academyId,
+        accountId: row.accountId,
+        fullName: row.fullName,
+        role: row.role,
+        state: "active",
+      }
+      : { state: "missing" }
+  }
   if (row.expiresAt <= now) return { state: "expired" }
   if (row.approvalStatus === "rejected") return { state: "rejected" }
   if (row.approvalStatus === "pending") {
@@ -577,9 +592,23 @@ export async function verifyCurrentPassword(input: {
 
 export type CurrentPasswordAttemptResult = "blocked" | "invalid" | "verified"
 
+async function verifyCurrentPin(accountId: string, pin: string, database: SmbaDatabaseExecutor) {
+  const stored = database.select({ pinHash: authPinCredentials.pinHash })
+    .from(authPinCredentials)
+    .where(eq(authPinCredentials.accountId, accountId))
+    .get()?.pinHash
+  return Boolean(stored && await verifyPassword({ hash: stored, password: pin }))
+}
+
+/**
+ * `allowPin`: also accept the account's six-digit PIN. A password is never six
+ * digits (MIN_PASSWORD_LENGTH), so the two cannot be confused, and a PIN guess
+ * spends the tighter PIN budget exactly as PIN sign-in does.
+ */
 export async function verifyCurrentPasswordAttempt(input: {
   accountId: string
   academyId: string
+  allowPin?: boolean
   ipHash: string
   operation: string
   password: string
@@ -592,7 +621,11 @@ export async function verifyCurrentPasswordAttempt(input: {
   now?: Date
 } = {}): Promise<CurrentPasswordAttemptResult> {
   const subjectHash = authSubjectHash(normalizeAcademyId(input.academyId))
-  const attempt = { ipHash: input.ipHash, subjectHash }
+  const asPin = Boolean(input.allowPin) && validatePin(input.password) === null
+  const factorName = asPin ? "current_pin" : "current_password"
+  const attempt = asPin
+    ? { factor: "pin" as const, ipHash: input.ipHash, subjectHash }
+    : { ipHash: input.ipHash, subjectHash }
   // Reserved before the slow verify, not counted after it, so a burst of
   // parallel guesses cannot all slip in under the ceiling (see reserveLoginAttempt).
   if (!reserveLoginAttempt(attempt, { database, now })) {
@@ -601,24 +634,27 @@ export async function verifyCurrentPasswordAttempt(input: {
       actorAccountId: input.accountId,
       eventType: "login_rate_limited",
       ipHash: input.ipHash,
-      metadata: { factor: "current_password", operation: input.operation },
+      metadata: { factor: factorName, operation: input.operation },
       outcome: "blocked",
       subjectHash,
       userAgent: input.userAgent,
     }, { database, now })
     return "blocked"
   }
-  if (!await verifyCurrentPassword({
-    accountId: input.accountId,
-    password: input.password,
-  }, { database })) {
+  const verified = asPin
+    ? await verifyCurrentPin(input.accountId, input.password, database)
+    : await verifyCurrentPassword({
+      accountId: input.accountId,
+      password: input.password,
+    }, { database })
+  if (!verified) {
     // Already counted by the reservation.
     writeAuthSecurityEvent({
       accountId: input.accountId,
       actorAccountId: input.accountId,
       eventType: "login_failed",
       ipHash: input.ipHash,
-      metadata: { factor: "current_password", operation: input.operation },
+      metadata: { factor: factorName, operation: input.operation },
       outcome: "failure",
       subjectHash,
       userAgent: input.userAgent,
@@ -795,9 +831,13 @@ function countAttemptKeys(tx: AttemptTransaction, keys: AttemptKey[], now: Date)
     const outsideWindow = !current
       || now.getTime() - current.windowStartedAt.getTime() >= LOGIN_WINDOW_MS
     const failedCount = outsideWindow ? 1 : current.failedCount + 1
-    const blockedUntil = failedCount >= threshold
-      ? new Date(now.getTime() + LOGIN_BLOCK_MS)
+    // A new count never shortens a standing block.
+    const standingBlock = current?.blockedUntil && current.blockedUntil > now
+      ? current.blockedUntil
       : null
+    const blockedUntil = failedCount >= threshold
+      ? new Date(Math.max(now.getTime() + LOGIN_BLOCK_MS, standingBlock?.getTime() ?? 0))
+      : standingBlock
     tx.insert(authLoginAttempts).values({
       key,
       blockedUntil,
@@ -1019,6 +1059,34 @@ export function recordLoginSuccess(subjectHash: string, {
       like(authLoginAttempts.key, `subject:${subjectHash}:%`),
     ))
     .run()
+}
+
+// Ends this Academy ID's sign-in pauses after an emailed password reset; the shared per-address bucket is left alone.
+export function clearSignInPauses(academyId: string, {
+  database = initializeDatabase(),
+}: {
+  database?: SmbaDatabaseExecutor
+} = {}) {
+  const subjectHash = authSubjectHash(normalizeAcademyId(academyId))
+  recordLoginSuccess(subjectHash, { database })
+  database.delete(authLoginAttempts)
+    .where(eq(authLoginAttempts.key, `pin:${subjectHash}`))
+    .run()
+}
+
+// Whether Better Auth has locked this account's authenticator checks. Read-only; the portal budget is checked when the attempt is reserved.
+export function secondFactorChecksPaused(accountId: string, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  const factor = database.select({ lockedUntil: authTwoFactors.lockedUntil })
+    .from(authTwoFactors)
+    .where(eq(authTwoFactors.userId, accountId))
+    .get()
+  return Boolean(factor?.lockedUntil && factor.lockedUntil > now)
 }
 
 export function ensureBootstrapCredential({

@@ -346,4 +346,29 @@ describe("member directory service", () => {
     })).toEqual({ ok: true, memberId })
     expect(identityKey()).toBeNull()
   })
+
+  it("will not set an onboarded player back to Assessment pending", () => {
+    const coach = accountService.findApprovedAccountByAcademyId("SMBA#0001")
+    if (!coach) throw new Error("Seed coach was not created.")
+    const playerId = accountService.registerAccount("Nila Bose", "player")
+    accountService.approveRegistration(playerId, coach.accountId)
+    database.update(schema.playerEnrollments).set({
+      academyPlan: "weekday-3-day",
+      batch: "Weekday",
+      level: "Beginner",
+      onboardingCompletedAt: new Date(),
+      status: "paused",
+    }).where(eq(schema.playerEnrollments.accountId, playerId)).run()
+
+    expect(memberService.updateMemberRecord({
+      coachId: coach.accountId,
+      database,
+      input: {
+        memberId: playerId,
+        expectedRevision: 0,
+        profile: { fullName: "Nila Bose", primaryContact: { name: "", phone: "", relationship: "" } },
+        training: { academyPlan: null, batch: "Assessment pending", level: "Assessment pending" },
+      },
+    })).toMatchObject({ ok: false, code: "ACTIVE_ASSIGNMENTS" })
+  })
 })

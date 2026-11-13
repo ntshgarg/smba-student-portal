@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { startTransition } from "react"
+import { useTransition } from "react"
 
 type RouteLoadingStateProps = {
   eyebrow: string
@@ -49,9 +49,10 @@ export function RouteErrorState({
   title,
 }: RouteErrorStateProps) {
   const router = useRouter()
+  const [retrying, startRetry] = useTransition()
 
   function retry() {
-    startTransition(() => {
+    startRetry(() => {
       router.refresh()
       onRetry()
     })
@@ -69,7 +70,9 @@ export function RouteErrorState({
         <h1 id="route-recovery-title">{title}</h1>
         <p className="route-recovery-copy">{body}</p>
         <div className="route-recovery-actions">
-          <button type="button" onClick={retry}>Try again</button>
+          <button type="button" onClick={retry} disabled={retrying}>
+            {retrying ? "Trying again…" : "Try again"}
+          </button>
           <Link href={returnHref}>{returnLabel}</Link>
         </div>
       </div>

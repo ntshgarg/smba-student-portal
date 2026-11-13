@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm"
+import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
 
 import {
   OperationalActionError,
@@ -32,7 +32,9 @@ import {
   createFeeAgreementInTransaction,
   endFeeAgreementInTransaction,
   isFinanceActive,
+  pauseUnstartedFeeAgreementInTransaction,
 } from "@/lib/finance/service"
+import { addCalendarDays } from "@/lib/finance/domain"
 import { loadChargeView } from "@/lib/finance/repository"
 import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
 import {
@@ -40,7 +42,7 @@ import {
   SCHEDULE_CHANGE_FEE_KEY,
   planThisMonthFeeCorrection,
 } from "@/lib/training/this-month-fee-plan"
-import { getAcademyDateKey } from "@/lib/format"
+import { formatSessionLabel, getAcademyDateKey } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanAssignmentLimit,
@@ -244,6 +246,126 @@ function validateFee(monthlyFeePaise: number | null, financeActive: boolean) {
   return monthlyFeePaise
 }
 
+/*
+ * "Stop fees after <month>", shared by End training, End schedule and Stop
+ * fees: the plan in force ends with that month, and a plan due to start after
+ * it is paused so it never bills. Returns whether a plan was stopped.
+ */
+export function stopFeesAfterMonth(
+  tx: Executor,
+  input: { finalMonth: string; idempotencyKey: string; playerId: string; reason: string },
+  context: { actorId: string; createId: () => string; now: Date },
+) {
+  const active = tx.select().from(feeAgreements).where(and(
+    eq(feeAgreements.playerAccountId, input.playerId),
+    eq(feeAgreements.status, "active"),
+  )).get()
+  if (!active) return false
+  if (active.effectiveFrom.slice(0, 7) <= input.finalMonth) {
+    endFeeAgreementInTransaction(tx, {
+      agreementId: active.id,
+      effectiveThroughPeriod: input.finalMonth,
+      expectedRevision: active.recordRevision,
+      idempotencyKey: input.idempotencyKey,
+      reason: input.reason,
+    }, context)
+  } else {
+    pauseUnstartedFeeAgreementInTransaction(tx, {
+      agreementId: active.id,
+      expectedRevision: active.recordRevision,
+      idempotencyKey: input.idempotencyKey,
+      reason: input.reason,
+      startsAfter: monthEndOf(`${input.finalMonth}-01`),
+    }, context)
+  }
+  return true
+}
+
+/*
+ * The notice a change that did not happen leaves on the player's record (see
+ * `trainingChanges` in lib/db/schema.ts): the red "could not be applied" for a
+ * failed change, and the plain note for a booking End schedule cancelled. Both
+ * go once the player's schedule is changed or ended afterwards; the note also
+ * goes once the coach books something new. Either can be dismissed.
+ */
+export function clearTrainingNotices(
+  tx: Executor,
+  playerId: string,
+  now: Date,
+  {
+    failuresOnly = false,
+    notesOnly = false,
+  }: {
+    /**
+     * Clear only the red "could not be applied" notices, and leave the blue
+     * notes on cancelled bookings until a new booking or Dismiss (End
+     * schedule: ending a player's schedule deals with an older failure, but
+     * not with a note that another schedule's ending wrote).
+     */
+    failuresOnly?: boolean
+    notesOnly?: boolean
+  } = {},
+) {
+  const failed = eq(trainingChanges.status, "failed")
+  const notes = and(eq(trainingChanges.status, "cancelled"), isNotNull(trainingChanges.failureReason))
+  tx.update(trainingChanges).set({ dismissedAt: now }).where(and(
+    eq(trainingChanges.playerAccountId, playerId),
+    isNull(trainingChanges.dismissedAt),
+    notesOnly ? notes : failuresOnly ? failed : or(failed, notes),
+  )).run()
+}
+
+function dayBefore(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() - 1)
+  return date.toISOString().slice(0, 10)
+}
+
+/**
+ * The plan a waiting fee change replaced, when the change can still be
+ * cancelled: the plan in force starts after today (so no fee is issued on it
+ * yet), and the plan before it was closed on the day before it, which is
+ * what a fee change does (createAgreement in lib/finance/service.ts). Shared
+ * with the Members summary, so the button is offered exactly when this allows
+ * it.
+ */
+export function waitingFeeChangeOf<Plan extends {
+  effectiveFrom: string
+  effectiveTo: string | null
+  id: string
+  status: string
+}>(plans: readonly Plan[], today: string) {
+  const change = plans.find((plan) => plan.status === "active")
+  if (!change || change.effectiveFrom <= today) return null
+  const replaced = plans.find((plan) => (
+    plan.status === "ended" && plan.effectiveTo === dayBefore(change.effectiveFrom)
+  ))
+  return replaced ? { change, replaced } : null
+}
+
+/**
+ * The refusal when a fee plan already starts next month. It names "Cancel
+ * this fee change" only when Members offers that button (a fee change made
+ * this month, nothing issued on it yet); a new player whose first fee plan
+ * starts next month has no such button, so they are told to wait instead.
+ */
+function nextMonthFeeRefusal(tx: Executor, playerId: string, today: string, then: string): never {
+  const plans = tx.select().from(feeAgreements).where(and(
+    eq(feeAgreements.playerAccountId, playerId),
+    ne(feeAgreements.status, "paused"),
+  )).all()
+  if (waitingFeeChangeOf(plans, today)) {
+    operationalActionError(
+      "CONFLICT",
+      `A new fee already starts next month. Use Cancel this fee change under Monthly fee first, then ${then}.`,
+    )
+  }
+  operationalActionError(
+    "CONFLICT",
+    "This player's fee plan only starts next month, so their training cannot be changed yet. Change it once next month has started.",
+  )
+}
+
 /** The plan in force on a date (active or ended), and the active one if different. */
 function agreementsAround(database: Executor, playerId: string, dateKey: string) {
   const covering = database.select().from(feeAgreements).where(and(
@@ -280,10 +402,7 @@ export function scheduleTrainingChange(
     if (financeActive) {
       const { active } = agreementsAround(tx, input.playerId, today)
       if (active && active.effectiveFrom >= effectiveOn) {
-        operationalActionError(
-          "CONFLICT",
-          "A new fee already starts next month. Cancel that fee change before changing training.",
-        )
+        nextMonthFeeRefusal(tx, input.playerId, today, "change training")
       }
     }
 
@@ -298,6 +417,7 @@ export function scheduleTrainingChange(
       updatedAt: now,
       weekdays: JSON.stringify(weekdays),
     }
+    clearTrainingNotices(tx, input.playerId, now, { notesOnly: true })
     const existing = scheduledChange(tx, input.playerId)
     if (existing) {
       tx.update(trainingChanges).set({ ...values, kind: "change" })
@@ -341,6 +461,7 @@ export function scheduleEndOfTraining(
       updatedAt: now,
       weekdays: "[]",
     }
+    clearTrainingNotices(tx, input.playerId, now, { notesOnly: true })
     const existing = scheduledChange(tx, input.playerId)
     if (existing) {
       tx.update(trainingChanges).set(values).where(eq(trainingChanges.id, existing.id)).run()
@@ -437,23 +558,19 @@ function applyChange(
 
   if (change.kind === "end") {
     endOpenAssignments(tx, change.playerAccountId, effectiveOn)
+    clearTrainingNotices(tx, change.playerAccountId, now)
     tx.update(playerEnrollments).set({
       recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
       status: "paused",
       updatedAt: now,
     }).where(eq(playerEnrollments.accountId, change.playerAccountId)).run()
     if (change.stopFees && isFinanceActive(tx)) {
-      const { active } = agreementsAround(tx, change.playerAccountId, effectiveOn)
-      const finalMonth = previousMonthKey(effectiveOn)
-      if (active && active.effectiveFrom.slice(0, 7) <= finalMonth) {
-        endFeeAgreementInTransaction(tx, {
-          agreementId: active.id,
-          effectiveThroughPeriod: finalMonth,
-          expectedRevision: active.recordRevision,
-          idempotencyKey: `training-end:${change.id}`,
-          reason: "Training ended from the player's record",
-        }, { actorId, createId, now })
-      }
+      stopFeesAfterMonth(tx, {
+        finalMonth: previousMonthKey(effectiveOn),
+        idempotencyKey: `training-end:${change.id}`,
+        playerId: change.playerAccountId,
+        reason: "Training ended from the player's record",
+      }, { actorId, createId, now })
     }
     return
   }
@@ -468,6 +585,7 @@ function applyChange(
   }
   const { weekdays } = validateSelection(tx, selection, effectiveOn)
   endOpenAssignments(tx, change.playerAccountId, effectiveOn)
+  clearTrainingNotices(tx, change.playerAccountId, now)
   tx.update(playerEnrollments).set({
     academyPlan: selection.academyPlan,
     batch: selection.batch,
@@ -508,6 +626,26 @@ function applyChange(
   }
 }
 
+/** How a schedule is named in notes on a player's record, e.g. "Beginner Weekday 6:00 PM". */
+export function scheduleLabel(
+  database: Executor,
+  series: typeof sessionSeries.$inferSelect,
+) {
+  const slot = database.select().from(sessionRecurrenceRules)
+    .where(eq(sessionRecurrenceRules.seriesId, series.id))
+    .orderBy(asc(sessionRecurrenceRules.weekday))
+    .get()
+  return formatSessionLabel({
+    batch: series.batch,
+    durationMinutes: slot?.durationMinutes ?? 0,
+    programme: series.programme,
+    startTime: slot?.startTime ?? "",
+  })
+}
+
+// Days after its date that a change hit by an unexpected fault is tried again.
+const TRAINING_CHANGE_RETRY_DAYS = 2
+
 /**
  * Applies every scheduled change whose date has come. Each change is its own
  * transaction; one that can no longer be applied (its schedule ended, say) is
@@ -525,30 +663,61 @@ export function applyDueTrainingChanges({
     lte(trainingChanges.effectiveOn, today),
   )).all()
   let applied = 0
+  let retry = 0
   for (const change of due) {
+    let cancelled = false
     try {
       database.transaction((tx) => {
-        const current = tx.select({ status: trainingChanges.status }).from(trainingChanges)
+        // Apply the row as it is now: a coach may have edited it since `due` was read.
+        const current = tx.select().from(trainingChanges)
           .where(eq(trainingChanges.id, change.id)).get()
-        if (current?.status !== "scheduled") return
-        applyChange(tx, change, { createId, now })
+        if (current?.status !== "scheduled" || current.effectiveOn > today) return
+        // A booking onto a schedule that has since ended (one booked before
+        // End schedule cancelled such bookings, or a race with it) is
+        // cancelled with a plain note, not marked as a red failure.
+        const target = current.kind === "change" && current.seriesId
+          ? tx.select().from(sessionSeries).where(eq(sessionSeries.id, current.seriesId)).get()
+          : undefined
+        if (target?.status === "ended") {
+          tx.update(trainingChanges).set({
+            failureReason: `Booked move to ${scheduleLabel(tx, target)} cancelled: that schedule was ended.`,
+            resolvedAt: now,
+            status: "cancelled",
+            updatedAt: now,
+          }).where(eq(trainingChanges.id, change.id)).run()
+          cancelled = true
+          return
+        }
+        applyChange(tx, current, { createId, now })
         tx.update(trainingChanges).set({ resolvedAt: now, status: "applied", updatedAt: now })
           .where(eq(trainingChanges.id, change.id)).run()
       }, { behavior: "immediate" })
-      applied += 1
+      if (!cancelled) applied += 1
     } catch (error) {
-      const reason = error instanceof OperationalActionError || error instanceof FinanceServiceError
+      // A refused change is final; any other fault is retried for a few days.
+      const refused = error instanceof OperationalActionError || error instanceof FinanceServiceError
+      if (!refused && today <= addCalendarDays(change.effectiveOn, TRAINING_CHANGE_RETRY_DAYS)) {
+        console.error("A scheduled training change could not be applied; it will be tried again.", error)
+        retry += 1
+        continue
+      }
+      if (!refused) console.error("A scheduled training change could not be applied.", error)
+      const reason = refused
         ? error.message
-        : "The change could not be applied."
+        : "Something went wrong each time it was tried. Make the change again from this record."
       database.update(trainingChanges).set({
         failureReason: reason,
         resolvedAt: now,
         status: "failed",
         updatedAt: now,
-      }).where(and(eq(trainingChanges.id, change.id), eq(trainingChanges.status, "scheduled"))).run()
+      }).where(and(
+        eq(trainingChanges.id, change.id),
+        eq(trainingChanges.status, "scheduled"),
+        lte(trainingChanges.effectiveOn, today),
+      )).run()
     }
   }
-  return { applied, due: due.length }
+  return { applied, due: due.length, retry }
 }
 
 /*
@@ -556,18 +725,28 @@ export function applyDueTrainingChanges({
  * the 1st of a later month, so once a server instance has looked on a given
  * day nothing else can fall due that day; the memo makes every later call that
  * day free, which matters because production reads are network round trips.
+ * A change being retried is looked at again at most every few minutes.
  */
+const RETRY_AFTER_MS = 5 * 60 * 1000
 let checkedOn: string | null = null
+let retryAfter = 0
 
 export function ensureDueTrainingChangesApplied(now = new Date()) {
   const today = getAcademyDateKey(now)
   if (checkedOn === today) return
+  if (now.getTime() < retryAfter) return
   try {
-    applyDueTrainingChanges({ now })
-    checkedOn = today
+    const { retry } = applyDueTrainingChanges({ now })
+    if (retry) {
+      retryAfter = now.getTime() + RETRY_AFTER_MS
+    } else {
+      checkedOn = today
+      retryAfter = 0
+    }
   } catch (error) {
-    // Never let this stop a page from loading; the next request tries again.
+    // Never let this stop a page from loading; a later request tries again.
     console.error("Scheduled training changes could not be applied.", error)
+    retryAfter = now.getTime() + RETRY_AFTER_MS
   }
 }
 
@@ -668,7 +847,8 @@ export function changeScheduleThisMonth(
       if (startsOn < player.trainingStartOn) {
         operationalActionError("INVALID_INPUT", "The new schedule cannot start before the player's training started.", "startsOn")
       }
-      if (scheduledChange(tx, input.playerId)) {
+      // A waiting end of training still applies after this month.
+      if (scheduledChange(tx, input.playerId)?.kind === "change") {
         operationalActionError(
           "CONFLICT",
           "This player has a change waiting for next month. Cancel it before changing this month.",
@@ -737,6 +917,7 @@ export function changeScheduleThisMonth(
           effectiveTo: laterOf(assignment.effectiveFrom, startsOn),
         }).where(eq(sessionAssignments.id, assignment.id)).run()
       }
+      clearTrainingNotices(tx, input.playerId, now)
       tx.update(playerEnrollments).set({
         academyPlan: input.academyPlan,
         batch: input.batch,
@@ -764,15 +945,13 @@ export function changeScheduleThisMonth(
       // A change of session time alone leaves the fee exactly as it is.
       if (!financeActive || !profileChanges) return result
 
-      const fee = validateFee(input.monthlyFeePaise, true) as number
       const { active, covering } = agreementsAround(tx, input.playerId, monthStart)
       if (active && active.effectiveFrom > monthStart) {
-        operationalActionError(
-          "CONFLICT",
-          "A new fee already starts next month. Cancel that fee change before changing this month.",
-        )
+        nextMonthFeeRefusal(tx, input.playerId, getAcademyDateKey(now), "change this month")
       }
+      // No fee plan covers this month, so there is no fee to change.
       if (!covering) return result
+      const fee = validateFee(input.monthlyFeePaise, true) as number
       const monthLabel = new Intl.DateTimeFormat("en-IN", {
         month: "long", timeZone: "UTC", year: "numeric",
       }).format(new Date(`${monthStart}T00:00:00Z`))
@@ -787,7 +966,7 @@ export function changeScheduleThisMonth(
           reason,
         }, { actorId: coachId, createId, now })
       } else {
-        createFeeAgreementInTransaction(tx, {
+        const { agreement } = createFeeAgreementInTransaction(tx, {
           academyPlan: input.academyPlan,
           agreedMonthlyFeePaise: fee,
           batch: input.batch,
@@ -797,6 +976,14 @@ export function changeScheduleThisMonth(
           level: input.level,
           playerId: input.playerId,
         }, { actorId: coachId, createId, now })
+        // This month's fee now follows the plan in force, not the one that
+        // ended last month, so a mid-month withdrawal refund stays possible.
+        if (monthCharge) {
+          tx.update(financialCharges).set({
+            feeAgreementId: agreement.id,
+            recordRevision: sql`${financialCharges.recordRevision} + 1`,
+          }).where(eq(financialCharges.id, monthCharge.charge.id)).run()
+        }
       }
 
       if (!monthCharge || covering.agreedMonthlyFeePaise === fee) return result
@@ -859,7 +1046,8 @@ export function endTrainingNow(
     return database.transaction((tx) => {
       requirePlayer(tx, input.playerId)
       const today = getAcademyDateKey(now)
-      if (!openAssignments(tx, input.playerId).length) {
+      const open = openAssignments(tx, input.playerId)
+      if (!open.length) {
         operationalActionError("BUSINESS_RULE", "This player is not on any schedule.")
       }
       const waiting = scheduledChange(tx, input.playerId)
@@ -867,27 +1055,93 @@ export function endTrainingNow(
         tx.update(trainingChanges).set({ resolvedAt: now, status: "cancelled", updatedAt: now })
           .where(eq(trainingChanges.id, waiting.id)).run()
       }
-      endOpenAssignments(tx, input.playerId, today)
+      // If today is already marked for them, end the place after today so the mark stays.
+      const markedToday = tx.select({ id: sessionAttendanceRecords.id }).from(sessionAttendanceRecords)
+        .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
+        .where(and(
+          eq(sessionAttendanceRecords.accountId, input.playerId),
+          ne(sessionAttendanceRecords.choice, "cleared"),
+          eq(sessionOccurrences.occurrenceDate, today),
+          inArray(sessionOccurrences.seriesId, open.map((assignment) => assignment.seriesId)),
+        ))
+        .get()
+      endOpenAssignments(tx, input.playerId, markedToday ? addCalendarDays(today, 1) : today)
+      clearTrainingNotices(tx, input.playerId, now)
       tx.update(playerEnrollments).set({
         recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
         status: "paused",
         updatedAt: now,
       }).where(eq(playerEnrollments.accountId, input.playerId)).run()
       if (input.stopFees && isFinanceActive(tx)) {
-        const { active } = agreementsAround(tx, input.playerId, today)
-        const month = today.slice(0, 7)
-        if (active && active.effectiveFrom.slice(0, 7) <= month) {
-          endFeeAgreementInTransaction(tx, {
-            agreementId: active.id,
-            effectiveThroughPeriod: month,
-            expectedRevision: active.recordRevision,
-            idempotencyKey: `training-end-now:${createId()}`,
-            reason: "Training ended from the player's record",
-          }, { actorId: coachId, createId, now })
-        }
+        stopFeesAfterMonth(tx, {
+          finalMonth: today.slice(0, 7),
+          idempotencyKey: `training-end-now:${createId()}`,
+          playerId: input.playerId,
+          reason: "Training ended from the player's record",
+        }, { actorId: coachId, createId, now })
       }
     }, { behavior: "immediate" })
   } catch (error) {
     return asOperationalError(error)
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Stop fees for a player on no schedule                               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Stop fees, for a player on no schedule with nothing booked: ends a fee plan
+ * kept for a break after this month, as End training's "Stop fees" does, so
+ * the player can be archived.
+ */
+export function stopFeePlan(
+  input: { playerId: string },
+  { coachId, createId = randomUUID, database = initializeDatabase(), now = new Date() }: TrainingContext,
+) {
+  requireHeadAdminAccess(coachId, { database })
+  try {
+    return database.transaction((tx) => {
+      requirePlayer(tx, input.playerId)
+      if (!isFinanceActive(tx)) {
+        operationalActionError("BUSINESS_RULE", "Financial tracking is not switched on.")
+      }
+      if (openAssignments(tx, input.playerId).length) {
+        operationalActionError(
+          "BUSINESS_RULE",
+          "This player is still on a schedule. Use End training, which stops fees too.",
+        )
+      }
+      const waiting = scheduledChange(tx, input.playerId)
+      if (waiting) {
+        operationalActionError(
+          "CONFLICT",
+          `This player has a change booked for ${waiting.effectiveOn}. Cancel it first to stop fees instead.`,
+        )
+      }
+      const finalMonth = getAcademyDateKey(now).slice(0, 7)
+      const stopped = stopFeesAfterMonth(tx, {
+        finalMonth,
+        idempotencyKey: `stop-fees:${createId()}`,
+        playerId: input.playerId,
+        reason: "Fees stopped from the player's record",
+      }, { actorId: coachId, createId, now })
+      if (!stopped) operationalActionError("NOT_FOUND", "This player has no fee plan to stop.")
+      return { finalMonth }
+    }, { behavior: "immediate" })
+  } catch (error) {
+    return asOperationalError(error)
+  }
+}
+
+/** Dismisses the notice a change that did not happen left on the player's record. */
+export function dismissTrainingNotice(
+  input: { playerId: string },
+  { coachId, database = initializeDatabase(), now = new Date() }: TrainingContext,
+) {
+  requireHeadAdminAccess(coachId, { database })
+  database.transaction((tx) => {
+    requirePlayer(tx, input.playerId)
+    clearTrainingNotices(tx, input.playerId, now)
+  }, { behavior: "immediate" })
 }

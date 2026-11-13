@@ -27,6 +27,27 @@ export async function getRawAuthSession() {
   return getAuth().api.getSession({ headers: await headers() })
 }
 
+/** A live sign-in refused an identity only because its authenticator setup is unfinished. */
+export async function sessionOwesAuthenticatorSetup() {
+  const rawSession = await getRawAuthSession()
+  if (!rawSession?.user?.id || rawSession.user.twoFactorEnabled) return false
+  const account = initializeDatabase().select({
+    coachAccessLevel: coachProfiles.accessLevel,
+    role: accounts.role,
+  })
+    .from(accounts)
+    .innerJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
+    .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
+    .where(and(
+      eq(accounts.id, rawSession.user.id),
+      eq(accounts.approvalStatus, "approved"),
+      isNull(accounts.archivedAt),
+      eq(authCredentialStates.status, "active"),
+    ))
+    .get()
+  return Boolean(account?.role && principalTotpRequired(account.role, account.coachAccessLevel))
+}
+
 export class DatabaseSessionProvider implements SessionProvider {
   /**
    * Whether the browser still holds a session Better Auth accepts, before any
@@ -73,7 +94,7 @@ export class DatabaseSessionProvider implements SessionProvider {
       && !rawSession.user.twoFactorEnabled) return null
     if (result.role === "platform_admin") {
       const previewToken = (await cookies()).get(ADMIN_PREVIEW_COOKIE)?.value
-      const claim = readAdminPreviewToken(previewToken, result.accountId)
+      const claim = readAdminPreviewToken(previewToken, result.accountId, rawSession.session?.token)
       if (claim) {
         const target = initializeDatabase().select({
           accountId: accounts.id,
@@ -128,4 +149,5 @@ export async function clearDatabaseSession() {
   const cookieStore = await cookies()
   cookieStore.delete(LEGACY_SESSION_COOKIE)
   cookieStore.delete(LEGACY_PROTOTYPE_SESSION_COOKIE)
+  cookieStore.delete(ADMIN_PREVIEW_COOKIE)
 }

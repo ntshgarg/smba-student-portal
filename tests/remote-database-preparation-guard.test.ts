@@ -166,3 +166,16 @@ describe("remote database preparation guard", () => {
     expect(await preparationBlocked()).toBe(true)
   })
 })
+
+// Build first: a failed build must never have changed the live database.
+describe("production deploy order", () => {
+  it("builds the new version before it changes the live database", async () => {
+    const { readFileSync } = await import("node:fs")
+    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      scripts: Record<string, string>
+    }
+    const steps = manifest.scripts["vercel-build"].split("&&").map((step) => step.trim())
+
+    expect(steps).toEqual(["next build", "npm run db:prepare:empty"])
+  })
+})

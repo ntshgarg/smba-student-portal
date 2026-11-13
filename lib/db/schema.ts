@@ -373,6 +373,10 @@ export const authSecurityEvents = sqliteTable("auth_security_events", {
     enum: [
       "activation_issued",
       "academy_id_notification_sent",
+      "registration_approved",
+      "registration_rejected",
+      "registration_rejection_undone",
+      "account_archived",
       "account_activated",
       "login_succeeded",
       "login_failed",
@@ -834,6 +838,9 @@ export const playerAssessments = sqliteTable("player_assessments", {
  * as `effective_on`, so the result is the same whichever day that is.
  *
  * One scheduled row per player at a time; editing replaces it.
+ *
+ * A failed row, or a booking End schedule cancelled (failure_reason set),
+ * shows a notice in Members until dismissed_at is set.
  */
 export const trainingChanges = sqliteTable("training_changes", {
   id: text("id").primaryKey(),
@@ -856,6 +863,7 @@ export const trainingChanges = sqliteTable("training_changes", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+  dismissedAt: integer("dismissed_at", { mode: "timestamp_ms" }),
 }, (table) => [
   index("training_changes_due_idx").on(table.status, table.effectiveOn),
   uniqueIndex("training_changes_one_scheduled_idx")

@@ -24,6 +24,7 @@ import { PlayerFeeRecordCard } from "@/components/financials/player-fee-record-c
 import { Reveal } from "@/components/reveal"
 
 const attendance: JuniorCoachAttendanceView = {
+  holidays: [],
   joinedOn: "2026-08-01",
   monthLabel: "August 2026",
   referenceDate: "2026-08-11",

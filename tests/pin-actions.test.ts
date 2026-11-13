@@ -74,7 +74,7 @@ describe("optional PIN setup", () => {
     expect(mocks.redirect).toHaveBeenCalledWith("/coach")
   })
 
-  it("creates a mandatory platform-owner PIN and cannot skip it", async () => {
+  it("creates a platform-owner PIN, and lets the owner skip it", async () => {
     mocks.getCurrentIdentity.mockResolvedValue({
       role: "platform_admin",
       subjectId: "platform-owner",
@@ -91,6 +91,6 @@ describe("optional PIN setup", () => {
 
     mocks.redirect.mockClear()
     await skipPinSetupAction()
-    expect(mocks.redirect).toHaveBeenCalledWith("/auth/pin/setup")
+    expect(mocks.redirect).toHaveBeenCalledWith("/admin")
   })
 })

@@ -65,6 +65,7 @@ function PaymentForm({
   onRecorded: (message: string) => void
   player: PlayerFinancialLedgerView
 }) {
+  const router = useRouter()
   const payableCharges = useMemo(
     () => charges.filter((charge) => charge.outstandingPaise > 0 && charge.status !== "void"),
     [charges],
@@ -73,6 +74,9 @@ function PaymentForm({
     payableCharges[0] ? String(payableCharges[0].outstandingPaise / 100) : "",
   )
   const [receivedOn, setReceivedOn] = useState(getAcademyDateKey())
+  // Until the coach picks a date, each new payment starts on today, so a desk
+  // left open overnight does not date the next payment yesterday.
+  const receivedOnChosen = useRef(false)
   const [method, setMethod] = useState<PaymentMethod>("upi")
   const [externalReference, setExternalReference] = useState("")
   const [internalNote, setInternalNote] = useState("")
@@ -136,6 +140,10 @@ function PaymentForm({
       return
     }
 
+    // No payment is under review yet, so nothing has been sent with this date.
+    if (reviewedAmountPaise === null && !receivedOnChosen.current) {
+      setReceivedOn(getAcademyDateKey())
+    }
     setPending("preview")
     try {
       const result = await previewPaymentAllocationsAction({
@@ -164,11 +172,11 @@ function PaymentForm({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The allocation could not be reviewed",
         retained: "The amount you entered is still on screen",
         subject: "The allocation review",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -210,6 +218,21 @@ function PaymentForm({
         receivedOn,
       })
       if (!result.ok) {
+        if (result.code === "BALANCE_CHANGED") {
+          // The fees changed since the desk opened (in another tab, say). The
+          // split was made against the old fees and can never be saved, so
+          // load the current fees and ask for a fresh review. Recalculate
+          // alone used to keep failing until the page was reloaded.
+          setReviewedAmountPaise(null)
+          setAllocationValues({})
+          requestKey.reset()
+          setFeedback({
+            message: "This player's fees changed since the desk opened. The current fees are now shown. Review the allocation again.",
+            tone: "error",
+          })
+          router.refresh()
+          return
+        }
         setFeedback(resultFeedback(result))
         return
       }
@@ -224,11 +247,11 @@ function PaymentForm({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The payment could not be recorded",
         retained: "The payment details are still on screen",
         subject: "The payment",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -298,6 +321,7 @@ function PaymentForm({
               value={receivedOn}
               disabled={Boolean(pending)}
               onChange={(event) => {
+                receivedOnChosen.current = true
                 setReceivedOn(event.target.value)
                 resetMutation()
               }}
@@ -353,6 +377,7 @@ function PaymentForm({
         {reviewedAmountPaise === null ? (
           <div className={styles.balanceReviewPrompt}>
             <InlineNotice
+              action={feedback?.action}
               className={styles.notice}
               id={RAPID_DESK_FEEDBACK_ID}
               message={feedback?.message}
@@ -417,6 +442,7 @@ function PaymentForm({
 
             <div className={styles.balancePaymentFooter}>
               <InlineNotice
+                action={feedback?.action}
                 className={styles.notice}
                 message={feedback?.message ?? (
                   allocationValidation && !allocationValidation.ok
@@ -627,14 +653,17 @@ export function FinancialsRapidDesk({
                     <div id="rapid-financial-player-results">
                       <ul className={styles.playerList}>
                         {workspace.players.map((player) => {
-                          const displayStatus = player.paymentEligible
+                          // A player whose fee plans have all ended left or stopped
+                          // fees; they need no plan set up.
+                          const showsStatus = player.paymentEligible
+                            || player.hasActiveFeePlan
+                            || player.feePlanEnded
+                          const displayStatus = showsStatus
                             ? statusLabels[player.status]
-                            : player.hasActiveFeePlan ? statusLabels[player.status] : "Fee plan required"
-                          const displayStatusClass = player.paymentEligible
-                            ? styles[`status_${player.status}`]
-                            : styles[player.hasActiveFeePlan
-                              ? `status_${player.status}`
-                              : "status_setup_required"]
+                            : "Fee plan required"
+                          const displayStatusClass = styles[showsStatus
+                            ? `status_${player.status}`
+                            : "status_setup_required"]
                           const content = (
                             <>
                               <span className={styles.playerInitials} aria-hidden="true">

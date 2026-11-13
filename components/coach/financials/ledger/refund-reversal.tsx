@@ -35,7 +35,9 @@ export function RefundReversal({ refund }: { refund: CoachRefundView }) {
       return
     }
     if (!window.confirm(
-      `Reverse refund ${refund.refundReference}? The fee plan will remain ended until it is corrected or replaced.`,
+      refund.purpose !== "mid_term_withdrawal"
+        ? `Reverse refund ${refund.refundReference}?`
+        : `Reverse refund ${refund.refundReference}? The month's fee goes back to fully paid.`,
     )) return
     setPending(true)
     try {
@@ -55,11 +57,11 @@ export function RefundReversal({ refund }: { refund: CoachRefundView }) {
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The refund could not be reversed",
         retained: "Your reason is still on screen",
         subject: "The refund reversal",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -69,7 +71,10 @@ export function RefundReversal({ refund }: { refund: CoachRefundView }) {
     }
   }
 
-  if (!refund.canReverse) return null
+  // Once reversed the control goes, but the result stays: it says whether the fee plan came back.
+  if (!refund.canReverse) {
+    return feedback ? <InlineNotice className={styles.notice} message={feedback.message} tone={feedback.tone} /> : null
+  }
 
   return (
     <details className={styles.refundReversal}>
@@ -78,7 +83,7 @@ export function RefundReversal({ refund }: { refund: CoachRefundView }) {
         <span>Reason</span>
         <textarea name="reason" ref={reasonRef} rows={2} value={reason} disabled={pending} onChange={(event) => { setReason(event.target.value); setDirty(true); setFeedback(null); requestKey.reset() }} />
       </label>
-      <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+      <InlineNotice action={feedback?.action} className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
       <button className={styles.correctionButton} type="button" disabled={pending} onClick={() => void reverse()}>
         {pending ? "Reversing…" : feedback?.offerRetry ? "Reverse refund again" : "Reverse refund"}
       </button>

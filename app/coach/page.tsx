@@ -46,6 +46,7 @@ import {
   formatSessionLabel,
 } from "@/lib/format"
 import { currentGreeting } from "@/lib/greeting"
+import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
 import { resolveNextScheduledOccurrence } from "@/lib/sessions/domain"
 import { scheduleIsRunning } from "@/lib/sessions/term"
 import { listTermFinishedPlayersToMove } from "@/lib/training/member-summaries"
@@ -96,6 +97,10 @@ export default async function CoachDashboardPage({
       to: `${years[years.length - 1]}-12-31`,
     })
     const attendance: JuniorCoachAttendanceView = {
+      holidays: listAcademyHolidaysInWindow(
+        `${years[0]}-01-01`,
+        `${years[years.length - 1]}-12-31`,
+      ),
       joinedOn: access.joinedOn,
       monthLabel: formatDateKey(`${month}-01`, {
         day: undefined,
@@ -151,12 +156,12 @@ export default async function CoachDashboardPage({
     ? series.find((item) => item.id === nextScheduledSession.seriesId)
     : null
   const nextSessionLabel = nextScheduledSession && nextScheduledSeries
-    ? formatSessionLabel({
+    ? `${formatDateKey(nextScheduledSession.occurrenceDate)} · ${formatSessionLabel({
         programme: nextScheduledSeries.programme,
         batch: nextScheduledSeries.batch,
         startTime: academyTimeInputValue(nextScheduledSession.startsAt),
         durationMinutes: nextScheduledSession.durationMinutes,
-      })
+      })}`
     : null
   const nextOccurrence = resolveNextScheduledOccurrence({
     occurrences: todaySessions,
@@ -166,6 +171,10 @@ export default async function CoachDashboardPage({
     ? series.find((item) => item.id === nextOccurrence.seriesId)
     : null
   const sessionPosition = nextOccurrence?.id === todaySessions[0]?.id ? "first" : "next"
+  const sessionOnCourt = todaySessions.some((occurrence) => {
+    const startsAt = new Date(occurrence.startsAt).getTime()
+    return startsAt <= now.getTime() && now.getTime() < startsAt + occurrence.durationMinutes * 60_000
+  })
   const dateLabel = formatAcademyDate(now, {
     day: "numeric",
     month: "long",
@@ -196,7 +205,9 @@ export default async function CoachDashboardPage({
   // Ended schedules and ones whose term has finished are not counted.
   const runningScheduleCount = series.filter((item) => scheduleIsRunning(item, today)).length
   const assessments = listAssessmentHome(identity.subjectId)
-  const assessedCount = assessments.players.filter((player) => player.lastAssessedOn).length
+  // The card counts only players training now.
+  const assessablePlayers = assessments.players.filter((player) => !player.offSchedule)
+  const assessedCount = assessablePlayers.filter((player) => player.lastAssessedOn).length
   const onboardingSummary = getPlayerOnboardingSummary(today)
 
   return (
@@ -217,6 +228,7 @@ export default async function CoachDashboardPage({
           venue: nextOccurrence.venue,
         } : null}
         sessionCount={todaySessions.length}
+        sessionOnCourt={sessionOnCourt}
         sessionPosition={sessionPosition}
       />
       <CoachDashboardStack id="attendance">
@@ -229,8 +241,8 @@ export default async function CoachDashboardPage({
         />
         <AssessmentsCard
           assessedCount={assessedCount}
-          draftCount={assessments.drafts}
-          playerCount={assessments.players.length}
+          draftCount={assessablePlayers.filter((player) => player.draft).length}
+          playerCount={assessablePlayers.length}
         />
         <FinancialsCard
           active={financeActive}

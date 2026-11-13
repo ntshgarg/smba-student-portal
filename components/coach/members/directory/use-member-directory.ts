@@ -39,22 +39,42 @@ import type {
   MemberField,
   PlayerMemberRecord,
 } from "@/lib/coach/types"
-import { formatInr } from "@/lib/format"
+import { formatDateKey, formatInr } from "@/lib/format"
 import { termFinishedToMove } from "@/lib/sessions/term"
 import {
   academyPlanIsValid,
   academyPlansFor,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
+import type { MemberScheduledChange } from "@/lib/training/member-summaries"
 
-function financialCloseoutMessage(
+/**
+ * How to end the fee plan Archive refused over, naming the action the record
+ * actually offers (member-training-actions.tsx): Stop fees only for a player
+ * with no place and nothing booked; End training while they still have a
+ * place; a booked change has to be dealt with first.
+ */
+export function feePlanEndRoute(
+  scheduled: Pick<MemberScheduledChange, "effectiveOn" | "kind" | "stopFees"> | null,
+  hasPlace: boolean,
+) {
+  if (scheduled?.kind === "end" && scheduled.stopFees) {
+    return `wait for the End training booked for ${formatDateKey(scheduled.effectiveOn, { day: "numeric", month: "short", weekday: undefined, year: "numeric" })}, which ends the player’s Fee Plan`
+  }
+  if (scheduled) return "cancel the booked change above, then end the player’s Fee Plan with Stop fees"
+  if (hasPlace) return "end the player’s Fee Plan with End training above (Stop fees after this month)"
+  return "end the player’s Fee Plan with Stop fees above"
+}
+
+export function financialCloseoutMessage(
   result: Extract<ArchiveMemberResult, { code: "FINANCIAL_CLOSEOUT_REQUIRED" }>,
+  route = feePlanEndRoute(null, false),
 ) {
   if (result.hasOpenFeePlan && result.hasOutstandingBalance) {
-    return `Resolve ${formatInr(result.outstandingPaise)} outstanding and end the player’s Fee Plan before archiving`
+    return `Resolve ${formatInr(result.outstandingPaise)} outstanding before archiving, and ${route}`
   }
   if (result.hasOpenFeePlan) {
-    return "End the player’s Fee Plan before archiving"
+    return `Before archiving, ${route}`
   }
   return `Resolve ${formatInr(result.outstandingPaise)} outstanding before archiving`
 }
@@ -221,10 +241,9 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     message: "Discard the unsaved changes to this member?",
     scope: "coach-member-editor",
   })
-  const activeFilterCount = Number(level !== "All levels")
-    + Number(status !== "all")
-    + Number(batch !== "All batches")
-    + Number(role !== "everyone")
+  // Level, batch and status do nothing for staff, so staff-only counts the role alone.
+  const activeFilterCount = Number(role !== "everyone") + (role === "staff" ? 0
+    : Number(level !== "All levels") + Number(status !== "all") + Number(batch !== "All batches"))
   const hasDirectoryCriteria = Boolean(query.trim()) || activeFilterCount > 0
 
   useEffect(() => {
@@ -381,6 +400,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     setEditingRevision(null)
     setDraft(null)
     setErrors({})
+    setMemberFeedback(null)
     if (memberId) restoreEditFocus(memberId)
   }
 
@@ -461,11 +481,11 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The member could not be saved",
         retained: "Your edits are still on screen",
-        subject: "The member details",
+        subject: "The member update",
       })
       setMemberFeedback({
+        action: failure.signIn,
         memberId: player.member.id,
         message: failure.message,
         offerRetry: failure.offerRetry,
@@ -495,7 +515,12 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
         if (result.code === "FINANCIAL_CLOSEOUT_REQUIRED") {
           setMemberFeedback({
             memberId: player.member.id,
-            message: financialCloseoutMessage(result),
+            message: financialCloseoutMessage(result, feePlanEndRoute(
+              memberTraining?.summaries[player.member.id]?.scheduled ?? null,
+              sessionAssignments.some((assignment) => (
+                assignment.playerId === player.member.id && assignment.effectiveTo === null
+              )),
+            )),
             recoveryHref: `/coach/financials/players/${encodeURIComponent(player.member.id)}`,
             tone: "error",
           })
@@ -522,11 +547,12 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The member could not be archived",
         retained: "The member is still active",
+        unconfirmed: "Check the connection, then reload the page to see whether the member was archived",
         subject: "The member archive",
       })
       setMemberFeedback({
+        action: failure.signIn,
         memberId: player.member.id,
         message: failure.message,
         offerRetry: failure.offerRetry,

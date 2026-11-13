@@ -1,0 +1,1 @@
+ALTER TABLE `training_changes` ADD `dismissed_at` integer;

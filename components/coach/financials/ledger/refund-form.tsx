@@ -31,11 +31,29 @@ import {
 import styles from "../financials.module.css"
 import type { SaveFeedback } from "./save-feedback"
 
+/*
+ * The withdrawal dates the server accepts (withdrawalDateWindow in
+ * lib/finance/domain.ts): inside the fee's month, not before it was paid and
+ * not after today. Today is the default when it qualifies, else the nearest
+ * day that does, so the form does not open on a date it will refuse.
+ */
+function withdrawalDateLimits(receipt: CoachReceiptView) {
+  const today = getAcademyDateKey()
+  const earliest = receipt.refundWindow?.earliest ?? receipt.receivedOn
+  const latest = receipt.refundWindow?.latest ?? today
+  const initial = today < earliest ? earliest : today > latest ? latest : today
+  return { earliest, initial, latest }
+}
+
 export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   const router = useRouter()
+  const dateLimits = withdrawalDateLimits(receipt)
   const [amount, setAmount] = useState("")
-  const [withdrawalEffectiveOn, setWithdrawalEffectiveOn] = useState(getAcademyDateKey())
+  const [withdrawalEffectiveOn, setWithdrawalEffectiveOn] = useState(dateLimits.initial)
   const [refundedOn, setRefundedOn] = useState(getAcademyDateKey())
+  // Until the coach picks it, the refund date follows today, so a form left
+  // open overnight does not record the refund on yesterday.
+  const refundedOnChosen = useRef(false)
   const [method, setMethod] = useState<PaymentMethod>(receipt.method)
   const [externalReference, setExternalReference] = useState("")
   const [internalNote, setInternalNote] = useState("")
@@ -91,6 +109,9 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
       amountRef.current?.focus()
       return
     }
+    if (reviewedAmountPaise === null && !refundedOnChosen.current) {
+      setRefundedOn(getAcademyDateKey())
+    }
     setPending("preview")
     try {
       const result = await previewRefundAllocationsAction({
@@ -102,6 +123,8 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
         if (result.field === "amountPaise") amountRef.current?.focus()
+        // Load the receipt as it is now, so the next review is checked against it.
+        if (result.code === "BALANCE_CHANGED") router.refresh()
         return
       }
       const suggested = new Map(result.data.allocations.map((allocation) => [
@@ -119,11 +142,11 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The refund could not be reviewed",
         retained: "Your refund details are still on screen",
         subject: "The refund review",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -136,6 +159,10 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending || reviewedAmountPaise === null || !allocationValidation?.ok) return
+    if (refundedOn < withdrawalEffectiveOn) {
+      setFeedback({ message: "The refund date cannot be before the date the member withdrew.", tone: "error" })
+      return
+    }
     if (!window.confirm(
       `Record a ${formatInr(reviewedAmountPaise)} refund for ${receipt.receiptReference} and end the fee plan on ${formatDueDate(withdrawalEffectiveOn)}?`,
     )) return
@@ -172,15 +199,21 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
         setReviewedAllocations([])
         setReviewedAmountPaise(null)
         router.refresh()
+      } else if (result.code === "BALANCE_CHANGED") {
+        // The review was made against the old receipt or fee: load them as
+        // they are now and ask for a fresh review.
+        setReviewedAllocations([])
+        setReviewedAmountPaise(null)
+        router.refresh()
       }
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The refund could not be recorded",
         retained: "Your refund details are still on screen",
         subject: "The refund",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -219,8 +252,8 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
             <input
               name="withdrawalEffectiveOn"
               type="date"
-              min={receipt.receivedOn}
-              max={getAcademyDateKey()}
+              min={dateLimits.earliest}
+              max={dateLimits.latest}
               value={withdrawalEffectiveOn}
               disabled={Boolean(pending)}
               onChange={(event) => {
@@ -244,7 +277,11 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
               max={getAcademyDateKey()}
               value={refundedOn}
               disabled={Boolean(pending)}
-              onChange={(event) => { setRefundedOn(event.target.value); resetMutation() }}
+              onChange={(event) => {
+                refundedOnChosen.current = true
+                setRefundedOn(event.target.value)
+                resetMutation()
+              }}
             />
           </label>
           <label className={styles.field}>
@@ -267,7 +304,7 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
 
         {reviewedAmountPaise === null ? (
           <div className={styles.paymentFooter}>
-            <InlineNotice className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
+            <InlineNotice action={feedback?.action} className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
             <button className={styles.quietButton} type="button" disabled={Boolean(pending)} onClick={() => void review()}>
               {pending === "preview"
                 ? "Reviewing…"
@@ -311,6 +348,7 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
             </div>
             <div className={styles.paymentFooter}>
               <InlineNotice
+                action={feedback?.action}
                 className={styles.notice}
                 id={allocationFeedbackId}
                 message={feedback?.message ?? (allocationValidation && !allocationValidation.ok ? allocationValidation.message : undefined)}

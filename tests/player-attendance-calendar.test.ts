@@ -111,7 +111,8 @@ function recordFixture(): PlayerAttendanceRecord {
         seriesId: "series-pending",
         occurrenceDate: "2026-08-03",
         eligibilityDate: "2026-08-03",
-        startsAt: "2026-08-03T11:30:00.000Z",
+        // 7:30 pm in the academy, matching its schedule's slot.
+        startsAt: "2026-08-03T14:00:00.000Z",
         durationMinutes: 60,
         status: "scheduled",
       },
@@ -175,6 +176,24 @@ describe("Player attendance month calendar", () => {
     expect(augustFifth?.sessions[0].state).toBe("future")
     expect(julyThirtyFirst?.sessions[0].state).toBe("rescheduled")
     expect(augustFirst?.completionCount).toBe(1)
+  })
+
+  /*
+   * The coach moved Wednesday's 4 pm session to 7:30 pm. The next-session card
+   * already showed 7:30; the calendar used to show the schedule's usual 4 pm.
+   */
+  it("shows a moved session at its new time, not the schedule's usual time", () => {
+    const record = recordFixture()
+    record.occurrences = record.occurrences.map((occurrence) => (
+      occurrence.id === "occurrence-future"
+        ? { ...occurrence, startsAt: "2026-08-05T14:00:00.000Z", durationMinutes: 90 }
+        : occurrence
+    ))
+    const calendar = buildPlayerAttendanceCalendar(record, 2026, 8)
+    const augustFifth = calendar.days.find((day) => day.key === "2026-08-05")
+
+    expect(augustFifth?.sessions[0].timeLabel).toBe("7:30–9 pm")
+    expect(augustFifth?.sessions[0].sessionLabel).toContain("7:30–9 pm")
   })
 })
 

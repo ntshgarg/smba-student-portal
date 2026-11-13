@@ -78,7 +78,7 @@ const nextConfig: NextConfig = {
   // "Deployment, development and test setup only. Request code must use
   // initializeDatabase(), which opens the prepared database without writing to
   // it." Its single importer is scripts/database/prepare.ts, which `vercel-build`
-  // runs *before* `next build`, in the build container where the checkout is
+  // runs *after* `next build`, in the build container where the checkout is
   // already on disk -- tracing decides what is copied into the function output,
   // not what the build step can see.
   //

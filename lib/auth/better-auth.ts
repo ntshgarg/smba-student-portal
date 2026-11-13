@@ -13,9 +13,10 @@ import { smbaPinLogin } from "@/lib/auth/pin-plugin"
 import {
   TRUST_DEVICE_IDENTIFIER_PREFIX,
   storedTrustDeviceIdentifier,
+  trustedDeviceDatabaseHooks,
 } from "@/lib/auth/second-factor-reset"
 import { usernameLoginHooks } from "@/lib/auth/username-login-guard"
-import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
+import { AUTH_COOKIE_PREFIX, secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import { resolveAuthSecret } from "@/lib/auth/auth-secret"
 
 const LOCAL_ONLY_AUTH_SECRET = "smba-local-only-auth-secret-change-before-deployment-2026"
@@ -86,6 +87,9 @@ function createAuth() {
   // the `/sign-in/username` handler, so this is the only place the guard can sit
   // and still cover both the login form and the public route.
   hooks: usernameLoginHooks,
+  // Holds a renewed "trust this device" to the date it was first given, so 30
+  // days means 30 days (lib/auth/second-factor-reset.ts).
+  databaseHooks: trustedDeviceDatabaseHooks,
   rateLimit: {
     enabled: true,
     max: 100,
@@ -99,7 +103,7 @@ function createAuth() {
     },
   },
   advanced: {
-    cookiePrefix: "smba",
+    cookiePrefix: AUTH_COOKIE_PREFIX,
     ipAddress: {
       ipAddressHeaders: ["x-vercel-forwarded-for", "cf-connecting-ip", "x-forwarded-for"],
       ipv6Subnet: 64,

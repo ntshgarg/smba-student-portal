@@ -11,12 +11,25 @@ import {
 } from "@/app/activate/actions"
 import {
   EMPTY_REGISTRATION_STATUS_STATE,
+  passwordStepReachable,
   type RegistrationStatusState,
 } from "@/lib/auth/registration-form"
 import { ActivationForm } from "@/components/activation-form"
 
 const SUBMISSION_FAILURE_MESSAGE =
   "We couldn’t check that just now. Your details are still here—please try again."
+
+// A lost reply after the code was checked: the code is spent, so retrying it can only fail.
+const CODE_STEP_FAILURE_MESSAGE =
+  "We didn’t hear back after checking your code. Reload this page: if it went through, your next step will be waiting. If not, send a new code."
+
+function formDataFor(values: RegistrationStatusState["values"], code?: string) {
+  const formData = new FormData()
+  formData.set("email", values.email)
+  formData.set("fullName", values.fullName)
+  if (code !== undefined) formData.set("code", code)
+  return formData
+}
 
 /**
  * Name, email, code -- and it works on any device.
@@ -35,7 +48,9 @@ export function RegistrationStatusForm() {
   const [state, setState] = useState<RegistrationStatusState>(EMPTY_REGISTRATION_STATUS_STATE)
   const [values, setValues] = useState({ email: "", fullName: "" })
   const [code, setCode] = useState("")
-  const [pending, setPending] = useState(false)
+  const [pendingKind, setPendingKind] = useState<"submit" | "resend" | null>(null)
+  const pending = pendingKind !== null
+  const [notice, setNotice] = useState<string | null>(null)
   const codeRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
   const fullNameRef = useRef<HTMLInputElement>(null)
@@ -48,31 +63,63 @@ export function RegistrationStatusForm() {
     if (state.error && !state.errorField) submitButtonRef.current?.focus()
   }, [state])
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function run(
+    kind: "submit" | "resend",
+    call: () => Promise<RegistrationStatusState>,
+    onCodeStep: boolean,
+  ) {
     if (submissionInFlight.current) return
 
     submissionInFlight.current = true
-    setPending(true)
-    const formData = new FormData(event.currentTarget)
-    const onCodeStep = state.step === "code"
+    setPendingKind(kind)
+    setNotice(null)
     // Clear the previous answer before asking again. Leaving it up meant a
     // stale "we couldn't send your request" sat beside the spinner for the whole
     // of the next attempt, so a retry looked like it had already failed.
     setState((current) => ({ ...current, error: null, errorField: null }))
-    formData.set("email", values.email)
-    formData.set("fullName", values.fullName)
 
     try {
-      setState(onCodeStep
-        ? await confirmRegistrationStatusCode(state, formData)
-        : await requestRegistrationStatusCode(state, formData))
+      const next = await call()
+      setState(next)
+      if (kind === "resend" && next.step === "code" && !next.error) {
+        setCode("")
+        setNotice(`If a new code was due, it is on its way to ${next.values.email}. A code you already received still works until it runs out.`)
+      }
     } catch {
-      setState({ ...state, error: SUBMISSION_FAILURE_MESSAGE, errorField: null })
+      setState({
+        ...state,
+        error: onCodeStep && kind === "submit" ? CODE_STEP_FAILURE_MESSAGE : SUBMISSION_FAILURE_MESSAGE,
+        errorField: null,
+      })
     } finally {
       submissionInFlight.current = false
-      setPending(false)
+      setPendingKind(null)
     }
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const onCodeStep = state.step === "code"
+    const formData = formDataFor(values, onCodeStep ? code : undefined)
+    void run(
+      "submit",
+      () => onCodeStep
+        ? confirmRegistrationStatusCode(state, formData)
+        : requestRegistrationStatusCode(state, formData),
+      onCodeStep,
+    )
+  }
+
+  function sendNewCode() {
+    void run("resend", () => requestRegistrationStatusCode(state, formDataFor(values)), true)
+  }
+
+  function reopen(nextValues: RegistrationStatusState["values"]) {
+    if (submissionInFlight.current) return
+    setState({ ...EMPTY_REGISTRATION_STATUS_STATE, values: nextValues })
+    setValues(nextValues)
+    setCode("")
+    setNotice(null)
   }
 
   if (state.step === "done") {
@@ -87,7 +134,7 @@ export function RegistrationStatusForm() {
         approved: "Approved.",
         new: "Nothing to show yet.",
         pending: "Approval is pending.",
-        rejected: "Request not approved.",
+        rejected: "Registration not accepted.",
       }[state.standing ?? "new"]
     const body = state.standing === "approved" && state.activated
       // Setting a password again is not possible and never was: the claim was
@@ -100,7 +147,7 @@ export function RegistrationStatusForm() {
           : "Your coach is setting up training. You’ll be able to sign in once that is finished.",
         new: "We have no request under this name and email. Check the spelling, or send a new request.",
         pending: "Your coach is reviewing this request. We’ll keep it here until they decide.",
-        rejected: "Please speak to your coach at the academy.",
+        rejected: "This registration was not accepted. Please contact the academy.",
       }[state.standing ?? "new"]
 
     return (
@@ -119,14 +166,20 @@ export function RegistrationStatusForm() {
             <p className="login-helper">Save this ID. You will use it every time you sign in.</p>
           </div>
         ) : null}
-        {state.standing === "approved" && state.onboardingCompleted && state.academyId
-          && !state.activated ? (
-            <ActivationForm academyId={state.academyId} />
-          ) : null}
+        {passwordStepReachable(state) && state.academyId ? (
+          <ActivationForm academyId={state.academyId} />
+        ) : null}
         {state.standing === "approved" && state.activated
           ? <Link href="/login">Sign in</Link>
           : null}
         {state.standing === "new" ? <Link href="/register">Request registration</Link> : null}
+        <button
+          className="totp-switch"
+          type="button"
+          onClick={() => reopen({ email: state.values.email, fullName: "" })}
+        >
+          Check a different player
+        </button>
       </div>
     )
   }
@@ -136,7 +189,7 @@ export function RegistrationStatusForm() {
     state.errorField === field ? state.error : null
 
   return (
-    <form className="login-form" method="post" onSubmit={(event) => void submit(event)} noValidate>
+    <form className="login-form" method="post" onSubmit={submit} noValidate>
       {onCodeStep ? (
         <div className="login-field">
           <label htmlFor="status-code">6-digit code</label>
@@ -155,7 +208,8 @@ export function RegistrationStatusForm() {
             onChange={(event) => setCode(event.target.value)}
           />
           <p id="status-code-help" className="login-helper">
-            If those details can be looked up, we’ve sent a code to {values.email}.
+            If those details can be looked up, we’ve sent a code to {values.email}. Codes last ten
+            minutes. If it has not arrived or has run out, send a new code.
           </p>
           {fieldError("code") ? (
             <p id="status-code-error" className="login-error" role="alert">{state.error}</p>
@@ -213,15 +267,31 @@ export function RegistrationStatusForm() {
       {state.error && state.errorField === null ? (
         <p id="status-form-error" className="login-error" role="alert">{state.error}</p>
       ) : null}
+      {notice ? <p className="login-helper" role="status">{notice}</p> : null}
 
       <button ref={submitButtonRef} className="login-submit" type="submit" disabled={pending}>
         <span>
-          {pending
+          {pendingKind === "submit"
             ? onCodeStep ? "Checking…" : "Sending code…"
             : onCodeStep ? "Check status" : "Send code"}
         </span>
         <ArrowRight aria-hidden="true" />
       </button>
+      {onCodeStep ? (
+        <>
+          <button className="totp-switch" type="button" disabled={pending} onClick={sendNewCode}>
+            {pendingKind === "resend" ? "Sending a new code…" : "Send a new code"}
+          </button>
+          <button
+            className="totp-switch"
+            type="button"
+            disabled={pending}
+            onClick={() => reopen(state.values)}
+          >
+            Use different details
+          </button>
+        </>
+      ) : null}
     </form>
   )
 }

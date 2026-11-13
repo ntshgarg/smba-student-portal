@@ -19,7 +19,11 @@ export function RecoveryForm() {
   const [state, formAction, pending] = useResilientActionState(
     requestPasswordRecoveryAction,
     initialState,
-    { retained: "No reset email was sent", subject: "Your reset request" },
+    {
+      subject: "Your reset request",
+      unconfirmed: "Check your inbox before asking again: if a reset email arrives, use it."
+        + " Asking again sends a new link and the earlier one stops working",
+    },
   )
   const academyIdRef = useRef<HTMLInputElement>(null)
   const submissionStartedRef = useRef(false)

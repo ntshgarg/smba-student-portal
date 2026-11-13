@@ -260,6 +260,13 @@
       "when": 1793796940180,
       "tag": "0036_better_auth_1_7_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1794506060556,
+      "tag": "0037_training_change_notices",
+      "breakpoints": true
     }
   ]
 }

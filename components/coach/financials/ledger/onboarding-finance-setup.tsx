@@ -7,6 +7,22 @@ import styles from "../financials.module.css"
 import type { PlayerFinancialLedgerView } from "../types"
 
 export function OnboardingFinanceSetup({ ledger }: { ledger: PlayerFinancialLedgerView }) {
+  if (ledger.onboardingComplete) {
+    // Onboarding is done, so it cannot set the fee any more. A schedule change
+    // in Members asks for the monthly fee and starts a fee plan with it.
+    return (
+      <section className={styles.setupState}>
+        <CircleAlert aria-hidden="true" />
+        <div>
+          <strong>This player has no fee plan</strong>
+          <p>No monthly fee is issued for them. Set their fee with a schedule change from their record in Members.</p>
+          <Link href={`/coach/members?player=${encodeURIComponent(ledger.playerId)}`}>
+            Open the player&apos;s record in Members
+          </Link>
+        </div>
+      </section>
+    )
+  }
   return (
     <section className={styles.setupState}>
       <CircleAlert aria-hidden="true" />

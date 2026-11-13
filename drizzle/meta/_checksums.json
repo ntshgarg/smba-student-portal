@@ -186,6 +186,11 @@
       "tag": "0036_better_auth_1_7_schema",
       "when": 1793796940180,
       "sha256": "eff386c83185ea63b64d1c664c95f911a5690da9e62674b8b73f327dac04cc08"
+    },
+    {
+      "tag": "0037_training_change_notices",
+      "when": 1794506060556,
+      "sha256": "81b412a51e0f7a79c5806b4975d55da7c0c523997d3bf61708e09b5df78dacaf"
     }
   ]
 }

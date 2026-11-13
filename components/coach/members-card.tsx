@@ -10,7 +10,7 @@ export function MembersCard({
 }: {
   memberCount: number
 }) {
-  const memberLabel = `${memberCount} enrolled ${memberCount === 1 ? "member" : "members"}`
+  const memberLabel = `${memberCount} enrolled ${memberCount === 1 ? "player" : "players"}`
 
   return (
     <CoachDashboardCard
@@ -22,7 +22,7 @@ export function MembersCard({
       <CoachDashboardSummary
         detail={memberCount > 0
           ? "Approved players and staff, with their training and contact records."
-          : "Approved players and staff appear here once onboarding is complete."}
+          : "Players appear here once their onboarding is complete."}
       >
         {memberLabel}
       </CoachDashboardSummary>

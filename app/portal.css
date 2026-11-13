@@ -944,6 +944,17 @@
   height: 13px;
 }
 
+/* "Keep make-up" sits beside Void on a make-up that needs review and shares
+   its shape; green because it keeps the player's credit. */
+.coach-adjustment-history-void.is-keep {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.coach-adjustment-history-void.is-keep:hover:not(:disabled) {
+  background: var(--green-soft);
+}
+
 .coach-adjustment-history-details {
   grid-column: 1 / -1;
   padding: var(--space-copy) 52px 18px;
@@ -1621,6 +1632,13 @@
   color: var(--steel);
   font-size: 0.75rem;
   line-height: 1.5;
+}
+
+/* A link inside helper text still needs a 24px target (WCAG 2.5.8). */
+.login-helper a {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
 }
 
 .login-register-link {
@@ -12040,6 +12058,16 @@ tr.is-expanded .coach-member-row-action button svg {
 .coach-day-holiday button:disabled {
   border-color: var(--line-disabled);
   color: var(--steel);
+}
+
+/* What the last holiday change did, above both calendar panes. */
+.coach-calendar-holiday-notice:not([data-empty="true"]) {
+  margin-top: var(--space-copy);
+}
+
+/* The staff roll call on a closed day says why nothing can be marked. */
+.coach-day-holiday {
+  flex-wrap: wrap;
 }
 
 /* Month grid. */

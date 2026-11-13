@@ -6,12 +6,13 @@ import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 
 import { ADMIN_PREVIEW_COOKIE, createAdminPreviewToken } from "@/lib/auth/admin-preview"
-import { getRawAuthSession } from "@/lib/auth/session"
+import { clearDatabaseSession, getRawAuthSession } from "@/lib/auth/session"
 import {
   HEAD_COACH_SETUP_COOKIE,
   createHeadCoachSetupClaim,
   headCoachSetupAvailable,
 } from "@/lib/auth/initial-setup"
+import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import {
   approveAuthenticatorResetRequest,
@@ -34,11 +35,11 @@ async function requirePlatformOwner() {
     ))
     .get()
   if (!owner) redirect("/login")
-  return rawSession.user.id
+  return { actorAccountId: rawSession.user.id, sessionToken: rawSession.session.token }
 }
 
 export async function startAdminPreviewAction(formData: FormData) {
-  const actorAccountId = await requirePlatformOwner()
+  const { actorAccountId, sessionToken } = await requirePlatformOwner()
   const targetAccountId = String(formData.get("targetAccountId") ?? "")
   const target = initializeDatabase().select({ role: accounts.role })
     .from(accounts)
@@ -57,13 +58,14 @@ export async function startAdminPreviewAction(formData: FormData) {
   const cookieStore = await cookies()
   cookieStore.set(ADMIN_PREVIEW_COOKIE, createAdminPreviewToken({
     actorAccountId,
+    sessionToken,
     targetAccountId,
   }), {
     httpOnly: true,
     maxAge: 60 * 60,
     path: "/",
     sameSite: "strict",
-    secure: process.env.VERCEL === "1",
+    secure: secureAuthCookiesRequired(),
   })
   writeAuthSecurityEvent({
     accountId: targetAccountId,
@@ -75,7 +77,7 @@ export async function startAdminPreviewAction(formData: FormData) {
 }
 
 export async function openHeadCoachSetupAction() {
-  const actorAccountId = await requirePlatformOwner()
+  const { actorAccountId } = await requirePlatformOwner()
   if (!headCoachSetupAvailable()) redirect("/admin")
   const claim = createHeadCoachSetupClaim({
     claimImmediately: true,
@@ -87,25 +89,27 @@ export async function openHeadCoachSetupAction() {
     maxAge: 60 * 60,
     path: "/setup/head-coach",
     sameSite: "strict",
-    secure: process.env.VERCEL === "1",
+    secure: secureAuthCookiesRequired(),
   })
+  // This device is handed to the coach, so sign the owner out of it.
+  await clearDatabaseSession()
   redirect("/setup/head-coach")
 }
 
 export async function approveAuthenticatorResetRequestAction(requestId: string) {
-  const actorAccountId = await requirePlatformOwner()
+  const { actorAccountId } = await requirePlatformOwner()
   const approved = approveAuthenticatorResetRequest({ actorAccountId, requestId })
   revalidatePath("/admin")
   return approved
     ? { message: "Authenticator reset approved. The coach can now sign in and connect a new authenticator.", ok: true as const }
-    : { message: "This request is unavailable, expired, or no longer matches the verified recovery email.", ok: false as const }
+    : { message: "This request is unavailable, expired, withdrawn by the coach, or no longer matches the verified recovery email.", ok: false as const }
 }
 
 export async function rejectAuthenticatorResetRequestAction(requestId: string) {
-  const actorAccountId = await requirePlatformOwner()
+  const { actorAccountId } = await requirePlatformOwner()
   const rejected = rejectAuthenticatorResetRequest({ actorAccountId, requestId })
   revalidatePath("/admin")
   return rejected
     ? { message: "Authenticator reset request rejected.", ok: true as const }
-    : { message: "This request is unavailable or expired.", ok: false as const }
+    : { message: "This request is unavailable, expired or withdrawn by the coach.", ok: false as const }
 }

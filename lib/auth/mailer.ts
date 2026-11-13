@@ -46,7 +46,17 @@ export type RegistrationVerificationMessage = {
   code: string
   expiresInMinutes: number
   fullName: string
+  /** Which door asked: a status check is worded as one. */
+  purpose?: "registration" | "status"
   standing: "new" | "pending" | "approved" | "rejected"
+  to: string
+}
+
+/** A plain account-security notice; each line is one paragraph. */
+export type SecurityNoticeMessage = {
+  fullName: string
+  lines: string[]
+  subject: string
   to: string
 }
 
@@ -56,6 +66,8 @@ export interface AuthMailer {
   sendPasswordRecovery(message: PasswordRecoveryMessage): Promise<void>
   sendRecoveryEmailVerification(message: RecoveryEmailVerificationMessage): Promise<void>
   sendRegistrationVerification(message: RegistrationVerificationMessage): Promise<void>
+  /** Optional so a mailer that cannot send notices still sends every code. */
+  sendSecurityNotice?(message: SecurityNoticeMessage): Promise<void>
 }
 
 export type CapturedAuthEmail =
@@ -64,6 +76,7 @@ export type CapturedAuthEmail =
   | ({ kind: "recovery-email-verification" } & RecoveryEmailVerificationMessage)
   | ({ kind: "password-recovery" } & PasswordRecoveryMessage)
   | ({ kind: "registration-verification" } & RegistrationVerificationMessage)
+  | ({ kind: "security-notice" } & SecurityNoticeMessage)
 
 const memoryOutbox: CapturedAuthEmail[] = []
 
@@ -136,6 +149,10 @@ class MemoryAuthMailer implements AuthMailer {
 
   async sendRegistrationVerification(message: RegistrationVerificationMessage) {
     memoryOutbox.push({ ...message, kind: "registration-verification" })
+  }
+
+  async sendSecurityNotice(message: SecurityNoticeMessage) {
+    memoryOutbox.push({ ...message, kind: "security-notice" })
   }
 }
 
@@ -217,6 +234,15 @@ class ResendAuthMailer implements AuthMailer {
     })
   }
 
+  async sendSecurityNotice(message: SecurityNoticeMessage) {
+    await this.send({
+      to: message.to,
+      subject: message.subject,
+      text: `Hello ${message.fullName},\n\n${message.lines.join("\n\n")}`,
+      html: `<p>Hello ${escapeHtml(message.fullName)},</p>${message.lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}`,
+    })
+  }
+
   async sendRegistrationVerification(message: RegistrationVerificationMessage) {
     const name = escapeHtml(message.fullName)
     const code = escapeHtml(message.code)
@@ -225,21 +251,27 @@ class ResendAuthMailer implements AuthMailer {
      * address has proved it; the browser that asked has proved nothing, so it is
      * told the same sentence either way.
      */
+    const statusCheck = message.purpose === "status"
     const standing = {
       approved: message.academyId
         ? `Your request has already been approved. Your Academy ID is ${message.academyId}.`
         : "Your request has already been approved.",
-      new: null,
+      new: statusCheck
+        ? "We have no registration under this name and email. Check the spelling, or send a new request from the registration page."
+        : null,
       pending: "A request for this name and address is already with your coach for review.",
       rejected: "A request for this name and address was not approved. Please speak to your coach at the academy.",
     }[message.standing]
     const standingText = standing ? `\n\n${standing}` : ""
     const standingHtml = standing ? `<p>${escapeHtml(standing)}</p>` : ""
+    const noun = statusCheck ? "status check" : "registration"
     await this.send({
       to: message.to,
-      subject: "Your SMBA registration code",
-      text: `Hello ${message.fullName},\n\nYour SMBA registration code is ${message.code}. It expires in ${message.expiresInMinutes} minutes.${standingText}\n\nIf you did not request this, you can ignore this email.`,
-      html: `<p>Hello ${name},</p><p>Enter this code to continue your SMBA registration.</p><p><strong style="font-size:28px;letter-spacing:0.18em">${code}</strong></p><p>It expires in ${message.expiresInMinutes} minutes.</p>${standingHtml}<p>If you did not request this, you can ignore this email.</p>`,
+      subject: `Your SMBA ${noun} code`,
+      text: `Hello ${message.fullName},\n\nYour SMBA ${noun} code is ${message.code}. It expires in ${message.expiresInMinutes} minutes.${standingText}\n\nIf you did not request this, you can ignore this email.`,
+      html: `<p>Hello ${name},</p><p>${statusCheck
+        ? "Enter this code to see where your SMBA registration stands."
+        : "Enter this code to continue your SMBA registration."}</p><p><strong style="font-size:28px;letter-spacing:0.18em">${code}</strong></p><p>It expires in ${message.expiresInMinutes} minutes.</p>${standingHtml}<p>If you did not request this, you can ignore this email.</p>`,
     })
   }
 }

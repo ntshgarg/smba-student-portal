@@ -30,6 +30,8 @@ export const metadata: Metadata = {
 
 export default async function AdminPage() {
   const identity = await sessionProvider.getCurrentIdentity()
+  // During a preview the identity is the person viewed; send them to their portal, not /login.
+  if (identity?.previewMode) redirect(identity.role === "coach" ? "/coach" : "/player")
   if (!identity || identity.role !== "platform_admin") redirect("/login")
   if (recoveryEmailEnrollmentRequired(identity.subjectId)) {
     redirect("/account/recovery-email/setup")
@@ -113,7 +115,7 @@ export default async function AdminPage() {
             <div>
               <p className="eyebrow">Academy not activated</p>
               <h2>Set up the first head coach</h2>
-              <p>Open this on the coach’s device. They will create their own password and PIN, then connect an authenticator.</p>
+              <p>Open this on the coach’s device. They will create their own password and PIN, then connect an authenticator. You will be signed out of this browser as setup opens.</p>
             </div>
             <form action={openHeadCoachSetupAction}>
               <button type="submit">Open secure coach setup</button>

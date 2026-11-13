@@ -2,27 +2,13 @@
 
 const MAX_BACKUP_AGE_MS = 30 * 60 * 60 * 1000
 const MAX_RESTORE_AGE_MS = 35 * 24 * 60 * 60 * 1000
+const SETUP_GUIDE = 'docs/PRODUCTION-OPERATIONS.md, "Scheduled encrypted backups"'
 
-/*
- * This gate asks whether a backup ran last night. That is the wrong question
- * while the nightly schedule is deliberately off -- it was disabled on
- * 2026-09-03 because the snapshots went to actions/upload-artifact on a public
- * repository, and the reason is written at the top of that workflow. Asking it
- * anyway failed the monitor every half hour and held a production alert open
- * against a state somebody chose, which is how a monitor stops being read.
- *
- * So the answer comes from the workflow itself rather than from a flag of our
- * own, and the mute lifts itself: restoring the `schedule:` trigger restores
- * the 30-hour gate in the same commit, with nothing separate to remember. The
- * age is still reported while muted, because "no backup since 3 September" is
- * the fact worth keeping in front of whoever reads the run.
- *
- * The caller passes the workflow text in, like every other input here, so this
- * module stays a pure function of its arguments and touches no filesystem.
- *
- * Comment stripping is deliberately naive -- a `#` inside a quoted value would
- * confuse it. No cron expression or trigger name contains one.
- */
+// Runs before this date predate the private store; their backups were deleted.
+const PRIVATE_STORE_SINCE = Date.parse("2026-11-13T00:00:00Z")
+
+// The 30-hour gate is muted while encrypted-production-backup.yml has no
+// `schedule:` trigger. Comment stripping is naive; no trigger contains a `#`.
 function backupScheduleIsEnabled(source) {
   const lines = source.split("\n").map((line) => line.replace(/#.*$/u, ""))
   const start = lines.findIndex((line) => /^["']?on["']?\s*:/u.test(line))
@@ -37,10 +23,21 @@ function backupScheduleIsEnabled(source) {
   return false
 }
 
-function latestSuccessfulMain(runs, { defaultBranch, repository }) {
-  return runs.find((run) => run.conclusion === "success"
+function isSuccessfulMain(run, { defaultBranch, repository }) {
+  return run.conclusion === "success"
     && run.head_branch === defaultBranch
-    && run.head_repository?.full_name === repository)
+    && run.head_repository?.full_name === repository
+}
+
+function startedAt(run) {
+  const time = Date.parse(run.created_at)
+  if (!Number.isFinite(time)) throw new Error("A workflow run has an invalid timestamp.")
+  return time
+}
+
+/** Successful runs on main since the private store began, newest first. */
+function storeEraRuns(runs, { defaultBranch, repository, since = PRIVATE_STORE_SINCE }) {
+  return runs.filter((run) => isSuccessfulMain(run, { defaultBranch, repository }) && startedAt(run) >= since)
 }
 
 function ageMilliseconds(timestamp, now) {
@@ -59,24 +56,6 @@ async function listRuns(github, { branch, owner, repo, workflowId }) {
     per_page: 100,
   })
   return response.data.workflow_runs
-}
-
-async function listArtifacts(github, { owner, repo, runId }) {
-  if (typeof github.paginate === "function") {
-    return github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
-      owner,
-      repo,
-      run_id: runId,
-      per_page: 100,
-    })
-  }
-  const response = await github.rest.actions.listWorkflowRunArtifacts({
-    owner,
-    repo,
-    run_id: runId,
-    per_page: 100,
-  })
-  return response.data.artifacts
 }
 
 module.exports = async function checkBackupFreshness({
@@ -106,8 +85,13 @@ module.exports = async function checkBackupFreshness({
       workflowId: "encrypted-backup-restore.yml",
     }),
   ])
-  const backup = latestSuccessfulMain(backupRuns, { defaultBranch, repository })
-  const restore = latestSuccessfulMain(restoreRuns, { defaultBranch, repository })
+  const storedBackups = storeEraRuns(backupRuns, { defaultBranch, repository })
+  const backup = storedBackups[0]
+  const firstBackup = storedBackups.at(-1)
+  // A restore check can only be of a stored backup once one exists.
+  const restore = firstBackup
+    ? storeEraRuns(restoreRuns, { defaultBranch, repository, since: startedAt(firstBackup) })[0]
+    : undefined
 
   if (!scheduled) {
     return {
@@ -119,20 +103,45 @@ module.exports = async function checkBackupFreshness({
     }
   }
 
-  if (!backup) throw new Error("No successful main-branch encrypted backup is available.")
-  if (!restore) throw new Error("No successful main-branch stored-backup restore verification is available.")
+  // No stored backup yet: the nightly run's own failure is the alert, so only warn.
+  if (!backup) {
+    return {
+      backupAgeHours: null,
+      backupRunId: null,
+      message: "No backup has been stored yet. Beyond Turso's one-day rewind, the academy has no copy "
+        + `of its records that could be restored. Finish setting up the private backup store (${SETUP_GUIDE}).`,
+      muted: true,
+    }
+  }
   if (ageMilliseconds(backup.updated_at || backup.created_at, now) > MAX_BACKUP_AGE_MS) {
-    throw new Error("The latest successful encrypted backup is older than 30 hours.")
+    throw new Error(
+      "The newest stored backup is more than 30 hours old, so last night's backup did not finish. "
+      + 'Open the latest "Encrypted production backup" run to see why.',
+    )
+  }
+  if (!restore) {
+    // No restore check is overdue until backups are older than 35 days.
+    if (ageMilliseconds(firstBackup.updated_at || firstBackup.created_at, now) > MAX_RESTORE_AGE_MS) {
+      throw new Error(
+        "Backups have been stored for more than 35 days and none has been restored and checked. Open the "
+        + 'latest "Encrypted backup restore verification" run to see why, or run it by hand.',
+      )
+    }
+    return {
+      backupRunId: backup.id,
+      message: 'No stored backup has been restored and checked yet. "Encrypted backup restore '
+        + 'verification" runs on the 1st of the month, or can be run by hand now.',
+      muted: false,
+      restoreRunId: null,
+    }
   }
   if (ageMilliseconds(restore.updated_at || restore.created_at, now) > MAX_RESTORE_AGE_MS) {
-    throw new Error("The latest successful stored-backup restore verification is older than 35 days.")
+    throw new Error(
+      "The last successful restore check of a stored backup is more than 35 days old. "
+      + 'Open the latest "Encrypted backup restore verification" run to see why.',
+    )
   }
-  const expectedName = `smba-production-backup-${backup.id}-${backup.run_attempt}`
-  const artifacts = await listArtifacts(github, { owner, repo, runId: backup.id })
-  const artifact = artifacts.find((candidate) => candidate.name === expectedName && !candidate.expired)
-  if (!artifact) throw new Error("The latest encrypted backup artifact is missing or expired.")
   return {
-    artifactId: artifact.id,
     backupRunId: backup.id,
     muted: false,
     restoreRunId: restore.id,
@@ -141,4 +150,5 @@ module.exports = async function checkBackupFreshness({
 
 module.exports.ageMilliseconds = ageMilliseconds
 module.exports.backupScheduleIsEnabled = backupScheduleIsEnabled
-module.exports.latestSuccessfulMain = latestSuccessfulMain
+module.exports.PRIVATE_STORE_SINCE = PRIVATE_STORE_SINCE
+module.exports.storeEraRuns = storeEraRuns

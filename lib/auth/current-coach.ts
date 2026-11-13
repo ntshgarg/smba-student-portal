@@ -10,6 +10,7 @@ import {
   type CoachAccessProfile,
 } from "@/lib/auth/coach-access"
 import type { SessionIdentity } from "@/lib/auth/identity"
+import { sessionOwesAuthenticatorSetup } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
 import { ensureDueTrainingChangesApplied } from "@/lib/training/changes"
 
@@ -27,10 +28,17 @@ export type CurrentCoachContext = {
 // expired session is not about the coach at all and signing in again clears it.
 // Only a missing identity can be an expiry -- a present one that is not a coach
 // is a genuine refusal -- and the session is only read to tell those apart.
+// A live session that owes authenticator setup is cleared the same way.
 export async function requireHeadAdminAction() {
   const identity = await sessionProvider.getCurrentIdentity()
-  if (!identity && !(await sessionProvider.hasActiveSession())) throw new SessionExpiredError()
+  if (!identity && (
+    !(await sessionProvider.hasActiveSession()) || await sessionOwesAuthenticatorSetup()
+  )) {
+    throw new SessionExpiredError()
+  }
   if (!identity || identity.role !== "coach") throw new Error("Head coach access is required.")
+  // Second lock behind the proxy: a preview never saves in the coach's name.
+  if (identity.previewMode) throw new Error("Admin preview is read-only. Exit preview before making changes.")
   requireHeadAdminAccess(identity.subjectId)
   if (!identity.previewMode) ensureDueTrainingChangesApplied()
   return identity

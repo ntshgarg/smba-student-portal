@@ -13,6 +13,7 @@ import {
 import {
   findApprovedAccountByAcademyId,
   confirmRegistration,
+  registrationCodeChecksPaused,
   requestRegistration,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
@@ -22,6 +23,7 @@ import {
   ACTIVATION_CLAIM_LIFETIME_MS,
   completeAccountActivation,
   createActivationClaimToken,
+  getActivationClaimStatus,
   loginIsBlocked,
   reserveLoginAttempt,
   validateNewPassword,
@@ -37,6 +39,8 @@ import {
 } from "@/lib/auth/security-context"
 import { clearDatabaseSession } from "@/lib/auth/session"
 import {
+  CODE_CHECKS_PAUSED_MESSAGE,
+  passwordStepReachable,
   type RegistrationField,
   type RegistrationFormState,
   type RegistrationValues,
@@ -47,6 +51,8 @@ const GENERIC_LOGIN_ERROR = `${ACADEMY_ID_LABEL} or password is incorrect. If th
 const GENERIC_PIN_ERROR = `${ACADEMY_ID_LABEL} or PIN is incorrect. Use your password if PIN login is unavailable.`
 const RATE_LIMITED_LOGIN_ERROR = "We couldn\u2019t sign you in. Wait a few minutes before trying again."
 const ACTIVATED_WITHOUT_SESSION_ERROR = "Your account is ready, but we couldn\u2019t sign you in. Open the sign-in page and use your new password."
+const ACTIVATION_ALREADY_COMPLETE_ERROR = "This account already has a password. Open the sign-in page and use your Academy ID and that password."
+const ACTIVATION_UNAVAILABLE_ERROR = "This password setup has run out or was replaced on another device (by a status check or a new registration). Check your status again at /activate to continue."
 
 // Better Auth surfaces an endpoint refusal as an APIError carrying the status it
 // was thrown with. Both sign-in endpoints throw TOO_MANY_REQUESTS once the
@@ -275,7 +281,9 @@ export async function activateAccount(
   const activated = await completeAccountActivation({ token, password })
   if (!activated) {
     return {
-      error: "This registration link is unavailable or has expired. Return to registration to request access again.",
+      error: getActivationClaimStatus(token).state === "active"
+        ? ACTIVATION_ALREADY_COMPLETE_ERROR
+        : ACTIVATION_UNAVAILABLE_ERROR,
       errorField: null,
     }
   }
@@ -296,7 +304,7 @@ export async function activateAccount(
       headers: requestHeaders,
     }))
   } catch {
-    cookieStore.delete(ACTIVATION_CLAIM_COOKIE)
+    // Cookie kept so /activate shows this message; the claim is already spent.
     return { error: ACTIVATED_WITHOUT_SESSION_ERROR, errorField: null }
   }
   cookieStore.delete(ACTIVATION_CLAIM_COOKIE)
@@ -390,9 +398,20 @@ export async function confirmRegistrationCode(
     requestedRole: values.requestedRole,
     security: requestSecurityContext(requestHeaders),
   })
-  if (!result) return { ...base, error: INVALID_CODE_MESSAGE, errorField: "code" }
+  if (!result) {
+    return {
+      ...base,
+      error: registrationCodeChecksPaused({
+        email: values.email,
+        fullName: values.fullName,
+        security: requestSecurityContext(requestHeaders),
+      }) ? CODE_CHECKS_PAUSED_MESSAGE : INVALID_CODE_MESSAGE,
+      errorField: "code",
+    }
+  }
 
-  if (result.standing === "new") {
+  // A request ready for its password also gets the receipt `confirmRegistration` minted.
+  if (result.standing === "new" || passwordStepReachable(result)) {
     /*
      * The activation claim still rides a cookie so the existing /activate page
      * keeps working unchanged. It is no longer the only way back -- name, email

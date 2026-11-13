@@ -1,4 +1,4 @@
-import { formatDateKey, formatSessionTimeRange } from "@/lib/format"
+import { academyTimeInputValue, formatDateKey, formatSessionTimeRange } from "@/lib/format"
 import {
   assignmentCoversOccurrence,
   playerWasEnrolledForOccurrence,
@@ -219,7 +219,13 @@ export function buildPlayerAttendanceCalendar(
         : state === "future"
           ? "future session"
           : state
-      const timeLabel = formatSessionTimeRange(session)
+      // This session's own time, not the schedule's usual slot: a session the
+      // coach moved to another time keeps its new time here, as it does on the
+      // next-session card.
+      const timeLabel = formatSessionTimeRange({
+        durationMinutes: occurrence.durationMinutes,
+        startTime: academyTimeInputValue(occurrence.startsAt),
+      })
       const groupLabel = session.programme + " · " + session.batch
 
       return [{

@@ -66,8 +66,8 @@ export function prepareDatabase({
     else seedDatabase(database)
   }
   // A genuinely empty academy must not contain a hidden or default owner
-  // credential. Its platform owner is created only through the one-time,
-  // token-bound setup flow.
+  // credential. Its platform owner is created only by the operator script
+  // (`npm run db:provision:admin`).
   if (!emptyAcademy) ensureBootstrapCredential({ database })
   return database
 }

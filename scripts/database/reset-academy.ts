@@ -6,10 +6,13 @@ import { initializeDatabase, shouldUseTurso } from "../../lib/db/client"
 /**
  * Empties an academy in place, leaving one platform owner and nothing else.
  *
- * Written for handover: the owner keeps their account, credentials, PIN,
- * authenticator and recovery email, and every academy record around them is
- * removed so the incoming head coach starts from the one-time secure setup
- * rather than inheriting somebody else's roster.
+ * Written for handover: the owner keeps their account, password, PIN and
+ * recovery email, and every academy record around them is removed so the
+ * incoming head coach starts from the one-time secure setup rather than
+ * inheriting somebody else's roster. The owner's authenticator app is removed
+ * too (see PURGED below): whoever holds the account next pairs their own phone
+ * on the next sign-in. scripts/deployment/prepare-admin-only-snapshot.mjs, the
+ * manual route, does the same, so both routes hand over the same account.
  *
  * This deletes production data and nothing puts it back, so it refuses to run
  * unless the operator names both halves of what they are about to do:
@@ -215,15 +218,41 @@ function soleOwner() {
 }
 
 /*
+ * Emptied by the reset, but the owner is expected to write them again straight
+ * afterwards by doing exactly what the handover asks: pairing a new
+ * authenticator on the next sign-in, and opening the one-time head coach setup.
+ * Rows that belong to the owner are not academy records; anybody else's are.
+ */
+const OWNER_REFILLED = new Map([
+  ["auth_two_factors", "user_id"],
+  ["auth_setup_claims", "created_by_account_id"],
+])
+
+function countRowsNotOwnedBy(table: string, column: string, ownerId: string) {
+  const row = database.get<{ total: number }>(sql`
+    select count(*) as total from ${sql.identifier(table)}
+    where ${sql.identifier(column)} <> ${ownerId}
+  `)
+  return row?.total ?? 0
+}
+
+/*
  * Answers "is this academy empty?" rather than "was anything deleted?", so it
  * can be run at any time, including long after a reset and against live
  * traffic. Owner-scoped tables are excluded because the owner is meant to
- * survive; runtime noise is excluded because it is meant to come back.
+ * survive; runtime noise is excluded because it is meant to come back; and the
+ * owner's own new authenticator and setup link are not academy records.
  */
-function verify(tables: string[], owner: { academyId: string }) {
+function verify(tables: string[], owner: { academyId: string; id: string }) {
   const survivors = tables
     .filter((table) => PURGED.has(table) && !RUNTIME_NOISE.has(table))
-    .map((table) => ({ count: countRows(table), table }))
+    .map((table) => {
+      const ownerColumn = OWNER_REFILLED.get(table)
+      return {
+        count: ownerColumn ? countRowsNotOwnedBy(table, ownerColumn, owner.id) : countRows(table),
+        table,
+      }
+    })
     .filter((entry) => entry.count > 0)
 
   if (survivors.length) {

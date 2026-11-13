@@ -5,12 +5,14 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { getAuth } from "@/lib/auth/better-auth"
+import { withdrawPendingAuthenticatorResetRequests } from "@/lib/auth/authenticator-reset-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import {
   releaseLoginAttempt,
   releaseSecondFactorAttempt,
   reserveLoginAttempt,
   reserveSecondFactorAttempt,
+  secondFactorChecksPaused,
   verifyCurrentPassword,
 } from "@/lib/auth/credential-service"
 import {
@@ -18,6 +20,7 @@ import {
   forgetTrustedDevices,
 } from "@/lib/auth/second-factor-reset"
 import { getRawAuthSession } from "@/lib/auth/session"
+import { challengedAccountId } from "@/lib/auth/two-factor-challenge"
 import { sessionProvider } from "@/lib/data"
 import {
   authSubjectHash,
@@ -46,6 +49,9 @@ export type TotpReconnectState = {
 }
 
 const TOO_MANY_SECOND_FACTOR_ATTEMPTS = "Too many attempts. Wait a few minutes before trying again."
+// Shown instead of "wrong code" while the authenticator lock stands.
+const SECOND_FACTOR_LOCKED =
+  "Too many codes were tried, so code checks are paused for up to 15 minutes. Wait, then enter a fresh code from your authenticator app. Recovery codes are refused until the pause ends too."
 
 /*
  * Whether this account already has a working authenticator. The setup screens
@@ -62,59 +68,31 @@ function hasVerifiedAuthenticator(accountId: string) {
     .get())
 }
 
-const SIGN_IN_CHALLENGE_EXPIRED = "Your sign-in has expired. Sign in again."
-
-/*
- * Every value the request carries under one cookie name, read leniently: names
- * and values trimmed, surrounding quotes dropped, percent-decoded. Lenient on
- * purpose -- Next's cookie parser and the one Better Auth verifies with disagree
- * about duplicates, padding and quotes, so reading the challenge with either
- * parser alone let a crafted Cookie header show this code one value (or none)
- * while Better Auth checked another. Collecting every candidate and accepting
- * only exactly one leaves nothing for the two to disagree about.
- */
-function cookieValues(cookieHeader: string | null, name: string) {
-  const values: string[] = []
-  for (const pair of (cookieHeader ?? "").split(";")) {
-    const separator = pair.indexOf("=")
-    if (separator === -1 || pair.slice(0, separator).trim() !== name) continue
-    let value = pair.slice(separator + 1).trim()
-    if (value.startsWith("\"")) value = value.slice(1, -1)
-    try {
-      values.push(decodeURIComponent(value))
-    } catch {
-      values.push(value)
-    }
-  }
-  return values
+function isTooManyRequests(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+  const status = (error as { status?: unknown }).status
+  return status === "TOO_MANY_REQUESTS" || status === 429
 }
 
-/*
- * The account a half-finished sign-in is waiting on, from the challenge cookie
- * the first factor set. The cookie holds the challenge id and a signature; the
- * id is random and only issued to whoever passed the password or PIN, so it
- * cannot be made up to point at someone else's account, and Better Auth checks
- * the signature itself when it verifies the code. Null -- and the request is
- * refused -- when there is no live challenge, when the cookie appears more than
- * once, or when the lookup fails: a code is never checked here without first
- * spending the challenged account's budget.
- */
-async function challengedAccountId(requestHeaders: Pick<Headers, "get">) {
+// Better Auth ends the sign-in challenge after five wrong codes; another code cannot help.
+function challengeUsedUp(error: unknown) {
+  return (error as { body?: { code?: unknown } } | null)?.body?.code === "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE"
+}
+
+// A newly connected authenticator withdraws any waiting reset request; approving it now would only wipe the new one.
+// Signing in with a code does not: that code may come from the lost phone the request is about.
+function withdrawStaleResetRequest(
+  accountId: string,
+  reason: "authenticator_connected",
+) {
   try {
-    const authContext = await getAuth().$context
-    const name = authContext.createAuthCookie("two_factor").name
-    const values = cookieValues(requestHeaders.get("cookie"), name)
-    if (values.length !== 1) return null
-    const signatureStart = values[0]!.lastIndexOf(".")
-    if (signatureStart < 1) return null
-    const challenge = await authContext.internalAdapter
-      .findVerificationValue(values[0]!.slice(0, signatureStart))
-    if (!challenge || challenge.expiresAt <= new Date()) return null
-    return challenge.value
+    withdrawPendingAuthenticatorResetRequests(accountId, { reason })
   } catch {
-    return null
+    // The sign-in has already succeeded.
   }
 }
+
+const SIGN_IN_CHALLENGE_EXPIRED = "Your sign-in has expired. Sign in again."
 
 /*
  * The sign-in code check is for a half-finished sign-in only. With a session in
@@ -126,7 +104,10 @@ async function challengedAccountId(requestHeaders: Pick<Headers, "get">) {
  */
 async function refuseSignedInCaller() {
   const session = await getRawAuthSession()
-  if (session) redirect(destinationForUser(session.user.id))
+  // Use the session's own authenticator state so unfinished setup is sent back to it.
+  if (session) {
+    redirect(destinationForUser(session.user.id, Boolean(session.user.twoFactorEnabled)))
+  }
 }
 
 function recordSecondFactorRateLimited(
@@ -233,6 +214,17 @@ export async function beginAuthenticatorReconnect(
     }
   }
   if (!await verifyCurrentPassword({ accountId: identity.subjectId, password })) {
+    // Log the failed password check, as the recovery-code reissue does.
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      actorAccountId: identity.subjectId,
+      eventType: "login_failed",
+      ipHash: security.ipHash,
+      metadata: { factor: "current_password", operation: "totp_reconnect" },
+      outcome: "failure",
+      subjectHash,
+      userAgent: security.userAgent,
+    })
     return { error: "The current password could not be verified.", errorField: "password" }
   }
   releaseLoginAttempt(attempt)
@@ -279,15 +271,26 @@ export async function beginAuthenticatorReconnect(
     recordSecondFactorSuccess(requestHeaders, identity.subjectId, "backup_code", "reconnect")
   }
 
+  const usedRecoveryCode = !/^\d{6}$/u.test(secondFactor)
   try {
     await requestAuth.api.revokeOtherSessions({ headers: requestHeaders })
+  } catch {
+    return {
+      error: "The authenticator could not be reconnected. Try again.",
+      errorField: null,
+    }
+  }
+  // Once the first step has run, other devices are already signed out; say so if the second fails.
+  try {
     await requestAuth.api.disableTwoFactor({
       body: { password },
       headers: requestHeaders,
     })
   } catch {
     return {
-      error: "The authenticator could not be reconnected. Try again.",
+      error: "Your other devices were logged out, but the authenticator could not be"
+        + " reconnected. Try again"
+        + (usedRecoveryCode ? " with a different recovery code or an authenticator code." : "."),
       errorField: null,
     }
   }
@@ -364,6 +367,16 @@ export async function startTotpSetup(
       },
     }
   } catch {
+    writeAuthSecurityEvent({
+      accountId: rawSession.user.id,
+      actorAccountId: rawSession.user.id,
+      eventType: "login_failed",
+      ipHash: security.ipHash,
+      metadata: { factor: "current_password", operation: "totp_setup" },
+      outcome: "failure",
+      subjectHash,
+      userAgent: security.userAgent,
+    })
     return { error: "That password could not be verified.", setup: null }
   }
 }
@@ -420,6 +433,7 @@ export async function confirmTotpSetup(
    */
   const endedSessions = endSessionsStartedBefore(rawSession.user.id, connectedAt)
   const forgottenDevices = forgetTrustedDevices(rawSession.user.id)
+  withdrawStaleResetRequest(rawSession.user.id, "authenticator_connected")
   const security = requestSecurityContext(requestHeaders)
   writeAuthSecurityEvent({
     accountId: rawSession.user.id,
@@ -494,6 +508,10 @@ export async function verifyTotpSignIn(
   // past it. The account's own budget is spent here first, as a single step.
   const accountId = await challengedAccountId(requestHeaders)
   if (!accountId) return { error: SIGN_IN_CHALLENGE_EXPIRED }
+  if (secondFactorChecksPaused(accountId)) {
+    recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
+    return { error: SECOND_FACTOR_LOCKED }
+  }
   if (!reserveSecondFactorAttempt(accountId, "challenge")) {
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: TOO_MANY_SECOND_FACTOR_ATTEMPTS }
@@ -510,6 +528,9 @@ export async function verifyTotpSignIn(
     // Next.js redirects are intentionally thrown; do not turn a successful
     // verification into an error message.
     if (error && typeof error === "object" && "digest" in error) throw error
+    // The lock can also land between the read above and this check.
+    if (isTooManyRequests(error)) return { error: SECOND_FACTOR_LOCKED }
+    if (challengeUsedUp(error)) return { error: SIGN_IN_CHALLENGE_EXPIRED }
     recordSecondFactorFailure(requestHeaders, accountId, "totp")
     return { error: "That code was not accepted. Wait for a new code and try again." }
   }
@@ -525,6 +546,12 @@ export async function verifyBackupCodeSignIn(
   const requestHeaders = await headers()
   const accountId = await challengedAccountId(requestHeaders)
   if (!accountId) return { error: SIGN_IN_CHALLENGE_EXPIRED }
+  // While the lock stands a recovery code is refused like any other, so say
+  // so before the coach spends one.
+  if (secondFactorChecksPaused(accountId)) {
+    recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
+    return { error: SECOND_FACTOR_LOCKED }
+  }
   if (!reserveSecondFactorAttempt(accountId, "challenge")) {
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: TOO_MANY_SECOND_FACTOR_ATTEMPTS }
@@ -542,6 +569,8 @@ export async function verifyBackupCodeSignIn(
     redirect(destinationForUser(response.user.id))
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error
+    if (isTooManyRequests(error)) return { error: SECOND_FACTOR_LOCKED }
+    if (challengeUsedUp(error)) return { error: SIGN_IN_CHALLENGE_EXPIRED }
     recordSecondFactorFailure(requestHeaders, accountId, "backup_code")
     return { error: "That recovery code was not accepted." }
   }

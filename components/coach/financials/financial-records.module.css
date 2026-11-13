@@ -765,6 +765,14 @@
   font-size: 0.8125rem;
 }
 
+.paginationNote {
+  display: block;
+  max-width: 420px;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
 .pagination > div {
   display: flex;
   gap: var(--space-tight);

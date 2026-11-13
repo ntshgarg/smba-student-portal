@@ -16,7 +16,7 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Fragment, useEffect, useRef, useState } from "react"
 
-import { HolidayComposer } from "@/components/coach/calendar/holiday-composer"
+import { HolidayComposer, pluralSessions } from "@/components/coach/calendar/holiday-composer"
 import {
   useMemberPortal,
   useSessionPortal,
@@ -41,6 +41,7 @@ import {
   formatAcademyTime,
   formatDateKey,
   formatSessionLabel,
+  getAcademyDateKey,
 } from "@/lib/format"
 import type { TrainingSessionOccurrence, TrainingSessionSeries } from "@/lib/sessions/types"
 
@@ -80,6 +81,70 @@ function dayOccurrenceSummary(scheduledCount: number, cancelledCount: number) {
   return `${scheduledCount} scheduled · ${cancelledCount} cancelled`
 }
 
+/**
+ * What removing a holiday actually did, in the coach's words. It names the day:
+ * the notice sits above the calendar and the coach may be looking at another
+ * day, or the month on a phone, by the time the answer comes back.
+ */
+export function holidayRemovedMessage(
+  dateKey: string,
+  {
+    keptCancelledSessions,
+    restoredSessions,
+    reviewFlagsCleared,
+  }: {
+    keptCancelledSessions: number
+    restoredSessions: number
+    reviewFlagsCleared: number
+  },
+) {
+  const day = formatDateKey(dateKey)
+  const parts = [
+    restoredSessions
+      ? `Holiday on ${day} removed. ${pluralSessions(restoredSessions)} ${restoredSessions === 1 ? "is" : "are"} back on.`
+      : `Holiday on ${day} removed. No sessions needed restoring.`,
+  ]
+  if (keptCancelledSessions) {
+    parts.push(`${pluralSessions(keptCancelledSessions)} stayed cancelled because ${keptCancelledSessions === 1 ? "its schedule has" : "their schedules have"} ended or already ${keptCancelledSessions === 1 ? "has" : "have"} a session that day.`)
+  }
+  if (reviewFlagsCleared) {
+    parts.push(`${reviewFlagsCleared} make-up${reviewFlagsCleared === 1 ? " is" : "s are"} no longer waiting for review.`)
+  }
+  return parts.join(" ")
+}
+
+/**
+ * Why a cancelled session is off, as far as this screen can tell: a holiday, a
+ * move to another day or time (when the session it ended up as is in the loaded
+ * month), or an ordinary cancellation. A move can be moved again, so the chain
+ * of replacements is followed to its end. Ending a schedule is recorded the same
+ * way as an ordinary cancellation, so it reads as "Cancelled".
+ */
+export function cancellationLabel(
+  occurrence: Pick<TrainingSessionOccurrence, "holidayId" | "id" | "occurrenceDate">,
+  occurrences: readonly Pick<TrainingSessionOccurrence, "id" | "replacementForOccurrenceId" | "status">[],
+  holidayByDate: ReadonlyMap<string, { label: string }>,
+) {
+  if (occurrence.holidayId) {
+    const holiday = holidayByDate.get(occurrence.occurrenceDate)
+    return holiday ? `Closed for ${holiday.label}` : "Closed for a holiday"
+  }
+  const seen = new Set([occurrence.id])
+  let frontier = [occurrence.id]
+  while (frontier.length) {
+    const next: string[] = []
+    for (const candidate of occurrences) {
+      if (!candidate.replacementForOccurrenceId || !frontier.includes(candidate.replacementForOccurrenceId)) continue
+      if (candidate.status === "scheduled") return "Moved"
+      if (seen.has(candidate.id)) continue
+      seen.add(candidate.id)
+      next.push(candidate.id)
+    }
+    frontier = next
+  }
+  return "Cancelled"
+}
+
 type ReplacementDraft = {
   dateKey: string
   startTime: string
@@ -112,11 +177,9 @@ function replacementDraftFor(occurrence: TrainingSessionOccurrence): Replacement
 }
 
 export function SessionCalendar({
-  referenceDate,
   referenceInstant: initialReferenceInstant,
   selectedDate,
 }: {
-  referenceDate: string
   referenceInstant: number
   selectedDate: string
 }) {
@@ -134,7 +197,8 @@ export function SessionCalendar({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const today = referenceDate
+  // From the ticking clock, so a page left open past midnight moves on to the new day.
+  const today = getAcademyDateKey(referenceInstant)
   const selectedMonth = selectedDate.slice(0, 7)
   const monthWindow = calendarWindowForMonth(selectedMonth)
   const monthOccurrences = sessionOccurrences.filter((occurrence) => (
@@ -150,7 +214,14 @@ export function SessionCalendar({
   const selectedHoliday = holidayByDate.get(selectedDate) ?? null
 
   const [holidayComposerOpen, setHolidayComposerOpen] = useState(false)
-  const [retractingHoliday, setRetractingHoliday] = useState(false)
+  // The dates being reopened, not a flag: the coach can move to another closed
+  // day while a removal is in flight and remove that one too. Server actions
+  // run one after another, so the second waits for the first.
+  const [retractingHolidayDates, setRetractingHolidayDates] = useState<readonly string[]>([])
+  const retractingHoliday = retractingHolidayDates.includes(selectedDate)
+  // Above both panes, not inside the day view: on a phone the month and the day
+  // are shown one at a time, and a closure is usually marked from the month.
+  // Every message names its days, so it reads right whichever day is selected.
   const [holidayFeedback, setHolidayFeedback] = useState<ActionFeedback | null>(null)
   const [mobileView, setMobileView] = useState<"month" | "day">("day")
   const [expandedOccurrenceId, setExpandedOccurrenceId] = useState<string | null>(null)
@@ -167,8 +238,16 @@ export function SessionCalendar({
   const dayHeadingRef = useRef<HTMLHeadingElement>(null)
   const shouldFocusMonth = useRef(false)
   const monthHeadingRef = useRef<HTMLHeadingElement>(null)
+  const expandedOccurrence = expandedOccurrenceId
+    ? dayOccurrences.find((occurrence) => occurrence.id === expandedOccurrenceId) ?? null
+    : null
   const replacementGuard = useUnsavedWorkGuard({
-    isDirty: Boolean(expandedOccurrenceId)
+    // Only while the replacement form is actually on screen. Once the session
+    // starts, is cancelled or moves away, the form is gone and there is nothing
+    // left to lose, so leaving should not ask.
+    isDirty: Boolean(expandedOccurrence)
+      && expandedOccurrence?.status === "scheduled"
+      && occurrenceIsUpcoming(expandedOccurrence, referenceInstant)
       && JSON.stringify(replacement) !== JSON.stringify(replacementBaseline),
     message: "Discard the unsaved replacement details?",
     scope: "coach-calendar-replacement",
@@ -241,16 +320,25 @@ export function SessionCalendar({
       if (openDay) setMobileView("day")
       return
     }
+    // Stay on the day until a cancel or move has its answer, so its outcome is seen.
+    if (pendingSessionAction !== null) return
+    // A month change remounts this screen, which would drop a removal's answer.
+    if (retractingHolidayDates.length && dateKey.slice(0, 7) !== selectedMonth) return
     if (!replacementGuard.confirmDiscard(
       "Leave this day and discard the unsaved replacement details?",
     )) return
     setFeedback(null)
+    // A finished holiday notice has been seen; one still on its way names its day.
+    setHolidayFeedback(null)
     setExpandedOccurrenceId(null)
     if (openDay) {
       setMobileView("day")
       shouldFocusDay.current = true
     }
-    router.push(`${pathname}?${dateQuery(new URLSearchParams(searchParams.toString()), dateKey)}`, { scroll: false })
+    // Via navigateAfterCommit so the guard's history step-back cannot cancel the push.
+    replacementGuard.navigateAfterCommit(() => {
+      router.push(`${pathname}?${dateQuery(new URLSearchParams(searchParams.toString()), dateKey)}`, { scroll: false })
+    })
   }
 
   function openOccurrence(occurrence: TrainingSessionOccurrence) {
@@ -283,10 +371,20 @@ export function SessionCalendar({
       {holidayComposerOpen ? (
         <HolidayComposer
           onClose={() => setHolidayComposerOpen(false)}
+          onNotice={setHolidayFeedback}
           selectedDate={selectedDate}
           today={today}
+          viewMonth={selectedMonth}
         />
       ) : null}
+
+      <InlineNotice
+        action={holidayFeedback?.action}
+        className="coach-calendar-holiday-notice"
+        message={holidayFeedback?.message}
+        tone={holidayFeedback?.tone}
+        reserveSpace={false}
+      />
 
       <section className={`coach-calendar-workspace is-${mobileView}`} aria-label="Session calendar workspace">
         <div className="coach-calendar-month-pane">
@@ -357,39 +455,46 @@ export function SessionCalendar({
                 <span>Academy closed</span>
                 <strong>{selectedHoliday.label}</strong>
               </div>
-              {/*
-                * Removing a holiday puts back only the sessions that holiday
-                * cancelled, so a session called off separately beforehand stays
-                * off. The server refuses outright if something has since been
-                * scheduled onto the freed date.
-                */}
+              {/* Removing a holiday puts back only the sessions it cancelled, except upcoming ones of a schedule ended since. */}
               <button
                 type="button"
                 disabled={retractingHoliday}
                 onClick={() => {
                   if (retractingHoliday) return
+                  const dateKey = selectedDate
+                  const day = formatDateKey(dateKey)
                   const confirmed = window.confirm(
-                    `Remove the ${selectedHoliday.label} holiday on ${formatDateKey(selectedDate)}? The sessions it cancelled will be restored.`,
+                    `Remove the ${selectedHoliday.label} holiday on ${day}? The sessions it cancelled come back, except upcoming ones whose schedule has ended since, and any whose schedule already has a session that day.`,
                   )
                   if (!confirmed) return
-                  setRetractingHoliday(true)
+                  setRetractingHolidayDates((current) => [...current, dateKey])
                   setHolidayFeedback(null)
-                  void retractAcademyHoliday(selectedDate)
+                  void retractAcademyHoliday(dateKey)
                     .then((result) => {
                       if (!result.ok) {
-                        setHolidayFeedback({ message: result.message, tone: "error" })
+                        setHolidayFeedback({
+                          message: `The holiday on ${day} was not removed. ${result.message}`,
+                          tone: "error",
+                        })
+                        return
                       }
+                      setHolidayFeedback({
+                        message: holidayRemovedMessage(dateKey, result.data),
+                        tone: "success",
+                      })
                     })
                     .catch((error: unknown) => {
                       const failure = describeSaveFailure({
                         error,
-                        fallbackMessage: "The holiday could not be removed",
                         retained: "The holiday is unchanged",
-                        subject: "Removing the holiday",
+                        unconfirmed: "Check the connection, then reload the page to see whether the holiday was removed",
+                        subject: `Removing the holiday on ${day}`,
                       })
-                      setHolidayFeedback({ message: failure.message, tone: "error" })
+                      setHolidayFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
                     })
-                    .finally(() => setRetractingHoliday(false))
+                    .finally(() => setRetractingHolidayDates((current) => (
+                      current.filter((candidate) => candidate !== dateKey)
+                    )))
                 }}
               >
                 {retractingHoliday ? "Removing…" : "Remove holiday"}
@@ -397,18 +502,19 @@ export function SessionCalendar({
             </div>
           ) : null}
 
-          <InlineNotice
-            message={holidayFeedback?.message}
-            tone={holidayFeedback?.tone}
-            reserveSpace={false}
-          />
-
           {!dayOccurrences.length ? (
             <div className="coach-calendar-empty coach-day-view-empty">
               <CalendarDays aria-hidden="true" />
-              <h3>No sessions today.</h3>
-              <p>This day is clear. Create a schedule to configure the academy’s recurring training rhythm.</p>
-              <Link href="/coach/schedules/new">Create schedule</Link>
+              {/* Any day can be selected, so this names the day, not today. */}
+              <h3>No sessions on this day.</h3>
+              {selectedHoliday ? (
+                <p>The academy is closed, and nothing was scheduled.</p>
+              ) : (
+                <>
+                  <p>This day is clear. Create a schedule to configure the academy’s recurring training rhythm.</p>
+                  <Link href="/coach/schedules/new">Create schedule</Link>
+                </>
+              )}
             </div>
           ) : (
             <div className="coach-day-session-list">
@@ -419,6 +525,9 @@ export function SessionCalendar({
                 const isExpanded = expandedOccurrenceId === occurrence.id
                 const fullSessionLabel = occurrenceLabel(series, occurrence)
                 const playerCountLabel = `${roster.length} ${roster.length === 1 ? "player" : "players"}`
+                const cancelledLabel = occurrence.status !== "cancelled"
+                  ? null
+                  : cancellationLabel(occurrence, sessionOccurrences, holidayByDate)
                 return (
                   <Fragment key={occurrence.id}>
                     <article className={[
@@ -429,12 +538,12 @@ export function SessionCalendar({
                       <button
                         type="button"
                         aria-expanded={isExpanded}
-                        aria-label={`${fullSessionLabel}. ${occurrence.status === "cancelled" ? "Cancelled. " : ""}${playerCountLabel}.`}
+                        aria-label={`${fullSessionLabel}. ${cancelledLabel ? `${cancelledLabel}. ` : ""}${playerCountLabel}.`}
                         onClick={() => openOccurrence(occurrence)}
                       >
                         <time dateTime={occurrence.startsAt}>{formatAcademyTime(occurrence.startsAt)}</time>
                         <span>
-                          {occurrence.status === "cancelled" ? <small className="coach-day-session-status">Cancelled</small> : null}
+                          {cancelledLabel ? <small className="coach-day-session-status">{cancelledLabel}</small> : null}
                           <strong>{series.programme} · {series.batch}</strong>
                           <small><Users aria-hidden="true" /> {playerCountLabel}</small>
                         </span>
@@ -481,11 +590,12 @@ export function SessionCalendar({
                           } catch (error) {
                             const failure = describeSaveFailure({
                               error,
-                              fallbackMessage: "Session could not be cancelled",
                               retained: "The session is still scheduled",
+                              unconfirmed: "Check the connection, then reload the page to see whether the session was cancelled",
                               subject: "The cancellation",
                             })
                             setFeedback({
+                              action: failure.signIn,
                               message: failure.message,
                               occurrenceId: occurrence.id,
                               offerRetry: failure.offerRetry,
@@ -530,11 +640,11 @@ export function SessionCalendar({
                           } catch (error) {
                             const failure = describeSaveFailure({
                               error,
-                              fallbackMessage: "Session could not be replaced",
                               retained: "Your replacement details are still on screen",
                               subject: "The replacement session",
                             })
                             setFeedback({
+                              action: failure.signIn,
                               message: failure.message,
                               occurrenceId: occurrence.id,
                               offerRetry: failure.offerRetry,
@@ -619,6 +729,7 @@ function OccurrenceDetails({
         ) : <p>No players were assigned to this occurrence.</p>}
       </div>
       <InlineNotice
+        action={feedback?.action}
         className="coach-calendar-inline-notice"
         id={feedbackId}
         message={feedback?.message}
@@ -710,9 +821,12 @@ function MonthGrid({
          * day has no scheduled sessions, so without this it announces "0
          * sessions" -- the same as a Sunday, which is the confusion the whole
          * feature exists to remove.
+         *
+         * A live session on a closed day (left from before such moves were
+         * refused) is shown, so the grid never disagrees with the day view.
          */
         const label = holiday
-          ? `${formatDateKey(dateKey)}, closed for ${holiday.label}`
+          ? `${formatDateKey(dateKey)}, closed for ${holiday.label}${count ? `, but ${count} ${count === 1 ? "session is" : "sessions are"} still scheduled` : ""}`
           : `${formatDateKey(dateKey)}, ${count} ${count === 1 ? "session" : "sessions"}`
         return (
           <button
@@ -730,7 +844,7 @@ function MonthGrid({
           >
             <strong>{Number(dateKey.slice(-2))}</strong>
             {holiday
-              ? <small className="coach-month-holiday">Holiday</small>
+              ? <small className="coach-month-holiday">Holiday{count ? ` · ${count}` : ""}</small>
               : count ? (
                 <small>
                   {count}

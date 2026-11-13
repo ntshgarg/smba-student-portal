@@ -1,35 +1,45 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  changePassword: vi.fn(),
   disableTwoFactor: vi.fn(),
   forgetTrustedDevices: vi.fn<(accountId: string) => number>(() => 2),
   generateBackupCodes: vi.fn(),
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   getRawAuthSession: vi.fn(),
+  hasActiveSession: vi.fn(),
   releaseLoginAttempt: vi.fn(),
   releaseSecondFactorAttempt: vi.fn(),
   reserveLoginAttempt: vi.fn(),
   reserveSecondFactorAttempt: vi.fn(),
   removePinCredential: vi.fn(),
+  revalidatePath: vi.fn(),
   revokeOtherSessions: vi.fn(),
   setPinCredential: vi.fn(),
   verifyBackupCode: vi.fn(),
   verifyCurrentPassword: vi.fn(),
   verifyCurrentPasswordAttempt: vi.fn(),
   verifyTOTP: vi.fn(),
+  withdrawPendingAuthenticatorResetRequests: vi.fn(),
   writeAuthSecurityEvent: vi.fn(),
 }))
 
 vi.mock("server-only", () => ({}))
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }))
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }))
+vi.mock("next/navigation", () => ({
+  redirect: (destination: string) => {
+    throw new Error(`NEXT_REDIRECT:${destination}`)
+  },
+}))
 vi.mock("@/lib/auth/better-auth", () => ({
   auth: { api: {} },
   // The reconnect flow's two calls are wired up here so the reissue tests can
   // prove they are never reached; see app/account/security/actions.ts.
   getAuth: () => ({
     api: {
+      changePassword: mocks.changePassword,
       disableTwoFactor: mocks.disableTwoFactor,
       generateBackupCodes: mocks.generateBackupCodes,
       revokeOtherSessions: mocks.revokeOtherSessions,
@@ -67,16 +77,25 @@ vi.mock("@/lib/auth/session", () => ({ getRawAuthSession: mocks.getRawAuthSessio
 vi.mock("@/lib/auth/second-factor-reset", () => ({
   forgetTrustedDevices: mocks.forgetTrustedDevices,
 }))
+vi.mock("@/lib/auth/authenticator-reset-service", () => ({
+  withdrawPendingAuthenticatorResetRequests: mocks.withdrawPendingAuthenticatorResetRequests,
+}))
 vi.mock("@/lib/data", () => ({
-  sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },
+  sessionProvider: {
+    getCurrentIdentity: mocks.getCurrentIdentity,
+    hasActiveSession: mocks.hasActiveSession,
+  },
 }))
 
 import {
+  changePasswordAction,
   reissueRecoveryCodesAction,
   removePinAction,
   revokeOtherSessionsAction,
+  revokeSessionAction,
   savePinAction,
 } from "@/app/account/security/actions"
+import { SESSION_EXPIRED_DIGEST } from "@/lib/actions/operational-result"
 
 function passwordData() {
   const formData = new FormData()
@@ -330,6 +349,100 @@ describe("reissuing the authenticator recovery codes", () => {
   })
 })
 
+/**
+ * M040. The current password is verified before Better Auth is asked to change
+ * it, so a throw from the change is never a wrong current password -- and
+ * Better Auth writes the new password and drops every session before the last
+ * step that can still throw.
+ */
+describe("changing the password when Better Auth throws part-way", () => {
+  function changeData() {
+    const formData = passwordData()
+    formData.set("newPassword", "A brand new secure password!")
+    formData.set("confirmPassword", "A brand new secure password!")
+    return formData
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getCurrentIdentity.mockResolvedValue({
+      academyId: "SMBA-HC-0001",
+      role: "coach",
+      subjectId: "head-coach",
+    })
+    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("verified")
+    mocks.changePassword.mockRejectedValue(new Error("session could not be created"))
+  })
+
+  /*
+   * This browser's session went with the others, so re-rendering the security
+   * page would bounce to a bare sign-in page and swallow any returned message.
+   * The news goes to the sign-in page instead.
+   */
+  it("sends the person to sign in with word that the password changed, when the new one took", async () => {
+    mocks.verifyCurrentPassword.mockResolvedValue(true)
+    mocks.hasActiveSession.mockResolvedValue(false)
+
+    await expect(changePasswordAction({ error: null, success: null }, changeData()))
+      .rejects.toThrow("NEXT_REDIRECT:/login?notice=password-changed")
+    expect(mocks.verifyCurrentPassword).toHaveBeenCalledWith({
+      accountId: "head-coach",
+      password: "A brand new secure password!",
+    })
+    expect(mocks.removePinCredential).toHaveBeenCalledWith("head-coach")
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("stays on the page when the throw came after this browser was signed in again", async () => {
+    mocks.verifyCurrentPassword.mockResolvedValue(true)
+    mocks.hasActiveSession.mockResolvedValue(true)
+
+    await expect(changePasswordAction({ error: null, success: null }, changeData()))
+      .resolves.toEqual({
+        error: null,
+        success: "Password changed. Other devices were logged out and any PIN was removed.",
+      })
+    expect(mocks.removePinCredential).toHaveBeenCalledWith("head-coach")
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/account/security")
+  })
+
+  it("does not blame the current password when the change did not take", async () => {
+    mocks.verifyCurrentPassword.mockResolvedValue(false)
+    mocks.hasActiveSession.mockResolvedValue(true)
+
+    await expect(changePasswordAction({ error: null, success: null }, changeData()))
+      .resolves.toEqual({
+        error: "Your password could not be changed. Your current password still works. Try again.",
+        errorField: null,
+        success: null,
+      })
+    expect(mocks.removePinCredential).not.toHaveBeenCalled()
+  })
+
+  it("says when every device was already logged out before the change failed", async () => {
+    mocks.verifyCurrentPassword.mockResolvedValue(false)
+    mocks.hasActiveSession.mockResolvedValue(false)
+
+    const result = await changePasswordAction({ error: null, success: null }, changeData())
+    expect(result.success).toBeNull()
+    expect(result.error).toContain("every device, this one included, was logged out")
+    expect(result.error).toContain("sign in again with it")
+    expect(result.error).not.toContain("Try again.")
+  })
+
+})
+
+describe("a sign-in that ran out while the security page was open", () => {
+  it("is refused as an expired sign-in the browser can recognise", async () => {
+    vi.clearAllMocks()
+    mocks.getCurrentIdentity.mockResolvedValue(null)
+
+    await expect(changePasswordAction({ error: null, success: null }, passwordData()))
+      .rejects.toMatchObject({ digest: SESSION_EXPIRED_DIGEST })
+    expect(mocks.changePassword).not.toHaveBeenCalled()
+  })
+})
+
 describe("logging out other devices", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -350,5 +463,42 @@ describe("logging out other devices", () => {
     }))
     // Still never touches the PIN; see the action's own comment.
     expect(mocks.removePinCredential).not.toHaveBeenCalled()
+  })
+})
+
+describe("during an admin preview", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getCurrentIdentity.mockResolvedValue({
+      academyId: "SMBA-PL-0004",
+      actorSubjectId: "owner",
+      previewMode: true,
+      role: "player",
+      subjectId: "player-4",
+    })
+    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("verified")
+  })
+
+  it("refuses every account security change, before any credential or session is touched", async () => {
+    const pinForm = passwordData()
+    pinForm.set("pin", "482916")
+    pinForm.set("confirmPin", "482916")
+    const passwordForm = passwordData()
+    passwordForm.set("newPassword", "A brand new secure password!")
+    passwordForm.set("confirmPassword", "A brand new secure password!")
+
+    await expect(revokeSessionAction("player-session")).rejects.toThrow(/read-only/u)
+    await expect(revokeOtherSessionsAction()).rejects.toThrow(/read-only/u)
+    await expect(savePinAction({ error: null, success: null }, pinForm)).rejects.toThrow(/read-only/u)
+    await expect(removePinAction({ error: null, success: null }, passwordData())).rejects.toThrow(/read-only/u)
+    await expect(changePasswordAction({ error: null, success: null }, passwordForm))
+      .rejects.toThrow(/read-only/u)
+
+    expect(mocks.revokeOtherSessions).not.toHaveBeenCalled()
+    expect(mocks.forgetTrustedDevices).not.toHaveBeenCalled()
+    expect(mocks.verifyCurrentPasswordAttempt).not.toHaveBeenCalled()
+    expect(mocks.setPinCredential).not.toHaveBeenCalled()
+    expect(mocks.removePinCredential).not.toHaveBeenCalled()
+    expect(mocks.writeAuthSecurityEvent).not.toHaveBeenCalled()
   })
 })

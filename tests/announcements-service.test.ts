@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 
 import {
+  countActiveCoachAnnouncements,
+  firstCoachAnnouncementMonth,
   getActiveHomepageAnnouncement,
   getActivePlayerAnnouncement,
   listActiveHomepageAnnouncements,
@@ -136,11 +138,27 @@ describe("announcement publication", () => {
     expect(retry.announcement.id).toBe(FIRST_ANNOUNCEMENT_ID)
     expect(database.select().from(schema.broadcasts).all()).toHaveLength(1)
 
+    // A retry whose reply was lost before midnight is still recognised after
+    // it, rather than refused because "today" is now past the expiry date.
+    const afterMidnight = await publishAnnouncement(input, {
+      coachId: HEAD_COACH_ID,
+      createId: () => SECOND_ANNOUNCEMENT_ID,
+      database,
+      now: new Date("2026-08-10T00:05:00+05:30"),
+    })
+    expect(afterMidnight.reusedPublication).toBe(true)
+    expect(database.select().from(schema.broadcasts).all()).toHaveLength(1)
+
     await expect(publishAnnouncement({ ...input, title: "Different title" }, {
       coachId: HEAD_COACH_ID,
       database,
       now: NOW,
-    })).rejects.toMatchObject({ code: "PUBLICATION_CONFLICT" })
+    })).rejects.toMatchObject({
+      code: "PUBLICATION_CONFLICT",
+      // Names the version that is live, so the composer can link straight to it.
+      announcementId: FIRST_ANNOUNCEMENT_ID,
+    })
+    expect(database.select().from(schema.broadcasts).all()).toHaveLength(1)
   })
 
   it("validates content, channels, expiry and head-admin authorization before writing", async () => {
@@ -262,6 +280,58 @@ describe("announcement presentation and withdrawal", () => {
       code: "ALREADY_WITHDRAWN",
     })
   })
+
+  it("refuses to pin a notice that has expired", async () => {
+    const expiring = await publishAnnouncement({
+      title: "Today only",
+      content: "Courts close early today.",
+      channels: ["player_dashboard"],
+      expiresOn: "2026-08-09",
+      publicationKey: "46464646-4646-4646-8646-464646464646",
+    }, { coachId: HEAD_COACH_ID, createId: () => SECOND_ANNOUNCEMENT_ID, database, now: NOW })
+    const nextDay = new Date("2026-08-10T09:00:00+05:30")
+    await expect(setAnnouncementPinned({
+      announcementId: expiring.announcement.id,
+      expectedPresentationRevision: 0,
+      pinned: true,
+    }, { coachId: HEAD_COACH_ID, database, now: nextDay })).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    })
+  })
+})
+
+describe("the coach's announcement archive", () => {
+  it("lists live notices from earlier months and knows the first month with any", async () => {
+    const lastMonth = new Date("2026-07-20T10:00:00+05:30")
+    await publishAnnouncement({
+      title: "Standing notice",
+      content: "Bring your own shuttles.",
+      channels: ["homepage"],
+      pinned: true,
+      publicationKey: "47474747-4747-4747-8747-474747474747",
+    }, { coachId: HEAD_COACH_ID, createId: () => FIRST_ANNOUNCEMENT_ID, database, now: lastMonth })
+    await publishAnnouncement({
+      title: "This month",
+      content: "Training begins on time.",
+      channels: ["homepage"],
+      publicationKey: "48484848-4848-4848-8848-484848484848",
+    }, { coachId: HEAD_COACH_ID, createId: () => SECOND_ANNOUNCEMENT_ID, database, now: NOW })
+    const context = { coachId: HEAD_COACH_ID, database, now: NOW }
+
+    // The dashboard counts both; the month view alone shows one.
+    expect(countActiveCoachAnnouncements(context)).toBe(2)
+    expect(listCoachAnnouncements({ month: "2026-08" }, context).map(({ id }) => id))
+      .toEqual([SECOND_ANNOUNCEMENT_ID])
+    expect(listCoachAnnouncements({
+      publishedBeforeMonth: "2026-08",
+      status: "active",
+    }, context).map(({ id }) => id)).toEqual([FIRST_ANNOUNCEMENT_ID])
+    expect(firstCoachAnnouncementMonth(context)).toBe("2026-07")
+  })
+
+  it("has no first month before anything is published", () => {
+    expect(firstCoachAnnouncementMonth({ coachId: HEAD_COACH_ID, database })).toBeNull()
+  })
 })
 
 describe("announcement audience queries", () => {
@@ -313,5 +383,12 @@ describe("announcement audience queries", () => {
 
     const tomorrow = new Date("2026-08-10T00:01:00+05:30")
     expect(listActiveHomepageAnnouncements({ database, now: tomorrow })).toEqual([])
+  })
+})
+
+describe("homepage announcements when the database fails", () => {
+  it("lets the fault through so the public route can log it", () => {
+    sqlite.close()
+    expect(() => listActiveHomepageAnnouncements({ database, now: NOW })).toThrow()
   })
 })

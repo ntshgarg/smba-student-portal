@@ -35,7 +35,7 @@ afterEach(() => {
   }
 })
 
-function academyDatabase({ owner = true }: { owner?: boolean } = {}) {
+function academyDatabase({ members = true, owner = true }: { members?: boolean; owner?: boolean } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "smba-reset-"))
   workspaces.push(directory)
   const file = path.join(directory, "academy.db")
@@ -71,8 +71,10 @@ function academyDatabase({ owner = true }: { owner?: boolean } = {}) {
   }
 
   if (owner) account(OWNER_ID, "platform_admin")
-  account("player-one", "player")
-  account("coach-one", "coach")
+  if (members) {
+    account("player-one", "player")
+    account("coach-one", "coach")
+  }
   sqlite.close()
   return { directory, file }
 }
@@ -256,6 +258,42 @@ describe("verifying an academy is empty", () => {
 
     const { stdout } = await run(file, ["--verify"])
     expect(stdout).toContain("The academy is empty")
+  }, 60_000)
+
+  it("still passes once the owner pairs a new authenticator and opens the head coach setup", async () => {
+    const { file } = academyDatabase()
+    await run(file, emptyArgs(file))
+
+    // Exactly what the handover asks of the owner next. Neither is an academy
+    // record, so neither may read as one left behind.
+    const owner = new Database(file)
+    owner.prepare(
+      "insert into auth_two_factors (id, user_id, secret, backup_codes, verified) values (?, ?, ?, ?, 1)",
+    ).run("tf-new", OWNER_ID, "NEW-SECRET", "codes")
+    owner.prepare(
+      "insert into auth_setup_claims (id, purpose, token_hash, created_by_account_id, expires_at, created_at, updated_at)"
+      + " values (?, 'head_coach_setup', ?, ?, ?, ?, ?)",
+    ).run("claim-1", "token-hash", OWNER_ID, NOW.getTime() + 3_600_000, NOW.getTime(), NOW.getTime())
+    owner.close()
+
+    const { stdout } = await run(file, ["--verify"])
+    expect(stdout).toContain("The academy is empty")
+  }, 60_000)
+
+  it("still fails when an authenticator belongs to someone other than the owner", async () => {
+    // Already empty: only the owner was ever added.
+    const { file } = academyDatabase({ members: false })
+
+    // Only the owner's account survives a reset, so somebody else's
+    // authenticator means the reset did not do its job.
+    const sqlite = new Database(file)
+    sqlite.pragma("foreign_keys = OFF")
+    sqlite.prepare(
+      "insert into auth_two_factors (id, user_id, secret, backup_codes) values (?, ?, ?, ?)",
+    ).run("tf-stranger", "someone-else", "SECRET", "codes")
+    sqlite.close()
+
+    await expect(run(file, ["--verify"])).rejects.toThrow(/still present/u)
   }, 60_000)
 
   it("fails while academy records remain", async () => {

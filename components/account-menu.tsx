@@ -15,9 +15,12 @@ type AccountIdentity = {
 
 export function AccountMenu({
   account,
+  previewMode = false,
   publicSiteHref,
 }: {
   account: AccountIdentity
+  // During a preview, Log out goes through Exit preview, the one allowed form.
+  previewMode?: boolean
   publicSiteHref: string
 }) {
   const [open, setOpen] = useState(false)
@@ -71,21 +74,33 @@ export function AccountMenu({
           inert={!open}
         >
           <p>
-            <span>Signed in as</span>
+            <span>{previewMode ? "Previewing as" : "Signed in as"}</span>
             <strong>{account.fullName}</strong>
           </p>
           <Link href={publicSiteHref} onClick={() => setOpen(false)}>
             Return to academy
           </Link>
-          <Link href="/account/security" onClick={() => setOpen(false)}>
-            Account security
-          </Link>
-          <form action={clearSession} data-unsaved-work-navigation="true">
-            <button type="submit">
-              Log out
-              <LogOut aria-hidden="true" />
-            </button>
-          </form>
+          {previewMode ? null : (
+            <Link href="/account/security" onClick={() => setOpen(false)}>
+              Account security
+            </Link>
+          )}
+          {previewMode ? (
+            <form action="/admin/preview/exit" method="post">
+              <input type="hidden" name="signOut" value="1" />
+              <button type="submit">
+                Exit preview and log out
+                <LogOut aria-hidden="true" />
+              </button>
+            </form>
+          ) : (
+            <form action={clearSession} data-unsaved-work-navigation="true">
+              <button type="submit">
+                Log out
+                <LogOut aria-hidden="true" />
+              </button>
+            </form>
+          )}
         </div>
       ) : null}
     </div>

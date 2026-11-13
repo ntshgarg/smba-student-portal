@@ -6,6 +6,10 @@
  * directly, and then fails at runtime the first time the form is submitted.
  */
 
+/** A refused code while checks from this connection are paused. */
+export const CODE_CHECKS_PAUSED_MESSAGE =
+  "Too many codes were tried from this connection. Wait 15 minutes, then ask for a new code: this one will have expired by then."
+
 export type RegistrationField =
   | "code"
   | "dateOfBirth"
@@ -23,6 +27,15 @@ export type RegistrationValues = {
 }
 
 export type RegistrationStanding = "new" | "pending" | "approved" | "rejected"
+
+/** Approved, set up, no password yet: both doors offer the password step only then. */
+export function passwordStepReachable(input: {
+  activated: boolean
+  onboardingCompleted: boolean
+  standing: RegistrationStanding | null
+}) {
+  return input.standing === "approved" && input.onboardingCompleted && !input.activated
+}
 
 /**
  * `values` rides the state so a refused submit re-renders what was typed. The
@@ -59,6 +72,15 @@ export const EMPTY_REGISTRATION_STATE: RegistrationFormState = {
   standing: null,
   step: "details",
   values: EMPTY_REGISTRATION_VALUES,
+}
+
+/** A request the head coach rejected, as the Rejected list on the intake register shows it. */
+export type RejectedRegistration = {
+  contactEmail: string | null
+  fullName: string
+  id: string
+  rejectedAt: string | null
+  requestedRole: "coach" | "player"
 }
 
 /**

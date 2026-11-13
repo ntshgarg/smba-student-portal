@@ -17,6 +17,7 @@ import {
   type SetAnnouncementPinnedInput,
   type WithdrawAnnouncementInput,
 } from "@/lib/announcements/contracts"
+import { getAnnouncementStatus } from "@/lib/announcements/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { initializeDatabase, type SmbaDatabase } from "@/lib/db/client"
 import {
@@ -33,16 +34,20 @@ const DATE_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u
 export class AnnouncementServiceError extends Error {
   readonly code: AnnouncementMutationCode
   readonly field?: AnnouncementMutationField
+  /** The announcement the refusal is about, when the coach may want to open it. */
+  readonly announcementId?: string
 
   constructor(
     code: AnnouncementMutationCode,
     message: string,
     field?: AnnouncementMutationField,
+    announcementId?: string,
   ) {
     super(message)
     this.name = "AnnouncementServiceError"
     this.code = code
     this.field = field
+    this.announcementId = announcementId
   }
 }
 
@@ -98,7 +103,7 @@ function publicationFingerprint(input: Omit<ValidatedPublication, "fingerprint">
   })).digest("hex")
 }
 
-function validatePublication(input: PublishAnnouncementInput, now: Date): ValidatedPublication {
+function validatePublication(input: PublishAnnouncementInput): ValidatedPublication {
   const title = normalizedSingleLine(input?.title)
   if (!title || title.length > ANNOUNCEMENT_TITLE_MAX_LENGTH) {
     fail(
@@ -143,12 +148,8 @@ function validatePublication(input: PublishAnnouncementInput, now: Date): Valida
   const expiresOn = typeof input?.expiresOn === "string" && input.expiresOn.trim()
     ? input.expiresOn.trim()
     : null
-  if (expiresOn && (!validDateKey(expiresOn) || expiresOn < getAcademyDateKey(now))) {
-    fail(
-      "INVALID_INPUT",
-      "Expiry must be today or a later academy date.",
-      "expiresOn",
-    )
+  if (expiresOn && !validDateKey(expiresOn)) {
+    fail("INVALID_INPUT", "Choose a valid expiry date.", "expiresOn")
   }
 
   const publicationKey = normalizedSingleLine(input?.publicationKey)
@@ -196,7 +197,7 @@ export async function publishAnnouncement(
   }: AnnouncementServiceContext,
 ): Promise<PublishAnnouncementResult> {
   requireHeadAdminAccess(coachId, { database })
-  const validated = validatePublication(input, now)
+  const validated = validatePublication(input)
 
   const publication = database.transaction((tx) => {
     requireHeadAdminAccess(coachId, { database: tx })
@@ -208,13 +209,25 @@ export async function publishAnnouncement(
       .get()
     if (existing) {
       if (existing.payloadFingerprint !== validated.fingerprint) {
-        fail(
+        // Another version sent under this key got here first; refuse this one
+        // rather than put up a second live notice, and name the live one.
+        throw new AnnouncementServiceError(
           "PUBLICATION_CONFLICT",
-          "This publication request was already used for a different announcement.",
+          "Another version of this announcement was already published. Nothing new was published.",
           "publicationKey",
+          existing.id,
         )
       }
       return { announcementId: existing.id, reusedPublication: true }
+    }
+    // Checked only for a new notice, so a retry that crosses midnight is still
+    // recognised as the one already published.
+    if (validated.expiresOn && validated.expiresOn < getAcademyDateKey(now)) {
+      fail(
+        "INVALID_INPUT",
+        "Expiry must be today or a later academy date.",
+        "expiresOn",
+      )
     }
 
     const announcementId = createId()
@@ -276,6 +289,7 @@ export async function setAnnouncementPinned(
   const result = database.transaction((tx) => {
     requireHeadAdminAccess(coachId, { database: tx })
     const current = tx.select({
+      expiresOn: broadcasts.expiresOn,
       pinned: broadcasts.pinned,
       presentationRevision: broadcasts.presentationRevision,
       withdrawnAt: broadcastWithdrawals.withdrawnAt,
@@ -291,6 +305,9 @@ export async function setAnnouncementPinned(
       fail("ALREADY_WITHDRAWN", "A withdrawn announcement cannot be pinned.", "announcementId")
     }
     if (current.pinned === input.pinned) return { reused: true }
+    if (input.pinned && getAnnouncementStatus(current, now) === "expired") {
+      fail("INVALID_INPUT", "An expired announcement cannot be pinned.", "announcementId")
+    }
     if (current.presentationRevision !== input.expectedPresentationRevision) {
       fail(
         "REVISION_CONFLICT",

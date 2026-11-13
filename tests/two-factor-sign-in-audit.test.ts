@@ -59,6 +59,7 @@ vi.mock("@/lib/auth/credential-service", () => ({
   releaseSecondFactorAttempt: mocks.releaseSecondFactorAttempt,
   reserveLoginAttempt: vi.fn(() => true),
   reserveSecondFactorAttempt: mocks.reserveSecondFactorAttempt,
+  secondFactorChecksPaused: vi.fn(() => false),
   verifyCurrentPassword: vi.fn(),
 }))
 vi.mock("@/lib/auth/post-auth-destination", () => ({
@@ -159,6 +160,18 @@ describe("second-factor sign-in is audited and metered per account", () => {
     expect(mocks.verifyBackupCode).not.toHaveBeenCalled()
     expect(mocks.writeAuthSecurityEvent).not.toHaveBeenCalled()
     expect(mocks.reserveSecondFactorAttempt).not.toHaveBeenCalled()
+  })
+
+  it("says to sign in again, not to wait for a new code, once the challenge is used up", async () => {
+    const usedUp = Object.assign(new Error("Too many attempts"), { body: { code: "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE" } })
+    mocks.verifyTOTP.mockRejectedValue(usedUp)
+    mocks.verifyBackupCode.mockRejectedValue(usedUp)
+    await expect(verifyTotpSignIn(initialState, form("code", "123456"))).resolves.toEqual({
+      error: "Your sign-in has expired. Sign in again.",
+    })
+    await expect(verifyBackupCodeSignIn(initialState, form("backupCode", "abcd-efgh"))).resolves.toEqual({
+      error: "Your sign-in has expired. Sign in again.",
+    })
   })
 
   // With a session in the request, Better Auth checks the code against the
@@ -285,6 +298,25 @@ describe("second-factor sign-in is audited and metered per account", () => {
     await expect(verifyTotpSignIn(initialState, form("code", "123456"))).resolves.toEqual({
       error: "Your sign-in has expired. Sign in again.",
     })
+    expect(mocks.verifyTOTP).not.toHaveBeenCalled()
+  })
+
+  /*
+   * M023. A signed-in caller is sent on to wherever their sign-in belongs. The
+   * destination used to be worked out as if the authenticator were connected,
+   * so a head coach who had walked away from setup went to /coach, which
+   * refused them to a blank sign-in form.
+   */
+  it("sends a signed-in head coach who owes an authenticator back to that step", async () => {
+    mocks.getRawAuthSession.mockResolvedValue({
+      user: { id: "head-coach", twoFactorEnabled: false },
+    })
+
+    await expect(verifyTotpSignIn(initialState, form("code", "123456"))).rejects.toThrow()
+    expect(mocks.postAuthenticationDestination).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: "head-coach",
+      twoFactorEnabled: false,
+    }))
     expect(mocks.verifyTOTP).not.toHaveBeenCalled()
   })
 })

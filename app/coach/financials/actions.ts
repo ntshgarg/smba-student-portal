@@ -180,6 +180,9 @@ export async function recordAllocatedPaymentAction(
 ): Promise<FinanceActionResult> {
   return runFinanceAction((coachId) => {
     const result = recordAllocatedPayment(input, { coachId })
+    if (result.reused && result.receipt.lifecycle === "reversed") {
+      return { message: "This payment was already recorded, and has since been reversed" }
+    }
     return { message: result.reused ? "Payment already recorded" : "Payment recorded" }
   })
 }
@@ -195,6 +198,9 @@ export async function recordRefundAction(
 ): Promise<FinanceActionResult> {
   return runFinanceAction((coachId) => {
     const result = recordRefund(input, { coachId })
+    if (result.reused && result.refund.lifecycle === "reversed") {
+      return { message: "This refund was already recorded, and has since been reversed" }
+    }
     return { message: result.reused ? "Refund already recorded" : "Refund recorded" }
   })
 }
@@ -204,7 +210,16 @@ export async function reverseRefundAction(
 ): Promise<FinanceActionResult> {
   return runFinanceAction((coachId) => {
     const result = reverseRefund(input, { coachId })
-    return { message: result.reused ? "Refund already reversed" : "Refund reversed" }
+    if (result.reused) return { message: "Refund already reversed" }
+    // The coach is told when the fee plan did not go back, so a player still
+    // training is not silently left with no fee plan.
+    if (result.feePlanRestored === false) {
+      return { message: "Refund reversed. The fee plan stays ended" }
+    }
+    if (result.feePlanRestored) {
+      return { message: "Refund reversed. The fee plan is back as it was before the refund" }
+    }
+    return { message: "Refund reversed" }
   })
 }
 

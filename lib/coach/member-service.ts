@@ -10,6 +10,7 @@ import {
   normalizedNameKey,
 } from "@/lib/auth/identity"
 import { normalizeEmailAddress, registrationSubjectKey } from "@/lib/auth/recovery-service"
+import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { academyToday } from "@/lib/clock"
 import type {
   ArchiveCoachInput,
@@ -33,11 +34,12 @@ import {
   playerEnrollments,
   sessionAssignments,
   sessionSeries,
+  trainingChanges,
 } from "@/lib/db/schema"
 import { readPlayerFinancialCloseoutState } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
-import { playerTrainingStatus } from "@/lib/sessions/term"
+import { formatTermDate, playerTrainingStatus } from "@/lib/sessions/term"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   type AcademyPlan,
@@ -292,6 +294,7 @@ export function updateMemberRecord({
       batch: playerEnrollments.batch,
       contactEmail: accounts.contactEmail,
       level: playerEnrollments.level,
+      onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
       recordRevision: playerEnrollments.recordRevision,
       registrationIdentityKey: accounts.registrationIdentityKey,
     }).from(accounts)
@@ -350,11 +353,16 @@ export function updateMemberRecord({
         isNull(sessionAssignments.effectiveTo),
       ))
       .all()
-    if (activeAssignments.length && (
-      validated.value.level !== current.level
+    const classificationChanges = validated.value.level !== current.level
       || validated.value.batch !== current.batch
       || validated.value.academyPlan !== current.academyPlan
-    )) {
+    if (classificationChanges && current.onboardingCompletedAt) {
+      return memberFailure(
+        "ACTIVE_ASSIGNMENTS",
+        "Change the level, batch or plan with Change schedule or Start training on the member record.",
+      )
+    }
+    if (activeAssignments.length && classificationChanges) {
       return memberFailure(
         "ACTIVE_ASSIGNMENTS",
         "End the player’s active sessions before changing their training classification.",
@@ -458,6 +466,22 @@ export function archiveMemberRecord({
         message: "End the player’s active sessions before archiving their membership.",
       }
     }
+    // A booked start of training would put an archived player back on a schedule.
+    const bookedStart = tx.select({ effectiveOn: trainingChanges.effectiveOn })
+      .from(trainingChanges)
+      .where(and(
+        eq(trainingChanges.playerAccountId, input.memberId),
+        eq(trainingChanges.status, "scheduled"),
+        eq(trainingChanges.kind, "change"),
+      ))
+      .get()
+    if (bookedStart) {
+      return {
+        ok: false,
+        code: "ACTIVE_ASSIGNMENTS",
+        message: `Training is booked to start on ${formatTermDate(bookedStart.effectiveOn)}. Cancel that booked change in Members before archiving this member.`,
+      }
+    }
 
     const financialCloseout = readPlayerFinancialCloseoutState(tx, input.memberId, now)
     if (financialCloseout.hasOpenFeePlan || financialCloseout.hasOutstandingBalance) {
@@ -494,7 +518,7 @@ export function archiveMemberRecord({
     if (accountUpdate.changes !== 1 || enrollmentUpdate.changes !== 1) {
       throw new Error("Member changed during an immediate archive transaction.")
     }
-    revokePortalAccess(tx, input.memberId, now)
+    revokePortalAccess(tx, input.memberId, now, coachId)
 
     return { ok: true, memberId: input.memberId }
   }, { behavior: "immediate" })
@@ -503,9 +527,20 @@ export function archiveMemberRecord({
 /**
  * Switches off every way an archived account signs in: the Academy ID, every
  * open session, and the credential (so activation, recovery and the PIN all
- * refuse it). Shared by player and coach archiving so the two cannot drift.
+ * refuse it), and logs who archived it. Shared by player and coach archiving.
  */
-function revokePortalAccess(tx: SmbaDatabaseExecutor, accountId: string, now: Date) {
+function revokePortalAccess(
+  tx: SmbaDatabaseExecutor,
+  accountId: string,
+  now: Date,
+  archivedByAccountId: string,
+) {
+  writeAuthSecurityEvent({
+    accountId,
+    actorAccountId: archivedByAccountId,
+    eventType: "account_archived",
+    outcome: "success",
+  }, { database: tx, now })
   tx.update(authMethods).set({ revokedAt: now }).where(and(
     eq(authMethods.accountId, accountId),
     isNull(authMethods.revokedAt),
@@ -585,7 +620,7 @@ export function archiveCoachRecord({
     if (accountUpdate.changes !== 1) {
       throw new Error("Coach changed during an immediate archive transaction.")
     }
-    revokePortalAccess(tx, input.coachAccountId, now)
+    revokePortalAccess(tx, input.coachAccountId, now, coachId)
 
     return { ok: true, coachAccountId: input.coachAccountId }
   }, { behavior: "immediate" })

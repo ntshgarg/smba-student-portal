@@ -63,6 +63,9 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const requestKey = useIdempotencyKey()
+  // After a save whose reply was lost, the same key goes with an edited retry,
+  // so a credit or charge that did save cannot be saved a second time.
+  const keepKey = useRef(false)
   const feedbackId = `correction-feedback-${ledger.playerId}`
   const invalidField = feedback?.tone === "error" ? feedback.field : undefined
 
@@ -75,7 +78,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
   function markDirty() {
     setDirty(true)
     setFeedback(null)
-    requestKey.reset()
+    if (!keepKey.current) requestKey.reset()
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -145,6 +148,16 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
         })
       }
 
+      keepKey.current = false
+      if (!result.ok && result.code === "IDEMPOTENCY_CONFLICT") {
+        requestKey.reset()
+        setFeedback({
+          message: "Your earlier correction was saved before the connection dropped. Check the record before adding another.",
+          tone: "error",
+        })
+        router.refresh()
+        return
+      }
       setFeedback(resultFeedback(result))
       if (result.ok) {
         requestKey.reset()
@@ -152,15 +165,19 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
         setAmount("")
         setReason("")
         router.refresh()
+      } else if (result.code === "BALANCE_CHANGED") {
+        // Load the fee as it is now, so the next try is checked against it.
+        router.refresh()
       }
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The correction could not be saved",
         retained: "Your correction details are still on screen",
         subject: "The correction",
       })
+      keepKey.current = true
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -250,7 +267,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
           </label>
 
           <div className={styles.paymentFooter}>
-            <InlineNotice className={styles.notice} id={feedbackId} message={feedback?.message} tone={feedback?.tone} />
+            <InlineNotice action={feedback?.action} className={styles.notice} id={feedbackId} message={feedback?.message} tone={feedback?.tone} />
             <button className={styles.correctionButton} type="submit" disabled={pending || (mode === "reverse_payment" && !paymentId) || (mode === "reverse_adjustment" && !adjustmentId) || (mode === "void_charge" && !chargeId)}>
               {pending ? "Saving…" : feedback?.offerRetry ? "Apply correction again" : "Apply correction"}
             </button>

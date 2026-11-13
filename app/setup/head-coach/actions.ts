@@ -8,6 +8,7 @@ import { signInWithJustWrittenPassword } from "@/lib/auth/username-login-guard"
 import {
   completeInitialHeadCoachSetup,
   HEAD_COACH_SETUP_COOKIE,
+  HEAD_COACH_SETUP_NAME_COOKIE,
   type HeadCoachSetupField,
   headCoachSetupAvailable,
   validHeadCoachSetupToken,
@@ -31,7 +32,7 @@ export async function completeHeadCoachSetupAction(
   const setupToken = cookieStore.get(HEAD_COACH_SETUP_COOKIE)?.value
   if (!validHeadCoachSetupToken(setupToken) || !headCoachSetupAvailable()) {
     return {
-      error: "This one-time setup session is unavailable or has already been used.",
+      error: "This setup session has expired, was replaced by a newer one opened on another device, or has already been completed. Ask the academy owner to open setup again if you still need it.",
       errorField: null,
     }
   }
@@ -60,15 +61,11 @@ export async function completeHeadCoachSetupAction(
     }
   }
 
-  // The academy exists from here on and `headCoachSetupAvailable()` is false, so
-  // both one-time cookies are spent whatever the sign-in does; keeping them only
-  // leaves a dead token in the browser and a second attempt that can only answer
-  // "already used". The sign-in itself is exempt from the login lockout because
-  // the password it presents is the one just written (lib/auth/username-login-guard.ts),
-  // and a refusal for any other reason is reported as a missing session rather
-  // than as a failed setup, which is what it is.
-  cookieStore.delete(HEAD_COACH_SETUP_COOKIE)
-  cookieStore.delete(HEAD_SETUP_EMAIL_COOKIE)
+  // The academy exists from here on and `headCoachSetupAvailable()` is false.
+  // The sign-in is exempt from the login lockout because the password it
+  // presents is the one just written (lib/auth/username-login-guard.ts), and a
+  // refusal for any other reason is reported as a missing session rather than
+  // as a failed setup, which is what it is.
   const requestHeaders = await headers()
   try {
     await signInWithJustWrittenPassword(() => getAuth().api.signInUsername({
@@ -76,11 +73,16 @@ export async function completeHeadCoachSetupAction(
       headers: requestHeaders,
     }))
   } catch {
+    // Spent cookies kept so the page still shows this message.
     return {
       error: "The head-coach account is ready, but we couldn\u2019t sign you in."
         + " Open the sign-in page and use your new password.",
       errorField: null,
     }
+  }
+  // Set at Path=/setup/head-coach, so the delete must name that path.
+  for (const name of [HEAD_COACH_SETUP_COOKIE, HEAD_SETUP_EMAIL_COOKIE, HEAD_COACH_SETUP_NAME_COOKIE]) {
+    cookieStore.delete({ name, path: "/setup/head-coach" })
   }
   redirect("/auth/two-factor/setup")
 }

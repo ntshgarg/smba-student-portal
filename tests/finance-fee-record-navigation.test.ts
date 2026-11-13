@@ -28,7 +28,8 @@ describe("coach Fee Records navigation", () => {
     expect(route).toContain("const PAGE_SIZE = 10")
     expect(route).toContain("const COLLECTION_PAGE_SIZE = 10")
     expect(route).toContain("const ACTIVITY_PAGE_SIZE = 20")
-    expect(route).toContain("const cursor = trail.at(-1)")
+    expect(route).toContain("const trail = readRecordsTrail(params.cursors)")
+    expect(route).toContain("load(trail.at(-1))")
     expect(route).toContain("pageSize: PAGE_SIZE")
     expect(route).toContain("pageSize: COLLECTION_PAGE_SIZE")
     expect(route).toContain("pageSize: ACTIVITY_PAGE_SIZE")
@@ -62,11 +63,12 @@ describe("coach Fee Records navigation", () => {
     const route = source("app/coach/financials/players/[playerId]/page.tsx")
 
     expect(records).not.toContain("showPaymentEntry")
-    expect(records).toContain("hasPayableBalance && !ledger.archived")
-    expect(records).not.toContain("hasActiveFeePlan && hasPayableBalance")
-    expect(records).toContain('charge.type === "registration"')
-    expect(records).toContain("charge.billingPeriod ?? paymentPeriod")
-    expect(route).toContain("paymentPeriod={paymentPeriod}")
+    // "Record payment" is offered exactly when the payment desk opens the
+    // player: the desk's own rule decides, not the record's balance.
+    expect(records).toContain("canRecordPayment && !ledger.archived")
+    expect(records).not.toContain("hasPayableBalance")
+    expect(route).toContain("canRecordPaymentAtDesk(record")
+    expect(route).toContain("canRecordPayment={canRecordPayment}")
     expect(records).toContain('scope: "outstanding"')
     expect(records).toContain("Download statement")
     expect(ledger).not.toContain("showPaymentEntry")
@@ -87,7 +89,7 @@ describe("coach Fee Records navigation", () => {
     expect(route).toContain("REGISTER_MODES")
     expect(route).toContain("PLAYER_SCOPES")
     expect(route).toContain("REGISTER_STATUSES")
-    expect(route).toContain("validCursorTrail")
+    expect(route).toContain("readRecordsTrail(query.cursors)")
     expect(route).toContain('backSearch.set("q", registerQuery)')
     expect(route).toContain('backSearch.set("cursors", cursors)')
   })
@@ -95,7 +97,7 @@ describe("coach Fee Records navigation", () => {
   it("keeps archived concession history visible without archived mutation controls", () => {
     const ledger = ledgerSource()
 
-    expect(ledger).toContain("ledger.archived && ledger.management.concessions.length > 0")
+    expect(ledger).toContain("|| ledger.management.concessions.length > 0")
     expect(ledger).toContain("Concessions previously recorded for this player.")
     expect(ledger).toContain("ledger.archived ? null : (")
   })

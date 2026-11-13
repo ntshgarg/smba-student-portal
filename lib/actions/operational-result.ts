@@ -1,3 +1,6 @@
+/** The digest Next.js keeps on a thrown expiry; the only part of it a browser sees. */
+export const SESSION_EXPIRED_DIGEST = "SMBA_SESSION_EXPIRED"
+
 export type OperationalActionErrorCode =
   | "BUSINESS_RULE"
   | "CONFLICT"
@@ -73,10 +76,13 @@ export function operationalActionFailure(
  * and a digest -- "The specific message is omitted in production builds to avoid
  * leaking sensitive details", in the vendored
  * react-server-dom-turbopack-client.browser.production.js -- discarding the
- * class, the message and every own property. Only a value survives the
- * boundary.
+ * class, the message and every own property but `digest`. A value survives the
+ * boundary whole; a throw survives only as its digest, which is why the class
+ * carries `SESSION_EXPIRED_DIGEST`.
  */
 export class SessionExpiredError extends OperationalActionError {
+  readonly digest = SESSION_EXPIRED_DIGEST
+
   constructor() {
     super(
       "SESSION_EXPIRED",

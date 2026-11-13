@@ -196,7 +196,7 @@ export function PlayerAttendanceCard({
               {playerState === "active"
                 ? "This month’s record begins when your first session starts."
                 : playerState === "paused"
-                  ? "Your existing attendance record remains available while training is paused."
+                  ? "Your past attendance stays here for you to look back on."
                   : playerState === "term-finished"
                     ? termFinishedOn
                       ? `Your term finished on ${formatTermDate(termFinishedOn)}. Your attendance from it stays in your record.`

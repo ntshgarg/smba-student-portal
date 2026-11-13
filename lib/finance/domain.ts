@@ -104,6 +104,38 @@ export function withdrawalCanClosePlan({
   return agreement.effectiveTo === monthEnd(period) && !laterPlanExists
 }
 
+/**
+ * The days a member's withdrawal can be dated for an unused-days refund on a
+ * month's fee, or null when no day qualifies. The server refuses any other
+ * date (lib/finance/service.ts withdrawalRefundablePaymentAllocations), so the
+ * coach's receipt list offers the refund, and the form allows a date, only
+ * inside this window:
+ *
+ * - strictly inside the fee's month: leaving on the 1st or the last day
+ *   leaves no part-month to refund;
+ * - not before the fee was paid in full, nor before the fee plan began;
+ * - not after today.
+ */
+export function withdrawalDateWindow({
+  paidOn,
+  period,
+  planStartsOn,
+  today,
+}: {
+  /** The day the last payment on the fee was received. */
+  paidOn: string | null
+  period: string
+  planStartsOn: string
+  today: string
+}) {
+  const earliest = [addCalendarDays(monthStart(period), 1), paidOn, planStartsOn]
+    .filter((value): value is string => value !== null)
+    .reduce((latest, value) => (value > latest ? value : latest))
+  const lastDay = addCalendarDays(monthEnd(period), -1)
+  const latest = lastDay < today ? lastDay : today
+  return earliest <= latest ? { earliest, latest } : null
+}
+
 export function calculateUnusedMonthRefundLimit(
   effectiveAmountPaise: number,
   billingPeriod: string,
@@ -237,8 +269,12 @@ export function deriveFinanceStatus(
   if (charge.lifecycle === "void") return "void"
   const ledger = calculateChargeLedger(charge)
   if (ledger.outstandingPaise === 0) return "paid"
-  if (ledger.receivedPaise > 0) return "partially_paid"
-  return charge.dueDate < referenceDate ? "overdue" : "pending"
+  // A balance still owed after its due date is overdue whether or not part of
+  // it was paid. A part-payment used to keep the fee "Partially paid" for
+  // good, so it dropped out of the coach's Overdue list and the family was
+  // told the rest was "due by" a date already past.
+  if (charge.dueDate < referenceDate) return "overdue"
+  return ledger.receivedPaise > 0 ? "partially_paid" : "pending"
 }
 
 export function combineFinanceStatuses(statuses: FinanceStatus[]): FinanceStatus {

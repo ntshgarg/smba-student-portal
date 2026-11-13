@@ -49,6 +49,7 @@ vi.mock("@/lib/auth/username-login-guard", () => ({
 vi.mock("@/lib/auth/initial-setup", () => ({
   completeInitialHeadCoachSetup: mocks.completeInitialHeadCoachSetup,
   HEAD_COACH_SETUP_COOKIE: "smba_head_coach_setup",
+  HEAD_COACH_SETUP_NAME_COOKIE: "smba_head_coach_setup_name",
   headCoachSetupAvailable: vi.fn(() => true),
   validHeadCoachSetupToken: vi.fn(() => true),
   validateInitialHeadCoachSetup: vi.fn(() => null),
@@ -85,8 +86,9 @@ describe("first-run head-coach setup action", () => {
 
     await completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())
 
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_coach_setup")
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_setup_email")
+    expect(mocks.cookieDelete).toHaveBeenCalledWith({ name: "smba_head_coach_setup", path: "/setup/head-coach" })
+    expect(mocks.cookieDelete).toHaveBeenCalledWith({ name: "smba_head_setup_email", path: "/setup/head-coach" })
+    expect(mocks.cookieDelete).toHaveBeenCalledWith({ name: "smba_head_coach_setup_name", path: "/setup/head-coach" })
     expect(mocks.redirect).toHaveBeenCalledWith("/auth/two-factor/setup")
   })
 
@@ -104,9 +106,13 @@ describe("first-run head-coach setup action", () => {
   })
 
   // The academy exists from here on, so the setup did not fail -- only the
-  // session did. Reporting the endpoint's refusal as a setup failure, or
-  // leaving the one-time cookies behind for a retry that can only answer
-  // "already used", strands the one account that can run the academy.
+  // session did, and reporting the endpoint's refusal as a setup failure
+  // strands the one account that can run the academy.
+  //
+  // The one-time cookies stay put on this path. They are already spent, so
+  // they open nothing; deleting them re-rendered the page as "setup
+  // unavailable", which hid this message -- the only thing on screen that
+  // told the coach their account was ready.
   it("reports a refused session as a missing session, not as a failed setup", async () => {
     mocks.signInUsername.mockRejectedValue(Object.assign(new Error("rate limited"), {
       status: "TOO_MANY_REQUESTS",
@@ -117,9 +123,22 @@ describe("first-run head-coach setup action", () => {
         + " Open the sign-in page and use your new password.",
       errorField: null,
     })
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_coach_setup")
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_head_setup_email")
+    expect(mocks.cookieDelete).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
+  })
+
+  // The verified email has its own time limit; account creation says plainly when it ran out.
+  it("puts the email step back when the verified email has run out", async () => {
+    mocks.completeInitialHeadCoachSetup.mockRejectedValue(
+      new Error("The email check ran out. Reload this page to verify the coach’s email again."),
+    )
+
+    await expect(completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())).resolves.toEqual({
+      error: "The email check ran out. Reload this page to verify the coach’s email again.",
+      errorField: null,
+    })
+    // Changing a cookie re-renders the page and would hide this message.
+    expect(mocks.cookieDelete).not.toHaveBeenCalled()
   })
 
   // A genuine creation failure still has to read as one, and the one-time

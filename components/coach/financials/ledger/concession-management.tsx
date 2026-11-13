@@ -1,6 +1,6 @@
 "use client"
 
-import { formatInr } from "@/lib/format"
+import { formatInr, getAcademyMonthKey } from "@/lib/format"
 import type { CoachConcessionView } from "@/lib/finance/types"
 
 import { formatDueDate, periodLabel } from "../financials-client-utils"
@@ -23,6 +23,10 @@ export function ConcessionManagement({
   period: string
 }) {
   const concessions = ledger.management.concessions
+  const thisMonth = getAcademyMonthKey()
+  // A recurring concession whose last month has passed reads as ended, as in Members.
+  const running = (concession: CoachConcessionView) => concession.lifecycle === "active"
+    && !(concession.endsPeriod && concession.endsPeriod < thisMonth)
 
   return (
     <details className={styles.concessions}>
@@ -46,8 +50,8 @@ export function ConcessionManagement({
                     <span>{concession.mode === "one_off" ? "One-off" : "Recurring monthly"}</span>
                     <strong>{concessionValueLabel(concession)}</strong>
                   </div>
-                  <em className={concession.lifecycle === "active" ? undefined : styles.concessionEnded}>
-                    {concession.lifecycle === "active" ? "Active" : "Ended"}
+                  <em className={running(concession) ? undefined : styles.concessionEnded}>
+                    {running(concession) ? "Active" : "Ended"}
                   </em>
                 </header>
                 <p>{concession.reason}</p>

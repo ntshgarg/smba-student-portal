@@ -27,9 +27,9 @@ import styles from "./announcements.module.css"
  * from — and then re-reads the announcement. Matches the composer's publish
  * deadline for the same reason: courtside connections stall rather than fail,
  * and this only has to beat an indefinite hang. It is a deadline, not a
- * cancellation — see `withSaveDeadline`.
+ * cancellation — see `withSaveDeadline`. Pin and unpin use it too.
  */
-const withdrawDeadlineMs = 20_000
+const actionDeadlineMs = 20_000
 
 function WithdrawDialog({
   announcementId,
@@ -91,10 +91,12 @@ function WithdrawDialog({
     try {
       const result = await withSaveDeadline(
         withdrawAnnouncementAction({ announcementId, reason: normalizedReason }),
-        withdrawDeadlineMs,
+        actionDeadlineMs,
       )
       if (!result.ok) {
-        if (dismissed.current) {
+        // Already withdrawn: the page behind is out of date, so leave the
+        // dialog and let the page show the withdrawal.
+        if (dismissed.current || result.code === "ALREADY_WITHDRAWN") {
           onFailureAfterExit(result.message)
           return
         }
@@ -106,7 +108,6 @@ function WithdrawDialog({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The announcement could not be withdrawn",
         retained: "Your reason is still here",
         subject: "The withdrawal",
       })
@@ -114,7 +115,7 @@ function WithdrawDialog({
         onFailureAfterExit(failure.message)
         return
       }
-      setFeedback({ message: failure.message, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
       reasonRef.current?.focus()
     } finally {
       setPending(false)
@@ -178,7 +179,7 @@ function WithdrawDialog({
             {reason.length}/250 · visible only to the head coach
           </small>
         </label>
-        <InlineNotice message={feedback?.message} tone={feedback?.tone} />
+        <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} />
         <div className={styles.dialogActions}>
           <button type="button" onClick={onClose}>Keep announcement</button>
           <button
@@ -215,18 +216,29 @@ export function PublishedAnnouncementDetail({
     publishedNow ? { message: "Announcement published", tone: "success" } : null,
   )
 
+  // The success note is shown once; drop ?published=1 so a reload does not
+  // bring it back over a notice that may since have been withdrawn.
+  useEffect(() => {
+    if (!publishedNow) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete("published")
+    window.history.replaceState(null, "", url)
+  }, [publishedNow])
+
   async function togglePin() {
-    if (pinPending || announcement.status === "withdrawn") return
+    if (pinPending || announcement.status !== "active") return
     setPinPending(true)
     setFeedback(null)
     try {
-      const result = await setAnnouncementPinnedAction({
+      const result = await withSaveDeadline(setAnnouncementPinnedAction({
         announcementId: announcement.id,
         expectedPresentationRevision: announcement.presentationRevision,
         pinned: !announcement.pinned,
-      })
+      }), actionDeadlineMs)
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
+        // A refusal means the notice changed elsewhere; show it as it is now.
+        router.refresh()
         return
       }
       setFeedback({
@@ -234,8 +246,14 @@ export function PublishedAnnouncementDetail({
         tone: "success",
       })
       router.refresh()
-    } catch {
-      setFeedback({ message: "The display priority could not be updated.", tone: "error" })
+    } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        retained: "Nothing was changed",
+        subject: announcement.pinned ? "Unpinning the announcement" : "Pinning the announcement",
+        unconfirmed: "Reload the page to see whether it changed",
+      })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPinPending(false)
     }
@@ -263,7 +281,7 @@ export function PublishedAnnouncementDetail({
         </span>
       </header>
 
-      <InlineNotice className={styles.detailNotice} message={feedback?.message} tone={feedback?.tone} />
+      <InlineNotice action={feedback?.action} className={styles.detailNotice} message={feedback?.message} tone={feedback?.tone} />
 
       <article className={styles.detailPanel}>
         <div className={styles.detailMessage}>
@@ -304,10 +322,12 @@ export function PublishedAnnouncementDetail({
               ))}
             </dd>
           </div>
-          <div>
-            <dt>Display priority</dt>
-            <dd>{announcement.pinned ? "Pinned" : "Standard"}</dd>
-          </div>
+          {announcement.status === "active" ? (
+            <div>
+              <dt>Display priority</dt>
+              <dd>{announcement.pinned ? "Pinned" : "Standard"}</dd>
+            </div>
+          ) : null}
         </dl>
 
         {announcement.withdrawal ? (
@@ -324,7 +344,9 @@ export function PublishedAnnouncementDetail({
           </aside>
         ) : null}
 
-        {announcement.status !== "withdrawn" ? (
+        {/* An expired notice is already off every screen, so there is nothing
+            left to pin or withdraw; it stays here as history. */}
+        {announcement.status === "active" ? (
           <div className={styles.detailActions}>
             <button type="button" onClick={togglePin} disabled={pinPending}>
               {announcement.pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
@@ -346,7 +368,11 @@ export function PublishedAnnouncementDetail({
         <WithdrawDialog
           announcementId={announcement.id}
           onClose={() => setWithdrawOpen(false)}
-          onFailureAfterExit={(message) => setFeedback({ message, tone: "error" })}
+          onFailureAfterExit={(message) => {
+            setWithdrawOpen(false)
+            setFeedback({ message, tone: "error" })
+            router.refresh()
+          }}
           onReasonChange={setWithdrawalReason}
           onWithdrawn={handleWithdrawn}
           reason={withdrawalReason}

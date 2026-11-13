@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, lt, lte, or, type SQL } from "drizzle-orm"
 
 import { formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -18,8 +18,7 @@ import {
   refundAllocations,
   refunds,
 } from "@/lib/db/schema"
-import { monthEnd, monthStart } from "@/lib/finance/domain"
-import { loadChargeViews } from "@/lib/finance/repository"
+import { listPlayersTrainingWithoutFeePlan, loadChargeViews } from "@/lib/finance/repository"
 import {
   FINANCE_AUDIT_EVENTS,
   type ChargeView,
@@ -82,6 +81,13 @@ export function loadFeeRegister(
   database: Executor,
   input: FinanceRegisterInput & { limit: number },
   now: Date,
+  /**
+   * Players whose fee for the month Issue fees would issue now
+   * (lib/finance/service.ts playersAwaitingMonthlyFee). Only they read "Not
+   * issued"; any fee plan covering the month used to be enough, so a player
+   * on a break, whom fee issuing passes over, read "Not issued" every month.
+   */
+  awaitingFeePlayerIds: ReadonlySet<string> = new Set(),
 ): FinanceRegisterResult {
   const players = database.select({
     academyIdSerial: academyIdAllocations.serial,
@@ -114,10 +120,6 @@ export function loadFeeRegister(
       charge,
     ])
   })
-  const agreementRows = period ? database.select().from(feeAgreements).where(and(
-    lte(feeAgreements.effectiveFrom, monthEnd(period)),
-    or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, monthStart(period))),
-  )).all() : []
 
   // Every approved player contributes a row, so the views are batched ahead of
   // the row build: four queries for the whole register, not four per player.
@@ -135,16 +137,19 @@ export function loadFeeRegister(
     true,
   )
 
-  const rows = players.map((player, index): FinanceRegisterRow => {
+  // A player with no fee this month is listed only when the coach has
+  // something to do: the fee is waiting to be issued ("Not issued"), or they
+  // train this month with no fee plan ("Setup required"), which the
+  // dashboard's needs-attention count includes and used to lead nowhere.
+  const withoutFeePlan = period === null
+    ? new Set<string>()
+    : listPlayersTrainingWithoutFeePlan(database, period)
+  const rows = players.flatMap((player, index): FinanceRegisterRow[] => {
     const charge = registerCharges[index]
     if (!charge) {
-      const hasAgreement = period !== null && agreementRows.some((agreement) => (
-        agreement.playerAccountId === player.playerId
-        && agreement.status !== "paused"
-        && agreement.effectiveFrom <= monthEnd(period)
-        && (agreement.effectiveTo === null || agreement.effectiveTo >= monthStart(period))
-      ))
-      return {
+      const awaitingFee = period !== null && awaitingFeePlayerIds.has(player.playerId)
+      if (!awaitingFee && !withoutFeePlan.has(player.playerId)) return []
+      return [{
         playerId: player.playerId,
         academyId: formatAcademyId(player.academyIdSerial),
         fullName: player.fullName,
@@ -160,13 +165,13 @@ export function loadFeeRegister(
         receivedPaise: 0,
         outstandingPaise: 0,
         dueDate: null,
-        status: hasAgreement ? "not_prepared" : "setup_required",
-      }
+        status: awaitingFee ? "not_prepared" : "setup_required",
+      }]
     }
     const view = chargeViews.get(charge.id)
     if (!view) throw new Error("The fee-register Charge is unavailable.")
     const adjustments = activeAdjustmentTotals(view.adjustments)
-    return {
+    return [{
       playerId: player.playerId,
       academyId: formatAcademyId(player.academyIdSerial),
       fullName: player.fullName,
@@ -183,12 +188,11 @@ export function loadFeeRegister(
       outstandingPaise: view.outstandingPaise,
       dueDate: view.dueDate,
       status: view.status,
-    }
+    }]
   })
 
   const query = normalizeSearch(input.query)
   const filtered = rows.filter((row) => {
-    if (row.status === "setup_required") return false
     if ((input.playerScope ?? "active") === "active" && row.archived) return false
     if (input.playerScope === "archived" && !row.archived) return false
     if (input.statuses?.length && !input.statuses.includes(row.status)) return false
@@ -581,12 +585,18 @@ export function loadFinancialActivity(
       reason = adjustment?.reversalReason ?? null
     } else if (event.eventType === "concession_created") {
       reason = concession?.reason ?? null
+    } else if (event.eventType === "concession_reversed") {
+      reason = concession?.reversalReason ?? null
+    } else if (event.eventType === "concession_application_reversed") {
+      reason = application?.reversalReason ?? null
     }
     return {
       id: event.id,
       occurredAt: event.occurredAt.toISOString(),
       eventType: event.eventType,
-      action: FINANCE_AUDIT_EVENTS[event.eventType].action,
+      action: metadata.operation === "onboarding_completed"
+        ? "Onboarding completed"
+        : FINANCE_AUDIT_EVENTS[event.eventType].action,
       actorId: event.actorAccountId,
       playerId,
       reference: payment?.receiptReference

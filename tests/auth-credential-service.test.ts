@@ -229,6 +229,24 @@ describe("production credential lifecycle", () => {
       token: activationToken,
       password: PASSWORD,
     }, { database, now: new Date(NOW.getTime() + 1_000) })).resolves.toBeNull()
+
+    /*
+     * The spent receipt now reads "active" rather than "missing", so the browser
+     * that just activated is told to sign in instead of being shown the
+     * name-and-email lookup -- including when the automatic sign-in after
+     * activation failed, which is when that message matters most. It still
+     * grants nothing: the second activation above was refused.
+     */
+    expect(getActivationClaimStatus(activationToken, {
+      database,
+      now: new Date(NOW.getTime() + 1_000),
+    })).toEqual({
+      academyId,
+      accountId: playerId,
+      fullName: "Mira Rao",
+      role: "player",
+      state: "active",
+    })
   })
 
   it("supports PIN setup, change, verification, removal, and permanent password fallback", async () => {
@@ -710,6 +728,36 @@ describe("production credential lifecycle", () => {
       database,
       now: new Date(NOW.getTime() + 15 * 60 * 1_000 + 6),
     })).resolves.toBe("invalid")
+  })
+
+  it("accepts the PIN in place of the password only where it is allowed", async () => {
+    const playerId = "pin-confirmation-player"
+    const { academyId, activationToken } = createApprovedPlayer(playerId, "Pin Confirmation Player")
+    await completeAccountActivation({ token: activationToken, password: PASSWORD }, { database, now: NOW })
+    await setPinCredential({ accountId: playerId, pin: "618203" }, { database, now: NOW })
+    const attempt = {
+      academyId,
+      accountId: playerId,
+      ipHash: "pin-confirmation-ip",
+      operation: "add_recovery_email",
+      userAgent: "test",
+    }
+
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, password: "618203" }, { database, now: NOW }))
+      .resolves.toBe("invalid")
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, allowPin: true, password: "618203" }, {
+      database,
+      now: NOW,
+    })).resolves.toBe("verified")
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, allowPin: true, password: "618204" }, {
+      database,
+      now: NOW,
+    })).resolves.toBe("invalid")
+    // The password still works where the PIN is allowed.
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, allowPin: true, password: PASSWORD }, {
+      database,
+      now: NOW,
+    })).resolves.toBe("verified")
   })
 
 })

@@ -209,15 +209,18 @@ describe("admin-approved authenticator recovery", () => {
       mailer,
     }, { database, now: NOW })
     expect(mailer.authenticatorRecovery).toHaveLength(1)
-    const token = new URL(mailer.authenticatorRecovery[0].recoveryUrl).searchParams.get("token") ?? ""
-    expect(claimPasswordRecovery(token, { database, now: NOW })).toBe(true)
-    expect(getAuthenticatorRecoveryStatus(token, { database, now: NOW })).toEqual({
+    const link = new URL(mailer.authenticatorRecovery[0].recoveryUrl).searchParams.get("token") ?? ""
+    // An authenticator link opens nothing on the password page.
+    expect(claimPasswordRecovery(link, { database, now: NOW })).toBeNull()
+    const token = claimPasswordRecovery(link, { database, intent: "authenticator", now: NOW })
+    expect(token).toEqual(expect.any(String))
+    expect(getAuthenticatorRecoveryStatus(token!, { database, now: NOW })).toEqual({
       academyId: "SMBA-HC-0001",
       state: "verified",
     })
-    const submitted = submitAuthenticatorResetRequest({ token }, { database, now: NOW })
+    const submitted = submitAuthenticatorResetRequest({ token: token! }, { database, now: NOW })
     expect(submitted?.accountId).toBe(HEAD_ID)
-    expect(submitAuthenticatorResetRequest({ token }, { database, now: NOW })).toBeNull()
+    expect(submitAuthenticatorResetRequest({ token: token! }, { database, now: NOW })).toBeNull()
 
     database.insert(schema.authPinCredentials).values({
       accountId: HEAD_ID,

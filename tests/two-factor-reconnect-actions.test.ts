@@ -101,6 +101,41 @@ describe("authenticator reconnection", () => {
     // The guess was reserved before the check and is not handed back.
     expect(mocks.reserveLoginAttempt).toHaveBeenCalledWith({ ipHash: "ip-hash", subjectHash: "subject-hash" })
     expect(mocks.releaseLoginAttempt).not.toHaveBeenCalled()
+    // Logged as the recovery-code reissue logs the same check, so guessing the
+    // password through this page leaves a trace.
+    expect(mocks.writeAuthSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: "head-coach",
+      eventType: "login_failed",
+      metadata: { factor: "current_password", operation: "totp_reconnect" },
+      outcome: "failure",
+    }))
+  })
+
+  it("says other devices were logged out when only the second step fails", async () => {
+    mocks.disableTwoFactor.mockRejectedValue(new Error("database busy"))
+
+    const result = await beginAuthenticatorReconnect(
+      { error: null, errorField: null },
+      reconnectData("AAAA-1111"),
+    )
+
+    expect(mocks.revokeOtherSessions).toHaveBeenCalled()
+    expect(result.error).toContain("Your other devices were logged out")
+    // The recovery code that got them here is already spent.
+    expect(result.error).toContain("different recovery code")
+  })
+
+  it("says nothing about other devices when the first step fails", async () => {
+    mocks.revokeOtherSessions.mockRejectedValue(new Error("database busy"))
+
+    await expect(beginAuthenticatorReconnect(
+      { error: null, errorField: null },
+      reconnectData("123456"),
+    )).resolves.toEqual({
+      error: "The authenticator could not be reconnected. Try again.",
+      errorField: null,
+    })
+    expect(mocks.disableTwoFactor).not.toHaveBeenCalled()
   })
 
   it("uses a current authenticator code, retires other sessions and starts fresh setup", async () => {

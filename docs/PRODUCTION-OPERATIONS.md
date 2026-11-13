@@ -32,9 +32,11 @@ conversation resolution and force-push/deletion prevention. Do not weaken those 
 
 ## Environment separation
 
-Vercel runs `vercel-build` for every deployment, production and preview alike, and its
-`db:prepare:empty` step migrates and seeds whichever database `TURSO_DATABASE_URL` names in that
-environment. The academy database must therefore be reachable from Production only:
+Vercel runs `vercel-build` for every deployment, production and preview alike. It runs `next build`
+first and only then `db:prepare:empty`, which migrates and seeds whichever database
+`TURSO_DATABASE_URL` names, so a failed build leaves the database alone. Keep every migration safe for
+the version before it (remove or rename only in a later release). The academy database must be
+reachable from Production only:
 
 | Variable | Production | Preview | Development |
 | --- | --- | --- | --- |
@@ -63,8 +65,10 @@ npm run preview:seed:turso
 
 ## Availability monitoring
 
-`GET /api/health` performs a read-only database query. It returns only `{"status":"ok"}` or a
-generic 503 response and is never cached. It does not expose counts, credentials or provider names.
+`GET /api/health` performs a read-only database query that reads one batch row, so it reports 503 for
+a database that cannot be reached and also for one that was never set up (no tables, or tables but no
+academy set-up). It returns only `{"status":"ok"}` or a generic 503 response and is never cached. It does
+not expose counts, credentials or provider names.
 
 `.github/workflows/production-health.yml` checks the database probe, public homepage identity and login
 page once per hour without authenticating or mutating data. The scheduled probe retries three times.
@@ -74,8 +78,10 @@ transitional, forged-actor and non-`main` deployment events are ignored. The wor
 default branch rather than event-controlled deployment code.
 
 `.github/workflows/operations-monitor.yml` checks sanitized server-error counts, authentication-email
-API failures, repeated login lockouts, backup age, restore-verification age and artifact availability
-twice per hour. `.github/workflows/production-alerts.yml`
+API failures, repeated login lockouts, backup age and restore-verification age
+twice per hour. It also alerts on any recovery-code sign-in, any authenticator reset request, approval or
+reconnect, and repeated failed second-factor attempts. Your own recovery-code sign-in or authenticator
+reset raises this alert too; if it was you, nothing needs doing. `.github/workflows/production-alerts.yml`
 turns failed default-branch quality, accessibility, health, monitoring, backup and production-deployment
 events into one assigned, deduplicated `production-alert` issue. Pull-request and fork runs cannot open or
 resolve production incidents. A successful default-branch recovery closes the corresponding issue. The repository
@@ -119,47 +125,55 @@ keep its decryption key in a separate password manager.
 
 ### Scheduled encrypted backups
 
-**There is currently no stored backup.** `.github/workflows/encrypted-production-backup.yml` can create,
-verify and encrypt a logical snapshot, but its schedule is off and it ends by failing on purpose: the
-only place it used to put the file was a GitHub Actions artifact, and on a public repository any GitHub
-account can download those. Until its last step uploads to private, access-controlled, logged storage
-(for example an object-storage bucket written with a write-only key), keep backups yourself with
-`npm run db:snapshot:create` and store them in a vault. The restore verification and backup-freshness
-alerts have nothing to check until then. When storage exists, the workflow is meant to run daily at
-08:17 IST, encrypt with GnuPG AES-256 before upload and remove every plaintext runner copy. Configure
-these GitHub Actions secrets:
+Every night at 02:47 IST, `.github/workflows/encrypted-production-backup.yml` snapshots the production
+database, encrypts it with GnuPG AES-256 and keeps it for 30 days as a draft release in a **separate
+private GitHub repository** (the backup store), never as an artifact of this public repository. It
+refuses to upload unless the store is private, and pruning never removes the newest complete backup.
+Until the store is set up the nightly run fails at its first step without reading the database. Set it
+up once:
 
-- `SMBA_BACKUP_DATABASE_URL`: production Turso database URL;
-- `SMBA_BACKUP_DATABASE_TOKEN`: database-scoped read-only token created with
-  `turso db tokens create <database-name> --read-only`; and
-- `SMBA_BACKUP_PASSPHRASE`: a unique random passphrase of at least 24 characters, stored in a separate
-  password manager and never in the repository or Vercel.
+1. On GitHub, create a new **private** repository named `smba-backups` under the same account as this
+   one, and tick **Add a README file** (the store needs one commit). To use another name, also add a
+   repository *variable* (not a secret) `SMBA_BACKUP_STORE_REPOSITORY` here set to `owner/name`.
+2. Create a fine-grained personal access token: **Repository access: Only select repositories**, the
+   store only; **Repository permissions: Contents: Read and write**. Give it an expiry you will
+   remember (a year at most), and renew it before then; the nightly run fails plainly when it lapses.
+3. In this repository, under **Settings, Secrets and variables, Actions**, add these secrets:
+   - `SMBA_BACKUP_STORE_TOKEN`: the token from step 2;
+   - `SMBA_BACKUP_DATABASE_URL`: production Turso database URL;
+   - `SMBA_BACKUP_DATABASE_TOKEN`: database-scoped read-only token created with
+     `turso db tokens create <database-name> --read-only`; and
+   - `SMBA_BACKUP_PASSPHRASE`: a unique random passphrase of at least 24 characters, stored in a
+     separate password manager and never in the repository, the store or Vercel. Without it no backup
+     can be decrypted, so keep a second copy somewhere safe.
+4. Run **Encrypted production backup** by hand and check it succeeds, then run **Encrypted backup
+   restore verification** by hand once. After that both run on their own.
+
+Never make the store public or reuse its token elsewhere. Deleting a backup from the store by hand is a
+data-recovery decision, not housekeeping.
 
 The operations monitor shares only the two read-only database secrets. It cannot change academy data.
-Trigger the workflow manually after configuring the secrets and retain its successful run as the first
-backup record.
 
-### Automated stored-artifact restore verification
+### Automated stored-backup restore verification
 
-`.github/workflows/encrypted-backup-restore.yml` downloads the newest successful, unexpired `main`
-backup on the first day of each month at 10:17 IST. It validates the selected run and artifact, decrypts
-inside a mode-0700 runner directory, rejects unsafe or unexpected archive entries, verifies the manifest,
-checksum, row counts, integrity and foreign keys, migrates a copy, builds against a separate empty
-database, and boots the application against the restored copy for health and login smoke checks. The
-workflow receives only `SMBA_BACKUP_PASSPHRASE`, never production database credentials, and always
-removes decrypted material. A manual run may select a specific successful backup workflow run ID.
+`.github/workflows/encrypted-backup-restore.yml` fetches the newest complete backup from the store on
+the first day of each month at 10:17 IST, decrypts it in a mode-0700 runner directory, verifies the
+archive, manifest, checksum, row counts, integrity and foreign keys, migrates a copy and boots the
+application on it for health and login smoke checks. It receives only the store token and
+`SMBA_BACKUP_PASSPHRASE`, always removes decrypted material, and a manual run may name a stored backup.
 
-Operations Monitor fails when the latest successful backup is older than 30 hours, the latest successful
-stored-artifact restore is older than 35 days, or the referenced artifact is missing or expired.
+Operations Monitor fails when the latest successful backup run is older than 30 hours or the latest
+restore check is older than 35 days. It only warns until the first backup is stored, and counts only
+runs from 13 November 2026 onward, when backups started going to the private store.
 
 ### Quarterly remote restore drill
 
 Record completed exercises in `docs/RESTORE-DRILL-LOG.md`.
 
-1. Confirm the latest automated daily backup and monthly stored-artifact restore are green.
-2. Download one encrypted workflow artifact and decrypt it outside the repository only when the
-   quarterly remote drill requires it:
-   `gpg --output smba-restore.tar.gz --decrypt smba-production-<run>.tar.gz.gpg`, then extract it into a
+1. Confirm the latest nightly backup and monthly stored-backup restore check are green.
+2. Download one encrypted backup from the store's **Releases** page (the drafts are listed there for
+   the owner) and decrypt it outside the repository only when the quarterly remote drill requires it:
+   `gpg --output smba-restore.tar.gz --decrypt smba-backup-<time>.tar.gz.gpg`, then extract it into a
    temporary directory and run `npm run db:snapshot:verify -- <snapshot> <manifest>`.
 3. Create a disposable Turso database from the snapshot or from a chosen PITR timestamp. This remains
    manual because automating database creation and deletion would require a write-capable management token.
@@ -179,11 +193,14 @@ that cannot run on the read-only backup credentials. `prepare-admin-only-snapsho
 from the remote and should be given a read token.
 
 `prepare-admin-only-snapshot.mjs` is read-only against the remote database. It clones the schema and
-rows into a new mode-0600 local SQLite file, deletes everything except the single active
-`platform_admin` account and the material that account logs in with — PIN, recovery email, verified
-authenticator, academy ID allocation — plus the batch catalogue, verifies the result holds exactly one
-account and zero coaches and zero players, checks integrity and foreign keys, and deletes the file
-again if any of that fails.
+rows into a new mode-0600 local SQLite file. It
+deletes everything except the platform owner (named the same way as `scripts/database/reset-academy.ts`
+names it: the one approved, unarchived `platform_admin` signing in as `SMBA-ADMIN-0001`) and what that
+account signs in with — password, PIN, recovery email, academy ID allocation — plus the batch catalogue
+and the update history. Like the "Empty the academy" workflow, it removes the owner's authenticator, so
+the outgoing operator's phone stops producing the owner's codes and the next holder pairs their own.
+It verifies the result holds exactly one account, no authenticator, zero coaches and zero players,
+checks integrity and foreign keys, and deletes the file again if any of that fails.
 
 ```bash
 TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<read token> \
@@ -191,12 +208,11 @@ TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<read token> \
   node scripts/deployment/prepare-admin-only-snapshot.mjs .data/backups/smba-admin-only-YYYY-MM-DD.db
 ```
 
-`reset-empty-academy.mjs` is the destructive half. It DELETEs every row of every table in the database
-`TURSO_DATABASE_URL` names and re-inserts the source, so against production it destroys every account,
-enrollment, attendance mark, fee, payment and refund the academy holds. Before the first delete it
-requires the source to already be a zero-member academy, requires the two schemas to name exactly the
-same tables, and writes and integrity-checks a complete local backup of the remote. That backup is the
-only recovery path from a mistake here; give it a durable location and handle it as a snapshot.
+`reset-empty-academy.mjs` is the destructive half: it DELETEs every row of every table in the database
+`TURSO_DATABASE_URL` names, except the update history, and re-inserts the source, after writing and
+integrity-checking a local backup that is the only recovery path from a mistake here. It refuses,
+changing nothing, unless the source is a zero-member academy with no authenticator and the live
+database still has the same tables, indexes, update history and owner as the source.
 
 ```bash
 TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<write token> \
@@ -206,13 +222,16 @@ TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<write token> \
 ```
 
 1. Take a fresh `npm run db:snapshot:create` snapshot and keep it in private storage. If you run the
-   reset from the "Empty the academy" workflow instead, it keeps no copy of its own: tick
-   `backup_confirmed` only once you hold one. The script's own backup is an undo, not the record of what the academy held.
+   reset from the "Empty the academy" workflow instead, it keeps no copy of its own: it refuses unless
+   the private backup store holds a backup from the last 30 hours, and anything saved since that backup
+   is not in it, so run "Encrypted production backup" by hand just before. Tick `backup_confirmed` only
+   once that run has finished. The script's own backup is an undo, not the record of what the academy held.
 2. Build the source with `prepare-admin-only-snapshot.mjs` against the same database you are about to
    reset. Building it elsewhere replaces the owner's credentials, and a schema that differs by one
    table aborts the reset.
-3. Run the reset and keep its JSON output — backup path, rows backed up, rows restored and the
-   re-read remote counts — with the change record.
+3. Run the reset when nobody is using the site: anything saved while the script copies the live
+   database is in neither copy. Keep its JSON output — backup path, rows backed up, rows restored and
+   the re-read remote counts — with the change record.
 4. Log in as the platform owner, confirm the academy is empty, and only then delete either file.
 
 Both files contain authentication material. They must never be committed, emailed or stored
@@ -228,6 +247,9 @@ unencrypted, and the same vault rules as `npm run db:snapshot:create` apply.
    before changing Vercel environment variables.
 5. Rotate any exposed token, revoke sessions when account security is affected, and record the
    recovery action in the incident log.
+6. Sign-in security events are deleted automatically after 180 days. If an incident may stay open
+   longer than that, take a `npm run db:snapshot:create` snapshot while the events still exist and keep
+   it, encrypted, with the incident record.
 
 ## Account recovery boundary
 

@@ -13,6 +13,7 @@ export type FinancialPlayerListView = {
   archived: boolean
   fullName: string
   hasActiveFeePlan: boolean
+  feePlanEnded: boolean
   paymentEligible: boolean
   status: FinanceStatus
   outstandingPaise: number
@@ -61,17 +62,31 @@ export type PlayerFinancialLedgerView = {
   archived: boolean
   charges: FinancialChargeView[]
   feePlanSetupReady: boolean
+  /**
+   * The fee plan to show: the one in force today, else the one about to
+   * start, else the one that ended last (lib/finance/types.ts FeePlanStanding).
+   */
   feePlan: {
     id: string
     academyPlan: import("@/lib/training/academy-plans").AcademyPlan
     agreedMonthlyFeePaise: number
     batch: import("@/lib/sessions/types").TrainingBatch
     effectiveFrom: string
+    effectiveTo: string | null
     label: string
     level: import("@/lib/sessions/types").TrainingProgramme
     recordRevision: number
+    /** running: in force with no end; ending: in force, ends on effectiveTo; starting: starts on effectiveFrom; ended: ended on effectiveTo. */
+    standing: "running" | "ending" | "starting" | "ended"
     status: "active" | "paused" | "ended"
+    /** The plan that follows the one in force (a fee or plan change). */
+    upcoming: {
+      agreedMonthlyFeePaise: number
+      effectiveFrom: string
+      label: string
+    } | null
   } | null
+  onboardingComplete: boolean
   enrollmentDefaults: {
     academyPlan: import("@/lib/training/academy-plans").AcademyPlan
     academyPlanLabel: string

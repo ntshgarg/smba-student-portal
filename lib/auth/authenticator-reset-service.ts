@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, eq, gt, isNull } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNull } from "drizzle-orm"
 
 import { releaseSecondFactorAttempt } from "@/lib/auth/credential-service"
 import { forgetTrustedDevices } from "@/lib/auth/second-factor-reset"
@@ -53,13 +53,15 @@ export function listPendingAuthenticatorResetRequests({
       eq(authMethods.method, "academy_id"),
       isNull(authMethods.revokedAt),
     ))
-    .innerJoin(authUsers, and(
-      eq(authUsers.id, accounts.id),
-      eq(authUsers.twoFactorEnabled, true),
-    ))
     .innerJoin(coachProfiles, and(
       eq(coachProfiles.accountId, accounts.id),
       eq(coachProfiles.accessLevel, "head_admin"),
+    ))
+    // Approval refuses a request whose address is no longer the account's
+    // recovery email, so the queue must not offer one.
+    .innerJoin(authRecoveryEmails, and(
+      eq(authRecoveryEmails.accountId, accounts.id),
+      eq(authRecoveryEmails.email, authAuthenticatorResetRequests.recoveryEmail),
     ))
     .where(and(
       eq(authAuthenticatorResetRequests.status, "pending"),
@@ -69,6 +71,113 @@ export function listPendingAuthenticatorResetRequests({
     ))
     .orderBy(asc(authAuthenticatorResetRequests.requestedAt))
     .all()
+}
+
+/** The coach's own request still waiting for the owner, if there is one. */
+export function getPendingAuthenticatorResetRequest(accountId: string, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  return database.select({
+    expiresAt: authAuthenticatorResetRequests.expiresAt,
+    id: authAuthenticatorResetRequests.id,
+    requestedAt: authAuthenticatorResetRequests.requestedAt,
+  }).from(authAuthenticatorResetRequests)
+    .where(and(
+      eq(authAuthenticatorResetRequests.accountId, accountId),
+      eq(authAuthenticatorResetRequests.status, "pending"),
+      gt(authAuthenticatorResetRequests.expiresAt, now),
+    ))
+    .get() ?? null
+}
+
+// Withdraws the coach's waiting request (cancelled, or a new authenticator connected).
+// Recorded as rejected by the coach themself, never as the owner's decision.
+export function withdrawPendingAuthenticatorResetRequests(accountId: string, {
+  database = initializeDatabase(),
+  now = new Date(),
+  reason,
+}: {
+  database?: SmbaDatabase
+  now?: Date
+  reason: "authenticator_connected" | "cancelled_by_coach"
+}) {
+  return database.transaction((tx) => {
+    const pending = tx.select({ id: authAuthenticatorResetRequests.id })
+      .from(authAuthenticatorResetRequests)
+      .where(and(
+        eq(authAuthenticatorResetRequests.accountId, accountId),
+        eq(authAuthenticatorResetRequests.status, "pending"),
+      ))
+      .all()
+    if (pending.length === 0) return 0
+    tx.update(authAuthenticatorResetRequests).set({
+      resolvedAt: now,
+      resolvedByAccountId: accountId,
+      status: "rejected",
+      updatedAt: now,
+    }).where(and(
+      eq(authAuthenticatorResetRequests.accountId, accountId),
+      eq(authAuthenticatorResetRequests.status, "pending"),
+    )).run()
+    for (const request of pending) {
+      writeAuthSecurityEvent({
+        accountId,
+        actorAccountId: accountId,
+        eventType: "totp_reset_rejected",
+        metadata: { reason, requestId: request.id },
+        outcome: "success",
+      }, { database: tx, now })
+    }
+    return pending.length
+  }, { behavior: "immediate" })
+}
+
+export type AuthenticatorResetOutcome = {
+  at: Date
+  state: "declined" | "lapsed" | "pending"
+}
+
+/** How far back a finished request is still worth telling the coach about. */
+const OUTCOME_NOTICE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+
+// What became of the coach's latest reset request, for the authenticator page. Null when there is nothing to say.
+export function latestAuthenticatorResetOutcome(accountId: string, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}): AuthenticatorResetOutcome | null {
+  const latest = database.select({
+    expiresAt: authAuthenticatorResetRequests.expiresAt,
+    requestedAt: authAuthenticatorResetRequests.requestedAt,
+    resolvedAt: authAuthenticatorResetRequests.resolvedAt,
+    resolvedByAccountId: authAuthenticatorResetRequests.resolvedByAccountId,
+    status: authAuthenticatorResetRequests.status,
+  }).from(authAuthenticatorResetRequests)
+    .where(eq(authAuthenticatorResetRequests.accountId, accountId))
+    .orderBy(desc(authAuthenticatorResetRequests.requestedAt))
+    .get()
+  if (!latest) return null
+  if (latest.status === "pending" && latest.expiresAt > now) {
+    return { at: latest.requestedAt, state: "pending" }
+  }
+  const lapsed = latest.status === "expired" || latest.status === "pending"
+  // A lapsed request ran out at its own expiry; `resolvedAt` on an expired row
+  // is only when somebody next opened the owner's queue.
+  const finishedAt = lapsed
+    ? latest.expiresAt
+    : latest.resolvedAt ?? latest.expiresAt
+  if (now.getTime() - finishedAt.getTime() > OUTCOME_NOTICE_WINDOW_MS) return null
+  if (lapsed) return { at: finishedAt, state: "lapsed" }
+  if (latest.status === "rejected" && latest.resolvedByAccountId !== accountId) {
+    return { at: finishedAt, state: "declined" }
+  }
+  return null
 }
 
 export function approveAuthenticatorResetRequest(input: {
@@ -97,10 +206,6 @@ export function approveAuthenticatorResetRequest(input: {
       .innerJoin(coachProfiles, and(
         eq(coachProfiles.accountId, accounts.id),
         eq(coachProfiles.accessLevel, "head_admin"),
-      ))
-      .innerJoin(authUsers, and(
-        eq(authUsers.id, accounts.id),
-        eq(authUsers.twoFactorEnabled, true),
       ))
       .where(and(
         eq(authAuthenticatorResetRequests.id, input.requestId),

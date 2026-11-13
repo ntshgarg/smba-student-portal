@@ -75,6 +75,12 @@ export type PlayerRefundView = {
   purpose: RefundPurpose
   withdrawalEffectiveOn: string | null
   amountPaise: number
+  /**
+   * The part of this refund paid back from the receipt it is listed under. A
+   * withdrawal refund on a fee paid in two instalments can draw on both
+   * receipts, so it is listed under each, with each receipt's own share.
+   */
+  receiptAmountPaise: number
   refundedOn: string
   lifecycle: PaymentLifecycle
 }
@@ -98,6 +104,14 @@ export type CoachReceiptView = Omit<PlayerReceiptView, "allocations"> & {
   allocations: CoachReceiptAllocationView[]
   refundablePaise: number
   canRefund: boolean
+  /**
+   * The receipt's fee could be refunded for unused days, but the player is
+   * still training: a withdrawal refund is recorded only after their training
+   * is ended in Members (head coach, 13 Nov 2026).
+   */
+  refundNeedsTrainingEnded: boolean
+  /** The days the member's withdrawal can be dated, when a refund is possible. */
+  refundWindow: { earliest: string; latest: string } | null
   recordRevision: number
   internalNote: string | null
 }
@@ -202,6 +216,26 @@ export type FeeSetupDefaults = {
   suggestedMonthlyFeePaise: number | null
 }
 
+/**
+ * A player's fee plans read against today, so a screen can say which fee is in
+ * force, which one is coming and whether the plans have ended. `feeAgreement`
+ * on the record is only the "active" plan, which is the latest one: a fee
+ * change makes next month's plan active while this month's has already ended,
+ * and a player who left has no active plan at all.
+ */
+export type FeePlanStanding = {
+  /** The plan in force today, running on or ending with this month. */
+  current: FeeAgreementView | null
+  /** A plan that starts after today: a fee change, or a new player's first fee month. */
+  upcoming: FeeAgreementView | null
+  /** The plan that ended last, when none is in force or coming. */
+  ended: FeeAgreementView | null
+  /** The day the first plan began. */
+  startsOn: string | null
+  /** The last day the plans cover, once none runs on. */
+  endsOn: string | null
+}
+
 export type PlayerFeeRecord = {
   playerId: string
   academyId: string
@@ -213,6 +247,9 @@ export type PlayerFeeRecord = {
   status: FinanceStatus
   currentBalancePaise: number
   feeAgreement: FeeAgreementView | null
+  feePlans: FeePlanStanding
+  /** Player onboarding has finished, so a missing fee plan is not onboarding's to set. */
+  onboardingComplete: boolean
   enrollmentDefaults?: FeeSetupDefaults | null
   setupDefaults: FeeSetupDefaults | null
   registrationCharge: ChargeView | null
@@ -253,6 +290,8 @@ export type FinancePlayerListItem = {
   fullName: string
   archived: boolean
   hasActiveFeePlan: boolean
+  /** Every fee plan the player had has ended: they left or stopped fees. */
+  feePlanEnded: boolean
   paymentEligible: boolean
   status: FinanceStatus
   outstandingPaise: number
@@ -340,6 +379,8 @@ export type OnboardingFinancePreviewLine = {
 export type OnboardingFinancePreview = {
   academyDateKey: string
   blockers: string[]
+  /** The last month the new Fee Plan bills when the first place has ended; else null. */
+  feePlanEndsAfter: string | null
   feePlanStartOn: string
   fingerprint: string
   lines: OnboardingFinancePreviewLine[]
@@ -502,6 +543,11 @@ export type RecordRefundResult = {
   refund: PlayerRefundView
   charges: ChargeView[]
   reused: boolean
+  /**
+   * Reversing a withdrawal refund only: whether the fee plan went back to how
+   * it was before the refund. False when it stays ended.
+   */
+  feePlanRestored?: boolean
 }
 
 export type ReverseRefundInput = {

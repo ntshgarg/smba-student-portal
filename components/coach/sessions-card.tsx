@@ -21,7 +21,7 @@ export function SessionsCard({
     ? `${todaySessionCount} ${todaySessionCount === 1 ? "session" : "sessions"} today. Today’s running sheet and future schedules.`
     : nextSessionLabel
       ? `Next · ${nextSessionLabel}`
-      : "No training scheduled yet."
+      : "No training scheduled."
 
   return (
     <CoachDashboardCard

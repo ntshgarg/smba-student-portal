@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 
 import {
   ASSESSMENT_TEXT_MAX_LENGTH,
@@ -12,6 +12,7 @@ import {
 import type {
   AssessmentErrorCode,
   AssessmentField,
+  AssessmentStatus,
   DiscardAssessmentInput,
   SaveAssessmentInput,
 } from "@/lib/assessments/contracts"
@@ -22,16 +23,31 @@ import { accounts, playerAssessments, playerEnrollments } from "@/lib/db/schema"
 import { getAcademyDateKey } from "@/lib/format"
 
 const DATE_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+
+type RefusalDetails = {
+  currentPublishedCount?: number
+  currentStatus?: AssessmentStatus
+}
 
 export class AssessmentServiceError extends Error {
   readonly code: AssessmentErrorCode
   readonly field?: AssessmentField
+  readonly currentPublishedCount?: number
+  readonly currentStatus?: AssessmentStatus
 
-  constructor(code: AssessmentErrorCode, message: string, field?: AssessmentField) {
+  constructor(
+    code: AssessmentErrorCode,
+    message: string,
+    field?: AssessmentField,
+    details: RefusalDetails = {},
+  ) {
     super(message)
     this.name = "AssessmentServiceError"
     this.code = code
     this.field = field
+    this.currentPublishedCount = details.currentPublishedCount
+    this.currentStatus = details.currentStatus
   }
 }
 
@@ -57,6 +73,14 @@ function isRealDateKey(value: string) {
  * not make and is refused, not trimmed.
  */
 function validate(input: SaveAssessmentInput, now: Date, { publishing }: { publishing: boolean }) {
+  if (input.newAssessmentId !== undefined
+    && (typeof input.newAssessmentId !== "string" || !UUID_PATTERN.test(input.newAssessmentId))) {
+    throw new AssessmentServiceError("INVALID_INPUT", "The assessment could not be read. Reload and try again.")
+  }
+  if (input.expectedPublishedCount !== undefined
+    && (!Number.isSafeInteger(input.expectedPublishedCount) || input.expectedPublishedCount < 0)) {
+    throw new AssessmentServiceError("INVALID_INPUT", "The assessment could not be read. Reload and try again.")
+  }
   if (typeof input.playerId !== "string" || !input.playerId.trim()) {
     throw new AssessmentServiceError("INVALID_INPUT", "Choose a player.", "playerId")
   }
@@ -104,13 +128,14 @@ function requireActivePlayer(tx: Transaction, playerId: string) {
       eq(accounts.role, "player"),
       eq(accounts.approvalStatus, "approved"),
       isNull(accounts.archivedAt),
-      eq(playerEnrollments.status, "active"),
+      // Off a schedule still counts until archived (lib/assessments/queries.ts).
+      inArray(playerEnrollments.status, ["active", "paused"]),
     ))
     .get()
   if (!player) {
     throw new AssessmentServiceError(
       "PLAYER_UNAVAILABLE",
-      "Assessments are available only for active players.",
+      "Assessments are available only for players who have trained here and are not archived.",
       "playerId",
     )
   }
@@ -127,6 +152,31 @@ function loadExisting(tx: Transaction, assessmentId: string, playerId: string) {
     throw new AssessmentServiceError("INVALID_INPUT", "This assessment belongs to a different player.", "playerId")
   }
   return existing
+}
+
+/**
+ * A first publish is refused if another was published since the form opened (a
+ * second tab or device). The refusal carries the new count, so the coach's next
+ * press goes through.
+ */
+function requireExpectedPublishedCount(tx: Transaction, input: SaveAssessmentInput) {
+  if (input.expectedPublishedCount === undefined) return
+  const published = tx.select({ total: sql<number>`count(*)` }).from(playerAssessments)
+    .where(and(
+      eq(playerAssessments.playerAccountId, input.playerId),
+      eq(playerAssessments.status, "published"),
+    ))
+    .get()?.total ?? 0
+  if (published !== input.expectedPublishedCount) {
+    throw new AssessmentServiceError(
+      "CONFLICT",
+      "Another assessment for this player was published after you opened this one,"
+        + " perhaps in another window. Nothing was published. Check their assessments,"
+        + " and publish again if this one is separate.",
+      undefined,
+      { currentPublishedCount: published },
+    )
+  }
 }
 
 function save(
@@ -149,8 +199,14 @@ function save(
   return database.transaction((tx) => {
     requireActivePlayer(tx, input.playerId)
 
-    if (input.assessmentId) {
-      const existing = loadExisting(tx, input.assessmentId, input.playerId)
+    // A repeated first save continues what the first attempt created.
+    const targetId = input.assessmentId
+      ?? (input.newAssessmentId && tx.select({ id: playerAssessments.id }).from(playerAssessments)
+        .where(eq(playerAssessments.id, input.newAssessmentId))
+        .get()?.id)
+
+    if (targetId) {
+      const existing = loadExisting(tx, targetId, input.playerId)
       if (existing.status === "published" && !publishing) {
         // A published assessment is changed by publishing the change, so the
         // player never sees a half-edited version and a "save" cannot quietly
@@ -158,13 +214,17 @@ function save(
         throw new AssessmentServiceError(
           "CONFLICT",
           "This assessment is already published. Publish your changes to update it.",
+          undefined,
+          { currentStatus: existing.status },
         )
       }
+      if (publishing && existing.status === "draft") requireExpectedPublishedCount(tx, input)
       tx.update(playerAssessments).set(publishing
         ? {
           ...content,
           publishedAt: existing.publishedAt ?? now,
-          publishedByAccountId: coachId,
+          // Kept with `publishedAt`: both describe the first publish.
+          publishedByAccountId: existing.publishedByAccountId ?? coachId,
           revision: existing.revision + 1,
           status: "published" as const,
         }
@@ -188,8 +248,9 @@ function save(
         )
       }
     }
+    if (publishing) requireExpectedPublishedCount(tx, input)
 
-    const id = createId()
+    const id = input.newAssessmentId ?? createId()
     tx.insert(playerAssessments).values({
       ...content,
       createdAt: now,
@@ -235,10 +296,19 @@ export function discardAssessmentDraft(
       .returning({ id: playerAssessments.id })
       .get()
     if (!deleted) {
-      throw new AssessmentServiceError(
-        "NOT_FOUND",
-        "This draft no longer exists, or it has already been published.",
-      )
+      // Gone is what the coach asked for; published elsewhere means the screen is out of date.
+      const remaining = tx.select({ status: playerAssessments.status }).from(playerAssessments)
+        .where(eq(playerAssessments.id, input.assessmentId))
+        .get()
+      if (remaining) {
+        throw new AssessmentServiceError(
+          "CONFLICT",
+          "This assessment has already been published, perhaps in another window, so it cannot be discarded.",
+          undefined,
+          { currentStatus: remaining.status },
+        )
+      }
+      throw new AssessmentServiceError("NOT_FOUND", "This draft no longer exists.")
     }
     return { assessmentId: deleted.id }
   }, { behavior: "immediate" })

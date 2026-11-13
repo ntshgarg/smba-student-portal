@@ -4,7 +4,7 @@ import type {
   AnnouncementStatus,
 } from "@/lib/announcements/contracts"
 import {
-  hasCoachAnnouncements,
+  firstCoachAnnouncementMonth,
   listCoachAnnouncements,
 } from "@/lib/announcements/queries"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
@@ -62,16 +62,26 @@ export default async function PublishedAnnouncementsPage({
     search,
     status,
   }, context)
-  // The filtered page is a subset of every announcement, so a non-empty one
-  // already proves the archive is not empty and needs no further read.
-  const hasPublishedAnnouncements = announcements.length > 0 || hasCoachAnnouncements(context)
+  // The dashboard counts every live notice, so the current month also lists
+  // live ones published earlier.
+  const stillShowing = month === currentMonth && (status === "all" || status === "active")
+    ? listCoachAnnouncements({
+      channel,
+      publishedBeforeMonth: currentMonth,
+      search,
+      status: "active",
+    }, context)
+    : []
+  const firstMonth = firstCoachAnnouncementMonth(context)
 
   return (
     <PublishedAnnouncementArchive
       announcements={announcements}
       currentMonth={currentMonth}
-      hasPublishedAnnouncements={hasPublishedAnnouncements}
+      firstMonth={firstMonth}
+      hasPublishedAnnouncements={firstMonth !== null}
       query={{ channel, month, query: search, status }}
+      stillShowing={stillShowing}
     />
   )
 }

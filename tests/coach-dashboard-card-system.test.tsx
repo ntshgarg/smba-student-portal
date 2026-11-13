@@ -85,7 +85,7 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain("₹47,500 outstanding")
     expect(html).toContain("14 attention")
     expect(html).toContain("Notice board is clear")
-    expect(html).toContain("39 enrolled members")
+    expect(html).toContain("39 enrolled players")
     expect(html).toContain("Approved players and staff, with their training and contact records.")
     expect(html).not.toContain("Roster current")
     expect(html).not.toContain("The academy directory is up to date.")
@@ -97,17 +97,17 @@ describe("coach dashboard Court Operations Board", () => {
     const empty = renderToStaticMarkup(<MembersCard memberCount={0} />)
 
     expect(populated).toContain("Clear")
-    expect(populated).toContain("39 enrolled members")
+    expect(populated).toContain("39 enrolled players")
     expect(empty).toContain("Setup")
-    expect(empty).toContain("0 enrolled members")
-    expect(empty).toContain("Approved players and staff appear here once onboarding is complete.")
+    expect(empty).toContain("0 enrolled players")
+    expect(empty).toContain("Players appear here once their onboarding is complete.")
     expect(empty).not.toContain("up to date")
   })
 
   it.each([
     [4, "Beginner · Weekday · 6–7 am", "4 today", "4 sessions today"],
     [0, "Beginner · Weekday · 6–7 am", "Clear", "Next · Beginner · Weekday · 6–7 am"],
-    [0, null, "Setup", "No training scheduled yet."],
+    [0, null, "Setup", "No training scheduled."],
   ] as const)(
     "preserves the Sessions priority branches",
     (todaySessionCount, nextSessionLabel, status, detail) => {

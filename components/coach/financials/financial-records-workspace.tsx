@@ -12,6 +12,7 @@ import {
 import Link from "next/link"
 import type { ReactNode } from "react"
 
+
 import {
   formatAcademyDate,
   formatAcademyTime,
@@ -36,6 +37,8 @@ import financialStyles from "./financials.module.css"
 export type FinancialRecordsView = "fees" | "collections" | "activity"
 
 export type FinancialRecordsPagination = {
+  /** Said when there are later records but Next has reached its limit. */
+  endNote?: string | null
   label: string
   nextHref?: string | null
   previousHref?: string | null
@@ -178,7 +181,10 @@ function StatusLabel({ status }: { status: FinanceStatus }) {
 function Pagination({ pagination }: { pagination: FinancialRecordsPagination }) {
   return (
     <nav className={recordsStyles.pagination} aria-label="Record pages">
-      <span>{pagination.label}</span>
+      <span>
+        {pagination.label}
+        {pagination.endNote ? <small className={recordsStyles.paginationNote}>{pagination.endNote}</small> : null}
+      </span>
       <div>
         {pagination.previousHref ? (
           <Link href={pagination.previousHref}><ArrowLeft aria-hidden="true" /> Previous</Link>
@@ -344,7 +350,9 @@ function FeeRegisterTable({
             ].filter(Boolean).join(" · ")
             const dueLabel = row.dueDate
               ? `Due ${formatDateKey(row.dueDate, { day: "numeric", month: "short", year: "numeric" })}`
-              : "No charge issued"
+              : row.status === "setup_required"
+                ? "On a schedule with no fee plan"
+                : "No charge issued"
 
             return (
               <tr key={`${row.playerId}-${row.feeReference ?? "not-prepared"}`}>
@@ -356,7 +364,7 @@ function FeeRegisterTable({
                   <small>{row.academyId}{row.archived ? " · Archived" : ""}</small>
                 </td>
                 <td className={recordsStyles.registrationEntry} data-label={isRegistration ? "Registration entry" : "Monthly fee"}>
-                  <strong>{row.feeReference ?? "Not issued"}</strong>
+                  <strong>{row.feeReference ?? (row.status === "setup_required" ? "No fee plan" : "Not issued")}</strong>
                   <small>{dueLabel}{adjustments ? ` · ${adjustments}` : " · No adjustments"}</small>
                 </td>
                 <td className={recordsStyles.registrationAmounts} data-label="Amounts">
@@ -478,6 +486,7 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
             <option value="pending">Pending</option>
             <option value="paid">Paid</option>
             <option value="not_prepared">Not issued</option>
+            <option value="setup_required">Setup required</option>
             <option value="void">Void</option>
           </select>
         </label>
@@ -738,6 +747,7 @@ export function FinancialRecordsWorkspace(props: FinancialRecordsWorkspaceProps)
       </header>
 
       <RecordsNavigation activeView={activeView} />
+
 
       {props.activeView === "fees" ? <FeeRegister register={props.feeRegister} /> : null}
       {props.activeView === "collections" ? <CollectionsDayBook dayBook={props.dayBook} /> : null}

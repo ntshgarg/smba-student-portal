@@ -2,7 +2,7 @@
 
 Never record database credentials, backup passphrases, personal data or authentication material here.
 
-Automated monthly stored-artifact results remain in GitHub Actions summaries. Record the quarterly
+Automated monthly stored-backup restore results remain in GitHub Actions summaries. Record the quarterly
 disposable-Turso drill here because it validates the provider restore boundary that automation does not
 receive credentials to create or delete.
 

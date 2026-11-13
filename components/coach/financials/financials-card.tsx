@@ -32,9 +32,11 @@ export function FinancialsCard({
     alreadyPrepared: number
   }
 }) {
-  const summary = attentionCount > 0
-    ? `${formatInr(outstandingPaise)} outstanding`
-    : "Fee records are ready to review"
+  const summary = attentionCount === 0
+    ? "Fee records are ready to review"
+    : outstandingPaise > 0
+      ? `${formatInr(outstandingPaise)} outstanding`
+      : "Some players need a fee plan or this month’s fee"
   const month = formatPeriod(period)
   const preparationState = preparation.ready > 0
     ? `${month} fees ready to issue`

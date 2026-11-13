@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import {
   OperationalActionError,
+  operationalActionError,
   operationalActionFailure,
   type OperationalActionResult,
 } from "@/lib/actions/operational-result"
@@ -13,14 +14,17 @@ import { getAcademyDateKey } from "@/lib/format"
 import {
   cancelTrainingChange,
   changeScheduleThisMonth,
+  dismissTrainingNotice,
   endTrainingNow,
   nextMonthStartOf,
   previewScheduleChange,
   scheduleEndOfTraining,
   scheduleTrainingChange,
+  stopFeePlan,
   type ChangeThisMonthInput,
 } from "@/lib/training/changes"
 import {
+  cancelFeeChange,
   changeMonthlyFee,
   giveConcession,
   stopConcession,
@@ -67,9 +71,17 @@ async function run<T>(operation: (coachId: string) => T): Promise<OperationalAct
  * change anything; starting on a day this month it happens now, under the
  * paid-fee rule in lib/training/changes.ts.
  */
-export async function changeScheduleAction(input: ChangeThisMonthInput) {
+export async function changeScheduleAction(input: ChangeThisMonthInput & { when?: "next" | "this" }) {
   return run((coachId) => {
-    if (input.startsOn === nextMonthStartOf(getAcademyDateKey(academyNow()))) {
+    const nextMonthStart = nextMonthStartOf(getAcademyDateKey(academyNow()))
+    // A "next month" form sent after midnight on the last day must not apply at once.
+    if (input.when === "next" && input.startsOn !== nextMonthStart) {
+      operationalActionError(
+        "CONFLICT",
+        "A new month has started since this form was opened. Close it and open it again.",
+      )
+    }
+    if (input.startsOn === nextMonthStart) {
       const scheduled = scheduleTrainingChange(input, { coachId })
       return { kind: "scheduled" as const, startsOn: scheduled.effectiveOn, result: null }
     }
@@ -116,6 +128,26 @@ export async function stopConcessionAction(
 ) {
   return run((coachId) => {
     stopConcession(input, { coachId })
+    return true
+  })
+}
+
+/** "Stop fees" for a player on no schedule with a fee plan still kept. */
+export async function stopFeePlanAction(input: { playerId: string }) {
+  return run((coachId) => stopFeePlan(input, { coachId }))
+}
+
+/** "Cancel this fee change" for a fee change waiting for next month. */
+export async function cancelFeeChangeAction(
+  input: { agreementId: string; expectedRevision: number; playerId: string },
+) {
+  return run((coachId) => cancelFeeChange(input, { coachId }))
+}
+
+/** Dismisses the notice a booked change that did not happen left on the record. */
+export async function dismissTrainingNoticeAction(input: { playerId: string }) {
+  return run((coachId) => {
+    dismissTrainingNotice(input, { coachId })
     return true
   })
 }

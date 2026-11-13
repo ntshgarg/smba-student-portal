@@ -35,13 +35,14 @@ import {
 } from "@/lib/attendance/recording-workspace"
 import {
   discardPlayerAttendanceDraft,
+  leftOutAttendanceDraftNotice,
   persistPlayerAttendanceDraft,
   readPlayerAttendanceDraft,
   rebaseRestoredAttendanceDraft,
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
-import { describeRefusedSave } from "@/lib/client/session-expiry"
+import { describeRefusedSave, feedbackAfterMark } from "@/lib/client/session-expiry"
 import {
   academyTimeInputValue,
   formatAcademyTime,
@@ -71,6 +72,14 @@ const attendanceChoices = [
  * on this device" would be a lie exactly where it costs a register.
  */
 const discardMarksPrompt = "Leave this session and discard the unsaved attendance changes?"
+
+/** Leaving the page keeps a stored draft; changing session or date discards it. */
+const keptMarksPrompt = "Leave this session? Your unsaved marks are kept on this device"
+  + " and come back when you open it again."
+
+/** Shown when the coach tries to change session or date while a save is running. */
+const waitForSaveMessage = "Attendance is still saving. Wait for it to finish before"
+  + " choosing another session or date."
 
 /**
  * `offerRetry`, `signIn` and `leaveConfirmation` ride on the feedback so every
@@ -134,6 +143,8 @@ export function PlayerAttendanceRecorder({
   const [selectedOccurrenceId, setSelectedOccurrenceId] = useState(initialOccurrenceId)
   const [draftChanges, setDraftChanges] = useState<SessionAttendanceChange[]>([])
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
+  // Answers a date or session tap that a running save held back, beside the picker.
+  const [selectionNotice, setSelectionNotice] = useState<ActionFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
   // The day's occurrences come from the server one date at a time
@@ -142,6 +153,8 @@ export function PlayerAttendanceRecorder({
   // date and this date's list is empty for reasons that have nothing to do with
   // the coach's schedule. The transition is what tells those two empties apart.
   const [isChangingDate, startDateChange] = useTransition()
+  // Whether the device holds the marks on screen, from the last write or a restore.
+  const [draftKeptOnDevice, setDraftKeptOnDevice] = useState<boolean | undefined>(undefined)
   const { confirmDiscard } = useUnsavedWorkGuard({
     isDirty: draftChanges.length > 0,
     // Leaving the *page* discards nothing while an expiry stands: the marks are
@@ -149,7 +162,8 @@ export function PlayerAttendanceRecorder({
     // place they cannot be saved from. The guard still confirms -- only the
     // sentence changes, and only once the draft has been read back out of
     // storage. See `describeRefusedSave`.
-    message: feedback?.leaveConfirmation ?? discardMarksPrompt,
+    message: feedback?.leaveConfirmation
+      ?? (draftKeptOnDevice ? keptMarksPrompt : discardMarksPrompt),
     scope: "record-player-attendance",
   })
 
@@ -175,59 +189,6 @@ export function PlayerAttendanceRecorder({
     )
     return () => window.clearInterval(timer)
   }, [initialReferenceInstant])
-
-  // Marks the coach never got to save survive only here. The stored copy is
-  // keyed by occurrence, so it can come back to the register it was made on and
-  // nowhere else. Restoring is announced rather than silent: these are unsaved
-  // marks, not saved state, and the coach has to know which they are looking at.
-  //
-  // Read after the mounting render rather than during it, so the server-rendered
-  // register is what hydrates.
-  //
-  // What comes back is rebased onto that hydrated register before any of it is
-  // shown. The expectation each mark carries is the one part of a draft that
-  // does not merely age: a week is long enough for the register to be written
-  // elsewhere, and a mark expecting what the cell held that evening is then
-  // unsaveable — see `rebaseRestoredAttendanceDraft`. The rebase stays in memory
-  // and storage keeps the draft as it was marked: rebasing again on the next
-  // read costs nothing, while overwriting the stored expectation would erase
-  // what the warning below is counted from. This component is keyed on the
-  // selection, so the navigation `chooseOccurrence` fires remounts it and reads
-  // the draft a second time within the same tap.
-  //
-  // `attendanceRecords` is a dependency because the rebase reads it, not because
-  // a new one should restore the draft again: the provider hands down a fresh
-  // object on every revalidation, and a second restore would re-announce, as
-  // recovered from an earlier visit, marks the coach is in the middle of making.
-  // The ref holds the restore to once per selected occurrence, against whatever
-  // the register has hydrated by the time the timer runs.
-  const restoredOccurrenceIdRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!selectedOccurrenceId) return
-    const timer = window.setTimeout(() => {
-      if (restoredOccurrenceIdRef.current === selectedOccurrenceId) return
-      restoredOccurrenceIdRef.current = selectedOccurrenceId
-      const restored = readPlayerAttendanceDraft(selectedOccurrenceId)
-      if (!restored.length) return
-      const recorded = attendanceRecords[selectedOccurrenceId] ?? {}
-      const rebased = rebaseRestoredAttendanceDraft(
-        restored,
-        (change) => recorded[change.playerId] ?? "cleared",
-      )
-      if (!rebased.changes.length) return
-      setDraftChanges(rebased.changes)
-      setFeedback({
-        message: restoredAttendanceDraftNotice(
-          rebased.changes.length,
-          "save attendance",
-          rebased.changedUnderneath,
-        ),
-        tone: "info",
-      })
-    }, 0)
-
-    return () => window.clearTimeout(timer)
-  }, [attendanceRecords, selectedOccurrenceId])
 
   const seriesById = useMemo(
     () => new Map(sessionSeries.map((series) => [series.id, series])),
@@ -272,16 +233,18 @@ export function PlayerAttendanceRecorder({
   const selectedSeries = selectedOccurrence
     ? seriesById.get(selectedOccurrence.seriesId) ?? null
     : null
-  const eligiblePlayerIds = selectedOccurrence
-    ? new Set(eligiblePlayerIdsForOccurrence({
-      assignments: sessionAssignments,
-      occurrence: selectedOccurrence,
-      players: players.map((player) => ({
-        id: player.member.id,
-        joinedOn: player.member.trainingStartOn,
-      })),
-    }))
-    : new Set<string>()
+  const eligiblePlayerIds = useMemo(() => (
+    selectedOccurrence
+      ? new Set(eligiblePlayerIdsForOccurrence({
+        assignments: sessionAssignments,
+        occurrence: selectedOccurrence,
+        players: players.map((player) => ({
+          id: player.member.id,
+          joinedOn: player.member.trainingStartOn,
+        })),
+      }))
+      : new Set<string>()
+  ), [players, selectedOccurrence, sessionAssignments])
   const roster = players.filter((player) => eligiblePlayerIds.has(player.member.id))
   // Deliberately the saved count, not saved-plus-draft: the footer already
   // reports unsaved marks as "N unsaved changes", so keeping this one to what
@@ -290,14 +253,101 @@ export function PlayerAttendanceRecorder({
   const selectedProgress = selectedOccurrenceId
     ? rosterProgressByOccurrence.get(selectedOccurrenceId)
     : undefined
-  const activeSourceAdjustmentByPlayer = new Map(
+  const activeSourceAdjustmentByPlayer = useMemo(() => new Map(
     attendanceAdjustments
       .filter((adjustment) => (
         !adjustment.voidedAt
         && adjustment.sourceOccurrenceId === selectedOccurrenceId
       ))
       .map((adjustment) => [adjustment.playerId, adjustment]),
-  )
+  ), [attendanceAdjustments, selectedOccurrenceId])
+  // Marks the coach never got to save survive only here. The stored copy is
+  // keyed by occurrence, so it can come back to the register it was made on and
+  // nowhere else. Restoring is announced rather than silent: these are unsaved
+  // marks, not saved state, and the coach has to know which they are looking at.
+  //
+  // Read after the mounting render rather than during it, so the server-rendered
+  // register is what hydrates.
+  //
+  // What comes back is rebased onto that hydrated register before any of it is
+  // shown. The expectation each mark carries is the one part of a draft that
+  // does not merely age: a week is long enough for the register to be written
+  // elsewhere, and a mark expecting what the cell held that evening is then
+  // unsaveable — see `rebaseRestoredAttendanceDraft`. The rebase is not written
+  // back on restore, so a reload before any tap warns again; the next mark
+  // persists the rebased expectations, once the coach has seen the warning.
+  // This component is keyed on the
+  // selection, so the navigation `chooseOccurrence` fires remounts it and reads
+  // the draft a second time within the same tap.
+  //
+  // `attendanceRecords` is a dependency because the rebase reads it, not because
+  // a new one should restore the draft again: the provider hands down a fresh
+  // object on every revalidation, and a second restore would re-announce, as
+  // recovered from an earlier visit, marks the coach is in the middle of making.
+  // The ref holds the restore to once per selected occurrence, against whatever
+  // the register has hydrated by the time the timer runs.
+  //
+  // Only marks this screen can show come back: a player no longer on the roster
+  // or whose absence was made up has no buttons, yet their mark would fail the
+  // whole save. Those are left out and named. Waits for the session to load so
+  // an empty roster cannot drop everything.
+  const restoredOccurrenceIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!selectedOccurrenceId || selectedOccurrence?.id !== selectedOccurrenceId) return
+    const timer = window.setTimeout(() => {
+      if (restoredOccurrenceIdRef.current === selectedOccurrenceId) return
+      restoredOccurrenceIdRef.current = selectedOccurrenceId
+      const stored = readPlayerAttendanceDraft(selectedOccurrenceId)
+      if (!stored.length) return
+      // A session cancelled since cannot be saved; the marks stay on the device.
+      if (selectedOccurrence.status !== "scheduled") {
+        setFeedback({
+          message: `${stored.length} unsaved ${stored.length === 1 ? "mark" : "marks"} from an earlier visit`
+            + " cannot be saved because this session was cancelled. They stay on this device and"
+            + " come back if the session is restored.",
+          tone: "info",
+        })
+        return
+      }
+      const restored = stored.filter((change) => (
+        eligiblePlayerIds.has(change.playerId)
+        && !activeSourceAdjustmentByPlayer.has(change.playerId)
+      ))
+      const leftOut = stored.length - restored.length
+      const recorded = attendanceRecords[selectedOccurrenceId] ?? {}
+      const rebased = rebaseRestoredAttendanceDraft(
+        restored,
+        (change) => recorded[change.playerId] ?? "cleared",
+      )
+      if (!rebased.changes.length) {
+        if (leftOut) {
+          discardPlayerAttendanceDraft(selectedOccurrenceId)
+          setFeedback({ message: leftOutAttendanceDraftNotice(leftOut), tone: "info" })
+        }
+        return
+      }
+      setDraftChanges(rebased.changes)
+      setDraftKeptOnDevice(true)
+      setFeedback({
+        message: restoredAttendanceDraftNotice(
+          rebased.changes.length,
+          "save attendance",
+          rebased.changedUnderneath,
+          leftOut,
+        ),
+        tone: "info",
+      })
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [
+    activeSourceAdjustmentByPlayer,
+    attendanceRecords,
+    eligiblePlayerIds,
+    selectedOccurrence,
+    selectedOccurrenceId,
+  ])
+
   const draftByPlayer = new Map(
     draftChanges.map((change) => [change.playerId, change.choice]),
   )
@@ -344,8 +394,16 @@ export function PlayerAttendanceRecorder({
     return true
   }
 
+  // A save in flight holds the session and date, so its outcome can be shown.
+  function blockedBySave() {
+    if (!isSaving) return false
+    setSelectionNotice({ message: waitForSaveMessage, tone: "info" })
+    return true
+  }
+
   function chooseDate(dateKey: string) {
-    if (!dateKey || dateKey === selectedDate || !discardDraftForSelectionChange()) return
+    if (!dateKey || dateKey === selectedDate || blockedBySave()) return
+    if (!discardDraftForSelectionChange()) return
     // The chosen date is shown at once — it is the coach's own input, and the
     // date row must not lag behind the picker. Only the navigation that fetches
     // it is deferred, so `isChangingDate` is raised for the round trip in which
@@ -367,6 +425,7 @@ export function PlayerAttendanceRecorder({
 
   function chooseOccurrence(occurrence: TrainingSessionOccurrence) {
     if (occurrence.status !== "scheduled" || occurrenceIsUpcoming(occurrence, referenceInstant)) return
+    if (blockedBySave()) return
     if (occurrence.id === selectedOccurrenceId) {
       if (!discardDraftForSelectionChange()) return
       setSelectedOccurrenceId(null)
@@ -400,8 +459,8 @@ export function PlayerAttendanceRecorder({
         playerId,
       }]
     setDraftChanges(nextChanges)
-    persistPlayerAttendanceDraft(selectedOccurrence.id, nextChanges)
-    setFeedback(null)
+    setDraftKeptOnDevice(persistPlayerAttendanceDraft(selectedOccurrence.id, nextChanges))
+    setFeedback(feedbackAfterMark)
   }
 
   async function saveAttendance() {
@@ -435,7 +494,6 @@ export function PlayerAttendanceRecorder({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Attendance could not be saved",
         retained: "Your marks are still on screen",
         subject: "Attendance",
       })
@@ -446,6 +504,7 @@ export function PlayerAttendanceRecorder({
       })
     } finally {
       setIsSaving(false)
+      setSelectionNotice(null)
     }
   }
 
@@ -687,6 +746,13 @@ export function PlayerAttendanceRecorder({
           </label>
           <p>{formatDateKey(selectedDate, { year: "numeric" })}</p>
         </div>
+        {selectionNotice ? (
+          <InlineNotice
+            message={selectionNotice.message}
+            reserveSpace={false}
+            tone={selectionNotice.tone}
+          />
+        ) : null}
 
         <div className="attendance-record-layout">
           <section

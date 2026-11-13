@@ -17,6 +17,11 @@ const sessionExpiredCode: OperationalActionErrorCode = "SESSION_EXPIRED"
  */
 const signInHref = "/login"
 
+/** A new mark clears stale feedback but keeps an expired-sign-in notice. */
+export function feedbackAfterMark<Feedback extends object>(current: Feedback | null) {
+  return current && "signIn" in current && current.signIn ? current : null
+}
+
 export type RefusedSaveDescription = {
   leaveConfirmation?: string
   message: string
@@ -76,6 +81,13 @@ export function describeRefusedSave(
     subject: string
   },
 ): RefusedSaveDescription {
+  // A refresh only brings the marks back if the device kept them.
+  if (result.code === "CONFLICT" && !marksOnDevice()) {
+    return {
+      message: `${result.message} These marks are only on this screen and a refresh`
+        + " will clear them, so note them before you refresh.",
+    }
+  }
   if (result.code !== sessionExpiredCode) return { message: result.message }
 
   const signIn = { href: signInHref, label: "Sign in" }

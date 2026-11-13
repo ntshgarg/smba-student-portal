@@ -42,6 +42,7 @@ export default async function NewAssessmentPage({
       group={start.player.group}
       player={start.player}
       previous={draft?.previous ?? start.previous}
+      publishedCount={start.publishedCount}
       today={getAcademyDateKey(academyNow())}
     />
   )

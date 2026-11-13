@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import { and, eq, inArray, isNull, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm"
 
 import { isValidDateKey } from "@/lib/attendance/domain"
 import { reconcileAttendanceAdjustmentReviewStates } from "@/lib/attendance/adjustments"
@@ -15,10 +15,11 @@ import {
   trainingStartIsImplausiblyEarly,
 } from "@/lib/training/training-start"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
-import type { SmbaDatabase } from "@/lib/db/client"
+import type { SmbaDatabase, SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   accounts,
   attendanceAdjustments,
+  feeAgreements,
   playerEnrollments,
   sessionAssignments,
   sessionAssignmentWeekdays,
@@ -26,7 +27,9 @@ import {
   sessionOccurrences,
   sessionRecurrenceRules,
   sessionSeries,
+  trainingChanges,
 } from "@/lib/db/schema"
+import { FinanceServiceError, isFinanceActive } from "@/lib/finance/service"
 import {
   assignmentCoversOccurrence,
   buildOccurrenceDrafts,
@@ -39,8 +42,14 @@ import {
   sessionSlotsOverlap,
   validateSeriesInput,
 } from "@/lib/sessions/domain"
+import { academyHolidaysOnDates, assertAcademyOpenOn } from "@/lib/sessions/holidays"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
+import {
+  formatTermDate,
+  scheduleIsRunning,
+  scheduleTermFinished,
+} from "@/lib/sessions/term"
 import type {
   CreateSessionSeriesInput,
   SessionAttendanceChange,
@@ -51,6 +60,7 @@ import {
   academyPlanLabel,
   academyPlanRequiredWeekdayCount,
 } from "@/lib/training/academy-plans"
+import { clearTrainingNotices, scheduleLabel, stopFeesAfterMonth } from "@/lib/training/changes"
 
 function addCalendarDays(dateKey: string, days: number) {
   const date = new Date(`${dateKey}T00:00:00.000Z`)
@@ -203,14 +213,26 @@ export function createSessionSeriesRecords({
      * the range once. A unique violation here is a real defect and must keep
      * failing the transaction rather than being folded into an update.
      */
+    /*
+     * A day already closed for a holiday gets its session the way every other
+     * session on that day has it: cancelled by that holiday. The calendar then
+     * shows one thing for the day, nobody is expected to train or be marked,
+     * a first month's fee does not count it, and removing the holiday brings
+     * it back with the rest.
+     */
+    const holidays = academyHolidaysOnDates(tx, [...draftDates])
     const occurrenceRows: Array<typeof sessionOccurrences.$inferInsert> = occurrenceDrafts
-      .map((draft) => ({
-        id: randomUUID(),
-        ...draft,
-        status: "scheduled",
-        replacementForOccurrenceId: null,
-        createdAt: now,
-      }))
+      .map((draft) => {
+        const holiday = holidays.get(draft.occurrenceDate)
+        return {
+          id: randomUUID(),
+          ...draft,
+          status: holiday ? "cancelled" : "scheduled",
+          holidayId: holiday?.id ?? null,
+          replacementForOccurrenceId: null,
+          createdAt: now,
+        }
+      })
     // A term can select a weekday its date range never reaches, and drizzle
     // rejects an empty `values()`.
     if (occurrenceRows.length) tx.insert(sessionOccurrences).values(occurrenceRows).run()
@@ -264,12 +286,21 @@ export function assignSessionRecords({
     batch: playerEnrollments.batch,
     level: playerEnrollments.level,
     academyPlan: playerEnrollments.academyPlan,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
   }).from(accounts).innerJoin(
     playerEnrollments,
     eq(playerEnrollments.accountId, accounts.id),
   ).where(and(eq(accounts.id, playerId), eq(accounts.role, "player"))).get()
   if (!player || player.approvalStatus !== "approved" || player.archivedAt) {
     operationalActionError("NOT_FOUND", "Approved player was not found.", "playerId")
+  }
+  // The Session step only sets a first schedule; later changes are made in Members.
+  if (confirmTrainingStart && player.onboardingCompletedAt) {
+    operationalActionError(
+      "CONFLICT",
+      "This player’s onboarding is already complete. Change their schedule in Members.",
+      "playerId",
+    )
   }
   if (!player.level || !player.batch) {
     operationalActionError(
@@ -385,20 +416,58 @@ export function assignSessionRecords({
    * eligibility is `eligibilityDate >= trainingStartOn`, so present days would
    * vanish from the player's month with the rows still in the table.
    */
+  // Only days really recorded, or a place still held, hold the start back.
   if (confirmTrainingStart) {
-    const heldAssignments = database.select({
-      effectiveFrom: sessionAssignments.effectiveFrom,
-    }).from(sessionAssignments)
-      .where(eq(sessionAssignments.accountId, playerId))
+    const firstMarked = database.select({ occurrenceDate: sessionOccurrences.occurrenceDate })
+      .from(sessionAttendanceRecords)
+      .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
+      .where(and(
+        eq(sessionAttendanceRecords.accountId, playerId),
+        ne(sessionAttendanceRecords.choice, "cleared"),
+      ))
       .all()
-    const earliestHeld = heldAssignments
-      .map((held) => held.effectiveFrom)
+      .map((row) => row.occurrenceDate)
       .sort()[0]
-    if (earliestHeld !== undefined && effectiveFrom > earliestHeld) {
+    if (firstMarked !== undefined && effectiveFrom > firstMarked) {
       operationalActionError(
         "BUSINESS_RULE",
-        "Clear the player’s existing session assignment before starting them later "
-          + "— days already recorded against it sit before this date.",
+        `Attendance is already marked for this player from ${formatTermDate(firstMarked)}, so `
+          + "training cannot start later than that. Finish onboarding with their first schedule "
+          + "on the Fee Plan step, then move them in Members.",
+        "effectiveFrom",
+      )
+    }
+    const today = getIndiaDateKey(now)
+    const heldEarlier = database.select({
+      effectiveFrom: sessionAssignments.effectiveFrom,
+      seriesEndsOn: sessionSeries.endsOn,
+      seriesStartsOn: sessionSeries.startsOn,
+      title: sessionSeries.title,
+    }).from(sessionAssignments)
+      .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+      .where(and(
+        eq(sessionAssignments.accountId, playerId),
+        isNull(sessionAssignments.effectiveTo),
+        eq(sessionSeries.status, "active"),
+      ))
+      .all()
+      .map((held) => ({
+        ...held,
+        coversFrom: held.effectiveFrom > held.seriesStartsOn ? held.effectiveFrom : held.seriesStartsOn,
+      }))
+      .filter((held) => (
+        (held.seriesEndsOn === null || held.seriesEndsOn >= held.coversFrom)
+        && held.coversFrom < effectiveFrom
+      ))
+      .sort((left, right) => left.coversFrom.localeCompare(right.coversFrom))[0]
+    if (heldEarlier) {
+      const finishedTerm = heldEarlier.seriesEndsOn !== null && heldEarlier.seriesEndsOn < today
+      operationalActionError(
+        "BUSINESS_RULE",
+        `This player is already on ${heldEarlier.title} from ${formatTermDate(heldEarlier.coversFrom)}, `
+          + "so training cannot start later than that. Reload Player onboarding to see it; to choose "
+          + `a different first schedule, use ${finishedTerm ? "Start again" : "Clear this assignment"} `
+          + "on the Session step.",
         "effectiveFrom",
       )
     }
@@ -1115,6 +1184,9 @@ export function replaceSessionOccurrence({
           "dateKey",
         )
       }
+      // A closed day cancelled every session on it; moving one there would put
+      // a session on a day the calendar and register show as closed.
+      assertAcademyOpenOn(tx, dateKey)
       const occupiedTarget = tx.select().from(sessionOccurrences).where(and(
         eq(sessionOccurrences.seriesId, occurrence.seriesId),
         eq(sessionOccurrences.occurrenceDate, dateKey),
@@ -1193,7 +1265,155 @@ export function replaceSessionOccurrence({
   }
 }
 
-export function endSessionSeriesRecords({
+/*
+ * End schedule, for each player on it: their place ends today; a player on
+ * another running schedule stays active with fees untouched; a booked move or
+ * end in Members is kept; a booking onto this schedule is cancelled with a
+ * note; everyone else is paused, and fees stop after this month if chosen.
+ */
+
+export type EndSchedulePlayer = {
+  fullName: string
+  playerId: string
+}
+
+export type EndScheduleRosterPlayer = EndSchedulePlayer & {
+  /** A booking onto this schedule, which End schedule cancels. */
+  bookingOntoThis: { effectiveOn: string; kind: "change" | "end" } | null
+  /** A booked move elsewhere or end of training, which End schedule leaves alone. */
+  bookingKept: { effectiveOn: string; kind: "change" | "end" } | null
+  hasFeePlan: boolean
+  inOnboarding: boolean
+  /** Still on another running schedule: stays active, fees untouched. */
+  onAnotherSchedule: boolean
+  /**
+   * Still holds a place on another schedule, running or term-finished, so
+   * End schedule leaves their status as it is instead of pausing them.
+   */
+  placeElsewhere: boolean
+}
+
+export type EndSchedulePreview = {
+  /** Players not on the schedule whose booked move onto it is cancelled. */
+  bookedOnto: Array<EndSchedulePlayer & { effectiveOn: string }>
+  /** The first day the places no longer cover. */
+  endsPlacesOn: string
+  financeActive: boolean
+  /** True when the schedule's last day has already passed. */
+  termFinished: boolean
+  players: EndScheduleRosterPlayer[]
+  upcomingSessions: number
+}
+
+export type EndScheduleResult = {
+  alreadyEnded: boolean
+  /** Players whose booking onto this schedule was cancelled. */
+  bookingCancelled: Array<EndSchedulePlayer & { schedule: string }>
+  /** Players whose own booked move or end of training was left as arranged. */
+  bookingKept: EndSchedulePlayer[]
+  cancelledOccurrences: number
+  closedAssignments: number
+  endsPlacesOn: string | null
+  feesStopped: EndSchedulePlayer[]
+  inOnboarding: EndSchedulePlayer[]
+  /** Still on another running schedule: active, fees untouched. */
+  keptActive: EndSchedulePlayer[]
+  takenOff: EndSchedulePlayer[]
+}
+
+/**
+ * Who is on the schedule and what End schedule will do for each, read once
+ * so the confirm panel and the write classify players the same way.
+ */
+function readEndScheduleRoster(
+  database: SmbaDatabaseExecutor,
+  series: typeof sessionSeries.$inferSelect,
+  today: string,
+) {
+  const places = database.select().from(sessionAssignments).where(and(
+    eq(sessionAssignments.seriesId, series.id),
+    isNull(sessionAssignments.effectiveTo),
+  )).all()
+  const onIds = [...new Set(places.map((place) => place.accountId))]
+  const bookings = database.select().from(trainingChanges).where(and(
+    eq(trainingChanges.status, "scheduled"),
+    onIds.length
+      ? or(inArray(trainingChanges.playerAccountId, onIds), eq(trainingChanges.seriesId, series.id))
+      : eq(trainingChanges.seriesId, series.id),
+  )).all()
+  const everyone = [...new Set([...onIds, ...bookings.map((booking) => booking.playerAccountId)])]
+  const people = new Map(everyone.length
+    ? database.select({
+      fullName: accounts.fullName,
+      id: accounts.id,
+      onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
+    }).from(accounts)
+      .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
+      .where(inArray(accounts.id, everyone))
+      .all()
+      .map((person) => [person.id, person])
+    : [])
+  const otherPlaces = onIds.length
+    ? database.select({
+      accountId: sessionAssignments.accountId,
+      endsOn: sessionSeries.endsOn,
+      status: sessionSeries.status,
+    }).from(sessionAssignments)
+      .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+      .where(and(
+        inArray(sessionAssignments.accountId, onIds),
+        isNull(sessionAssignments.effectiveTo),
+        ne(sessionAssignments.seriesId, series.id),
+      )).all()
+    : []
+  const withPlans = new Set(onIds.length
+    ? database.select({ playerId: feeAgreements.playerAccountId }).from(feeAgreements).where(and(
+      inArray(feeAgreements.playerAccountId, onIds),
+      eq(feeAgreements.status, "active"),
+    )).all().map((row) => row.playerId)
+    : [])
+  const ontoThis = (booking: typeof trainingChanges.$inferSelect) => (
+    booking.kind === "change" && booking.seriesId === series.id
+  )
+  const nameOf = (playerId: string) => people.get(playerId)?.fullName ?? "A player"
+
+  const players: EndScheduleRosterPlayer[] = onIds.map((playerId) => {
+    const booking = bookings.find((item) => item.playerAccountId === playerId) ?? null
+    return {
+      bookingKept: booking && !ontoThis(booking)
+        ? { effectiveOn: booking.effectiveOn, kind: booking.kind }
+        : null,
+      bookingOntoThis: booking && ontoThis(booking)
+        ? { effectiveOn: booking.effectiveOn, kind: booking.kind }
+        : null,
+      fullName: nameOf(playerId),
+      hasFeePlan: withPlans.has(playerId),
+      inOnboarding: !people.get(playerId)?.onboardingCompletedAt,
+      onAnotherSchedule: otherPlaces.some((place) => (
+        place.accountId === playerId && scheduleIsRunning(place, today)
+      )),
+      placeElsewhere: otherPlaces.some((place) => place.accountId === playerId),
+      playerId,
+    }
+  }).sort((first, second) => first.fullName.localeCompare(second.fullName, "en-IN"))
+  const bookedOnto = bookings
+    .filter((booking) => ontoThis(booking) && !onIds.includes(booking.playerAccountId))
+    .map((booking) => ({
+      effectiveOn: booking.effectiveOn,
+      fullName: nameOf(booking.playerAccountId),
+      playerId: booking.playerAccountId,
+    }))
+    .sort((first, second) => first.fullName.localeCompare(second.fullName, "en-IN"))
+  return {
+    bookedOnto,
+    cancelBookings: bookings.filter(ontoThis),
+    places,
+    players,
+  }
+}
+
+/** What End schedule would do, for its confirm panel. Changes nothing. */
+export function previewEndSessionSeries({
   coachId,
   database,
   now = new Date(),
@@ -1203,7 +1423,46 @@ export function endSessionSeriesRecords({
   database: SmbaDatabase
   now?: Date
   seriesId: string
-}) {
+}): EndSchedulePreview {
+  requireHeadAdminAccess(coachId, { database })
+  const today = getIndiaDateKey(now)
+  const series = typeof seriesId === "string"
+    ? database.select().from(sessionSeries).where(eq(sessionSeries.id, seriesId)).get()
+    : undefined
+  if (!series || series.status !== "active") {
+    operationalActionError("NOT_FOUND", "This schedule has already ended. Reload the roster.", "seriesId")
+  }
+  const roster = readEndScheduleRoster(database, series, today)
+  const upcomingSessions = database.select().from(sessionOccurrences).where(and(
+    eq(sessionOccurrences.seriesId, seriesId),
+    eq(sessionOccurrences.status, "scheduled"),
+  )).all().filter((occurrence) => occurrenceIsUpcoming(occurrence, now)).length
+  return {
+    bookedOnto: roster.bookedOnto,
+    endsPlacesOn: today,
+    financeActive: isFinanceActive(database),
+    players: roster.players,
+    termFinished: scheduleTermFinished(series, today),
+    upcomingSessions,
+  }
+}
+
+export function endSessionSeriesRecords({
+  coachId,
+  createId = randomUUID,
+  database,
+  now = new Date(),
+  seriesId,
+  stopFees,
+}: {
+  coachId: string
+  createId?: () => string
+  database: SmbaDatabase
+  now?: Date
+  seriesId: string
+  /** "Stop fees after this month" (true) or "Keep the fee plan" (false). */
+  stopFees: boolean
+}): EndScheduleResult {
   requireHeadAdminAccess(coachId, { database })
   if (typeof seriesId !== "string" || !seriesId.trim()) {
     operationalActionError("NOT_FOUND", "Schedule was not found.", "seriesId")
@@ -1217,7 +1476,18 @@ export function endSessionSeriesRecords({
       operationalActionError("NOT_FOUND", "Schedule was not found.", "seriesId")
     }
     if (series.status === "ended") {
-      return { alreadyEnded: true, cancelledOccurrences: 0, closedAssignments: 0 }
+      return {
+        alreadyEnded: true,
+        bookingCancelled: [],
+        bookingKept: [],
+        cancelledOccurrences: 0,
+        closedAssignments: 0,
+        endsPlacesOn: null,
+        feesStopped: [],
+        inOnboarding: [],
+        keptActive: [],
+        takenOff: [],
+      }
     }
     const occurrences = tx.select().from(sessionOccurrences).where(
       eq(sessionOccurrences.seriesId, seriesId),
@@ -1237,10 +1507,8 @@ export function endSessionSeriesRecords({
     const futureOccurrenceIds = occurrences.filter((occurrence) => (
       occurrence.status === "scheduled" && occurrenceIsUpcoming(occurrence, now)
     )).map((occurrence) => occurrence.id)
-    const openAssignments = tx.select().from(sessionAssignments).where(and(
-      eq(sessionAssignments.seriesId, seriesId),
-      isNull(sessionAssignments.effectiveTo),
-    )).all()
+    const roster = readEndScheduleRoster(tx, series, referenceDate)
+    const endsPlacesOn = referenceDate
     const ended = tx.update(sessionSeries).set({ status: "ended" }).where(and(
       eq(sessionSeries.id, seriesId),
       eq(sessionSeries.status, "active"),
@@ -1258,32 +1526,105 @@ export function endSessionSeriesRecords({
         eq(sessionOccurrences.status, "scheduled"),
       )).run()
     }
-    openAssignments.forEach((assignment) => {
+    /*
+     * A future session already off for a holiday is off for this ending too.
+     * Detached from the holiday, so removing the holiday later leaves it
+     * cancelled instead of bringing back a session of an ended schedule with
+     * nobody on it.
+     */
+    const holidaySuspendedFutureIds = occurrences.filter((occurrence) => (
+      occurrence.status === "cancelled"
+      && occurrence.holidayId !== null
+      && occurrenceIsUpcoming(occurrence, now)
+    )).map((occurrence) => occurrence.id)
+    if (holidaySuspendedFutureIds.length) {
+      tx.update(sessionOccurrences).set({ holidayId: null })
+        .where(inArray(sessionOccurrences.id, holidaySuspendedFutureIds)).run()
+    }
+    roster.places.forEach((assignment) => {
       tx.update(sessionAssignments).set({
-        effectiveTo: assignment.effectiveFrom > referenceDate
+        effectiveTo: assignment.effectiveFrom > endsPlacesOn
           ? assignment.effectiveFrom
-          : referenceDate,
+          : endsPlacesOn,
       }).where(and(
         eq(sessionAssignments.id, assignment.id),
         isNull(sessionAssignments.effectiveTo),
       )).run()
     })
-    const affectedPlayerIds = [...new Set(openAssignments.map((assignment) => assignment.accountId))]
-    affectedPlayerIds.forEach((playerId) => {
-      const remaining = tx.select({ id: sessionAssignments.id }).from(sessionAssignments).where(and(
-        eq(sessionAssignments.accountId, playerId),
-        isNull(sessionAssignments.effectiveTo),
-      )).get()
+
+    // Their schedule has ended, so an older red failure on their record is
+    // dealt with. A note on a booking cancelled by another schedule's ending
+    // stays until a new booking or Dismiss; the notes written below are new.
+    roster.players.forEach((player) => clearTrainingNotices(tx, player.playerId, now, { failuresOnly: true }))
+    const label = scheduleLabel(tx, series)
+    const endedOn = formatTermDate(referenceDate)
+    const onIds = new Set(roster.players.map((player) => player.playerId))
+    roster.cancelBookings.forEach((booking) => {
+      tx.update(trainingChanges).set({
+        failureReason: onIds.has(booking.playerAccountId)
+          ? `Booked change of days or fee on ${label} cancelled: that schedule was ended on ${endedOn}.`
+          : `Booked move to ${label} cancelled: that schedule was ended on ${endedOn}.`,
+        resolvedAt: now,
+        status: "cancelled",
+        updatedAt: now,
+      }).where(and(
+        eq(trainingChanges.id, booking.id),
+        eq(trainingChanges.status, "scheduled"),
+      )).run()
+    })
+
+    const financeActive = isFinanceActive(tx)
+    const finalMonth = referenceDate.slice(0, 7)
+    const result: EndScheduleResult = {
+      alreadyEnded: false,
+      bookingCancelled: [
+        ...roster.players.filter((player) => player.bookingOntoThis),
+        ...roster.bookedOnto,
+      ].map(({ fullName, playerId }) => ({ fullName, playerId, schedule: label })),
+      bookingKept: [],
+      cancelledOccurrences: futureOccurrenceIds.length,
+      closedAssignments: roster.places.length,
+      endsPlacesOn,
+      feesStopped: [],
+      inOnboarding: [],
+      keptActive: [],
+      takenOff: [],
+    }
+    roster.players.forEach((player) => {
+      const person = { fullName: player.fullName, playerId: player.playerId }
+      result.takenOff.push(person)
+      if (player.inOnboarding) result.inOnboarding.push(person)
       tx.update(playerEnrollments).set({
         recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
-        status: remaining ? "active" : "paused",
+        status: player.placeElsewhere ? "active" : "paused",
         updatedAt: now,
-      }).where(eq(playerEnrollments.accountId, playerId)).run()
+      }).where(eq(playerEnrollments.accountId, player.playerId)).run()
+      if (player.onAnotherSchedule) {
+        result.keptActive.push(person)
+        return
+      }
+      if (player.bookingKept) {
+        result.bookingKept.push(person)
+        return
+      }
+      if (!stopFees || !financeActive) return
+      try {
+        if (stopFeesAfterMonth(tx, {
+          finalMonth,
+          idempotencyKey: `end-schedule:${createId()}`,
+          playerId: player.playerId,
+          reason: "Schedule ended",
+        }, { actorId: coachId, createId, now })) {
+          result.feesStopped.push(person)
+        }
+      } catch (error) {
+        // Nothing is saved; say whose fee plan could not be stopped.
+        if (error instanceof FinanceServiceError) {
+          operationalActionError("BUSINESS_RULE", `${player.fullName}: ${error.message}`)
+        }
+        throw error
+      }
     })
-    return {
-      alreadyEnded: false,
-      cancelledOccurrences: futureOccurrenceIds.length,
-      closedAssignments: openAssignments.length,
-    }
+    return result
   }, { behavior: "immediate" })
 }

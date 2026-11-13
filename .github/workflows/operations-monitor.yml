@@ -45,15 +45,16 @@ jobs:
               repo: context.repo.repo,
             })
             if (result.muted) {
-              // Warning rather than failure, and never silence: the schedule is
-              // off on purpose, so this is a standing condition to keep visible,
-              // not an incident to page anyone about.
-              core.warning(result.backupRunId
-                ? `Backup freshness is muted: the nightly schedule in encrypted-production-backup.yml is disabled, and the last successful backup (run ${result.backupRunId}) is ${result.backupAgeHours} hours old. Production has no current snapshot. Re-enable the schedule once the destination is authenticated storage.`
-                : "Backup freshness is muted: the nightly schedule in encrypted-production-backup.yml is disabled and no successful backup exists at all.")
+              // A standing condition: warn, don't fail every half hour.
+              core.warning(result.message ?? (result.backupRunId
+                ? `Backup freshness is muted: the nightly schedule in encrypted-production-backup.yml is disabled, and the last stored backup (run ${result.backupRunId}) is ${result.backupAgeHours} hours old. Production has no current backup. Turn the schedule back on.`
+                : "Backup freshness is muted: the nightly schedule in encrypted-production-backup.yml is disabled and no backup has ever been stored."))
               return
             }
-            core.notice(`Backup run ${result.backupRunId}, restore run ${result.restoreRunId}, artifact ${result.artifactId} are current.`)
+            if (result.message) core.warning(result.message)
+            core.notice(result.restoreRunId
+              ? `Backup run ${result.backupRunId} and restore check run ${result.restoreRunId} are current.`
+              : `Backup run ${result.backupRunId} is current.`)
 
   security-signals:
     name: Authentication delivery and lockout signals
