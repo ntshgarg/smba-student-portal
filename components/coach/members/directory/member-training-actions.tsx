@@ -199,8 +199,8 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
               </strong>
               <span>
                 {scheduled.kind === "end"
-                  // In onboarding there is no fee plan to keep yet.
-                  ? `Paused from ${dayName(scheduled.effectiveOn)}${!onboarded ? "" : scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
+                  // Without a fee plan there is nothing to stop or keep.
+                  ? `Paused from ${dayName(scheduled.effectiveOn)}${!fee?.activeAgreementId ? "" : scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
                   : [
                     scheduledSeries ? seriesLabel(scheduledSeries) : "New schedule",
                     dayList(scheduled.weekdays),
@@ -294,7 +294,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                       ? "paid"
                       : fee.thisMonth.receivedPaise > 0
                         ? `${formatInr(fee.thisMonth.receivedPaise)} paid`
-                        : `due ${dayName(fee.thisMonth.dueDate)}`}`
+                        : `${fee.thisMonth.dueDate < data.today ? "overdue, was due" : "due"} ${dayName(fee.thisMonth.dueDate)}`}`
                     : "Not issued yet"}</dd>
                 </div>
                 <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthNoFee === "term-finished"
@@ -310,7 +310,9 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                 </div>
               </dl>
             ) : (
-              <p className={styles.help}>No fee plan yet. It is set during Player onboarding.</p>
+              <p className={styles.help}>{onboarded
+                ? "No fee plan."
+                : "No fee plan yet. It is set during Player onboarding."}</p>
             )}
             {/* Without a running place there is no fee to change. A booked
                 move carries its own fee, edited with that change; a booked
@@ -380,7 +382,9 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                     className={styles.button}
                     disabled={busy}
                     onClick={() => {
-                      if (!fee.concession) return
+                      if (!fee.concession || !window.confirm(
+                        `Stop ${player.member.fullName}’s concession? Fees issued from now on are at the full amount; fees already issued keep it.`,
+                      )) return
                       const concession = fee.concession
                       void submit(
                         () => stopConcessionAction({
@@ -442,6 +446,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           onCancel={() => setOpen(null)}
           onSubmit={submit}
           playerId={memberId}
+          scheduled={scheduled}
           termFinishedOn={player.training.termFinishedOn}
           thisMonth={thisMonth}
         />
@@ -473,7 +478,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
       {open === "concession" && fee ? (
         <ConcessionForm
           busy={busy}
-          monthlyFee={fee.nextMonthFeePaise ?? fee.monthlyFeePaise}
+          monthlyFee={fee.nextMonthNoFee ? null : fee.nextMonthFeePaise}
           name={player.member.fullName}
           nextMonth={nextMonth}
           onCancel={() => setOpen(null)}
@@ -603,8 +608,9 @@ function TrainingForm({
     ? scheduled.monthlyFeePaise
     : !profileChanges && fee?.monthlyFeePaise ? fee.monthlyFeePaise : standard ?? fee?.monthlyFeePaise ?? null
   const feePaise = feeTouched ? parseRupeesToPaise(feeText) : suggestedFee
-  // This month, a fee is asked for only when the level, batch or plan changes.
-  const askFee = financeActive && (when === "next" || profileChanges)
+  // This month, a fee is asked for only when the level, batch or plan changes
+  // and a fee plan is in force to change.
+  const askFee = financeActive && (when === "next" || (profileChanges && fee?.monthlyFeePaise != null))
   const feeOk = !askFee || (feePaise !== null && feePaise > 0)
   const dateOk = when === "next" || (date >= monthStart && date <= today && date >= player.member.trainingStartOn)
 
@@ -865,6 +871,7 @@ function EndForm({
   onCancel,
   onSubmit,
   playerId,
+  scheduled,
   termFinishedOn,
   thisMonth,
 }: {
@@ -876,12 +883,14 @@ function EndForm({
   onCancel: () => void
   onSubmit: Submit
   playerId: string
+  scheduled: MemberScheduledChange | null
   /** Set when the player's term has finished; the ending itself is unchanged. */
   termFinishedOn: string | null
   thisMonth: string
 }) {
   const [leftAlready, setLeftAlready] = useState(false)
-  const [stopFees, setStopFees] = useState(true)
+  // Reopened, the form keeps the fee choice of the end already planned.
+  const [stopFees, setStopFees] = useState(scheduled?.kind === "end" ? scheduled.stopFees : true)
   return (
     <FormShell
       busy={busy}
@@ -901,6 +910,7 @@ function EndForm({
         leftAlready ? "Take them off their schedule today" : `Keep them on their schedule until the end of ${thisMonth}`,
         leftAlready ? "Pause them from today" : `Pause them from ${dayName(nextMonthStart)}`,
         ...(financeActive ? [stopFees ? `Stop fees after ${thisMonth}` : "Keep the fee plan"] : []),
+        ...(scheduled?.kind === "change" ? ["Drop the change planned for next month"] : []),
       ]}
       title={`${name} stops training`}
     >

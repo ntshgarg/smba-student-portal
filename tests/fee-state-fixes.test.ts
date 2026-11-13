@@ -38,6 +38,7 @@ describe("fee changes reach the fee the family is billed", () => {
     percent: "21000000-0000-4000-8000-0000000000b5",
     stayer: "21000000-0000-4000-8000-0000000000b6",
     twice: "21000000-0000-4000-8000-0000000000b7",
+    changer: "21000000-0000-4000-8000-0000000000b8",
   }
   let nextMutation = 0
   const mutationId = () => `00000000-0000-4000-8000-${String(nextMutation += 1).padStart(12, "0")}`
@@ -175,6 +176,7 @@ describe("fee changes reach the fee the family is billed", () => {
     addPlayer(players.percent, "Isha Das", 9105, morning)
     addPlayer(players.stayer, "Jay Patel", 9106, morning)
     addPlayer(players.twice, "Kiran Shah", 9107, morning)
+    addPlayer(players.changer, "Lata Rao", 9108, morning)
 
     finance.activateFinance({ trackingMonth: "2026-10", idempotencyKey: "activate-fee-state-fixes" }, context())
     for (const playerId of Object.values(players)) {
@@ -282,6 +284,22 @@ describe("fee changes reach the fee the family is billed", () => {
     // The plan's end moves back to the day the family left.
     expect(database.select().from(schema.feeAgreements)
       .where(eq(schema.feeAgreements.id, ended.id)).get()?.effectiveTo).toBe("2026-10-05")
+  })
+
+  it("still offers the unused-days refund after a level or plan change this month", () => {
+    changeThisMonth(players.changer, threeDay, 300_000)
+    const charge = octoberCharge(players.changer)
+    finance.recordAllocatedPayment({
+      allocations: [{ amountPaise: 300_000, chargeId: charge.id, expectedChargeRevision: charge.recordRevision }],
+      amountPaise: 300_000,
+      method: "cash",
+      mutationId: mutationId(),
+      playerId: players.changer,
+      receivedOn: "2026-10-05",
+    }, context())
+    changes.endTrainingNow({ playerId: players.changer, stopFees: true }, context())
+    const record = finance.getCoachFinancePlayerRecord(players.changer, context())
+    expect(record?.coachManagement?.receipts[0]?.canRefund).toBe(true)
   })
 
   it("does not offer a withdrawal refund when a newer fee plan replaced the old one", () => {

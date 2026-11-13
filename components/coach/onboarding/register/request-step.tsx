@@ -75,7 +75,7 @@ export function RequestStep({
       return
     }
     const baseMessage = item.requestedRole === "coach"
-      ? `${result.data.fullName} approved as ${result.data.academyId}. They can activate their staff account in the registration browser.`
+      ? `${result.data.fullName} approved as ${result.data.academyId}. They can now activate their staff account from any device.`
       : `${result.data.fullName} approved as ${result.data.academyId}. Continue with the court assessment.`
     onSuccess({
       message: result.data.notificationDelivered

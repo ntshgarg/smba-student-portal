@@ -50,6 +50,8 @@ export function MemberEditForm({
   } = editor
   const memberId = player.member.id
   const classificationLockId = `member-${memberId}-classification-lock`
+  // Once onboarding is finished, the training actions own the classification.
+  const classificationLocked = hasActiveAssignments || Boolean(player.member.onboardingCompletedAt)
 
   return (
     <form
@@ -130,13 +132,13 @@ export function MemberEditForm({
 
       <fieldset disabled={isSaving}>
         <legend>Training</legend>
-        {hasActiveAssignments ? (
+        {classificationLocked ? (
           <p
             id={classificationLockId}
             className="coach-member-classification-lock"
           >
-            Level, batch and plan change with Change training on the member record,
-            from the 1st of next month.
+            Level, batch and plan change with Change schedule or Start training on
+            the member record.
           </p>
         ) : null}
         <div className="coach-member-form-grid">
@@ -146,11 +148,11 @@ export function MemberEditForm({
               id={`member-${memberId}-level`}
               name="level"
               value={draft.level}
-              disabled={hasActiveAssignments}
+              disabled={classificationLocked}
               aria-invalid={Boolean(errors.level)}
               aria-describedby={[
                 errors.level ? `member-${memberId}-level-error` : null,
-                hasActiveAssignments ? classificationLockId : null,
+                classificationLocked ? classificationLockId : null,
               ].filter(Boolean).join(" ") || undefined}
               onChange={(event) => onSelectLevel(event.target.value as MemberDraft["level"])}
             >
@@ -165,11 +167,11 @@ export function MemberEditForm({
               id={`member-${memberId}-batch`}
               name="batch"
               value={draft.batch}
-              disabled={hasActiveAssignments}
+              disabled={classificationLocked}
               aria-invalid={Boolean(errors.batch)}
               aria-describedby={[
                 errors.batch ? `member-${memberId}-batch-error` : null,
-                hasActiveAssignments ? classificationLockId : null,
+                classificationLocked ? classificationLockId : null,
               ].filter(Boolean).join(" ") || undefined}
               onChange={(event) => onSelectBatch(event.target.value as MemberDraft["batch"])}
             >
@@ -184,13 +186,13 @@ export function MemberEditForm({
               id={`member-${memberId}-academy-plan`}
               name="academyPlan"
               value={draft.academyPlan ?? ""}
-              disabled={hasActiveAssignments
+              disabled={classificationLocked
                 || draft.level === "Assessment pending"
                 || draft.batch === "Assessment pending"}
               aria-invalid={Boolean(errors.academyPlan)}
               aria-describedby={[
                 errors.academyPlan ? `member-${memberId}-academy-plan-error` : null,
-                hasActiveAssignments ? classificationLockId : null,
+                classificationLocked ? classificationLockId : null,
               ].filter(Boolean).join(" ") || undefined}
               onChange={(event) => {
                 onUpdateField(

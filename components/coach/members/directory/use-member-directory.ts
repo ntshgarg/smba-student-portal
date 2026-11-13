@@ -241,10 +241,9 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     message: "Discard the unsaved changes to this member?",
     scope: "coach-member-editor",
   })
-  const activeFilterCount = Number(level !== "All levels")
-    + Number(status !== "all")
-    + Number(batch !== "All batches")
-    + Number(role !== "everyone")
+  // Level, batch and status do nothing for staff, so staff-only counts the role alone.
+  const activeFilterCount = Number(role !== "everyone") + (role === "staff" ? 0
+    : Number(level !== "All levels") + Number(status !== "all") + Number(batch !== "All batches"))
   const hasDirectoryCriteria = Boolean(query.trim()) || activeFilterCount > 0
 
   useEffect(() => {
@@ -401,6 +400,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     setEditingRevision(null)
     setDraft(null)
     setErrors({})
+    setMemberFeedback(null)
     if (memberId) restoreEditFocus(memberId)
   }
 

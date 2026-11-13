@@ -951,12 +951,13 @@ export function changeScheduleThisMonth(
       // A change of session time alone leaves the fee exactly as it is.
       if (!financeActive || !profileChanges) return result
 
-      const fee = validateFee(input.monthlyFeePaise, true) as number
       const { active, covering } = agreementsAround(tx, input.playerId, monthStart)
       if (active && active.effectiveFrom > monthStart) {
         nextMonthFeeRefusal(tx, input.playerId, getAcademyDateKey(now), "change this month")
       }
+      // No fee plan covers this month, so there is no fee to change.
       if (!covering) return result
+      const fee = validateFee(input.monthlyFeePaise, true) as number
       const monthLabel = new Intl.DateTimeFormat("en-IN", {
         month: "long", timeZone: "UTC", year: "numeric",
       }).format(new Date(`${monthStart}T00:00:00Z`))
@@ -971,7 +972,7 @@ export function changeScheduleThisMonth(
           reason,
         }, { actorId: coachId, createId, now })
       } else {
-        createFeeAgreementInTransaction(tx, {
+        const { agreement } = createFeeAgreementInTransaction(tx, {
           academyPlan: input.academyPlan,
           agreedMonthlyFeePaise: fee,
           batch: input.batch,
@@ -981,6 +982,14 @@ export function changeScheduleThisMonth(
           level: input.level,
           playerId: input.playerId,
         }, { actorId: coachId, createId, now })
+        // This month's fee now follows the plan in force, not the one that
+        // ended last month, so a mid-month withdrawal refund stays possible.
+        if (monthCharge) {
+          tx.update(financialCharges).set({
+            feeAgreementId: agreement.id,
+            recordRevision: sql`${financialCharges.recordRevision} + 1`,
+          }).where(eq(financialCharges.id, monthCharge.charge.id)).run()
+        }
       }
 
       if (!monthCharge || covering.agreedMonthlyFeePaise === fee) return result

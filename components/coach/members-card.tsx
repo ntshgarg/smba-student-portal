@@ -10,7 +10,7 @@ export function MembersCard({
 }: {
   memberCount: number
 }) {
-  const memberLabel = `${memberCount} enrolled ${memberCount === 1 ? "member" : "members"}`
+  const memberLabel = `${memberCount} enrolled ${memberCount === 1 ? "player" : "players"}`
 
   return (
     <CoachDashboardCard

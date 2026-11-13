@@ -9,6 +9,7 @@ import { formatJoinedDate } from "@/components/coach/members/directory/shared"
 import { InlineNotice, type InlineNoticeAction } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { AcademyStaffMember } from "@/lib/coach/types"
+import { getAcademyDateKey } from "@/lib/format"
 
 export function staffAccessLabel(accessLevel: AcademyStaffMember["accessLevel"]) {
   return accessLevel === "head_admin" ? "Head coach" : "Assistant coach"
@@ -202,13 +203,13 @@ export function StaffDetailRow({
                 <div>
                   <dt>Coach approved</dt>
                   <dd>{staff.approvedAt
-                    ? formatJoinedDate(staff.approvedAt.slice(0, 10))
+                    ? formatJoinedDate(getAcademyDateKey(staff.approvedAt))
                     : "Not recorded"}</dd>
                 </div>
                 <div>
                   <dt>Account activated</dt>
                   <dd>{staff.activatedAt
-                    ? formatJoinedDate(staff.activatedAt.slice(0, 10))
+                    ? formatJoinedDate(getAcademyDateKey(staff.activatedAt))
                     : "Not yet activated"}</dd>
                 </div>
               </dl>

@@ -294,6 +294,7 @@ export function updateMemberRecord({
       batch: playerEnrollments.batch,
       contactEmail: accounts.contactEmail,
       level: playerEnrollments.level,
+      onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
       recordRevision: playerEnrollments.recordRevision,
       registrationIdentityKey: accounts.registrationIdentityKey,
     }).from(accounts)
@@ -352,11 +353,16 @@ export function updateMemberRecord({
         isNull(sessionAssignments.effectiveTo),
       ))
       .all()
-    if (activeAssignments.length && (
-      validated.value.level !== current.level
+    const classificationChanges = validated.value.level !== current.level
       || validated.value.batch !== current.batch
       || validated.value.academyPlan !== current.academyPlan
-    )) {
+    if (classificationChanges && current.onboardingCompletedAt) {
+      return memberFailure(
+        "ACTIVE_ASSIGNMENTS",
+        "Change the level, batch or plan with Change schedule or Start training on the member record.",
+      )
+    }
+    if (activeAssignments.length && classificationChanges) {
       return memberFailure(
         "ACTIVE_ASSIGNMENTS",
         "End the player’s active sessions before changing their training classification.",
