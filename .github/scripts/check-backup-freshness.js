@@ -4,39 +4,11 @@ const MAX_BACKUP_AGE_MS = 30 * 60 * 60 * 1000
 const MAX_RESTORE_AGE_MS = 35 * 24 * 60 * 60 * 1000
 const SETUP_GUIDE = 'docs/PRODUCTION-OPERATIONS.md, "Scheduled encrypted backups"'
 
-/*
- * The day backups started going to the private store. Every earlier run of
- * either workflow belongs to the public-artifact era: fifteen successful
- * backup runs up to 3 Sep 2026, and restore checks of those copies up to
- * 1 Oct 2026. Those copies were deleted, so none of those runs is a backup the
- * academy holds or a restore check of one. Counting them would call the newest
- * of them "last night's backup" and alert every half hour before the store is
- * even set up, and would make the first real restore check overdue the moment
- * the first stored backup lands. Nothing on main could store a backup before
- * this date: until then its backup workflow failed on purpose.
- */
+// Runs before this date predate the private store; their backups were deleted.
 const PRIVATE_STORE_SINCE = Date.parse("2026-11-13T00:00:00Z")
 
-/*
- * This gate asks whether a backup was stored last night. It is muted only if
- * the nightly schedule in encrypted-production-backup.yml is switched off on
- * purpose -- it was, from 2026-09-03 until the head coach decided on 13 Nov
- * 2026 that the academy keeps nightly backups in a private store for 30 days.
- * Asking it while the schedule is off would fail the monitor every half hour
- * and hold a production alert open against a state somebody chose, which is how
- * a monitor stops being read.
- *
- * So the answer comes from the workflow itself rather than from a flag of our
- * own, and the mute lifts itself: restoring the `schedule:` trigger restores
- * the 30-hour gate in the same commit, with nothing separate to remember. The
- * age is still reported while muted.
- *
- * The caller passes the workflow text in, like every other input here, so this
- * module stays a pure function of its arguments and touches no filesystem.
- *
- * Comment stripping is deliberately naive -- a `#` inside a quoted value would
- * confuse it. No cron expression or trigger name contains one.
- */
+// The 30-hour gate is muted while encrypted-production-backup.yml has no
+// `schedule:` trigger. Comment stripping is naive; no trigger contains a `#`.
 function backupScheduleIsEnabled(source) {
   const lines = source.split("\n").map((line) => line.replace(/#.*$/u, ""))
   const start = lines.findIndex((line) => /^["']?on["']?\s*:/u.test(line))
@@ -131,15 +103,7 @@ module.exports = async function checkBackupFreshness({
     }
   }
 
-  // A successful run is a stored backup: putting the file in the private
-  // backup store is that workflow's last step, and the run fails if it fails.
-  //
-  // Nothing stored yet means the store has not been set up, or every night so
-  // far has failed. Each of those nights already fails "Encrypted production
-  // backup" itself, which Production alerts reports once a night with the
-  // reason. Failing here too would comment on an alert every half hour and
-  // bury this workflow's other job, the sign-in security signals -- so this
-  // says the same thing as a warning instead.
+  // No stored backup yet: the nightly run's own failure is the alert, so only warn.
   if (!backup) {
     return {
       backupAgeHours: null,
@@ -156,9 +120,7 @@ module.exports = async function checkBackupFreshness({
     )
   }
   if (!restore) {
-    // The first restore check runs on the 1st of the month after backups
-    // begin, so it is only overdue once backups are older than the 35 days
-    // allowed between checks.
+    // No restore check is overdue until backups are older than 35 days.
     if (ageMilliseconds(firstBackup.updated_at || firstBackup.created_at, now) > MAX_RESTORE_AGE_MS) {
       throw new Error(
         "Backups have been stored for more than 35 days and none has been restored and checked. Open the "

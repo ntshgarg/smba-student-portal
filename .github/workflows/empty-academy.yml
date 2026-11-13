@@ -54,41 +54,23 @@ jobs:
             exit 1
           fi
 
-      - name: Require the private backup store
-        env:
-          SMBA_BACKUP_STORE_TOKEN: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
-        run: |
-          if [ -z "$SMBA_BACKUP_STORE_TOKEN" ]; then
-            {
-              echo "### Nothing was deleted"
-              echo
-              echo "There is no private backup store yet, so there is no copy of the academy to fall back on."
-              echo "Set up the store (docs/PRODUCTION-OPERATIONS.md, \"Scheduled encrypted backups\"),"
-              echo "run \"Encrypted production backup\", then run this again."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::No private backup store is set up, so the tick box cannot be checked. Nothing was deleted."
-            exit 1
-          fi
-
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # The tick box is a person's word; this is the evidence. Everything below
-      # deletes, and after Turso's one-day rewind the stored backup is the only
-      # way back, so it has to exist and be recent before anything is touched.
-      # Anything saved since that backup is not in it: for an up-to-the-minute
-      # copy, run "Encrypted production backup" by hand first.
+      # Checks the tick box: a stored backup under 30 hours old must exist.
       - name: Require a backup from the last 30 hours
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           STORE_REPOSITORY: ${{ vars.SMBA_BACKUP_STORE_REPOSITORY || format('{0}/smba-backups', github.repository_owner) }}
+          STORE_TOKEN_SET: ${{ secrets.SMBA_BACKUP_STORE_TOKEN != '' }}
         with:
-          github-token: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
+          github-token: ${{ secrets.SMBA_BACKUP_STORE_TOKEN || github.token }}
           script: |
             const backupStore = require("./.github/scripts/backup-store.js")
             try {
+              backupStore.requireStoreToken(process.env.STORE_TOKEN_SET === "true")
               const store = backupStore.parseStoreRepository(process.env.STORE_REPOSITORY)
               await backupStore.assertPrivateStore({
                 github,

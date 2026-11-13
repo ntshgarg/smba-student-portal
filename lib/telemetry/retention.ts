@@ -25,14 +25,7 @@ import {
  */
 export const APPLICATION_ERROR_RETENTION_DAYS = 90
 export const AUTH_SECURITY_EVENT_RETENTION_DAYS = 180
-/*
- * The same policy promises that expired email codes, sessions and rate-limit
- * records go no more than 90 days after they expire. Those were never deleted
- * either, and an email code row keeps the address it was sent to -- so a parent
- * who once asked for a sign-in code, or someone who started registering and
- * gave up, stayed on the database for good. Every one of these rows is useless
- * minutes after it expires; 90 days past expiry is the policy's outer limit.
- */
+// The policy also deletes expired email codes, sessions and rate limits within 90 days.
 export const EXPIRED_SIGN_IN_RECORD_RETENTION_DAYS = 90
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -95,11 +88,7 @@ export function purgeExpiredTelemetry({
  * grow these tables, so the cost lands on whoever is producing the rows and no
  * scheduler has to exist. It never throws: a failed purge must not turn a
  * sign-in or an error report into a failure.
- *
- * It never runs inside somebody else's transaction. Its deletes would belong to
- * that transaction, so a rollback would quietly put the rows back -- after the
- * hour had already been counted as done. Plenty of writes happen outside one
- * (every sign-in, every error report), so skipping these costs nothing.
+ * Skipped inside a transaction, whose rollback would undo the purge.
  */
 export function purgeExpiredTelemetryOccasionally({
   database,

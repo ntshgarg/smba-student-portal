@@ -1,14 +1,7 @@
 name: Encrypted backup restore verification
 
-# Once a month, prove the newest nightly backup can actually be brought back:
-# fetch it from the private backup store, check it is the file that was stored,
-# decrypt it, check the database inside, bring it up to date, and start the
-# site on it. Where the backups are kept and why: encrypted-production-backup.yml
-# and docs/PRODUCTION-OPERATIONS.md, "Scheduled encrypted backups".
-#
-# This never sees the production database credentials -- only the store token
-# and the backup passphrase, each in the one step that needs it -- and it
-# always deletes every decrypted copy before it finishes.
+# Monthly: fetch the newest nightly backup from the private store, decrypt it,
+# check it and start the site on it. See encrypted-production-backup.yml.
 
 on:
   schedule:
@@ -41,23 +34,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - name: Require the private backup store
-        env:
-          SMBA_BACKUP_STORE_TOKEN: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
-        run: |
-          if [ -z "$SMBA_BACKUP_STORE_TOKEN" ]; then
-            {
-              echo "### No backup could be checked"
-              echo
-              echo "There is no private place to keep backups yet, so there is nothing to restore."
-              echo "Beyond Turso's one-day rewind, the academy has no copy of its records that could be restored."
-              echo
-              echo "Set up the store: docs/PRODUCTION-OPERATIONS.md, \"Scheduled encrypted backups\"."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::No private backup store is set up (the SMBA_BACKUP_STORE_TOKEN secret is missing), so the academy has no backup to restore."
-            exit 1
-          fi
-
       - name: Check out trusted default-branch verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,12 +55,14 @@ jobs:
         env:
           REQUESTED_BACKUP: ${{ inputs.backup_name }}
           STORE_REPOSITORY: ${{ vars.SMBA_BACKUP_STORE_REPOSITORY || format('{0}/smba-backups', github.repository_owner) }}
+          STORE_TOKEN_SET: ${{ secrets.SMBA_BACKUP_STORE_TOKEN != '' }}
         with:
-          github-token: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}
+          github-token: ${{ secrets.SMBA_BACKUP_STORE_TOKEN || github.token }}
           script: |
             const path = require("node:path")
             const backupStore = require("./.github/scripts/backup-store.js")
             try {
+              backupStore.requireStoreToken(process.env.STORE_TOKEN_SET === "true")
               const store = backupStore.parseStoreRepository(process.env.STORE_REPOSITORY)
               await backupStore.assertPrivateStore({
                 github,
@@ -103,7 +81,6 @@ jobs:
               })
               core.setOutput("name", selected.name)
               core.setOutput("created-at", selected.createdAt)
-              core.setOutput("stored-sha256", selected.sha256)
             } catch (error) {
               await core.summary
                 .addHeading("No backup could be checked", 3)
@@ -192,7 +169,6 @@ jobs:
           BACKUP_NAME: ${{ steps.backup.outputs.name }}
           CIPHERTEXT_SHA256: ${{ steps.restore.outputs.ciphertext-sha256 }}
           SNAPSHOT_SHA256: ${{ steps.restore.outputs.snapshot-sha256 }}
-          STORED_SHA256: ${{ steps.backup.outputs.stored-sha256 }}
         run: |
           {
             echo "## Encrypted backup restore verification"
@@ -200,7 +176,6 @@ jobs:
             echo "- Result: passed"
             echo "- Backup: ${BACKUP_NAME}"
             echo "- Backup made: ${BACKUP_CREATED_AT}"
-            echo "- SHA-256 recorded when stored: \`${STORED_SHA256}\`"
             echo "- Ciphertext SHA-256: \`${CIPHERTEXT_SHA256}\`"
             echo "- Snapshot SHA-256: \`${SNAPSHOT_SHA256}\`"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -32,18 +32,11 @@ conversation resolution and force-push/deletion prevention. Do not weaken those 
 
 ## Environment separation
 
-Vercel runs `vercel-build` for every deployment, production and preview alike. It builds the new
-version first (`next build`) and only then runs `db:prepare:empty`, which migrates and seeds whichever
-database `TURSO_DATABASE_URL` names in that environment. A build that fails therefore leaves the
-database alone. A build that succeeds updates the database before Vercel's own deploy steps that come
-after the build (bundling the functions, checking their size limits, uploading the output) and before
-traffic moves to the new version. Normally the version already live meets the updated database for
-those few seconds. If one of those later deploy steps fails, though, the database stays updated while
-the old version keeps serving, until the next deploy succeeds. So keep every migration safe for the
-version before it: add tables and columns freely, but remove or rename something only in a later
-release, once nothing live still uses it. That rule, not the build order, is what keeps the live
-version working. The academy
-database must be reachable from Production only:
+Vercel runs `vercel-build` for every deployment, production and preview alike. It runs `next build`
+first and only then `db:prepare:empty`, which migrates and seeds whichever database
+`TURSO_DATABASE_URL` names, so a failed build leaves the database alone. Keep every migration safe for
+the version before it (remove or rename only in a later release). The academy database must be
+reachable from Production only:
 
 | Variable | Production | Preview | Development |
 | --- | --- | --- | --- |
@@ -130,21 +123,12 @@ keep its decryption key in a separate password manager.
 
 ### Scheduled encrypted backups
 
-Every night at 02:47 IST, `.github/workflows/encrypted-production-backup.yml` copies the production
-database with the logical snapshot tool, checks the copy, encrypts it with GnuPG AES-256 and keeps the
-encrypted file for 30 days in a **separate private GitHub repository** (the backup store). It removes
-every plaintext copy from the runner, and after each upload it deletes stored backups older than 30
-days, but never the newest complete one, so a month of failed nights still leaves the last good copy.
-
-The backups are not kept as workflow artifacts of this repository. This repository is public, and any
-GitHub account can download a public repository's artifacts; that is how fifteen encrypted copies of
-the academy were downloadable by anyone until 3 September 2026. Before every upload,
-`.github/scripts/backup-store.js` checks that the store is a different repository and that it is
-private, and refuses otherwise. Each backup is a draft release in the store holding one encrypted file;
-its notes record when it was made and the file's SHA-256 checksum.
-
-**Until the store is set up, no backup is taken.** The nightly run fails at its first step and says so
-without reading the database, and Production alerts opens an issue for it. Set it up once:
+Every night at 02:47 IST, `.github/workflows/encrypted-production-backup.yml` snapshots the production
+database, encrypts it with GnuPG AES-256 and keeps it for 30 days as a draft release in a **separate
+private GitHub repository** (the backup store), never as an artifact of this public repository. It
+refuses to upload unless the store is private, and pruning never removes the newest complete backup.
+Until the store is set up the nightly run fails at its first step without reading the database. Set it
+up once:
 
 1. On GitHub, create a new **private** repository named `smba-backups` under the same account as this
    one, and tick **Add a README file** (the store needs one commit). To use another name, also add a
@@ -163,33 +147,22 @@ without reading the database, and Production alerts opens an issue for it. Set i
 4. Run **Encrypted production backup** by hand and check it succeeds, then run **Encrypted backup
    restore verification** by hand once. After that both run on their own.
 
-Never make the store public, give access to it to anyone who should not see every family's records,
-or reuse its token anywhere else. Revoking the token or removing someone's access to the store takes
-their access to the backups away. Deleting a
-backup from the store by hand is a data-recovery decision, not housekeeping.
+Never make the store public or reuse its token elsewhere. Deleting a backup from the store by hand is a
+data-recovery decision, not housekeeping.
 
 The operations monitor shares only the two read-only database secrets. It cannot change academy data.
 
 ### Automated stored-backup restore verification
 
 `.github/workflows/encrypted-backup-restore.yml` fetches the newest complete backup from the store on
-the first day of each month at 10:17 IST and checks it is the file that was stored (its SHA-256 must
-match the one recorded at upload). It decrypts inside a mode-0700 runner directory, rejects unsafe or
-unexpected archive entries, verifies the manifest, checksum, row counts, integrity and foreign keys,
-migrates a copy, builds against a separate empty database, and boots the application against the
-restored copy for health and login smoke checks. The workflow receives only the store token and
-`SMBA_BACKUP_PASSPHRASE`, never production database credentials, and always removes decrypted
-material. A manual run may name a specific stored backup. When there is no backup to check, it fails
-and says plainly that the academy has no restorable copy beyond Turso's one-day rewind.
+the first day of each month at 10:17 IST, decrypts it in a mode-0700 runner directory, verifies the
+archive, manifest, checksum, row counts, integrity and foreign keys, migrates a copy and boots the
+application on it for health and login smoke checks. It receives only the store token and
+`SMBA_BACKUP_PASSPHRASE`, always removes decrypted material, and a manual run may name a stored backup.
 
 Operations Monitor fails when the latest successful backup run is older than 30 hours or the latest
-successful restore check is older than 35 days, and says what that means in plain words. Until the first
-backup has been stored it only warns, because each failed night already fails the backup workflow and
-raises its own alert; and it allows the first restore check up to 35 days after backups begin. It
-counts only runs from 13 November 2026 onward, when backups started going to the private store: the
-older successful runs in the history kept their copies as public workflow files, which no longer exist,
-so they are neither a backup nor a restore check of one. A restore check counts only if it ran after the
-first stored backup.
+restore check is older than 35 days. It only warns until the first backup is stored, and counts only
+runs from 13 November 2026 onward, when backups started going to the private store.
 
 ### Quarterly remote restore drill
 
@@ -217,8 +190,8 @@ variable. `reset-empty-academy.mjs` needs a write-capable Turso token, so that s
 that cannot run on the read-only backup credentials. `prepare-admin-only-snapshot.mjs` only reads
 from the remote and should be given a read token.
 
-`prepare-admin-only-snapshot.mjs` is read-only against the remote database. It reads the schema and
-rows in one read transaction, so the copy is of one moment, into a new mode-0600 local SQLite file. It
+`prepare-admin-only-snapshot.mjs` is read-only against the remote database. It clones the schema and
+rows into a new mode-0600 local SQLite file. It
 deletes everything except the platform owner (named the same way as `scripts/database/reset-academy.ts`
 names it: the one approved, unarchived `platform_admin` signing in as `SMBA-ADMIN-0001`) and what that
 account signs in with — password, PIN, recovery email, academy ID allocation — plus the batch catalogue
@@ -233,20 +206,11 @@ TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<read token> \
   node scripts/deployment/prepare-admin-only-snapshot.mjs .data/backups/smba-admin-only-YYYY-MM-DD.db
 ```
 
-`reset-empty-academy.mjs` is the destructive half. It DELETEs every row of every table in the database
-`TURSO_DATABASE_URL` names, except the update history, and re-inserts the source, so against production
-it destroys every account, enrollment, attendance mark, fee, payment and refund the academy holds.
-Before the first delete it requires the source to be a zero-member academy with no authenticator, and
-refuses, changing nothing and leaving no backup file, unless the live database is still the one the
-source was prepared from: the same tables and indexes, the same update history (an update released in
-between used to be rolled back in that history and break every later deploy), the same owner, and the
-owner's password, PIN, recovery email, sign-in names and sign-in standing (active, to be reset or
-revoked) unchanged. It writes and integrity-checks a complete local backup of the remote, read as of one
-moment without locking anyone out. Only then does it take the live database's write lock, which Turso
-allows for a few seconds at a time: it checks everything again, checks that nothing was saved since the
-backup, and replaces the data. If anything was saved in between it changes nothing and asks you to run
-it again when nobody is using the academy. That backup is the only recovery path from a mistake here;
-give it a durable location and handle it as a snapshot.
+`reset-empty-academy.mjs` is the destructive half: it DELETEs every row of every table in the database
+`TURSO_DATABASE_URL` names, except the update history, and re-inserts the source, after writing and
+integrity-checking a local backup that is the only recovery path from a mistake here. It refuses,
+changing nothing, unless the source is a zero-member academy with no authenticator and the live
+database still has the same tables, indexes, update history and owner as the source.
 
 ```bash
 TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<write token> \

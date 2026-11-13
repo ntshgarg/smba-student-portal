@@ -1,22 +1,8 @@
 name: Encrypted production backup
 
-# Every night: copy the production database, check the copy, lock it with the
-# backup passphrase and keep the locked file in a separate PRIVATE GitHub
-# repository for 30 days. The monthly "Encrypted backup restore verification"
-# fetches the newest one and proves it can be brought back.
-#
-# Never as a workflow artifact. This repository is public, and any GitHub
-# account can download a public repository's artifacts: that is how fifteen
-# encrypted copies of the academy -- children's names, dates of birth, guardian
-# phone numbers, password hashes and authenticator secrets -- were downloadable
-# by anyone until 3 September 2026. .github/scripts/backup-store.js checks that
-# the store is private before every upload and refuses otherwise, and
-# tests/ci-security-controls.test.ts fails if this file ever uploads an artifact.
-#
-# Setting up the store, and the secrets this needs:
-# docs/PRODUCTION-OPERATIONS.md, "Scheduled encrypted backups". Until the store
-# is set up, every run fails at its first step and says so, without reading the
-# database.
+# Nightly: snapshot production, encrypt it and keep it 30 days in a separate
+# PRIVATE repository (never a workflow artifact: this repository is public).
+# Setup and secrets: docs/PRODUCTION-OPERATIONS.md, "Scheduled encrypted backups".
 
 on:
   schedule:
@@ -97,8 +83,6 @@ jobs:
         run: |
           npm run db:snapshot:verify -- .data/backup-run/smba-production.db
 
-      # Each run is a fresh runner, so fixed names cannot collide. Nothing from
-      # the run is spliced into this shell: it holds the passphrase.
       - name: Encrypt snapshot and manifest
         env:
           SMBA_BACKUP_PASSPHRASE: ${{ secrets.SMBA_BACKUP_PASSPHRASE }}
@@ -118,9 +102,7 @@ jobs:
           rm -f .data/smba-production-backup.tar.gz
           rm -rf .data/backup-run
 
-      # Checks the store is still private, uploads, and only then deletes stored
-      # backups older than 30 days -- never the newest complete one, so a month
-      # of failed nights cannot leave the academy with nothing.
+      # Prunes only after a successful upload, and never the newest complete backup.
       - name: Keep the encrypted snapshot in the private store
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -143,7 +125,6 @@ jobs:
               .addHeading("Encrypted production backup", 2)
               .addList([
                 `Stored: ${stored.name} (${stored.size} bytes)`,
-                `Encrypted file SHA-256: ${stored.sha256}`,
                 `Older than ${backupStore.RETENTION_DAYS} days and removed: ${pruned.length ? pruned.join(", ") : "none"}`,
               ])
               .write()

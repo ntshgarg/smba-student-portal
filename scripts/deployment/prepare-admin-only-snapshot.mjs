@@ -1,16 +1,5 @@
-// Builds the source that reset-empty-academy.mjs loads into the live database:
-// a local copy of the academy holding the platform owner and nothing else.
-//
-// It reads the remote and never writes to it. The copy keeps the owner's
-// account, password, PIN, recovery email and Academy ID allocation, plus the
-// batch catalogue and the update history. It does not keep the owner's
-// authenticator app: a handover must not pass on a phone that is still paired to
-// the outgoing operator, so whoever holds the account next pairs their own on
-// the next sign-in. scripts/database/reset-academy.ts -- the "Empty the academy"
-// button -- does exactly the same, so both routes hand over the same account.
-//
-// Procedure: docs/PRODUCTION-OPERATIONS.md, "Resetting the academy to an empty
-// state".
+// Builds the owner-only source that reset-empty-academy.mjs loads. Reads the
+// remote, never writes it; drops the owner's authenticator, as reset-academy.ts does.
 
 import fs from "node:fs"
 import path from "node:path"
@@ -20,7 +9,6 @@ import LibsqlDatabase from "libsql"
 
 import {
   PLATFORM_OWNER_ACADEMY_ID,
-  readConsistently,
   soleOwnerQuery,
 } from "./academy-owner.mjs"
 
@@ -105,31 +93,24 @@ function count(database, query, ...parameters) {
 let completed = false
 
 try {
-  // One read transaction, so every table is copied as of the same moment. Read
-  // table by table on a live site, a row could arrive in one table after its
-  // neighbour had already been copied, and the copy would fail its own checks.
-  const { rows, schema } = readConsistently(source, () => {
-    const schema = schemaObjects(source)
-    return {
-      rows: Object.fromEntries(schema.tables.map(({ name }) => [
-        name,
-        source.prepare(`SELECT * FROM ${quoteIdentifier(name)}`).all(),
-      ])),
-      schema,
-    }
-  })
+  const schema = schemaObjects(source)
   let copiedRows = 0
 
   snapshot.pragma("foreign_keys = OFF")
   const clone = snapshot.transaction(() => {
     for (const table of schema.tables) snapshot.exec(table.sql)
-    for (const table of schema.tables) copiedRows += insertRows(snapshot, table.name, rows[table.name])
+    for (const table of schema.tables) {
+      copiedRows += insertRows(
+        snapshot,
+        table.name,
+        source.prepare(`SELECT * FROM ${quoteIdentifier(table.name)}`).all(),
+      )
+    }
     for (const index of schema.indexes) snapshot.exec(index.sql)
   })
   clone.immediate()
 
-  // The same rule scripts/database/reset-academy.ts uses to name the owner, so
-  // the two routes can never disagree about which account survives.
+  // Same owner rule as scripts/database/reset-academy.ts.
   const owners = snapshot.prepare(soleOwnerQuery).all()
   if (owners.length !== 1) {
     throw new Error(`Expected exactly one approved platform owner, found ${owners.length}.`)
@@ -150,9 +131,7 @@ try {
 
     snapshot.prepare("DELETE FROM auth_provider_accounts WHERE user_id <> ?").run(owner.id)
     snapshot.prepare("DELETE FROM auth_users WHERE id <> ?").run(owner.id)
-    // The authenticator row went with every other non-preserved table above.
-    // The flag has to fall with it: an account claiming an authenticator it no
-    // longer has cannot sign in at all.
+    // The authenticator row was deleted above; clear the flag so the owner can sign in.
     snapshot.prepare("UPDATE auth_users SET two_factor_enabled = 0 WHERE id = ?").run(owner.id)
 
     for (const table of [

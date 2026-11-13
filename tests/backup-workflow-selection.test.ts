@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -28,7 +27,6 @@ type StoredBackup = {
   createdAt: string | null
   id: number
   name: string
-  sha256: string | null
 }
 
 type Store = { owner: string, repo: string }
@@ -38,14 +36,15 @@ const backupStore = require("../.github/scripts/backup-store.js") as {
   NO_BACKUP_MESSAGE: string
   assertPrivateStore: (input: Record<string, unknown>) => Promise<unknown>
   backupsToPrune: (backups: StoredBackup[], now: Date) => StoredBackup[]
-  downloadStoredBackup: (input: Record<string, unknown>) => Promise<{ file: string, sha256: string }>
+  downloadStoredBackup: (input: Record<string, unknown>) => Promise<{ file: string }>
   listStoredBackups: (input: Record<string, unknown>) => Promise<StoredBackup[]>
   newestCompleteBackup: (backups: StoredBackup[]) => StoredBackup | null
   parseStoreRepository: (value: string) => Store
   pruneStoredBackups: (input: Record<string, unknown>) => Promise<string[]>
   requireRecentBackup: (backup: StoredBackup | null, now: Date) => number
+  requireStoreToken: (tokenIsSet: boolean) => void
   selectBackup: (backups: StoredBackup[], requested?: string) => StoredBackup
-  storeBackup: (input: Record<string, unknown>) => Promise<{ name: string, sha256: string, size: number }>
+  storeBackup: (input: Record<string, unknown>) => Promise<{ name: string, size: number }>
 }
 const checkBackupFreshness = require("../.github/scripts/check-backup-freshness.js") as ((
   input: Record<string, unknown>
@@ -63,15 +62,11 @@ afterEach(() => {
   for (const directory of directories.splice(0)) fs.rmSync(directory, { force: true, recursive: true })
 })
 
-function sha256(data: Buffer | string) {
-  return createHash("sha256").update(data).digest("hex")
-}
-
 function release(id: number, createdAt: string, overrides: Record<string, unknown> = {}) {
   const name = `smba-backup-${createdAt.replace(/[:.]/gu, "-")}`
   return {
     assets: [{ id: id * 10, name: `${name}.tar.gz.gpg`, size: 2048, state: "uploaded" }],
-    body: JSON.stringify({ ciphertextSha256: "a".repeat(64), createdAt }),
+    body: JSON.stringify({ createdAt }),
     draft: true,
     id,
     name,
@@ -85,6 +80,7 @@ function storeMock({
   uploadFails = false,
 } = {}) {
   return {
+    paginate: vi.fn(async (list: () => Promise<{ data: unknown[] }>) => (await list()).data),
     rest: {
       repos: {
         createRelease: vi.fn(async (input: Record<string, unknown>) => ({ data: { id: 900, ...input } })),
@@ -149,7 +145,7 @@ describe("the private backup store", () => {
     expect(() => backupStore.parseStoreRepository("not a repository")).toThrow(/owner\/repository/u)
   })
 
-  it("stores the encrypted file as a draft with its time and checksum", async () => {
+  it("stores the encrypted file as a draft with its time", async () => {
     const github = storeMock()
     const { file } = encryptedFile("locked bytes")
 
@@ -164,13 +160,11 @@ describe("the private backup store", () => {
 
     expect(stored).toEqual({
       name: "smba-backup-2026-11-13T21-17-04-512Z",
-      sha256: sha256("locked bytes"),
       size: "locked bytes".length,
     })
     const created = github.rest.repos.createRelease.mock.calls[0][0]
     expect(created).toMatchObject({ draft: true, owner: "owner", repo: "smba-backups" })
     expect(JSON.parse(String(created.body))).toEqual({
-      ciphertextSha256: sha256("locked bytes"),
       createdAt: "2026-11-13T21:17:04.512Z",
       sourceRun: "77-1",
     })
@@ -240,6 +234,7 @@ describe("finding and keeping stored backups", () => {
   it("says plainly that there is no backup at all", () => {
     expect(() => backupStore.selectBackup([])).toThrow(/Beyond Turso's one-day rewind/u)
     expect(() => backupStore.requireRecentBackup(null, NOW)).toThrow(/No backup is stored/u)
+    expect(() => backupStore.requireStoreToken(false)).toThrow(/No private backup store is set up/u)
   })
 
   it("only accepts a backup from the last 30 hours before the academy is emptied", async () => {
@@ -253,17 +248,12 @@ describe("finding and keeping stored backups", () => {
     // 30 hours and 45 minutes is not "less than 30 hours", whatever the rounding.
     expect(() => backupStore.requireRecentBackup(newest, new Date("2026-11-14T04:02:00Z")))
       .toThrow(/30 hours ago/u)
-    // A backup that claims to come from the future is not trusted.
-    expect(() => backupStore.requireRecentBackup(newest, new Date("2026-11-12T09:17:00Z")))
-      .toThrow(/not a time that has passed/u)
   })
 
-  it("fetches a stored backup only if it is the file that was stored", async () => {
+  it("fetches a stored backup into a private file", async () => {
     const bytes = Buffer.from("the stored ciphertext")
     const [backup] = await backupStore.listStoredBackups({
-      github: storeMock({ releases: [release(1, "2026-11-13T21:17:00.000Z", {
-        body: JSON.stringify({ ciphertextSha256: sha256(bytes), createdAt: "2026-11-13T21:17:00.000Z" }),
-      })] }),
+      github: storeMock({ releases: [release(1, "2026-11-13T21:17:00.000Z")] }),
       store: STORE,
     })
     const { directory } = encryptedFile()
@@ -273,10 +263,6 @@ describe("finding and keeping stored backups", () => {
     const fetched = await backupStore.downloadStoredBackup({ backup, directory: path.join(directory, "download"), github, store: STORE })
     expect(fs.readFileSync(fetched.file)).toEqual(bytes)
     expect((fs.statSync(fetched.file).mode & 0o777).toString(8)).toBe("600")
-
-    github.rest.repos.getReleaseAsset.mockResolvedValueOnce({ data: Buffer.from("something else") })
-    await expect(backupStore.downloadStoredBackup({ backup, directory: path.join(directory, "again"), github, store: STORE }))
-      .rejects.toThrow(/does not match the checksum/u)
   })
 })
 

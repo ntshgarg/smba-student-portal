@@ -1048,15 +1048,6 @@ export function ensureBootstrapCredential({
   if (!existingUser) {
     const password = process.env.SMBA_BOOTSTRAP_HEAD_COACH_PASSWORD?.trim()
     if (!password) {
-      /*
-       * Not a production deploy check. The deploy (`vercel-build`) prepares an
-       * empty academy, and prepareDatabase() only calls this for a loaded one,
-       * so a Vercel production build never reaches this line. It fires only
-       * when someone runs `npm run db:migrate` or `npm run db:bootstrap` by hand
-       * with Vercel's production variables set, against a database that
-       * already holds a head coach with no password. A real academy's head
-       * coach is created through the one-time setup instead.
-       */
       if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production") {
         throw new Error("SMBA_BOOTSTRAP_HEAD_COACH_PASSWORD is required for a fresh production database.")
       }

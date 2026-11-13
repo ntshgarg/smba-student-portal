@@ -45,10 +45,7 @@ jobs:
               repo: context.repo.repo,
             })
             if (result.muted) {
-              // Warning rather than failure, and never silence: either the
-              // schedule is off on purpose, or nothing has been stored yet and
-              // the nightly backup's own failure is already the alert. A
-              // standing condition to keep visible, not a page every half hour.
+              // A standing condition: warn, don't fail every half hour.
               core.warning(result.message ?? (result.backupRunId
                 ? `Backup freshness is muted: the nightly schedule in encrypted-production-backup.yml is disabled, and the last stored backup (run ${result.backupRunId}) is ${result.backupAgeHours} hours old. Production has no current backup. Turn the schedule back on.`
                 : "Backup freshness is muted: the nightly schedule in encrypted-production-backup.yml is disabled and no backup has ever been stored."))

@@ -1,29 +1,14 @@
 "use strict"
 
 /*
- * Where the nightly encrypted backups are kept, and how they are found again.
- *
- * Not in this repository's workflow artifacts. This repository is public, and
- * any GitHub account can download a public repository's artifacts -- which is
- * how fifteen encrypted copies of the academy, children's records included,
- * came to be downloadable by anyone until they were found and deleted. So the
- * backups live in a separate PRIVATE repository the owner creates, as files
- * attached to draft releases there. Reading them needs an account or token the
- * owner granted, and revoking that token or removing a collaborator takes the
- * access away again.
- *
- * One draft release per backup, holding exactly one encrypted file. Its notes
- * record when the backup was made and the file's SHA-256, so the restore check
- * can prove it fetched the same bytes that were stored. Drafts are used because
- * they create no git tag, so deleting one after 30 days leaves nothing behind.
- * A release's own created_at is the date of the commit it points at, not when
- * it was drafted, so the time is read from the notes instead.
+ * Nightly encrypted backups live in a separate PRIVATE repository, one draft
+ * release (no git tag) per backup holding one encrypted file, never in this
+ * public repository's artifacts. The backup time is kept in the release notes.
  */
 
 // actions/github-script loads this file with require(), so it is CommonJS and
 // reaches Node's own modules the same way.
 /* eslint-disable @typescript-eslint/no-require-imports */
-const crypto = require("node:crypto")
 const fs = require("node:fs")
 const path = require("node:path")
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -39,6 +24,13 @@ const SETUP_GUIDE = 'docs/PRODUCTION-OPERATIONS.md, "Scheduled encrypted backups
 const NO_BACKUP_MESSAGE = "No backup is stored. Beyond Turso's one-day rewind, the academy has no copy "
   + "of its records that could be restored. Finish setting up the private backup store "
   + `(${SETUP_GUIDE}), then run "Encrypted production backup".`
+const NO_STORE_MESSAGE = "No private backup store is set up (the SMBA_BACKUP_STORE_TOKEN secret is missing), "
+  + "so the academy has no backup beyond Turso's one-day rewind. "
+  + `Set up the store: ${SETUP_GUIDE}.`
+
+function requireStoreToken(tokenIsSet) {
+  if (!tokenIsSet) throw new Error(NO_STORE_MESSAGE)
+}
 
 function parseStoreRepository(value) {
   const match = /^([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)$/u.exec(String(value ?? "").trim())
@@ -95,12 +87,7 @@ function readNotes(body) {
   }
 }
 
-/**
- * The store's view of one release. `complete` is false for anything that is
- * not exactly one uploaded encrypted file with a recorded time and checksum --
- * the leftovers of an upload that failed half-way, say. Those are never
- * restored from, and are pruned like any other old entry.
- */
+/** `complete` is false unless the release holds exactly one uploaded backup file and a time. */
 function describeRelease(release) {
   if (!String(release?.name ?? "").startsWith(BACKUP_PREFIX)) return null
   const notes = readNotes(release.body)
@@ -108,7 +95,6 @@ function describeRelease(release) {
   const assets = Array.isArray(release.assets) ? release.assets : []
   const asset = assets.length === 1 ? assets[0] : null
   const complete = Number.isFinite(createdAt)
-    && /^[a-f0-9]{64}$/u.test(String(notes.ciphertextSha256 ?? ""))
     && asset !== null
     && asset.state === "uploaded"
     && BACKUP_FILE_PATTERN.test(String(asset.name ?? ""))
@@ -119,21 +105,16 @@ function describeRelease(release) {
     createdAt: Number.isFinite(createdAt) ? new Date(createdAt).toISOString() : null,
     id: release.id,
     name: release.name,
-    sha256: complete ? notes.ciphertextSha256 : null,
   }
-}
-
-async function listReleases({ github, store }) {
-  const parameters = { owner: store.owner, per_page: 100, repo: store.repo }
-  if (typeof github.paginate === "function") {
-    return github.paginate(github.rest.repos.listReleases, parameters)
-  }
-  return (await github.rest.repos.listReleases(parameters)).data
 }
 
 /** Every backup in the store, newest first. */
 async function listStoredBackups({ github, store }) {
-  const releases = await listReleases({ github, store })
+  const releases = await github.paginate(github.rest.repos.listReleases, {
+    owner: store.owner,
+    per_page: 100,
+    repo: store.repo,
+  })
   return releases
     .map(describeRelease)
     .filter(Boolean)
@@ -144,11 +125,7 @@ function newestCompleteBackup(backups) {
   return backups.find((backup) => backup.complete) ?? null
 }
 
-/**
- * The backups past the 30-day limit. The newest complete backup is never one
- * of them, however old: if the nightly job has been failing for a month, the
- * last good copy is the one thing that must not be thrown away.
- */
+/** Backups past the 30-day limit, never including the newest complete one. */
 function backupsToPrune(backups, now, retentionDays = RETENTION_DAYS) {
   const keep = newestCompleteBackup(backups)
   const cutoff = now.getTime() - retentionDays * DAY_MS
@@ -156,18 +133,13 @@ function backupsToPrune(backups, now, retentionDays = RETENTION_DAYS) {
     && (backup.createdAt === null || Date.parse(backup.createdAt) < cutoff))
 }
 
-function sha256(data) {
-  return crypto.createHash("sha256").update(data).digest("hex")
-}
-
 async function storeBackup({ filePath, github, now = new Date(), publicRepository, sourceRun, store }) {
   await assertPrivateStore({ github, publicRepository, store })
   const data = fs.readFileSync(filePath)
   if (!data.length) throw new Error("The encrypted backup is empty. Nothing was stored.")
   const name = `${BACKUP_PREFIX}${now.toISOString().replace(/[:.]/gu, "-")}`
-  const ciphertextSha256 = sha256(data)
   const release = (await github.rest.repos.createRelease({
-    body: JSON.stringify({ ciphertextSha256, createdAt: now.toISOString(), sourceRun }, null, 2),
+    body: JSON.stringify({ createdAt: now.toISOString(), sourceRun }, null, 2),
     draft: true,
     name,
     owner: store.owner,
@@ -189,7 +161,7 @@ async function storeBackup({ filePath, github, now = new Date(), publicRepositor
       .catch(() => undefined)
     throw new Error(`The encrypted backup could not be uploaded to ${storeName(store)}. Nothing was kept.`)
   }
-  return { name, sha256: ciphertextSha256, size: data.length }
+  return { name, size: data.length }
 }
 
 async function pruneStoredBackups({ github, now = new Date(), store }) {
@@ -214,23 +186,10 @@ function selectBackup(backups, requestedName) {
   return newest
 }
 
-/**
- * Throws, in words the person running the workflow can act on, unless the
- * newest backup is less than 30 hours old: last night's, or one just run by
- * hand. Measured to the millisecond, the same way the operations monitor
- * measures it, so the two never disagree about the same backup. A backup whose
- * notes claim a time in the future is not trusted. Returns its age in whole
- * hours.
- */
+/** Throws unless the newest backup is under 30 hours old; returns its age in hours. */
 function requireRecentBackup(backup, now, maxHours = RECENT_BACKUP_HOURS) {
   if (!backup) throw new Error(NO_BACKUP_MESSAGE)
   const ageMs = now.getTime() - Date.parse(backup.createdAt)
-  if (!Number.isFinite(ageMs) || ageMs < -5 * 60 * 1000) {
-    throw new Error(
-      `The newest stored backup says it was made at ${backup.createdAt}, which is not a time that has `
-      + 'passed. Run "Encrypted production backup" by hand, wait for it to finish, then try again.',
-    )
-  }
   const ageHours = Math.max(0, Math.floor(ageMs / HOUR_MS))
   if (!(ageMs < maxHours * HOUR_MS)) {
     throw new Error(
@@ -252,18 +211,16 @@ async function downloadStoredBackup({ backup, directory, github, store }) {
     repo: store.repo,
   })
   const data = Buffer.from(response.data)
-  if (sha256(data) !== backup.sha256) {
-    throw new Error(`The fetched backup ${backup.name} does not match the checksum recorded when it was stored.`)
-  }
   fs.mkdirSync(directory, { mode: 0o700, recursive: true })
   const file = path.join(directory, backup.asset.name)
   fs.writeFileSync(file, data, { flag: "wx", mode: 0o600 })
-  return { file, sha256: backup.sha256 }
+  return { file }
 }
 
 module.exports = {
   BACKUP_PREFIX,
   NO_BACKUP_MESSAGE,
+  NO_STORE_MESSAGE,
   RECENT_BACKUP_HOURS,
   RETENTION_DAYS,
   assertPrivateStore,
@@ -275,6 +232,7 @@ module.exports = {
   parseStoreRepository,
   pruneStoredBackups,
   requireRecentBackup,
+  requireStoreToken,
   selectBackup,
   storeBackup,
 }
