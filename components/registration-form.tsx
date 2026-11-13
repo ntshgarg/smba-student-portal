@@ -40,9 +40,9 @@ export function RegistrationForm() {
   const [state, setState] = useState(initialState)
   const [values, setValues] = useState(EMPTY_REGISTRATION_VALUES)
   const [code, setCode] = useState("")
-  const [pending, setPending] = useState(false)
   /** "resend" while a new code is being asked for from the code step. */
   const [pendingKind, setPendingKind] = useState<"submit" | "resend" | null>(null)
+  const pending = pendingKind !== null
   const [notice, setNotice] = useState<string | null>(null)
   const [lostCodeReply, setLostCodeReply] = useState(false)
   const codeRef = useRef<HTMLInputElement>(null)
@@ -75,7 +75,6 @@ export function RegistrationForm() {
     if (submissionInFlight.current) return
 
     submissionInFlight.current = true
-    setPending(true)
     setPendingKind(kind)
     setNotice(null)
     setLostCodeReply(false)
@@ -101,7 +100,6 @@ export function RegistrationForm() {
       })
     } finally {
       submissionInFlight.current = false
-      setPending(false)
       setPendingKind(null)
     }
   }

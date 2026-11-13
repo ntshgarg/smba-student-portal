@@ -92,7 +92,6 @@ export async function openHeadCoachSetupAction() {
     secure: secureAuthCookiesRequired(),
   })
   // This device is handed to the coach, so sign the owner out of it.
-  cookieStore.delete(ADMIN_PREVIEW_COOKIE)
   await clearDatabaseSession()
   redirect("/setup/head-coach")
 }

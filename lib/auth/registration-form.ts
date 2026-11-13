@@ -77,7 +77,6 @@ export const EMPTY_REGISTRATION_STATE: RegistrationFormState = {
 /** A request the head coach rejected, as the Rejected list on the intake register shows it. */
 export type RejectedRegistration = {
   contactEmail: string | null
-  createdAt: string
   fullName: string
   id: string
   rejectedAt: string | null

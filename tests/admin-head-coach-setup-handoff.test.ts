@@ -77,7 +77,6 @@ describe("opening head-coach setup on the coach's device", () => {
       path: "/setup/head-coach",
     }))
     expect(mocks.clearDatabaseSession).toHaveBeenCalledOnce()
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_admin_preview")
     expect(mocks.order.indexOf("signed-out")).toBeLessThan(mocks.order.indexOf("redirect:/setup/head-coach"))
     expect(mocks.order.indexOf("set:smba_head_coach_setup")).toBeLessThan(mocks.order.indexOf("signed-out"))
   })

@@ -381,7 +381,7 @@ export async function completeInitialHeadCoachSetup(
       subjectKey: input.recoveryEmailSubjectKey,
     }, { database: tx, now })
     if (!recoveryEmail) {
-      throw new Error("Verify the recovery email before creating the head-coach account.")
+      throw new Error("The email check ran out. Reload this page to verify the coach’s email again.")
     }
     upsertPasswordCredential({
       academyId: HEAD_COACH_ACADEMY_ID,

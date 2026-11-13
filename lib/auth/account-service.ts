@@ -810,7 +810,6 @@ export function listRejectedRegistrations({
 } = {}): RejectedRegistration[] {
   return database.select({
     contactEmail: accounts.contactEmail,
-    createdAt: accounts.createdAt,
     fullName: accounts.fullName,
     id: accounts.id,
     rejectedAt: accounts.rejectedAt,
@@ -824,7 +823,6 @@ export function listRejectedRegistrations({
     .all()
     .map((request) => ({
       contactEmail: request.contactEmail,
-      createdAt: request.createdAt.toISOString(),
       fullName: request.fullName,
       id: request.id,
       rejectedAt: request.rejectedAt?.toISOString() ?? null,

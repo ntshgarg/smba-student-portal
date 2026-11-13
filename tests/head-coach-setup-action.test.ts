@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   completeInitialHeadCoachSetup: vi.fn(),
   cookieDelete: vi.fn(),
   cookieGet: vi.fn(),
-  getVerifiedSetupRecoveryEmail: vi.fn(),
   redirect: vi.fn(),
   signInUsername: vi.fn(),
   /** Depth of the just-written-password exemption around the current call. */
@@ -57,7 +56,6 @@ vi.mock("@/lib/auth/initial-setup", () => ({
 }))
 
 vi.mock("@/lib/auth/recovery-service", () => ({
-  getVerifiedSetupRecoveryEmail: mocks.getVerifiedSetupRecoveryEmail,
   HEAD_SETUP_EMAIL_COOKIE: "smba_head_setup_email",
   recoverySubjectKeyForHeadSetup: vi.fn(() => "head-setup-subject"),
 }))
@@ -81,7 +79,6 @@ describe("first-run head-coach setup action", () => {
     mocks.signedInWhileExempt = false
     mocks.cookieGet.mockReturnValue({ value: "a-one-time-setup-token" })
     mocks.completeInitialHeadCoachSetup.mockResolvedValue({ academyId: "SMBA#0001" })
-    mocks.getVerifiedSetupRecoveryEmail.mockReturnValue("coach@example.com")
   })
 
   it("signs the new head coach in and sends them to authenticator setup", async () => {
@@ -130,17 +127,16 @@ describe("first-run head-coach setup action", () => {
     expect(mocks.redirect).not.toHaveBeenCalled()
   })
 
-  // The verified email has its own time limit. Running past it used to fail
-  // inside account creation with "verify the recovery email" while the page
-  // still showed the email as verified, and nothing on screen changed.
+  // The verified email has its own time limit; account creation says plainly when it ran out.
   it("puts the email step back when the verified email has run out", async () => {
-    mocks.getVerifiedSetupRecoveryEmail.mockReturnValue(null)
+    mocks.completeInitialHeadCoachSetup.mockRejectedValue(
+      new Error("The email check ran out. Reload this page to verify the coach’s email again."),
+    )
 
     await expect(completeHeadCoachSetupAction({ error: null, errorField: null }, setupData())).resolves.toEqual({
       error: "The email check ran out. Reload this page to verify the coach’s email again.",
       errorField: null,
     })
-    expect(mocks.completeInitialHeadCoachSetup).not.toHaveBeenCalled()
     // Changing a cookie re-renders the page and would hide this message.
     expect(mocks.cookieDelete).not.toHaveBeenCalled()
   })

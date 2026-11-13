@@ -19,7 +19,6 @@ describe("the head coach's Rejected list", () => {
         onRestored={vi.fn()}
         requests={[{
           contactEmail: "mira.family@example.com",
-          createdAt: "2026-11-01T04:00:00.000Z",
           fullName: "Mira Rao",
           id: "request-1",
           rejectedAt: "2026-11-03T04:00:00.000Z",

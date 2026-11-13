@@ -742,7 +742,7 @@ export async function requestRegistrationVerification(input: {
     await (input.mailer ?? createAuthMailer()).sendRegistrationVerification({
       academyId: input.academyId ?? null,
       code,
-      purpose: input.purpose ?? "registration",
+      purpose: input.purpose,
       expiresInMinutes: EMAIL_VERIFICATION_LIFETIME_MS / 60_000,
       fullName,
       standing: input.standing,

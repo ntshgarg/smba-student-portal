@@ -48,8 +48,8 @@ export function RegistrationStatusForm() {
   const [state, setState] = useState<RegistrationStatusState>(EMPTY_REGISTRATION_STATUS_STATE)
   const [values, setValues] = useState({ email: "", fullName: "" })
   const [code, setCode] = useState("")
-  const [pending, setPending] = useState(false)
   const [pendingKind, setPendingKind] = useState<"submit" | "resend" | null>(null)
+  const pending = pendingKind !== null
   const [notice, setNotice] = useState<string | null>(null)
   const codeRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
@@ -71,7 +71,6 @@ export function RegistrationStatusForm() {
     if (submissionInFlight.current) return
 
     submissionInFlight.current = true
-    setPending(true)
     setPendingKind(kind)
     setNotice(null)
     // Clear the previous answer before asking again. Leaving it up meant a
@@ -94,7 +93,6 @@ export function RegistrationStatusForm() {
       })
     } finally {
       submissionInFlight.current = false
-      setPending(false)
       setPendingKind(null)
     }
   }

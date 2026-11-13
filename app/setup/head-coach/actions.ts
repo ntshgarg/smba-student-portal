@@ -15,7 +15,6 @@ import {
   validateInitialHeadCoachSetup,
 } from "@/lib/auth/initial-setup"
 import {
-  getVerifiedSetupRecoveryEmail,
   HEAD_SETUP_EMAIL_COOKIE,
   recoverySubjectKeyForHeadSetup,
 } from "@/lib/auth/recovery-service"
@@ -50,18 +49,6 @@ export async function completeHeadCoachSetupAction(
   const validationError = validateInitialHeadCoachSetup(input)
   if (validationError) {
     return { error: validationError.message, errorField: validationError.field }
-  }
-
-  // The verified email has its own time limit; say plainly when it has run out.
-  if (!getVerifiedSetupRecoveryEmail({
-    receiptToken: input.recoveryEmailReceiptToken,
-    subjectKey: input.recoveryEmailSubjectKey,
-  })) {
-    // Cookie left alone: changing it re-renders the page and drops this message.
-    return {
-      error: "The email check ran out. Reload this page to verify the coach\u2019s email again.",
-      errorField: null,
-    }
   }
 
   let account: Awaited<ReturnType<typeof completeInitialHeadCoachSetup>>
