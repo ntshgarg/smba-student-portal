@@ -1046,34 +1046,10 @@ describe("Financials V1 service", () => {
       now,
     })
 
-    const transitionRevision = database.select({
-      recordRevision: schema.playerEnrollments.recordRevision,
-    }).from(schema.playerEnrollments)
-      .where(eq(schema.playerEnrollments.accountId, playerId)).get()?.recordRevision
-    if (transitionRevision === undefined) throw new Error("The enrollment revision is unavailable.")
-    const changedProfile = memberService.updateMemberRecord({
-      coachId,
-      database,
-      now,
-      input: {
-        memberId: playerId,
-        expectedRevision: transitionRevision,
-        profile: {
-          fullName: "Programme Transition Player",
-          trainingStartOn: "2026-08-08",
-          primaryContact: { name: "", relationship: "", phone: "" },
-        },
-        training: {
-          academyPlan: "weekday-3-day",
-          level: "Intermediate",
-          batch: "Weekday",
-        },
-      },
-    })
-    expect(changedProfile).toMatchObject({
-      ok: true,
-      record: { training: { level: "Intermediate" } },
-    })
+    // The player moved up after the first place ended. Members no longer allows
+    // that edit while onboarding is unfinished, so it is written directly.
+    database.update(schema.playerEnrollments).set({ level: "Intermediate" })
+      .where(eq(schema.playerEnrollments.accountId, playerId)).run()
 
     finance.prepareMonthlyCharges({
       period: "2026-09",

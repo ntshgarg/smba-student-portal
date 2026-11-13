@@ -2029,6 +2029,13 @@ export function redateConfirmedTrainingStart(
       financeError("CONFLICT", "This onboarding record changed elsewhere. Review it and try again.")
     }
 
+    // Onboarding starts the first place on the start date, so it moves with it;
+    // otherwise the reopened months have no place to bill or mark against.
+    tx.update(sessionAssignments).set({ effectiveFrom: input.trainingStartOn }).where(and(
+      eq(sessionAssignments.accountId, input.playerId),
+      eq(sessionAssignments.effectiveFrom, enrollment.trainingStartOn),
+    )).run()
+
     // The earliest Fee Plan is extended back to the corrected month so the
     // reopened months can be prepared. Later plans all start at or after it, so
     // widening the earliest cannot overlap them. A paused plan never bills

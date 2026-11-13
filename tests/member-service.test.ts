@@ -224,6 +224,17 @@ describe("member directory service", () => {
       .from(schema.playerEnrollments)
       .where(eq(schema.playerEnrollments.accountId, playerId)).get()?.revision).toBe(3)
 
+    // An ended place still holds the classification until onboarding is finished.
+    expect(memberService.updateMemberRecord({
+      coachId: coach.accountId,
+      database,
+      input: {
+        ...validInput,
+        expectedRevision: 3,
+        training: { ...validInput.training, level: "Intermediate" },
+      },
+    })).toMatchObject({ ok: false, code: "ACTIVE_ASSIGNMENTS" })
+
     database.update(schema.playerEnrollments).set({ status: "active" })
       .where(eq(schema.playerEnrollments.accountId, playerId)).run()
     expect(coachDatabase.listApprovedPlayerRecords().trainingProfiles

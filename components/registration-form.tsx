@@ -88,7 +88,7 @@ export function RegistrationForm() {
       setState(next)
       if (kind === "resend" && next.step === "code" && !next.error) {
         setCode("")
-        setNotice(`If a new code was due, it is on its way to ${next.values.email}. A code you already received still works until it runs out.`)
+        setNotice(`If a new code was due, it is on its way to ${next.values.email}. If two codes arrive, use the newest one.`)
       }
     } catch {
       const codeStepConfirm = onCodeStep && kind === "submit"

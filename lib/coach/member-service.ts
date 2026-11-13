@@ -368,6 +368,19 @@ export function updateMemberRecord({
         "End the player’s active sessions before changing their training classification.",
       )
     }
+    // Until onboarding is finished a place that has ended still counts, as it
+    // does on the onboarding screens: changing the classification under it
+    // leaves onboarding with no way forward.
+    if (classificationChanges && !current.onboardingCompletedAt && tx.select({
+      id: sessionAssignments.id,
+    }).from(sessionAssignments)
+      .where(eq(sessionAssignments.accountId, input.memberId))
+      .get()) {
+      return memberFailure(
+        "ACTIVE_ASSIGNMENTS",
+        "Finish onboarding before changing the level, batch or plan. This player already has a schedule place.",
+      )
+    }
     if (activeAssignments.some(({ series }) => (
       series.programme !== validated.value.level
       || series.batch !== validated.value.batch

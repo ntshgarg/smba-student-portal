@@ -31,6 +31,7 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
     directoryFeedback,
     directorySummaryRef,
     draft,
+    earliestByPlayer,
     editingMemberId,
     editor,
     expandedMemberId,
@@ -144,6 +145,7 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
                           draft={draft}
                           editor={editor}
                           feedback={currentMemberFeedback}
+                          holdsPlace={earliestByPlayer.has(memberId)}
                           isArchiving={archivingMemberId === memberId}
                           isEditing={editingMemberId === memberId}
                           onArchive={handleArchive}

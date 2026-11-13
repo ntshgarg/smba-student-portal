@@ -570,6 +570,14 @@ export function findApprovedAccountByAcademyId(value: string) {
     .get()
 }
 
+/** The name and address an account's emails go to. */
+export function findAccountContact(accountId: string) {
+  return initializeDatabase().select({
+    contactEmail: accounts.contactEmail,
+    fullName: accounts.fullName,
+  }).from(accounts).where(eq(accounts.id, accountId)).get() ?? null
+}
+
 function assertApprovingCoach(coachAccountId: string) {
   requireHeadAdminAccess(coachAccountId)
 }

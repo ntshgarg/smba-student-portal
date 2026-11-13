@@ -364,7 +364,8 @@ describe("training start billing and correction", () => {
 
   it("refuses a re-date that contradicts an issued fee, then permits it once resolved", () => {
     const { occurrenceIds, playerId } = createPlayer({
-      assignments: [{ from: "2026-07-01" }],
+      // As onboarding leaves it: the place starts on the confirmed start date.
+      assignments: [{ from: "2026-08-15" }],
       name: "Late Confirmation Player",
       occurrences: [
         "2026-07-07", "2026-07-14", "2026-07-21", "2026-07-28",

@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache"
 
+import { findAccountContact } from "@/lib/auth/account-service"
 import { requireHeadAdminAction } from "@/lib/auth/current-coach"
+import { createAuthMailer } from "@/lib/auth/mailer"
+import { absoluteSiteUrl } from "@/lib/config"
 import {
   activateFinance,
   applyChargeAdjustment,
@@ -121,11 +124,37 @@ export async function activateFinanceAction(input: {
   })
 }
 
+/**
+ * The approval email says a password comes later; this is the "later". Onboarding
+ * is already committed, so a failed email is reported to the coach, not undone.
+ */
+async function emailOnboardingFinished(playerId: string) {
+  try {
+    const contact = findAccountContact(playerId)
+    const mailer = createAuthMailer()
+    if (!contact?.contactEmail || !mailer.sendSecurityNotice) return false
+    await mailer.sendSecurityNotice({
+      fullName: contact.fullName,
+      lines: [
+        "Your coach has finished setting up your training.",
+        `You can now create your password: ${absoluteSiteUrl("/activate")}`,
+      ],
+      subject: "You can now set your SMBA password",
+      to: contact.contactEmail,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function completeOnboardingFinanceAction(
   input: CommitOnboardingFinanceInput,
 ): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
+  const completed = { now: false }
+  const result = await runFinanceAction((coachId) => {
     const result = completePlayerOnboardingFinance(input, { coachId })
+    completed.now = !result.reused
     return {
       message: result.reused
         ? "Onboarding fees were already issued"
@@ -134,6 +163,11 @@ export async function completeOnboardingFinanceAction(
           : "Onboarding completed; registration fee issued and the monthly Fee Plan starts in its derived month",
     }
   })
+  if (!result.ok || !completed.now || await emailOnboardingFinished(input.playerId)) return result
+  return {
+    ...result,
+    message: `${result.message}; the family could not be emailed, so tell them they can now set a password`,
+  }
 }
 
 export async function previewOnboardingFinanceAction(

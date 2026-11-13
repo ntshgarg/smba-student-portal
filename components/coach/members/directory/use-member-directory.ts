@@ -117,7 +117,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     () => buildMemberDirectoryIndex(players, sessionAssignments, sessionSeries, today),
     [players, sessionAssignments, sessionSeries, today],
   )
-  const { playerById, sessionLabelsByPlayer } = memberIndex
+  const { earliestByPlayer, playerById, sessionLabelsByPlayer } = memberIndex
   const urlCriteria = useMemo(
     () => parseMemberDirectoryCriteria(searchParams),
     [searchParams],
@@ -644,6 +644,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     directoryFeedback,
     directorySummaryRef,
     draft,
+    earliestByPlayer,
     editingMemberId,
     editor,
     expandedMemberId,
