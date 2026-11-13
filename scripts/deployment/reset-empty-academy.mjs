@@ -9,6 +9,9 @@
 // lock, a live database with the same table layout, update history and owner as
 // the source. The update history (__drizzle_migrations) is never wiped.
 //
+// Run it when nobody is using the site: anything saved while the script copies
+// the live database is in neither copy.
+//
 // Procedure and preconditions: docs/PRODUCTION-OPERATIONS.md, "Resetting the
 // academy to an empty state". prepare-admin-only-snapshot.mjs builds the source
 // this consumes, so that the platform owner's login survives the reset.

@@ -1,4 +1,4 @@
-// The owner rule shared by the manual handover scripts and
+// The owner rule of the manual handover scripts; mirrors
 // scripts/database/reset-academy.ts. PLATFORM_OWNER_ACADEMY_ID repeats
 // lib/auth/identity.ts's PLATFORM_ADMIN_ACADEMY_ID (plain node cannot import TS).
 

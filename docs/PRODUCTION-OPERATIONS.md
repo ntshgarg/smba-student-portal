@@ -227,8 +227,9 @@ TURSO_DATABASE_URL=<academy database> TURSO_AUTH_TOKEN=<write token> \
 2. Build the source with `prepare-admin-only-snapshot.mjs` against the same database you are about to
    reset. Building it elsewhere replaces the owner's credentials, and a schema that differs by one
    table aborts the reset.
-3. Run the reset and keep its JSON output — backup path, rows backed up, rows restored and the
-   re-read remote counts — with the change record.
+3. Run the reset when nobody is using the site: anything saved while the script copies the live
+   database is in neither copy. Keep its JSON output — backup path, rows backed up, rows restored and
+   the re-read remote counts — with the change record.
 4. Log in as the platform owner, confirm the academy is empty, and only then delete either file.
 
 Both files contain authentication material. They must never be committed, emailed or stored

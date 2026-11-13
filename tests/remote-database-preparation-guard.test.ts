@@ -167,13 +167,7 @@ describe("remote database preparation guard", () => {
   })
 })
 
-/*
- * The production deploy used to change the live database first and build the
- * new version second. For the whole build -- and for good if the build then
- * failed -- the live site ran the old screens against the new layout. Building
- * first means a failed build never touches the database, and the window where
- * old code meets new tables shrinks to Vercel's switch-over.
- */
+// Build first: a failed build must never have changed the live database.
 describe("production deploy order", () => {
   it("builds the new version before it changes the live database", async () => {
     const { readFileSync } = await import("node:fs")
