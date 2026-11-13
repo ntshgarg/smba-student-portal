@@ -4733,7 +4733,8 @@ export function canRecordPaymentAtDesk(
   if (record.archived) return false
   const period = getAcademyMonthKey(now)
   return listFinancePlayers(database, {
-    awaitingFeePlayerIds: playersAwaitingMonthlyFee(database, period, now),
+    // Payment eligibility does not depend on who awaits a fee.
+    awaitingFeePlayerIds: new Set<string>(),
     now,
     period,
     query: record.academyId,

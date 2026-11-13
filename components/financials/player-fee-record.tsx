@@ -134,15 +134,10 @@ function receiptMeta(receipt: PlayerReceiptView) {
   ].filter((item): item is string => Boolean(item))
 }
 
-/*
- * Every withdrawal refund on a month's fee, newest first, each once (a refund
- * on a fee paid in two instalments is listed under both receipts).
- */
-function withdrawalsForCharge(
+function withdrawalForCharge(
   record: PlayerFeeRecord,
   charge: ChargeView,
-): WithdrawalEvent[] {
-  const seen = new Set<string>()
+): WithdrawalEvent | null {
   const events = record.receipts.flatMap((receipt) => {
     const allocatesCharge = receipt.allocations.some((allocation) => allocation.chargeId === charge.id)
     if (!allocatesCharge) return []
@@ -153,26 +148,15 @@ function withdrawalsForCharge(
           && refund.withdrawalEffectiveOn?.slice(0, 7) === charge.billingPeriod
       ))
       .map((refund) => ({ receipt, refund }))
-  }).filter(({ refund }) => {
-    if (seen.has(refund.id)) return false
-    seen.add(refund.id)
-    return true
   })
 
-  return events.sort((first, second) => (
-    second.refund.refundedOn.localeCompare(first.refund.refundedOn)
+  return events.sort((first, second) => {
+    if (first.refund.lifecycle !== second.refund.lifecycle) {
+      return first.refund.lifecycle === "recorded" ? -1 : 1
+    }
+    return second.refund.refundedOn.localeCompare(first.refund.refundedOn)
       || second.refund.id.localeCompare(first.refund.id)
-  ))
-}
-
-/*
- * The withdrawal refund that closes a month: only one still recorded. A
- * reversed refund gave the money back to the fee, so the month reads as paid
- * again. It used to keep "Closed after withdrawal / Balance closed".
- */
-function activeWithdrawalForCharge(record: PlayerFeeRecord, charge: ChargeView) {
-  return withdrawalsForCharge(record, charge)
-    .find(({ refund }) => refund.lifecycle === "recorded") ?? null
+  })[0] ?? null
 }
 
 /*
@@ -219,7 +203,7 @@ function monthState(
     return { detail: "", label: "Not issued", tone: "quiet" as const }
   }
 
-  if (activeWithdrawalForCharge(record, charge)) {
+  if (withdrawalForCharge(record, charge)?.refund.lifecycle === "recorded") {
     return {
       detail: "Balance closed",
       label: "Closed after withdrawal",
@@ -289,8 +273,7 @@ function feeRecordHref(year: string, month: string | null) {
 function RegistrationBand({ record }: { record: PlayerFeeRecord }) {
   const charge = record.registrationCharge
 
-  // A registration fee the academy voided is not "after onboarding": it is not
-  // charged, unless the coach issues it again.
+  // A voided registration fee is waived: not charged.
   if (charge?.lifecycle === "void") {
     return (
       <section
@@ -373,8 +356,8 @@ function MonthDetail({
   const activeConcessionPaise = concessions
     .filter((entry) => entry.lifecycle === "applied")
     .reduce((total, entry) => total + entry.amountPaise, 0)
-  const withdrawals = charge ? withdrawalsForCharge(record, charge) : []
-  const activeWithdrawal = charge ? activeWithdrawalForCharge(record, charge) : null
+  const withdrawal = charge ? withdrawalForCharge(record, charge) : null
+  const activeWithdrawal = withdrawal?.refund.lifecycle === "recorded" ? withdrawal : null
   const grossReceivedPaise = charge?.payments
     .filter((payment) => payment.lifecycle === "recorded")
     .reduce((total, payment) => total + payment.amountPaise, 0) ?? 0
@@ -462,7 +445,7 @@ function MonthDetail({
         )}
       </header>
 
-      {receiptRows.length || concessions.length || withdrawals.length ? (
+      {receiptRows.length || concessions.length || withdrawal ? (
         <div className={styles.monthHistory}>
           {receiptRows.map(({ receipt }) => (
             <section
@@ -500,12 +483,8 @@ function MonthDetail({
             </section>
           ))}
 
-          {withdrawals.map((withdrawal) => (
-            <section
-              className={styles.historyEntry}
-              data-tone={withdrawal.refund.lifecycle === "recorded" ? "refund" : "quiet"}
-              key={withdrawal.refund.id}
-            >
+          {withdrawal ? (
+            <section className={styles.historyEntry} data-tone={withdrawal.refund.lifecycle === "recorded" ? "refund" : "quiet"}>
               <div className={styles.historyLead}>
                 <span>
                   {withdrawal.refund.lifecycle === "recorded" ? "Refund issued" : "Refund reversed"}
@@ -517,7 +496,7 @@ function MonthDetail({
                 {withdrawal.refund.refundReference} · {formatFinanceDate(withdrawal.refund.refundedOn)}
               </p>
             </section>
-          ))}
+          ) : null}
         </div>
       ) : (
         <p className={styles.noHistory}>No offline payment has been recorded for this fee yet.</p>

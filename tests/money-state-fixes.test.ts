@@ -266,9 +266,6 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
       .where(eq(schema.financialAuditEvents.entityId, plan(players.stopper)[0]!.id)).all()
     expect(planEntries.filter((entry) => entry.eventType === "fee_agreement_ended")
       .some((entry) => entry.metadata.includes("Ended by mid-term withdrawal refund"))).toBe(true)
-    expect(coachRecord(players.stopper).coachManagement!.refunds[0]).toMatchObject({
-      restoresFeePlan: true,
-    })
 
     reverse(recorded.refund.id)
     expect(plan(players.stopper)[0]).toMatchObject({ effectiveTo: "2026-10-31", status: "ended" })
@@ -318,9 +315,6 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     const payment = pay(players.rejoiner, 400_000, "2026-10-02")
     changes.endTrainingNow({ playerId: players.rejoiner, stopFees: false }, context())
     const recorded = refund(payment.receipt.id, 50_000, "2026-10-04")
-    expect(coachRecord(players.rejoiner).coachManagement!.refunds[0]).toMatchObject({
-      restoresFeePlan: true,
-    })
     // Back from 1 November on a new fee plan.
     finance.createOrReplaceFeeAgreement({
       ...fiveDay,
@@ -329,11 +323,6 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
       idempotencyKey: "plan-rejoiner-november",
       playerId: players.rejoiner,
     }, context())
-    // The confirmation used to promise the plan back, and the reversal then
-    // quietly left it ended.
-    expect(coachRecord(players.rejoiner).coachManagement!.refunds[0]).toMatchObject({
-      restoresFeePlan: false,
-    })
     expect(reverse(recorded.refund.id)).toMatchObject({ feePlanRestored: false })
     expect(plan(players.rejoiner).find((row) => row.effectiveFrom === "2026-07-01"))
       .toMatchObject({ effectiveTo: "2026-10-04", status: "ended" })

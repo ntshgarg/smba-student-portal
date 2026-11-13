@@ -39,6 +39,7 @@ describe("fee changes reach the fee the family is billed", () => {
     stayer: "21000000-0000-4000-8000-0000000000b6",
     twice: "21000000-0000-4000-8000-0000000000b7",
     changer: "21000000-0000-4000-8000-0000000000b8",
+    markedLeaver: "21000000-0000-4000-8000-0000000000b9",
   }
   let nextMutation = 0
   const mutationId = () => `00000000-0000-4000-8000-${String(nextMutation += 1).padStart(12, "0")}`
@@ -177,6 +178,7 @@ describe("fee changes reach the fee the family is billed", () => {
     addPlayer(players.stayer, "Jay Patel", 9106, morning)
     addPlayer(players.twice, "Kiran Shah", 9107, morning)
     addPlayer(players.changer, "Lata Rao", 9108, morning)
+    addPlayer(players.markedLeaver, "Mira Iyer", 9109, morning)
 
     finance.activateFinance({ trackingMonth: "2026-10", idempotencyKey: "activate-fee-state-fixes" }, context())
     for (const playerId of Object.values(players)) {
@@ -284,6 +286,42 @@ describe("fee changes reach the fee the family is billed", () => {
     // The plan's end moves back to the day the family left.
     expect(database.select().from(schema.feeAgreements)
       .where(eq(schema.feeAgreements.id, ended.id)).get()?.effectiveTo).toBe("2026-10-05")
+  })
+
+  it("offers the unused-days refund the same day to a player who left after today's attendance was marked", () => {
+    const charge = octoberCharge(players.markedLeaver)
+    const payment = finance.recordAllocatedPayment({
+      allocations: [{ amountPaise: 400_000, chargeId: charge.id, expectedChargeRevision: charge.recordRevision }],
+      amountPaise: 400_000,
+      method: "cash",
+      mutationId: mutationId(),
+      playerId: players.markedLeaver,
+      receivedOn: "2026-10-02",
+    }, context())
+    const todaySession = database.select().from(schema.sessionOccurrences).where(and(
+      eq(schema.sessionOccurrences.seriesId, morning),
+      eq(schema.sessionOccurrences.occurrenceDate, "2026-10-05"),
+    )).get()!
+    database.insert(schema.sessionAttendanceRecords).values({
+      accountId: players.markedLeaver,
+      choice: "present",
+      createdAt: now,
+      id: "marked-leaver-today",
+      markedByAccountId: coachId,
+      occurrenceId: todaySession.id,
+      updatedAt: now,
+    }).run()
+    changes.endTrainingNow({ playerId: players.markedLeaver, stopFees: true }, context())
+    // Today's mark stays, so the place covers today and ends tomorrow.
+    expect(database.select().from(schema.sessionAssignments)
+      .where(eq(schema.sessionAssignments.accountId, players.markedLeaver)).get()?.effectiveTo).toBe("2026-10-06")
+
+    expect(() => finance.previewRefundAllocations({
+      amountPaise: 100_000,
+      expectedPaymentRevision: 0,
+      paymentId: payment.receipt.id,
+      withdrawalEffectiveOn: "2026-10-05",
+    }, context())).not.toThrow()
   })
 
   it("still offers the unused-days refund after a level or plan change this month", () => {

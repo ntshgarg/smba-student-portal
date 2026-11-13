@@ -28,6 +28,7 @@ import {
 } from "@/lib/db/schema"
 import { academyPlanIsValid } from "@/lib/training/academy-plans"
 import {
+  addCalendarDays,
   calculateChargeLedger,
   combineFinanceStatuses,
   deriveFinanceStatus,
@@ -373,7 +374,9 @@ export function playerTrainingHasEnded(
 ) {
   const place = database.select({ id: sessionAssignments.id }).from(sessionAssignments).where(and(
     eq(sessionAssignments.accountId, playerId),
-    or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, todayKey)),
+    // A place ending tomorrow covers only today: "They have left already"
+    // after today's attendance is marked ends it that way.
+    or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, addCalendarDays(todayKey, 1))),
   )).get()
   if (place) return false
   return !database.select({ id: trainingChanges.id }).from(trainingChanges).where(and(
@@ -933,12 +936,6 @@ function loadCoachReceiptContext(
       allocationRows.map(({ charge }) => charge.playerAccountId),
     )]),
     recordedWithdrawalChargeIds: loadRecordedWithdrawalChargeIds(database, chargeIds),
-    // A few recorded withdrawal refunds per player at most.
-    planRestoringRefundIds: new Set(refundRows.filter((refund) => (
-      refund.lifecycle === "recorded"
-      && refund.purpose === "mid_term_withdrawal"
-      && planRestoreAfterWithdrawalReversal(database, refund) !== null
-    )).map((refund) => refund.id)),
     refundBreakdowns: loadRefundBreakdowns(database, [...new Set(refundRows.map((refund) => refund.id))]),
     refundedPaiseByAllocation: loadRecordedRefundPaiseByAllocation(
       database,
@@ -1087,7 +1084,6 @@ function loadPlayerPhaseTwoHistory(
         internalNote: refund.internalNote,
         allocations: allocationsForRefund,
         canReverse: refund.lifecycle === "recorded",
-        restoresFeePlan: coachContext.planRestoringRefundIds.has(refund.id),
         recordRevision: refund.recordRevision,
       }
     })

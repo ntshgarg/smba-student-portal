@@ -130,12 +130,6 @@ export type CoachRefundView = PlayerRefundView & {
   internalNote: string | null
   allocations: CoachRefundAllocationView[]
   canReverse: boolean
-  /**
-   * Reversing this withdrawal refund puts the fee plan back as it was before
-   * the refund. Refunds recorded before 13 Nov 2026 did not keep that, so
-   * their plan stays ended.
-   */
-  restoresFeePlan: boolean
   recordRevision: number
 }
 

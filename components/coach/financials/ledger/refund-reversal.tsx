@@ -37,9 +37,7 @@ export function RefundReversal({ refund }: { refund: CoachRefundView }) {
     if (!window.confirm(
       refund.purpose !== "mid_term_withdrawal"
         ? `Reverse refund ${refund.refundReference}?`
-        : refund.restoresFeePlan
-          ? `Reverse refund ${refund.refundReference}? The month's fee goes back to fully paid, and the fee plan goes back to how it was before the refund.`
-          : `Reverse refund ${refund.refundReference}? The month's fee goes back to fully paid. The fee plan stays ended.`,
+        : `Reverse refund ${refund.refundReference}? The month's fee goes back to fully paid.`,
     )) return
     setPending(true)
     try {

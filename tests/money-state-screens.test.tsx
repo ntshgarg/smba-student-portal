@@ -329,7 +329,6 @@ describe("the coach's fee record", () => {
       internalNote: null,
       method: "cash" as const,
       recordRevision: 0,
-      restoresFeePlan: true,
     }
     const html = renderToStaticMarkup(<PlayerLedger ledger={ledger({
       management: {
