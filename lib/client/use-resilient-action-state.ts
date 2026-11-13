@@ -88,7 +88,7 @@ export function resilientAction<State extends ActionErrorState>(
        * `NEXT_REDIRECT` alert flashed into the form's `role="alert"` on the way
        * out, a stale subtree carried into the next route, and a bogus
        * `unhandled_rejection` row per successful sign-in, spending the
-       * reporter's eight-per-page budget on the framework's own control flow.
+       * reporter's eight-per-hour budget on the framework's own control flow.
        * Every row in `client_error_reports` on 2026-09-07 -- all sixteen of
        * them, `Error` with a null digest, on the six auth routes whose actions
        * end in `redirect()` and nowhere else -- has this shape.

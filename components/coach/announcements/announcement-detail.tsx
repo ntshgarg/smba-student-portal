@@ -27,9 +27,9 @@ import styles from "./announcements.module.css"
  * from — and then re-reads the announcement. Matches the composer's publish
  * deadline for the same reason: courtside connections stall rather than fail,
  * and this only has to beat an indefinite hang. It is a deadline, not a
- * cancellation — see `withSaveDeadline`.
+ * cancellation — see `withSaveDeadline`. Pin and unpin use it too.
  */
-const withdrawDeadlineMs = 20_000
+const actionDeadlineMs = 20_000
 
 function WithdrawDialog({
   announcementId,
@@ -91,10 +91,12 @@ function WithdrawDialog({
     try {
       const result = await withSaveDeadline(
         withdrawAnnouncementAction({ announcementId, reason: normalizedReason }),
-        withdrawDeadlineMs,
+        actionDeadlineMs,
       )
       if (!result.ok) {
-        if (dismissed.current) {
+        // Already withdrawn: the page behind is out of date, so leave the
+        // dialog and let the page show the withdrawal.
+        if (dismissed.current || result.code === "ALREADY_WITHDRAWN") {
           onFailureAfterExit(result.message)
           return
         }
@@ -214,18 +216,29 @@ export function PublishedAnnouncementDetail({
     publishedNow ? { message: "Announcement published", tone: "success" } : null,
   )
 
+  // The success note is shown once; drop ?published=1 so a reload does not
+  // bring it back over a notice that may since have been withdrawn.
+  useEffect(() => {
+    if (!publishedNow) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete("published")
+    window.history.replaceState(null, "", url)
+  }, [publishedNow])
+
   async function togglePin() {
     if (pinPending || announcement.status !== "active") return
     setPinPending(true)
     setFeedback(null)
     try {
-      const result = await setAnnouncementPinnedAction({
+      const result = await withSaveDeadline(setAnnouncementPinnedAction({
         announcementId: announcement.id,
         expectedPresentationRevision: announcement.presentationRevision,
         pinned: !announcement.pinned,
-      })
+      }), actionDeadlineMs)
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
+        // A refusal means the notice changed elsewhere; show it as it is now.
+        router.refresh()
         return
       }
       setFeedback({
@@ -355,7 +368,11 @@ export function PublishedAnnouncementDetail({
         <WithdrawDialog
           announcementId={announcement.id}
           onClose={() => setWithdrawOpen(false)}
-          onFailureAfterExit={(message) => setFeedback({ message, tone: "error" })}
+          onFailureAfterExit={(message) => {
+            setWithdrawOpen(false)
+            setFeedback({ message, tone: "error" })
+            router.refresh()
+          }}
           onReasonChange={setWithdrawalReason}
           onWithdrawn={handleWithdrawn}
           reason={withdrawalReason}

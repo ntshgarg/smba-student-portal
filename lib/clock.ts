@@ -34,17 +34,12 @@ import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 // What it does not reach, stated so nobody reads the pin as more than it is:
 // this module is server-only, so a component that takes its own "now" at mount
 // is outside it. Three registers were brought inside by having their pages pass
-// academyNow() down and their 30s tick advance from it. The rest still read the
-// device: components/coach/attendance-adjustments-workspace.tsx:145, :163 and
-// :164 are the ones that matter, because :163 gates
-// `occurrence.occurrenceDate <= todayKey` in sourceOptions and the audited
-// `coach-attendance-adjustments` state therefore still grows an option every
-// midnight. Behind them, session-schedules.tsx:138, session-create.tsx:88,
-// financials-rapid-desk.tsx:76 and :287, refund-form.tsx:38, :39, :224 and :245,
-// fee-plan-editor.tsx:29, report-workspace.tsx:552, and
-// announcement-presentation.ts:19 -- that last one shared with client trees, so
-// it cannot import this module at all without breaking them. The pin removes
-// most of the drift, not all of it.
+// academyNow() down and their 30s tick advance from it, and the attendance
+// adjustments workspace takes its page's academyNow() as props and holds it
+// from mount. The rest still read the device: financials-rapid-desk.tsx,
+// refund-form.tsx and announcement-presentation.ts -- that last one shared with
+// client trees, so it cannot import this module at all without breaking them.
+// The pin removes most of the drift, not all of it.
 function pinnedAccessibilityInstant() {
   const configured = process.env.SMBA_ACCESSIBILITY_CLOCK?.trim()
   if (!configured) return null

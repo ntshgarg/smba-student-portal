@@ -8,20 +8,15 @@ import { operationalEvents } from "@/lib/db/schema"
 import { purgeExpiredTelemetryOccasionally } from "@/lib/telemetry/retention"
 
 /*
- * Two bounds, because this runs for every server-side throw and an anonymous
+ * Bounded, because this runs for every server-side throw and an anonymous
  * caller can cause one at will: a server action id is a build-time constant sat
  * in the JavaScript the signed-out /login page already loads, and posting
  * malformed arguments to it throws. Measured against a live build with no
  * cookie: ~150 rows per second, one per request, on a table with no unique
  * index and no ceiling.
  *
- * The client-side twin in lib/telemetry/record-client-error.ts was given both
- * of these and this path was not, though its comment claims the two are treated
- * alike. The hashing was copied across; the bound was not.
- *
- * The global ceiling is what actually holds. `routePath` here is simply the
- * route the action was posted to, so it is chosen by the attacker, and anything
- * counted per route can be spread across routes to defeat it.
+ * The one bound is the duplicate window below: one row per (fingerprint, route)
+ * per window. There is no global ceiling; why is given where the dedupe runs.
  */
 const DUPLICATE_WINDOW_MS = 10 * 60_000
 

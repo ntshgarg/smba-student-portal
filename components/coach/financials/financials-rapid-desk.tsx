@@ -74,6 +74,9 @@ function PaymentForm({
     payableCharges[0] ? String(payableCharges[0].outstandingPaise / 100) : "",
   )
   const [receivedOn, setReceivedOn] = useState(getAcademyDateKey())
+  // Until the coach picks a date, each new payment starts on today, so a desk
+  // left open overnight does not date the next payment yesterday.
+  const receivedOnChosen = useRef(false)
   const [method, setMethod] = useState<PaymentMethod>("upi")
   const [externalReference, setExternalReference] = useState("")
   const [internalNote, setInternalNote] = useState("")
@@ -137,6 +140,10 @@ function PaymentForm({
       return
     }
 
+    // No payment is under review yet, so nothing has been sent with this date.
+    if (reviewedAmountPaise === null && !receivedOnChosen.current) {
+      setReceivedOn(getAcademyDateKey())
+    }
     setPending("preview")
     try {
       const result = await previewPaymentAllocationsAction({
@@ -314,6 +321,7 @@ function PaymentForm({
               value={receivedOn}
               disabled={Boolean(pending)}
               onChange={(event) => {
+                receivedOnChosen.current = true
                 setReceivedOn(event.target.value)
                 resetMutation()
               }}

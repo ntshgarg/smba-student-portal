@@ -57,6 +57,11 @@ describe("public announcements endpoint", () => {
 
     const response = await GET()
     expect(response.status).toBe(200)
+    expect(response.headers.get("cache-control")).toBe("no-store")
+    expect(console.error).toHaveBeenCalledWith(
+      "Public announcement lookup failed.",
+      expect.anything(),
+    )
     expect(await response.json()).toEqual({ announcements: [] })
   })
 })

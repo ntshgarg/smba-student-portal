@@ -74,7 +74,7 @@ export function AccountMenu({
           inert={!open}
         >
           <p>
-            <span>Signed in as</span>
+            <span>{previewMode ? "Previewing as" : "Signed in as"}</span>
             <strong>{account.fullName}</strong>
           </p>
           <Link href={publicSiteHref} onClick={() => setOpen(false)}>

@@ -330,13 +330,11 @@ export function countActiveCoachAnnouncements({
 export function listActiveHomepageAnnouncements(
   options: AnnouncementQueryOptions = {},
 ): PublicAnnouncementSummary[] {
-  try {
-    const database = options.database ?? initializeDatabase()
-    const now = options.now ?? academyNow()
-    return activeChannelRows("homepage", database, now).map(publicSummary)
-  } catch {
-    return []
-  }
+  // No catch here: the public route logs the fault and keeps the empty answer
+  // out of the cache.
+  const database = options.database ?? initializeDatabase()
+  const now = options.now ?? academyNow()
+  return activeChannelRows("homepage", database, now).map(publicSummary)
 }
 
 export function getActiveHomepageAnnouncement(

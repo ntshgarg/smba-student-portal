@@ -381,7 +381,15 @@ export function TrialForm() {
 
   return (
     <div className="trial-form-card">
-      <form onSubmit={onSubmit} aria-labelledby="trial-form-title">
+      <form
+        onSubmit={onSubmit}
+        // An edit makes the prepared message out of date, so the fallback link
+        // and the "opened" note go until the form is sent again.
+        onChange={() => setWhatsappStatus((current) => (
+          current.state === "idle" ? current : { state: "idle" }
+        ))}
+        aria-labelledby="trial-form-title"
+      >
         <div className="form-heading">
           <h3 id="trial-form-title">Free trial request</h3>
           <MessageCircle aria-hidden="true" />

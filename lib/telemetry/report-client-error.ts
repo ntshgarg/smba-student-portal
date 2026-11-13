@@ -21,10 +21,15 @@ import {
 //
 // Deliberately no server-only imports: this module is bundled for the client.
 
-const MAX_REPORTS_PER_PAGE_LOAD = 8
+// Per hour, not per page load: the App Router keeps this module across client
+// navigation, so a workspace left open all day would otherwise go quiet for
+// good after its eighth fault.
+const MAX_REPORTS_PER_WINDOW = 8
+const REPORT_WINDOW_MS = 60 * 60_000
 
 const reportedSignatures = new Set<string>()
 let reportsSent = 0
+let windowStartedAt = 0
 let reporting = false
 
 function dispatch(body: string) {
@@ -63,7 +68,13 @@ export function reportClientError(input: {
   reporting = true
 
   try {
-    if (reportsSent >= MAX_REPORTS_PER_PAGE_LOAD) return
+    const now = Date.now()
+    if (now - windowStartedAt >= REPORT_WINDOW_MS) {
+      windowStartedAt = now
+      reportsSent = 0
+      reportedSignatures.clear()
+    }
+    if (reportsSent >= MAX_REPORTS_PER_WINDOW) return
 
     const { digest, errorName, summary } = describeReportedError(input.error)
     const report: ClientErrorReport = {
@@ -78,7 +89,7 @@ export function reportClientError(input: {
     }
 
     // A boundary can remount many times for one fault. Report each distinct
-    // fault once per page load.
+    // fault once per window.
     const signature = clientErrorSignature(report)
     if (reportedSignatures.has(signature)) return
     reportedSignatures.add(signature)

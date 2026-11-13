@@ -51,6 +51,9 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   const [amount, setAmount] = useState("")
   const [withdrawalEffectiveOn, setWithdrawalEffectiveOn] = useState(dateLimits.initial)
   const [refundedOn, setRefundedOn] = useState(getAcademyDateKey())
+  // Until the coach picks it, the refund date follows today, so a form left
+  // open overnight does not record the refund on yesterday.
+  const refundedOnChosen = useRef(false)
   const [method, setMethod] = useState<PaymentMethod>(receipt.method)
   const [externalReference, setExternalReference] = useState("")
   const [internalNote, setInternalNote] = useState("")
@@ -105,6 +108,9 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
       setFeedback({ message: "Enter a valid refund amount", tone: "error" })
       amountRef.current?.focus()
       return
+    }
+    if (reviewedAmountPaise === null && !refundedOnChosen.current) {
+      setRefundedOn(getAcademyDateKey())
     }
     setPending("preview")
     try {
@@ -271,7 +277,11 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
               max={getAcademyDateKey()}
               value={refundedOn}
               disabled={Boolean(pending)}
-              onChange={(event) => { setRefundedOn(event.target.value); resetMutation() }}
+              onChange={(event) => {
+                refundedOnChosen.current = true
+                setRefundedOn(event.target.value)
+                resetMutation()
+              }}
             />
           </label>
           <label className={styles.field}>

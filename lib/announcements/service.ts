@@ -103,7 +103,7 @@ function publicationFingerprint(input: Omit<ValidatedPublication, "fingerprint">
   })).digest("hex")
 }
 
-function validatePublication(input: PublishAnnouncementInput, now: Date): ValidatedPublication {
+function validatePublication(input: PublishAnnouncementInput): ValidatedPublication {
   const title = normalizedSingleLine(input?.title)
   if (!title || title.length > ANNOUNCEMENT_TITLE_MAX_LENGTH) {
     fail(
@@ -148,12 +148,8 @@ function validatePublication(input: PublishAnnouncementInput, now: Date): Valida
   const expiresOn = typeof input?.expiresOn === "string" && input.expiresOn.trim()
     ? input.expiresOn.trim()
     : null
-  if (expiresOn && (!validDateKey(expiresOn) || expiresOn < getAcademyDateKey(now))) {
-    fail(
-      "INVALID_INPUT",
-      "Expiry must be today or a later academy date.",
-      "expiresOn",
-    )
+  if (expiresOn && !validDateKey(expiresOn)) {
+    fail("INVALID_INPUT", "Choose a valid expiry date.", "expiresOn")
   }
 
   const publicationKey = normalizedSingleLine(input?.publicationKey)
@@ -201,7 +197,7 @@ export async function publishAnnouncement(
   }: AnnouncementServiceContext,
 ): Promise<PublishAnnouncementResult> {
   requireHeadAdminAccess(coachId, { database })
-  const validated = validatePublication(input, now)
+  const validated = validatePublication(input)
 
   const publication = database.transaction((tx) => {
     requireHeadAdminAccess(coachId, { database: tx })
@@ -223,6 +219,15 @@ export async function publishAnnouncement(
         )
       }
       return { announcementId: existing.id, reusedPublication: true }
+    }
+    // Checked only for a new notice, so a retry that crosses midnight is still
+    // recognised as the one already published.
+    if (validated.expiresOn && validated.expiresOn < getAcademyDateKey(now)) {
+      fail(
+        "INVALID_INPUT",
+        "Expiry must be today or a later academy date.",
+        "expiresOn",
+      )
     }
 
     const announcementId = createId()

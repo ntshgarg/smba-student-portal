@@ -404,7 +404,7 @@ export function AssessmentForm({
 
       <header className={styles.header}>
         <div>
-          <span className="eyebrow">{published ? "Published assessment" : "New assessment"}</span>
+          <span className="eyebrow">{published ? "Published assessment" : assessmentId ? "Draft assessment" : "New assessment"}</span>
           <h1>{player.name}</h1>
         </div>
       </header>

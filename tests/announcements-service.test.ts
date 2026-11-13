@@ -138,6 +138,17 @@ describe("announcement publication", () => {
     expect(retry.announcement.id).toBe(FIRST_ANNOUNCEMENT_ID)
     expect(database.select().from(schema.broadcasts).all()).toHaveLength(1)
 
+    // A retry whose reply was lost before midnight is still recognised after
+    // it, rather than refused because "today" is now past the expiry date.
+    const afterMidnight = await publishAnnouncement(input, {
+      coachId: HEAD_COACH_ID,
+      createId: () => SECOND_ANNOUNCEMENT_ID,
+      database,
+      now: new Date("2026-08-10T00:05:00+05:30"),
+    })
+    expect(afterMidnight.reusedPublication).toBe(true)
+    expect(database.select().from(schema.broadcasts).all()).toHaveLength(1)
+
     await expect(publishAnnouncement({ ...input, title: "Different title" }, {
       coachId: HEAD_COACH_ID,
       database,
@@ -372,5 +383,12 @@ describe("announcement audience queries", () => {
 
     const tomorrow = new Date("2026-08-10T00:01:00+05:30")
     expect(listActiveHomepageAnnouncements({ database, now: tomorrow })).toEqual([])
+  })
+})
+
+describe("homepage announcements when the database fails", () => {
+  it("lets the fault through so the public route can log it", () => {
+    sqlite.close()
+    expect(() => listActiveHomepageAnnouncements({ database, now: NOW })).toThrow()
   })
 })

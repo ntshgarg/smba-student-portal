@@ -28,6 +28,9 @@ export async function GET() {
     console.error("Public announcement lookup failed.", {
       cause: describeFailureCause(error),
     })
-    return Response.json({ announcements: [] }, { headers: publicResponseHeaders })
+    // Not cached, so the notices come back on the next load once the fault clears.
+    return Response.json({ announcements: [] }, {
+      headers: { ...publicResponseHeaders, "Cache-Control": "no-store" },
+    })
   }
 }
