@@ -14,11 +14,7 @@ export type SaveFailureDescription = {
   signIn?: InlineNoticeAction
 }
 
-/**
- * The link an expired-sign-in notice can carry. It opens in a new tab because
- * the sentence beside it says to: leaving this tab for /login would throw away
- * the work the notice promises is still on screen.
- */
+/** Opens in a new tab so the work on this screen is kept. */
 export const signInInNewTab: InlineNoticeAction = {
   href: "/login",
   label: "Sign in in a new tab",
@@ -67,14 +63,7 @@ export function withSaveDeadline<T>(save: Promise<T>, timeoutMs: number) {
   })
 }
 
-/**
- * The shapes a *bug* gives a `TypeError`, across the three engines: reading a
- * field of a missing value ("Cannot read properties of undefined", Safari's
- * "undefined is not an object", Firefox's "can't access property ... is
- * undefined"), calling or spreading the wrong thing ("is not a function", "is
- * not iterable"). A dropped request never reads like this, so a `TypeError`
- * that does is a fault to report, not a connection to blame.
- */
+/** `TypeError` wordings that mean a bug in this page, not a dropped request. */
 const programmingErrorShape = new RegExp([
   "cannot (read|set) propert",
   "cannot destructure",
@@ -90,15 +79,9 @@ const programmingErrorShape = new RegExp([
  * varies: "Failed to fetch" (Chrome), "NetworkError when attempting to fetch
  * resource." (Firefox), "Load failed" (Safari). The constructor is the signal,
  * and `name` is compared as well because an error crossing a realm boundary
- * fails `instanceof`. The one thing the message is read for is to rule out a
- * bug in this page's own code, which is also a `TypeError` (see
- * `programmingErrorShape`). Anything else -- including a server-thrown error --
- * is not a transport failure and returns `null`.
- *
- * A transport failure does NOT mean the server never received the request.
- * The same rejection arrives when the connection drops after the server has
- * finished and before its reply gets back, so the caller cannot know whether
- * the save happened. `describeSaveFailure` words it that way.
+ * fails `instanceof`. A bug-shaped message (`programmingErrorShape`) and
+ * anything else -- including a server-thrown error -- returns `null`.
+ * The server may still have received the request.
  *
  * `navigator.onLine` only reports whether a network interface exists, so it
  * cannot prove reachability. It is used solely to choose between the two
@@ -126,24 +109,9 @@ function errorDigest(error: unknown) {
   return typeof digest === "string" ? digest : null
 }
 
-/**
- * True when a save was refused because the coach's sign-in has run out. The
- * guard throws `SessionExpiredError`, whose digest is the one part of it that
- * survives the trip back to the browser (see `SESSION_EXPIRED_DIGEST`).
- */
+/** True when the save was refused because the sign-in has run out. */
 export function isSessionExpiry(error: unknown) {
   return errorDigest(error) === SESSION_EXPIRED_DIGEST
-}
-
-/**
- * A fault in this page's own code, as opposed to anything the server said: an
- * error of its own kind (a `TypeError` from reading a missing field, say) with
- * no digest. A server action's throw arrives as a plain `Error` with one, and
- * Next.js's own complaint about a reply it could not read ("An unexpected
- * response was received from the server.") as a plain `Error` without.
- */
-function isClientFault(error: unknown) {
-  return error instanceof Error && error.name !== "Error" && errorDigest(error) === null
 }
 
 export function classifySaveFailure(
@@ -161,34 +129,11 @@ export function networkFailureCause(kind: NetworkFailureKind) {
 }
 
 /**
- * Turns a rejected save into operational copy. `subject` names what was being
- * saved, `retained` states what is still true when the save certainly did not
- * happen. Both are supplied without trailing punctuation.
- *
- * Nothing but an expired sign-in is described as a failure, because nothing
- * else can be known to have changed nothing. A dropped connection or a missed
- * deadline may have arrived after the server finished. So may a server fault --
- * the write can commit before something later in the action throws -- and so
- * may the plain `Error` Next.js raises for a reply it could not read, which is
- * what a platform timeout or a 5xx page becomes. None of those says whether the
- * save landed, and none is shown word for word: a production build replaces a
- * server's sentence with a fixed technical one, and Next's own is no better.
- *
- * Where `retained` describes the screen ("Your marks are still on screen") it
- * stays true either way and is kept, with "try again": callers that pass only
- * `retained` are the ones whose save is safe to repeat. Where it describes the
- * academy ("The member is still active") it would be false if the save landed,
- * so the caller supplies `unconfirmed` instead: what to do to find out, which
- * then replaces both `retained` and the generic next step, and no retry is
- * offered beside it.
- *
- * An expired sign-in is the one refusal known to have changed nothing -- the
- * guard throws before any write -- and the one whose fix is not on this screen.
- * The way back keeps the work: signing in from a new tab renews the cookie
- * this tab sends too, so the next save from here goes through.
- *
- * `subject` is a singular noun phrase ("The member update", not "The member
- * details"): the sentences around it say "was" and "it".
+ * Turns a rejected save into operational copy. `subject` (singular, no trailing
+ * punctuation) names what was being saved; `retained` states what is still on
+ * screen. Only an expired sign-in is called a failure: anything else may have
+ * landed. Where `retained` would be false if the save landed, the caller passes
+ * `unconfirmed` (how to find out) instead, and no retry is offered.
  */
 export function describeSaveFailure({
   error,
@@ -198,6 +143,8 @@ export function describeSaveFailure({
   unconfirmed,
 }: {
   error: unknown
+  /** Ignored; kept so older callers still compile. */
+  fallbackMessage?: string
   isOnline?: boolean
   retained: string
   subject: string
@@ -224,9 +171,7 @@ export function describeSaveFailure({
     }
   }
 
-  if (kind === "unknown" && isClientFault(error)) {
-    // The reporter is the only way a bug in a save button reaches anyone;
-    // the coach can do nothing about it but try again.
+  if (kind === "unknown") {
     reportClientError({ boundary: "window", error, eventType: "unhandled_rejection" })
   }
 
@@ -245,10 +190,6 @@ export function describeSaveFailure({
     kind,
     message: `${subject} ${cause}, so it may or may not have gone through. `
       + (unconfirmed ? `${unconfirmed}.` : `${retained}. ${nextStep}.`),
-    // Where the coach has to look before acting, a button that acts is the
-    // wrong thing to put beside the sentence telling them to look. An
-    // unexpected fault gets no button either: the sentence says try again, and
-    // a fault that repeats is better met by a reload than a second press.
     offerRetry: !unconfirmed && kind !== "unknown",
   }
 }

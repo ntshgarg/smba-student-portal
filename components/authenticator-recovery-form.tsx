@@ -20,8 +20,6 @@ export function AuthenticatorRecoveryRequestForm() {
     initialRequestState,
     {
       subject: "Your recovery request",
-      // The same request service as the password reset: asking again retires
-      // the earlier link.
       unconfirmed: "Check your inbox before asking again: if a verification email arrives, use it."
         + " Asking again sends a new link and the earlier one stops working",
     },
@@ -73,8 +71,6 @@ export function AuthenticatorRecoveryApprovalForm({ academyId }: { academyId: st
     initialApprovalState,
     {
       subject: "Your reset request",
-      // A submitted request spends this verified session, so a retry after it
-      // went through is refused rather than sent twice.
       unconfirmed: "Check the connection and try again. If trying again says this session has"
         + " expired, the first request went through and the platform admin already has it",
     },

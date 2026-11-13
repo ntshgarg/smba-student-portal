@@ -289,11 +289,7 @@ export function AssessmentForm({
         tone: "success",
       })
     } catch (error) {
-      // An edit of a saved assessment goes by its id, so sending it again is
-      // safe. The first save of a new one is not: if the lost reply was for a
-      // publish that landed, a second press publishes a second assessment. And
-      // no way out here leads to /login -- leaving takes the ratings with it,
-      // while a new tab renews the sign-in this tab saves with.
+      // Resaving an existing assessment is safe; resaving a new one could publish it twice.
       const failure = describeSaveFailure({
         error,
         retained: ratingsKept,

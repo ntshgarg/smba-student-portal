@@ -27,13 +27,7 @@ export async function getRawAuthSession() {
   return getAuth().api.getSession({ headers: await headers() })
 }
 
-/**
- * True for a live sign-in whose only gap is an unfinished authenticator: a
- * head coach or the platform owner who walked away from authenticator setup.
- * `getCurrentIdentity` refuses that session -- every page then treats it as
- * signed out -- so the sign-in page asks this to send them back to the step
- * they owe instead of showing a blank sign-in form.
- */
+/** A live sign-in refused an identity only because its authenticator setup is unfinished. */
 export async function sessionOwesAuthenticatorSetup() {
   const rawSession = await getRawAuthSession()
   if (!rawSession?.user?.id || rawSession.user.twoFactorEnabled) return false

@@ -53,25 +53,13 @@ const passwordFieldIds = {
   newPassword: "security-new-password",
 } as const
 
-/**
- * The reissue action, wrapped so a refused second press keeps the set on screen.
- *
- * After a reissue the form stays live and React empties its fields, so a second
- * press by mistake used to come back as "Enter your current password." with
- * `codes: null` -- and the only readable copy of a set that was still the live
- * one vanished. The action now says when it refused before touching the stored
- * set, and only then do the codes on screen stay; anything that may have
- * replaced the set still clears them.
- *
- * The codes are also left out of what goes back to the server: they are the
- * coach's only copy and the action has no use for them.
- */
-async function reissueStillShowingCodes(
+/** A credential refusal leaves the stored set alone, so the codes on screen stay. */
+async function reissueKeepingCodesOnRefusal(
   state: RecoveryCodeReissueState,
   formData: FormData,
 ): Promise<RecoveryCodeReissueState> {
-  const next = await reissueRecoveryCodesAction({ ...state, codes: null }, formData)
-  return next.storedSetUnchanged && state.codes ? { ...next, codes: state.codes } : next
+  const next = await reissueRecoveryCodesAction(state, formData)
+  return next.codes === null && next.errorField ? { ...next, codes: state.codes } : next
 }
 
 /** Sessions shown before the list has to be expanded. */
@@ -112,10 +100,6 @@ export function AccountSecurityWorkspace({
       // rather than leave a stale one beside the failure.
       fold: (state, error) => ({ ...state, error, errorField: null, success: null }),
       subject: "Your new password",
-      // A finished change replaces the password, signs every device out and
-      // removes the PIN before the reply is sent; the new sign-in cookie is lost
-      // with the reply. So the next click may well ask for a sign-in, and the
-      // password to give it is the new one.
       unconfirmed: "If it went through, your new password is now the one that works and"
         + " other devices were signed out. Reload this page: if you are asked to sign in,"
         + " use your new password",
@@ -138,15 +122,13 @@ export function AccountSecurityWorkspace({
     },
   )
   const [reissueState, reissueAction, reissuePending] = useResilientActionState(
-    reissueStillShowingCodes,
+    reissueKeepingCodesOnRefusal,
     initialReissueState,
     {
       // Codes from an earlier press may have been superseded by the press that
       // failed, and a dead code presented as live is what locks a coach out, so
-      // they go with the failure. An expired sign-in is the exception: the
-      // guard refuses before the stored set is touched, so codes on screen are
-      // still the live set and the only readable copy of it. Neither credential
-      // was rejected, so neither field is flagged.
+      // they go with the failure, unless the sign-in had expired (nothing was
+      // touched). Neither field is flagged.
       fold: (state, error, kind) => ({
         ...state,
         codes: kind === "session-expired" ? state.codes : null,
@@ -154,9 +136,6 @@ export function AccountSecurityWorkspace({
         errorField: null,
       }),
       subject: "Your request for new recovery codes",
-      // A finished reissue overwrites the stored set before the reply is sent,
-      // so the codes the coach holds may already be dead. Only a set that was
-      // actually shown can be trusted, so the way out is another reissue.
       unconfirmed: "If it went through, your old codes no longer work and the new ones could"
         + " not be shown. Check the connection and reissue again to get a set you can save."
         + " No device was signed out and your authenticator app is unchanged",
@@ -209,8 +188,6 @@ export function AccountSecurityWorkspace({
           error,
           retained,
           subject,
-          // "It is still signed in" is only true if the request never
-          // arrived; a dropped reply cannot say which.
           unconfirmed: "Reload this page to see which devices are still signed in",
         })
         setSessionsFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
@@ -342,8 +319,6 @@ export function AccountSecurityWorkspace({
             <div className="totp-backup-codes">
               <h3>Your new recovery codes</h3>
               <p role="status">{`${reissuedCodes.length} new codes replaced the old set. Save them before you leave this page; they are not shown again.`}</p>
-              {/* Another reissue, from this page or another device, replaces this
-                  set without this page knowing, so the list says so itself. */}
               <p>If new codes are issued again, here or on another device, these stop working.</p>
               <ul>{reissuedCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul>
               <div className="totp-backup-actions">

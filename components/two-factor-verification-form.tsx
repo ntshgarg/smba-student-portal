@@ -28,8 +28,6 @@ export function TwoFactorVerificationForm() {
     initialState,
     {
       subject: "Your recovery code",
-      // A recovery code accepted on the server is spent even when the reply,
-      // and the sign-in it carried, never arrives.
       unconfirmed: "Check the connection and try again. Each recovery code works only once,"
         + " so if this one is refused, use a different one",
     },

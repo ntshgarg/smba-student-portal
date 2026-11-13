@@ -13,11 +13,7 @@ export type InlineNoticeTone = "success" | "error" | "info"
 export type InlineNoticeAction = {
   href: string
   label: string
-  /**
-   * Opens in a new tab, leaving this one -- and whatever is typed into it --
-   * where it is. Signing in from a new tab renews the cookie this tab sends,
-   * so the coach can come back and save.
-   */
+  /** Opens in a new tab so whatever is typed into this one stays. */
   newTab?: boolean
 }
 

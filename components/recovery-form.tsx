@@ -21,8 +21,6 @@ export function RecoveryForm() {
     initialState,
     {
       subject: "Your reset request",
-      // Asking again retires the earlier link (requestPasswordRecovery), so an
-      // email that did go out would stop working the moment a second is sent.
       unconfirmed: "Check your inbox before asking again: if a reset email arrives, use it."
         + " Asking again sends a new link and the earlier one stops working",
     },

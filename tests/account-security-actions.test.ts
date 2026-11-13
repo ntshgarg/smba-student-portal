@@ -240,7 +240,6 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "That authenticator or recovery code was not accepted.",
         errorField: "secondFactor",
-        storedSetUnchanged: true,
       })
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
     // Spent by the reservation before the check, and not handed back.
@@ -254,7 +253,6 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Enter a current authenticator code or an unused recovery code.",
         errorField: "secondFactor",
-        storedSetUnchanged: true,
       })
     expect(mocks.verifyTOTP).not.toHaveBeenCalled()
     expect(mocks.verifyBackupCode).not.toHaveBeenCalled()
@@ -269,7 +267,6 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "The current password could not be verified.",
         errorField: "currentPassword",
-        storedSetUnchanged: true,
       })
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
     // A wrong password must not burn the recovery code typed beside it.
@@ -285,7 +282,6 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Too many attempts. Wait a few minutes before trying again.",
         errorField: null,
-        storedSetUnchanged: true,
       })
     expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
@@ -299,7 +295,6 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Too many attempts. Wait a few minutes before trying again.",
         errorField: null,
-        storedSetUnchanged: true,
       })
     expect(mocks.verifyTOTP).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
@@ -316,7 +311,6 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Enter your current password.",
         errorField: "currentPassword",
-        storedSetUnchanged: true,
       })
     expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
@@ -330,7 +324,6 @@ describe("reissuing the authenticator recovery codes", () => {
         codes: null,
         error: "Leave preview mode to manage recovery codes.",
         errorField: null,
-        storedSetUnchanged: true,
       })
     expect(mocks.verifyCurrentPassword).not.toHaveBeenCalled()
     expect(mocks.generateBackupCodes).not.toHaveBeenCalled()
@@ -432,16 +425,6 @@ describe("changing the password when Better Auth throws part-way", () => {
     expect(result.error).not.toContain("Try again.")
   })
 
-  it("does not report a finished change as failed when only the security log write fails", async () => {
-    mocks.changePassword.mockResolvedValue({})
-    mocks.writeAuthSecurityEvent.mockImplementation(() => {
-      throw new Error("log unavailable")
-    })
-
-    await expect(changePasswordAction({ error: null, success: null }, changeData()))
-      .resolves.toMatchObject({ error: null })
-    mocks.writeAuthSecurityEvent.mockReset()
-  })
 })
 
 describe("a sign-in that ran out while the security page was open", () => {

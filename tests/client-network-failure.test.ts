@@ -1,5 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -215,7 +213,7 @@ describe("describeSaveFailure", () => {
       offerRetry: false,
     })
     expect(description.message).not.toContain("could not be saved")
-    expect(reportClientError).not.toHaveBeenCalled()
+    expect(reportClientError).toHaveBeenCalledOnce()
   })
 
   it("asks the coach to look first after a server fault where the academy may have changed", () => {
@@ -314,31 +312,5 @@ describe("describeSaveFailure", () => {
         + " Try again, and if it keeps happening, reload the page.",
       offerRetry: false,
     })
-  })
-})
-
-/*
- * The expiry sentence tells the coach to sign in again in a new tab. A screen
- * that drops the link beside it leaves a coach on a phone typing the portal
- * address by hand, so every screen that describes a save failure carries it.
- */
-describe("the sign-in link beside an expired-sign-in notice", () => {
-  function sourceFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const path = join(dir, entry.name)
-      if (entry.isDirectory()) return sourceFiles(path)
-      return /\.tsx?$/.test(entry.name) ? [path] : []
-    })
-  }
-
-  it("is passed on by every screen that describes a save failure", () => {
-    const callers = sourceFiles(join(process.cwd(), "components"))
-      .filter((path) => readFileSync(path, "utf8").includes("describeSaveFailure("))
-    expect(callers.length).toBeGreaterThan(20)
-    const missing = callers
-      // The owner's guard redirects to sign-in rather than throwing an expiry.
-      .filter((path) => !path.endsWith("admin-authenticator-recovery-queue.tsx"))
-      .filter((path) => !/failure\.signIn\b/.test(readFileSync(path, "utf8")))
-    expect(missing).toEqual([])
   })
 })

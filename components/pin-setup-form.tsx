@@ -15,13 +15,11 @@ import {
 const initialState: PinSetupState = { error: null, errorField: null }
 const pinSetupErrorId = "pin-setup-error"
 
-export function PinSetupForm({ allowSkip = true }: { allowSkip?: boolean }) {
+export function PinSetupForm() {
   const [state, formAction, pending] = useResilientActionState(setupPinAction, initialState, {
     // Neither PIN field is at fault, so the message stays at form level.
     fold: (state, error) => ({ ...state, error, errorField: null }),
     subject: "Your PIN",
-    // A retry after a PIN was saved is sent straight on (setupPinAction), so
-    // trying again is the way to find out.
     unconfirmed: "Your password still signs you in either way."
       + " Check the connection and try again; if the PIN was saved, you will be taken straight on",
   })
@@ -82,16 +80,12 @@ export function PinSetupForm({ allowSkip = true }: { allowSkip?: boolean }) {
             <span>{pending ? "Saving PIN…" : "Set up PIN"}</span>
             <ArrowRight aria-hidden="true" />
           </button>
-          {allowSkip ? (
-            <button className="login-secondary" type="submit" formAction={skipPinSetupAction}>
-              Skip for now
-            </button>
-          ) : null}
+          <button className="login-secondary" type="submit" formAction={skipPinSetupAction}>
+            Skip for now
+          </button>
         </div>
       </form>
-      <p className="login-helper">{allowSkip
-        ? "You can add or remove a PIN later in Account security."
-        : "The head-coach account requires both password and PIN recovery options."}</p>
+      <p className="login-helper">You can add or remove a PIN later in Account security.</p>
     </div>
   )
 }

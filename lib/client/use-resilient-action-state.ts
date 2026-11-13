@@ -5,10 +5,9 @@ import { useActionState } from "react"
 
 import {
   classifySaveFailure,
-  networkFailureCause,
+  describeSaveFailure,
   type SaveFailureKind,
 } from "@/lib/client/network-failure"
-import { reportClientError } from "@/lib/telemetry/report-client-error"
 
 /**
  * `useActionState` has no failure channel. When the action rejects, React marks
@@ -49,24 +48,12 @@ export type ResilientActionOptions<State> = {
    * went wrong; only a `"session-expired"` is known to have changed nothing.
    */
   fold?: (state: State, message: string, kind: SaveFailureKind) => State
-  /**
-   * What was being submitted, as a singular noun phrase ("Your request for new
-   * recovery codes"): the sentence around it says "was" and "it". No trailing
-   * punctuation.
-   */
+  /** Older name for what is still on screen; prefer `unconfirmed`. */
+  retained?: string
+  /** What was being submitted, as a singular noun phrase. No trailing punctuation. */
   subject: string
-  /**
-   * What the person should do when the request may or may not have gone
-   * through, true in BOTH cases. No trailing punctuation.
-   *
-   * These forms change passwords, PINs, codes and sign-ins, and a dropped
-   * connection cannot say whether the server got there first: the reply is
-   * lost the same way whether the request never arrived or the server had
-   * already finished. So this is never "your old password still works" -- that
-   * is the sentence that sent a coach back to a password the server had
-   * already replaced -- but how to find out and what to try next.
-   */
-  unconfirmed: string
+  /** How to find out whether it went through, true either way. No trailing punctuation. */
+  unconfirmed?: string
 }
 
 function foldIntoError<State extends ActionErrorState>(state: State, message: string) {
@@ -80,7 +67,7 @@ function foldIntoError<State extends ActionErrorState>(state: State, message: st
  */
 export function resilientAction<State extends ActionErrorState>(
   action: FormAction<State>,
-  { fold = foldIntoError, subject, unconfirmed }: ResilientActionOptions<State>,
+  { fold = foldIntoError, ...wording }: ResilientActionOptions<State>,
 ): FormAction<State> {
   return async (state, payload) => {
     try {
@@ -115,47 +102,17 @@ export function resilientAction<State extends ActionErrorState>(
        */
       unstable_rethrow(error)
 
-      const kind = classifySaveFailure(error)
-
-      // A transport failure is an operating condition on a venue connection,
-      // not a defect, and reporting every one of them would bury the endpoint.
-      // Anything else reaching here is a real fault that used to land in
-      // `app/error.tsx`, which reports; catching it must not cost that signal.
-      // `window` is the boundary the report vocabulary already reserves for a
-      // rejection with nowhere else to land.
-      if (kind === "unknown") {
-        reportClientError({ boundary: "window", error, eventType: "unhandled_rejection" })
-      }
-
-      return fold(state, describeUnconfirmedSubmission(kind, { subject, unconfirmed }), kind)
+      return fold(state, describeUnconfirmedSubmission(error, wording), classifySaveFailure(error))
     }
   }
 }
 
-/**
- * The sentence for a submission whose reply did not come back as an answer.
- *
- * Only an expired sign-in is known to have changed nothing: the guard refuses
- * before any write. Every other case -- a dropped connection, a device that
- * went offline mid-request, a fault on the server -- may have happened after
- * the server finished, so none of them is called a failure, and none of them
- * repeats the server's own wording, which a production build replaces with a
- * fixed technical sentence anyway.
- */
+/** The sentence for a submission whose reply did not come back as an answer. */
 export function describeUnconfirmedSubmission(
-  kind: SaveFailureKind,
-  { subject, unconfirmed }: Pick<ResilientActionOptions<unknown>, "subject" | "unconfirmed">,
+  error: unknown,
+  { retained = "Nothing was changed", subject, unconfirmed }: Omit<ResilientActionOptions<unknown>, "fold">,
 ) {
-  if (kind === "session-expired") {
-    return `${subject} did not go through because your sign-in has expired. Nothing was changed.`
-      + " Sign in again to continue."
-  }
-  const cause = kind === "offline" || kind === "unreachable"
-    ? `was not confirmed because ${networkFailureCause(kind)}`
-    : kind === "timeout"
-      ? "was not confirmed in time"
-      : "ran into an unexpected problem"
-  return `${subject} ${cause}, so it may or may not have gone through. ${unconfirmed}.`
+  return describeSaveFailure({ error, retained, subject, unconfirmed }).message
 }
 
 type ResilientActionState<State> = [

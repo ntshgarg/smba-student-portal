@@ -50,9 +50,6 @@ export function HeadCoachSetupForm({
       // fold clears any field verdict the previous submit left behind.
       fold: (state, message) => ({ ...state, error: message, errorField: null }),
       subject: "Your head-coach account",
-      // A finished setup spends the one-time link and signs the head coach in,
-      // so a reload either carries on to the authenticator step or says the
-      // setup is already complete.
       unconfirmed: "Reload this page before trying again: if the account was created,"
         + " it will say setup is complete and you can sign in with the password you chose",
     },

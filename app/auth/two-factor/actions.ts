@@ -126,10 +126,7 @@ async function challengedAccountId(requestHeaders: Pick<Headers, "get">) {
  */
 async function refuseSignedInCaller() {
   const session = await getRawAuthSession()
-  // The session's own authenticator state, not the default: a head coach who
-  // walked away from authenticator setup belongs back on that step, and
-  // assuming it done sent them to /coach, which refused them to a blank
-  // sign-in form.
+  // Use the session's own authenticator state so unfinished setup is sent back to it.
   if (session) {
     redirect(destinationForUser(session.user.id, Boolean(session.user.twoFactorEnabled)))
   }
@@ -239,8 +236,7 @@ export async function beginAuthenticatorReconnect(
     }
   }
   if (!await verifyCurrentPassword({ accountId: identity.subjectId, password })) {
-    // The same record the recovery-code reissue writes for the same check, so a
-    // password guessed through this page shows up in the security log too.
+    // Log the failed password check, as the recovery-code reissue does.
     writeAuthSecurityEvent({
       accountId: identity.subjectId,
       actorAccountId: identity.subjectId,
@@ -306,12 +302,7 @@ export async function beginAuthenticatorReconnect(
       errorField: null,
     }
   }
-  /*
-   * Two steps, reported apart. Once the first has run, every other device is
-   * already signed out (and a recovery code used above is already spent), so
-   * a failure in the second must not read as though nothing happened -- a
-   * coach would otherwise find the courtside tablet signed out with no reason.
-   */
+  // Once the first step has run, other devices are already signed out; say so if the second fails.
   try {
     await requestAuth.api.disableTwoFactor({
       body: { password },

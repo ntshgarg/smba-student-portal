@@ -28,8 +28,7 @@ export default async function PinSetupPage() {
       : identity.role === "coach" ? "/coach" : "/player")
   }
   const mandatory = identity.role === "platform_admin" || access?.accessLevel === "head_admin"
-  // The action refuses a sign-in older than a few minutes, so offering the form
-  // to one only set up a refusal -- with no Skip for a head coach, a dead end.
+  // The action refuses a sign-in older than a few minutes; do not offer the form then.
   const canSetPin = await sessionFreshEnoughForPinSetup()
   return (
     <main className="login-page">
@@ -48,23 +47,18 @@ export default async function PinSetupPage() {
           <p className="eyebrow">Quick login</p>
           <h1 id="pin-setup-title">Set up a 6-digit PIN.</h1>
           <p>{mandatory
-            ? "This account needs a PIN for quick sign-in. Your password will always continue to work."
+            ? "This account should have a PIN. You will be reminded at each sign-in until one is set. Your password will always continue to work."
             : "Use it for faster sign-in. Your password will always continue to work."}</p>
         </div>
-        {canSetPin ? <PinSetupForm allowSkip={!mandatory} /> : (
+        {canSetPin ? <PinSetupForm /> : (
           <>
             <p className="login-error" role="status">
               For your security, a PIN can only be set within a few minutes of signing in.
-              {mandatory
-                ? " Sign out below, then sign in again to set it."
-                : " Skip it for now, or sign out below and sign in again to set it."}
+              Skip it for now, or sign out below and sign in again to set it.
             </p>
-            {/* An optional PIN must never stand between someone and their journal. */}
-            {mandatory ? null : (
-              <form className="pin-setup-actions" action={skipPinSetupAction}>
-                <button className="login-secondary" type="submit">Skip for now</button>
-              </form>
-            )}
+            <form className="pin-setup-actions" action={skipPinSetupAction}>
+              <button className="login-secondary" type="submit">Skip for now</button>
+            </form>
           </>
         )}
         <InterstitialSignOut />

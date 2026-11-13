@@ -15,8 +15,6 @@ export function ActivationForm({ academyId }: { academyId: string }) {
     // previous field verdict and send focus to a control that is not at fault.
     fold: (state, error) => ({ ...state, error, errorField: null }),
     subject: "Your new password",
-    // A finished activation spends this link, so trying again here would be
-    // refused; signing in tells the person which way it went.
     unconfirmed: `Try signing in with ${academyId} and the password you just chose.`
       + " If that is refused, check the connection and try again here",
   })

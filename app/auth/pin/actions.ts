@@ -4,7 +4,6 @@ import { redirect } from "next/navigation"
 
 import { sessionProvider } from "@/lib/data"
 import { hasPinCredential, setPinCredential, validateNewPin } from "@/lib/auth/credential-service"
-import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { sessionFreshEnoughForPinSetup } from "@/lib/auth/pin-setup-freshness"
 
 export type PinSetupState = {
@@ -34,9 +33,6 @@ export async function setupPinAction(
     // action only ever performs first-time (or post-recovery) setup.
     redirect(destination(identity.role))
   }
-  // A PIN is a complete sign-in factor minted without a password, so only a
-  // sign-in that has just proved a credential may set one. See
-  // `PIN_SETUP_SESSION_MAX_AGE_MS`.
   if (!await sessionFreshEnoughForPinSetup()) {
     return {
       error: "Sign in again to set a PIN.",
@@ -65,9 +61,5 @@ export async function skipPinSetupAction() {
   const identity = await sessionProvider.getCurrentIdentity()
   if (!identity) redirect("/login")
   if (identity.previewMode) redirect("/admin")
-  const access = identity.role === "coach" ? getCoachAccessProfile(identity.subjectId) : null
-  if (identity.role === "platform_admin" || access?.accessLevel === "head_admin") {
-    redirect("/auth/pin/setup")
-  }
   redirect(destination(identity.role))
 }

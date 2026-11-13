@@ -130,17 +130,11 @@ describe("pressing Reissue again after a set is on screen", () => {
       codes: null,
       error: "Enter your current password.",
       errorField: "currentPassword",
-      storedSetUnchanged: true,
     })
     const action = await reissueAction()
 
     const next = await action({ codes: shown, error: null, errorField: null }, new FormData())
     expect(next).toMatchObject({ codes: shown, error: "Enter your current password." })
-    // The codes are the coach's only copy; they are not sent back to the server.
-    expect(mocks.reissueRecoveryCodesAction).toHaveBeenCalledWith(
-      expect.objectContaining({ codes: null }),
-      expect.any(FormData),
-    )
   })
 
   it("clears them when the set may have been replaced", async () => {

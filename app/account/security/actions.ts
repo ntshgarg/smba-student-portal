@@ -32,7 +32,6 @@ import {
 } from "@/lib/auth/security-context"
 import { initializeDatabase } from "@/lib/db/client"
 import { authRuntimeSessions } from "@/lib/db/schema"
-import { PASSWORD_CHANGED_LOGIN_NOTICE } from "@/lib/auth/login-notices"
 
 /** Which input an error belongs to, so the form can flag and focus it. */
 export type PasswordChangeField = "currentPassword" | "newPassword" | "confirmPassword"
@@ -58,27 +57,9 @@ export type RecoveryCodeReissueState = {
   error: string | null
   /** Which credential the reissue form should flag; `null` marks neither. */
   errorField?: "currentPassword" | "secondFactor" | null
-  /**
-   * True when the action refused before it could replace the stored set, so a
-   * set the coach is still reading on screen is still the live one.
-   */
-  storedSetUnchanged?: boolean
 }
 
-/** A reissue refused before the stored set was touched. */
-function reissueRefused(
-  error: string,
-  errorField: RecoveryCodeReissueState["errorField"] = null,
-): RecoveryCodeReissueState {
-  return { codes: null, error, errorField, storedSetUnchanged: true }
-}
-
-/*
- * Every form here sits on a page that only renders for a signed-in person, so a
- * missing identity at submit time is a sign-in that ran out (or was ended
- * elsewhere) while the page was open. Thrown as the expiry it is, the form says
- * "sign in again" instead of a generic failure.
- */
+// These pages render only when signed in, so a missing identity is an expired sign-in.
 async function requireIdentity() {
   const identity = await sessionProvider.getCurrentIdentity()
   if (!identity) throw new SessionExpiredError()
@@ -141,16 +122,8 @@ export async function changePasswordAction(
       success: null,
     }
   }
-  /*
-   * The current password was verified just above, so a throw from here is not
-   * a wrong password. Better Auth runs with no transaction (lib/auth/
-   * better-auth.ts) and changes the password in three writes: it deletes every
-   * session, this one included, then writes the new password, then mints this
-   * browser's replacement session. Any of them can throw, and nothing before it
-   * is undone -- so the new password is asked directly whether it took, and the
-   * session table whether this browser is still signed in, rather than the
-   * person being told their current password was wrong.
-   */
+  // The current password was verified above, so a throw here is not a wrong
+  // password: ask whether the new one took and whether this browser is signed in.
   let signedOutHere = false
   try {
     await getAuth().api.changePassword({
@@ -173,8 +146,6 @@ export async function changePasswordAction(
         success: null,
       }
     }
-    // The throw may have come after this browser's replacement session was
-    // written, in which case it is still signed in; the session table says.
     signedOutHere = !(await sessionProvider.hasActiveSession().catch(() => false))
   }
 
@@ -186,39 +157,17 @@ export async function changePasswordAction(
    * success message below was not true. The emailed reset path already does
    * exactly this.
    */
-  try {
-    removePinCredential(identity.subjectId)
-  } catch {
-    return {
-      error: signedOutHere
-        ? "Your password was changed and every device, this one included, was logged out,"
-          + " but your PIN could not be removed. Sign in with your new password, then change"
-          + " it once more to remove the PIN."
-        : "Your password was changed and other devices were logged out, but your PIN"
-          + " could not be removed. Change your password again to remove it.",
-      errorField: null,
-      success: null,
-    }
-  }
+  removePinCredential(identity.subjectId)
 
-  try {
-    writeAuthSecurityEvent({
-      accountId: identity.subjectId,
-      eventType: "password_changed",
-      ipHash: confirmation.security.ipHash,
-      outcome: "success",
-      userAgent: confirmation.security.userAgent,
-    })
-  } catch {
-    // The password has already changed; a failed audit write must not say otherwise.
-  }
-  /*
-   * When this browser's own session went with the others, the security page has
-   * nothing left to render for it: re-rendering it after the action redirects
-   * to a bare sign-in page, which would swallow any message returned here. So
-   * the sign-in page is where the news goes, carried by its own notice.
-   */
-  if (signedOutHere) redirect(`/login?notice=${PASSWORD_CHANGED_LOGIN_NOTICE}`)
+  writeAuthSecurityEvent({
+    accountId: identity.subjectId,
+    eventType: "password_changed",
+    ipHash: confirmation.security.ipHash,
+    outcome: "success",
+    userAgent: confirmation.security.userAgent,
+  })
+  // This browser was signed out too, so the security page cannot show the result.
+  if (signedOutHere) redirect("/login?notice=password-changed")
   revalidatePath("/account/security")
   return {
     error: null,
@@ -384,11 +333,19 @@ export async function reissueRecoveryCodesAction(
   // account and Better Auth would reissue the other's codes. The page redirects
   // preview sessions away; a directly invoked action has to refuse for itself.
   if (identity.previewMode) {
-    return reissueRefused("Leave preview mode to manage recovery codes.")
+    return {
+      codes: null,
+      error: "Leave preview mode to manage recovery codes.",
+      errorField: null,
+    }
   }
   const rawSession = await getRawAuthSession()
   if (!rawSession?.user.twoFactorEnabled) {
-    return reissueRefused("This account has no authenticator, so it has no recovery codes.")
+    return {
+      codes: null,
+      error: "This account has no authenticator, so it has no recovery codes.",
+      errorField: null,
+    }
   }
 
   const requestHeaders = await headers()
@@ -408,13 +365,17 @@ export async function reissueRecoveryCodesAction(
       subjectHash,
       userAgent: security.userAgent,
     })
-    return reissueRefused("Too many attempts. Wait a few minutes before trying again.")
+    return {
+      codes: null,
+      error: "Too many attempts. Wait a few minutes before trying again.",
+      errorField: null,
+    }
   }
 
   const currentPassword = String(formData.get("currentPassword") ?? "")
   const secondFactor = String(formData.get("secondFactor") ?? "").trim()
   if (!currentPassword) {
-    return reissueRefused("Enter your current password.", "currentPassword")
+    return { codes: null, error: "Enter your current password.", errorField: "currentPassword" }
   }
   // Each guess is reserved before its slow check rather than counted after it,
   // so parallel requests cannot all read "not blocked" first.
@@ -433,14 +394,19 @@ export async function reissueRecoveryCodesAction(
       subjectHash,
       userAgent: security.userAgent,
     })
-    return reissueRefused("The current password could not be verified.", "currentPassword")
+    return {
+      codes: null,
+      error: "The current password could not be verified.",
+      errorField: "currentPassword",
+    }
   }
   releaseLoginAttempt(attempt)
   if (!secondFactor) {
-    return reissueRefused(
-      "Enter a current authenticator code or an unused recovery code.",
-      "secondFactor",
-    )
+    return {
+      codes: null,
+      error: "Enter a current authenticator code or an unused recovery code.",
+      errorField: "secondFactor",
+    }
   }
   // A signed-in code check skips Better Auth's lockout, so the account's own
   // second-factor budget is the limit here.
@@ -474,7 +440,11 @@ export async function reissueRecoveryCodesAction(
       subjectHash,
       userAgent: security.userAgent,
     })
-    return reissueRefused("That authenticator or recovery code was not accepted.", "secondFactor")
+    return {
+      codes: null,
+      error: "That authenticator or recovery code was not accepted.",
+      errorField: "secondFactor",
+    }
   }
   releaseSecondFactorAttempt(identity.subjectId)
   if (!/^\d{6}$/u.test(secondFactor)) {

@@ -29,8 +29,6 @@ export function RecoveryEmailSecurityPanel({
     initialRecoveryEmailEnrollmentState,
     {
       subject: "Your recovery email change",
-      // Asking only sends a code; nothing changes until a code is confirmed,
-      // so this stays true whichever way the request went.
       unconfirmed: "Your current recovery address stays in place until you confirm a code."
         + " Check the connection and send it again. If two codes arrive, use the newest one",
     },
@@ -40,8 +38,6 @@ export function RecoveryEmailSecurityPanel({
     initialRecoveryEmailEnrollmentState,
     {
       subject: "Your verification code",
-      // A confirmed code switches the address before the reply is sent; the
-      // "Verified address" line shows the saved one once the page is reloaded.
       unconfirmed: "Reload this page to see which recovery address is saved before trying again",
     },
   )

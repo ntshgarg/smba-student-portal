@@ -8,7 +8,6 @@ import { LoginForm } from "@/components/login-form"
 import { sessionProvider } from "@/lib/data"
 import { publicSiteUrl } from "@/lib/config"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
-import { PASSWORD_CHANGED_LOGIN_NOTICE } from "@/lib/auth/login-notices"
 import { sessionOwesAuthenticatorSetup } from "@/lib/auth/session"
 
 export const metadata: Metadata = {
@@ -36,7 +35,7 @@ export default async function LoginPage({
   if (await sessionOwesAuthenticatorSetup()) redirect("/auth/two-factor/setup")
   const query = await searchParams
   const recovered = query.recovered === "1"
-  const passwordChanged = query.notice === PASSWORD_CHANGED_LOGIN_NOTICE
+  const passwordChanged = query.notice === "password-changed"
 
   return (
     <main className="login-page">

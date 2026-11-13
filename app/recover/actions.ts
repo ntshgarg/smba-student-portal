@@ -24,11 +24,7 @@ export type RecoverySecondFactorState = {
 export type RecoveryPasswordState = {
   error: string | null
   errorField: "password" | "confirmPassword" | null
-  /**
-   * The link ran out or was already used while the form was open. The page
-   * only offers "Request another link" when it loads on a dead link, so the
-   * form offers it itself rather than leaving "Back to login" as the only exit.
-   */
+  /** The link died while the form was open, so the form offers a new one itself. */
   linkExpired?: boolean
 }
 

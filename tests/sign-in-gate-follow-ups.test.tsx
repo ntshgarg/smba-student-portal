@@ -79,7 +79,7 @@ describe("the PIN setup page", () => {
   it("does not tell a first-time head coach their PIN was removed", async () => {
     const markup = await render()
     expect(markup).not.toContain("removed during password recovery")
-    expect(markup).toContain("This account needs a PIN")
+    expect(markup).toContain("You will be reminded at each sign-in")
   })
 
   it("does not offer a form its action will refuse to an older sign-in", async () => {
@@ -96,19 +96,10 @@ describe("the PIN setup page", () => {
     expect(await render()).toContain('name="pin"')
   })
 
-  it("still lets someone whose PIN is optional skip it on an older sign-in", async () => {
-    mocks.getCoachAccessProfile.mockReturnValue({ accessLevel: "junior_coach" })
+  it("lets a head coach skip it, since a missing PIN does not block them", async () => {
+    expect(await render()).toContain("Skip for now")
     mocks.sessionFreshEnoughForPinSetup.mockResolvedValue(false)
-
-    const markup = await render()
-    expect(markup).not.toContain('name="pin"')
-    expect(markup).toContain("Skip for now")
-  })
-
-  it("offers no skip to a head coach, whose PIN is required", async () => {
-    mocks.sessionFreshEnoughForPinSetup.mockResolvedValue(false)
-
-    expect(await render()).not.toContain("Skip for now")
+    expect(await render()).toContain("Skip for now")
   })
 })
 
@@ -133,11 +124,10 @@ describe("the sign-in page", () => {
 
   it("says the password changed when the change also signed this browser out", async () => {
     mocks.getCurrentIdentity.mockResolvedValue(null)
-    const { PASSWORD_CHANGED_LOGIN_NOTICE } = await import("@/lib/auth/login-notices")
     const { default: LoginPage } = await import("@/app/login/page")
 
     const markup = renderToStaticMarkup(await LoginPage({
-      searchParams: Promise.resolve({ notice: PASSWORD_CHANGED_LOGIN_NOTICE }),
+      searchParams: Promise.resolve({ notice: "password-changed" }),
     }))
     expect(markup).toContain("Password changed")
     expect(markup).toContain("Sign in with your new password")
@@ -172,32 +162,23 @@ describe("a head-coach save refused because the identity is gone", () => {
 })
 
 describe("the head-coach-only notice", () => {
-  it("is taken off the address once shown, keeping everything else", async () => {
-    const { addressWithoutNotice } = await import("@/components/coach/coach-access-notice")
-
-    expect(addressWithoutNotice("https://portal.example/coach?notice=head-coach-only#attendance"))
-      .toBe("/coach#attendance")
-    expect(addressWithoutNotice("https://portal.example/coach?notice=head-coach-only&tab=week"))
-      .toBe("/coach?tab=week")
-    expect(addressWithoutNotice("https://portal.example/coach?tab=week")).toBeNull()
-  })
-
-  it("hands Next.js no state of its own, so the router drops the notice too", async () => {
-    const { dropNoticeFromAddress } = await import("@/components/coach/coach-access-notice")
+  it("is taken off the address once shown, handing Next.js a null state", async () => {
+    vi.resetModules()
+    vi.doMock("react", async () => ({
+      ...await vi.importActual<typeof import("react")>("react"),
+      useEffect: (effect: () => void) => effect(),
+    }))
+    const { CoachAccessNotice } = await import("@/components/coach/coach-access-notice")
     const replaceState = vi.fn()
-
-    dropNoticeFromAddress({
+    vi.stubGlobal("window", {
       history: { replaceState },
       location: { href: "https://portal.example/coach?notice=head-coach-only&month=2026-11" },
     })
+    CoachAccessNotice()
+    vi.unstubAllGlobals()
+    vi.doUnmock("react")
 
-    // Next skips its router for a state carrying its `__NA` flag, which is what
-    // `history.state` holds on every page it rendered.
     expect(replaceState).toHaveBeenCalledWith(null, "", "/coach?month=2026-11")
-
-    replaceState.mockClear()
-    dropNoticeFromAddress({ history: { replaceState }, location: { href: "https://portal.example/coach" } })
-    expect(replaceState).not.toHaveBeenCalled()
   })
 })
 

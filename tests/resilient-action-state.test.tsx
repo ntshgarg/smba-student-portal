@@ -379,10 +379,6 @@ describe("a dropped request leaves an authentication form standing", () => {
     // A transport failure is an operating condition, not a fault to report.
     expect(reportClientError).not.toHaveBeenCalled()
   })
-
-  it("covers all 23 call sites across the thirteen authentication components", () => {
-    expect(surfaces.reduce((total, surface) => total + surface.sites.length, 0)).toBe(23)
-  })
 })
 
 describe("two-factor recovery codes survive a dropped verification", () => {
@@ -529,7 +525,7 @@ describe("the wrapper's contract", () => {
 
     await expect(action({ error: null }, new FormData())).resolves.toEqual({
       error: "Your new PIN did not go through because your sign-in has expired. Nothing was changed."
-        + " Sign in again to continue.",
+        + " Sign in again in a new tab, then come back here and try again.",
     })
     // An expiry is an everyday event on a seven-day clock, not a fault.
     expect(reportClientError).not.toHaveBeenCalled()

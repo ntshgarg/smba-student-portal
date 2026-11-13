@@ -25,9 +25,6 @@ export function RecoverySecondFactorForm() {
     initialFactorState,
     {
       subject: "Your code",
-      // An accepted code is recorded before the reply (recovery-service), and a
-      // saved recovery code is then spent, so typing it again is refused even
-      // though the step is done. Reloading shows which step the link is on.
       unconfirmed: "Reload this page before trying again: if the code was accepted,"
         + " you will see the new-password form. A saved recovery code works only once",
     },
@@ -80,9 +77,6 @@ export function RecoveryPasswordForm() {
       // Neither password field is at fault, so focus stays where it is.
       fold: (state, error) => ({ ...state, error, errorField: null, linkExpired: false }),
       subject: "Your new password",
-      // A finished reset replaces the password and spends this link in one
-      // step, so "your old password still works" may be exactly wrong. Signing
-      // in with the new one is how the person finds out.
       unconfirmed: "If it went through, your old password and this link no longer work."
         + " Try signing in with your new password; if it is refused, reload this page and try again",
     },

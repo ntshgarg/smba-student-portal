@@ -66,9 +66,7 @@ import type {
  * The bare guard, for the actions this file has not moved onto
  * `runCoachAction` yet. Both attendance registers have moved; the other 11
  * exports here still throw an expiry across the server-action boundary, where
- * React replaces it with a fixed sentence and keeps only its digest --
- * `SESSION_EXPIRED_DIGEST`, which `describeSaveFailure` reads to tell the coach
- * to sign in again instead of showing a generic failure.
+ * React replaces it with a fixed sentence and a digest.
  */
 async function requireCoach() {
   return requireHeadAdminAction()

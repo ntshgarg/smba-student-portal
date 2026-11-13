@@ -147,9 +147,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
     try {
       const result = await action()
       if (!result.ok) {
-        // `run` in training-actions returns an expired sign-in as a value, so
-        // it is told apart here rather than in the catch. Signing in in this
-        // tab would close the form and lose what was typed into it.
+        // An expired sign-in comes back as a value, not a throw.
         setNotice(refusedForExpiredSignIn(result)
           ? {
             action: signInInNewTab,
@@ -164,9 +162,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
       setOpen(null)
       router.refresh()
     } catch (error) {
-      // Fees, concessions and places: a reply lost after the server finished
-      // must not read as "not saved", or a second submit from a reopened form
-      // (with a new key) would apply it twice. So the coach looks first.
+      // A resubmit could apply the change twice, so the coach checks first.
       const failure = describeSaveFailure({
         error,
         retained: formKept,
