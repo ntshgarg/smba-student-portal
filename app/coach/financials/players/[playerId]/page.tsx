@@ -7,6 +7,7 @@ import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { initializeDatabase } from "@/lib/db/client"
 import { getCoachFinancePlayerRecord, getFinanceActivation } from "@/lib/finance/service"
 import { academyCurrentMonth } from "@/lib/clock"
+import { readRecordsTrail } from "@/lib/finance/records-trail"
 
 export const metadata = {
   title: "Player fee record",
@@ -39,14 +40,6 @@ function allowedValue<const T extends readonly string[]>(
   return value && allowed.includes(value) ? value as T[number] : fallback
 }
 
-function validCursorTrail(value: string | undefined) {
-  if (!value || value.length > 4_020) return ""
-  const values = value.split(",")
-  return values.length <= 20 && values.every((item) => item.length > 0 && item.length <= 200)
-    ? values.join(",")
-    : ""
-}
-
 export default async function FinancialPlayerRecordPage({
   params,
   searchParams,
@@ -69,7 +62,8 @@ export default async function FinancialPlayerRecordPage({
   const scope = allowedValue(firstValue(query.scope), PLAYER_SCOPES, "active")
   const status = allowedValue(firstValue(query.status), REGISTER_STATUSES, "all")
   const registerQuery = (firstValue(query.q) ?? "").trim().slice(0, 120)
-  const cursors = validCursorTrail(firstValue(query.cursors))
+  // Read the same way as the records page, so Back returns to the same page.
+  const cursors = readRecordsTrail(query.cursors).join(",")
   const record = getCoachFinancePlayerRecord(playerId, {
     coachId: identity.subjectId,
     database,

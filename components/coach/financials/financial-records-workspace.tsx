@@ -12,6 +12,8 @@ import {
 import Link from "next/link"
 import type { ReactNode } from "react"
 
+import { RecordsRestartNotice } from "@/components/coach/financials/records-restart-notice"
+
 import {
   formatAcademyDate,
   formatAcademyTime,
@@ -36,6 +38,8 @@ import financialStyles from "./financials.module.css"
 export type FinancialRecordsView = "fees" | "collections" | "activity"
 
 export type FinancialRecordsPagination = {
+  /** Said when there are later records but Next has reached its limit. */
+  endNote?: string | null
   label: string
   nextHref?: string | null
   previousHref?: string | null
@@ -88,7 +92,10 @@ export type FinancialActivityView = {
   pagination: FinancialRecordsPagination
 }
 
-export type FinancialRecordsWorkspaceProps =
+export type FinancialRecordsWorkspaceProps = {
+  /** Shown once above the list when it started again from page 1. */
+  notice?: string | null
+} & (
   | {
     activeView: "fees"
     activity?: never
@@ -107,6 +114,7 @@ export type FinancialRecordsWorkspaceProps =
     dayBook?: never
     feeRegister?: never
   }
+)
 
 const statusLabels: Record<FinanceStatus, string> = {
   not_prepared: "Not issued",
@@ -178,7 +186,10 @@ function StatusLabel({ status }: { status: FinanceStatus }) {
 function Pagination({ pagination }: { pagination: FinancialRecordsPagination }) {
   return (
     <nav className={recordsStyles.pagination} aria-label="Record pages">
-      <span>{pagination.label}</span>
+      <span>
+        {pagination.label}
+        {pagination.endNote ? <small className={recordsStyles.paginationNote}>{pagination.endNote}</small> : null}
+      </span>
       <div>
         {pagination.previousHref ? (
           <Link href={pagination.previousHref}><ArrowLeft aria-hidden="true" /> Previous</Link>
@@ -738,6 +749,8 @@ export function FinancialRecordsWorkspace(props: FinancialRecordsWorkspaceProps)
       </header>
 
       <RecordsNavigation activeView={activeView} />
+
+      {props.notice ? <RecordsRestartNotice message={props.notice} /> : null}
 
       {props.activeView === "fees" ? <FeeRegister register={props.feeRegister} /> : null}
       {props.activeView === "collections" ? <CollectionsDayBook dayBook={props.dayBook} /> : null}
