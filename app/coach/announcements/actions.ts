@@ -36,7 +36,7 @@ function failure(error: AnnouncementServiceError): AnnouncementActionResult {
     code: error.code,
     field: error.field,
     message: error.message,
-    ...(error.announcementId ? { announcementId: error.announcementId } : {}),
+    announcementId: error.announcementId,
   }
 }
 

@@ -30,10 +30,8 @@ function failure(error: AssessmentServiceError): AssessmentActionResult {
   return {
     ok: false,
     code: error.code,
-    ...(error.currentStatus ? { currentStatus: error.currentStatus } : {}),
-    ...(error.currentPublishedCount !== undefined
-      ? { currentPublishedCount: error.currentPublishedCount }
-      : {}),
+    currentStatus: error.currentStatus,
+    currentPublishedCount: error.currentPublishedCount,
     field: error.field,
     message: error.message,
   }

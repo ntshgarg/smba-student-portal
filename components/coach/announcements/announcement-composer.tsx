@@ -9,7 +9,6 @@ import { announcementParagraphs } from "@/components/announcements/announcement-
 import {
   InlineNotice,
   type ActionFeedback,
-  type InlineNoticeAction,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { AnnouncementActionResult } from "@/lib/announcements/contracts"
@@ -65,7 +64,6 @@ const publishedAfterExitMessage = "Announcement published. The publish you left 
 const otherVersionLiveMessage = "Another version of this announcement is already live."
   + " Open it to check it, and withdraw it if this one replaces it."
 
-type Notice = ActionFeedback & { action?: InlineNoticeAction }
 
 /** A version of this notice known to be live; `payload` is what it said, when known. */
 export type LiveVersion = {
@@ -79,7 +77,7 @@ function announcementHref(announcementId: string) {
 }
 
 /** Worked out on each render, so an edit made since is never called published. */
-export function liveVersionNotice(version: LiveVersion, onScreen: string): Notice {
+export function liveVersionNotice(version: LiveVersion, onScreen: string): ActionFeedback {
   // Opened beside the editor, so checking it does not discard unpublished wording.
   const action = { href: announcementHref(version.announcementId), label: "Open it", newTab: true }
   if (version.payload === onScreen) {
@@ -432,7 +430,7 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
   }))
   // Reports a publish that failed after the review dialog had gone. A live
   // version is reported from `liveVersions` instead.
-  const [feedback, setFeedback] = useState<Notice | null>(null)
+  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   /** Versions of this notice known to be live while the coach is still here, oldest first. */
   const [liveVersions, setLiveVersions] = useState<LiveVersion[]>([])
   /** Keys a publish was sent with; until its outcome is known it may still land. */
@@ -444,7 +442,8 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
   const channelGroupRef = useRef<HTMLFieldSetElement>(null)
   const expiryRef = useRef<HTMLInputElement>(null)
   const currentPayload = publicationPayload(values)
-  const isDirty = !published && (
+  const latestLive = liveVersions.at(-1) ?? null
+  const isDirty = !published && latestLive?.payload !== currentPayload && (
     values.title !== ""
     || values.content !== ""
     || values.channels.length > 0
@@ -452,7 +451,6 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
     || values.expiresOn !== ""
   )
   // Warn in the review when publishing would add a second notice.
-  const latestLive = liveVersions.at(-1) ?? null
   const otherLiveAnnouncementId = latestLive && latestLive.payload !== publication.payload
     ? latestLive.announcementId
     : null

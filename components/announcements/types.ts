@@ -5,11 +5,7 @@ export type AnnouncementSummary = {
   publishedAt: string
   expiresOn: string | null
   pinned: boolean
-  /**
-   * Worked out by the server against the academy clock, for players. When it
-   * is present the badge uses it rather than recomputing against this device's
-   * clock, so the server and the screen cannot disagree about "New".
-   */
+  /** Server's academy-clock answer; the badge prefers it over the device clock. */
   isNew?: boolean
 }
 export type AnnouncementDetail = Omit<AnnouncementSummary, "preview"> & {
