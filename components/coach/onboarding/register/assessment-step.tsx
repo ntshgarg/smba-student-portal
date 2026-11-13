@@ -122,11 +122,11 @@ export function AssessmentStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The assessment could not be saved",
         retained: "Your assessment details are still on screen",
         subject: "The assessment",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -231,7 +231,7 @@ export function AssessmentStep({
           {errors.academyPlan ? <small id={`onboarding-${item.id}-plan-error`}>{errors.academyPlan}</small> : null}
         </label>
       </div>
-      <InlineNotice message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <Link href={`/coach/members?player=${encodeURIComponent(item.id)}`}>View member record</Link>
         <button

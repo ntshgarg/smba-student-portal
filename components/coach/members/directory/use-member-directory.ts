@@ -481,11 +481,11 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The member could not be saved",
         retained: "Your edits are still on screen",
-        subject: "The member details",
+        subject: "The member update",
       })
       setMemberFeedback({
+        action: failure.signIn,
         memberId: player.member.id,
         message: failure.message,
         offerRetry: failure.offerRetry,
@@ -547,11 +547,12 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The member could not be archived",
         retained: "The member is still active",
+        unconfirmed: "Check the connection, then reload the page to see whether the member was archived",
         subject: "The member archive",
       })
       setMemberFeedback({
+        action: failure.signIn,
         memberId: player.member.id,
         message: failure.message,
         offerRetry: failure.offerRetry,

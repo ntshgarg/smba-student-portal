@@ -272,11 +272,12 @@ export function SessionSchedules({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Schedule could not be ended",
         retained: "The schedule is still active",
+        unconfirmed: "Check the connection, then reload the page to see whether the schedule ended",
         subject: "The schedule ending",
       })
       setEndingFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         seriesId: series.id,
@@ -364,6 +365,7 @@ export function SessionSchedules({
                 : "No players on this schedule. Players are added in Player onboarding."}</p>}
             </div>
             <InlineNotice
+              action={endingFeedback?.seriesId === series.id ? endingFeedback.action : undefined}
               className="coach-roster-end-notice"
               message={endingFeedback?.seriesId === series.id ? endingFeedback.message : null}
               reserveSpace={false}

@@ -22,6 +22,8 @@ export type InlineNoticeAction = {
 }
 
 export type ActionFeedback = {
+  /** A way out the screen cannot offer itself, shown beside the message. */
+  action?: InlineNoticeAction
   message: string
   tone: InlineNoticeTone
 }

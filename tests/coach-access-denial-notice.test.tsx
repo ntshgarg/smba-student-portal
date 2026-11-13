@@ -10,6 +10,8 @@ vi.mock("next/navigation", () => ({ redirect }))
 vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity },
 }))
+// Not under test, and the real one opens the database on the first coach page.
+vi.mock("@/lib/training/changes", () => ({ ensureDueTrainingChangesApplied: vi.fn() }))
 vi.mock("@/lib/auth/coach-access", () => ({
   getCoachAccessProfile,
   requireHeadAdminAccess: vi.fn(),

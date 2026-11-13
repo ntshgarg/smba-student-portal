@@ -34,8 +34,8 @@ export function RejectedRequests({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The rejection could not be undone",
         retained: "The request is still rejected",
+        unconfirmed: "Reload this page to see whether the request is back in the queue",
         subject: "The undo",
       })
       setFeedback({ message: failure.message, requestId: request.id, tone: "error" })

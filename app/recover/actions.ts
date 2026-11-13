@@ -28,6 +28,8 @@ export type RecoverySecondFactorState = {
 export type RecoveryPasswordState = {
   error: string | null
   errorField: "password" | "confirmPassword" | null
+  /** The link died while the form was open, so the form offers a new one itself. */
+  linkExpired?: boolean
 }
 
 /** Where the recovery pass cookie lives; a delete must name the same path. */
@@ -109,7 +111,12 @@ export async function completePasswordRecoveryAction(
     token,
   })
   if (!completed) {
-    return { error: "This recovery session is invalid or expired.", errorField: null }
+    return {
+      error: "This reset link has expired or has already been used."
+        + " If you have just reset your password, sign in with the new one.",
+      errorField: null,
+      linkExpired: true,
+    }
   }
   cookieStore.delete({ name: RECOVERY_SESSION_COOKIE, path: RECOVERY_COOKIE_PATH })
   redirect("/login?recovered=1")

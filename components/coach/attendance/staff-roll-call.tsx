@@ -21,7 +21,7 @@ import {
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
-import { describeRefusedSave } from "@/lib/client/session-expiry"
+import { describeRefusedSave, feedbackAfterMark } from "@/lib/client/session-expiry"
 import type {
   StaffAttendanceChange,
   StaffAttendanceChoice,
@@ -281,7 +281,7 @@ export function StaffRollCall({
       }]
     setDrafts(nextDrafts)
     setDraftKeptOnDevice(persistStaffAttendanceDraft(selectedDate, nextDrafts))
-    setFeedback(null)
+    setFeedback(feedbackAfterMark)
   }
 
   async function saveRollCall() {
@@ -323,14 +323,13 @@ export function StaffRollCall({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Staff attendance could not be saved",
-        repeatable: true,
         retained: "Your marks are still on screen",
         subject: "Staff attendance",
       })
       setFeedback({
         message: failure.message,
         offerRetry: failure.offerRetry,
+        signIn: failure.signIn,
         tone: "error",
       })
     } finally {

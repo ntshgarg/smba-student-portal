@@ -118,6 +118,7 @@ export function MemberDetailRow({
 
           {!isEditing ? (
             <InlineNotice
+              action={feedback?.action}
               className="coach-member-save-notice"
               message={feedback?.message ?? null}
               reserveSpace={false}

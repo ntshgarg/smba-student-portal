@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
 import {
@@ -23,8 +24,9 @@ export function RecoverySecondFactorForm() {
     verifyRecoverySecondFactorAction,
     initialFactorState,
     {
-      retained: "The code was not used and your reset link still works",
       subject: "Your code",
+      unconfirmed: "Reload this page before trying again: if the code was accepted,"
+        + " you will see the new-password form. A saved recovery code works only once",
     },
   )
   const credentialRef = useRef<HTMLInputElement>(null)
@@ -73,9 +75,10 @@ export function RecoveryPasswordForm() {
     initialPasswordState,
     {
       // Neither password field is at fault, so focus stays where it is.
-      fold: (state, error) => ({ ...state, error, errorField: null }),
-      retained: "Your old password still works and the reset link is still valid",
+      fold: (state, error) => ({ ...state, error, errorField: null, linkExpired: false }),
       subject: "Your new password",
+      unconfirmed: "If it went through, your old password and this link no longer work."
+        + " Try signing in with your new password; if it is refused, reload this page and try again",
     },
   )
   const passwordRef = useRef<HTMLInputElement>(null)
@@ -106,6 +109,9 @@ export function RecoveryPasswordForm() {
       </AuthField>
       <p className="login-helper">Resetting logs out every device and removes the old PIN. Your authenticator remains connected.</p>
       {state.error ? <p id={passwordErrorId} className="login-error" role="alert">{state.error}</p> : null}
+      {state.linkExpired ? (
+        <div className="login-empty-state"><Link href="/recover">Request another link</Link></div>
+      ) : null}
       <button className="login-submit" type="submit" disabled={pending}>
         <span>{pending ? "Resetting password…" : "Reset password"}</span>
         <ArrowRight aria-hidden="true" />

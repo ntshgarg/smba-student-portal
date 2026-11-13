@@ -21,6 +21,7 @@ import type {
   SaveAssessmentInput,
 } from "@/lib/assessments/contracts"
 import { formatAssessmentDate, sectionTone } from "@/lib/assessments/display"
+import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PreviousAssessment } from "@/lib/assessments/queries"
 import {
   ASSESSMENT_RATING_LABELS,
@@ -250,6 +251,7 @@ export function AssessmentForm({
   const overall = overallRating(values.ratings)
   const busy = pending !== null
   const firstName = player.name.split(" ")[0]
+  const ratingsKept = "Your ratings and notes are still on screen"
 
   function change(patch: Partial<FormValues>) {
     setValues((current) => ({ ...current, ...patch }))
@@ -315,15 +317,14 @@ export function AssessmentForm({
           : "Draft saved. Nothing reaches the player until you publish.",
         tone: "success",
       })
-    } catch {
-      // The save may have landed before the connection dropped. Saving again
-      // carries the same id, so it cannot make a second copy.
-      setNotice({
-        action: { href: "/login", label: "Sign in again" },
-        message: "The save could not be confirmed. Your changes are still here, and saving again"
-          + " will not make a second copy. If it keeps happening, sign in again.",
-        tone: "error",
+    } catch (error) {
+      // Saving again carries the same id, so it cannot make a second copy.
+      const failure = describeSaveFailure({
+        error,
+        retained: ratingsKept,
+        subject: "The assessment",
       })
+      setNotice({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPending(null)
     }
@@ -350,8 +351,14 @@ export function AssessmentForm({
       }
       setDiscarded(true)
       navigateAfterCommit(() => window.location.replace("/coach/assessments"))
-    } catch {
-      setNotice({ message: "The draft could not be discarded. Try again.", tone: "error" })
+    } catch (error) {
+      // Sending it again is harmless: a draft already gone is refused by name.
+      const failure = describeSaveFailure({
+        error,
+        retained: ratingsKept,
+        subject: "Discarding the draft",
+      })
+      setNotice({ action: failure.signIn, message: failure.message, tone: "error" })
     } finally {
       setPending(null)
     }

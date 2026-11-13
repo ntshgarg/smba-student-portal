@@ -93,8 +93,8 @@ export function RecoveryEmailEnrollmentForm({
     { ...initialRecoveryEmailEnrollmentState, fullName: defaultName },
     {
       fold: foldPastRetirement(retired?.request),
-      retained: "No verification code was sent",
       subject: "Your recovery email",
+      unconfirmed: "Check the connection and send it again. If two codes arrive, use the newest one",
     },
   )
   const [confirmState, confirm, confirming] = useResilientActionState(
@@ -102,8 +102,10 @@ export function RecoveryEmailEnrollmentForm({
     initialRecoveryEmailEnrollmentState,
     {
       fold: foldPastRetirement(retired?.confirm),
-      retained: "The code was not used and is still valid",
       subject: "Your verification code",
+      unconfirmed: "Reload this page before trying again. If you are taken straight on, your"
+        + " address was confirmed. If it asks for your email again, send a new code: the one"
+        + " you entered may already have been used",
     },
   )
   // A retired result speaks for nothing: not the step, not the address the code

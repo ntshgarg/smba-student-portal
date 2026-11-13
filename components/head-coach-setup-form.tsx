@@ -49,8 +49,9 @@ export function HeadCoachSetupForm({
       // A transport failure belongs to the request, not to a control, so the
       // fold clears any field verdict the previous submit left behind.
       fold: (state, message) => ({ ...state, error: message, errorField: null }),
-      retained: "No account was created and this one-time setup link still works",
       subject: "Your head-coach account",
+      unconfirmed: "Reload this page before trying again: if the account was created,"
+        + " it will say setup is complete and you can sign in with the password you chose",
     },
   )
   const submissionStartedRef = useRef(false)

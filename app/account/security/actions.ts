@@ -3,7 +3,9 @@
 import { and, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
+import { redirect } from "next/navigation"
 
+import { SessionExpiredError } from "@/lib/actions/operational-result"
 import { getAuth } from "@/lib/auth/better-auth"
 import { withdrawPendingAuthenticatorResetRequests } from "@/lib/auth/authenticator-reset-service"
 import {
@@ -58,9 +60,10 @@ export type RecoveryCodeReissueState = {
   errorField?: "currentPassword" | "secondFactor" | null
 }
 
+// These pages render only when signed in, so a missing identity is an expired sign-in.
 async function requireSignedIn() {
   const identity = await sessionProvider.getCurrentIdentity()
-  if (!identity) throw new Error("Authentication is required.")
+  if (!identity) throw new SessionExpiredError()
   return identity
 }
 
@@ -129,17 +132,31 @@ export async function changePasswordAction(
       success: null,
     }
   }
+  // The current password was verified above, so a throw here is not a wrong
+  // password: ask whether the new one took and whether this browser is signed in.
+  let signedOutHere = false
   try {
     await getAuth().api.changePassword({
       body: { currentPassword, newPassword, revokeOtherSessions: true },
       headers: confirmation.requestHeaders,
     })
   } catch {
-    return {
-      error: "The current password could not be verified.",
-      errorField: "currentPassword",
-      success: null,
+    const changed = await verifyCurrentPassword({
+      accountId: identity.subjectId,
+      password: newPassword,
+    }).catch(() => false)
+    if (!changed) {
+      const stillSignedIn = await sessionProvider.hasActiveSession().catch(() => true)
+      return {
+        error: stillSignedIn
+          ? "Your password could not be changed. Your current password still works. Try again."
+          : "Your password could not be changed, but every device, this one included, was"
+            + " logged out. Your current password still works: sign in again with it, then try again.",
+        errorField: null,
+        success: null,
+      }
     }
+    signedOutHere = !(await sessionProvider.hasActiveSession().catch(() => false))
   }
 
   /*
@@ -159,6 +176,8 @@ export async function changePasswordAction(
     outcome: "success",
     userAgent: confirmation.security.userAgent,
   })
+  // This browser was signed out too, so the security page cannot show the result.
+  if (signedOutHere) redirect("/login?notice=password-changed")
   revalidatePath("/account/security")
   return {
     error: null,

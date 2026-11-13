@@ -95,11 +95,12 @@ export function FeePlanStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The session assignment could not be reset",
         retained: "Nothing has changed on this player",
+        unconfirmed: "Check the connection, then reload the page to see whether the session assignment was reset",
         subject: "The session assignment reset",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: "reset",
@@ -198,11 +199,11 @@ export function FeePlanStep({
       } catch (error) {
         const failure = describeSaveFailure({
           error,
-          fallbackMessage: "The Fee Plan could not be saved",
           retained: "The agreed monthly fee is still on screen",
           subject: "The fee timeline",
         })
         setFeedback({
+          action: failure.signIn,
           message: failure.message,
           offerRetry: failure.offerRetry,
           retryAction: "submit",
@@ -250,11 +251,11 @@ export function FeePlanStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The Fee Plan could not be saved",
         retained: "The fee timeline is still on screen",
         subject: "The Fee Plan",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: "submit",
@@ -376,7 +377,7 @@ export function FeePlanStep({
           )}
         </section>
       ) : null}
-      <InlineNotice id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
+      <InlineNotice action={feedback?.action} id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {/*
         * This used to read "there is no other way back to it", which was true
         * while the step list was a picture. It is navigation now, so moving the

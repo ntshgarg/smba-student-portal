@@ -165,11 +165,11 @@ function PaymentForm({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The allocation could not be reviewed",
         retained: "The amount you entered is still on screen",
         subject: "The allocation review",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -240,11 +240,11 @@ function PaymentForm({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The payment could not be recorded",
         retained: "The payment details are still on screen",
         subject: "The payment",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -369,6 +369,7 @@ function PaymentForm({
         {reviewedAmountPaise === null ? (
           <div className={styles.balanceReviewPrompt}>
             <InlineNotice
+              action={feedback?.action}
               className={styles.notice}
               id={RAPID_DESK_FEEDBACK_ID}
               message={feedback?.message}
@@ -433,6 +434,7 @@ function PaymentForm({
 
             <div className={styles.balancePaymentFooter}>
               <InlineNotice
+                action={feedback?.action}
                 className={styles.notice}
                 message={feedback?.message ?? (
                   allocationValidation && !allocationValidation.ok

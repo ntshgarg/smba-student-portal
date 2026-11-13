@@ -512,11 +512,11 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The adjustment could not be published",
         retained: "Your adjustment draft is still on screen",
         subject: "The reschedule",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: "publish",
@@ -541,11 +541,12 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The make-up could not be kept",
         retained: "It still needs review",
+        unconfirmed: "Check the connection, then reload the page to see whether the make-up was kept",
         subject: "Keeping the make-up",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: pendingKey,
@@ -579,11 +580,12 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The adjustment could not be voided",
         retained: "The adjustment is still published",
+        unconfirmed: "Check the connection, then reload the page to see whether the adjustment was voided",
         subject: "The adjustment",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         retryAction: adjustment.id,
@@ -611,6 +613,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
 
           {feedback ? (
             <InlineNotice
+              action={feedback.action}
               className="coach-adjustments-notice"
               id={feedbackId}
               message={feedback.message}

@@ -27,6 +27,27 @@ export async function getRawAuthSession() {
   return getAuth().api.getSession({ headers: await headers() })
 }
 
+/** A live sign-in refused an identity only because its authenticator setup is unfinished. */
+export async function sessionOwesAuthenticatorSetup() {
+  const rawSession = await getRawAuthSession()
+  if (!rawSession?.user?.id || rawSession.user.twoFactorEnabled) return false
+  const account = initializeDatabase().select({
+    coachAccessLevel: coachProfiles.accessLevel,
+    role: accounts.role,
+  })
+    .from(accounts)
+    .innerJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
+    .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
+    .where(and(
+      eq(accounts.id, rawSession.user.id),
+      eq(accounts.approvalStatus, "approved"),
+      isNull(accounts.archivedAt),
+      eq(authCredentialStates.status, "active"),
+    ))
+    .get()
+  return Boolean(account?.role && principalTotpRequired(account.role, account.coachAccessLevel))
+}
+
 export class DatabaseSessionProvider implements SessionProvider {
   /**
    * Whether the browser still holds a session Better Auth accepts, before any

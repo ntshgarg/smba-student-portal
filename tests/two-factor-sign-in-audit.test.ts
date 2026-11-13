@@ -288,4 +288,23 @@ describe("second-factor sign-in is audited and metered per account", () => {
     })
     expect(mocks.verifyTOTP).not.toHaveBeenCalled()
   })
+
+  /*
+   * M023. A signed-in caller is sent on to wherever their sign-in belongs. The
+   * destination used to be worked out as if the authenticator were connected,
+   * so a head coach who had walked away from setup went to /coach, which
+   * refused them to a blank sign-in form.
+   */
+  it("sends a signed-in head coach who owes an authenticator back to that step", async () => {
+    mocks.getRawAuthSession.mockResolvedValue({
+      user: { id: "head-coach", twoFactorEnabled: false },
+    })
+
+    await expect(verifyTotpSignIn(initialState, form("code", "123456"))).rejects.toThrow()
+    expect(mocks.postAuthenticationDestination).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: "head-coach",
+      twoFactorEnabled: false,
+    }))
+    expect(mocks.verifyTOTP).not.toHaveBeenCalled()
+  })
 })

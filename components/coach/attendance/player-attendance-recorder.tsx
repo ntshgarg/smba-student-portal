@@ -42,7 +42,7 @@ import {
   restoredAttendanceDraftNotice,
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
-import { describeRefusedSave } from "@/lib/client/session-expiry"
+import { describeRefusedSave, feedbackAfterMark } from "@/lib/client/session-expiry"
 import {
   academyTimeInputValue,
   formatAcademyTime,
@@ -460,7 +460,7 @@ export function PlayerAttendanceRecorder({
       }]
     setDraftChanges(nextChanges)
     setDraftKeptOnDevice(persistPlayerAttendanceDraft(selectedOccurrence.id, nextChanges))
-    setFeedback(null)
+    setFeedback(feedbackAfterMark)
   }
 
   async function saveAttendance() {
@@ -494,14 +494,13 @@ export function PlayerAttendanceRecorder({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "Attendance could not be saved",
-        repeatable: true,
         retained: "Your marks are still on screen",
         subject: "Attendance",
       })
       setFeedback({
         message: failure.message,
         offerRetry: failure.offerRetry,
+        signIn: failure.signIn,
         tone: "error",
       })
     } finally {

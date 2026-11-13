@@ -86,18 +86,17 @@ function RecoveryEmailChangeForms({
     requestRecoveryEmailChange,
     initialRecoveryEmailEnrollmentState,
     {
-      retained: "Your current recovery address is unchanged",
       subject: "Your recovery email change",
+      unconfirmed: "Your current recovery address stays in place until you confirm a code."
+        + " Check the connection and send it again. If two codes arrive, use the newest one",
     },
   )
   const [confirmState, confirmAction, confirming] = useResilientActionState(
     confirmRecoveryEmailChange,
     initialRecoveryEmailEnrollmentState,
     {
-      // Only what holds whether or not the request landed: a press whose
-      // answer was lost may have used the code, and confirming again will say so.
-      retained: "Your recovery email changes only once its code is accepted",
       subject: "Your verification code",
+      unconfirmed: "Reload this page to see which recovery address is saved before trying again",
     },
   )
   const [requestValidationTarget, setRequestValidationTarget] = useState<string | null>(null)

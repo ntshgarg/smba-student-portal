@@ -161,11 +161,11 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The correction could not be saved",
         retained: "Your correction details are still on screen",
         subject: "The correction",
       })
       setFeedback({
+        action: failure.signIn,
         message: failure.message,
         offerRetry: failure.offerRetry,
         tone: "error",
@@ -255,7 +255,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
           </label>
 
           <div className={styles.paymentFooter}>
-            <InlineNotice className={styles.notice} id={feedbackId} message={feedback?.message} tone={feedback?.tone} />
+            <InlineNotice action={feedback?.action} className={styles.notice} id={feedbackId} message={feedback?.message} tone={feedback?.tone} />
             <button className={styles.correctionButton} type="submit" disabled={pending || (mode === "reverse_payment" && !paymentId) || (mode === "reverse_adjustment" && !adjustmentId) || (mode === "void_charge" && !selectedChargeId)}>
               {pending ? "Saving…" : feedback?.offerRetry ? "Apply correction again" : "Apply correction"}
             </button>

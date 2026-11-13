@@ -376,6 +376,7 @@ export function SessionCalendar({
       ) : null}
 
       <InlineNotice
+        action={holidayFeedback?.action}
         className="coach-calendar-holiday-notice"
         message={holidayFeedback?.message}
         tone={holidayFeedback?.tone}
@@ -487,11 +488,11 @@ export function SessionCalendar({
                     .catch((error: unknown) => {
                       const failure = describeSaveFailure({
                         error,
-                        fallbackMessage: `The holiday on ${day} could not be removed`,
-                        retained: "Reload the calendar to see whether the day is still closed",
+                        retained: "The holiday is unchanged",
+                        unconfirmed: "Check the connection, then reload the page to see whether the holiday was removed",
                         subject: `Removing the holiday on ${day}`,
                       })
-                      setHolidayFeedback({ message: failure.message, tone: "error" })
+                      setHolidayFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
                     })
                     .finally(() => setRetractingHolidayDates((current) => (
                       current.filter((candidate) => candidate !== dateKey)
@@ -591,15 +592,12 @@ export function SessionCalendar({
                           } catch (error) {
                             const failure = describeSaveFailure({
                               error,
-                              fallbackMessage: "Session could not be cancelled",
-                              // The request may have reached the server before
-                              // the connection dropped, so this does not promise
-                              // the session is untouched. Cancelling again is
-                              // safe: an already-cancelled session stays as it is.
-                              retained: "If the session still shows as scheduled, cancelling again is safe",
+                              retained: "The session is still scheduled",
+                              unconfirmed: "Check the connection, then reload the page to see whether the session was cancelled",
                               subject: "The cancellation",
                             })
                             setFeedback({
+                              action: failure.signIn,
                               message: failure.message,
                               occurrenceId: occurrence.id,
                               offerRetry: failure.offerRetry,
@@ -644,11 +642,11 @@ export function SessionCalendar({
                           } catch (error) {
                             const failure = describeSaveFailure({
                               error,
-                              fallbackMessage: "Session could not be replaced",
                               retained: "Your replacement details are still on screen",
                               subject: "The replacement session",
                             })
                             setFeedback({
+                              action: failure.signIn,
                               message: failure.message,
                               occurrenceId: occurrence.id,
                               offerRetry: failure.offerRetry,
@@ -733,6 +731,7 @@ function OccurrenceDetails({
         ) : <p>No players were assigned to this occurrence.</p>}
       </div>
       <InlineNotice
+        action={feedback?.action}
         className="coach-calendar-inline-notice"
         id={feedbackId}
         message={feedback?.message}

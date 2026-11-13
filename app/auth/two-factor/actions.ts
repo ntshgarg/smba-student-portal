@@ -99,7 +99,10 @@ const SIGN_IN_CHALLENGE_EXPIRED = "Your sign-in has expired. Sign in again."
  */
 async function refuseSignedInCaller() {
   const session = await getRawAuthSession()
-  if (session) redirect(destinationForUser(session.user.id))
+  // Use the session's own authenticator state so unfinished setup is sent back to it.
+  if (session) {
+    redirect(destinationForUser(session.user.id, Boolean(session.user.twoFactorEnabled)))
+  }
 }
 
 function recordSecondFactorRateLimited(
@@ -206,8 +209,7 @@ export async function beginAuthenticatorReconnect(
     }
   }
   if (!await verifyCurrentPassword({ accountId: identity.subjectId, password })) {
-    // Already counted by the reservation; recorded as every other password
-    // check on these screens is, so the security log sees the guess.
+    // Log the failed password check, as the recovery-code reissue does.
     writeAuthSecurityEvent({
       accountId: identity.subjectId,
       actorAccountId: identity.subjectId,
@@ -264,15 +266,26 @@ export async function beginAuthenticatorReconnect(
     recordSecondFactorSuccess(requestHeaders, identity.subjectId, "backup_code", "reconnect")
   }
 
+  const usedRecoveryCode = !/^\d{6}$/u.test(secondFactor)
   try {
     await requestAuth.api.revokeOtherSessions({ headers: requestHeaders })
+  } catch {
+    return {
+      error: "The authenticator could not be reconnected. Try again.",
+      errorField: null,
+    }
+  }
+  // Once the first step has run, other devices are already signed out; say so if the second fails.
+  try {
     await requestAuth.api.disableTwoFactor({
       body: { password },
       headers: requestHeaders,
     })
   } catch {
     return {
-      error: "The authenticator could not be reconnected. Try again.",
+      error: "Your other devices were logged out, but the authenticator could not be"
+        + " reconnected. Try again"
+        + (usedRecoveryCode ? " with a different recovery code or an authenticator code." : "."),
       errorField: null,
     }
   }

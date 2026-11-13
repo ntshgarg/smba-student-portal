@@ -8,6 +8,11 @@ import type { OperationalActionErrorCode } from "@/lib/actions/operational-resul
  */
 const sessionExpiredCode: OperationalActionErrorCode = "SESSION_EXPIRED"
 
+/** True for a refused save result whose cause is an expired sign-in. */
+export function refusedForExpiredSignIn(result: { code?: string }) {
+  return result.code === sessionExpiredCode
+}
+
 /**
  * The login page takes no return path -- `app/login/page.tsx` reads only
  * `recovered`, and `postAuthenticationDestination` decides where a signed-in
@@ -16,6 +21,11 @@ const sessionExpiredCode: OperationalActionErrorCode = "SESSION_EXPIRED"
  * which is a redirect that page cannot currently be talked into.
  */
 const signInHref = "/login"
+
+/** A new mark clears stale feedback but keeps an expired-sign-in notice. */
+export function feedbackAfterMark<Feedback extends object>(current: Feedback | null) {
+  return current && "signIn" in current && current.signIn ? current : null
+}
 
 export type RefusedSaveDescription = {
   leaveConfirmation?: string

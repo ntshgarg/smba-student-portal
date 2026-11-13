@@ -56,6 +56,15 @@ const passwordFieldIds = {
   newPassword: "security-new-password",
 } as const
 
+/** A credential refusal leaves the stored set alone, so the codes on screen stay. */
+async function reissueKeepingCodesOnRefusal(
+  state: RecoveryCodeReissueState,
+  formData: FormData,
+): Promise<RecoveryCodeReissueState> {
+  const next = await reissueRecoveryCodesAction(state, formData)
+  return next.codes === null && next.errorField ? { ...next, codes: state.codes } : next
+}
+
 /** Sessions shown before the list has to be expanded. */
 const sessionPreviewCount = 5
 
@@ -108,36 +117,46 @@ export function AccountSecurityWorkspace({
       // No field was rejected and nothing succeeded, so clear both verdicts
       // rather than leave a stale one beside the failure.
       fold: (state, error) => ({ ...state, error, errorField: null, success: null }),
-      retained: "Your current password still works",
       subject: "Your new password",
+      unconfirmed: "If it went through, your new password is now the one that works and"
+        + " other devices were signed out. Reload this page: if you are asked to sign in,"
+        + " use your new password",
     },
   )
   const [pinState, pinAction, pinPending] = useResilientActionState(savePinAction, initialPinState, {
     fold: (state, error) => ({ ...state, error, success: null }),
-    retained: "Your current sign-in options are unchanged",
     subject: "Your PIN",
+    unconfirmed: "Your password still signs you in either way. Reload this page to see"
+      + " whether the PIN changed before trying again",
   })
   const [removeState, removeAction, removePending] = useResilientActionState(
     removePinAction,
     initialPinState,
     {
       fold: (state, error) => ({ ...state, error, success: null }),
-      retained: "Your PIN still works",
       subject: "Your PIN removal",
+      unconfirmed: "Your password still signs you in either way. Reload this page to see"
+        + " whether the PIN was removed",
     },
   )
   const [reissueState, reissueAction, reissuePending] = useResilientActionState(
-    reissueRecoveryCodesAction,
+    reissueKeepingCodesOnRefusal,
     initialReissueState,
     {
       // Codes from an earlier press may have been superseded by the press that
       // failed, and a dead code presented as live is what locks a coach out, so
-      // they go with the failure. Neither credential was rejected, so neither
-      // field is flagged. What the sentence keeps is the invariant of this
-      // action, which holds whether or not the request reached the server.
-      fold: (state, error) => ({ ...state, codes: null, error, errorField: null }),
-      retained: "No device was signed out and your authenticator app is unchanged",
-      subject: "Your new recovery codes",
+      // they go with the failure, unless the sign-in had expired (nothing was
+      // touched). Neither field is flagged.
+      fold: (state, error, kind) => ({
+        ...state,
+        codes: kind === "session-expired" ? state.codes : null,
+        error,
+        errorField: null,
+      }),
+      subject: "Your request for new recovery codes",
+      unconfirmed: "If it went through, your old codes no longer work and the new ones could"
+        + " not be shown. Check the connection and reissue again to get a set you can save."
+        + " No device was signed out and your authenticator app is unchanged",
     },
   )
   // The notice names a set -- "All 10 recovery codes are on the clipboard" --
@@ -160,7 +179,7 @@ export function AccountSecurityWorkspace({
   function runOneClick(
     run: () => Promise<void>,
     setFeedback: (feedback: ActionFeedback | null) => void,
-    copy: { fallbackMessage: string, retained: string, subject: string, success: string },
+    copy: { retained: string, subject: string, success: string, unconfirmed: string },
   ) {
     setFeedback(null)
     startTransition(async () => {
@@ -168,15 +187,8 @@ export function AccountSecurityWorkspace({
         await run()
         setFeedback({ message: copy.success, tone: "success" })
       } catch (error) {
-        setFeedback({
-          message: describeSaveFailure({
-            error,
-            fallbackMessage: copy.fallbackMessage,
-            retained: copy.retained,
-            subject: copy.subject,
-          }).message,
-          tone: "error",
-        })
+        const failure = describeSaveFailure({ error, ...copy })
+        setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
       }
     })
   }
@@ -198,8 +210,7 @@ export function AccountSecurityWorkspace({
    */
   function revokeSessions(
     run: () => Promise<void>,
-    { fallbackMessage, retained, subject, success }: {
-      fallbackMessage: string
+    { retained, subject, success }: {
       retained: string
       subject: string
       success?: string
@@ -211,10 +222,13 @@ export function AccountSecurityWorkspace({
         await run()
         if (success) setSessionsFeedback({ message: success, tone: "success" })
       } catch (error) {
-        setSessionsFeedback({
-          message: describeSaveFailure({ error, fallbackMessage, retained, subject }).message,
-          tone: "error",
+        const failure = describeSaveFailure({
+          error,
+          retained,
+          subject,
+          unconfirmed: "Reload this page to see which devices are still signed in",
         })
+        setSessionsFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
       } finally {
         setRevokingSessionId(null)
       }
@@ -343,6 +357,7 @@ export function AccountSecurityWorkspace({
             <div className="totp-backup-codes">
               <h3>Your new recovery codes</h3>
               <p role="status">{`${reissuedCodes.length} new codes replaced the old set. Save them before you leave this page; they are not shown again.`}</p>
+              <p>If new codes are issued again, here or on another device, these stop working.</p>
               <ul>{reissuedCodes.map((code) => <li key={code}><code>{code}</code></li>)}</ul>
               <div className="totp-backup-actions">
                 <button
@@ -390,18 +405,18 @@ export function AccountSecurityWorkspace({
             type="button"
             disabled={isPending}
             onClick={() => runOneClick(() => cancelAuthenticatorResetRequestAction(), setResetFeedback, {
-              fallbackMessage: "The request could not be cancelled",
               retained: "It is still waiting for the platform admin",
               subject: "The cancellation",
               success: "Reset request cancelled. Your authenticator is unchanged.",
+              unconfirmed: "Reload this page to see whether the request is still waiting",
             })}
           >
             Cancel reset request
           </button>
-          <InlineNotice message={resetFeedback?.message} reserveSpace={false} tone={resetFeedback?.tone} />
+          <InlineNotice action={resetFeedback?.action} message={resetFeedback?.message} reserveSpace={false} tone={resetFeedback?.tone} />
         </section>
       ) : resetFeedback ? (
-        <InlineNotice message={resetFeedback.message} reserveSpace={false} tone={resetFeedback.tone} />
+        <InlineNotice action={resetFeedback.action} message={resetFeedback.message} reserveSpace={false} tone={resetFeedback.tone} />
       ) : null}
 
       {authenticatorEnabled ? (
@@ -424,16 +439,16 @@ export function AccountSecurityWorkspace({
               type="button"
               disabled={isPending}
               onClick={() => runOneClick(() => forgetTrustedBrowsersAction(), setTrustFeedback, {
-                fallbackMessage: "The trusted browsers could not be forgotten",
                 retained: "They still skip the code",
                 subject: "Forgetting trusted browsers",
                 success: "Trusted browsers forgotten. Every browser, this one included, will ask for an authenticator code at its next sign-in.",
+                unconfirmed: "Reload this page to see whether any browser still skips the code",
               })}
             >
               Forget trusted browsers
             </button>
           ) : null}
-          <InlineNotice message={trustFeedback?.message} reserveSpace={false} tone={trustFeedback?.tone} />
+          <InlineNotice action={trustFeedback?.action} message={trustFeedback?.message} reserveSpace={false} tone={trustFeedback?.tone} />
         </section>
       ) : null}
 
@@ -491,7 +506,6 @@ export function AccountSecurityWorkspace({
                       onClick={() => {
                         setRevokingSessionId(session.id)
                         revokeSessions(() => revokeSessionAction(session.id), {
-                          fallbackMessage: "That device could not be signed out",
                           retained: "It is still signed in",
                           subject: "The sign-out",
                         })
@@ -521,7 +535,6 @@ export function AccountSecurityWorkspace({
               className="security-secondary-action"
               type="button"
               onClick={() => revokeSessions(() => revokeOtherSessionsAction(), {
-                fallbackMessage: "The other devices could not be signed out",
                 retained: "They are still signed in",
                 subject: "The sign-out",
                 // Trusted browsers are forgotten too (app/account/security/actions.ts).
@@ -535,6 +548,7 @@ export function AccountSecurityWorkspace({
             </button>
           ) : null}
           <InlineNotice
+            action={sessionsFeedback?.action}
             message={sessionsFeedback?.message}
             reserveSpace={false}
             tone={sessionsFeedback?.tone}

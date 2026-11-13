@@ -3,8 +3,11 @@
 import { unstable_rethrow } from "next/navigation"
 import { useActionState } from "react"
 
-import { describeSaveFailure } from "@/lib/client/network-failure"
-import { reportClientError } from "@/lib/telemetry/report-client-error"
+import {
+  classifySaveFailure,
+  describeSaveFailure,
+  type SaveFailureKind,
+} from "@/lib/client/network-failure"
 
 /**
  * `useActionState` has no failure channel. When the action rejects, React marks
@@ -17,9 +20,9 @@ import { reportClientError } from "@/lib/telemetry/report-client-error"
  * A dropped request is enough to trigger that; the action itself need not be
  * buggy. On the authentication surfaces the request is the whole product, so
  * this wrapper supplies the seam React does not: it catches the rejection,
- * turns it into the same operational sentence the attendance registers already
- * use, and folds it into the state the form is rendering, so the failure
- * arrives through the existing error markup instead of through a boundary.
+ * turns it into a plain sentence about what may have happened and what to do,
+ * and folds it into the state the form is rendering, so the failure arrives
+ * through the existing error markup instead of through a boundary.
  *
  * It supplies that seam for faults only. A rejection Next.js threw on purpose --
  * the `redirect()` every successful sign-in ends on, and the `notFound`,
@@ -41,13 +44,16 @@ export type ResilientActionOptions<State> = {
    * Rewrites the state on screen so it carries `message`. The default replaces
    * `error`, which is all a state needs when `error` is its only failure
    * channel. Supply one where the shape also carries a field-level verdict or a
-   * success notice, neither of which may outlive the failure.
+   * success notice, neither of which may outlive the failure. `kind` says what
+   * went wrong; only a `"session-expired"` is known to have changed nothing.
    */
-  fold?: (state: State, message: string) => State
-  /** What remains true despite the failure. No trailing punctuation. */
-  retained: string
-  /** What was being submitted. No trailing punctuation. */
+  fold?: (state: State, message: string, kind: SaveFailureKind) => State
+  /** Older name for what is still on screen; prefer `unconfirmed`. */
+  retained?: string
+  /** What was being submitted, as a singular noun phrase. No trailing punctuation. */
   subject: string
+  /** How to find out whether it went through, true either way. No trailing punctuation. */
+  unconfirmed?: string
 }
 
 function foldIntoError<State extends ActionErrorState>(state: State, message: string) {
@@ -61,7 +67,7 @@ function foldIntoError<State extends ActionErrorState>(state: State, message: st
  */
 export function resilientAction<State extends ActionErrorState>(
   action: FormAction<State>,
-  { fold = foldIntoError, retained, subject }: ResilientActionOptions<State>,
+  { fold = foldIntoError, ...wording }: ResilientActionOptions<State>,
 ): FormAction<State> {
   return async (state, payload) => {
     try {
@@ -96,26 +102,17 @@ export function resilientAction<State extends ActionErrorState>(
        */
       unstable_rethrow(error)
 
-      const failure = describeSaveFailure({
-        error,
-        fallbackMessage: `${subject} could not be sent`,
-        retained,
-        subject,
-      })
-
-      // A transport failure is an operating condition on a venue connection,
-      // not a defect, and reporting every one of them would bury the endpoint.
-      // Anything else reaching here is a real fault that used to land in
-      // `app/error.tsx`, which reports; catching it must not cost that signal.
-      // `window` is the boundary the report vocabulary already reserves for a
-      // rejection with nowhere else to land.
-      if (failure.kind === "unknown") {
-        reportClientError({ boundary: "window", error, eventType: "unhandled_rejection" })
-      }
-
-      return fold(state, failure.message)
+      return fold(state, describeUnconfirmedSubmission(error, wording), classifySaveFailure(error))
     }
   }
+}
+
+/** The sentence for a submission whose reply did not come back as an answer. */
+export function describeUnconfirmedSubmission(
+  error: unknown,
+  { retained = "Nothing was changed", subject, unconfirmed }: Omit<ResilientActionOptions<unknown>, "fold">,
+) {
+  return describeSaveFailure({ error, retained, subject, unconfirmed }).message
 }
 
 type ResilientActionState<State> = [

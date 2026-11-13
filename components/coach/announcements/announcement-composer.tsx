@@ -265,7 +265,6 @@ function ReviewDialog({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        fallbackMessage: "The announcement could not be published",
         retained: "Your message is still here",
         subject: "The announcement",
       })
@@ -274,10 +273,10 @@ function ReviewDialog({
         request.then((result) => settle(result, sent), () => {})
       }
       if (dismissed.current) {
-        onFailureAfterExit({ message: failure.message, tone: "error" })
+        onFailureAfterExit({ action: failure.signIn, message: failure.message, tone: "error" })
         return
       }
-      setFeedback({ message: failure.message, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, tone: "error" })
       publishButtonRef.current?.focus()
     } finally {
       setPending(false)
@@ -388,6 +387,7 @@ function ReviewDialog({
         ) : null}
 
         <InlineNotice
+          action={feedback?.action}
           className={styles.dialogNotice}
           message={feedback?.message}
           tone={feedback?.tone}
