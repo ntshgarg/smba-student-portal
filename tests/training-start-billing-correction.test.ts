@@ -239,6 +239,23 @@ describe("training start billing and correction", () => {
     })
   })
 
+  it("does not list a first month with no session left as ready to issue", () => {
+    const { playerId } = createPlayer({
+      assignments: [{ from: "2026-11-03" }],
+      name: "Late Start Player",
+      occurrences: ["2026-11-03", "2026-11-10", "2026-11-17", "2026-11-24", "2026-12-01"],
+      seriesStartsOn: "2026-11-03",
+      trainingStartOn: "2026-11-26",
+    })
+    onboard(playerId, onboardingNow)
+
+    const now = new Date("2026-11-27T10:00:00+05:30")
+    const november = prepare("2026-11", "issue-november-late-start", now)
+    expect(november.deferred).toBeGreaterThanOrEqual(1)
+    expect(monthlyCharge(playerId, "2026-11")).toEqual([])
+    expect(finance.getCoachMonthlyPreparationPreview("2026-11", { coachId, database, now }).ready).toBe(0)
+  })
+
   it("leaves a month already prepared at the full fee unprorated", () => {
     const { playerId } = createPlayer({
       assignments: [{ from: "2026-12-01" }],

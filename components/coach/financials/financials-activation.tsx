@@ -40,6 +40,9 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
       if (result.ok) {
         requestKey.reset()
         router.refresh()
+      } else if (result.code === "ALREADY_ACTIVE") {
+        // Started elsewhere with another month: load Financials as it now is.
+        router.refresh()
       }
     } catch (error) {
       const failure = describeSaveFailure({

@@ -1269,6 +1269,19 @@ describe("Financials V2 service", () => {
       eq(schema.financialAuditEvents.eventType, "concession_reversed"),
       eq(schema.financialAuditEvents.entityId, fixed.concession.id),
     )).all()).toHaveLength(1)
+    // The activity log shows the reason the coach typed for each undo.
+    expect(finance.getFinancialActivity({
+      eventTypes: ["concession_reversed", "concession_application_reversed"],
+    }, { coachId, database, now }).items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventType: "concession_application_reversed",
+        reason: "Concession was approved against the wrong month",
+      }),
+      expect.objectContaining({
+        eventType: "concession_reversed",
+        reason: "The approved concession is no longer required",
+      }),
+    ]))
 
     // Ending a Concession definition stops future use without rewriting an
     // already-published ledger credit. Application correction remains an

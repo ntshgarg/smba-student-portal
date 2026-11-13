@@ -180,6 +180,9 @@ export async function recordAllocatedPaymentAction(
 ): Promise<FinanceActionResult> {
   return runFinanceAction((coachId) => {
     const result = recordAllocatedPayment(input, { coachId })
+    if (result.reused && result.receipt.lifecycle === "reversed") {
+      return { message: "This payment was already recorded, and has since been reversed" }
+    }
     return { message: result.reused ? "Payment already recorded" : "Payment recorded" }
   })
 }
@@ -195,6 +198,9 @@ export async function recordRefundAction(
 ): Promise<FinanceActionResult> {
   return runFinanceAction((coachId) => {
     const result = recordRefund(input, { coachId })
+    if (result.reused && result.refund.lifecycle === "reversed") {
+      return { message: "This refund was already recorded, and has since been reversed" }
+    }
     return { message: result.reused ? "Refund already recorded" : "Refund recorded" }
   })
 }

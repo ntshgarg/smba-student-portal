@@ -117,6 +117,8 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
       if (!result.ok) {
         setFeedback({ message: result.message, tone: "error" })
         if (result.field === "amountPaise") amountRef.current?.focus()
+        // Load the receipt as it is now, so the next review is checked against it.
+        if (result.code === "BALANCE_CHANGED") router.refresh()
         return
       }
       const suggested = new Map(result.data.allocations.map((allocation) => [
@@ -151,6 +153,10 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (pending || reviewedAmountPaise === null || !allocationValidation?.ok) return
+    if (refundedOn < withdrawalEffectiveOn) {
+      setFeedback({ message: "The refund date cannot be before the date the member withdrew.", tone: "error" })
+      return
+    }
     if (!window.confirm(
       `Record a ${formatInr(reviewedAmountPaise)} refund for ${receipt.receiptReference} and end the fee plan on ${formatDueDate(withdrawalEffectiveOn)}?`,
     )) return
@@ -184,6 +190,12 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
         setExternalReference("")
         setInternalNote("")
         setAllocationValues({})
+        setReviewedAllocations([])
+        setReviewedAmountPaise(null)
+        router.refresh()
+      } else if (result.code === "BALANCE_CHANGED") {
+        // The review was made against the old receipt or fee: load them as
+        // they are now and ask for a fresh review.
         setReviewedAllocations([])
         setReviewedAmountPaise(null)
         router.refresh()

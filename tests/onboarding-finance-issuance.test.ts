@@ -251,6 +251,11 @@ describe("onboarding finance issuance", () => {
       schema.financialCharges.playerAccountId,
       playerId,
     )).all()).toHaveLength(2)
+    expect(finance.getFinancialActivity({ eventTypes: ["historical_reconciled"] }, {
+      coachId,
+      database,
+      now: onboardingNow,
+    }).items).toContainEqual(expect.objectContaining({ action: "Onboarding completed", playerId }))
 
     finance.prepareMonthlyCharges({
       idempotencyKey: "issue-september-after-prorated-onboarding",

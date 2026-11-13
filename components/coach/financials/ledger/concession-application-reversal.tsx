@@ -32,7 +32,9 @@ export function ConcessionApplicationReversal({
     scope: `financial-concession-application-reversal-${application.applicationId}`,
   })
 
-  if (!application.canReverse) return null
+  if (!application.canReverse) {
+    return feedback ? <InlineNotice className={styles.notice} message={feedback.message} tone={feedback.tone} /> : null
+  }
 
   async function reverse() {
     if (!reason.trim()) {

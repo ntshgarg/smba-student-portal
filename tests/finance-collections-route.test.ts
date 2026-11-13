@@ -20,7 +20,7 @@ vi.mock("@/lib/finance/service", async () => {
       this.code = code
     }
   }
-  return { FinanceServiceError, getCollectionsDayBook }
+  return { FinanceServiceError, getCollectionsDayBook, isStaleRecordsCursor: () => false }
 })
 
 import { GET } from "@/app/coach/financials/collections.csv/route"

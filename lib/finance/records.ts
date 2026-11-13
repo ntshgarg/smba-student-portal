@@ -585,12 +585,18 @@ export function loadFinancialActivity(
       reason = adjustment?.reversalReason ?? null
     } else if (event.eventType === "concession_created") {
       reason = concession?.reason ?? null
+    } else if (event.eventType === "concession_reversed") {
+      reason = concession?.reversalReason ?? null
+    } else if (event.eventType === "concession_application_reversed") {
+      reason = application?.reversalReason ?? null
     }
     return {
       id: event.id,
       occurredAt: event.occurredAt.toISOString(),
       eventType: event.eventType,
-      action: FINANCE_AUDIT_EVENTS[event.eventType].action,
+      action: metadata.operation === "onboarding_completed"
+        ? "Onboarding completed"
+        : FINANCE_AUDIT_EVENTS[event.eventType].action,
       actorId: event.actorAccountId,
       playerId,
       reference: payment?.receiptReference

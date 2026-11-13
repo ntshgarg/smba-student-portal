@@ -203,7 +203,9 @@ function monthState(
     return { detail: "", label: "Not issued", tone: "quiet" as const }
   }
 
-  if (withdrawalForCharge(record, charge)?.refund.lifecycle === "recorded") {
+  // Closed only while nothing is due; a later charge on the month shows as due.
+  if (withdrawalForCharge(record, charge)?.refund.lifecycle === "recorded"
+    && charge.outstandingPaise === 0) {
     return {
       detail: "Balance closed",
       label: "Closed after withdrawal",

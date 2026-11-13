@@ -2,7 +2,7 @@ import {
   CsvExportValueError,
   type ExportTruncation,
 } from "@/lib/finance/csv-truncation"
-import { FinanceServiceError } from "@/lib/finance/service"
+import { FinanceServiceError, isStaleRecordsCursor } from "@/lib/finance/service"
 import {
   exportTruncationLog,
   privateDownloadResponse,
@@ -59,6 +59,10 @@ export function financeExportTruncation(failure: {
 
   return (error, rowsWritten) => {
     log(error, rowsWritten)
+    // The records changed while the file was being read; a fresh download works.
+    if (isStaleRecordsCursor(error)) {
+      return "The records changed while this file was downloading. Download it again."
+    }
     if (error instanceof FinanceServiceError) return error.message
     if (error instanceof CsvExportValueError) {
       return "The next record holds an amount this file cannot write, so the "

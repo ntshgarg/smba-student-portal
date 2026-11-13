@@ -71,7 +71,10 @@ export function RefundReversal({ refund }: { refund: CoachRefundView }) {
     }
   }
 
-  if (!refund.canReverse) return null
+  // Once reversed the control goes, but the result stays: it says whether the fee plan came back.
+  if (!refund.canReverse) {
+    return feedback ? <InlineNotice className={styles.notice} message={feedback.message} tone={feedback.tone} /> : null
+  }
 
   return (
     <details className={styles.refundReversal}>

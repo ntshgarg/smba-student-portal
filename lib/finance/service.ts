@@ -754,13 +754,35 @@ function monthlyPreparationCandidates(
   const candidates = [...candidatesByPlayer.values()]
   const playerIds = candidates.map((candidate) => candidate.agreement.playerAccountId)
   const periodAssignments = loadPeriodAssignmentIndex(database, playerIds, period)
-  return candidates.map((candidate) => ({
-    ...candidate,
-    hasAssignment: periodAssignments.has(candidate.agreement.playerAccountId, {
+  const billedEarlier = new Set(playerIds.length
+    ? database.select({ playerId: financialCharges.playerAccountId }).from(financialCharges).where(and(
+      inArray(financialCharges.playerAccountId, playerIds),
+      eq(financialCharges.type, "monthly_training"),
+      eq(financialCharges.lifecycle, "issued"),
+      lt(financialCharges.billingPeriod, period),
+    )).all().map((row) => row.playerId)
+    : [])
+  return candidates.map((candidate) => {
+    const hasAssignment = periodAssignments.has(candidate.agreement.playerAccountId, {
       programme: candidate.agreement.level,
       batch: candidate.agreement.batch,
-    }),
-  }))
+    })
+    return {
+      ...candidate,
+      hasAssignment,
+      // Issue fees passes over a first month with no session left to bill
+      // (monthlyChargeBasis), so that month is never "ready to issue".
+      nothingToBill: hasAssignment
+        && !billedEarlier.has(candidate.agreement.playerAccountId)
+        && period >= candidate.enrollment.trainingStartOn.slice(0, 7)
+        && monthlyChargeBasis(database, {
+          agreement: candidate.agreement,
+          isFirstBilledMonth: true,
+          period,
+          trainingStartOn: candidate.enrollment.trainingStartOn,
+        }).amountPaise === 0,
+    }
+  })
 }
 
 function monthlyPreparationPreview(
@@ -774,8 +796,8 @@ function monthlyPreparationPreview(
   const beforeCutover = !activation || period < activation.trackingMonth
 
   return {
-    ready: beforeCutover ? 0 : candidates.filter(({ agreement, hasAssignment }) => {
-      return hasAssignment && !preparedIds.has(agreement.playerAccountId)
+    ready: beforeCutover ? 0 : candidates.filter(({ agreement, hasAssignment, nothingToBill }) => {
+      return hasAssignment && !nothingToBill && !preparedIds.has(agreement.playerAccountId)
     }).length,
     alreadyPrepared: beforeCutover ? 0 : candidates.filter(({ agreement }) => preparedIds.has(
       agreement.playerAccountId,
@@ -806,7 +828,9 @@ function playersAwaitingMonthlyFee(
   const candidates = monthlyPreparationCandidates(database, period, now)
   const prepared = new Set(listPreparedPlayerIds(database, period))
   return new Set(candidates
-    .filter(({ agreement, hasAssignment }) => hasAssignment && !prepared.has(agreement.playerAccountId))
+    .filter(({ agreement, hasAssignment, nothingToBill }) => (
+      hasAssignment && !nothingToBill && !prepared.has(agreement.playerAccountId)
+    ))
     .map(({ agreement }) => agreement.playerAccountId))
 }
 
@@ -4915,8 +4939,8 @@ export function getCoachFinanceDashboardSummary(
   const beforeCutover = !activation || period < activation.trackingMonth
   // The same "ready" players as playersAwaitingMonthlyFee, from the reads
   // this summary already makes.
-  const ready = beforeCutover ? [] : candidates.filter(({ agreement, hasAssignment }) => (
-    hasAssignment && !preparedIds.has(agreement.playerAccountId)
+  const ready = beforeCutover ? [] : candidates.filter(({ agreement, hasAssignment, nothingToBill }) => (
+    hasAssignment && !nothingToBill && !preparedIds.has(agreement.playerAccountId)
   ))
   const players = listFinancePlayers(database, {
     awaitingFeePlayerIds: new Set(ready.map(({ agreement }) => agreement.playerAccountId)),
