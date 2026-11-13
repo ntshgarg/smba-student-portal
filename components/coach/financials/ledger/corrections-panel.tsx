@@ -6,7 +6,6 @@ import type { FormEvent } from "react"
 
 import {
   applyChargeAdjustmentAction,
-  reissueRegistrationFeeAction,
   reverseChargeAdjustmentAction,
   reversePaymentAction,
   type FinanceActionResult,
@@ -32,7 +31,6 @@ type CorrectionMode =
   | "manual_credit"
   | "manual_debit"
   | "void_charge"
-  | "reissue_registration"
 
 type CorrectionFeedback = SaveFeedback & {
   field?: "amount" | "reason"
@@ -53,20 +51,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
     ))
     .map((adjustment) => ({ adjustment, charge })))
   const voidableCharges = activeCharges.filter((charge) => charge.canVoid)
-  // A registration fee voided by mistake can be put back; it used to be gone
-  // for good, as onboarding, which issues it, cannot run twice.
-  const canReissueRegistration = ledger.charges.some((charge) => (
-    charge.type === "registration" && charge.status === "void"
-  )) && !ledger.charges.some((charge) => (
-    charge.type === "registration" && charge.status !== "void"
-  ))
-  const [chosenMode, setMode] = useState<CorrectionMode>(
-    activeCharges.length ? "manual_credit" : "reissue_registration",
-  )
-  // Once the registration fee is back, "Issue registration fee again" is gone.
-  const mode: CorrectionMode = chosenMode === "reissue_registration" && !canReissueRegistration
-    ? "manual_credit"
-    : chosenMode
+  const [mode, setMode] = useState<CorrectionMode>("manual_credit")
   const [chargeId, setChargeId] = useState(activeCharges[0]?.id ?? "")
   const [paymentId, setPaymentId] = useState(receipts[0]?.id ?? "")
   const [adjustmentId, setAdjustmentId] = useState(adjustments[0]?.adjustment.id ?? "")
@@ -124,9 +109,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
           ? "Reverse this adjustment? The original record will remain in the audit history."
           : mode === "void_charge"
             ? "Void this charge? The original record will remain in the audit history."
-            : mode === "reissue_registration"
-              ? "Issue the registration fee again, due today? The voided fee stays in the record."
-              : "Apply this adjustment to the selected charge?",
+            : "Apply this adjustment to the selected charge?",
     )
     if (!confirmed) return
 
@@ -143,12 +126,6 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
         result = await reverseChargeAdjustmentAction({
           adjustmentId,
           idempotencyKey: requestKey.current(),
-          reason: reason.trim(),
-        })
-      } else if (mode === "reissue_registration") {
-        result = await reissueRegistrationFeeAction({
-          idempotencyKey: requestKey.current(),
-          playerId: ledger.playerId,
           reason: reason.trim(),
         })
       } else if (mode === "void_charge") {
@@ -198,7 +175,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
     }
   }
 
-  if (!activeCharges.length && !canReissueRegistration) return null
+  if (!activeCharges.length) return null
 
   return (
     <details className={styles.corrections}>
@@ -221,18 +198,15 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
                 markDirty()
               }}
             >
-              <option value="manual_credit" disabled={!activeCharges.length}>Apply credit</option>
-              <option value="manual_debit" disabled={!activeCharges.length}>Apply additional charge</option>
+              <option value="manual_credit">Apply credit</option>
+              <option value="manual_debit">Apply additional charge</option>
               <option value="reverse_payment" disabled={!receipts.length}>Reverse payment</option>
               <option value="reverse_adjustment" disabled={!adjustments.length}>Reverse adjustment</option>
               <option value="void_charge" disabled={!voidableCharges.length}>Void charge</option>
-              {canReissueRegistration ? (
-                <option value="reissue_registration">Issue registration fee again</option>
-              ) : null}
             </select>
           </label>
 
-          {mode === "reissue_registration" ? null : mode === "reverse_payment" ? (
+          {mode === "reverse_payment" ? (
             <label className={styles.field}>
               <span>Recorded payment</span>
               <select name="paymentId" value={paymentId} disabled={pending} onChange={(event) => { setPaymentId(event.target.value); markDirty() }}>

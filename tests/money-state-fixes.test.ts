@@ -249,33 +249,6 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     expect(plan(players.keeper)[0]).toMatchObject({ effectiveTo: null, status: "active" })
   })
 
-  it("ends the fee plan with a 'Fee plan ended' entry, and reversing puts a kept plan back", () => {
-    // "They have left already", keeping the fee plan for a break.
-    changes.endTrainingNow({ playerId: players.keeper, stopFees: false }, context())
-    const receipt = coachRecord(players.keeper).coachManagement!.receipts[0]!
-    expect(receipt).toMatchObject({
-      canRefund: true,
-      refundNeedsTrainingEnded: false,
-      refundWindow: { earliest: "2026-10-02", latest: "2026-10-05" },
-    })
-
-    const recorded = refund(receipt.id, 50_000, "2026-10-04")
-    const [ended] = plan(players.keeper)
-    expect(ended).toMatchObject({ effectiveTo: "2026-10-04", status: "ended" })
-    expect(database.select().from(schema.financialAuditEvents).where(and(
-      eq(schema.financialAuditEvents.eventType, "fee_agreement_ended"),
-      eq(schema.financialAuditEvents.entityId, ended!.id),
-    )).all()).toHaveLength(1)
-
-    expect(coachRecord(players.keeper).coachManagement!.refunds[0]).toMatchObject({
-      restoresFeePlan: true,
-    })
-    reverse(recorded.refund.id)
-    // It used to stay ended on the withdrawal date, so the player was never
-    // billed again and the screens said they were never set up.
-    expect(plan(players.keeper)[0]).toMatchObject({ effectiveTo: null, status: "active" })
-  })
-
   it("puts a stopped plan back to the end of its month when the refund is reversed", () => {
     const payment = pay(players.stopper, 400_000, "2026-10-02")
     changes.endTrainingNow({ playerId: players.stopper, stopFees: true }, context())
@@ -289,13 +262,13 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     const left = viewModel.toPlayerFinancialLedgerView(coachRecord(players.stopper))
     expect(left.feePlan).toMatchObject({ agreedMonthlyFeePaise: 400_000, standing: "ended" })
 
-    // Stop fees had already ended the plan; the refund only moved its end
-    // date, so the activity log does not show the plan ending twice.
     const planEntries = database.select().from(schema.financialAuditEvents)
       .where(eq(schema.financialAuditEvents.entityId, plan(players.stopper)[0]!.id)).all()
-    expect(planEntries.filter((entry) => entry.eventType === "fee_agreement_ended")).toHaveLength(1)
-    expect(planEntries.find((entry) => entry.eventType === "fee_agreement_corrected")?.metadata)
-      .toContain("End date moved to 4 Oct 2026")
+    expect(planEntries.filter((entry) => entry.eventType === "fee_agreement_ended")
+      .some((entry) => entry.metadata.includes("Ended by mid-term withdrawal refund"))).toBe(true)
+    expect(coachRecord(players.stopper).coachManagement!.refunds[0]).toMatchObject({
+      restoresFeePlan: true,
+    })
 
     reverse(recorded.refund.id)
     expect(plan(players.stopper)[0]).toMatchObject({ effectiveTo: "2026-10-31", status: "ended" })
@@ -323,7 +296,6 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     }).run()
     expect(coachRecord(players.returner).coachManagement!.receipts[0]).toMatchObject({
       canRefund: false,
-      refundBlockedByBookedStart: true,
       refundNeedsTrainingEnded: true,
     })
     expect(() => finance.previewRefundAllocations({
@@ -339,7 +311,6 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     changes.cancelTrainingChange({ changeId: bookedId }, context())
     expect(coachRecord(players.returner).coachManagement!.receipts[0]).toMatchObject({
       canRefund: true,
-      refundBlockedByBookedStart: false,
     })
   })
 
@@ -409,7 +380,7 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     })
   })
 
-  it("keeps a player whose registration fee was voided payable, and can issue it again", () => {
+  it("keeps a player whose registration fee was voided payable", () => {
     const registration = finance.resolveExistingRegistrationFee({
       idempotencyKey: "waived-registration",
       playerId: players.waived,
@@ -432,28 +403,6 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
       playerId: players.waived,
       query: academyId(players.waived),
     }, context()).selectedLedger?.playerId).toBe(players.waived)
-
-    const reissued = finance.reissueRegistrationFee({
-      idempotencyKey: "reissue-waived-registration",
-      playerId: players.waived,
-      reason: "Waived by mistake",
-    }, context())
-    expect(reissued).toMatchObject({
-      dueDate: "2026-10-05",
-      lifecycle: "issued",
-      originalAmountPaise: registration.originalAmountPaise,
-      type: "registration",
-    })
-    expect(finance.reissueRegistrationFee({
-      idempotencyKey: "reissue-waived-registration",
-      playerId: players.waived,
-      reason: "Waived by mistake",
-    }, context()).id).toBe(reissued.id)
-    expect(() => finance.reissueRegistrationFee({
-      idempotencyKey: "reissue-waived-registration-again",
-      playerId: players.waived,
-      reason: "Twice",
-    }, context())).toThrow(expect.objectContaining({ code: "CONFLICT" }))
   })
 
   it("reverses a voided fee's concession, so the one-off concession can go on its replacement", () => {
@@ -574,9 +523,7 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     expect(register.rows.find((row) => row.playerId === players.breaker)).toBeUndefined()
 
     const record = coachRecord(players.legacy, secondNovember)
-    expect(record).toMatchObject({ status: "setup_required", trainsWithoutFeePlan: true })
-    expect(finance.getPlayerFeeRecord(players.legacy, { database, now: secondNovember }))
-      .toMatchObject({ trainsWithoutFeePlan: false })
+    expect(record.status).toBe("setup_required")
   })
 
   it("does not offer a refund on the 1st, when every withdrawal date would be refused", () => {

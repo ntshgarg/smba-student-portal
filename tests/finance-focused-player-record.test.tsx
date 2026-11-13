@@ -20,7 +20,6 @@ const archivedLedger: PlayerFinancialLedgerView = {
   feePlanSetupReady: false,
   feePlan: null,
   onboardingComplete: false,
-  trainsWithoutFeePlan: false,
   fullName: "Aarav Bhat",
   management: {
     concessions: [{
@@ -63,7 +62,6 @@ const archivedLedger: PlayerFinancialLedgerView = {
       amountPaise: 50_000,
       canRefund: false,
       refundNeedsTrainingEnded: false,
-      refundBlockedByBookedStart: false,
       refundWindow: null,
       externalReference: null,
       id: "payment-42",

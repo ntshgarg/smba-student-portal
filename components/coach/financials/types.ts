@@ -79,21 +79,14 @@ export type PlayerFinancialLedgerView = {
     /** running: in force with no end; ending: in force, ends on effectiveTo; starting: starts on effectiveFrom; ended: ended on effectiveTo. */
     standing: "running" | "ending" | "starting" | "ended"
     status: "active" | "paused" | "ended"
-    /**
-     * The plan that follows the one in force (a fee change, or a change of
-     * level, batch or plan at the same fee), so a plan ending at the month's
-     * end does not read like a player leaving.
-     */
+    /** The plan that follows the one in force (a fee or plan change). */
     upcoming: {
       agreedMonthlyFeePaise: number
       effectiveFrom: string
       label: string
-      feeChanges: boolean
     } | null
   } | null
   onboardingComplete: boolean
-  /** On a schedule this month with no fee plan for it, so no fee is issued. */
-  trainsWithoutFeePlan: boolean
   enrollmentDefaults: {
     academyPlan: import("@/lib/training/academy-plans").AcademyPlan
     academyPlanLabel: string

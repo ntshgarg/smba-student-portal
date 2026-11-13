@@ -15,7 +15,6 @@ import {
   recordAllocatedPayment,
   recordRefund,
   redateConfirmedTrainingStart,
-  reissueRegistrationFee,
   reverseChargeAdjustment,
   reverseConcessionApplication,
   reversePayment,
@@ -37,7 +36,6 @@ import type {
   RecordRefundInput,
   RedateConfirmedTrainingStartInput,
   RefundAllocationPreview,
-  ReissueRegistrationFeeInput,
   ReversePaymentInput,
   ReverseRefundInput,
   ReverseAdjustmentInput,
@@ -279,14 +277,5 @@ export async function voidChargeAction(
   return runFinanceAction((coachId) => {
     voidCharge(input, { coachId })
     return { message: "Charge voided" }
-  })
-}
-
-export async function reissueRegistrationFeeAction(
-  input: ReissueRegistrationFeeInput,
-): Promise<FinanceActionResult> {
-  return runFinanceAction((coachId) => {
-    reissueRegistrationFee(input, { coachId })
-    return { message: "Registration fee issued again" }
   })
 }

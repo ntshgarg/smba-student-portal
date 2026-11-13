@@ -344,38 +344,24 @@ export function hasCurrentOrFutureMatchingAssignment(
 
 /**
  * A player's training has ended when they have no place on any schedule after
- * today and no move booked that would start one. "They have left already"
- * under End training in Members does exactly this (lib/training/changes.ts
- * endTrainingNow).
- *
- * Head coach, 13 Nov 2026: a mid-term withdrawal refund is recorded only once
- * training has ended. The refund ends the fee plan, and recording it while the
- * player was still on a schedule left them training with no fee plan, so they
- * were silently never billed again.
- *
- * Returns what keeps a player's training from having ended, so the coach is sent to
- * the step that clears it: "on_schedule" (End training in Members, which also
- * cancels any booked move), or "booked_start" for a player with no place who
- * has a start booked. End training is not offered to that player, and the
- * server refuses it ("not on any schedule"), so the booked start has to be
- * cancelled instead. Null once training has ended.
+ * today and no move booked that would start one. A mid-term withdrawal refund
+ * is recorded only then (head coach, 13 Nov 2026).
  */
-export function playerTrainingEndBlocker(
+export function playerTrainingHasEnded(
   database: Executor,
   playerId: string,
   todayKey: string,
-): "on_schedule" | "booked_start" | null {
+) {
   const place = database.select({ id: sessionAssignments.id }).from(sessionAssignments).where(and(
     eq(sessionAssignments.accountId, playerId),
     or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, todayKey)),
   )).get()
-  if (place) return "on_schedule"
-  const bookedMove = database.select({ id: trainingChanges.id }).from(trainingChanges).where(and(
+  if (place) return false
+  return !database.select({ id: trainingChanges.id }).from(trainingChanges).where(and(
     eq(trainingChanges.playerAccountId, playerId),
     eq(trainingChanges.status, "scheduled"),
     eq(trainingChanges.kind, "change"),
   )).get()
-  return bookedMove ? "booked_start" : null
 }
 
 export function readAuditEventByIdempotencyKey(database: Executor, idempotencyKey: string) {
@@ -677,11 +663,6 @@ function loadReceiptRefunds(database: Executor, paymentIds: string[]) {
 }
 
 /**
- * The refunds whose reversal puts the fee plan back: a withdrawal refund
- * recorded from 13 Nov 2026 keeps the plan as it was before the refund in its
- * audit entry (lib/finance/service.ts recordRefund).
- */
-/**
  * How reversing a mid-term withdrawal refund would put its fee plan back, or
  * null when it would not. The reversal (lib/finance/service.ts reverseRefund)
  * applies exactly this, and the coach's confirmation says what it will do from
@@ -969,10 +950,7 @@ function loadPlayerPhaseTwoHistory(
       [...refundsByPayment.values()].flat().map(({ refund }) => refund),
     )
     : null
-  const trainingEndBlocker = includeInternal
-    ? playerTrainingEndBlocker(database, playerId, todayKey)
-    : "on_schedule"
-  const trainingEnded = trainingEndBlocker === null
+  const trainingEnded = includeInternal && playerTrainingHasEnded(database, playerId, todayKey)
   const receiptPairs = paymentRows.map((payment) => {
     const allocations = allocationsByPayment.get(payment.id) ?? []
     const paymentRefunds = refundsByPayment.get(payment.id) ?? []
@@ -1013,6 +991,7 @@ function loadPlayerPhaseTwoHistory(
       return { publicReceipt, coachReceipt: null, coachRefunds: [] }
     }
 
+    let refundWindow: { earliest: string; latest: string } | null = null
     const coachAllocations = allocations.map(({ allocation, charge }) => {
       const activeRefunded = coachContext.refundedPaiseByAllocation.get(allocation.id) ?? 0
       const chargeLedger = chargeView(
@@ -1071,13 +1050,13 @@ function loadPlayerPhaseTwoHistory(
         && chargeLedger.effectiveAmountPaise > 0
         && chargeLedger.outstandingPaise === 0
         && chargeLedger.receivedPaise === chargeLedger.effectiveAmountPaise
+      if (withdrawalEligible) refundWindow ??= window
       return {
         ...publicReceipt.allocations.find((item) => item.id === allocation.id)!,
         paymentAllocationId: allocation.id,
         refundablePaise: withdrawalEligible
           ? Math.max(0, allocation.amountPaise - Number(activeRefunded))
           : 0,
-        refundWindow: withdrawalEligible ? window : null,
       }
     })
     const coachRefunds = paymentRefunds.map(({ refund }) => {
@@ -1099,25 +1078,14 @@ function loadPlayerPhaseTwoHistory(
       publicReceipt,
       coachReceipt: {
         ...publicReceipt,
-        allocations: coachAllocations.map((allocation) => ({
-          amountPaise: allocation.amountPaise,
-          billingPeriod: allocation.billingPeriod,
-          chargeId: allocation.chargeId,
-          chargeType: allocation.chargeType,
-          description: allocation.description,
-          feeReference: allocation.feeReference,
-          id: allocation.id,
-          paymentAllocationId: allocation.paymentAllocationId,
-          refundablePaise: allocation.refundablePaise,
-        })),
+        allocations: coachAllocations,
         refundablePaise: coachAllocations.reduce(
           (total, allocation) => total + allocation.refundablePaise,
           0,
         ),
         canRefund: refundable && trainingEnded,
         refundNeedsTrainingEnded: refundable && !trainingEnded,
-        refundBlockedByBookedStart: refundable && trainingEndBlocker === "booked_start",
-        refundWindow: coachAllocations.find((allocation) => allocation.refundWindow)?.refundWindow ?? null,
+        refundWindow,
         recordRevision: payment.recordRevision,
         internalNote: payment.internalNote,
       },
@@ -1325,7 +1293,6 @@ export function loadPlayerFeeRecord(
     financeTrackingMonth: activation?.trackingMonth ?? null,
     registrationResolutionRequired,
     status: trainsWithoutFeePlan && feeStatus !== "overdue" ? "setup_required" : feeStatus,
-    trainsWithoutFeePlan,
     currentBalancePaise: activeCharges.reduce(
       (total, charge) => total + charge.outstandingPaise,
       0,

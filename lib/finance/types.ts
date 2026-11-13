@@ -110,11 +110,6 @@ export type CoachReceiptView = Omit<PlayerReceiptView, "allocations"> & {
    * is ended in Members (head coach, 13 Nov 2026).
    */
   refundNeedsTrainingEnded: boolean
-  /**
-   * The player has no place but a start is booked in Members, so the booked
-   * start, not End training, is what has to be cancelled before a refund.
-   */
-  refundBlockedByBookedStart: boolean
   /** The days the member's withdrawal can be dated, when a refund is possible. */
   refundWindow: { earliest: string; latest: string } | null
   recordRevision: number
@@ -220,6 +215,13 @@ export type FeeAgreementView = {
  * classification. Conflating the two is what used to make the fee-plan editor
  * disappear for such a player instead of letting the coach set their fee.
  */
+export type FeeSetupDefaults = {
+  academyPlan: AcademyPlan
+  level: TrainingProgramme
+  batch: TrainingBatch
+  suggestedMonthlyFeePaise: number | null
+}
+
 /**
  * A player's fee plans read against today, so a screen can say which fee is in
  * force, which one is coming and whether the plans have ended. `feeAgreement`
@@ -240,13 +242,6 @@ export type FeePlanStanding = {
   endsOn: string | null
 }
 
-export type FeeSetupDefaults = {
-  academyPlan: AcademyPlan
-  level: TrainingProgramme
-  batch: TrainingBatch
-  suggestedMonthlyFeePaise: number | null
-}
-
 export type PlayerFeeRecord = {
   playerId: string
   academyId: string
@@ -261,12 +256,6 @@ export type PlayerFeeRecord = {
   feePlans: FeePlanStanding
   /** Player onboarding has finished, so a missing fee plan is not onboarding's to set. */
   onboardingComplete: boolean
-  /**
-   * Coach view only (always false for the family): the player finished
-   * onboarding and is on a schedule this month with no fee plan for it, so no
-   * monthly fee will be issued (listPlayersTrainingWithoutFeePlan).
-   */
-  trainsWithoutFeePlan: boolean
   enrollmentDefaults?: FeeSetupDefaults | null
   setupDefaults: FeeSetupDefaults | null
   registrationCharge: ChargeView | null
@@ -469,13 +458,6 @@ export type ReverseAdjustmentInput = {
 export type VoidChargeInput = {
   chargeId: string
   expectedChargeRevision: number
-  reason: string
-  idempotencyKey: string
-}
-
-/** Puts back a registration fee that was voided, for "Issue registration fee again". */
-export type ReissueRegistrationFeeInput = {
-  playerId: string
   reason: string
   idempotencyKey: string
 }

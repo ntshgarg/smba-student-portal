@@ -67,7 +67,7 @@ import {
   loadPeriodAssignmentIndex,
   loadPlayerFeeRecord,
   planRestoreAfterWithdrawalReversal,
-  playerTrainingEndBlocker,
+  playerTrainingHasEnded,
   readActiveFeeAgreement,
   readActivePlayer,
   readAuditEventByIdempotencyKey,
@@ -129,7 +129,6 @@ import {
   type RecordRefundResult,
   type RedateConfirmedTrainingStartInput,
   type RedateConfirmedTrainingStartResult,
-  type ReissueRegistrationFeeInput,
   type ResolveExistingRegistrationFeeInput,
   type ReversePaymentInput,
   type ReverseRefundInput,
@@ -144,7 +143,7 @@ import {
   type EndFeeAgreementResult,
   type FeeAgreementView,
 } from "@/lib/finance/types"
-import { formatDateKey, getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
+import { getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
 import { scheduleTermFinished } from "@/lib/sessions/term"
 import { academyPlanIsValid } from "@/lib/training/academy-plans"
@@ -3048,23 +3047,13 @@ function withdrawalRefundablePaymentAllocations(
     })
 }
 
-/**
- * Head coach, 13 Nov 2026: a mid-term withdrawal refund is recorded only after
- * the player's training has been ended in Members ("They have left already").
- * Recording the refund ends the fee plan, so recording it for a player still
- * on a schedule left them training with no fee plan and never billed again.
- */
-const TRAINING_STILL_RUNNING_MESSAGE = "End this player’s training in Members first: choose End training, then “They have left already”. A mid-term withdrawal refund can only be recorded once they have left."
-// End training is not offered to a player with no place, so a booked start
-// is cancelled instead (Cancel scheduled change in Members).
-const BOOKED_START_MESSAGE = "This player has a start booked in Members. If they have left, open their record in Members and choose Cancel scheduled change first. A mid-term withdrawal refund can only be recorded once they have left."
-
+// Head coach, 13 Nov 2026: a withdrawal refund ends the fee plan, so it is
+// recorded only after the player's training has ended in Members.
 function requireTrainingEnded(database: SmbaDatabaseExecutor, playerId: string, now: Date) {
-  const blocker = playerTrainingEndBlocker(database, playerId, getAcademyDateKey(now))
-  if (blocker) {
+  if (!playerTrainingHasEnded(database, playerId, getAcademyDateKey(now))) {
     financeError(
       "CONFLICT",
-      blocker === "booked_start" ? BOOKED_START_MESSAGE : TRAINING_STILL_RUNNING_MESSAGE,
+      "End this player’s training in Members first: choose End training, then “They have left already” (or Cancel scheduled change for a booked start). A mid-term withdrawal refund can only be recorded once they have left.",
       "withdrawalEffectiveOn",
     )
   }
@@ -3565,29 +3554,18 @@ export function recordRefund(
       },
       now,
     })
-    // The refund ends the plan, so "Fee plan ended" in the activity log finds
-    // it like every other ending. A plan that had already ended (Stop fees)
-    // only has its end date moved, which is a correction, not a second ending.
-    const planWasEnded = item.agreement.status === "ended"
     insertAudit(tx, {
       actorId: coachId,
       createId,
       entityId: item.agreement.id,
       entityType: "fee_agreement",
-      eventType: planWasEnded ? "fee_agreement_corrected" : "fee_agreement_ended",
+      eventType: "fee_agreement_ended",
       metadata: {
         agreementId: item.agreement.id,
         effectiveTo: withdrawalEffectiveOn,
         playerId: item.agreement.playerAccountId,
         previous: previousAgreement,
-        reason: planWasEnded
-          ? `End date moved to ${formatDateKey(withdrawalEffectiveOn, {
-            day: "numeric",
-            month: "short",
-            weekday: undefined,
-            year: "numeric",
-          })} by mid-term withdrawal refund ${refundReference}`
-          : `Ended by mid-term withdrawal refund ${refundReference}`,
+        reason: `Ended by mid-term withdrawal refund ${refundReference}`,
         refundId,
       },
       now,
@@ -4621,90 +4599,6 @@ export function voidCharge(
     const updated = loadChargeView(tx, charge.id, now)
     if (!updated) throw new Error("The void Charge is unavailable.")
     return updated
-  }, { behavior: "immediate" })
-}
-
-/**
- * "Issue registration fee again" under Corrections: puts back a registration
- * fee that was voided. Voiding one used to strand the player: nothing could
- * issue it again, and onboarding, the only place that issues it, refuses to
- * run twice. The new fee is a new record, for the amount and description of
- * the one voided, due today; the voided one stays as it was.
- */
-export function reissueRegistrationFee(
-  input: ReissueRegistrationFeeInput,
-  {
-    coachId,
-    createFeeReference = createOpaqueFeeReference,
-    createId = randomUUID,
-    database = initializeDatabase(),
-    now = new Date(),
-  }: CoachContext,
-): ChargeView {
-  const idempotencyKey = validateIdempotencyKey(input.idempotencyKey)
-  const reason = requireText(input.reason, "reason", "A reason")
-  return database.transaction((tx) => {
-    requireCoach(tx, coachId)
-    requireFinanceActive(tx)
-    const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
-    if (replay) {
-      const metadata = parseAuditMetadata<{ playerId?: string; reason?: string }>(replay.metadata)
-      if (replay.eventType !== "charge_issued" || metadata.playerId !== input.playerId
-        || metadata.reason !== reason) {
-        financeError("IDEMPOTENCY_CONFLICT", "This request was already used differently.")
-      }
-      const charge = loadChargeView(tx, replay.entityId, now)
-      if (!charge) throw new Error("The issued registration fee is unavailable.")
-      return charge
-    }
-    requireActiveFinanceTarget(tx, input.playerId)
-    const registrations = tx.select().from(financialCharges).where(and(
-      eq(financialCharges.playerAccountId, input.playerId),
-      eq(financialCharges.type, "registration"),
-    )).orderBy(desc(financialCharges.issuedAt), desc(financialCharges.id)).all()
-    if (registrations.some((charge) => charge.lifecycle === "issued")) {
-      financeError("CONFLICT", "This player already has a registration fee.")
-    }
-    const voided = registrations.find((charge) => charge.lifecycle === "void")
-    if (!voided) {
-      financeError("NOT_FOUND", "Only a voided registration fee can be issued again.")
-    }
-    const id = createId()
-    tx.insert(financialCharges).values({
-      id,
-      feeReference: nextFeeReference(tx, createFeeReference),
-      playerAccountId: input.playerId,
-      type: "registration",
-      billingPeriod: null,
-      description: voided.description,
-      originalAmountPaise: voided.originalAmountPaise,
-      currency: FINANCE_CURRENCY,
-      dueDate: getAcademyDateKey(now),
-      lifecycle: "issued",
-      recordRevision: 0,
-      issuedByAccountId: coachId,
-      issuedAt: now,
-    }).run()
-    insertAudit(tx, {
-      actorId: coachId,
-      createId,
-      entityId: id,
-      entityType: "charge",
-      eventType: "charge_issued",
-      idempotencyKey,
-      metadata: {
-        amountPaise: voided.originalAmountPaise,
-        billingPeriod: null,
-        playerId: input.playerId,
-        reason,
-        replacesChargeId: voided.id,
-        type: "registration",
-      },
-      now,
-    })
-    const charge = loadChargeView(tx, id, now)
-    if (!charge) throw new Error("The issued registration fee is unavailable.")
-    return charge
   }, { behavior: "immediate" })
 }
 

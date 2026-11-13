@@ -132,24 +132,11 @@ export function ReceiptHistory({
 
                   {receipt.canRefund && !readOnly ? <RefundForm receipt={receipt} /> : null}
                   {receipt.refundNeedsTrainingEnded && !readOnly ? (
-                    // Shown on every refundable receipt, so it is worded for a
-                    // player who is leaving, not as a step for everyone.
-                    <p className={styles.refundNeedsTrainingEnded}>
-                      {receipt.refundBlockedByBookedStart ? (
-                        <>
-                          If this player is leaving and the unused days of this fee are to be
-                          given back: they have a start booked in Members. Cancel it there
-                          first (Cancel scheduled change), then record the refund here.{" "}
-                        </>
-                      ) : (
-                        <>
-                          If this player is leaving and the unused days of this fee are to be
-                          given back: end their training in Members first (End training, then
-                          &ldquo;They have left already&rdquo;), then record the refund here.{" "}
-                        </>
-                      )}
+                    <p className={styles.managedInMembers}>
+                      If this player is leaving, end their training in Members first, then record
+                      the refund here.{" "}
                       <Link href={`/coach/members?player=${encodeURIComponent(ledger.playerId)}`}>
-                        Open the player&apos;s record in Members
+                        Open in Members
                       </Link>
                     </p>
                   ) : null}

@@ -5,7 +5,7 @@ import os from "node:os"
 import path from "node:path"
 
 import Database from "better-sqlite3"
-import { and, eq, inArray, isNull } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/better-sqlite3"
 import { migrate } from "drizzle-orm/better-sqlite3/migrator"
 import { readMigrationFiles } from "drizzle-orm/migrator"
@@ -569,6 +569,7 @@ async function applicationModules(target: string) {
     announcementService,
     credentialService,
     holidayService,
+    trainingChanges,
   ] = await Promise.all([
     import("../../lib/db/client"),
     import("../../lib/auth/account-service"),
@@ -581,6 +582,7 @@ async function applicationModules(target: string) {
     import("../../lib/announcements/service"),
     import("../../lib/auth/credential-service"),
     import("../../lib/sessions/holidays"),
+    import("../../lib/training/changes"),
   ])
   return {
     database: initializeDatabase(),
@@ -594,6 +596,7 @@ async function applicationModules(target: string) {
     announcementService,
     credentialService,
     holidayService,
+    trainingChanges,
   }
 }
 
@@ -1247,6 +1250,7 @@ async function seedFinancials(target: string) {
     dbSchema,
     financeConfig,
     financeService,
+    trainingChanges,
   } = await applicationModules(target)
   const now = new Date(`${FINANCE_REFERENCE_DATE}T12:00:00+05:30`)
   const createFeeReference = deterministicFeeReferenceGenerator()
@@ -1538,54 +1542,15 @@ async function seedFinancials(target: string) {
   if (refundablePayments.length !== 2) {
     throw new Error(`${selectedProfile.key} fixture requires two deterministic paid receipts.`)
   }
-  /*
-   * These two refunds model ones recorded before 13 Nov 2026, when a refund
-   * could be recorded while the player was still on a schedule. The service
-   * now records one only once the player's training has ended ("They have
-   * left already" in Members), so their places are closed for the call and
-   * reopened after it. Before that rule a refund kept no record of the fee
-   * plan's earlier state, so that record is taken off again (legacyRefunds
-   * below) and the reversed refund leaves its plan ended, as such a reversal
-   * does: both players keep training with an ended plan, the state the coach
-   * now sees as "Setup required". A repeated seed pass replays the refunds,
-   * which needs no place closed, and finds nothing to reopen.
-   */
-  // A refund recorded before 13 Nov 2026 stored no `previousAgreement` and
-  // wrote no fee plan entry of its own (lib/finance/service.ts recordRefund).
-  const legacyRefunds = (refundIds: string[]) => {
-    const auditRows = database.select().from(dbSchema.financialAuditEvents)
-      .where(inArray(dbSchema.financialAuditEvents.entityType, ["refund", "fee_agreement"])).all()
-    auditRows.forEach((row) => {
-      const metadata = JSON.parse(row.metadata) as Record<string, unknown>
-      if (row.entityType === "refund" && row.eventType === "refund_recorded"
-        && refundIds.includes(row.entityId) && "previousAgreement" in metadata) {
-        delete metadata.previousAgreement
-        database.update(dbSchema.financialAuditEvents)
-          .set({ metadata: JSON.stringify(metadata) })
-          .where(eq(dbSchema.financialAuditEvents.id, row.id)).run()
-      }
-      if (row.entityType === "fee_agreement"
-        && typeof metadata.refundId === "string" && refundIds.includes(metadata.refundId)
-        && (row.eventType === "fee_agreement_ended" || row.eventType === "fee_agreement_corrected")
-        && String(metadata.reason ?? "").includes("by mid-term withdrawal refund")) {
-        database.delete(dbSchema.financialAuditEvents)
-          .where(eq(dbSchema.financialAuditEvents.id, row.id)).run()
-      }
-    })
-  }
-  const reopenedPlaces = refundablePayments.flatMap(({ playerId }) => (
-    database.select({ id: dbSchema.sessionAssignments.id })
+  // A withdrawal refund is recorded only once the player's training has ended.
+  refundablePayments.forEach(({ playerId }) => {
+    const onSchedule = database.select({ id: dbSchema.sessionAssignments.id })
       .from(dbSchema.sessionAssignments)
       .where(and(
         eq(dbSchema.sessionAssignments.accountId, playerId),
         isNull(dbSchema.sessionAssignments.effectiveTo),
-      )).all()
-      .map(({ id }) => id)
-  ))
-  reopenedPlaces.forEach((id) => {
-    database.update(dbSchema.sessionAssignments)
-      .set({ effectiveTo: FINANCE_REFERENCE_DATE })
-      .where(eq(dbSchema.sessionAssignments.id, id)).run()
+      )).get()
+    if (onSchedule) trainingChanges.endTrainingNow({ playerId, stopFees: true }, context)
   })
   const recordedRefunds = refundablePayments.map((payment, index) => financeService.recordRefund({
     paymentId: payment.paymentId,
@@ -1593,7 +1558,7 @@ async function seedFinancials(target: string) {
     // is required for an identical idempotent command on later seed passes.
     expectedPaymentRevision: 0,
     expectedChargeRevision: 1,
-    expectedAgreementRevision: 0,
+    expectedAgreementRevision: 1,
     amountPaise: index === 0 ? 50_000 : 25_000,
     withdrawalEffectiveOn: FINANCE_REFERENCE_DATE,
     refundedOn: FINANCE_REFERENCE_DATE,
@@ -1606,18 +1571,12 @@ async function seedFinancials(target: string) {
     }],
     mutationId: mutationId(100 + index),
   }, context))
-  legacyRefunds(recordedRefunds.map(({ refund }) => refund.id))
   financeService.reverseRefund({
     refundId: recordedRefunds[1].refund.id,
     expectedRefundRevision: 0,
     reason: "Deterministic reversed Refund fixture",
     mutationId: mutationId(102),
   }, context)
-  reopenedPlaces.forEach((id) => {
-    database.update(dbSchema.sessionAssignments)
-      .set({ effectiveTo: null })
-      .where(eq(dbSchema.sessionAssignments.id, id)).run()
-  })
 
   if (concessionTargets.length !== 2) {
     throw new Error(`${selectedProfile.key} fixture requires two deterministic unpaid Charges.`)
@@ -2284,12 +2243,18 @@ function verify(target: string, expectedStage?: Stage) {
       if (summary.assignments !== expectedAssignments) {
         problems.push(`Loaded ${selectedProfile.key} profile must contain ${expectedAssignments} assignments.`)
       }
+      // Players given a withdrawal refund (seedFinancials) have left training.
+      const withdrawn = db.prepare(`
+        select count(*) as players, coalesce(sum(batch = 'Weekday'), 0) as weekday
+        from player_enrollments
+        where account_id in (select player_account_id from refunds where purpose = 'mid_term_withdrawal')
+      `).get() as { players: number; weekday: number }
       const activeAssignmentCount = db.prepare(`
         select count(*) as count from session_assignments where effective_to is null
       `).get() as { count: number }
-      if (activeAssignmentCount.count !== expectedActiveAssignments) {
+      if (activeAssignmentCount.count !== expectedActiveAssignments - withdrawn.players) {
         problems.push(
-          `Loaded ${selectedProfile.key} profile must contain ${expectedActiveAssignments} active assignments.`,
+          `Loaded ${selectedProfile.key} profile must contain ${expectedActiveAssignments - withdrawn.players} active assignments.`,
         )
       }
       const lifecycle = db.prepare(`
@@ -2300,8 +2265,8 @@ function verify(target: string, expectedStage?: Stage) {
           sum(case when a.archived_at is not null then 1 else 0 end) as archived
         from player_enrollments e join accounts a on a.id = e.account_id
       `).get() as { active: number; archived: number; paused: number; unassigned: number }
-      if (lifecycle.active !== players.length - 6
-        || lifecycle.paused !== 3
+      if (lifecycle.active !== players.length - 6 - withdrawn.players
+        || lifecycle.paused !== 3 + withdrawn.players
         || lifecycle.unassigned !== 2
         || lifecycle.archived !== 1) {
         problems.push(
@@ -2349,7 +2314,7 @@ function verify(target: string, expectedStage?: Stage) {
       })
       const expectedWeekdayAssignments = players.filter((player) => (
         player.batch === "Weekday" && player.finalState === "active"
-      )).length
+      )).length - withdrawn.weekday
       if (weekdayCoverage.length !== expectedWeekdayAssignments) {
         problems.push(
           `Loaded stage contains ${weekdayCoverage.length} Weekday assignments instead of ${expectedWeekdayAssignments}.`,
@@ -2458,8 +2423,6 @@ function verify(target: string, expectedStage?: Stage) {
         || financeLifecycle.withdrawalCredits !== 2) {
         problems.push("Withdrawal Refunds must retain their dates and linked unused-training credits.")
       }
-      // Both fixture refunds model ones recorded before 13 Nov 2026, so the
-      // reversed one leaves its plan closed too.
       if (financeLifecycle.activeAgreements
           !== financePlayerCount - financeLifecycle.withdrawalPlayers
         || financeLifecycle.endedAgreements < financeLifecycle.withdrawalPlayers + 1) {

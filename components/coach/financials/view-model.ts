@@ -27,8 +27,6 @@ function feePlanView(standing: FeePlanStanding): PlayerFinancialLedgerView["feeP
     ? {
         agreedMonthlyFeePaise: standing.upcoming.agreedMonthlyFeePaise,
         effectiveFrom: standing.upcoming.effectiveFrom,
-        feeChanges: standing.upcoming.agreedMonthlyFeePaise
-          !== standing.current.agreedMonthlyFeePaise,
         label: planLabel(standing.upcoming),
       }
     : null
@@ -88,7 +86,6 @@ export function toPlayerFinancialLedgerView(ledger: PlayerFeeRecord): PlayerFina
     feePlanSetupReady: ledger.feePlanSetupReady,
     feePlan: feePlanView(ledger.feePlans),
     onboardingComplete: ledger.onboardingComplete,
-    trainsWithoutFeePlan: ledger.trainsWithoutFeePlan,
     enrollmentDefaults: ledger.enrollmentDefaults ? {
       ...ledger.enrollmentDefaults,
       academyPlanLabel: academyPlanLabel(ledger.enrollmentDefaults.academyPlan),
