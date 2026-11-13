@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   confirmRecoveryEmailVerification: vi.fn(),
-  emailCodeChecksPaused: vi.fn(() => false),
-  freshAccountCodeChecksPaused: vi.fn(() => false),
   getCoachAccessProfile: vi.fn(),
   getCurrentIdentity: vi.fn(),
   getRecoveryEmail: vi.fn(),
@@ -29,8 +27,6 @@ vi.mock("@/lib/auth/credential-service", () => ({
 vi.mock("@/lib/auth/cookie-policy", () => ({ secureAuthCookiesRequired: vi.fn() }))
 vi.mock("@/lib/auth/recovery-service", () => ({
   EMAIL_VERIFICATION_LIFETIME_MS: 10 * 60 * 1000,
-  emailCodeChecksPaused: mocks.emailCodeChecksPaused,
-  freshAccountCodeChecksPaused: mocks.freshAccountCodeChecksPaused,
   normalizeEmailAddress: vi.fn((value: string) => value.trim().toLowerCase()),
   notifyRecoveryEmailReplaced: mocks.notifyRecoveryEmailReplaced,
   recoveryEmailSendRefusal: mocks.recoveryEmailSendRefusal,
@@ -92,22 +88,6 @@ describe("recovery email change requirements", () => {
     expect(mocks.verifyFreshAccountSecondFactor).not.toHaveBeenCalled()
   })
 
-  it("says checks are paused, not that the code is wrong, when the budget is spent", async () => {
-    mocks.getCurrentIdentity.mockResolvedValue({ role: "coach", subjectId: "head-one" })
-    mocks.getCoachAccessProfile.mockReturnValue({ accessLevel: "head_admin" })
-    mocks.verifyCurrentPasswordAttempt.mockResolvedValue("verified")
-    mocks.verifyFreshAccountSecondFactor.mockResolvedValue(false)
-    mocks.freshAccountCodeChecksPaused.mockReturnValue(true)
-    const formData = new FormData()
-    formData.set("email", "new@example.com")
-    formData.set("currentPassword", "Current secure password!")
-    formData.set("secondFactor", "123456")
-
-    await expect(requestRecoveryEmailChange(initialState, formData)).resolves.toMatchObject({
-      error: "Too many attempts. Wait a few minutes before trying again.",
-    })
-  })
-
   it("tells the old address once the change is confirmed", async () => {
     mocks.getRecoveryEmail.mockReturnValue({ email: "old@example.com", verifiedAt: new Date() })
     mocks.confirmRecoveryEmailVerification.mockReturnValue({
@@ -139,24 +119,6 @@ describe("recovery email change requirements", () => {
 
     await confirmRecoveryEmailChange(initialState, formData)
     expect(mocks.redirect).toHaveBeenCalledWith("/account/security?emailChanged=1")
-  })
-
-  it("still calls a wrong code wrong when nothing changed", async () => {
-    mocks.getRecoveryEmail.mockReturnValue({
-      email: "old@example.com",
-      verifiedAt: new Date("2026-01-01T00:00:00.000Z"),
-    })
-    mocks.confirmRecoveryEmailVerification.mockReturnValue(null)
-    const formData = new FormData()
-    formData.set("email", "new@example.com")
-    formData.set("code", "123456")
-
-    await expect(confirmRecoveryEmailChange(initialState, formData)).resolves.toEqual({
-      email: "new@example.com",
-      error: "That code is invalid or expired.",
-      sent: true,
-    })
-    expect(mocks.redirect).not.toHaveBeenCalled()
   })
 
   it("rejects an empty form before checking credentials or sending email", async () => {

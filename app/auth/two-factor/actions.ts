@@ -12,6 +12,7 @@ import {
   releaseSecondFactorAttempt,
   reserveLoginAttempt,
   reserveSecondFactorAttempt,
+  secondFactorChecksPaused,
   verifyCurrentPassword,
 } from "@/lib/auth/credential-service"
 import {
@@ -48,6 +49,7 @@ export type TotpReconnectState = {
 }
 
 const TOO_MANY_SECOND_FACTOR_ATTEMPTS = "Too many attempts. Wait a few minutes before trying again."
+// Shown instead of "wrong code" while the authenticator lock stands.
 const SECOND_FACTOR_LOCKED =
   "Too many codes were tried, so code checks are paused for up to 15 minutes. Wait, then enter a fresh code from your authenticator app. Recovery codes are refused until the pause ends too."
 
@@ -66,41 +68,14 @@ function hasVerifiedAuthenticator(accountId: string) {
     .get())
 }
 
-/*
- * Better Auth's sign-in lock on the authenticator: eight wrong codes and every
- * code, right or wrong, is refused for fifteen minutes. The library refuses with
- * its own error, which these actions used to answer "That code was not
- * accepted" -- so a coach typing the right code from the phone was told it was
- * wrong, over and over, and then spent recovery codes that were refused the
- * same way. The lock is read first so the coach is told to wait instead, and
- * no guess is spent while it stands.
- */
-function authenticatorSignInLocked(accountId: string) {
-  const factor = initializeDatabase().select({ lockedUntil: authTwoFactors.lockedUntil })
-    .from(authTwoFactors)
-    .where(eq(authTwoFactors.userId, accountId))
-    .get()
-  return Boolean(factor?.lockedUntil && factor.lockedUntil > new Date())
-}
-
 function isTooManyRequests(error: unknown) {
   if (typeof error !== "object" || error === null) return false
   const status = (error as { status?: unknown }).status
   return status === "TOO_MANY_REQUESTS" || status === 429
 }
 
-/*
- * The coach has just connected a new authenticator, so a reset request still
- * waiting for the owner can only do harm now: approving it would wipe the
- * authenticator they just set up and sign them out everywhere. Withdrawn here.
- * Never allowed to change what the person sees.
- *
- * Signing in with a code does not withdraw it. The code may come from the very
- * phone, or the printed recovery codes, the request is about -- in a stolen
- * bag -- and the owner's approval is then the coach's only way to shut that
- * person out. A coach who simply found the phone cancels the request from
- * Account security.
- */
+// A newly connected authenticator withdraws any waiting reset request; approving it now would only wipe the new one.
+// Signing in with a code does not: that code may come from the lost phone the request is about.
 function withdrawStaleResetRequest(
   accountId: string,
   reason: "authenticator_connected",
@@ -515,7 +490,7 @@ export async function verifyTotpSignIn(
   // past it. The account's own budget is spent here first, as a single step.
   const accountId = await challengedAccountId(requestHeaders)
   if (!accountId) return { error: SIGN_IN_CHALLENGE_EXPIRED }
-  if (authenticatorSignInLocked(accountId)) {
+  if (secondFactorChecksPaused(accountId, "challenge")) {
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: SECOND_FACTOR_LOCKED }
   }
@@ -554,7 +529,7 @@ export async function verifyBackupCodeSignIn(
   if (!accountId) return { error: SIGN_IN_CHALLENGE_EXPIRED }
   // While the lock stands a recovery code is refused like any other, so say
   // so before the coach spends one.
-  if (authenticatorSignInLocked(accountId)) {
+  if (secondFactorChecksPaused(accountId, "challenge")) {
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: SECOND_FACTOR_LOCKED }
   }

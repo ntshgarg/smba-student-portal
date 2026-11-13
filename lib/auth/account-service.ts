@@ -100,12 +100,7 @@ export function registrationIdentity(fullName: string, email: string) {
   }
 }
 
-/**
- * Whether registration code checks for this name and address are paused from
- * this connection, so a refused code can be answered "wait" rather than
- * "invalid". Read-only, and every key behind it is spent from the requester's
- * own address, so it says nothing about whether the identity exists.
- */
+/** Whether registration code checks are paused from this connection. Read-only. */
 export function registrationCodeChecksPaused(input: {
   email: string
   fullName: string
@@ -117,7 +112,6 @@ export function registrationCodeChecksPaused(input: {
   const identity = registrationIdentity(normalizeFullName(input.fullName), input.email)
   if (!identity) return false
   return emailCodeChecksPaused({
-    kind: "registration",
     security: input.security,
     subjectKey: identity.subjectKey,
   }, options)

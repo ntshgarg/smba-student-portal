@@ -43,8 +43,6 @@ vi.mock("@/lib/auth/credential-service", () => ({
 vi.mock("@/lib/auth/cookie-policy", () => ({ secureAuthCookiesRequired: vi.fn() }))
 vi.mock("@/lib/auth/recovery-service", () => ({
   EMAIL_VERIFICATION_LIFETIME_MS: 10 * 60 * 1000,
-  emailCodeChecksPaused: vi.fn(() => false),
-  freshAccountCodeChecksPaused: vi.fn(() => false),
   normalizeEmailAddress: vi.fn((value: string) => value.trim().toLowerCase()),
   notifyRecoveryEmailReplaced: vi.fn(async () => false),
   recoveryEmailSendRefusal: vi.fn(() => null),

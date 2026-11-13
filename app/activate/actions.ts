@@ -8,6 +8,7 @@ import {
   requestRegistrationStatus,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
+import { CODE_CHECKS_PAUSED_MESSAGE } from "@/lib/auth/registration-form"
 import {
   ACTIVATION_CLAIM_COOKIE,
   ACTIVATION_CLAIM_LIFETIME_MS,
@@ -19,8 +20,6 @@ import type { RegistrationStatusState } from "@/lib/auth/registration-form"
 
 /** One answer for every unusable code -- see confirmRegistrationStatusCode. */
 const INVALID_CODE_MESSAGE = "That code is invalid or expired."
-const CODE_CHECKS_PAUSED_MESSAGE =
-  "Too many codes were tried from this connection. Wait 15 minutes, then ask for a new code: this one will have expired by then."
 
 function valuesFrom(formData: FormData) {
   return {
@@ -101,7 +100,6 @@ export async function confirmRegistrationStatusCode(
     security: requestSecurityContext(requestHeaders),
   })
   if (!result) {
-    // A pause from this connection is named as one; see app/login/actions.ts.
     return {
       ...base,
       error: registrationCodeChecksPaused({

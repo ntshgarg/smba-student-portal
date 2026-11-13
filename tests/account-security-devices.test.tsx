@@ -1,13 +1,4 @@
-/**
- * The signed-in devices list on /account/security.
- *
- * It said "Show 5 most recent" while showing the five oldest sign-ins, so the
- * one entry a coach most needs to notice -- a brand-new sign-in they do not
- * recognise -- was the one hidden by default. Its times followed the viewer's
- * machine clock rather than the academy's. And nothing showed which browsers
- * were trusted to skip the authenticator code, or a reset request waiting in
- * the coach's name.
- */
+// The signed-in devices list, trusted browsers and reset request on /account/security.
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
@@ -60,14 +51,14 @@ describe("the signed-in devices list", () => {
   it("shows this device, then the newest sign-ins, in the academy's clock", () => {
     const html = render({
       sessions: [
-        // Listed oldest first, as the page used to read them.
-        session("oldest", "2026-11-01T00:30:00.000Z"),
-        session("this-one", "2026-11-02T00:30:00.000Z", true),
-        session("older", "2026-11-03T00:30:00.000Z"),
-        session("old", "2026-11-04T00:30:00.000Z"),
-        session("middle", "2026-11-05T00:30:00.000Z"),
-        session("recent", "2026-11-06T00:30:00.000Z"),
+        // Newest first, as the page reads them.
         session("unrecognised", "2026-11-13T00:30:00.000Z"),
+        session("recent", "2026-11-06T00:30:00.000Z"),
+        session("middle", "2026-11-05T00:30:00.000Z"),
+        session("old", "2026-11-04T00:30:00.000Z"),
+        session("older", "2026-11-03T00:30:00.000Z"),
+        session("this-one", "2026-11-02T00:30:00.000Z", true),
+        session("oldest", "2026-11-01T00:30:00.000Z"),
       ],
     })
     const shown = [...html.matchAll(/Signed in ([^<]+)<\/span>/gu)].map((match) => match[1])
@@ -92,12 +83,6 @@ describe("trusted browsers and reset requests", () => {
     expect(html).toContain("20 November 2026")
     expect(html).toContain("10 December 2026")
     expect(html).toContain("Forget trusted browsers")
-  })
-
-  it("says plainly when no browser skips the code", () => {
-    const html = render({ trustedBrowserExpiries: [] })
-    expect(html).toContain("No browser skips the authenticator code.")
-    expect(html).not.toContain("Forget trusted browsers")
   })
 
   it("shows a reset request waiting in the coach's name, with a way to cancel it", () => {

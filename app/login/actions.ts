@@ -38,6 +38,7 @@ import {
 } from "@/lib/auth/security-context"
 import { clearDatabaseSession } from "@/lib/auth/session"
 import {
+  CODE_CHECKS_PAUSED_MESSAGE,
   type RegistrationField,
   type RegistrationFormState,
   type RegistrationValues,
@@ -81,14 +82,6 @@ export type { RegistrationFormState } from "@/lib/auth/registration-form"
 
 /** One message for every way a code can be unusable -- see confirmRegistrationCode. */
 const INVALID_CODE_MESSAGE = "That code is invalid or expired."
-/*
- * The one exception: checks paused from this connection. Every key behind the
- * pause was spent from here, so naming it reveals nothing about the identity,
- * and during a sign-up session on shared wifi it is the difference between a
- * family waiting a few minutes and a family deciding the code is broken.
- */
-const CODE_CHECKS_PAUSED_MESSAGE =
-  "Too many codes were tried from this connection. Wait 15 minutes, then ask for a new code: this one will have expired by then."
 
 function registrationValuesFrom(formData: FormData): RegistrationValues {
   return {

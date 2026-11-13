@@ -18,7 +18,6 @@ import {
   releaseSecondFactorAttempt,
   reserveLoginAttempt,
   reserveSecondFactorAttempt,
-  secondFactorChecksPaused,
   type SecondFactorScope,
   validateNewPassword,
 } from "@/lib/auth/credential-service"
@@ -157,21 +156,8 @@ function challengeSecretHash(
  * an academy's wifi, or from a carrier NAT, locked out every unrelated person on
  * it. A registration flood should throttle registration and nothing else.
  */
-/*
- * Two address buckets, not one. Sends ("recovery-request") and code checks
- * ("recovery-code") used to share a single twenty-per-quarter-hour bucket, so a
- * registration drive on the academy wifi -- twenty families asking for codes --
- * spent the budget that the same families needed to type those codes in, and
- * every right code was then answered "invalid or expired". Asking for a code and
- * guessing one are different things to limit.
- *
- * An address the deployment cannot see is one hash shared by every caller on
- * earth. `attemptKeys` drops its per-address ceilings for that hash, because a
- * per-address ceiling on such a bucket is a global lock -- but namespacing hid
- * the hash from that check, so twenty sends from anywhere stopped everyone. With
- * no address to count, the "address" half is scoped to the subject instead:
- * nothing is shared between strangers, and each subject keeps its own ceiling.
- */
+// Sends and code checks use separate address buckets. With no visible address, the address half is scoped
+// to the subject, so strangers never share one global bucket.
 type RequestBucket = "recovery-code" | "recovery-request"
 
 function requestThrottleKeys(
@@ -200,15 +186,8 @@ function registrationCodeAttempt(hashedSubject: string, ipHash?: string | null) 
   )
 }
 
-/**
- * Whether emailed-code checks for this subject are paused from this address.
- * Read-only. Every key behind it is spent by this address alone, so saying
- * "wait" instead of "wrong code" tells the caller nothing about anyone else --
- * and a family typing the right code during a busy sign-up session needs to be
- * told to wait, not that their code is wrong.
- */
+/** Whether registration code checks are paused from this address. Read-only. */
 export function emailCodeChecksPaused(input: {
-  kind: "recovery-email" | "registration"
   security?: SecurityMetadata
   subjectKey: string
 }, {
@@ -218,11 +197,10 @@ export function emailCodeChecksPaused(input: {
   database?: SmbaDatabaseExecutor
   now?: Date
 } = {}) {
-  const hashedSubject = subjectHash(input.subjectKey)
-  const attempt = input.kind === "registration"
-    ? registrationCodeAttempt(hashedSubject, input.security?.ipHash)
-    : recoveryEmailCodeAttempt(hashedSubject, input.security?.ipHash)
-  return loginIsBlocked(attempt, { database, now })
+  return loginIsBlocked(
+    registrationCodeAttempt(subjectHash(input.subjectKey), input.security?.ipHash),
+    { database, now },
+  )
 }
 
 /*
@@ -320,13 +298,7 @@ function recoveryEmailSendState(
   return null
 }
 
-/**
- * Why a recovery-email code would not be sent right now, or null when it
- * would. Read-only, so a screen can check it before asking for anything it
- * cannot hand back: a change of address asks for the password and, for the
- * head coach, an authenticator or recovery code, and spending a recovery code
- * only to be told "wait one minute" threw it away.
- */
+// Why a recovery-email code would not be sent now, or null. Read-only, so it is checked before any code is spent.
 export function recoveryEmailSendRefusal(input: {
   security?: SecurityMetadata
   subjectKey: string
@@ -538,13 +510,7 @@ export function confirmRecoveryEmailVerification(input: {
   return { email, previousEmail: null, receiptToken }
 }
 
-/*
- * A family changes the recovery address because someone else can read the old
- * inbox. So whatever that inbox was sent stops working with the change: reset
- * links still in it (purpose `password_reset`, for the password and the
- * authenticator alike), and any authenticator reset request it verified, which
- * the owner would otherwise be shown and could never approve.
- */
+// A changed recovery address retires reset links and reset requests tied to the old inbox.
 function retireRecoveryWorkForOldAddress(
   accountId: string,
   newEmail: string,
@@ -914,13 +880,7 @@ export function getVerifiedSetupRecoveryEmail(input: {
   return challenge?.verifiedAt ? challenge.email : null
 }
 
-/**
- * Which page an emailed recovery link belongs to. Both kinds are
- * `password_reset` challenges on the same account, so the kind is folded into
- * the stored hash: a password link opened on the authenticator page, or the
- * other way round, matches nothing. Password links hash exactly as they always
- * have, so a link already in someone's inbox keeps working.
- */
+// Which page a recovery link belongs to; folded into the stored hash so a link only opens its own page.
 export type RecoveryLinkIntent = "authenticator" | "password"
 
 function recoverySecretHash(
@@ -1088,17 +1048,7 @@ export async function requestPasswordRecovery(input: {
     }, { database, now })
     return genericRecoveryResponse(startedAt)
   }
-  /*
-   * Older links are retired only once the new one has actually been delivered,
-   * as registration codes are. Retiring first meant a failed or slow send took
-   * away the link already in the inbox while the page said "check your email".
-   *
-   * A link that has already been opened -- a reset in progress in somebody's
-   * browser -- is left alone. Retiring it let anyone who knew the Academy ID and
-   * the recovery address cancel the holder's reset from anywhere by asking for
-   * another link. It still runs out on its own clock, and finishing either one
-   * retires the rest.
-   */
+  // Older links are retired only after the new one is delivered, and a link already opened in a browser is left alone.
   database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
     .where(and(
       eq(authEmailChallenges.accountId, account.accountId),
@@ -1280,15 +1230,7 @@ export function passwordRecoveryLinkBlocked(token: string, {
     : null
 }
 
-/**
- * Opens an emailed link in this browser, once. Returns a new random pass for
- * this browser's cookie, or null when the link is unusable.
- *
- * The stored hash moves from the emailed token to the pass, so from here on the
- * link in the email -- and in any mail-scanner log or browser history it passed
- * through -- opens nothing. The reset belongs to the browser that pressed
- * Continue.
- */
+// Opens an emailed link once: the stored hash moves to a new pass for this browser's cookie. Null when unusable.
 export function claimPasswordRecovery(token: string, {
   database = initializeDatabase(),
   intent = "password",
@@ -1633,29 +1575,6 @@ export async function verifyPasswordRecoverySecondFactor(input: {
   return true
 }
 
-/**
- * Whether code checks on this reset are paused, so the page can say "wait"
- * rather than "not accepted" when the right code was refused only because of
- * the pause. Read-only.
- */
-export function passwordRecoveryCodeChecksPaused(input: {
-  security?: SecurityMetadata
-  token: string
-}, {
-  database = initializeDatabase(),
-  now = new Date(),
-}: {
-  database?: SmbaDatabaseExecutor
-  now?: Date
-} = {}) {
-  const challenge = recoveryChallenge(input.token, "password", database, now)
-  if (!challenge?.accountId || !challenge.claimedAt) return false
-  return loginIsBlocked(
-    passwordRecoveryFactorAttempt(challenge.accountId, input.security?.ipHash),
-    { database, now },
-  ) || secondFactorChecksPaused(challenge.accountId, "challenge", { database, now })
-}
-
 export async function verifyFreshAccountSecondFactor(input: {
   accountId: string
   credential: string
@@ -1679,23 +1598,6 @@ export async function verifyFreshAccountSecondFactor(input: {
   if (result !== "verified") return false
   releaseLoginAttempt(attempt, { database, now })
   return true
-}
-
-/** The signed-in twin of {@link passwordRecoveryCodeChecksPaused}. */
-export function freshAccountCodeChecksPaused(input: {
-  accountId: string
-  security?: SecurityMetadata
-}, {
-  database = initializeDatabase(),
-  now = new Date(),
-}: {
-  database?: SmbaDatabaseExecutor
-  now?: Date
-} = {}) {
-  return loginIsBlocked(
-    freshAccountFactorAttempt(input.accountId, input.security?.ipHash),
-    { database, now },
-  ) || secondFactorChecksPaused(input.accountId, "session", { database, now })
 }
 
 export async function completePasswordRecovery(input: {
@@ -1783,4 +1685,11 @@ export async function completePasswordRecovery(input: {
     }, { database: tx, now })
     return true
   }, { behavior: "immediate" })
+}
+
+/** Why email alone cannot reset a protected account with no authenticator. */
+export function protectedResetUnavailableCopy(academyId: string, owner: boolean) {
+  return owner
+    ? `${academyId} is the platform admin account and has no authenticator connected, so its password cannot be reset by email. It needs a manual fix by whoever looks after the portal’s hosting.`
+    : `${academyId} is a protected account with no authenticator connected, so its password cannot be reset by email alone. That is only possible for 24 hours after the platform admin approves an authenticator reset sent from this recovery email. Contact the platform admin, confirm who you are, and ask them to help you back in.`
 }

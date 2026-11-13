@@ -27,19 +27,8 @@ function cookieValues(cookieHeader: string | null, name: string) {
   return values
 }
 
-/**
- * The account a half-finished sign-in is waiting on, from the challenge cookie
- * the first factor set. The cookie holds the challenge id and a signature; the
- * id is random and only issued to whoever passed the password or PIN, so it
- * cannot be made up to point at someone else's account, and Better Auth checks
- * the signature itself when it verifies the code. Null -- and the request is
- * refused -- when there is no live challenge, when the cookie appears more than
- * once, or when the lookup fails: a code is never checked here without first
- * spending the challenged account's budget.
- *
- * Kept out of the "use server" actions file on purpose: every export there is a
- * public endpoint, and this must never answer a caller with an account id.
- */
+// The account a half-finished sign-in is waiting on, from the challenge cookie; null if none or ambiguous.
+// Kept out of "use server" so it is never a public endpoint.
 export async function challengedAccountId(requestHeaders: Pick<Headers, "get">) {
   try {
     const authContext = await getAuth().$context

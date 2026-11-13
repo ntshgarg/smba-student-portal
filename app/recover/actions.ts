@@ -8,7 +8,6 @@ import {
   completePasswordRecovery,
   getPasswordRecoveryStatus,
   PASSWORD_RECOVERY_LIFETIME_MS,
-  passwordRecoveryCodeChecksPaused,
   RECOVERY_SESSION_COOKIE,
   requestPasswordRecovery,
   verifyPasswordRecoverySecondFactor,
@@ -82,21 +81,12 @@ export async function verifyRecoverySecondFactorAction(
   const token = (await cookies()).get(RECOVERY_SESSION_COOKIE)?.value ?? ""
   const credential = String(formData.get("credential") ?? "").trim()
   if (!credential) return { error: "Enter an authenticator or saved recovery code." }
-  const security = await requestContext()
   const verified = await verifyPasswordRecoverySecondFactor({
     credential,
-    security,
+    security: await requestContext(),
     token,
   })
-  if (!verified) {
-    // A right code is refused while checks are paused, and saying "not
-    // accepted" then sends the coach through their recovery codes for nothing.
-    return {
-      error: passwordRecoveryCodeChecksPaused({ security, token })
-        ? "Too many codes were tried. Wait 15 minutes, then enter a fresh code from your authenticator app."
-        : "That code was not accepted.",
-    }
-  }
+  if (!verified) return { error: "That code was not accepted." }
   redirect("/recover/reset")
 }
 

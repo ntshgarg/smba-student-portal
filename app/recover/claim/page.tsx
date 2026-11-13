@@ -4,9 +4,9 @@ import Link from "next/link"
 
 import { openPasswordRecoveryLinkAction } from "@/app/recover/actions"
 import { RecoveryLinkContinueButton } from "@/components/recovery-link-continue-button"
-import { protectedResetUnavailableCopy } from "@/lib/auth/recovery-copy"
 import {
   passwordRecoveryLinkBlocked,
+  protectedResetUnavailableCopy,
   recoveryLinkIsOpenable,
 } from "@/lib/auth/recovery-service"
 import { publicSiteUrl } from "@/lib/config"
@@ -17,13 +17,8 @@ export const metadata: Metadata = {
   robots: { follow: false, index: false },
 }
 
-/*
- * Where the emailed reset link lands. Opening it only shows this page; the
- * link is used up by the Continue button. Work and school mail scanners, and
- * the link previews some phones build, fetch every link in a message before the
- * person sees it -- when the fetch itself spent the link, those families were
- * told "expired" every time they tapped it.
- */
+// Opening the emailed link only shows this page, so mail scanners cannot spend
+// it; the Continue button uses it up.
 export default async function RecoveryLinkPage({
   searchParams,
 }: {
@@ -31,8 +26,6 @@ export default async function RecoveryLinkPage({
 }) {
   const token = (await searchParams).token ?? ""
   const blocked = passwordRecoveryLinkBlocked(token)
-  // A reset email alone cannot finish is said here, before Continue spends
-  // the link on a promise of a new password.
   const openable = !blocked && recoveryLinkIsOpenable(token, "password")
   return (
     <main className="login-page">

@@ -15,7 +15,6 @@ import {
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import {
   approveAuthenticatorResetRequest,
-  notifyAuthenticatorResetDecision,
   rejectAuthenticatorResetRequest,
 } from "@/lib/auth/authenticator-reset-service"
 import { initializeDatabase } from "@/lib/db/client"
@@ -96,30 +95,17 @@ export async function openHeadCoachSetupAction() {
 export async function approveAuthenticatorResetRequestAction(requestId: string) {
   const actorAccountId = await requirePlatformOwner()
   const approved = approveAuthenticatorResetRequest({ actorAccountId, requestId })
-  // The coach is waiting on this decision and has no other way to hear it.
-  const emailed = approved ? await notifyAuthenticatorResetDecision(requestId) : false
   revalidatePath("/admin")
   return approved
-    ? {
-      message: emailed
-        ? "Authenticator reset approved. The coach has been emailed and can now sign in and connect a new authenticator."
-        : "Authenticator reset approved. The coach can now sign in and connect a new authenticator. The email to the coach could not be sent, so tell them yourself.",
-      ok: true as const,
-    }
+    ? { message: "Authenticator reset approved. The coach can now sign in and connect a new authenticator.", ok: true as const }
     : { message: "This request is unavailable, expired, withdrawn by the coach, or no longer matches the verified recovery email.", ok: false as const }
 }
 
 export async function rejectAuthenticatorResetRequestAction(requestId: string) {
   const actorAccountId = await requirePlatformOwner()
   const rejected = rejectAuthenticatorResetRequest({ actorAccountId, requestId })
-  const emailed = rejected ? await notifyAuthenticatorResetDecision(requestId) : false
   revalidatePath("/admin")
   return rejected
-    ? {
-      message: emailed
-        ? "Authenticator reset request rejected. The coach has been emailed."
-        : "Authenticator reset request rejected. The email to the coach could not be sent, so tell them yourself.",
-      ok: true as const,
-    }
+    ? { message: "Authenticator reset request rejected.", ok: true as const }
     : { message: "This request is unavailable, expired or withdrawn by the coach.", ok: false as const }
 }

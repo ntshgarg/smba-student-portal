@@ -27,13 +27,7 @@ export function RecoveryEmailSecurityPanel({
   maskedEmail: string
   requiresSecondFactor: boolean
 }) {
-  /*
-   * Each attempt at a change is its own pair of form states. `useActionState`
-   * has no reset, so once the code step appeared nothing could take it away: a
-   * coach who mistyped the new address sat in front of a code box that could
-   * never work, with no hint of where the code had gone, until they reloaded.
-   * "Use a different address" starts a fresh attempt by remounting the pair.
-   */
+  // Each change attempt is its own pair of form states; "Use a different address" remounts the pair.
   const [attempt, setAttempt] = useState(0)
   // The address from the attempt being redone, so a typo is fixed, not retyped.
   const [previousEmail, setPreviousEmail] = useState("")

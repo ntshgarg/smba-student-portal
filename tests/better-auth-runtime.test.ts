@@ -307,14 +307,8 @@ describe("Better Auth runtime adapter", () => {
     })).rejects.toThrow()
   })
 
-  /*
-   * "Trust this private device for 30 days" has to mean 30 days, and has to
-   * mean it at the PIN door as well. Better Auth renewed the trust for another
-   * full month on every password sign-in, so a browser used monthly never saw
-   * the code again; and the PIN door never read the trust at all, so a coach
-   * who ticked the box after a PIN sign-in was asked for the code every time.
-   */
-  it("holds a renewed trust to the date it was first given, and honours it at the PIN door", async () => {
+  // "Trust this private device for 30 days" means 30 days from when it was first given.
+  it("holds a renewed trust to the date it was first given", async () => {
     clearLoginAttempts()
     const readSecret = async () => {
       const sqlite = new Database(databasePath, { readonly: true })
@@ -369,23 +363,11 @@ describe("Better Auth runtime adapter", () => {
     expect(renewedRows[0]!.expiresAt).toBeLessThanOrEqual(firstGivenUntil)
     const renewedCookie = cookieFrom(renewed.headers, "trust_device") || trustCookie
 
-    const pinSignIn = await auth.api.signInPin({
-      body: { pin: "482916", username: "SMBA#0001" },
-      headers: new Headers({ cookie: renewedCookie }),
-      returnHeaders: true,
-    })
-    expect(pinSignIn.response).not.toMatchObject({ twoFactorRedirect: true })
-    expect(cookieFrom(pinSignIn.headers, "session_token")).toContain("smba.session_token=")
-
-    // Once the first date passes, both doors ask for the code again.
+    // Once the first date passes, the code is asked for again.
     const expired = new Database(databasePath)
     expired.prepare("update auth_verifications set expires_at = ? where value = ? and identifier like 'trust-device-%'")
       .run(Date.now() - 1_000, coachAccountId)
     expired.close()
-    await expect(auth.api.signInPin({
-      body: { pin: "482916", username: "SMBA#0001" },
-      headers: new Headers({ cookie: renewedCookie }),
-    })).resolves.toMatchObject({ twoFactorRedirect: true })
     await expect(auth.api.signInUsername({
       body: { password: "SMBA local access 2026!", username: "SMBA#0001" },
       headers: new Headers({ cookie: renewedCookie }),

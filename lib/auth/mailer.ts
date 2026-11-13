@@ -50,12 +50,7 @@ export type RegistrationVerificationMessage = {
   to: string
 }
 
-/**
- * A plain account-security notice: something already happened to the account
- * and the person it belongs to should hear about it -- the recovery address was
- * replaced, an authenticator reset was approved or declined. Each line is one
- * paragraph of plain text.
- */
+/** A plain account-security notice; each line is one paragraph. */
 export type SecurityNoticeMessage = {
   fullName: string
   lines: string[]

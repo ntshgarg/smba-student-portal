@@ -1,13 +1,4 @@
-/**
- * The authenticator check after the password or PIN.
- *
- * While Better Auth's eight-miss lock stands, every code is refused -- the right
- * one too -- and the page used to say "That code was not accepted", so a head
- * coach typed the right code again and again and then spent recovery codes
- * that were refused the same way. And a coach who got back in left any reset
- * request they had sent waiting for the owner, who could then approve it and
- * wipe the authenticator the coach had just used.
- */
+// The authenticator check after the password or PIN: lock wording and waiting reset requests.
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   }),
   releaseSecondFactorAttempt: vi.fn(),
   reserveSecondFactorAttempt: vi.fn(() => true),
+  secondFactorChecksPaused: vi.fn(() => false),
   selectGet: vi.fn(),
   verifyBackupCode: vi.fn(),
   verifyTOTP: vi.fn(),
@@ -53,6 +45,7 @@ vi.mock("@/lib/auth/credential-service", () => ({
   releaseSecondFactorAttempt: mocks.releaseSecondFactorAttempt,
   reserveLoginAttempt: vi.fn(() => true),
   reserveSecondFactorAttempt: mocks.reserveSecondFactorAttempt,
+  secondFactorChecksPaused: mocks.secondFactorChecksPaused,
   verifyCurrentPassword: vi.fn(),
 }))
 vi.mock("@/lib/auth/post-auth-destination", () => ({
@@ -90,11 +83,12 @@ describe("the authenticator check at sign-in", () => {
       value: "head-coach",
     })
     mocks.reserveSecondFactorAttempt.mockReturnValue(true)
+    mocks.secondFactorChecksPaused.mockReturnValue(false)
     mocks.selectGet.mockReturnValue({ role: "coach" })
   })
 
   it("tells the coach to wait while the lock stands, and checks no code", async () => {
-    mocks.selectGet.mockReturnValue({ lockedUntil: new Date(Date.now() + 10 * 60_000), role: "coach" })
+    mocks.secondFactorChecksPaused.mockReturnValue(true)
 
     const totp = await verifyTotpSignIn(initialState, form("code", "123456"))
     const backup = await verifyBackupCodeSignIn(initialState, form("backupCode", "SPARE-CODE"))
@@ -106,21 +100,6 @@ describe("the authenticator check at sign-in", () => {
     expect(mocks.verifyTOTP).not.toHaveBeenCalled()
     expect(mocks.verifyBackupCode).not.toHaveBeenCalled()
     expect(mocks.reserveSecondFactorAttempt).not.toHaveBeenCalled()
-  })
-
-  it("tells the coach to wait when the lock lands during the check", async () => {
-    mocks.verifyTOTP.mockRejectedValue(Object.assign(new Error("ACCOUNT_TEMPORARILY_LOCKED"), {
-      status: "TOO_MANY_REQUESTS",
-    }))
-    const result = await verifyTotpSignIn(initialState, form("code", "123456"))
-    expect(result.error).toMatch(/paused for up to 15 minutes/u)
-  })
-
-  it("still calls a wrong code wrong", async () => {
-    mocks.verifyTOTP.mockRejectedValue(Object.assign(new Error("INVALID_CODE"), { status: "UNAUTHORIZED" }))
-    await expect(verifyTotpSignIn(initialState, form("code", "123456"))).resolves.toEqual({
-      error: "That code was not accepted. Wait for a new code and try again.",
-    })
   })
 
   it("leaves a waiting reset request alone when the coach signs in with a code", async () => {

@@ -2,7 +2,6 @@ import "server-only"
 
 import { randomBytes } from "node:crypto"
 
-import { createHMAC } from "@better-auth/utils/hmac"
 import { createAuthEndpoint } from "better-auth/api"
 import { setSessionCookie } from "better-auth/cookies"
 import { z } from "zod"
@@ -124,32 +123,7 @@ export function smbaPinLogin() {
 
         const user = await context.context.internalAdapter.findUserById(verified.accountId)
         if (!user) throw context.error("UNAUTHORIZED", { message: INVALID_PIN_LOGIN })
-        /*
-         * "Trust this private device" is offered on the code page whichever way
-         * the person signed in, but only the password door honoured it: Better
-         * Auth's own check sits on its /sign-in paths and never sees this one.
-         * So a coach who ticked the box after a PIN sign-in was asked for the
-         * code every time. The same check is made here -- the signed cookie,
-         * its HMAC over this account, and a live trust row for this account.
-         * The trust is not renewed here, so it still ends on the date it was
-         * first given.
-         */
-        const trustedBrowser = verified.twoFactorEnabled && await (async () => {
-          try {
-            const trustCookie = context.context.createAuthCookie("trust_device")
-            const signed = await context.getSignedCookie(trustCookie.name, context.context.secret)
-            const [token, trustIdentifier] = typeof signed === "string" ? signed.split("!") : []
-            if (!token || !trustIdentifier) return false
-            const expected = await createHMAC("SHA-256", "base64urlnopad")
-              .sign(context.context.secret, `${user.id}!${trustIdentifier}`)
-            if (token !== expected) return false
-            const trust = await context.context.internalAdapter.findVerificationValue(trustIdentifier)
-            return Boolean(trust && trust.value === user.id && trust.expiresAt > new Date())
-          } catch {
-            return false
-          }
-        })()
-        if (verified.twoFactorEnabled && !trustedBrowser) {
+        if (verified.twoFactorEnabled) {
           const maxAge = 10 * 60
           const identifier = `2fa-${randomBytes(20).toString("base64url")}`
           const expiresAt = new Date(Date.now() + maxAge * 1_000)

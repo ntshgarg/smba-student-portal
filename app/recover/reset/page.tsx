@@ -9,9 +9,9 @@ import {
 } from "@/components/recovery-reset-forms"
 import {
   getPasswordRecoveryStatus,
+  protectedResetUnavailableCopy,
   RECOVERY_SESSION_COOKIE,
 } from "@/lib/auth/recovery-service"
-import { protectedResetUnavailableCopy } from "@/lib/auth/recovery-copy"
 import { publicSiteUrl } from "@/lib/config"
 
 export const metadata: Metadata = {
@@ -48,16 +48,14 @@ export default async function RecoveryResetPage() {
                 ? "This protected account also requires its existing authenticator."
                 : `Resetting ${status.academyId} will log out every device and remove its old PIN.`}</p>
         </div>
-        {status.state === "missing" || status.state === "unavailable" ? (
+        {status.state === "missing" ? (
+          <div className="login-empty-state"><Link href="/recover">Request another link</Link></div>
+        ) : status.state === "unavailable" ? (
           <div className="login-empty-state"><Link href="/login">Back to sign-in</Link></div>
         ) : status.requiresSecondFactor && !status.secondFactorVerified
           ? (
             <>
               <RecoverySecondFactorForm />
-              {/*
-               * A head coach who lost the phone as well as the password has
-               * one way through, and it starts on another page.
-               */}
               <p className="login-helper">
                 Lost your authenticator and every recovery code?{" "}
                 <Link href="/auth/two-factor/recovery">Ask the platform admin to reset the authenticator</Link>.

@@ -41,13 +41,7 @@ export function forgetTrustedDevices(
   )).run().changes
 }
 
-/**
- * The browsers this account currently trusts to skip the authenticator code,
- * as the expiry of each, soonest first. Nothing identifies the browser itself
- * -- the library stores no device details with the trust -- so the account
- * security page can say how many there are and until when, and offer to forget
- * them all.
- */
+// Expiries of the browsers this account trusts to skip the authenticator, soonest first.
 export function listTrustedDevices(
   accountId: string,
   {
@@ -69,22 +63,8 @@ export function listTrustedDevices(
     .map((row) => row.expiresAt)
 }
 
-/*
- * "Trust this private device for 30 days" has to mean 30 days.
- *
- * Better Auth renews a trusted browser on every password sign-in: it deletes
- * the trust row the browser's cookie names and writes a fresh one good for
- * another full 30 days (plugins/two-factor/index.mjs, the /sign-in after-hook).
- * A browser used at least monthly therefore never saw the code again, which is
- * not what the coach agreed to.
- *
- * The renewal is a delete followed by a create inside one request, so these
- * two database hooks carry the old row's expiry across: the delete remembers
- * it against the request it happened in, and the create that follows in the
- * same request is held to it. The browser keeps its trust until the date it
- * was first given, then is asked for a code. A brand-new trust (the checkbox
- * on the code page) has no delete in front of it and gets the full 30 days.
- */
+// Better Auth renews a trusted browser on each sign-in (delete then create in one request).
+// These hooks carry the old expiry across, so trust ends 30 days after it was first given.
 const trustExpiryBeingRenewed = new WeakMap<object, { accountId: string, expiresAt: Date }>()
 
 type TrustRow = { expiresAt: Date | number | string, identifier?: string, value?: string }
@@ -123,16 +103,7 @@ export const trustedDeviceDatabaseHooks = {
   },
 }
 
-/*
- * Clears this account's sign-ins that have already run out.
- *
- * An expired sign-in can no longer be used, but its row stayed: Better Auth
- * only drops one when that same browser comes back with it. "Log out other
- * devices" goes through the library's list of live sign-ins, so the dead rows
- * survived it too, and the devices list went on counting them -- a coach who
- * had just signed everything else out after losing a phone still read "6
- * signed-in devices" and had every reason to think someone was in.
- */
+// Clears this account's expired sign-ins, which Better Auth leaves behind and "Log out other devices" misses.
 export function endExpiredSessions(
   accountId: string,
   {

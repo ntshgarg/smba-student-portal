@@ -6,6 +6,10 @@
  * directly, and then fails at runtime the first time the form is submitted.
  */
 
+/** A refused code while checks from this connection are paused. */
+export const CODE_CHECKS_PAUSED_MESSAGE =
+  "Too many codes were tried from this connection. Wait 15 minutes, then ask for a new code: this one will have expired by then."
+
 export type RegistrationField =
   | "code"
   | "dateOfBirth"

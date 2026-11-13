@@ -228,17 +228,11 @@ export function AccountSecurityWorkspace({
     document.getElementById(passwordFieldIds[field])?.focus()
   }, [passwordState])
 
-  // Keep this device visible even when the list is capped, then newest first:
-  // the five shown are the five most recent, as the button below says.
-  const orderedSessions = useMemo(() => {
-    const newestFirst = [...sessions].sort((left, right) => (
-      Date.parse(right.createdAt) - Date.parse(left.createdAt)
-    ))
-    return [
-      ...newestFirst.filter((session) => session.current),
-      ...newestFirst.filter((session) => !session.current),
-    ]
-  }, [sessions])
+  // Keep this device visible even when the list is capped.
+  const orderedSessions = useMemo(() => [
+    ...sessions.filter((session) => session.current),
+    ...sessions.filter((session) => !session.current),
+  ], [sessions])
   const visibleSessions = showAllSessions
     ? orderedSessions
     : orderedSessions.slice(0, sessionPreviewCount)

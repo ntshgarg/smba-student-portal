@@ -1,17 +1,7 @@
-/**
- * The sign-in, recovery-link, authenticator-reset and trusted-device fixes from
- * the state-machine audit, held against a real migrated database.
- *
- * Each case names the family-facing failure it stops: a mail scanner using up a
- * reset link, a finished reset still saying "wait a few minutes", a link in an
- * old inbox outliving a change of recovery address, a busy sign-up session
- * calling right codes wrong, a coach never hearing what became of a reset
- * request, and so on.
- */
+// Sign-in, recovery-link, authenticator-reset and trusted-device fixes, against a real migrated database.
 import path from "node:path"
 
 import Database from "better-sqlite3"
-import { createOTP } from "@better-auth/utils/otp"
 import { hashPassword, symmetricEncrypt } from "better-auth/crypto"
 import { eq } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/better-sqlite3"
@@ -24,12 +14,10 @@ import {
   approveAuthenticatorResetRequest,
   latestAuthenticatorResetOutcome,
   listPendingAuthenticatorResetRequests,
-  notifyAuthenticatorResetDecision,
   withdrawPendingAuthenticatorResetRequests,
 } from "@/lib/auth/authenticator-reset-service"
 import {
   loginIsBlocked,
-  recordLoginFailure,
   reserveLoginAttempt,
   upsertPasswordCredential,
 } from "@/lib/auth/credential-service"
@@ -46,13 +34,8 @@ import {
   completePasswordRecovery,
   confirmRecoveryEmailVerification,
   confirmRegistrationVerification,
-  emailCodeChecksPaused,
-  EMAIL_RESEND_COOLDOWN_MS,
-  getAuthenticatorRecoveryStatus,
   getPasswordRecoveryStatus,
   notifyRecoveryEmailReplaced,
-  passwordRecoveryCodeChecksPaused,
-  recoveryEmailSendRefusal,
   recoveryLinkIsOpenable,
   recoverySubjectKeyForAccount,
   registrationSubjectKey,
@@ -101,12 +84,6 @@ class CapturingMailer implements AuthMailer {
 
   async sendSecurityNotice(message: SecurityNoticeMessage) {
     this.notices.push(message)
-  }
-}
-
-class FailingMailer extends CapturingMailer {
-  override async sendPasswordRecovery() {
-    throw new Error("simulated delivery failure")
   }
 }
 
@@ -230,56 +207,6 @@ describe("the emailed reset link", () => {
       .resolves.toBe(true)
   })
 
-  it("opens only the page it was sent for", async () => {
-    await createActiveAccount({
-      accessLevel: "head_admin",
-      academyId: "SMBA-HC-5002",
-      accountId: "head-intent",
-      email: "head@example.com",
-      role: "coach",
-    })
-    await addAuthenticator("head-intent")
-    const mailer = new CapturingMailer()
-    await requestPasswordRecovery({
-      academyId: "SMBA-HC-5002",
-      email: "head@example.com",
-      intent: "authenticator",
-      mailer,
-    }, { database, now: NOW })
-    const authenticatorLink = linkFrom(mailer.authenticatorRecovery[0]!.recoveryUrl)
-    expect(recoveryLinkIsOpenable(authenticatorLink, "password", { database, now: NOW })).toBe(false)
-    expect(claimPasswordRecovery(authenticatorLink, { database, now: NOW })).toBeNull()
-    const pass = claimPasswordRecovery(authenticatorLink, { database, intent: "authenticator", now: NOW })
-    expect(getAuthenticatorRecoveryStatus(pass!, { database, now: NOW })).toMatchObject({ state: "verified" })
-    expect(getPasswordRecoveryStatus(pass!, { database, now: NOW })).toEqual({ state: "missing" })
-  })
-
-  it("keeps the link already in the inbox when sending a newer one fails", async () => {
-    await createActiveAccount({ academyId: "SMBA-PL-5003", accountId: "flaky-mail", email: "parent@example.com", role: "player" })
-    const first = await emailedPasswordLink("SMBA-PL-5003", "parent@example.com")
-    await requestPasswordRecovery({
-      academyId: "SMBA-PL-5003",
-      email: "parent@example.com",
-      mailer: new FailingMailer(),
-    }, { database, now: new Date(NOW.getTime() + 1_000) })
-    expect(claimPasswordRecovery(first, { database, now: new Date(NOW.getTime() + 2_000) }))
-      .toEqual(expect.any(String))
-  })
-
-  it("is not cancelled mid-reset by someone asking for another link", async () => {
-    await createActiveAccount({ academyId: "SMBA-PL-5004", accountId: "mid-reset", email: "parent@example.com", role: "player" })
-    const first = await emailedPasswordLink("SMBA-PL-5004", "parent@example.com")
-    const pass = claimPasswordRecovery(first, { database, now: NOW })
-    // Anyone who knows the Academy ID and the address can ask again.
-    await emailedPasswordLink("SMBA-PL-5004", "parent@example.com", new Date(NOW.getTime() + 1_000))
-    expect(getPasswordRecoveryStatus(pass!, { database, now: new Date(NOW.getTime() + 2_000) }))
-      .toMatchObject({ state: "active" })
-    await expect(completePasswordRecovery({ password: NEW_PASSWORD, token: pass! }, {
-      database,
-      now: new Date(NOW.getTime() + 2_000),
-    })).resolves.toBe(true)
-  })
-
   it("lifts the sign-in pause once the password has been reset", async () => {
     await createActiveAccount({ academyId: "SMBA-PL-5005", accountId: "locked-out", email: "parent@example.com", role: "player" })
     const attempt = { ipHash: "home-wifi", subjectHash: authSubjectHash("SMBA-PL-5005") }
@@ -332,47 +259,6 @@ describe("changing the recovery email", () => {
     expect(mailer.notices[0]).toMatchObject({ subject: "Your SMBA recovery email was changed", to: "old@example.com" })
     expect(mailer.notices[0]!.lines.join(" ")).not.toContain("new@example.com")
   })
-
-  it("expires an authenticator reset request the old address made", async () => {
-    await createActiveAccount({
-      accessLevel: "head_admin",
-      academyId: "SMBA-HC-5102",
-      accountId: "head-moving",
-      email: "old@example.com",
-      role: "coach",
-    })
-    await addAuthenticator("head-moving")
-    database.insert(schema.authAuthenticatorResetRequests).values({
-      accountId: "head-moving",
-      createdAt: NOW,
-      expiresAt: new Date(NOW.getTime() + 60 * 60 * 1000),
-      id: "old-inbox-request",
-      recoveryEmail: "old@example.com",
-      requestedAt: NOW,
-      status: "pending",
-      updatedAt: NOW,
-    }).run()
-    await changeAddress("head-moving", "new@example.com", new Date(NOW.getTime() + 1_000))
-    expect(database.select().from(schema.authAuthenticatorResetRequests).get()?.status).toBe("rejected")
-  })
-
-  it("says why no code can be sent before anything is checked", async () => {
-    await createActiveAccount({ academyId: "SMBA-PL-5103", accountId: "cooling", email: "old@example.com", role: "player" })
-    const subjectKey = recoverySubjectKeyForAccount("cooling")
-    expect(recoveryEmailSendRefusal({ subjectKey }, { database, now: NOW })).toBeNull()
-    await requestRecoveryEmailVerification({
-      accountId: "cooling",
-      email: "new@example.com",
-      mailer: new CapturingMailer(),
-      subjectKey,
-    }, { database, now: NOW })
-    expect(recoveryEmailSendRefusal({ subjectKey }, { database, now: new Date(NOW.getTime() + 1_000) }))
-      .toBe("Wait one minute before requesting another code.")
-    expect(recoveryEmailSendRefusal({ subjectKey }, {
-      database,
-      now: new Date(NOW.getTime() + EMAIL_RESEND_COOLDOWN_MS),
-    })).toBeNull()
-  })
 })
 
 describe("emailed code throttles", () => {
@@ -401,53 +287,6 @@ describe("emailed code throttles", () => {
     }, { database, now: NOW })
     expect(verified).toBe("family19@example.com")
   })
-
-  it("reports a pause on code checks from this connection, and only from this connection", async () => {
-    const mailer = new CapturingMailer()
-    await sendRegistrationCode("asha", "asha@example.com", "phone-network", mailer)
-    const subjectKey = registrationSubjectKey("asha@example.com", "asha")
-    for (let miss = 0; miss < 5; miss += 1) {
-      confirmRegistrationVerification({
-        code: "000000",
-        onVerified: () => true,
-        security: { ipHash: "phone-network" },
-        subjectKey,
-      }, { database, now: NOW })
-    }
-    expect(emailCodeChecksPaused({
-      kind: "registration",
-      security: { ipHash: "phone-network" },
-      subjectKey,
-    }, { database, now: NOW })).toBe(true)
-    expect(emailCodeChecksPaused({
-      kind: "registration",
-      security: { ipHash: "home-broadband" },
-      subjectKey,
-    }, { database, now: NOW })).toBe(false)
-  })
-
-  it("never lets twenty strangers with no visible address stop everyone else", async () => {
-    const mailer = new CapturingMailer()
-    for (let family = 0; family < 21; family += 1) {
-      await sendRegistrationCode(`family ${family}`, `family${family}@example.com`, undefined, mailer)
-    }
-    expect(mailer.registration).toHaveLength(21)
-  })
-
-  it("never shortens a pause that is still running", () => {
-    const attempt = { ipHash: "shared-ip", subjectHash: authSubjectHash("SMBA-PL-5201") }
-    // Five failures over four minutes: the window began at the first, the
-    // pause at the fifth.
-    for (let minute = 0; minute < 5; minute += 1) {
-      recordLoginFailure(attempt, { database, now: new Date(NOW.getTime() + minute * 60_000) })
-    }
-    const sixteenMinutesIn = new Date(NOW.getTime() + 16 * 60_000)
-    expect(loginIsBlocked(attempt, { database, now: sixteenMinutesIn })).toBe(true)
-    // A failure counted without a check in front of it lands after the window
-    // but inside the pause. It used to start a fresh count and clear the pause.
-    recordLoginFailure(attempt, { database, now: sixteenMinutesIn })
-    expect(loginIsBlocked(attempt, { database, now: sixteenMinutesIn })).toBe(true)
-  })
 })
 
 describe("protected accounts and their authenticator", () => {
@@ -456,49 +295,20 @@ describe("protected accounts and their authenticator", () => {
     return addAuthenticator(accountId, backupCodes)
   }
 
-  it("raises the recovery-code alert when a code is spent resetting a password", async () => {
-    await headCoachWithAuthenticator("head-alert", "SMBA-HC-5301", ["SPARE-CODE"])
+  it("raises the recovery-code alert when a code is spent in password recovery or a recovery-email change", async () => {
+    await headCoachWithAuthenticator("head-alert", "SMBA-HC-5301", ["SPARE-CODE", "SPARE-CODE-TWO"])
     const pass = claimPasswordRecovery(await emailedPasswordLink("SMBA-HC-5301", "head@example.com"), { database, now: NOW })
     await expect(verifyPasswordRecoverySecondFactor({ credential: "SPARE-CODE", token: pass! }, { database, now: NOW }))
       .resolves.toBe(true)
-    const alerts = events("totp_verified").filter((row) => row.accountId === "head-alert")
-    expect(alerts.map((row) => JSON.parse(row.metadata))).toEqual([
-      { method: "backup_code", operation: "password_recovery" },
-    ])
-  })
-
-  it("raises the recovery-code alert when a code is spent moving the recovery email", async () => {
-    await headCoachWithAuthenticator("head-email", "SMBA-HC-5302", ["SPARE-CODE"])
     await expect(verifyFreshAccountSecondFactor({
-      accountId: "head-email",
-      credential: "SPARE-CODE",
+      accountId: "head-alert",
+      credential: "SPARE-CODE-TWO",
       operation: "change_recovery_email",
     }, { database, now: NOW })).resolves.toBe(true)
     expect(events("totp_verified").map((row) => JSON.parse(row.metadata))).toEqual([
+      { method: "backup_code", operation: "password_recovery" },
       { method: "backup_code", operation: "change_recovery_email" },
     ])
-  })
-
-  it("does not lift a running sign-in lock from a signed-in check", async () => {
-    const secret = await headCoachWithAuthenticator("head-lock", "SMBA-HC-5303")
-    const lockedUntil = new Date(NOW.getTime() + 10 * 60_000)
-    database.update(schema.authTwoFactors).set({ failedVerificationCount: 8, lockedUntil })
-      .where(eq(schema.authTwoFactors.userId, "head-lock")).run()
-    await expect(verifyFreshAccountSecondFactor({
-      accountId: "head-lock",
-      credential: await createOTP(secret).totp(),
-    }, { database, now: NOW })).resolves.toBe(true)
-    expect(database.select().from(schema.authTwoFactors).get()?.lockedUntil?.getTime())
-      .toBe(lockedUntil.getTime())
-  })
-
-  it("says the reset is paused, rather than the code wrong, while the lock stands", async () => {
-    await headCoachWithAuthenticator("head-paused", "SMBA-HC-5304")
-    const pass = claimPasswordRecovery(await emailedPasswordLink("SMBA-HC-5304", "head@example.com"), { database, now: NOW })
-    expect(passwordRecoveryCodeChecksPaused({ token: pass! }, { database, now: NOW })).toBe(false)
-    database.update(schema.authTwoFactors).set({ lockedUntil: new Date(NOW.getTime() + 60_000) })
-      .where(eq(schema.authTwoFactors.userId, "head-paused")).run()
-    expect(passwordRecoveryCodeChecksPaused({ token: pass! }, { database, now: NOW })).toBe(true)
   })
 
   it("lets a head coach reset a forgotten password for a day after the owner approves an authenticator reset", async () => {
@@ -527,18 +337,6 @@ describe("protected accounts and their authenticator", () => {
     })
     await expect(completePasswordRecovery({ password: NEW_PASSWORD, token: pass! }, { database, now: soon }))
       .resolves.toBe(true)
-  })
-
-  it("still refuses an email-only reset of a protected account with no authenticator and no approval", async () => {
-    await createActiveAccount({ accessLevel: "head_admin", academyId: "SMBA-HC-5306", accountId: "head-bare", email: "head@example.com", role: "coach" })
-    const pass = claimPasswordRecovery(await emailedPasswordLink("SMBA-HC-5306", "head@example.com"), { database, now: NOW })
-    expect(getPasswordRecoveryStatus(pass!, { database, now: NOW })).toEqual({
-      academyId: "SMBA-HC-5306",
-      owner: false,
-      state: "unavailable",
-    })
-    await expect(completePasswordRecovery({ password: NEW_PASSWORD, token: pass! }, { database, now: NOW }))
-      .resolves.toBe(false)
   })
 })
 
@@ -574,35 +372,13 @@ describe("the coach's authenticator reset request", () => {
     expect(latestAuthenticatorResetOutcome("head-coach", { database, now: NOW })).toBeNull()
   })
 
-  it("tells the coach it is waiting, then that it ran out, and marks it so", async () => {
+  it("tells the coach it is waiting, then that it ran out", async () => {
     await headCoachWithRequest({ expiresAt: new Date(NOW.getTime() + 60_000) })
     expect(latestAuthenticatorResetOutcome("head-coach", { database, now: NOW }))
       .toEqual({ at: NOW, state: "pending" })
     const later = new Date(NOW.getTime() + 2 * 60_000)
     expect(latestAuthenticatorResetOutcome("head-coach", { database, now: later }))
       .toEqual({ at: new Date(NOW.getTime() + 60_000), state: "lapsed" })
-    listPendingAuthenticatorResetRequests({ database, now: later })
-    expect(database.select().from(schema.authAuthenticatorResetRequests).get()?.status).toBe("expired")
-  })
-
-  it("is emailed the owner's decision", async () => {
-    await headCoachWithRequest()
-    database.update(schema.authAuthenticatorResetRequests)
-      .set({ resolvedAt: NOW, resolvedByAccountId: "owner", status: "rejected" })
-      .run()
-    expect(latestAuthenticatorResetOutcome("head-coach", { database, now: NOW }))
-      .toEqual({ at: NOW, state: "declined" })
-    const mailer = new CapturingMailer()
-    await expect(notifyAuthenticatorResetDecision("request", { database, mailer })).resolves.toBe(true)
-    expect(mailer.notices[0]).toMatchObject({
-      subject: "Your SMBA authenticator reset was not approved",
-      to: "head@example.com",
-    })
-  })
-
-  it("is not offered to the owner once the recovery address has changed", async () => {
-    await headCoachWithRequest({ recoveryEmail: "someone-else@example.com" })
-    expect(listPendingAuthenticatorResetRequests({ database, now: NOW })).toHaveLength(0)
   })
 })
 

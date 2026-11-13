@@ -53,12 +53,7 @@ export default async function AccountSecurityPage({
 
   const database = initializeDatabase()
   const now = new Date()
-  /*
-   * Live sign-ins only, newest first. Expired rows cannot be used, so counting
-   * them as signed-in devices made a cleared account look occupied; and the
-   * list is cut to the five most recent, so it has to start with the newest --
-   * a sign-in the coach does not recognise is the one this list exists to show.
-   */
+  // Live sign-ins only, newest first: the list is cut to the five most recent.
   const sessions = database.select().from(authRuntimeSessions)
     .where(and(
       eq(authRuntimeSessions.userId, identity.subjectId),

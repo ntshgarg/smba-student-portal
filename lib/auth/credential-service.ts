@@ -817,14 +817,7 @@ function countAttemptKeys(tx: AttemptTransaction, keys: AttemptKey[], now: Date)
     const outsideWindow = !current
       || now.getTime() - current.windowStartedAt.getTime() >= LOGIN_WINDOW_MS
     const failedCount = outsideWindow ? 1 : current.failedCount + 1
-    /*
-     * A block outlives the window that set it: the window is counted from the
-     * first failure, the block from the last. A failure counted without a block
-     * check in front of it -- a just-written password, a code checked after its
-     * own read -- used to land in the gap, start a fresh window and write
-     * `blockedUntil: null` over a block with minutes still to run. A new count
-     * never shortens a standing block.
-     */
+    // A new count never shortens a standing block.
     const standingBlock = current?.blockedUntil && current.blockedUntil > now
       ? current.blockedUntil
       : null
@@ -1054,16 +1047,7 @@ export function recordLoginSuccess(subjectHash: string, {
     .run()
 }
 
-/**
- * Ends every sign-in pause standing against this Academy ID: the password and
- * PIN failures from any address, and the PIN's own tighter budget.
- *
- * For the moments the account holder has just proved who they are some other
- * way and set a new password -- an emailed reset. Leaving the pause in place
- * told them "Password reset complete" and then "wait a few minutes" on the
- * first try with the new password, which reads as a reset that failed. The
- * per-address bucket is shared with other accounts and is left alone.
- */
+// Ends this Academy ID's sign-in pauses after an emailed password reset; the shared per-address bucket is left alone.
 export function clearSignInPauses(academyId: string, {
   database = initializeDatabase(),
 }: {
@@ -1076,12 +1060,7 @@ export function clearSignInPauses(academyId: string, {
     .run()
 }
 
-/**
- * Whether this account's authenticator checks are paused: Better Auth's
- * sign-in lock on the factor, or the portal's own budget for this scope.
- * Read-only -- it spends nothing -- so a screen can say "wait" instead of
- * "wrong code" when a right code was refused only because of the pause.
- */
+// Whether this account's authenticator checks are paused (Better Auth's lock or the portal budget). Read-only.
 export function secondFactorChecksPaused(accountId: string, scope: SecondFactorScope, {
   database = initializeDatabase(),
   now = new Date(),

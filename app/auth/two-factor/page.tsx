@@ -20,13 +20,7 @@ export const metadata: Metadata = {
   robots: { follow: false, index: false },
 }
 
-/*
- * A head coach locked out of the authenticator asks the platform admin for a
- * reset and then waits, and this is the page they come back to. Nothing used
- * to tell them whether the owner had acted: a declined request, or one that ran
- * out after a day, looked exactly like one still waiting. An approved one needs
- * no notice -- the coach is sent straight on to connect a new authenticator.
- */
+// Tells a locked-out coach whether their reset request is waiting, declined or lapsed.
 function resetOutcomeNotice(outcome: AuthenticatorResetOutcome) {
   const on = formatAcademyDate(outcome.at)
   switch (outcome.state) {
