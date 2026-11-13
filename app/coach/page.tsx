@@ -196,9 +196,7 @@ export default async function CoachDashboardPage({
   // Ended schedules and ones whose term has finished are not counted.
   const runningScheduleCount = series.filter((item) => scheduleIsRunning(item, today)).length
   const assessments = listAssessmentHome(identity.subjectId)
-  // The card counts the players training now, and their drafts. Players off a
-  // schedule can be assessed too, from the Assessments page, but are not a
-  // to-do here.
+  // The card counts only players training now.
   const assessablePlayers = assessments.players.filter((player) => !player.offSchedule)
   const assessedCount = assessablePlayers.filter((player) => player.lastAssessedOn).length
   const onboardingSummary = getPlayerOnboardingSummary(today)

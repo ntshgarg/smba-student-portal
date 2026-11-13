@@ -103,13 +103,8 @@ type SessionStepFeedback = SaveFeedback & {
   field?: "weekdays" | "effectiveFrom"
 }
 
-/*
- * What the Session step says about a first schedule the player already holds,
- * by where it stands (lib/coach/onboarding.ts OnboardingPlace). One rule for
- * every step: holding a place on a matching schedule is "Session done",
- * running or not (head coach, 12 Nov 2026).
- */
-export function placeReport(item: PlayerOnboardingCase) {
+/** What the Session step says about a first schedule the player already holds. */
+function placeReport(item: PlayerOnboardingCase) {
   const place = item.assignedSession
   if (!place) return null
   const firstName = item.fullName.split(/\s+/u)[0]
@@ -231,7 +226,6 @@ export function SessionStep({
    * Undoing this step, from this step. The server refuses once the player has
    * attendance, fees or a payment on record and names which -- so the coach
    * learns what is protecting the assignment rather than that "records" exist.
-   * The button is offered only while nothing is recorded (`item.hasRecords`).
    */
   async function resetAssignment() {
     if (busy) return
@@ -337,12 +331,7 @@ export function SessionStep({
    * is that changing the schedule means undoing this one. Say what is assigned
    * and name the control that undoes it rather than offering a form that cannot
    * work.
-   *
-   * The panel covers every place the player holds, ended ones included: an
-   * ended first schedule used to fall through to the blank form below, whose
-   * every date was then refused with advice to clear an assignment nothing on
-   * screen could clear. Clearing (or "Start again") is offered only while
-   * nothing is recorded; otherwise the way on is to finish onboarding.
+   * Ended places included; clearing is offered only while nothing is recorded.
    */
   const report = placeReport(item)
   if (report) {
@@ -351,13 +340,6 @@ export function SessionStep({
       <div className={styles.recoveryPanel}>
         <strong>{report.heading}</strong>
         <p>{report.body}</p>
-        {canClear && item.assignedSession?.standing !== "running"
-          && item.assignedSession?.standing !== "unusable" ? (
-            <p>
-              Nothing is recorded for this player yet, so you can also start again: clear this
-              schedule, then choose a new first schedule and first training day.
-            </p>
-          ) : null}
         {/*
           * The reset lives here as well as on Fee Plan. This is the step whose
           * work it undoes, and sending a coach two steps forward to undo the

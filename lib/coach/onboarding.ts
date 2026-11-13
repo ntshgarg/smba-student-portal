@@ -88,22 +88,13 @@ export type PlayerOnboardingCase = {
    * The player's first schedule (their place on it), when they hold one: the
    * open place if there is one, otherwise the latest ended one. Without it the
    * Session step cannot tell "assign one" from "one already exists" and renders
-   * a pristine form whose submit the server refuses.
-   *
-   * This is the one answer to "has a schedule" during onboarding (head coach,
-   * 12 Nov 2026): the step indicator, the Session panel, the Assessment lock
-   * and the server's own checks all go by it. A place that has ended, or whose
-   * term has finished, still counts -- the coach finishes onboarding with that
-   * first term and then moves the player in Members.
+   * a pristine form whose submit the server refuses. An ended or finished
+   * place still counts as "has a schedule" everywhere in onboarding.
    */
   assignedSession: OnboardingPlace | null
   batch: TrainingBatch | null
   feePlanRecorded: boolean
-  /**
-   * Whether anything is recorded for the player yet: marked attendance, an
-   * attendance correction, a fee plan, a fee or a payment. While nothing is,
-   * the coach can clear the first schedule and start again.
-   */
+  /** Marked attendance, a correction, fee plan, fee or payment exists. */
   hasRecords?: boolean
   fullName: string
   id: string
@@ -178,11 +169,6 @@ type OnboardingSummaryInput = {
   feePlans: OnboardingFeePlan[]
   newRequestCount: number
   players: OnboardingPlayer[]
-  /**
-   * The academy's today. The stage itself no longer depends on it (a first
-   * schedule that ended still counts); the Session step's report of where the
-   * place stands does.
-   */
   referenceDate: string
 }
 
@@ -219,13 +205,7 @@ function dayBefore(dateKey: string) {
   return date.toISOString().slice(0, 10)
 }
 
-/*
- * The days a place covers, both ends included, or null when it covers none.
- * A place's `effectiveTo` is the first day it no longer covers (Members, End
- * schedule and fee issuing all read it that way), while a schedule's last day
- * is a day it runs. This used to read `effectiveTo` as a day still covered,
- * so a place ended on its own first day looked like one day of training.
- */
+// The days a place covers, both ends included (`effectiveTo` is exclusive), or null.
 function assignmentRange(assignment: OnboardingAssignment) {
   const start = latestDate(assignment.effectiveFrom, assignment.seriesStartsOn)
   const end = earliestDate(
@@ -288,18 +268,7 @@ function trainingStartIsConfirmed(player: OnboardingPlayer) {
     || player.trainingStartConfirmedAt !== null
 }
 
-/*
- * "Session done": the player holds a place on a schedule matching their level
- * and batch that covers at least one day. Whether it is still running does not
- * matter (head coach, 12 Nov 2026). A first schedule that is ended, by End
- * schedule or End training, or whose last day simply passes, before the Fee
- * Plan is done used to send the case back to the Session step, where no date
- * could be chosen and nothing could clear it. Now the coach finishes
- * onboarding with that first term -- the Fee Plan step bills only up to where
- * the place ended -- and moves or ends the player in Members like anyone else.
- * The fee setup's completion check reads places the same way
- * (lib/finance/service.ts buildOnboardingFinancePreview).
- */
+// "Session done": a place matching level and batch that covers a day, running or not.
 function hasMatchingPlace(
   assignments: OnboardingAssignment[],
   player: OnboardingPlayer,
@@ -582,16 +551,7 @@ export function derivePlayerOnboardingWorkspace({
   return { cases, summary }
 }
 
-/**
- * The training start to show for a player, or null while nobody has chosen
- * one. Approval stamps the day it happened as a stand-in (the column cannot
- * be empty), and the real date is chosen with the first schedule on the
- * Session step, which confirms it. Showing the stand-in as "Training from"
- * told coaches a start date nobody had picked.
- *
- * An absent confirmation means the caller did not read it, which is treated
- * as confirmed, the same convention `trainingStartIsConfirmed` follows.
- */
+/** The training start to show, or null while it is approval's stand-in date. */
 export function shownTrainingStart(player: {
   trainingStartConfirmedAt?: string | null
   trainingStartOn?: string | null

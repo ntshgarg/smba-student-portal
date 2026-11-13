@@ -74,9 +74,7 @@ async function run<T>(operation: (coachId: string) => T): Promise<OperationalAct
 export async function changeScheduleAction(input: ChangeThisMonthInput & { when?: "next" | "this" }) {
   return run((coachId) => {
     const nextMonthStart = nextMonthStartOf(getAcademyDateKey(academyNow()))
-    // A form opened on the last day of a month and sent after midnight still
-    // carries "the 1st of next month", which is now today: read as a change
-    // this month, it used to happen at once instead of being booked.
+    // A "next month" form sent after midnight on the last day must not apply at once.
     if (input.when === "next" && input.startsOn !== nextMonthStart) {
       operationalActionError(
         "CONFLICT",

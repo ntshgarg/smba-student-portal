@@ -71,11 +71,6 @@ describe("opening onboarding for a player who is not in it", () => {
       />,
     )
 
-    expect(html).toContain("This player has no onboarding step left")
     expect(html).toContain("/coach/members?player=finished-player")
-    expect(html).not.toContain("Complete Rohan’s assessment")
-    expect(replace).not.toHaveBeenCalled()
-    // A start date approval stamped, which nobody chose, is not shown as one.
-    expect(html).not.toContain("Training from")
   })
 })

@@ -459,12 +459,7 @@ export function archiveMemberRecord({
         message: "End the player’s active sessions before archiving their membership.",
       }
     }
-    /*
-     * A start of training booked in Members would put an archived player back
-     * on a schedule on the 1st, where it fails on a record nobody sees. The
-     * record holds Archive back while one waits; a record opened before the
-     * booking still offers it, so the rule is kept here too.
-     */
+    // A booked start of training would put an archived player back on a schedule.
     const bookedStart = tx.select({ effectiveOn: trainingChanges.effectiveOn })
       .from(trainingChanges)
       .where(and(

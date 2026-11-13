@@ -122,10 +122,6 @@ export function SessionSchedules({
   today,
 }: {
   initialPlayerId?: string | null
-  /**
-   * The `?player=` player has not finished Player onboarding. Members refuses
-   * their schedule changes until then, so the note sends the coach there.
-   */
   initialPlayerInOnboarding?: boolean
   initialProgramme?: ScheduleGroupKey | null
   initialSeriesId?: string | null
@@ -252,8 +248,6 @@ export function SessionSchedules({
     if (guidedTermFinishedOn) {
       return `Term finished on ${formatTermDate(guidedTermFinishedOn)}. ${changesMadeIn}`
     }
-    // A player who finished onboarding and then stopped is started again in
-    // Members; Player onboarding has no step left for them.
     return initialPlayerInOnboarding
       ? "Not on any schedule. A first schedule is set in Player onboarding."
       : "Not on any schedule. Start their training again from Members."

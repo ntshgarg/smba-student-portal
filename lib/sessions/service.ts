@@ -281,13 +281,7 @@ export function assignSessionRecords({
   if (!player || player.approvalStatus !== "approved" || player.archivedAt) {
     operationalActionError("NOT_FOUND", "Approved player was not found.", "playerId")
   }
-  /*
-   * The onboarding Session step only ever sets a first schedule. A screen left
-   * open after onboarding was completed used to add a second schedule here
-   * without making the player active again (the enrollment update below skips
-   * a completed player), so a paused player could sit on a schedule unseen.
-   * Later changes are made in Members.
-   */
+  // The Session step only sets a first schedule; later changes are made in Members.
   if (confirmTrainingStart && player.onboardingCompletedAt) {
     operationalActionError(
       "CONFLICT",
@@ -409,13 +403,7 @@ export function assignSessionRecords({
    * eligibility is `eligibilityDate >= trainingStartOn`, so present days would
    * vanish from the player's month with the rows still in the table.
    */
-  /*
-   * Only days that really are recorded hold the start back. This used to
-   * refuse any start later than the earliest place the player had ever held,
-   * marks or not, and told the coach to clear an assignment the screen offered
-   * no way to clear -- so a first schedule ended before its first session left
-   * no date that passed.
-   */
+  // Only days really recorded, or a place still held, hold the start back.
   if (confirmTrainingStart) {
     const firstMarked = database.select({ occurrenceDate: sessionOccurrences.occurrenceDate })
       .from(sessionAttendanceRecords)
@@ -436,14 +424,6 @@ export function assignSessionRecords({
         "effectiveFrom",
       )
     }
-    /*
-     * Nor does a place the player still holds. An open place on a schedule
-     * covers its days whether or not they are marked yet, and a later start
-     * would put those days before the training start, out of attendance and
-     * billing -- the case of a Session step left open in one tab while the
-     * player was assigned in another. Only a place that is ended, or never
-     * covered a day, gives way to a later start.
-     */
     const today = getIndiaDateKey(now)
     const heldEarlier = database.select({
       effectiveFrom: sessionAssignments.effectiveFrom,

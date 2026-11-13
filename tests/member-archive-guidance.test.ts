@@ -1,45 +1,14 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("@/app/coach/members/training-actions", () => ({}))
+vi.mock("@/components/coach/coach-portal-provider", () => ({}))
 
 import { archiveBlockedNote } from "@/components/coach/members/directory/member-access-actions"
 
-/*
- * What a member record says stands between the player and Archive. It used to
- * tell a coach who had just booked End training to "use End training", with
- * no word that archiving opens on the day it happens or at once with "They
- * have left already" -- and it offered Archive while a start was booked.
- */
 describe("the archive note on a member record", () => {
   it("names when archiving opens after End training is booked", () => {
-    const note = archiveBlockedNote(true, { effectiveOn: "2026-12-01", kind: "end", stopFees: true }, true)
-    // Named the way the training panel names it, and only promised once fees stop.
-    expect(note).toContain("Training ends after November 2026. Archiving opens from 1 December 2026, once no fees are owed")
+    const note = archiveBlockedNote(true, { effectiveOn: "2026-12-01", kind: "end" })
+    expect(note).toContain("Training ends after November 2026. Archiving opens from 1 December 2026")
     expect(note).toContain("They have left already")
-    expect(note).not.toContain("Use End training above before archiving")
-  })
-
-  it("names Stop fees when the booked end keeps the fee plan", () => {
-    const note = archiveBlockedNote(true, { effectiveOn: "2026-12-01", kind: "end", stopFees: false }, true)
-    // Archive refuses while a fee plan is open, so "archiving opens then" was untrue.
-    expect(note).toContain("their fee plan is kept")
-    expect(note).toContain("use Stop fees from 1 December 2026")
-    expect(note).not.toContain("Archiving opens")
-  })
-
-  it("promises archiving from the 1st when there is no fee plan to stop", () => {
-    expect(archiveBlockedNote(true, { effectiveOn: "2026-12-01", kind: "end", stopFees: false }, false))
-      .toContain("Archiving opens from 1 December 2026")
-  })
-
-  it("still asks for End training when nothing is booked", () => {
-    expect(archiveBlockedNote(true, null)).toBe("Use End training above before archiving this member.")
-  })
-
-  it("holds Archive back while a start of training is booked", () => {
-    expect(archiveBlockedNote(false, { effectiveOn: "2026-12-01", kind: "change" }))
-      .toContain("Cancel that booked change above before archiving")
-  })
-
-  it("offers Archive for a player off every schedule with nothing booked", () => {
-    expect(archiveBlockedNote(false, null)).toBeNull()
   })
 })

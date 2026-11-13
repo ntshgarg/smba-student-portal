@@ -958,11 +958,7 @@ function createAgreement(
     actorId: string
     createId: () => string
     now: Date
-    /**
-     * Onboarding completion has already checked the player's place itself
-     * (buildOnboardingFinancePreview), including a first schedule that ended
-     * before onboarding finished, which this check alone would refuse.
-     */
+    /** Onboarding completion already checked the place, ended ones included. */
     placeChecked?: boolean
   },
 ) {
@@ -1196,13 +1192,7 @@ function buildOnboardingFinancePreview(
       eq(sessionSeries.programme, input.level),
       eq(sessionSeries.batch, input.batch),
     )).all()
-  /*
-   * A place counts while it covers at least one day from the training start.
-   * Its `effectiveTo` is the first day it no longer covers; the schedule's last
-   * day is a day it runs. A place ended on its own first day used to count as
-   * one day of training here, the same mistake the onboarding steps made
-   * (lib/coach/onboarding.ts assignmentRange); both now read it one way.
-   */
+  // A place counts while it covers a day from the training start (`effectiveTo` is exclusive).
   const usableAssignments = assignments.filter((assignment) => {
     const start = [
       enrollment.trainingStartOn,
@@ -1213,15 +1203,7 @@ function buildOnboardingFinancePreview(
       && (assignment.seriesEndsOn === null || assignment.seriesEndsOn >= start)
   })
   if (!usableAssignments.length) blockers.push("Assign a matching session before completing fees.")
-  /*
-   * A first schedule that was ended before onboarding finished (End schedule,
-   * or End training in Members) is finished with as it was: the registration
-   * fee and the months the player trained, and no fee after the month the
-   * place ended (head coach, 12 Nov 2026). So the Fee Plan made at completion
-   * stops after that month. A term that merely ran out by date keeps an open
-   * place and an open Fee Plan; Members then shows the player as "Term
-   * finished" to move, and no fee is issued for months without a schedule.
-   */
+  // An ended first place: the Fee Plan stops after the month it ended. A term finished by date keeps it open.
   const placeLastMonth = (assignment: typeof usableAssignments[number]) => {
     const lastDays = [
       assignment.effectiveTo === null ? null : addCalendarDays(assignment.effectiveTo, -1),
@@ -1237,14 +1219,7 @@ function buildOnboardingFinancePreview(
   const placeEndsAfter = placesEnded && lastMonths.every((month) => month !== null)
     ? (lastMonths as string[]).sort().at(-1) ?? null
     : null
-  /*
-   * End training booked in Members while the player is still in onboarding
-   * (it stays open to them, head coach 12 Nov 2026). The plan made at
-   * completion stops with it, as that end's "Stop fees" would have stopped the
-   * plan had it existed when the end was booked. Completing before the 1st
-   * used to leave an open plan that the end, applied on the 1st, then kept --
-   * a fee plan nobody chose, which also held Archive back.
-   */
+  // An End training booked during onboarding stops the plan made at completion too.
   const waitingEnd = database.select({ effectiveOn: trainingChanges.effectiveOn })
     .from(trainingChanges)
     .where(and(
@@ -1268,12 +1243,7 @@ function buildOnboardingFinancePreview(
       assignment.seriesStartsOn,
     ].reduce((latest, value) => value > latest ? value : latest))
     .sort()[0] ?? enrollment.trainingStartOn
-  /*
-   * The month an ended first place stops in is charged for the weeks actually
-   * trained (head coach, 12 Nov 2026): its sessions out of all the sessions
-   * that month would have had (`wholeMonth`), whether it is also the first
-   * month or a later one. The joining month is otherwise prorated as before.
-   */
+  // The month an ended first place stops in is charged for the sessions actually trained.
   const sessionProration = (period: string) => readFirstMonthSessionProration(database, {
     batch: input.batch,
     period,
@@ -1577,11 +1547,7 @@ export function completePlayerOnboardingFinance(
       })
       return [{ issued, line }]
     })
-    // The first schedule was ended before onboarding finished: the plan stops
-    // after the month the place ended, as End training's "Stop fees" would
-    // have stopped it had the plan existed then. The same for an End training
-    // booked in Members while onboarding was open: the plan stops after its
-    // last month, and the booking now says "fees stop", which it does.
+    // Ended first place or booked end: the plan stops, and the booking says "fees stop".
     if (preview.feePlanEndsAfter !== null) {
       const bookedEnd = tx.update(trainingChanges).set({ stopFees: true, updatedAt: now }).where(and(
         eq(trainingChanges.playerAccountId, input.playerId),

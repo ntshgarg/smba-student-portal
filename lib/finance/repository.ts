@@ -102,7 +102,6 @@ function readFinancePlayer(database: Executor, playerId: string) {
     fullName: accounts.fullName,
     id: accounts.id,
     level: playerEnrollments.level,
-    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
@@ -242,15 +241,7 @@ export function readFirstMonthSessionProration(
     playerId: string
     programme: typeof feeAgreements.$inferSelect.level
     trainingStartOn: string
-    /**
-     * Count the sessions the month would have had, not only the ones the
-     * player's place covered: for the month a first schedule that was ended
-     * stops in, when onboarding is finished with it (head coach, 12 Nov 2026:
-     * "the weeks actually trained"). The place's end then does not shorten the
-     * month, and sessions End schedule cancelled when it ended the schedule
-     * still count towards it. Without this, a player ended after one session
-     * read as "1 of 1" and was charged the whole month.
-     */
+    /** Count every session the month would have had, including ones End schedule cancelled. */
     wholeMonth?: boolean
   },
 ) {
@@ -1106,7 +1097,6 @@ export function loadPlayerFeeRecord(
     academyId: formatAcademyId(player.academyIdSerial),
     fullName: player.fullName,
     archived: player.archivedAt !== null,
-    onboardingComplete: player.onboardingCompletedAt !== null,
     financeTrackingMonth: activation?.trackingMonth ?? null,
     registrationResolutionRequired,
     status: combineFinanceStatuses(activeCharges.map((charge) => charge.status)),

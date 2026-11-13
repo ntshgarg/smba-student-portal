@@ -59,7 +59,7 @@ function monthName(dateKey: string) {
 }
 
 /** The month a change dated the 1st follows: training ends after this one. */
-function monthBefore(firstOfMonth: string) {
+export function monthBefore(firstOfMonth: string) {
   const [year, month] = firstOfMonth.split("-").map(Number)
   return monthName(new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10))
 }
@@ -172,8 +172,6 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
 
           {scheduled ? (
             <div className={styles.scheduled}>
-              {/* Named by the change's own date: one whose day has passed
-                  without it being applied used to read as next month's. */}
               <strong>
                 {scheduled.kind === "end"
                   ? `Training ends after ${monthBefore(scheduled.effectiveOn)}`
@@ -181,8 +179,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
               </strong>
               <span>
                 {scheduled.kind === "end"
-                  // A player still in onboarding has no fee plan to keep: the
-                  // plan made when onboarding finishes stops with this end.
+                  // In onboarding there is no fee plan to keep yet.
                   ? `Paused from ${dayName(scheduled.effectiveOn)}${!onboarded ? "" : scheduled.stopFees ? " · fees stop" : " · fee plan kept"}`
                   : [
                     scheduledSeries ? seriesLabel(scheduledSeries) : "New schedule",
@@ -191,12 +188,6 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                     scheduled.monthlyFeePaise !== null ? `${formatInr(scheduled.monthlyFeePaise)} a month` : null,
                   ].filter(Boolean).join(" · ")}
               </span>
-              {/* Its day has come but it has not happened: it hit a fault and
-                  is tried again for a couple of days (TRAINING_CHANGE_RETRY_DAYS
-                  in lib/training/changes.ts), then shown as failed. */}
-              {scheduled.effectiveOn <= data.today ? (
-                <span>Not applied yet. It is tried again shortly; if this stays, cancel it and make the change again.</span>
-              ) : null}
             </div>
           ) : null}
 
@@ -331,10 +322,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
             ) : null}
             {fee?.activeAgreementId ? (
               <div className={styles.actions}>
-                {/* Not while a booking decides the fee: a waiting move carries
-                    its own fee (the server refuses Change fee then), and after
-                    a waiting end that stops fees there is no later fee to
-                    change -- a new one would only be cancelled again. */}
+                {/* Not while a booked change or fee-stopping end decides the fee. */}
                 {hasRunningPlace && !(scheduled?.kind === "change")
                   && !(scheduled?.kind === "end" && scheduled.stopFees) ? (
                   <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
@@ -514,10 +502,7 @@ function TrainingForm({
     level: player.training.level as TrainingProgramme,
   }
   // A paused player restarts from next month; an edit of a waiting change stays
-  // there. A waiting end of training does not stop a change this month (it
-  // still ends their training after this month), but a start date has to fall
-  // on or after their training start, so a player who only starts after today
-  // has no day this month to offer.
+  // there; a player who starts after today has no day this month.
   const canStartThisMonth = mode === "change" && !editing && player.member.trainingStartOn <= today
   const endWaiting = scheduled?.kind === "end"
   const [when, setWhen] = useState<"next" | "this">(canStartThisMonth ? "this" : "next")
@@ -540,10 +525,7 @@ function TrainingForm({
   const [feeText, setFeeText] = useState("")
   const [feeTouched, setFeeTouched] = useState(false)
   const [marks, setMarks] = useState<Array<{ choice: string; occurrenceDate: string }> | null>(null)
-  // A check that failed is not "nothing to clear": it used to read as if no
-  // mark would be cleared, the coach confirmed, and the marks went anyway.
   const [marksFailed, setMarksFailed] = useState(false)
-  const [marksAttempt, setMarksAttempt] = useState(0)
 
   useEffect(() => {
     if (when !== "this" || !date) return
@@ -556,7 +538,7 @@ function TrainingForm({
     return () => {
       live = false
     }
-  }, [date, marksAttempt, player.member.id, when])
+  }, [date, player.member.id, when])
 
   function chooseWhen(next: "next" | "this") {
     if (next === "this" && when !== "this") {
@@ -630,8 +612,6 @@ function TrainingForm({
     when === "this"
       ? `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}${profileChanges ? `, ${academyPlanLabel(plan)}` : ""}`
       : `From ${dayName(startsOn)}: ${label} on ${dayList(weekdays)}, ${academyPlanLabel(plan)}`,
-    // Says what the check found, and only once it has: a failed or
-    // unfinished check is not "nothing to clear" (Confirm waits for it too).
     when === "this"
       ? marksFailed
         ? "Could not check which attendance marks are cleared"
@@ -835,20 +815,7 @@ function TrainingForm({
         <div className={styles.field}>
           <span className={styles.label}>Attendance that will be cleared</span>
           {marksFailed ? (
-            <p className={styles.help}>
-              Could not check which marks would be cleared. Check your connection, then{" "}
-              <button
-                className={styles.button}
-                onClick={() => {
-                  setMarks(null)
-                  setMarksFailed(false)
-                  setMarksAttempt((value) => value + 1)
-                }}
-                type="button"
-              >
-                check again
-              </button>
-            </p>
+            <p className={styles.help}>Could not check which marks would be cleared. Check your connection and open the form again.</p>
           ) : marks === null ? <p className={styles.help}>Checking…</p> : marks.length ? (
             <ul className={styles.marks}>
               {marks.map((item) => (
@@ -877,7 +844,6 @@ function EndForm({
 }: {
   busy: boolean
   financeActive: boolean
-  /** The player has not finished Player onboarding (head coach, 12 Nov 2026). */
   inOnboarding: boolean
   name: string
   nextMonthStart: string

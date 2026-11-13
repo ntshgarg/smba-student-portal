@@ -77,13 +77,7 @@ function groupLabel(level: string | null, batch: string | null) {
   return parts.length > 0 ? parts.join(" · ") : null
 }
 
-/*
- * Who can be assessed: every player on a schedule, and every player who has
- * been on one and is off it now (training ended or paused, a schedule ended),
- * until they are archived (head coach, 12 Nov 2026). A finished term keeps the
- * player's place open, so they are "active" here already. A player who has
- * never been on a schedule ("unassigned") is still in onboarding.
- */
+// Players on a schedule or off one (paused) until archived; "unassigned" is still in onboarding.
 function activePlayerRows(database: SmbaDatabaseExecutor) {
   return database.select({
     batch: playerEnrollments.batch,
@@ -148,9 +142,6 @@ export function listAssessmentHome(
       lastOverall: latest ? overallRating(parseStoredRatings(latest.ratings)) : null,
     }
   }).sort((a, b) => {
-    // Players off a schedule can still be assessed, but the ones training now
-    // come first: the list's job is to show who has been left.
-    if (a.offSchedule !== b.offSchedule) return a.offSchedule ? 1 : -1
     if (a.lastAssessedOn === b.lastAssessedOn) return a.name.localeCompare(b.name, "en-IN")
     if (a.lastAssessedOn === null) return -1
     if (b.lastAssessedOn === null) return 1

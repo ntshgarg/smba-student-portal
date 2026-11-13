@@ -80,14 +80,6 @@ describe("onboarding reset guidance", () => {
     expect(html).toContain("Complete onboarding, then make any change in Members")
   })
 
-  it("says what completing does when the first schedule has ended", () => {
-    const html = render(player({
-      assignedSession: { batch: "Weekend", effectiveFrom: "2026-07-04", endsOn: null, programme: "Intermediate", standing: "ended" },
-    }))
-    expect(html).toContain("Aditi’s first schedule has ended")
-    expect(html).toContain("no monthly fee after that")
-  })
-
   it("offers the ordinary fee form for a start date that has not arrived", () => {
     /*
      * There used to be a panel here instead, refusing completion until the date

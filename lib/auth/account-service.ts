@@ -675,9 +675,7 @@ export function approveRegistration(
       fullName: registration.fullName,
       role: registration.requestedRole,
     }
-    // Immediate, like every other onboarding write: two coaches approving at
-    // once must not both read the request as pending.
-  }, { behavior: "immediate" })
+  })
 }
 
 export function rejectRegistration(registrationId: string, coachAccountId: string) {

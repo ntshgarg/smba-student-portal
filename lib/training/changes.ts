@@ -34,6 +34,7 @@ import {
   isFinanceActive,
   pauseUnstartedFeeAgreementInTransaction,
 } from "@/lib/finance/service"
+import { addCalendarDays } from "@/lib/finance/domain"
 import { loadChargeView } from "@/lib/finance/repository"
 import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
 import {
@@ -320,16 +321,6 @@ export function clearTrainingNotices(
   )).run()
 }
 
-function addDays(dateKey: string, days: number) {
-  const date = new Date(`${dateKey}T00:00:00.000Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
-}
-
-function dayAfter(dateKey: string) {
-  return addDays(dateKey, 1)
-}
-
 function dayBefore(dateKey: string) {
   const date = new Date(`${dateKey}T00:00:00.000Z`)
   date.setUTCDate(date.getUTCDate() - 1)
@@ -476,10 +467,7 @@ export function scheduleEndOfTraining(
       level: null,
       monthlyFeePaise: null,
       seriesId: null,
-      // A player still in onboarding has no fee plan yet, and the form offers
-      // no fees choice; the plan made when onboarding finishes stops with this
-      // end (lib/finance/service.ts buildOnboardingFinancePreview), so the
-      // booking says so rather than "fee plan kept".
+      // In onboarding the plan made at completion stops with this end.
       stopFees: Boolean(input.stopFees) || !player.onboardingCompletedAt,
       updatedAt: now,
       weekdays: "[]",
@@ -666,15 +654,8 @@ export function scheduleLabel(
   })
 }
 
-/*
- * How many days after its own date a booked change that hit an unexpected
- * fault (not a rule refusing it) is still tried again. A passing fault -- a
- * dropped connection, a busy database -- clears itself within that; one that
- * never goes away (a bad stored row, a bug) would otherwise leave the change
- * silently waiting for ever while the player trains and is billed on the old
- * terms. After this it fails visibly, as a refused change does.
- */
-export const TRAINING_CHANGE_RETRY_DAYS = 2
+// Days after its date that a change hit by an unexpected fault is tried again.
+const TRAINING_CHANGE_RETRY_DAYS = 2
 
 /**
  * Applies every scheduled change whose date has come. Each change is its own
@@ -723,18 +704,9 @@ export function applyDueTrainingChanges({
       }, { behavior: "immediate" })
       if (!cancelled) applied += 1
     } catch (error) {
-      /*
-       * A change its rule refused is final at once. A passing fault -- a
-       * dropped connection, a busy database -- used to be final too, so a
-       * player meant to stop on the 1st kept training and stayed billable
-       * until the coach noticed and redid it a month late. Such a change now
-       * stays booked and is tried again (nothing was written: the transaction
-       * rolled back), but only for TRAINING_CHANGE_RETRY_DAYS after its date.
-       * A fault still there after that is not passing, and the change fails
-       * visibly so the coach can make it another way.
-       */
+      // A refused change is final; any other fault is retried for a few days.
       const refused = error instanceof OperationalActionError || error instanceof FinanceServiceError
-      if (!refused && today <= addDays(change.effectiveOn, TRAINING_CHANGE_RETRY_DAYS)) {
+      if (!refused && today <= addCalendarDays(change.effectiveOn, TRAINING_CHANGE_RETRY_DAYS)) {
         console.error("A scheduled training change could not be applied; it will be tried again.", error)
         retry += 1
         continue
@@ -759,10 +731,7 @@ export function applyDueTrainingChanges({
  * the 1st of a later month, so once a server instance has looked on a given
  * day nothing else can fall due that day; the memo makes every later call that
  * day free, which matters because production reads are network round trips.
- *
- * A change that hit a passing fault is tried again, but not by every request:
- * at most once every few minutes, so a fault that lasts does not put a
- * write-locked transaction in front of every page.
+ * A change being retried is looked at again at most every few minutes.
  */
 const RETRY_AFTER_MS = 5 * 60 * 1000
 let checkedOn: string | null = null
@@ -884,9 +853,7 @@ export function changeScheduleThisMonth(
       if (startsOn < player.trainingStartOn) {
         operationalActionError("INVALID_INPUT", "The new schedule cannot start before the player's training started.", "startsOn")
       }
-      // A waiting move would be undone by this change; a waiting end of
-      // training is not -- it still ends their training after this month, so
-      // the coach can adjust the rest of the month without cancelling it.
+      // A waiting end of training still applies after this month.
       if (scheduledChange(tx, input.playerId)?.kind === "change") {
         operationalActionError(
           "CONFLICT",
@@ -1085,14 +1052,7 @@ export function endTrainingNow(
         tx.update(trainingChanges).set({ resolvedAt: now, status: "cancelled", updatedAt: now })
           .where(eq(trainingChanges.id, waiting.id)).run()
       }
-      /*
-       * "They have left already" takes them off today. A place's end date is
-       * the first day it no longer covers, so ending it today also took today
-       * off their record -- and a session this morning they were marked at
-       * silently vanished from their attendance. When today is already marked
-       * for them, the place ends after today instead: the mark stays, and
-       * nothing later is covered.
-       */
+      // If today is already marked for them, end the place after today so the mark stays.
       const markedToday = tx.select({ id: sessionAttendanceRecords.id }).from(sessionAttendanceRecords)
         .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
         .where(and(
@@ -1102,7 +1062,7 @@ export function endTrainingNow(
           inArray(sessionOccurrences.seriesId, open.map((assignment) => assignment.seriesId)),
         ))
         .get()
-      endOpenAssignments(tx, input.playerId, markedToday ? dayAfter(today) : today)
+      endOpenAssignments(tx, input.playerId, markedToday ? addCalendarDays(today, 1) : today)
       clearTrainingNotices(tx, input.playerId, now)
       tx.update(playerEnrollments).set({
         recordRevision: sql`${playerEnrollments.recordRevision} + 1`,

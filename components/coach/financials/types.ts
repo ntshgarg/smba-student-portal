@@ -61,8 +61,6 @@ export type PlayerFinancialLedgerView = {
   archived: boolean
   charges: FinancialChargeView[]
   feePlanSetupReady: boolean
-  /** See PlayerFeeRecord.onboardingComplete. */
-  onboardingComplete?: boolean
   feePlan: {
     id: string
     academyPlan: import("@/lib/training/academy-plans").AcademyPlan

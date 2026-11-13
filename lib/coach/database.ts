@@ -418,11 +418,7 @@ export function getCoachSessionSnapshot(referenceDate = academyToday()) {
   }
 }
 
-/**
- * Whether an approved player has yet to finish Player onboarding. Members
- * refuses schedule changes for them, so screens that send a coach to Members
- * send them to onboarding instead.
- */
+/** Whether an approved player has yet to finish Player onboarding. */
 export function playerIsInOnboarding(playerId: string) {
   const row = initializeDatabase().select({
     onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,

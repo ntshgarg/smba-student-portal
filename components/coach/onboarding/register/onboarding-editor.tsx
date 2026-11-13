@@ -35,9 +35,7 @@ function editorCopy(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
       }
     case "session":
       // Revisited, this step reports an assignment rather than offering to make
-      // one; a heading still saying "assign" describes work that is done. A
-      // first schedule that has run out or been ended is not "set", though:
-      // saying so sent coaches looking for a way on that was not there.
+      // one; a heading still saying "assign" describes work that is done.
       if (item.assignedSession?.standing === "running") {
         return {
           title: `${firstName}’s court time is set`,
@@ -141,10 +139,6 @@ export function OnboardingEditor({
         </div>
         <OnboardingTimeline item={item} />
         {revisiting ? (
-          /*
-           * It used to add "Changes save as normal", which the Session step
-           * (a report with one undo) and a locked Assessment cannot honour.
-           */
           <p className={styles.revisitNote} role="note">
             You are back on a completed step. Nothing is final until onboarding is completed.
           </p>

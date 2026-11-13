@@ -91,13 +91,7 @@ export function PlayerOnboardingRegister({
   const registerTitleRef = useRef<HTMLHeadingElement>(null)
   const previousSelectionRef = useRef<string | null>(null)
 
-  /*
-   * A link to someone with no onboarding step left -- their onboarding is
-   * finished, or the request was already handled -- used to be quietly
-   * redirected to whichever case was first, so the coach landed on another
-   * child's onboarding with no word of explanation. Now nothing opens and the
-   * page says why, with the way to the player's record.
-   */
+  // A link to someone with no onboarding step left opens nothing and says why.
   const missingPlayerId = selectedId && !selectedItem ? selectedId : null
 
   useEffect(() => {

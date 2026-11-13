@@ -95,7 +95,7 @@ describe("coach Fee Records navigation", () => {
   it("keeps archived concession history visible without archived mutation controls", () => {
     const ledger = ledgerSource()
 
-    expect(ledger).toContain("|| ledger.management.concessions.length > 0")
+    expect(ledger).toContain("ledger.archived && ledger.management.concessions.length > 0")
     expect(ledger).toContain("Concessions previously recorded for this player.")
     expect(ledger).toContain("ledger.archived ? null : (")
   })

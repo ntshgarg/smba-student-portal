@@ -292,20 +292,16 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
     expect(onboardingCase(chitra)).toMatchObject({ stage: "feePlan" })
   })
 
-  it("refuses a later start only when attendance is really marked, and says what to do", () => {
+  it("refuses a later start only while marked days or a held place cover earlier days", () => {
     const dev = newPlayer("Dev Marked Days")
     assign(dev, autumn, "2026-11-02")
-    mark(dev, occurrenceOn(autumn, "2026-11-04"), "present")
+    // A Session step left open in another tab: the held place names its own button.
+    expect(() => assign(dev, winter, "2026-11-09")).toThrow(/from 2 November 2026[^]*Clear this assignment/u)
 
-    let message = ""
-    try {
-      assign(dev, winter, "2026-11-09")
-    } catch (error) {
-      message = (error as Error).message
-    }
-    expect(message).toContain("Attendance is already marked for this player from 4 November 2026")
-    expect(message).toContain("Fee Plan step")
-    expect(message).not.toContain("Clear the player")
+    mark(dev, occurrenceOn(autumn, "2026-11-04"), "present")
+    expect(() => assign(dev, winter, "2026-11-09"))
+      .toThrow(/Attendance is already marked for this player from 4 November 2026[^]*Fee Plan step/u)
+    expect(places(dev)).toHaveLength(1)
   })
 
   it("starts again when a mark was only ticked and unticked, and never points to the Calendar", () => {
@@ -380,7 +376,7 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       idempotencyKey: "fee-after-end",
       monthlyFeePaise: 350_000,
       playerId: kiran,
-    }, context())).toThrow(/fees stop then/u)
+    }, context())).toThrow(/fees stop from/u)
 
     // Adjusting the rest of this month used to be refused until the planned
     // end was cancelled; the end still happens after this month.
@@ -473,21 +469,6 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
     expect(plans(mira)).toEqual([
       expect.objectContaining({ effectiveTo: "2026-11-30", status: "ended" }),
     ])
-  })
-
-  it("refuses a later start while a place the player still holds covers earlier days", () => {
-    const ravi = newPlayer("Ravi Two Tabs")
-    assign(ravi, autumn, "2026-11-02")
-    // A Session step left open in another tab, sent after the assignment.
-    let message = ""
-    try {
-      assign(ravi, winter, "2026-11-09")
-    } catch (error) {
-      message = (error as Error).message
-    }
-    expect(message).toContain("from 2 November 2026")
-    expect(message).toContain("Clear this assignment")
-    expect(places(ravi)).toHaveLength(1)
   })
 
   it("keeps Archive refused on the server while a start of training is booked", () => {
