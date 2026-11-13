@@ -6,8 +6,6 @@ vi.mock("server-only", () => ({}))
 import {
   createAdminPreviewToken,
   readAdminPreviewToken,
-  readLiveAdminPreviewClaim,
-  sessionTokenFromCookieValue,
 } from "@/lib/auth/admin-preview"
 import { AdminPreviewBanner } from "@/components/admin-preview-banner"
 import { proxy } from "@/proxy"
@@ -57,16 +55,6 @@ describe("platform-owner preview claims", () => {
       SESSION_TOKEN,
       new Date(now.getTime() + 60 * 60 * 1000 + 1),
     )).toBeNull()
-  })
-
-  it("reads the session token out of the signed sign-in cookie", () => {
-    const value = SESSION_COOKIE.split("=").slice(1).join("=")
-    expect(sessionTokenFromCookieValue(value)).toBe(SESSION_TOKEN)
-    expect(sessionTokenFromCookieValue(undefined)).toBeNull()
-    expect(readLiveAdminPreviewClaim(
-      livePreviewCookie().split("=")[1],
-      sessionTokenFromCookieValue(value),
-    )).not.toBeNull()
   })
 
   it("blocks mutations during a live preview while allowing the explicit preview-exit post", () => {

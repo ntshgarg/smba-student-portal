@@ -12,12 +12,7 @@ function previewIsLive(request: NextRequest) {
   const sessionToken = sessionTokenFromCookieValue(AUTH_SESSION_COOKIE_NAMES
     .map((name) => request.cookies.get(name)?.value)
     .find(Boolean))
-  try {
-    return readLiveAdminPreviewClaim(request.cookies.get(ADMIN_PREVIEW_COOKIE)?.value, sessionToken) !== null
-  } catch {
-    // The signing secret could not be read: stay read-only rather than guess.
-    return true
-  }
+  return readLiveAdminPreviewClaim(request.cookies.get(ADMIN_PREVIEW_COOKIE)?.value, sessionToken) !== null
 }
 
 export function proxy(request: NextRequest) {

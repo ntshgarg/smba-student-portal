@@ -110,9 +110,6 @@ describe("Log out during a preview", () => {
     )
     expect(markup).toContain('action="/admin/preview/exit"')
     expect(markup).toContain('name="signOut"')
-    // It says whose sign-in ends: the name shown is the person being viewed.
-    expect(markup).toContain("Viewing as")
-    expect(markup).not.toContain("Signed in as")
     expect(markup).toContain("Exit preview and log out")
     // The previewed person's account security is not the owner's to open.
     expect(markup).not.toContain('href="/account/security"')

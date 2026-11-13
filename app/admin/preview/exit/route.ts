@@ -35,7 +35,6 @@ export async function POST(request: Request) {
       accountId: claim?.targetAccountId ?? actorAccountId,
       actorAccountId,
       eventType: "admin_preview_stopped",
-      metadata: signOut ? { signedOut: true } : undefined,
       outcome: "success",
     })
   }

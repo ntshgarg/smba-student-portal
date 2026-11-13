@@ -159,7 +159,7 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
                     aria-label="Account navigation"
                   >
                     <p>
-                      <span>{account.previewMode ? "Viewing as" : "Account"}</span>
+                      <span>Account</span>
                       <strong>{account.name}</strong>
                     </p>
                     <a href={account.dashboardHref} onClick={() => setAccountOpen(false)}>
