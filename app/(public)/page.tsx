@@ -14,9 +14,9 @@ import {
 import { absoluteSiteUrl } from "@/lib/config"
 import { contact, proofPoints, trainingPrograms } from "@/lib/public/academy"
 import { PublicAnnouncements } from "@/components/announcements/public-announcements"
+import { HeroShuttle } from "@/components/public/hero-shuttle/hero-shuttle"
 import {
   FeeExplorer,
-  FlightLineVisual,
   PrinciplesReveal,
   TrialForm,
 } from "@/components/public/home-interactions"
@@ -149,7 +149,7 @@ function Hero() {
           </span>
         </div>
       </div>
-      <FlightLineVisual />
+      <HeroShuttle />
     </section>
   )
 }
