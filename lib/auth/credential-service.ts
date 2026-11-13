@@ -1074,26 +1074,19 @@ export function clearSignInPauses(academyId: string, {
     .run()
 }
 
-// Whether this account's authenticator checks are paused (Better Auth's lock or the portal budget). Read-only.
-export function secondFactorChecksPaused(accountId: string, scope: SecondFactorScope, {
+// Whether Better Auth has locked this account's authenticator checks. Read-only; the portal budget is checked when the attempt is reserved.
+export function secondFactorChecksPaused(accountId: string, {
   database = initializeDatabase(),
   now = new Date(),
 }: {
   database?: SmbaDatabaseExecutor
   now?: Date
 } = {}) {
-  if (scope === "challenge") {
-    const factor = database.select({ lockedUntil: authTwoFactors.lockedUntil })
-      .from(authTwoFactors)
-      .where(eq(authTwoFactors.userId, accountId))
-      .get()
-    if (factor?.lockedUntil && factor.lockedUntil > now) return true
-  }
-  const row = database.select({ blockedUntil: authLoginAttempts.blockedUntil })
-    .from(authLoginAttempts)
-    .where(eq(authLoginAttempts.key, secondFactorKey(accountId, scope).key))
+  const factor = database.select({ lockedUntil: authTwoFactors.lockedUntil })
+    .from(authTwoFactors)
+    .where(eq(authTwoFactors.userId, accountId))
     .get()
-  return Boolean(row?.blockedUntil && row.blockedUntil > now)
+  return Boolean(factor?.lockedUntil && factor.lockedUntil > now)
 }
 
 export function ensureBootstrapCredential({

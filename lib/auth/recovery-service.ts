@@ -773,9 +773,7 @@ export async function requestRegistrationVerification(input: {
       eq(authEmailChallenges.subjectHash, hashedSubject),
       eq(authEmailChallenges.purpose, "verify_email"),
       isNull(authEmailChallenges.consumedAt),
-      // Only codes asked for before this one: two overlapping requests used to
-      // retire each other, leaving neither emailed code usable.
-      lt(authEmailChallenges.createdAt, now),
+      ne(authEmailChallenges.id, challengeId),
     )).run()
   return { email }
 }
@@ -953,7 +951,6 @@ export async function requestPasswordRecovery(input: {
     accountId: accounts.id,
     fullName: accounts.fullName,
     role: accounts.role,
-    twoFactorEnabled: authUsers.twoFactorEnabled,
   }).from(authMethods)
     .innerJoin(accounts, eq(accounts.id, authMethods.accountId))
     .innerJoin(authUsers, eq(authUsers.id, accounts.id))
@@ -975,8 +972,7 @@ export async function requestPasswordRecovery(input: {
     )).get()
   const validAuthenticatorRecovery = intent !== "authenticator"
     || (account?.role === "coach"
-      && account.accessLevel === "head_admin"
-      && account.twoFactorEnabled)
+      && account.accessLevel === "head_admin")
   if (!account || !validAuthenticatorRecovery) {
     writeAuthSecurityEvent({
       eventType: failureEvent,
@@ -1138,13 +1134,6 @@ function roleRequiresRecoverySecondFactor(row: {
     || (row.role === "coach" && row.accessLevel === "head_admin")
 }
 
-/**
- * How long after the owner approves an authenticator reset the head coach may
- * also reset a forgotten password by email alone. The same span the request
- * itself was allowed to wait for approval.
- */
-export const APPROVED_RESET_PASSWORD_WINDOW_MS = AUTHENTICATOR_RESET_REQUEST_LIFETIME_MS
-
 function recentlyApprovedAuthenticatorReset(
   accountId: string,
   email: string,
@@ -1159,29 +1148,13 @@ function recentlyApprovedAuthenticatorReset(
       // Only for the inbox the owner approved. A recovery address changed
       // since then has not been vouched for by anybody.
       eq(authAuthenticatorResetRequests.recoveryEmail, email),
-      gt(authAuthenticatorResetRequests.resolvedAt, new Date(now.getTime() - APPROVED_RESET_PASSWORD_WINDOW_MS)),
+      gt(authAuthenticatorResetRequests.resolvedAt, new Date(now.getTime() - AUTHENTICATOR_RESET_REQUEST_LIFETIME_MS)),
     ))
     .get())
 }
 
-/*
- * What a protected account (head coach, owner) must show besides the emailed
- * link before its password can be reset.
- *
- * The rule exists so that the recovery inbox alone cannot take the account.
- * With a connected authenticator, that is the authenticator. Without one there
- * was nothing to show at all, so a head coach who lost the phone and also
- * forgot the password was stuck even after the owner approved the reset --
- * the very approval that already accepted "this inbox plus the owner's yes" as
- * enough to remove the authenticator. For a day after that approval, and only
- * from the inbox that was approved, the same proof is enough to set a new
- * password. The owner's queue says so beside the Approve button, so the owner
- * knows that is what they are agreeing to. Outside it there is still no way
- * through by email, and the page says so rather than asking for a code that
- * cannot exist. The owner has nobody to approve for them, so without an
- * authenticator their recovery inbox is enough, and they are emailed when it
- * is used (completePasswordRecovery).
- */
+// Head coach/owner: an authenticator code, or (head coach) an owner-approved reset from this inbox
+// within 24h. An owner with no authenticator: the inbox alone, and they are emailed when it is used.
 function recoverySecondFactorRule(row: {
   accessLevel: "head_admin" | "junior_coach" | null
   accountId: string | null
@@ -1216,26 +1189,6 @@ export function recoveryLinkIsOpenable(token: string, intent: RecoveryLinkIntent
 } = {}) {
   const challenge = recoveryChallenge(token, intent, database, now)
   return Boolean(challenge && !challenge.claimedAt)
-}
-
-/**
- * Whether an unopened password link leads to a reset that email alone cannot
- * finish (a protected account with no authenticator and no recent approval).
- * The link page says so up front instead of promising a new password and
- * spending the link on Continue only to say it there.
- */
-export function passwordRecoveryLinkBlocked(token: string, {
-  database = initializeDatabase(),
-  now = new Date(),
-}: {
-  database?: SmbaDatabaseExecutor
-  now?: Date
-} = {}) {
-  const challenge = recoveryChallenge(token, "password", database, now)
-  if (!challenge || challenge.claimedAt || !challenge.role) return null
-  return recoverySecondFactorRule(challenge, database, now) === "unavailable"
-    ? { academyId: challenge.academyId }
-    : null
 }
 
 // Opens an emailed link once: the stored hash moves to a new pass for this browser's cookie. Null when unusable.
@@ -1313,8 +1266,7 @@ export function getAuthenticatorRecoveryStatus(token: string, {
   if (!challenge?.accountId
     || !challenge.claimedAt
     || challenge.role !== "coach"
-    || challenge.accessLevel !== "head_admin"
-    || !challenge.twoFactorEnabled) {
+    || challenge.accessLevel !== "head_admin") {
     return { state: "missing" }
   }
   const recoveryEmail = getRecoveryEmail(challenge.accountId, { database })
@@ -1336,8 +1288,7 @@ export function submitAuthenticatorResetRequest(input: {
   if (!challenge?.accountId
     || !challenge.claimedAt
     || challenge.role !== "coach"
-    || challenge.accessLevel !== "head_admin"
-    || !challenge.twoFactorEnabled) {
+    || challenge.accessLevel !== "head_admin") {
     return null
   }
   const accountId = challenge.accountId
@@ -1510,14 +1461,6 @@ async function verifyAccountSecondFactor(input: {
   return "verified"
 }
 
-function passwordRecoveryFactorAttempt(accountId: string, ipHash?: string | null) {
-  return requestThrottleKeys(`recovery-factor:${accountId}`, ipHash, "recovery-code")
-}
-
-function freshAccountFactorAttempt(accountId: string, ipHash?: string | null) {
-  return requestThrottleKeys(`fresh-account-factor:${accountId}`, ipHash, "recovery-code")
-}
-
 export async function verifyPasswordRecoverySecondFactor(input: {
   credential: string
   security?: SecurityMetadata
@@ -1533,7 +1476,7 @@ export async function verifyPasswordRecoverySecondFactor(input: {
   if (!challenge?.accountId || !challenge.claimedAt || !roleRequiresRecoverySecondFactor(challenge)) {
     return false
   }
-  const attempt = passwordRecoveryFactorAttempt(challenge.accountId, input.security?.ipHash)
+  const attempt = requestThrottleKeys(`recovery-factor:${challenge.accountId}`, input.security?.ipHash, "recovery-code")
   const blocked = () => {
     writeAuthSecurityEvent({
       accountId: challenge.accountId,
@@ -1590,7 +1533,7 @@ export async function verifyFreshAccountSecondFactor(input: {
 }) {
   const database = options?.database ?? initializeDatabase()
   const now = options?.now ?? new Date()
-  const attempt = freshAccountFactorAttempt(input.accountId, input.security?.ipHash)
+  const attempt = requestThrottleKeys(`fresh-account-factor:${input.accountId}`, input.security?.ipHash, "recovery-code")
   if (!reserveLoginAttempt(attempt, { database, now })) return false
   const result = await verifyAccountSecondFactor({
     accountId: input.accountId,

@@ -2,7 +2,7 @@ import "server-only"
 
 import { createHash } from "node:crypto"
 
-import { and, asc, eq, gt, like, lt, lte } from "drizzle-orm"
+import { and, asc, eq, gt, like, lt } from "drizzle-orm"
 
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import { authRuntimeSessions, authSessions, authVerifications } from "@/lib/db/schema"
@@ -101,20 +101,6 @@ export const trustedDeviceDatabaseHooks = {
       },
     },
   },
-}
-
-// Clears this account's expired sign-ins, which Better Auth leaves behind and "Log out other devices" misses.
-export function endExpiredSessions(
-  accountId: string,
-  {
-    database = initializeDatabase(),
-    now = new Date(),
-  }: { database?: SmbaDatabaseExecutor, now?: Date } = {},
-) {
-  return database.delete(authRuntimeSessions).where(and(
-    eq(authRuntimeSessions.userId, accountId),
-    lte(authRuntimeSessions.expiresAt, now),
-  )).run().changes
 }
 
 /*

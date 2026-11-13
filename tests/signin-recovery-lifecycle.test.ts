@@ -45,7 +45,7 @@ import {
   verifyFreshAccountSecondFactor,
   verifyPasswordRecoverySecondFactor,
 } from "@/lib/auth/recovery-service"
-import { endExpiredSessions, listTrustedDevices } from "@/lib/auth/second-factor-reset"
+import { listTrustedDevices } from "@/lib/auth/second-factor-reset"
 import { authSubjectHash } from "@/lib/auth/security-context"
 import type { SmbaDatabase } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
@@ -339,6 +339,32 @@ describe("protected accounts and their authenticator", () => {
       .resolves.toBe(true)
   })
 
+  it("lets a head coach who never connected an authenticator get back in through the owner", async () => {
+    await createActiveAccount({ academyId: "SMBA-ADMIN-0001", accountId: "owner", role: "platform_admin" })
+    await createActiveAccount({ accessLevel: "head_admin", academyId: "SMBA-HC-5306", accountId: "head-no-app", email: "head@example.com", role: "coach" })
+    const mailer = new CapturingMailer()
+    await requestPasswordRecovery({ academyId: "SMBA-HC-5306", email: "head@example.com", intent: "authenticator", mailer }, { database, now: NOW })
+    expect(mailer.authenticatorRecovery).toHaveLength(1)
+
+    database.insert(schema.authAuthenticatorResetRequests).values({
+      accountId: "head-no-app",
+      createdAt: NOW,
+      expiresAt: new Date(NOW.getTime() + 60 * 60_000),
+      id: "no-app",
+      recoveryEmail: "head@example.com",
+      requestedAt: NOW,
+      status: "pending",
+      updatedAt: NOW,
+    }).run()
+    expect(listPendingAuthenticatorResetRequests({ database, now: NOW })).toHaveLength(1)
+    expect(approveAuthenticatorResetRequest({ actorAccountId: "owner", requestId: "no-app" }, { database, now: NOW }))
+      .toEqual({ accountId: "head-no-app" })
+
+    const pass = claimPasswordRecovery(await emailedPasswordLink("SMBA-HC-5306", "head@example.com"), { database, now: NOW })
+    await expect(completePasswordRecovery({ password: NEW_PASSWORD, token: pass! }, { database, now: NOW }))
+      .resolves.toBe(true)
+  })
+
   it("lets the owner with no authenticator reset a forgotten password by email, and tells them", async () => {
     await createActiveAccount({ academyId: "SMBA-ADMIN-0001", accountId: "owner", email: "owner@example.com", role: "platform_admin" })
     const pass = claimPasswordRecovery(await emailedPasswordLink("SMBA-ADMIN-0001", "owner@example.com"), { database, now: NOW })
@@ -393,27 +419,6 @@ describe("the coach's authenticator reset request", () => {
 })
 
 describe("devices and trusted browsers", () => {
-  it("clears only the sign-ins that have run out", async () => {
-    await createActiveAccount({ academyId: "SMBA-PL-5501", accountId: "devices", role: "player" })
-    for (const [id, expiresAt] of [
-      ["dead-one", new Date(NOW.getTime() - 60_000)],
-      ["dead-two", new Date(NOW.getTime() - 1)],
-      ["live", new Date(NOW.getTime() + 60_000)],
-    ] as const) {
-      database.insert(schema.authRuntimeSessions).values({
-        createdAt: NOW,
-        expiresAt,
-        id,
-        token: `token-${id}`,
-        updatedAt: NOW,
-        userId: "devices",
-      }).run()
-    }
-    expect(endExpiredSessions("devices", { database, now: NOW })).toBe(2)
-    expect(database.select({ id: schema.authRuntimeSessions.id }).from(schema.authRuntimeSessions).all())
-      .toEqual([{ id: "live" }])
-  })
-
   it("lists each live trusted browser by when it stops skipping the code", async () => {
     await createActiveAccount({ academyId: "SMBA-HC-5502", accountId: "trusting", role: "coach" })
     for (const [id, value, expiresAt] of [

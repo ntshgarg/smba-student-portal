@@ -23,7 +23,7 @@ import {
 } from "@/lib/auth/credential-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { normalizeAcademyId } from "@/lib/auth/identity"
-import { endExpiredSessions, forgetTrustedDevices } from "@/lib/auth/second-factor-reset"
+import { forgetTrustedDevices } from "@/lib/auth/second-factor-reset"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
 import {
@@ -193,9 +193,6 @@ export async function revokeOtherSessionsAction() {
   const identity = await requireIdentity()
   const requestHeaders = await headers()
   await getAuth().api.revokeOtherSessions({ headers: requestHeaders })
-  // The library ends only live sign-ins; the dead ones it leaves behind would
-  // still be listed and counted as devices afterwards.
-  endExpiredSessions(identity.subjectId)
   /*
    * Trusted browsers go too, this one included. Ending a lost phone's session
    * is not enough while that phone is still trusted to skip the authenticator
@@ -259,7 +256,6 @@ export async function revokeSessionAction(sessionId: string) {
  */
 export async function forgetTrustedBrowsersAction() {
   const identity = await requireIdentity()
-  if (identity.previewMode) return
   const forgottenDevices = forgetTrustedDevices(identity.subjectId)
   if (forgottenDevices > 0) {
     const security = requestSecurityContext(await headers())
@@ -283,7 +279,6 @@ export async function forgetTrustedBrowsersAction() {
  */
 export async function cancelAuthenticatorResetRequestAction() {
   const identity = await requireIdentity()
-  if (identity.previewMode) return
   withdrawPendingAuthenticatorResetRequests(identity.subjectId, { reason: "cancelled_by_coach" })
   revalidatePath("/account/security")
 }

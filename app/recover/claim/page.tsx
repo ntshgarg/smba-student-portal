@@ -4,11 +4,7 @@ import Link from "next/link"
 
 import { openPasswordRecoveryLinkAction } from "@/app/recover/actions"
 import { RecoveryLinkContinueButton } from "@/components/recovery-link-continue-button"
-import {
-  passwordRecoveryLinkBlocked,
-  protectedResetUnavailableCopy,
-  recoveryLinkIsOpenable,
-} from "@/lib/auth/recovery-service"
+import { recoveryLinkIsOpenable } from "@/lib/auth/recovery-service"
 import { publicSiteUrl } from "@/lib/config"
 
 export const metadata: Metadata = {
@@ -25,8 +21,7 @@ export default async function RecoveryLinkPage({
   searchParams: Promise<{ token?: string }>
 }) {
   const token = (await searchParams).token ?? ""
-  const blocked = passwordRecoveryLinkBlocked(token)
-  const openable = !blocked && recoveryLinkIsOpenable(token, "password")
+  const openable = recoveryLinkIsOpenable(token, "password")
   return (
     <main className="login-page">
       <section className="login-card" aria-labelledby="recovery-link-title">
@@ -37,22 +32,18 @@ export default async function RecoveryLinkPage({
         <div className="login-copy activation-copy">
           <p className="eyebrow">Account recovery</p>
           <h1 id="recovery-link-title">
-            {blocked
-              ? "This reset needs the platform admin."
-              : openable ? "Reset your password." : "This reset link has been used or has expired."}
+            {openable ? "Reset your password." : "This reset link has been used or has expired."}
           </h1>
-          <p>{blocked
-            ? protectedResetUnavailableCopy(blocked.academyId)
-            : openable
-              ? "Continue in this browser to choose a new password. The link works once, so finish here."
-              : "If you already pressed Continue in another browser, finish there. Otherwise request a new email."}</p>
+          <p>{openable
+            ? "Continue in this browser to choose a new password. The link works once, so finish here."
+            : "If you already pressed Continue in another browser, finish there. Otherwise request a new email."}</p>
         </div>
         {openable ? (
           <form className="login-form" action={openPasswordRecoveryLinkAction}>
             <input type="hidden" name="token" value={token} />
             <RecoveryLinkContinueButton />
           </form>
-        ) : blocked ? null : (
+        ) : (
           <div className="login-empty-state"><Link href="/recover">Request another link</Link></div>
         )}
         <Link className="login-back" href="/login">← Back to login</Link>

@@ -508,7 +508,7 @@ export async function verifyTotpSignIn(
   // past it. The account's own budget is spent here first, as a single step.
   const accountId = await challengedAccountId(requestHeaders)
   if (!accountId) return { error: SIGN_IN_CHALLENGE_EXPIRED }
-  if (secondFactorChecksPaused(accountId, "challenge")) {
+  if (secondFactorChecksPaused(accountId)) {
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: SECOND_FACTOR_LOCKED }
   }
@@ -548,7 +548,7 @@ export async function verifyBackupCodeSignIn(
   if (!accountId) return { error: SIGN_IN_CHALLENGE_EXPIRED }
   // While the lock stands a recovery code is refused like any other, so say
   // so before the coach spends one.
-  if (secondFactorChecksPaused(accountId, "challenge")) {
+  if (secondFactorChecksPaused(accountId)) {
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: SECOND_FACTOR_LOCKED }
   }

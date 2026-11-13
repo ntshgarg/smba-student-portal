@@ -51,7 +51,7 @@ export default async function RecoveryResetPage() {
         {status.state === "missing" ? (
           <div className="login-empty-state"><Link href="/recover">Request another link</Link></div>
         ) : status.state === "unavailable" ? (
-          <div className="login-empty-state"><Link href="/login">Back to sign-in</Link></div>
+          <div className="login-empty-state"><Link href="/auth/two-factor/recovery">Ask the platform admin to reset the authenticator</Link></div>
         ) : status.requiresSecondFactor && !status.secondFactorVerified
           ? (
             <>

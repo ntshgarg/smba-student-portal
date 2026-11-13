@@ -53,10 +53,6 @@ export function listPendingAuthenticatorResetRequests({
       eq(authMethods.method, "academy_id"),
       isNull(authMethods.revokedAt),
     ))
-    .innerJoin(authUsers, and(
-      eq(authUsers.id, accounts.id),
-      eq(authUsers.twoFactorEnabled, true),
-    ))
     .innerJoin(coachProfiles, and(
       eq(coachProfiles.accountId, accounts.id),
       eq(coachProfiles.accessLevel, "head_admin"),
@@ -210,10 +206,6 @@ export function approveAuthenticatorResetRequest(input: {
       .innerJoin(coachProfiles, and(
         eq(coachProfiles.accountId, accounts.id),
         eq(coachProfiles.accessLevel, "head_admin"),
-      ))
-      .innerJoin(authUsers, and(
-        eq(authUsers.id, accounts.id),
-        eq(authUsers.twoFactorEnabled, true),
       ))
       .where(and(
         eq(authAuthenticatorResetRequests.id, input.requestId),
