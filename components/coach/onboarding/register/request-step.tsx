@@ -12,7 +12,7 @@ import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { OnboardingDuplicateSignal, PlayerOnboardingCase } from "@/lib/coach/onboarding"
 
 import styles from "../player-onboarding-register.module.css"
-import { shortDate, type SaveFeedback } from "./shared"
+import { shortDate, shortInstant, type SaveFeedback } from "./shared"
 
 /**
  * Approve and reject share one notice, so the retry prompt names which of the
@@ -137,7 +137,7 @@ export function RequestStep({
       <dl className={styles.requestFacts}>
         <div><dt>{item.requestedRole === "coach" ? "Assistant coach" : "Player"}</dt><dd>{item.fullName}</dd></div>
         <div><dt>Request type</dt><dd>{item.requestedRole === "coach" ? "Coaching staff" : "Academy membership"}</dd></div>
-        <div><dt>Received</dt><dd>{item.requestedAt ? shortDate(item.requestedAt) : "Recently"}</dd></div>
+        <div><dt>Received</dt><dd>{item.requestedAt ? shortInstant(item.requestedAt) : "Recently"}</dd></div>
         {item.dateOfBirth ? (
           <div><dt>Date of birth</dt><dd>{shortDate(item.dateOfBirth)}</dd></div>
         ) : null}

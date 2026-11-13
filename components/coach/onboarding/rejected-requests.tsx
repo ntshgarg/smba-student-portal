@@ -9,7 +9,7 @@ import type { RejectedRegistration } from "@/lib/auth/registration-form"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 
 import styles from "./player-onboarding-register.module.css"
-import { folio, shortDate } from "./register/shared"
+import { folio, shortInstant } from "./register/shared"
 
 /** Rejected requests, so a mistaken rejection can be found and undone. */
 export function RejectedRequests({
@@ -81,7 +81,7 @@ export function RejectedRequests({
               <span className={styles.stageStamp}>Rejected</span>
               <div className={styles.nextAction}>
                 <strong>{request.requestedRole === "coach" ? "Assistant coach" : "Player"}</strong>
-                <small>{request.rejectedAt ? `Rejected ${shortDate(request.rejectedAt)}` : "Rejected"}</small>
+                <small>{request.rejectedAt ? `Rejected ${shortInstant(request.rejectedAt)}` : "Rejected"}</small>
               </div>
               <button
                 className={styles.openButton}

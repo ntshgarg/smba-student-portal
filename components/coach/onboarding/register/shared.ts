@@ -1,6 +1,6 @@
 import type { ActionFeedback } from "@/components/inline-notice"
 import type { PlayerOnboardingStage } from "@/lib/coach/onboarding"
-import { formatDateKey } from "@/lib/format"
+import { formatAcademyDate, formatDateKey } from "@/lib/format"
 
 /**
  * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
@@ -42,4 +42,9 @@ export function shortDate(value: string) {
     weekday: undefined,
     year: undefined,
   })
+}
+
+/** For a moment in time (requested, rejected), read in India time; `shortDate` is for date-only keys. */
+export function shortInstant(value: string) {
+  return formatAcademyDate(value, { month: "short", year: undefined })
 }

@@ -697,6 +697,8 @@ export function approveRegistration(
         accountId: registration.id,
         status: "unassigned",
         trainingStartOn: getAcademyDateKey(now),
+        // The verified mobile from registration, so Members has a number to call.
+        primaryContactPhone: registration.contactPhone,
         updatedAt: now,
       }).run()
     } else {
