@@ -718,6 +718,9 @@ function monthlyPreparationCandidates(
   database: SmbaDatabaseExecutor,
   period: string,
   now: Date,
+  // Only the "ready to issue" previews read nothingToBill; issuing works out
+  // each month's amount itself, so it skips this extra work.
+  { withNothingToBill = false }: { withNothingToBill?: boolean } = {},
 ) {
   const candidatesByPlayer = new Map<
     string,
@@ -754,7 +757,7 @@ function monthlyPreparationCandidates(
   const candidates = [...candidatesByPlayer.values()]
   const playerIds = candidates.map((candidate) => candidate.agreement.playerAccountId)
   const periodAssignments = loadPeriodAssignmentIndex(database, playerIds, period)
-  const billedEarlier = new Set(playerIds.length
+  const billedEarlier = new Set(withNothingToBill && playerIds.length
     ? database.select({ playerId: financialCharges.playerAccountId }).from(financialCharges).where(and(
       inArray(financialCharges.playerAccountId, playerIds),
       eq(financialCharges.type, "monthly_training"),
@@ -772,7 +775,8 @@ function monthlyPreparationCandidates(
       hasAssignment,
       // Issue fees passes over a first month with no session left to bill
       // (monthlyChargeBasis), so that month is never "ready to issue".
-      nothingToBill: hasAssignment
+      nothingToBill: withNothingToBill
+        && hasAssignment
         && !billedEarlier.has(candidate.agreement.playerAccountId)
         && period >= candidate.enrollment.trainingStartOn.slice(0, 7)
         && monthlyChargeBasis(database, {
@@ -790,7 +794,7 @@ function monthlyPreparationPreview(
   period: string,
   now: Date,
 ): MonthlyPreparationPreview {
-  const candidates = monthlyPreparationCandidates(database, period, now)
+  const candidates = monthlyPreparationCandidates(database, period, now, { withNothingToBill: true })
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
@@ -825,7 +829,7 @@ function playersAwaitingMonthlyFee(
 ): ReadonlySet<string> {
   const activation = readFinanceActivation(database)
   if (!activation || period < activation.trackingMonth) return new Set()
-  const candidates = monthlyPreparationCandidates(database, period, now)
+  const candidates = monthlyPreparationCandidates(database, period, now, { withNothingToBill: true })
   const prepared = new Set(listPreparedPlayerIds(database, period))
   return new Set(candidates
     .filter(({ agreement, hasAssignment, nothingToBill }) => (
@@ -4933,7 +4937,7 @@ export function getCoachFinanceDashboardSummary(
   if (!isValidMonthKey(period)) {
     financeError("INVALID_INPUT", "Choose a valid fee month.", "period")
   }
-  const candidates = monthlyPreparationCandidates(database, period, now)
+  const candidates = monthlyPreparationCandidates(database, period, now, { withNothingToBill: true })
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth

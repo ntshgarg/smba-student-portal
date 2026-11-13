@@ -794,7 +794,7 @@ export const FINANCE_AUDIT_EVENTS: Record<FinanceAuditEventType, FinanceAuditEve
   },
   historical_reconciled: {
     action: "Historical fee status recorded",
-    filterLabel: "Onboarding or historical status",
+    filterLabel: "Historical status recorded",
   },
   training_start_redated: {
     action: "Training start date corrected",
