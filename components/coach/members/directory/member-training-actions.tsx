@@ -456,6 +456,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           busy={busy}
           currentFee={fee.monthlyFeePaise}
           name={player.member.fullName}
+          nextMonthStart={data.nextMonthStart}
           startsMonth={monthName(fee.feeChangeStartsOn)}
           startsThisMonth={fee.feeChangeStartsOn <= data.today}
           onCancel={() => setOpen(null)}
@@ -481,6 +482,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           monthlyFee={fee.nextMonthNoFee ? null : fee.nextMonthFeePaise}
           name={player.member.fullName}
           nextMonth={nextMonth}
+          nextMonthStart={data.nextMonthStart}
           onCancel={() => setOpen(null)}
           onSubmit={submit}
           playerId={memberId}
@@ -903,7 +905,7 @@ function EndForm({
         void onSubmit<unknown>(
           () => leftAlready
             ? endTrainingNowAction({ playerId, stopFees: financeActive && stopFees })
-            : scheduleEndOfTrainingAction({ playerId, stopFees: financeActive && stopFees }),
+            : scheduleEndOfTrainingAction({ nextMonthStart, playerId, stopFees: financeActive && stopFees }),
           () => leftAlready ? "Training ended today" : `Training ends after ${thisMonth}`,
         )
       }}
@@ -1005,6 +1007,7 @@ function FeeForm({
   busy,
   currentFee,
   name,
+  nextMonthStart,
   onCancel,
   onSubmit,
   playerId,
@@ -1015,6 +1018,7 @@ function FeeForm({
   busy: boolean
   currentFee: number | null
   name: string
+  nextMonthStart: string
   onCancel: () => void
   onSubmit: Submit
   playerId: string
@@ -1037,7 +1041,7 @@ function FeeForm({
       onConfirm={() => {
         if (amount === null) return
         void onSubmit(
-          () => changeMonthlyFeeAction({ idempotencyKey: `member-fee:${key}`, monthlyFeePaise: amount, playerId }),
+          () => changeMonthlyFeeAction({ idempotencyKey: `member-fee:${key}`, monthlyFeePaise: amount, nextMonthStart, playerId }),
           (result) => `New fee from ${monthName(result.startsOn)}`,
         )
       }}
@@ -1068,6 +1072,7 @@ function ConcessionForm({
   monthlyFee,
   name,
   nextMonth,
+  nextMonthStart,
   onCancel,
   onSubmit,
   playerId,
@@ -1076,6 +1081,7 @@ function ConcessionForm({
   monthlyFee: number | null
   name: string
   nextMonth: string
+  nextMonthStart: string
   onCancel: () => void
   onSubmit: Submit
   playerId: string
@@ -1105,6 +1111,7 @@ function ConcessionForm({
             duration,
             months: duration === "months" ? Number(months) : undefined,
             mutationId: key,
+            nextMonthStart,
             playerId,
             value: value as number,
             valueKind: kind,
