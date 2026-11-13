@@ -20,22 +20,24 @@ function recordPaymentHref(ledger: PlayerFinancialLedgerView) {
 
 export function FinancialPlayerRecordWorkspace({
   backHref,
+  canRecordPayment,
   ledger,
-  paymentPeriod,
   period,
 }: {
   backHref: string
+  /**
+   * Whether the payment desk opens this player, by the desk's own rule
+   * (lib/finance/service.ts canRecordPaymentAtDesk). Worked out here from the
+   * balance, it could offer "Record payment" for a player the desk then
+   * turned away, landing the coach on an empty desk with no word why.
+   */
+  canRecordPayment: boolean
   ledger: PlayerFinancialLedgerView
-  paymentPeriod: string
   period: string
 }) {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [ledger.playerId])
-  const hasPayableBalance = ledger.charges.some((charge) => (
-    charge.outstandingPaise > 0
-      && (charge.type === "registration" || (charge.billingPeriod ?? paymentPeriod) <= paymentPeriod)
-  ))
 
   return (
     <div className={`${financialStyles.workspace} ${financialStyles.recordsWorkspace} page-shell`}>
@@ -50,7 +52,7 @@ export function FinancialPlayerRecordWorkspace({
           <p>Review the player’s fee plan, charges, receipts and corrections.</p>
         </div>
         <div className={recordsStyles.playerRecordActions}>
-          {hasPayableBalance && !ledger.archived ? (
+          {canRecordPayment && !ledger.archived ? (
             <Link href={recordPaymentHref(ledger)}>
               <ReceiptIndianRupee aria-hidden="true" /> Record payment
             </Link>

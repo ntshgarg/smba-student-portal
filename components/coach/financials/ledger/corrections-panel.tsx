@@ -63,6 +63,11 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const requestKey = useIdempotencyKey()
+  const chargeOptions = mode === "void_charge" ? voidableCharges : activeCharges
+  // The chosen fee, or the first one listed when it is no longer there.
+  const selectedChargeId = chargeOptions.some((charge) => charge.id === chargeId)
+    ? chargeId
+    : chargeOptions[0]?.id ?? ""
   const feedbackId = `correction-feedback-${ledger.playerId}`
   const invalidField = feedback?.tone === "error" ? feedback.field : undefined
 
@@ -124,13 +129,13 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
           reason: reason.trim(),
         })
       } else if (mode === "void_charge") {
-        const charge = voidableCharges.find((item) => item.id === chargeId)
+        const charge = voidableCharges.find((item) => item.id === selectedChargeId)
         if (!charge) {
           setFeedback({ message: "This charge cannot be voided", tone: "error" })
           return
         }
         result = await voidChargeAction({
-          chargeId,
+          chargeId: selectedChargeId,
           expectedChargeRevision: charge.revision,
           idempotencyKey: requestKey.current(),
           reason: reason.trim(),
@@ -138,7 +143,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
       } else {
         result = await applyChargeAdjustmentAction({
           amountPaise: adjustmentAmountPaise,
-          chargeId,
+          chargeId: selectedChargeId,
           idempotencyKey: requestKey.current(),
           kind: mode as "manual_credit" | "manual_debit",
           reason: reason.trim(),
@@ -226,8 +231,8 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
           ) : (
             <label className={styles.field}>
               <span>Charge</span>
-              <select name="chargeId" value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
-                {(mode === "void_charge" ? voidableCharges : activeCharges).map((charge) => (
+              <select name="chargeId" value={selectedChargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
+                {chargeOptions.map((charge) => (
                   <option key={charge.id} value={charge.id}>{charge.description} · {charge.feeReference}</option>
                 ))}
               </select>
@@ -251,7 +256,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
 
           <div className={styles.paymentFooter}>
             <InlineNotice className={styles.notice} id={feedbackId} message={feedback?.message} tone={feedback?.tone} />
-            <button className={styles.correctionButton} type="submit" disabled={pending || (mode === "reverse_payment" && !paymentId) || (mode === "reverse_adjustment" && !adjustmentId) || (mode === "void_charge" && !chargeId)}>
+            <button className={styles.correctionButton} type="submit" disabled={pending || (mode === "reverse_payment" && !paymentId) || (mode === "reverse_adjustment" && !adjustmentId) || (mode === "void_charge" && !selectedChargeId)}>
               {pending ? "Saving…" : feedback?.offerRetry ? "Apply correction again" : "Apply correction"}
             </button>
           </div>

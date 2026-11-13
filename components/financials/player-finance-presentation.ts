@@ -127,8 +127,12 @@ export function dashboardFeeRecordCopy(
     }
   }
 
+  // An overdue balance (part-paid or not) was due by a date that has passed,
+  // so it is not told "due by" that date as if it were still to come.
   return {
     status: summary.status === "overdue" ? `${amount} remains due` : `${amount} due`,
-    detail: dueDate ? `Due by ${dueDate}.` : "Open your fee record for the full details.",
+    detail: dueDate
+      ? summary.status === "overdue" ? `It was due by ${dueDate}.` : `Due by ${dueDate}.`
+      : "Open your fee record for the full details.",
   }
 }

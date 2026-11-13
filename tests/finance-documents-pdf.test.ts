@@ -53,6 +53,7 @@ describe("Financials PDF generation", () => {
       refunds: refunded ? [{
         refundReference: "SMBA-RF-2026-00001",
         amountPaise: refunded,
+        receiptAmountPaise: refunded,
         refundedOn: "2026-08-10",
         lifecycle: "recorded",
       }] : [],

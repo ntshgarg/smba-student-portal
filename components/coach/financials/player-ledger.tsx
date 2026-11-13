@@ -2,11 +2,12 @@
 
 import Link from "next/link"
 
-import { formatAcademyDate, formatInr } from "@/lib/format"
+import { formatAcademyDate, formatDateKey, formatInr } from "@/lib/format"
 
 import {
   formatDueDate,
   paymentMethodLabel,
+  periodLabel,
   statusLabels,
 } from "./financials-client-utils"
 import styles from "./financials.module.css"
@@ -15,6 +16,19 @@ import { CorrectionsPanel } from "./ledger/corrections-panel"
 import { OnboardingFinanceSetup } from "./ledger/onboarding-finance-setup"
 import { ReceiptHistory } from "./ledger/receipt-history"
 import type { PlayerFinancialLedgerView } from "./types"
+
+function planDate(dateKey: string | null) {
+  return dateKey
+    ? formatDateKey(dateKey, { day: "numeric", month: "short", weekday: undefined, year: "numeric" })
+    : ""
+}
+
+function planStanding(plan: NonNullable<PlayerFinancialLedgerView["feePlan"]>) {
+  if (plan.standing === "running") return "Active"
+  if (plan.standing === "ending") return `Ends ${planDate(plan.effectiveTo)}`
+  if (plan.standing === "starting") return `Starts ${planDate(plan.effectiveFrom)}`
+  return `Ended ${planDate(plan.effectiveTo)}`
+}
 
 export function PlayerLedger({
   focused = false,
@@ -33,7 +47,10 @@ export function PlayerLedger({
         <div>
           <span>{ledger.academyId}{ledger.archived ? " · Archived" : ""}</span>
           <h2 id="selected-ledger-title">{ledger.fullName}</h2>
-          <p>{ledger.feePlan?.label ?? "Player onboarding in progress"}</p>
+          <p>
+            {ledger.feePlan?.label
+              ?? (ledger.onboardingComplete ? "No fee plan" : "Player onboarding in progress")}
+          </p>
         </div>
         <div className={styles.ledgerBalance}>
           <span>Outstanding</span>
@@ -47,8 +64,14 @@ export function PlayerLedger({
           <dl className={styles.feePlan}>
             <div><dt>Fee plan</dt><dd>{ledger.feePlan.label}</dd></div>
             <div><dt>Agreed monthly fee</dt><dd>{formatInr(ledger.feePlan.agreedMonthlyFeePaise)}</dd></div>
-            <div><dt>Plan status</dt><dd>{ledger.feePlan.status}</dd></div>
+            <div><dt>Plan status</dt><dd>{planStanding(ledger.feePlan)}</dd></div>
           </dl>
+          {ledger.feePlan.upcoming ? (
+            <p className={styles.managedInMembers}>
+              From {periodLabel(ledger.feePlan.upcoming.effectiveFrom.slice(0, 7))}: {ledger.feePlan.upcoming.label},{" "}
+              {formatInr(ledger.feePlan.upcoming.agreedMonthlyFeePaise)} a month.
+            </p>
+          ) : null}
           {ledger.archived ? null : (
             // Fee changes, concessions and ending training are made from the
             // player's record in Members (head coach, 5 Oct 2026), next to the
@@ -64,7 +87,7 @@ export function PlayerLedger({
       ) : ledger.archived ? null : <OnboardingFinanceSetup ledger={ledger} />}
 
       {(!ledger.archived && ledger.feePlan)
-        || (ledger.archived && ledger.management.concessions.length > 0) ? (
+        || ledger.management.concessions.length > 0 ? (
         <ConcessionManagement ledger={ledger} period={period} />
       ) : null}
 

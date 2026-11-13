@@ -87,6 +87,29 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
     return id
   }
 
+  function addAugustAssignment(playerId: string) {
+    const seriesId = `phase3-series-august-${playerId}`
+    database.insert(schema.sessionSeries).values({
+      id: seriesId,
+      title: "August Beginner Weekday",
+      programme: "Beginner",
+      batch: "Weekday",
+      venue: "SMBA Court",
+      startsOn: "2026-08-01",
+      status: "active",
+      createdByAccountId: coachId,
+      createdAt: now,
+    }).run()
+    database.insert(schema.sessionAssignments).values({
+      id: `phase3-assignment-august-${playerId}`,
+      accountId: playerId,
+      seriesId,
+      effectiveFrom: "2026-08-01",
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
+  }
+
   function addMatchingAssignment(playerId: string, suffix: string) {
     const seriesId = `phase3-series-${suffix}`
     database.insert(schema.sessionSeries).values({
@@ -132,6 +155,9 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
     createPlayer("Chitra", { archived: true })
     const agreementId = createAgreement(ashaId)
     createAgreement(binaId)
+    // Bina trains in August, so August's fee is one Issue fees would issue:
+    // "Not issued". A fee plan alone, with no schedule, is no longer enough.
+    addAugustAssignment(binaId)
     const chargeId = "phase3-charge-asha-august"
     database.insert(schema.financialCharges).values({
       id: chargeId,
@@ -228,7 +254,8 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
       effectiveAmountPaise: 375_000,
       receivedPaise: 150_000,
       outstandingPaise: 225_000,
-      status: "partially_paid",
+      // Part-paid and past its due date (5 August): overdue.
+      status: "overdue",
     })])
     expect(first.summary).toMatchObject({
       totalRows: 2,
@@ -236,7 +263,7 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
       effectiveAmountPaise: 375_000,
       receivedPaise: 150_000,
       outstandingPaise: 225_000,
-      statusCounts: { partially_paid: 1, not_prepared: 1 },
+      statusCounts: { overdue: 1, not_prepared: 1 },
     })
     expect(first.nextCursor).toBe(ashaId)
     expect(finance.getFeeRegister({

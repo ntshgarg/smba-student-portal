@@ -31,10 +31,25 @@ import {
 import styles from "../financials.module.css"
 import type { SaveFeedback } from "./save-feedback"
 
+/*
+ * The withdrawal dates the server accepts (withdrawalDateWindow in
+ * lib/finance/domain.ts): inside the fee's month, not before it was paid and
+ * not after today. Today is the default when it qualifies, else the nearest
+ * day that does, so the form does not open on a date it will refuse.
+ */
+function withdrawalDateLimits(receipt: CoachReceiptView) {
+  const today = getAcademyDateKey()
+  const earliest = receipt.refundWindow?.earliest ?? receipt.receivedOn
+  const latest = receipt.refundWindow?.latest ?? today
+  const initial = today < earliest ? earliest : today > latest ? latest : today
+  return { earliest, initial, latest }
+}
+
 export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
   const router = useRouter()
+  const dateLimits = withdrawalDateLimits(receipt)
   const [amount, setAmount] = useState("")
-  const [withdrawalEffectiveOn, setWithdrawalEffectiveOn] = useState(getAcademyDateKey())
+  const [withdrawalEffectiveOn, setWithdrawalEffectiveOn] = useState(dateLimits.initial)
   const [refundedOn, setRefundedOn] = useState(getAcademyDateKey())
   const [method, setMethod] = useState<PaymentMethod>(receipt.method)
   const [externalReference, setExternalReference] = useState("")
@@ -219,8 +234,8 @@ export function RefundForm({ receipt }: { receipt: CoachReceiptView }) {
             <input
               name="withdrawalEffectiveOn"
               type="date"
-              min={receipt.receivedOn}
-              max={getAcademyDateKey()}
+              min={dateLimits.earliest}
+              max={dateLimits.latest}
               value={withdrawalEffectiveOn}
               disabled={Boolean(pending)}
               onChange={(event) => {

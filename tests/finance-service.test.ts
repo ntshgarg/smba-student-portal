@@ -520,9 +520,12 @@ describe("Financials V1 service", () => {
       period: "2026-08",
       view: "attention",
     }, { coachId, database, now: overdueReference })
+    // A player owing an overdue monthly fee is on the coach's lists, and can be
+    // paid at the desk, whether or not their registration fee is settled. They
+    // used to be dropped as "setup required" (state-machine audit, M113/M128).
     expect(unresolvedOverdueWorkspace.players.find((player) => (
       player.playerId === unresolvedPlayerId
-    ))).toBeUndefined()
+    ))).toMatchObject({ outstandingPaise: 350_000, paymentEligible: true, status: "overdue" })
     expect(finance.getCoachFinanceDashboardSummary("2026-08", {
       coachId,
       database,
@@ -549,6 +552,7 @@ describe("Financials V1 service", () => {
       period: "2026-08",
       view: "attention",
     }, { coachId, database, now })
+    // Paid up, so no longer needing attention.
     expect(unresolvedWorkspace.players.find((player) => (
       player.playerId === unresolvedPlayerId
     ))).toBeUndefined()

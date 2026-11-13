@@ -43,7 +43,10 @@ describe("coach Financials Phase 2 workflows", () => {
     expect(corrections).toContain("const receipts = ledger.management.receipts.filter")
     expect(corrections).toContain('receipt.lifecycle === "recorded"')
     expect(corrections).toContain('refund.lifecycle === "recorded"')
-    expect(refundForm).toContain("min={receipt.receivedOn}")
+    // The withdrawal date is held to the days the server accepts
+    // (withdrawalDateWindow), not merely on or after the receipt.
+    expect(refundForm).toContain("min={dateLimits.earliest}")
+    expect(refundForm).toContain("max={dateLimits.latest}")
     expect(refundForm).toContain("receipt.receiptReference")
   })
 

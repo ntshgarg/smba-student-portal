@@ -2,7 +2,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
@@ -115,6 +115,15 @@ describe("Financials archived-player mutation guard", () => {
     return chargeId
   }
 
+  /*
+   * "They have left already" in Members: the player's place ends today. A
+   * withdrawal refund is recorded only after that (head coach, 13 Nov 2026).
+   */
+  function leaveTraining(playerId: string) {
+    database.update(schema.sessionAssignments).set({ effectiveTo: "2026-08-20" })
+      .where(eq(schema.sessionAssignments.accountId, playerId)).run()
+  }
+
   function archivePlayer(playerId: string) {
     database.update(schema.accounts).set({
       archivedAt: now,
@@ -195,7 +204,17 @@ describe("Financials archived-player mutation guard", () => {
       allocations: [{ paymentAllocationId: paymentAllocation.id, amountPaise: 10_000 }],
       mutationId: mutationId(2),
     }
+    leaveTraining(playerId)
     const refund = finance.recordRefund(refundInput, { coachId, createId, database, now })
+    // The player comes back from September.
+    database.insert(schema.sessionAssignments).values({
+      id: `${playerId}-return`,
+      accountId: playerId,
+      seriesId: `${playerId}-series`,
+      effectiveFrom: "2026-09-01",
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
     const continuingAgreement = finance.createOrReplaceFeeAgreement({
       ...agreementInput(playerId, "archive-forged-continuing-agreement"),
       effectiveFrom: "2026-09-01",
@@ -405,6 +424,7 @@ describe("Financials archived-player mutation guard", () => {
       allocations: [{ paymentAllocationId: paymentAllocation.id, amountPaise: 10_000 }],
       mutationId: mutationId(31),
     }
+    leaveTraining(playerId)
     const refund = finance.recordRefund(refundInput, { coachId, createId, database, now })
     const refundReversalInput = {
       refundId: refund.refund.id,
@@ -419,9 +439,25 @@ describe("Financials archived-player mutation guard", () => {
       idempotencyKey: "archive-replay-payment-reversal",
     }
     finance.reversePayment(paymentReversalInput, { coachId, createId, database, now })
+    // Reversing the refund put the fee plan back as it was, running; the
+    // player returns to a schedule in September with a new plan.
+    const restoredAgreement = database.select().from(schema.feeAgreements).where(and(
+      eq(schema.feeAgreements.playerAccountId, playerId),
+      eq(schema.feeAgreements.status, "active"),
+    )).get()
+    if (!restoredAgreement) throw new Error("The reversed refund did not restore the fee plan.")
+    database.insert(schema.sessionAssignments).values({
+      id: `${playerId}-return`,
+      accountId: playerId,
+      seriesId: `${playerId}-series`,
+      effectiveFrom: "2026-09-01",
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
     const endingAgreement = finance.createOrReplaceFeeAgreement({
       ...agreementInput(playerId, "archive-replay-ending-agreement"),
       effectiveFrom: "2026-09-01",
+      expectedAgreementRevision: restoredAgreement.recordRevision,
     }, { coachId, createId, database, now }).agreement
     const concessionChargeId = createCharge(
       playerId,

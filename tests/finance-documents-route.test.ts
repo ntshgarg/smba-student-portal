@@ -78,6 +78,7 @@ const receipt: FinanceReceiptDocument = {
   refunds: [{
     refundReference: "SMBA-RF-2026-00001",
     amountPaise: 50_000,
+    receiptAmountPaise: 50_000,
     refundedOn: "2026-08-09",
     lifecycle: "recorded",
   }],

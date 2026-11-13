@@ -50,7 +50,13 @@ describe("finance domain", () => {
     expect(deriveFinanceStatus({
       ...base,
       payments: [{ amountPaise: 25_000, lifecycle: "recorded" as const }],
-    }, "2026-08-06")).toBe("partially_paid")
+    }, "2026-08-05")).toBe("partially_paid")
+    // A part-paid fee still owing after its due date is overdue: it used to
+    // stay "partially paid" for good and drop out of the Overdue list.
+    expect(deriveFinanceStatus({
+      ...base,
+      payments: [{ amountPaise: 25_000, lifecycle: "recorded" as const }],
+    }, "2026-08-06")).toBe("overdue")
     expect(deriveFinanceStatus({
       ...base,
       payments: [{ amountPaise: 100_000, lifecycle: "recorded" as const }],

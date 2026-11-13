@@ -10,6 +10,7 @@ import {
 } from "@/lib/format"
 import { IVORY, NAVY, RED, STEEL, WHITE } from "@/lib/pdf-palette"
 import type {
+  FinanceDocumentRefund,
   FinanceReceiptDocument,
   FinanceStatementCharge,
   FinanceStatementDocument,
@@ -437,9 +438,20 @@ class FinancePdfFlow {
   }
 }
 
+/*
+ * A refund on a fee paid in instalments can draw on more than one receipt.
+ * Each receipt shows its own share, which is what its refunded total counts,
+ * and says it was part of a larger refund.
+ */
+function refundShareNote(refund: FinanceDocumentRefund) {
+  return refund.receiptAmountPaise !== refund.amountPaise
+    ? ` - part of a ${money(refund.amountPaise)} refund`
+    : ""
+}
+
 function receiptLines(receipt: FinanceStatementReceipt | FinanceReceiptDocument) {
   const refundLines = receipt.refunds.map((refund) => (
-    `Refund ${refund.refundReference} - ${money(refund.amountPaise)} - ${dateKey(refund.refundedOn)}${refund.lifecycle === "reversed" ? " - reversed" : ""}`
+    `Refund ${refund.refundReference} - ${money(refund.receiptAmountPaise)}${refundShareNote(refund)} - ${dateKey(refund.refundedOn)}${refund.lifecycle === "reversed" ? " - reversed" : ""}`
   ))
   return [
     ...receipt.allocations.map((allocation) => (
@@ -472,8 +484,8 @@ function drawReceipt(flow: FinancePdfFlow, receipt: FinanceReceiptDocument) {
     flow.section("Refund history")
     receipt.refunds.forEach((refund) => flow.record({
       title: `Refund ${refund.refundReference}`,
-      subtitle: dateKey(refund.refundedOn),
-      amount: money(refund.amountPaise),
+      subtitle: `${dateKey(refund.refundedOn)}${refundShareNote(refund)}`,
+      amount: money(refund.receiptAmountPaise),
       status: {
         label: refund.lifecycle === "reversed" ? "Reversed" : "Recorded",
         tone: statusTone(refund.lifecycle),

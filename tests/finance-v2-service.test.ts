@@ -646,10 +646,12 @@ describe("Financials V2 service", () => {
       schema.chargeAdjustments.id,
       withdrawalCredit!.id,
     )).get()?.reversedAt).toBeInstanceOf(Date)
+    // Reversing the refund puts the fee plan back as it was before: it was
+    // running, so it runs on. It used to stay ended at the withdrawal date.
     expect(database.select().from(schema.feeAgreements).where(eq(
       schema.feeAgreements.playerAccountId,
       playerId,
-    )).get()).toMatchObject({ status: "ended", effectiveTo: "2026-08-15" })
+    )).get()).toMatchObject({ status: "active", effectiveTo: null, recordRevision: 2 })
     expect(finance.reverseRefund({
       refundId: refunded.refund.id,
       expectedRefundRevision: 0,
@@ -672,13 +674,13 @@ describe("Financials V2 service", () => {
     expect(correctedPreview.allocations[0]).toMatchObject({
       chargeId,
       expectedChargeRevision: 3,
-      expectedAgreementRevision: 1,
+      expectedAgreementRevision: 2,
     })
     expect(finance.recordRefund({
       paymentId: payment.receipt.id,
       expectedPaymentRevision: 2,
       expectedChargeRevision: 3,
-      expectedAgreementRevision: 1,
+      expectedAgreementRevision: 2,
       amountPaise: 80_000,
       withdrawalEffectiveOn: "2026-08-16",
       refundedOn: "2026-08-17",
@@ -703,7 +705,7 @@ describe("Financials V2 service", () => {
     )).get()).toMatchObject({
       effectiveTo: "2026-08-16",
       status: "ended",
-      recordRevision: 2,
+      recordRevision: 3,
     })
     expect(database.select().from(schema.financeReferenceSequences).where(and(
       eq(schema.financeReferenceSequences.kind, "refund"),

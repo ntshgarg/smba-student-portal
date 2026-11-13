@@ -5,7 +5,11 @@ import { toPlayerFinancialLedgerView } from "@/components/coach/financials/view-
 import { isValidMonthKey } from "@/lib/attendance/domain"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { initializeDatabase } from "@/lib/db/client"
-import { getCoachFinancePlayerRecord, getFinanceActivation } from "@/lib/finance/service"
+import {
+  canRecordPaymentAtDesk,
+  getCoachFinancePlayerRecord,
+  getFinanceActivation,
+} from "@/lib/finance/service"
 import { academyCurrentMonth } from "@/lib/clock"
 import { readRecordsTrail } from "@/lib/finance/records-trail"
 
@@ -70,6 +74,10 @@ export default async function FinancialPlayerRecordPage({
   })
   if (!record) notFound()
   const ledger = toPlayerFinancialLedgerView(record)
+  const canRecordPayment = canRecordPaymentAtDesk(record, {
+    coachId: identity.subjectId,
+    database,
+  })
 
   const backSearch = new URLSearchParams({
     mode,
@@ -84,8 +92,8 @@ export default async function FinancialPlayerRecordPage({
   return (
     <FinancialPlayerRecordWorkspace
       backHref={`/coach/financials/records?${backSearch.toString()}`}
+      canRecordPayment={canRecordPayment}
       ledger={ledger}
-      paymentPeriod={paymentPeriod}
       period={period}
     />
   )

@@ -33,11 +33,13 @@ import {
   monthEnd,
   monthStart,
   withdrawalCanClosePlan,
+  withdrawalDateWindow,
 } from "@/lib/finance/domain"
 import {
   FINANCE_CURRENCY,
   type ChargeView,
   type CoachFinanceManagementView,
+  type FeePlanStanding,
   type FinanceActivation,
   type FinancePlayerListItem,
   type PaymentMethod,
@@ -102,6 +104,7 @@ function readFinancePlayer(database: Executor, playerId: string) {
     fullName: accounts.fullName,
     id: accounts.id,
     level: playerEnrollments.level,
+    onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
@@ -337,6 +340,28 @@ export function hasCurrentOrFutureMatchingAssignment(
       return (endsOn === null || endsOn >= startsOn)
         && (endsOn === null || endsOn >= referenceDate)
     })
+}
+
+/**
+ * A player's training has ended when they have no place on any schedule after
+ * today and no move booked that would start one. A mid-term withdrawal refund
+ * is recorded only then (head coach, 13 Nov 2026).
+ */
+export function playerTrainingHasEnded(
+  database: Executor,
+  playerId: string,
+  todayKey: string,
+) {
+  const place = database.select({ id: sessionAssignments.id }).from(sessionAssignments).where(and(
+    eq(sessionAssignments.accountId, playerId),
+    or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, todayKey)),
+  )).get()
+  if (place) return false
+  return !database.select({ id: trainingChanges.id }).from(trainingChanges).where(and(
+    eq(trainingChanges.playerAccountId, playerId),
+    eq(trainingChanges.status, "scheduled"),
+    eq(trainingChanges.kind, "change"),
+  )).get()
 }
 
 export function readAuditEventByIdempotencyKey(database: Executor, idempotencyKey: string) {
@@ -582,18 +607,121 @@ function loadReceiptAllocations(database: Executor, paymentIds: string[]) {
   return grouped
 }
 
+type ReceiptRefundRow = {
+  refund: typeof refunds.$inferSelect
+  /** The part of the refund paid back from this receipt. */
+  receiptAmountPaise: number
+}
+
+/*
+ * The refunds each receipt paid money back for. A withdrawal refund is started
+ * from one receipt (`refunds.payment_id`), but on a fee paid in instalments it
+ * can draw on every receipt that paid that fee. It used to be listed only under
+ * the receipt it was started from, while each receipt's refunded total counted
+ * its own share, so both receipts contradicted themselves. A refund is now
+ * listed under every receipt it drew on, with that receipt's share.
+ */
 function loadReceiptRefunds(database: Executor, paymentIds: string[]) {
-  const grouped = new Map<string, (typeof refunds.$inferSelect)[]>(paymentIds.map((paymentId) => [
+  const grouped = new Map<string, ReceiptRefundRow[]>(paymentIds.map((paymentId) => [
     paymentId,
     [],
   ]))
   if (!grouped.size) return grouped
-  database.select().from(refunds)
-    .where(inArray(refunds.paymentId, [...grouped.keys()]))
+  const ids = [...grouped.keys()]
+  const shares = new Map<string, number>()
+  const shareKey = (paymentId: string, refundId: string) => `${paymentId}\u0000${refundId}`
+  database.select({
+    paymentId: paymentAllocations.paymentId,
+    refundId: refundAllocations.refundId,
+    total: sql<number>`coalesce(sum(${refundAllocations.amountPaise}), 0)`,
+  }).from(refundAllocations)
+    .innerJoin(
+      paymentAllocations,
+      eq(paymentAllocations.id, refundAllocations.paymentAllocationId),
+    )
+    .where(inArray(paymentAllocations.paymentId, ids))
+    .groupBy(paymentAllocations.paymentId, refundAllocations.refundId)
+    .all()
+    .forEach((row) => shares.set(shareKey(row.paymentId, row.refundId), Number(row.total)))
+  const drawnRefundIds = new Set([...shares.keys()].map((key) => key.split("\u0000")[1]))
+  const rows = database.select().from(refunds)
+    .where(or(inArray(refunds.paymentId, ids), inArray(refunds.id, [...drawnRefundIds])))
     .orderBy(desc(refunds.refundedOn), desc(refunds.recordedAt), desc(refunds.id))
     .all()
-    .forEach((refund) => grouped.get(refund.paymentId)?.push(refund))
+  ids.forEach((paymentId) => {
+    rows.forEach((refund) => {
+      const share = shares.get(shareKey(paymentId, refund.id))
+      if (share === undefined && refund.paymentId !== paymentId) return
+      grouped.get(paymentId)?.push({
+        refund,
+        // A refund with no allocation rows at all belongs wholly to its receipt.
+        receiptAmountPaise: share ?? (drawnRefundIds.has(refund.id) ? 0 : refund.amountPaise),
+      })
+    })
+  })
   return grouped
+}
+
+/**
+ * How reversing a mid-term withdrawal refund would put its fee plan back, or
+ * null when it would not. The reversal (lib/finance/service.ts reverseRefund)
+ * applies exactly this, and the coach's confirmation says what it will do from
+ * the same answer: it used to promise the plan back whenever the refund kept
+ * the plan's earlier state, though the reversal then quietly left it ended.
+ *
+ * Nothing is put back when the refund was recorded before 13 Nov 2026 (no
+ * earlier state was kept), when the plan has changed since the refund, or when
+ * putting it back would overlap a plan made since (a booked return, say). Fees
+ * already issued never change: the plan only covers days again that it
+ * covered before.
+ */
+export function planRestoreAfterWithdrawalReversal(
+  database: Executor,
+  refund: Pick<typeof refunds.$inferSelect, "id" | "playerAccountId" | "withdrawalEffectiveOn">,
+) {
+  const recorded = database.select({ metadata: financialAuditEvents.metadata })
+    .from(financialAuditEvents)
+    .where(and(
+      eq(financialAuditEvents.entityType, "refund"),
+      eq(financialAuditEvents.entityId, refund.id),
+      eq(financialAuditEvents.eventType, "refund_recorded"),
+    )).get()
+  let metadata: {
+    agreementId?: string
+    previousAgreement?: { effectiveTo: string | null; status: string }
+  } = {}
+  try {
+    metadata = recorded ? JSON.parse(recorded.metadata) as typeof metadata : {}
+  } catch {
+    // An unreadable entry restores nothing.
+  }
+  const previous = metadata.previousAgreement
+  const withdrawnOn = refund.withdrawalEffectiveOn
+  if (!metadata.agreementId || !previous || !withdrawnOn
+    || !["active", "ended"].includes(previous.status)
+    || (previous.status === "ended" && !previous.effectiveTo)) return null
+  const agreement = database.select().from(feeAgreements)
+    .where(eq(feeAgreements.id, metadata.agreementId)).get()
+  if (!agreement || agreement.status !== "ended"
+    || agreement.effectiveTo !== withdrawnOn
+    || agreement.playerAccountId !== refund.playerAccountId) return null
+  const restoredTo = previous.status === "active" ? null : previous.effectiveTo
+  const overlapping = database.select({ id: feeAgreements.id }).from(feeAgreements).where(and(
+    eq(feeAgreements.playerAccountId, agreement.playerAccountId),
+    ne(feeAgreements.id, agreement.id),
+    ne(feeAgreements.status, "paused"),
+    restoredTo ? lte(feeAgreements.effectiveFrom, restoredTo) : undefined,
+    or(isNull(feeAgreements.effectiveTo), gt(feeAgreements.effectiveTo, withdrawnOn)),
+  )).get()
+  if (overlapping) return null
+  if (previous.status === "active" && readActiveFeeAgreement(database, agreement.playerAccountId)) {
+    return null
+  }
+  return {
+    agreement,
+    effectiveTo: restoredTo,
+    status: previous.status === "active" ? "active" as const : "ended" as const,
+  }
 }
 
 function loadRecordedRefundPaiseByPayment(database: Executor, paymentIds: string[]) {
@@ -786,7 +914,13 @@ function loadCoachReceiptContext(
       allocationRows.map(({ charge }) => charge.playerAccountId),
     )]),
     recordedWithdrawalChargeIds: loadRecordedWithdrawalChargeIds(database, chargeIds),
-    refundBreakdowns: loadRefundBreakdowns(database, refundRows.map((refund) => refund.id)),
+    // A few recorded withdrawal refunds per player at most.
+    planRestoringRefundIds: new Set(refundRows.filter((refund) => (
+      refund.lifecycle === "recorded"
+      && refund.purpose === "mid_term_withdrawal"
+      && planRestoreAfterWithdrawalReversal(database, refund) !== null
+    )).map((refund) => refund.id)),
+    refundBreakdowns: loadRefundBreakdowns(database, [...new Set(refundRows.map((refund) => refund.id))]),
     refundedPaiseByAllocation: loadRecordedRefundPaiseByAllocation(
       database,
       allocationRows.map(({ allocation }) => allocation.id),
@@ -813,14 +947,15 @@ function loadPlayerPhaseTwoHistory(
     ? loadCoachReceiptContext(
       database,
       [...allocationsByPayment.values()].flat(),
-      [...refundsByPayment.values()].flat(),
+      [...refundsByPayment.values()].flat().map(({ refund }) => refund),
     )
     : null
+  const trainingEnded = includeInternal && playerTrainingHasEnded(database, playerId, todayKey)
   const receiptPairs = paymentRows.map((payment) => {
     const allocations = allocationsByPayment.get(payment.id) ?? []
     const paymentRefunds = refundsByPayment.get(payment.id) ?? []
     const activeAllocatedRefundPaise = refundedPaiseByPayment.get(payment.id) ?? 0
-    const publicRefunds = paymentRefunds.map((refund) => ({
+    const publicRefunds = paymentRefunds.map(({ receiptAmountPaise, refund }) => ({
       id: refund.id,
       paymentId: payment.id,
       receiptReference: payment.receiptReference,
@@ -828,6 +963,7 @@ function loadPlayerPhaseTwoHistory(
       purpose: refund.purpose,
       withdrawalEffectiveOn: refund.withdrawalEffectiveOn,
       amountPaise: refund.amountPaise,
+      receiptAmountPaise,
       refundedOn: refund.refundedOn,
       lifecycle: refund.lifecycle,
     }))
@@ -855,6 +991,7 @@ function loadPlayerPhaseTwoHistory(
       return { publicReceipt, coachReceipt: null, coachRefunds: [] }
     }
 
+    let refundWindow: { earliest: string; latest: string } | null = null
     const coachAllocations = allocations.map(({ allocation, charge }) => {
       const activeRefunded = coachContext.refundedPaiseByAllocation.get(allocation.id) ?? 0
       const chargeLedger = chargeView(
@@ -887,15 +1024,33 @@ function loadPlayerPhaseTwoHistory(
         period: charge.billingPeriod,
         reversedRefundOn: reversedWithdrawalRefund?.withdrawalEffectiveOn,
       })
+      // The same date rules the server applies to the withdrawal date, so a
+      // refund is not offered when every date the coach could pick is refused
+      // (on the 1st of the month, say).
+      const paidOn = (coachContext.chargeRelations.get(charge.id)?.payments ?? [])
+        .filter(({ payment: chargePayment }) => chargePayment.lifecycle === "recorded")
+        .reduce<string | null>((latest, { payment: chargePayment }) => (
+          latest === null || chargePayment.receivedOn > latest ? chargePayment.receivedOn : latest
+        ), null)
+      const window = charge.billingPeriod !== null && agreement
+        ? withdrawalDateWindow({
+          paidOn,
+          period: charge.billingPeriod,
+          planStartsOn: agreement.effectiveFrom,
+          today: todayKey,
+        })
+        : null
       const withdrawalEligible = payment.lifecycle === "recorded"
         && charge.type === "monthly_training"
         && Boolean(charge.billingPeriod)
         && agreementCanClose
+        && window !== null
         && !laterCharge
         && !activeWithdrawalRefund
         && chargeLedger.effectiveAmountPaise > 0
         && chargeLedger.outstandingPaise === 0
         && chargeLedger.receivedPaise === chargeLedger.effectiveAmountPaise
+      if (withdrawalEligible) refundWindow ??= window
       return {
         ...publicReceipt.allocations.find((item) => item.id === allocation.id)!,
         paymentAllocationId: allocation.id,
@@ -904,7 +1059,7 @@ function loadPlayerPhaseTwoHistory(
           : 0,
       }
     })
-    const coachRefunds = paymentRefunds.map((refund) => {
+    const coachRefunds = paymentRefunds.map(({ refund }) => {
       const allocationsForRefund = coachContext.refundBreakdowns.get(refund.id) ?? []
       return {
         ...publicRefunds.find((item) => item.id === refund.id)!,
@@ -913,9 +1068,12 @@ function loadPlayerPhaseTwoHistory(
         internalNote: refund.internalNote,
         allocations: allocationsForRefund,
         canReverse: refund.lifecycle === "recorded",
+        restoresFeePlan: coachContext.planRestoringRefundIds.has(refund.id),
         recordRevision: refund.recordRevision,
       }
     })
+    const refundable = payment.lifecycle === "recorded"
+      && coachAllocations.some((allocation) => allocation.refundablePaise > 0)
     return {
       publicReceipt,
       coachReceipt: {
@@ -925,8 +1083,9 @@ function loadPlayerPhaseTwoHistory(
           (total, allocation) => total + allocation.refundablePaise,
           0,
         ),
-        canRefund: payment.lifecycle === "recorded"
-          && coachAllocations.some((allocation) => allocation.refundablePaise > 0),
+        canRefund: refundable && trainingEnded,
+        refundNeedsTrainingEnded: refundable && !trainingEnded,
+        refundWindow,
         recordRevision: payment.recordRevision,
         internalNote: payment.internalNote,
       },
@@ -1006,6 +1165,52 @@ function loadPlayerPhaseTwoHistory(
   }
 }
 
+function toFeeAgreementView(agreement: typeof feeAgreements.$inferSelect) {
+  return {
+    id: agreement.id,
+    academyPlan: agreement.academyPlan,
+    level: agreement.level,
+    batch: agreement.batch,
+    agreedMonthlyFeePaise: agreement.agreedMonthlyFeePaise,
+    currency: FINANCE_CURRENCY,
+    monthlyDueDay: agreement.monthlyDueDay,
+    effectiveFrom: agreement.effectiveFrom,
+    effectiveTo: agreement.effectiveTo,
+    status: agreement.status,
+    recordRevision: agreement.recordRevision,
+  }
+}
+
+/*
+ * A player's fee plans read against today (FeePlanStanding in
+ * lib/finance/types.ts). "Active" is the latest plan, not the one in force:
+ * after a fee change next month's plan is active while this month's has ended,
+ * and a player who left has no active plan. The coach's fee record used to
+ * show only the active plan, so a leaver read as "onboarding in progress" and
+ * a waiting fee change as this month's agreed fee. A paused plan never
+ * started (lib/finance/service.ts pauseUnstartedFeeAgreementInTransaction),
+ * so it is left out.
+ */
+function loadFeePlanStanding(database: Executor, playerId: string, todayKey: string): FeePlanStanding {
+  const plans = database.select().from(feeAgreements).where(and(
+    eq(feeAgreements.playerAccountId, playerId),
+    ne(feeAgreements.status, "paused"),
+  )).orderBy(asc(feeAgreements.effectiveFrom), asc(feeAgreements.createdAt)).all()
+  const current = plans.find((plan) => (
+    plan.effectiveFrom <= todayKey && (plan.effectiveTo === null || plan.effectiveTo >= todayKey)
+  )) ?? null
+  const upcoming = plans.find((plan) => plan.effectiveFrom > todayKey) ?? null
+  const last = plans.at(-1) ?? null
+  const runsOn = plans.some((plan) => plan.status === "active")
+  return {
+    current: current ? toFeeAgreementView(current) : null,
+    upcoming: upcoming ? toFeeAgreementView(upcoming) : null,
+    ended: !current && !upcoming && last?.status === "ended" ? toFeeAgreementView(last) : null,
+    startsOn: plans[0]?.effectiveFrom ?? null,
+    endsOn: runsOn || !last ? null : last.effectiveTo,
+  }
+}
+
 export function loadPlayerFeeRecord(
   database: Executor,
   playerId: string,
@@ -1071,6 +1276,14 @@ export function loadPlayerFeeRecord(
     },
   ))
   const phaseTwoHistory = loadPlayerPhaseTwoHistory(database, playerId, includeInternal, todayKey)
+  const feeStatus = combineFinanceStatuses(activeCharges.map((charge) => charge.status))
+  // The coach's lists read "Setup required" for this player
+  // (listFinancePlayers); the fee record says the same and why.
+  const trainsWithoutFeePlan = includeInternal && listPlayersTrainingWithoutFeePlan(
+    database,
+    todayKey.slice(0, 7),
+    playerId,
+  ).has(playerId)
 
   return {
     playerId,
@@ -1079,25 +1292,15 @@ export function loadPlayerFeeRecord(
     archived: player.archivedAt !== null,
     financeTrackingMonth: activation?.trackingMonth ?? null,
     registrationResolutionRequired,
-    status: combineFinanceStatuses(activeCharges.map((charge) => charge.status)),
+    status: trainsWithoutFeePlan && feeStatus !== "overdue" ? "setup_required" : feeStatus,
     currentBalancePaise: activeCharges.reduce(
       (total, charge) => total + charge.outstandingPaise,
       0,
     ),
     feePlanSetupReady,
-    feeAgreement: agreement ? {
-      id: agreement.id,
-      academyPlan: agreement.academyPlan,
-      level: agreement.level,
-      batch: agreement.batch,
-      agreedMonthlyFeePaise: agreement.agreedMonthlyFeePaise,
-      currency: FINANCE_CURRENCY,
-      monthlyDueDay: agreement.monthlyDueDay,
-      effectiveFrom: agreement.effectiveFrom,
-      effectiveTo: agreement.effectiveTo,
-      status: agreement.status,
-      recordRevision: agreement.recordRevision,
-    } : null,
+    feeAgreement: agreement ? toFeeAgreementView(agreement) : null,
+    feePlans: loadFeePlanStanding(database, playerId, todayKey),
+    onboardingComplete: player.onboardingCompletedAt !== null,
     enrollmentDefaults,
     setupDefaults: agreement ? null : enrollmentDefaults,
     registrationCharge,
@@ -1135,13 +1338,94 @@ function termFeeMonths(database: Executor, playerId: string, todayKey: string) {
   }
 }
 
+/**
+ * Players who finished onboarding and are on a schedule in `period` with no
+ * fee plan for it: nothing will ever issue them a monthly fee. The coach's
+ * finance lists show them as "Setup required" (listFinancePlayers, and the fee
+ * register in lib/finance/records.ts), and the dashboard counts them as
+ * needing attention.
+ *
+ * Left out: a player with a fee plan in force or still to start (a first fee
+ * month after this one, a booked return), including one whose fees were
+ * stopped before that plan started; a stopped plan that never began is not a
+ * missing one. A withdrawal refund recorded before 13 Nov 2026 for a player
+ * who kept training is the case this finds: it ended their plan and nothing
+ * showed it.
+ */
+export function listPlayersTrainingWithoutFeePlan(
+  database: Executor,
+  period: string,
+  playerId?: string,
+) {
+  const rows = database.select({ playerId: accounts.id }).from(accounts)
+    .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
+    .where(and(
+      playerId === undefined ? undefined : eq(accounts.id, playerId),
+      eq(accounts.role, "player"),
+      eq(accounts.approvalStatus, "approved"),
+      isNull(accounts.archivedAt),
+      sql`${playerEnrollments.onboardingCompletedAt} is not null`,
+      sql`exists (
+        select 1 from ${sessionAssignments}
+        inner join ${sessionSeries} on ${sessionSeries.id} = ${sessionAssignments.seriesId}
+        where ${sessionAssignments.accountId} = ${accounts.id}
+          and ${sessionAssignments.effectiveFrom} <= ${monthEnd(period)}
+          and (${sessionAssignments.effectiveTo} is null
+            or (${sessionAssignments.effectiveTo} > ${monthStart(period)}
+              and ${sessionAssignments.effectiveTo} > ${sessionAssignments.effectiveFrom}))
+          and ${sessionSeries.startsOn} <= ${monthEnd(period)}
+          and (${sessionSeries.endsOn} is null or ${sessionSeries.endsOn} >= ${monthStart(period)})
+      )`,
+      sql`not exists (
+        select 1 from ${feeAgreements}
+        where ${feeAgreements.playerAccountId} = ${accounts.id}
+          and (${feeAgreements.status} = 'active'
+            or ${feeAgreements.effectiveFrom} > ${monthEnd(period)}
+            or (${feeAgreements.status} != 'paused'
+              and ${feeAgreements.effectiveFrom} <= ${monthEnd(period)}
+              and (${feeAgreements.effectiveTo} is null
+                or ${feeAgreements.effectiveTo} >= ${monthStart(period)})))
+      )`,
+    )).all()
+  return new Set(rows.map((row) => row.playerId))
+}
+
+/**
+ * The players on the coach's finance lists for a month: the payment desk, the
+ * dashboard's "needs attention" count and the (unused) finance workspace.
+ *
+ * - Each fee's status comes from the same ledger rules as the player's fee
+ *   record (calculateChargeLedger and deriveFinanceStatus in
+ *   lib/finance/domain.ts); this list used to keep its own copy of them.
+ * - "Monthly fee not issued" is decided by the caller from the fees that
+ *   Issue fees would issue for the month (`awaitingFeePlayerIds`), the same
+ *   answer the fee register and the Issue fees panel give.
+ * - A player with fees is never left off. A player with an active fee plan but
+ *   no registration fee (one voided from Corrections, say) used to be marked
+ *   "setup required" and dropped, which took them off the payment desk too.
+ * - A player who finished onboarding and trains this month with no fee plan
+ *   reads "Setup required" (listPlayersTrainingWithoutFeePlan), whether or
+ *   not they have fees from before: almost every player has a registration
+ *   fee, and it used to hide the missing plan behind "Paid". Only an overdue
+ *   fee reads first. A player with no fees yet is listed only when the head
+ *   coach has something to do: their month's fee is waiting to be issued, or
+ *   their fee plan is missing. Players still in onboarding are left to the
+ *   onboarding register.
+ */
 export function listFinancePlayers(
   database: Executor,
   {
+    awaitingFeePlayerIds,
     now = new Date(),
     period,
     query = "",
-  }: { now?: Date; period: string; query?: string },
+  }: {
+    /** Players whose fee for `period` Issue fees would issue now. */
+    awaitingFeePlayerIds: ReadonlySet<string>
+    now?: Date
+    period: string
+    query?: string
+  },
 ): FinancePlayerListItem[] {
   const normalizedQuery = query.trim().toLocaleLowerCase("en-IN")
   const searchPattern = `%${normalizedQuery.replace(/[\\%_]/gu, "\\$&")}%`
@@ -1169,40 +1453,26 @@ export function listFinancePlayers(
   const creditTotal = sql<number>`coalesce((
     select sum(${chargeAdjustments.amountPaise}) from ${chargeAdjustments}
     where ${chargeAdjustments.chargeId} = ${financialCharges.id}
-      and ${chargeAdjustments.kind} in (
-        'manual_credit',
-        'legacy_settlement',
-        'concession_credit',
-        'withdrawal_credit'
-      )
+      and ${chargeAdjustments.kind} != 'manual_debit'
       and ${chargeAdjustments.reversedAt} is null
   ), 0)`
   const hasActiveAgreement = sql<number>`exists (
     select 1 from ${feeAgreements}
     where ${feeAgreements.playerAccountId} = ${accounts.id}
       and ${feeAgreements.status} = 'active'
-      and ${feeAgreements.academyPlan} = ${playerEnrollments.academyPlan}
-      and ${feeAgreements.level} = ${playerEnrollments.level}
-      and ${feeAgreements.batch} = ${playerEnrollments.batch}
   )`
   const hasPaymentAgreementHistory = sql<number>`exists (
     select 1 from ${feeAgreements}
     where ${feeAgreements.playerAccountId} = ${accounts.id}
       and ${feeAgreements.status} in ('active', 'ended')
   )`
-  const hasPeriodAssignment = sql<number>`exists (
-    select 1 from ${sessionAssignments}
-    inner join ${sessionSeries} on ${sessionSeries.id} = ${sessionAssignments.seriesId}
-    where ${sessionAssignments.accountId} = ${accounts.id}
-      and ${sessionSeries.programme} = ${playerEnrollments.level}
-      and ${sessionSeries.batch} = ${playerEnrollments.batch}
-      and ${sessionAssignments.effectiveFrom} <= ${monthEnd(period)}
-      and (${sessionAssignments.effectiveTo} is null
-        or (${sessionAssignments.effectiveTo} > ${monthStart(period)}
-          and ${sessionAssignments.effectiveTo} > ${sessionAssignments.effectiveFrom}))
-      and ${sessionSeries.startsOn} <= ${monthEnd(period)}
-      and (${sessionSeries.endsOn} is null or ${sessionSeries.endsOn} >= ${monthStart(period)})
+  // Any fee plan at all, a stopped one included: End training's "Stop fees"
+  // pauses a plan that had not started yet.
+  const hasAnyAgreement = sql<number>`exists (
+    select 1 from ${feeAgreements}
+    where ${feeAgreements.playerAccountId} = ${accounts.id}
   )`
+  const withoutFeePlan = listPlayersTrainingWithoutFeePlan(database, period)
   const rows = database.select({
     academyIdSerial: academyIdAllocations.serial,
     fullName: accounts.fullName,
@@ -1219,8 +1489,8 @@ export function listFinancePlayers(
     debitTotal,
     creditTotal,
     hasActiveAgreement,
+    hasAnyAgreement,
     hasPaymentAgreementHistory,
-    hasPeriodAssignment,
   }).from(accounts)
     .innerJoin(playerEnrollments, eq(playerEnrollments.accountId, accounts.id))
     .innerJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
@@ -1266,59 +1536,63 @@ export function listFinancePlayers(
   const grouped = new Map<string, typeof rows>()
   rows.forEach((row) => grouped.set(row.playerId, [...(grouped.get(row.playerId) ?? []), row]))
   const todayKey = getAcademyDateKey(now)
-  const items = [...grouped.values()].map((playerRows) => {
+  return [...grouped.values()].flatMap((playerRows): FinancePlayerListItem[] => {
     const player = playerRows[0]
     const chargeRows = playerRows.flatMap((row) => {
       const dueDate = row.dueDate
       if (!row.chargeId || row.originalAmountPaise === null || !dueDate) return []
-      const effective = Math.max(
-        0,
-        row.originalAmountPaise + Number(row.debitTotal) - Number(row.creditTotal),
-      )
-      const received = Math.max(0, Number(row.paymentTotal) - Number(row.refundTotal))
-      const outstanding = Math.max(0, effective - received)
-      const status = outstanding === 0
-        ? "paid" as const
-        : received > 0
-          ? "partially_paid" as const
-          : dueDate < todayKey
-            ? "overdue" as const
-            : "pending" as const
-      return [{ ...row, dueDate, outstanding, status }]
+      // The totals stand in for the rows they sum. Reversed rows are already
+      // left out of them, so each fact here is recorded or in force.
+      const fact = {
+        originalAmountPaise: row.originalAmountPaise,
+        dueDate,
+        lifecycle: "issued" as const,
+        adjustments: [
+          { kind: "manual_debit" as const, amountPaise: Number(row.debitTotal), reversedAt: null },
+          { kind: "manual_credit" as const, amountPaise: Number(row.creditTotal), reversedAt: null },
+        ],
+        payments: [{ amountPaise: Number(row.paymentTotal), lifecycle: "recorded" as const }],
+        refunds: [{ amountPaise: Number(row.refundTotal), lifecycle: "recorded" as const }],
+      }
+      return [{
+        ...row,
+        dueDate,
+        outstanding: calculateChargeLedger(fact).outstandingPaise,
+        status: deriveFinanceStatus(fact, todayKey),
+      }]
     })
     const hasAgreement = Number(player.hasActiveAgreement) > 0
     const hasPaymentHistory = Number(player.hasPaymentAgreementHistory) > 0
-    const hasAssignment = Number(player.hasPeriodAssignment) > 0
+    const awaitingFee = awaitingFeePlayerIds.has(player.playerId)
+    const archived = player.archivedAt !== null
+    const trainsWithoutPlan = !awaitingFee && withoutFeePlan.has(player.playerId)
+    const base = {
+      playerId: player.playerId,
+      academyId: formatAcademyId(player.academyIdSerial),
+      fullName: player.fullName,
+      archived,
+      hasActiveFeePlan: hasAgreement,
+      feePlanEnded: Number(player.hasAnyAgreement) > 0 && !hasAgreement,
+    }
     if (!chargeRows.length) {
-      return {
-        playerId: player.playerId,
-        academyId: formatAcademyId(player.academyIdSerial),
-        fullName: player.fullName,
-        archived: player.archivedAt !== null,
-        hasActiveFeePlan: hasAgreement,
+      if (!awaitingFee && !trainsWithoutPlan) return []
+      return [{
+        ...base,
         paymentEligible: false,
-        status: "setup_required" as const,
+        status: awaitingFee ? "not_prepared" : "setup_required",
         outstandingPaise: 0,
         dueDate: null,
         feeReference: null,
-      }
+      }]
     }
-    const hasMonthlyCharge = chargeRows.some((row) => (
-      row.chargeType === "monthly_training" && row.billingPeriod === period
-    ))
-    const hasRegistrationCharge = chargeRows.some((row) => row.chargeType === "registration")
     const hasPayableRegistration = chargeRows.some((row) => (
       row.chargeType === "registration" && row.outstanding > 0
     ))
-    const status = (!hasPaymentHistory && !hasRegistrationCharge)
-      || (hasAgreement && !hasRegistrationCharge)
-      ? "setup_required" as const
-      : hasAgreement && hasAssignment && !hasMonthlyCharge
-        ? combineFinanceStatuses([
-          ...chargeRows.map((row) => row.status),
-          "not_prepared",
-        ])
-        : combineFinanceStatuses(chargeRows.map((row) => row.status))
+    const feeStatus = combineFinanceStatuses([
+      ...chargeRows.map((row) => row.status),
+      ...(awaitingFee ? ["not_prepared" as const] : []),
+    ])
+    const status = trainsWithoutPlan && feeStatus !== "overdue" ? "setup_required" : feeStatus
     const representative = [...chargeRows].sort((left, right) => {
       const leftSettled = left.outstanding === 0 ? 1 : 0
       const rightSettled = right.outstanding === 0 ? 1 : 0
@@ -1328,13 +1602,8 @@ export function listFinancePlayers(
           - Number(left.chargeType === "monthly_training")
     })[0]
     const outstandingPaise = chargeRows.reduce((total, row) => total + row.outstanding, 0)
-    const archived = player.archivedAt !== null
-    return {
-      playerId: player.playerId,
-      academyId: formatAcademyId(player.academyIdSerial),
-      fullName: player.fullName,
-      archived,
-      hasActiveFeePlan: hasAgreement,
+    return [{
+      ...base,
       paymentEligible: !archived
         && outstandingPaise > 0
         && (hasPaymentHistory || hasPayableRegistration),
@@ -1342,9 +1611,8 @@ export function listFinancePlayers(
       outstandingPaise,
       dueDate: representative.dueDate,
       feeReference: representative.feeReference,
-    }
+    }]
   })
-  return items.filter((item) => item.status !== "setup_required")
 }
 
 export function listMonthlyPreparationCandidates(database: Executor, period: string) {

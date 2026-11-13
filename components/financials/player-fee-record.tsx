@@ -69,10 +69,8 @@ function recordYears(record: PlayerFeeRecord, currentPeriod: string) {
     if (VALID_PERIOD.test(period)) years.add(period.slice(0, 4))
   })
 
-  if (record.feeAgreement) {
-    years.add(record.feeAgreement.effectiveFrom.slice(0, 4))
-    if (record.feeAgreement.effectiveTo) years.add(record.feeAgreement.effectiveTo.slice(0, 4))
-  }
+  if (record.feePlans.startsOn) years.add(record.feePlans.startsOn.slice(0, 4))
+  if (record.feePlans.endsOn) years.add(record.feePlans.endsOn.slice(0, 4))
 
   if (record.registrationCharge) years.add(record.registrationCharge.dueDate.slice(0, 4))
 
@@ -118,19 +116,33 @@ function receiptAllocationLabel(allocation: PlayerReceiptAllocationView) {
   return "Monthly fee"
 }
 
+/* A receipt whose money was given back says so, as the coach's copy does. */
+function receiptState(receipt: PlayerReceiptView) {
+  if (receipt.lifecycle === "reversed") return "Reversed"
+  const refundedPaise = receipt.refundedPaise ?? 0
+  if (refundedPaise >= receipt.amountPaise) return "Refunded"
+  if (refundedPaise > 0) return `${formatInr(refundedPaise)} refunded`
+  return "Recorded"
+}
+
 function receiptMeta(receipt: PlayerReceiptView) {
   return [
     `Receipt ${receipt.receiptReference}`,
     paymentMethodLabel(receipt.method),
     receipt.externalReference ? `Payment reference ${receipt.externalReference}` : null,
-    receipt.lifecycle === "reversed" ? "Reversed" : "Recorded",
+    receiptState(receipt),
   ].filter((item): item is string => Boolean(item))
 }
 
-function withdrawalForCharge(
+/*
+ * Every withdrawal refund on a month's fee, newest first, each once (a refund
+ * on a fee paid in two instalments is listed under both receipts).
+ */
+function withdrawalsForCharge(
   record: PlayerFeeRecord,
   charge: ChargeView,
-): WithdrawalEvent | null {
+): WithdrawalEvent[] {
+  const seen = new Set<string>()
   const events = record.receipts.flatMap((receipt) => {
     const allocatesCharge = receipt.allocations.some((allocation) => allocation.chargeId === charge.id)
     if (!allocatesCharge) return []
@@ -141,15 +153,26 @@ function withdrawalForCharge(
           && refund.withdrawalEffectiveOn?.slice(0, 7) === charge.billingPeriod
       ))
       .map((refund) => ({ receipt, refund }))
+  }).filter(({ refund }) => {
+    if (seen.has(refund.id)) return false
+    seen.add(refund.id)
+    return true
   })
 
-  return events.sort((first, second) => {
-    if (first.refund.lifecycle !== second.refund.lifecycle) {
-      return first.refund.lifecycle === "recorded" ? -1 : 1
-    }
-    return second.refund.refundedOn.localeCompare(first.refund.refundedOn)
+  return events.sort((first, second) => (
+    second.refund.refundedOn.localeCompare(first.refund.refundedOn)
       || second.refund.id.localeCompare(first.refund.id)
-  })[0] ?? null
+  ))
+}
+
+/*
+ * The withdrawal refund that closes a month: only one still recorded. A
+ * reversed refund gave the money back to the fee, so the month reads as paid
+ * again. It used to keep "Closed after withdrawal / Balance closed".
+ */
+function activeWithdrawalForCharge(record: PlayerFeeRecord, charge: ChargeView) {
+  return withdrawalsForCharge(record, charge)
+    .find(({ refund }) => refund.lifecycle === "recorded") ?? null
 }
 
 /*
@@ -175,9 +198,11 @@ function monthState(
   charge: ChargeView | undefined,
 ) {
   if (!charge || charge.lifecycle === "void") {
-    const agreement = record.feeAgreement
-    const agreementStart = agreement?.effectiveFrom.slice(0, 7)
-    const agreementEnd = agreement?.effectiveTo?.slice(0, 7)
+    // Every fee plan the player had, not only the latest: the latest can be a
+    // fee change that starts next month, which made this month read "Before
+    // plan", and a player who left has none, so "Plan ended" never showed.
+    const agreementStart = record.feePlans.startsOn?.slice(0, 7)
+    const agreementEnd = record.feePlans.endsOn?.slice(0, 7)
 
     if (agreementStart && period < agreementStart) {
       return { detail: "", label: "Before plan", tone: "quiet" as const }
@@ -194,11 +219,24 @@ function monthState(
     return { detail: "", label: "Not issued", tone: "quiet" as const }
   }
 
-  if (withdrawalForCharge(record, charge)) {
+  if (activeWithdrawalForCharge(record, charge)) {
     return {
       detail: "Balance closed",
       label: "Closed after withdrawal",
       tone: "closed" as const,
+    }
+  }
+
+  // A fee wholly covered by a concession or credit was never paid: "Paid
+  // ₹0" read oddly next to the registration band's "Covered by concession".
+  if (charge.status === "paid" && charge.receivedPaise === 0) {
+    const covered = record.concessionEntries.some((entry) => (
+      entry.chargeId === charge.id && entry.lifecycle === "applied"
+    ))
+    return {
+      detail: "",
+      label: covered ? "Covered by concession" : "Nothing to pay",
+      tone: "paid" as const,
     }
   }
 
@@ -251,7 +289,22 @@ function feeRecordHref(year: string, month: string | null) {
 function RegistrationBand({ record }: { record: PlayerFeeRecord }) {
   const charge = record.registrationCharge
 
-  if (!charge || charge.lifecycle === "void" || record.registrationResolutionRequired) {
+  // A registration fee the academy voided is not "after onboarding": it is not
+  // charged, unless the coach issues it again.
+  if (charge?.lifecycle === "void") {
+    return (
+      <section
+        className={styles.registrationEmpty}
+        data-registration-state="cancelled"
+        aria-label="Registration fee"
+      >
+        <strong>Registration fee</strong>
+        <p>Not charged</p>
+      </section>
+    )
+  }
+
+  if (!charge || record.registrationResolutionRequired) {
     return (
       <section
         className={styles.registrationEmpty}
@@ -320,8 +373,8 @@ function MonthDetail({
   const activeConcessionPaise = concessions
     .filter((entry) => entry.lifecycle === "applied")
     .reduce((total, entry) => total + entry.amountPaise, 0)
-  const withdrawal = charge ? withdrawalForCharge(record, charge) : null
-  const activeWithdrawal = withdrawal?.refund.lifecycle === "recorded" ? withdrawal : null
+  const withdrawals = charge ? withdrawalsForCharge(record, charge) : []
+  const activeWithdrawal = charge ? activeWithdrawalForCharge(record, charge) : null
   const grossReceivedPaise = charge?.payments
     .filter((payment) => payment.lifecycle === "recorded")
     .reduce((total, payment) => total + payment.amountPaise, 0) ?? 0
@@ -371,7 +424,7 @@ function MonthDetail({
                 <dd>{formatInr(activeConcessionPaise)}</dd>
               </div>
             ) : null}
-            {withdrawal ? (
+            {activeWithdrawal ? (
               <div>
                 <dt>Offline paid</dt>
                 <dd>{formatInr(grossReceivedPaise)}</dd>
@@ -409,7 +462,7 @@ function MonthDetail({
         )}
       </header>
 
-      {receiptRows.length || concessions.length || withdrawal ? (
+      {receiptRows.length || concessions.length || withdrawals.length ? (
         <div className={styles.monthHistory}>
           {receiptRows.map(({ receipt }) => (
             <section
@@ -447,8 +500,12 @@ function MonthDetail({
             </section>
           ))}
 
-          {withdrawal ? (
-            <section className={styles.historyEntry} data-tone={withdrawal.refund.lifecycle === "recorded" ? "refund" : "quiet"}>
+          {withdrawals.map((withdrawal) => (
+            <section
+              className={styles.historyEntry}
+              data-tone={withdrawal.refund.lifecycle === "recorded" ? "refund" : "quiet"}
+              key={withdrawal.refund.id}
+            >
               <div className={styles.historyLead}>
                 <span>
                   {withdrawal.refund.lifecycle === "recorded" ? "Refund issued" : "Refund reversed"}
@@ -460,7 +517,7 @@ function MonthDetail({
                 {withdrawal.refund.refundReference} · {formatFinanceDate(withdrawal.refund.refundedOn)}
               </p>
             </section>
-          ) : null}
+          ))}
         </div>
       ) : (
         <p className={styles.noHistory}>No offline payment has been recorded for this fee yet.</p>

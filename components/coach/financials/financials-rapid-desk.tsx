@@ -65,6 +65,7 @@ function PaymentForm({
   onRecorded: (message: string) => void
   player: PlayerFinancialLedgerView
 }) {
+  const router = useRouter()
   const payableCharges = useMemo(
     () => charges.filter((charge) => charge.outstandingPaise > 0 && charge.status !== "void"),
     [charges],
@@ -210,6 +211,21 @@ function PaymentForm({
         receivedOn,
       })
       if (!result.ok) {
+        if (result.code === "BALANCE_CHANGED") {
+          // The fees changed since the desk opened (in another tab, say). The
+          // split was made against the old fees and can never be saved, so
+          // load the current fees and ask for a fresh review. Recalculate
+          // alone used to keep failing until the page was reloaded.
+          setReviewedAmountPaise(null)
+          setAllocationValues({})
+          requestKey.reset()
+          setFeedback({
+            message: "This player's fees changed since the desk opened. The current fees are now shown. Review the allocation again.",
+            tone: "error",
+          })
+          router.refresh()
+          return
+        }
         setFeedback(resultFeedback(result))
         return
       }
@@ -627,14 +643,17 @@ export function FinancialsRapidDesk({
                     <div id="rapid-financial-player-results">
                       <ul className={styles.playerList}>
                         {workspace.players.map((player) => {
-                          const displayStatus = player.paymentEligible
+                          // A player whose fee plans have all ended left or stopped
+                          // fees; they need no plan set up.
+                          const showsStatus = player.paymentEligible
+                            || player.hasActiveFeePlan
+                            || player.feePlanEnded
+                          const displayStatus = showsStatus
                             ? statusLabels[player.status]
-                            : player.hasActiveFeePlan ? statusLabels[player.status] : "Fee plan required"
-                          const displayStatusClass = player.paymentEligible
-                            ? styles[`status_${player.status}`]
-                            : styles[player.hasActiveFeePlan
-                              ? `status_${player.status}`
-                              : "status_setup_required"]
+                            : "Fee plan required"
+                          const displayStatusClass = styles[showsStatus
+                            ? `status_${player.status}`
+                            : "status_setup_required"]
                           const content = (
                             <>
                               <span className={styles.playerInitials} aria-hidden="true">
