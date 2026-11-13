@@ -162,6 +162,18 @@ describe("second-factor sign-in is audited and metered per account", () => {
     expect(mocks.reserveSecondFactorAttempt).not.toHaveBeenCalled()
   })
 
+  it("says to sign in again, not to wait for a new code, once the challenge is used up", async () => {
+    const usedUp = Object.assign(new Error("Too many attempts"), { body: { code: "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE" } })
+    mocks.verifyTOTP.mockRejectedValue(usedUp)
+    mocks.verifyBackupCode.mockRejectedValue(usedUp)
+    await expect(verifyTotpSignIn(initialState, form("code", "123456"))).resolves.toEqual({
+      error: "Your sign-in has expired. Sign in again.",
+    })
+    await expect(verifyBackupCodeSignIn(initialState, form("backupCode", "abcd-efgh"))).resolves.toEqual({
+      error: "Your sign-in has expired. Sign in again.",
+    })
+  })
+
   // With a session in the request, Better Auth checks the code against the
   // session's account on a path with no lockout: an unlimited guessing oracle
   // for anyone holding a head-coach or owner session.

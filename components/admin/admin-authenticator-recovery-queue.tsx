@@ -6,6 +6,7 @@ import { ShieldAlert } from "lucide-react"
 
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
+import { formatAcademyDate } from "@/lib/format"
 
 import {
   approveAuthenticatorResetRequestAction,
@@ -22,10 +23,7 @@ type AuthenticatorResetRequest = {
 }
 
 function readableDate(value: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value))
+  return formatAcademyDate(value, { hour: "numeric", minute: "2-digit" })
 }
 
 export function AdminAuthenticatorRecoveryQueue({
@@ -33,7 +31,7 @@ export function AdminAuthenticatorRecoveryQueue({
 }: {
   requests: AuthenticatorResetRequest[]
 }) {
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const [busy, setBusy] = useState<{ decision: "approve" | "reject", id: string } | null>(null)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -52,7 +50,7 @@ export function AdminAuthenticatorRecoveryQueue({
    * whichever tone was hard-coded.
    */
   function decide(requestId: string, decision: "approve" | "reject") {
-    setBusyId(requestId)
+    setBusy({ decision, id: requestId })
     setFeedback(null)
     startTransition(async () => {
       try {
@@ -78,7 +76,7 @@ export function AdminAuthenticatorRecoveryQueue({
           tone: "error",
         })
       } finally {
-        setBusyId(null)
+        setBusy(null)
       }
     })
   }
@@ -114,7 +112,7 @@ export function AdminAuthenticatorRecoveryQueue({
                 disabled={pending}
                 onClick={() => decide(request.id, "reject")}
               >
-                Reject
+                {pending && busy?.id === request.id && busy.decision === "reject" ? "Working…" : "Reject"}
               </button>
               <button
                 className="is-approve"
@@ -122,7 +120,7 @@ export function AdminAuthenticatorRecoveryQueue({
                 disabled={pending}
                 onClick={() => decide(request.id, "approve")}
               >
-                {pending && busyId === request.id ? "Working…" : "Approve reset"}
+                {pending && busy?.id === request.id && busy.decision === "approve" ? "Working…" : "Approve reset"}
               </button>
             </div>
           </article>

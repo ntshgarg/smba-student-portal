@@ -53,7 +53,7 @@ export default async function AuthenticatorRecoveryPage({
         {requested ? (
           <div className="registration-confirmation" role="status">
             <h2>Wait for platform-admin approval.</h2>
-            <p>After approval, sign in with the existing password or PIN. SMBA will force a fresh authenticator setup.</p>
+            <p>After approval, sign in with your password and connect a new authenticator. If you have forgotten the password too, use Forgot password with this recovery email within 24 hours of the approval.</p>
           </div>
         ) : status.state === "verified"
           ? <AuthenticatorRecoveryApprovalForm academyId={status.academyId} />

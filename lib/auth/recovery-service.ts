@@ -1178,7 +1178,9 @@ function recentlyApprovedAuthenticatorReset(
  * password. The owner's queue says so beside the Approve button, so the owner
  * knows that is what they are agreeing to. Outside it there is still no way
  * through by email, and the page says so rather than asking for a code that
- * cannot exist.
+ * cannot exist. The owner has nobody to approve for them, so without an
+ * authenticator their recovery inbox is enough, and they are emailed when it
+ * is used (completePasswordRecovery).
  */
 function recoverySecondFactorRule(row: {
   accessLevel: "head_admin" | "junior_coach" | null
@@ -1192,7 +1194,8 @@ function recoverySecondFactorRule(row: {
     .where(eq(authTwoFactors.userId, row.accountId))
     .get()
   if (factor?.verified) return "required"
-  if (row.role === "coach" && recentlyApprovedAuthenticatorReset(row.accountId, row.email, database, now)) {
+  if (row.role === "platform_admin") return "not_required"
+  if (recentlyApprovedAuthenticatorReset(row.accountId, row.email, database, now)) {
     return "not_required"
   }
   return "unavailable"
@@ -1231,7 +1234,7 @@ export function passwordRecoveryLinkBlocked(token: string, {
   const challenge = recoveryChallenge(token, "password", database, now)
   if (!challenge || challenge.claimedAt || !challenge.role) return null
   return recoverySecondFactorRule(challenge, database, now) === "unavailable"
-    ? { academyId: challenge.academyId, owner: challenge.role === "platform_admin" }
+    ? { academyId: challenge.academyId }
     : null
 }
 
@@ -1265,7 +1268,7 @@ export function claimPasswordRecovery(token: string, {
 
 export type PasswordRecoveryStatus =
   | { state: "missing" }
-  | { academyId: string; owner: boolean; state: "unavailable" }
+  | { academyId: string; state: "unavailable" }
   | {
     academyId: string
     requiresSecondFactor: boolean
@@ -1284,11 +1287,7 @@ export function getPasswordRecoveryStatus(token: string, {
   if (!challenge?.claimedAt || !challenge.role) return { state: "missing" }
   const rule = recoverySecondFactorRule(challenge, database, now)
   if (rule === "unavailable") {
-    return {
-      academyId: challenge.academyId,
-      owner: challenge.role === "platform_admin",
-      state: "unavailable",
-    }
+    return { academyId: challenge.academyId, state: "unavailable" }
   }
   const requiresSecondFactor = rule === "required"
   return {
@@ -1606,6 +1605,7 @@ export async function verifyFreshAccountSecondFactor(input: {
 }
 
 export async function completePasswordRecovery(input: {
+  mailer?: AuthMailer
   password: string
   security?: SecurityMetadata
   token: string
@@ -1624,7 +1624,7 @@ export async function completePasswordRecovery(input: {
   if (rule === "required" && !challenge.secondFactorVerifiedAt) return false
   const passwordHash = await hashPassword(input.password)
 
-  return database.transaction((tx) => {
+  const completed = database.transaction((tx) => {
     const current = tx.select({ id: authEmailChallenges.id })
       .from(authEmailChallenges)
       .where(and(
@@ -1690,11 +1690,28 @@ export async function completePasswordRecovery(input: {
     }, { database: tx, now })
     return true
   }, { behavior: "immediate" })
+  // The owner without an authenticator reset by email alone (recoverySecondFactorRule).
+  // Best effort: the password has already changed.
+  if (completed && challenge.role === "platform_admin" && rule === "not_required") {
+    try {
+      const mailer = input.mailer ?? createAuthMailer()
+      await mailer.sendSecurityNotice?.({
+        fullName: accountName(challenge.accountId, database) ?? challenge.academyId,
+        lines: [
+          `The password for ${challenge.academyId} was just reset using this recovery email. Every device was signed out.`,
+          "If you did this, there is nothing more to do. If you did not, reset the password again from this email straight away and connect an authenticator.",
+        ],
+        subject: "Your SMBA password was reset",
+        to: challenge.email,
+      })
+    } catch {
+      // The reset stands either way.
+    }
+  }
+  return completed
 }
 
-/** Why email alone cannot reset a protected account with no authenticator. */
-export function protectedResetUnavailableCopy(academyId: string, owner: boolean) {
-  return owner
-    ? `${academyId} is the platform admin account and has no authenticator connected, so its password cannot be reset by email. It needs a manual fix by whoever looks after the portal’s hosting.`
-    : `${academyId} is a protected account with no authenticator connected, so its password cannot be reset by email alone. That is only possible for 24 hours after the platform admin approves an authenticator reset sent from this recovery email. Contact the platform admin, confirm who you are, and ask them to help you back in.`
+/** Why email alone cannot reset a head coach with no authenticator. */
+export function protectedResetUnavailableCopy(academyId: string) {
+  return `${academyId} is a protected account with no authenticator connected, so its password cannot be reset by email alone. That is only possible for 24 hours after the platform admin approves an authenticator reset sent from this recovery email. Contact the platform admin, confirm who you are, and ask them to help you back in.`
 }

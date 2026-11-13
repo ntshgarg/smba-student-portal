@@ -74,6 +74,11 @@ function isTooManyRequests(error: unknown) {
   return status === "TOO_MANY_REQUESTS" || status === 429
 }
 
+// Better Auth ends the sign-in challenge after five wrong codes; another code cannot help.
+function challengeUsedUp(error: unknown) {
+  return (error as { body?: { code?: unknown } } | null)?.body?.code === "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE"
+}
+
 // A newly connected authenticator withdraws any waiting reset request; approving it now would only wipe the new one.
 // Signing in with a code does not: that code may come from the lost phone the request is about.
 function withdrawStaleResetRequest(
@@ -525,6 +530,7 @@ export async function verifyTotpSignIn(
     if (error && typeof error === "object" && "digest" in error) throw error
     // The lock can also land between the read above and this check.
     if (isTooManyRequests(error)) return { error: SECOND_FACTOR_LOCKED }
+    if (challengeUsedUp(error)) return { error: SIGN_IN_CHALLENGE_EXPIRED }
     recordSecondFactorFailure(requestHeaders, accountId, "totp")
     return { error: "That code was not accepted. Wait for a new code and try again." }
   }
@@ -564,6 +570,7 @@ export async function verifyBackupCodeSignIn(
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error
     if (isTooManyRequests(error)) return { error: SECOND_FACTOR_LOCKED }
+    if (challengeUsedUp(error)) return { error: SIGN_IN_CHALLENGE_EXPIRED }
     recordSecondFactorFailure(requestHeaders, accountId, "backup_code")
     return { error: "That recovery code was not accepted." }
   }

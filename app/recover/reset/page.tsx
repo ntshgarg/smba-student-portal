@@ -43,7 +43,7 @@ export default async function RecoveryResetPage() {
           <p>{status.state === "missing"
             ? "Request a new email from the recovery page."
             : status.state === "unavailable"
-              ? protectedResetUnavailableCopy(status.academyId, status.owner)
+              ? protectedResetUnavailableCopy(status.academyId)
               : status.requiresSecondFactor && !status.secondFactorVerified
                 ? "This protected account also requires its existing authenticator."
                 : `Resetting ${status.academyId} will log out every device and remove its old PIN.`}</p>

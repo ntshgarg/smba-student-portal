@@ -338,6 +338,16 @@ describe("protected accounts and their authenticator", () => {
     await expect(completePasswordRecovery({ password: NEW_PASSWORD, token: pass! }, { database, now: soon }))
       .resolves.toBe(true)
   })
+
+  it("lets the owner with no authenticator reset a forgotten password by email, and tells them", async () => {
+    await createActiveAccount({ academyId: "SMBA-ADMIN-0001", accountId: "owner", email: "owner@example.com", role: "platform_admin" })
+    const pass = claimPasswordRecovery(await emailedPasswordLink("SMBA-ADMIN-0001", "owner@example.com"), { database, now: NOW })
+    expect(getPasswordRecoveryStatus(pass!, { database, now: NOW })).toMatchObject({ requiresSecondFactor: false, state: "active" })
+    const mailer = new CapturingMailer()
+    await expect(completePasswordRecovery({ mailer, password: NEW_PASSWORD, token: pass! }, { database, now: NOW }))
+      .resolves.toBe(true)
+    expect(mailer.notices).toEqual([expect.objectContaining({ subject: "Your SMBA password was reset", to: "owner@example.com" })])
+  })
 })
 
 describe("the coach's authenticator reset request", () => {

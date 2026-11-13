@@ -42,7 +42,7 @@ export default async function RecoveryLinkPage({
               : openable ? "Reset your password." : "This reset link has been used or has expired."}
           </h1>
           <p>{blocked
-            ? protectedResetUnavailableCopy(blocked.academyId, blocked.owner)
+            ? protectedResetUnavailableCopy(blocked.academyId)
             : openable
               ? "Continue in this browser to choose a new password. The link works once, so finish here."
               : "If you already pressed Continue in another browser, finish there. Otherwise request a new email."}</p>
