@@ -657,7 +657,8 @@ function TrainingForm({
       ? [when === "this"
         ? `Monthly fee ${formatInr(feePaise)}${correctedThisMonth !== null && thisMonthFee !== null && correctedThisMonth !== thisMonthFee ? `; ${thisMonth}'s fee becomes ${formatInr(correctedThisMonth)}` : thisMonthFee === null ? `; ${thisMonth}'s fee is issued at this amount` : ""}`
         : `From ${monthName(startsOn)}: ${formatInr(feePaise)} a month`]
-      : financeActive && when === "this" ? ["Keep the fee as it is"] : []),
+      : financeActive && when === "this" && fee?.monthlyFeePaise != null ? ["Keep the fee as it is"] : []),
+    ...(when === "next" && scheduled?.kind === "end" ? ["Drop the end of training planned for next month"] : []),
   ] : []
 
   return (
