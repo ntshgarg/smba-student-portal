@@ -9,7 +9,7 @@ import {
 } from "@/app/coach/actions"
 import { InlineNotice } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
-import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
+import type { OnboardingDuplicateSignal, PlayerOnboardingCase } from "@/lib/coach/onboarding"
 
 import styles from "../player-onboarding-register.module.css"
 import { shortDate, type SaveFeedback } from "./shared"
@@ -20,6 +20,17 @@ import { shortDate, type SaveFeedback } from "./shared"
  */
 type RequestStepFeedback = SaveFeedback & {
   retryAction?: "approve" | "reject"
+}
+
+function duplicateStandingLabel(signal: OnboardingDuplicateSignal) {
+  switch (signal.standing) {
+    case "archived":
+      return signal.academyId ? ` · was ${signal.academyId}, has left the academy` : " · has left the academy"
+    case "pending":
+      return " · request waiting"
+    case "approved":
+      return signal.academyId ? ` · ${signal.academyId}` : ""
+  }
 }
 
 export function RequestStep({
@@ -75,7 +86,9 @@ export function RequestStep({
   }
 
   async function reject() {
-    if (busy || !window.confirm(`Reject ${item.fullName}’s registration request?`)) return
+    if (busy || !window.confirm(
+      `Reject ${item.fullName}’s registration request? You can undo this later from Rejected requests.`,
+    )) return
     setBusy("reject")
     setFeedback(null)
     let result: Awaited<ReturnType<typeof rejectRegistrationAction>>
@@ -102,7 +115,10 @@ export function RequestStep({
       setFeedback({ message: result.message, tone: "error" })
       return
     }
-    onSuccess({ message: `${item.fullName}’s request was rejected.`, remove: true })
+    onSuccess({
+      message: `${item.fullName}’s request was rejected. To change your mind, open Rejected requests below the register.`,
+      remove: true,
+    })
   }
 
   const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
@@ -145,14 +161,14 @@ export function RequestStep({
         <div className={styles.duplicateSignal} role="note">
           <p>
             {item.duplicateSignals.length === 1
-              ? "Someone already here may be this person:"
-              : "People already here who may be this person:"}
+              ? "Someone already on record may be this person:"
+              : "People already on record who may be this person:"}
           </p>
           <ul>
-            {item.duplicateSignals.map((signal) => (
-              <li key={`${signal.fullName}-${signal.reason}-${signal.academyId ?? "pending"}`}>
+            {item.duplicateSignals.map((signal, index) => (
+              <li key={`${signal.fullName}-${signal.reason}-${signal.standing}-${signal.academyId ?? "none"}-${index}`}>
                 <strong>{signal.fullName}</strong>
-                {signal.academyId ? ` · ${signal.academyId}` : " · request waiting"}
+                {duplicateStandingLabel(signal)}
                 <span>
                   {signal.reason === "same-contact"
                     ? " — same contact email"
@@ -162,6 +178,9 @@ export function RequestStep({
             ))}
           </ul>
           <p className={styles.duplicateSignalHelp}>
+            {item.duplicateSignals.some((signal) => signal.standing === "archived")
+              ? "Someone who has left may be registering again. Approving gives them a new Academy ID; their earlier attendance and fees stay on the old record. "
+              : null}
             Registering more than one player on one address is normal. Check the name and date of
             birth before approving.
           </p>

@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm"
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm"
 
 import { formatAcademyId, identityNameParts } from "@/lib/auth/identity"
 import { academyToday } from "@/lib/clock"
@@ -17,6 +17,7 @@ import {
 } from "@/lib/db/schema"
 import {
   derivePlayerOnboardingWorkspace,
+  type OnboardingFormerRecord,
   type PlayerOnboardingSummary,
   type PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
@@ -360,10 +361,13 @@ export function getPlayerOnboardingWorkspace(
       recordRevision: player.recordRevision,
     }))
 
+  const formerRecords = pendingRequests.length ? listFormerRecordsForDuplicateHint(db) : []
+
   if (!players.length) {
     return derivePlayerOnboardingWorkspace({
       assignments: [],
       feePlans: [],
+      formerRecords,
       pendingRequests,
       players: [],
       referenceDate,
@@ -402,11 +406,36 @@ export function getPlayerOnboardingWorkspace(
   return derivePlayerOnboardingWorkspace({
     assignments,
     feePlans,
+    formerRecords,
     pendingRequests,
     players,
     playersWithRecords: new Set(readOnboardingRecords(db, unfinishedIds).keys()),
     referenceDate,
   })
+}
+
+/** Members who have left, for the approval screen's "may be this person" hint. */
+function listFormerRecordsForDuplicateHint(
+  db: ReturnType<typeof initializeDatabase>,
+): OnboardingFormerRecord[] {
+  return db.select({
+    academyIdSerial: academyIdAllocations.serial,
+    contactEmail: accounts.contactEmail,
+    dateOfBirth: accounts.dateOfBirth,
+    fullName: accounts.fullName,
+    id: accounts.id,
+  }).from(accounts)
+    .leftJoin(academyIdAllocations, eq(academyIdAllocations.accountId, accounts.id))
+    .where(and(inArray(accounts.requestedRole, ["player", "coach"]), isNotNull(accounts.archivedAt)))
+    .all()
+    .map((record) => ({
+      academyId: record.academyIdSerial === null ? null : formatAcademyId(record.academyIdSerial),
+      contactEmail: record.contactEmail,
+      dateOfBirth: record.dateOfBirth,
+      fullName: record.fullName,
+      id: record.id,
+      standing: "archived" as const,
+    }))
 }
 
 export function getCoachSessionSnapshot(referenceDate = academyToday()) {

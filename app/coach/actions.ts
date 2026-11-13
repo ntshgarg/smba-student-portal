@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import {
   approveRegistration,
   rejectRegistration,
+  undoRegistrationRejection,
 } from "@/lib/auth/account-service"
 import { runCoachAction } from "@/lib/actions/coach-session"
 import {
@@ -203,6 +204,23 @@ export async function rejectRegistrationAction(registrationId: string) {
       )
     }
     rejectRegistration(registrationId, coach.subjectId)
+    revalidateAcademyData()
+    return null
+  })
+}
+
+/** Puts a rejected request back in the review queue. Approving it is still a separate step. */
+export async function undoRegistrationRejectionAction(registrationId: string) {
+  const coach = await requireCoach()
+  return runOperationalAction(() => {
+    if (typeof registrationId !== "string" || !registrationId.trim()) {
+      throw new OperationalActionError(
+        "NOT_FOUND",
+        "This request is no longer rejected. Refresh the page to see where it stands.",
+        "registrationId",
+      )
+    }
+    undoRegistrationRejection(registrationId, coach.subjectId)
     revalidateAcademyData()
     return null
   })

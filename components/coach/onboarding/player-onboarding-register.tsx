@@ -15,6 +15,7 @@ import {
 } from "react"
 
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
+import type { RejectedRegistration } from "@/lib/auth/registration-form"
 import {
   shownTrainingStart,
   type PlayerOnboardingCase,
@@ -26,6 +27,7 @@ import type { TrainingSessionSeries } from "@/lib/sessions/types"
 import styles from "./player-onboarding-register.module.css"
 import { OnboardingEditor } from "./register/onboarding-editor"
 import { folio, shortDate, STAGES } from "./register/shared"
+import { RejectedRequests } from "./rejected-requests"
 
 function onboardingHref(
   pathname: string,
@@ -74,11 +76,13 @@ function nextAction(item: PlayerOnboardingCase) {
 export function PlayerOnboardingRegister({
   financeActive,
   referenceDate,
+  rejectedRequests = [],
   sessionSeries,
   workspace,
 }: {
   financeActive: boolean
   referenceDate: string
+  rejectedRequests?: RejectedRegistration[]
   sessionSeries: TrainingSessionSeries[]
   workspace: PlayerOnboardingWorkspace
 }) {
@@ -234,6 +238,8 @@ export function PlayerOnboardingRegister({
           </div>
         )}
       </section>
+
+      <RejectedRequests onRestored={handleSuccess} requests={rejectedRequests} />
     </div>
   )
 }

@@ -36,6 +36,8 @@ import {
 import { getAcademyDateKey } from "@/lib/format"
 
 export const HEAD_COACH_SETUP_COOKIE = "smba_head_coach_setup"
+/** The coach's typed name, carried from the email step to the account step. */
+export const HEAD_COACH_SETUP_NAME_COOKIE = "smba_head_coach_setup_name"
 export const HEAD_COACH_SETUP_CLAIM_LIFETIME_MS = 60 * 60 * 1_000
 
 function setupClaimHash(token: string) {

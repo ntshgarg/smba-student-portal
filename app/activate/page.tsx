@@ -57,21 +57,25 @@ export default async function ActivatePage() {
           <p className="eyebrow">Private account setup</p>
           <h1 id="activation-title">
             {approved ? emailVerified ? "Create your password." : "Verify your recovery email."
-              : status.state === "pending" ? "Approval is pending."
-                : status.state === "onboarding" ? "Approved."
-                  : status.state === "rejected" ? "Request not approved."
-                    : "Check your status."}
+              : status.state === "active" ? "Your account is ready."
+                : status.state === "pending" ? "Approval is pending."
+                  : status.state === "onboarding" ? "Approved."
+                    : status.state === "rejected" ? "Registration not accepted."
+                      : "Check your status."}
           </h1>
           <p>
             {approved ? emailVerified
               ? `Welcome, ${status.fullName}. Your registration is approved.`
               : `Welcome, ${status.fullName}. Verify an email before creating your password.`
-              : status.state === "pending" ? `Your coach is reviewing ${status.fullName}’s request.`
-                : status.state === "onboarding"
-                  ? `Welcome, ${status.fullName}. Your coach is setting up training.`
-                  : status.state === "rejected" ? "This registration request was not approved."
-                    : status.state === "expired" ? "This registration receipt has expired."
-                      : "Enter the name and email you registered with and we’ll send a code."}
+              : status.state === "active"
+                ? `Welcome, ${status.fullName}. This account already has a password. Sign in with Academy ID ${status.academyId}.`
+                : status.state === "pending" ? `Your coach is reviewing ${status.fullName}’s request.`
+                  : status.state === "onboarding"
+                    ? `Welcome, ${status.fullName}. Your coach is setting up training.`
+                    : status.state === "rejected"
+                      ? "This registration was not accepted. Please contact the academy."
+                      : status.state === "expired" ? "This registration receipt has expired."
+                        : "Enter the name and email you registered with and we’ll send a code."}
           </p>
         </div>
 
@@ -90,29 +94,32 @@ export default async function ActivatePage() {
               />
             </>
           ) : (
-          status.state === "pending" || status.state === "onboarding" ? (
-            // This browser still holds a usable receipt, so it already knows whose
-            // request this is. Asking for the name and address again would be
-            // busywork; the lookup below is for the browsers that do not.
-            <div className="registration-confirmation" role="status">
-              <h2>Waiting for your coach.</h2>
-              <p>
-                {status.state === "onboarding"
-                  ? "Your request is approved. You’ll be able to create a password once your coach has finished setting up assessment, sessions and fees."
-                  : "Return here after approval to create your password."}
-              </p>
-              <Link href="/activate">Check again</Link>
-            </div>
-          ) : (
-            /*
-             * No usable receipt here. That used to be a dead end -- the cookie was
-             * the only link between a person and their request, so clearing it or
-             * switching device left "request registration" as the only thing on
-             * screen, and some of the duplicate queue is people who took it. Name,
-             * email and a fresh code reach the same status from anywhere.
-             */
+          <>
+            {status.state === "active" ? (
+              <div className="registration-confirmation" role="status">
+                <Link href="/login">Sign in</Link>
+              </div>
+            ) : status.state === "pending" || status.state === "onboarding" ? (
+              // This browser still holds a usable receipt, so it already knows whose
+              // request this is. Asking for the name and address again would be
+              // busywork; the lookup below is for the browsers that do not.
+              <div className="registration-confirmation" role="status">
+                <h2>Waiting for your coach.</h2>
+                <p>
+                  {status.state === "onboarding"
+                    ? "Your request is approved. You’ll be able to create a password once your coach has finished setting up assessment, sessions and fees."
+                    : "Return here after approval to create your password."}
+                </p>
+                <Link href="/activate">Check again</Link>
+              </div>
+            ) : null}
+            {/* Any device can look up a request by name, email and code; with a
+                receipt here, it is how a parent reaches a different child. */}
+            {status.state === "active" || status.state === "pending" || status.state === "onboarding" ? (
+              <p className="login-helper">Checking on a different player? Enter their name and email.</p>
+            ) : null}
             <RegistrationStatusForm />
-          )
+          </>
         )}
 
         <Link className="login-back" href="/login">

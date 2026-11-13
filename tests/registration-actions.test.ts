@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   cookieGet: vi.fn(),
   cookieSet: vi.fn(),
   findApprovedAccountByAcademyId: vi.fn(),
+  getActivationClaimStatus: vi.fn((): { state: string } => ({ state: "missing" })),
   hashPassword: vi.fn(async () => "hashed"),
   loginIsBlocked: vi.fn(() => false),
   postAuthenticationDestination: vi.fn((input: {
@@ -81,6 +82,7 @@ vi.mock("@/lib/auth/credential-service", () => ({
   ACTIVATION_CLAIM_LIFETIME_MS: 30 * 24 * 60 * 60 * 1000,
   completeAccountActivation: mocks.completeAccountActivation,
   createActivationClaimToken: vi.fn(() => "test-activation-token-value-with-more-than-forty-characters"),
+  getActivationClaimStatus: mocks.getActivationClaimStatus,
   loginIsBlocked: mocks.loginIsBlocked,
   // The shared-bucket tax. Zero here: these cases are about which answer comes
   // back, not how long it takes, and a real delay would only slow the suite.
@@ -283,6 +285,64 @@ describe("public registration action", () => {
     )
 
     expect(result).toMatchObject({ academyId: "SMBA-PL-0019", standing: "approved" })
+  })
+
+  /*
+   * The registration door used to answer "create a password" for this standing
+   * and then send the family to /activate, which -- without the browser they
+   * first registered in -- asked for their name, email and a second code. The
+   * status door handed over the password step at once. Both now do.
+   */
+  it("hands over the password step when an approved, set-up player registers again", async () => {
+    mocks.confirmRegistration.mockReturnValueOnce({
+      academyId: "SMBA-PL-0019",
+      accountId: null,
+      activated: false,
+      onboardingCompleted: true,
+      standing: "approved",
+    })
+
+    const result = await confirmRegistrationCode(
+      { ...initialState, step: "code" },
+      registrationData({ code: "123456" }),
+    )
+
+    expect(mocks.confirmRegistration).toHaveBeenCalledWith(expect.objectContaining({
+      activationToken: expect.any(String),
+    }))
+    expect(mocks.cookieSet).toHaveBeenCalledWith(
+      "smba_activation_claim",
+      expect.any(String),
+      expect.any(Object),
+    )
+    expect(result).toMatchObject({
+      academyId: "SMBA-PL-0019",
+      onboardingCompleted: true,
+      standing: "approved",
+      step: "done",
+    })
+  })
+
+  it("hands over nothing while training is still being set up, or once a password exists", async () => {
+    for (const reply of [
+      { activated: false, onboardingCompleted: false },
+      { activated: true, onboardingCompleted: true },
+    ]) {
+      mocks.cookieSet.mockClear()
+      mocks.confirmRegistration.mockReturnValueOnce({
+        academyId: "SMBA-PL-0019",
+        accountId: null,
+        standing: "approved",
+        ...reply,
+      })
+
+      await confirmRegistrationCode(
+        { ...initialState, step: "code" },
+        registrationData({ code: "123456" }),
+      )
+
+      expect(mocks.cookieSet).not.toHaveBeenCalled()
+    }
   })
 
   it("answers every unusable code with one message, and stays on the code step", async () => {
@@ -570,7 +630,42 @@ describe("account activation action", () => {
         + " Open the sign-in page and use your new password.",
       errorField: null,
     })
-    expect(mocks.cookieDelete).toHaveBeenCalledWith("smba_activation_claim")
+    // Left in place: deleting the receipt re-rendered /activate as the lookup
+    // form, so this message never reached the screen. The claim is spent, so
+    // the cookie now only tells the page to say "your account is ready".
+    expect(mocks.cookieDelete).not.toHaveBeenCalled()
     expect(mocks.redirect).not.toHaveBeenCalled()
+  })
+
+  /*
+   * Every refusal used to say "return to registration to request access
+   * again" -- wrong for someone who set the password in another tab, and wrong
+   * for an approved family whose setup was replaced by a status check on
+   * another device. Neither needs to register.
+   */
+  it("tells someone who already set a password to sign in, not to register", async () => {
+    mocks.completeAccountActivation.mockResolvedValue(null)
+    mocks.getActivationClaimStatus.mockReturnValueOnce({ state: "active" })
+
+    const result = await activateAccount(
+      { error: null, errorField: null },
+      activationData("A secure password"),
+    )
+
+    expect(result.error).toContain("already has a password")
+    expect(result.error).not.toContain("registration")
+  })
+
+  it("sends a replaced or expired setup back to the status check, not to registration", async () => {
+    mocks.completeAccountActivation.mockResolvedValue(null)
+    mocks.getActivationClaimStatus.mockReturnValueOnce({ state: "missing" })
+
+    const result = await activateAccount(
+      { error: null, errorField: null },
+      activationData("A secure password"),
+    )
+
+    expect(result.error).toContain("Check your status again")
+    expect(result.error).not.toContain("Return to registration")
   })
 })

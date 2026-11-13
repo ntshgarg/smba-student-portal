@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 
 import { ADMIN_PREVIEW_COOKIE, createAdminPreviewToken } from "@/lib/auth/admin-preview"
-import { getRawAuthSession } from "@/lib/auth/session"
+import { clearDatabaseSession, getRawAuthSession } from "@/lib/auth/session"
 import {
   HEAD_COACH_SETUP_COOKIE,
   createHeadCoachSetupClaim,
@@ -89,6 +89,9 @@ export async function openHeadCoachSetupAction() {
     sameSite: "strict",
     secure: process.env.VERCEL === "1",
   })
+  // This device is handed to the coach, so sign the owner out of it.
+  cookieStore.delete(ADMIN_PREVIEW_COOKIE)
+  await clearDatabaseSession()
   redirect("/setup/head-coach")
 }
 

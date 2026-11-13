@@ -113,7 +113,7 @@ export default async function AdminPage() {
             <div>
               <p className="eyebrow">Academy not activated</p>
               <h2>Set up the first head coach</h2>
-              <p>Open this on the coach’s device. They will create their own password and PIN, then connect an authenticator.</p>
+              <p>Open this on the coach’s device. They will create their own password and PIN, then connect an authenticator. You will be signed out of this browser as setup opens.</p>
             </div>
             <form action={openHeadCoachSetupAction}>
               <button type="submit">Open secure coach setup</button>

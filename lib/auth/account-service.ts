@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomInt, randomUUID } from "node:crypto"
 
-import { and, eq, isNotNull, isNull } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm"
 
 import {
   ACADEMY_ID_SERIAL_RANGES,
@@ -43,12 +43,17 @@ import {
   registrationSubjectKey,
   requestRegistrationVerification,
 } from "@/lib/auth/recovery-service"
-import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { authRecoveryEmails } from "@/lib/db/schema"
 import type { AuthMailer } from "@/lib/auth/mailer"
-import type { RegistrationStanding } from "@/lib/auth/registration-form"
+import {
+  passwordStepReachable,
+  type RegistrationStanding,
+  type RejectedRegistration,
+} from "@/lib/auth/registration-form"
+import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { getAcademyDateKey } from "@/lib/format"
 
+/** Fixtures and tests only; real requests come from `confirmRegistration`. */
 export function registerAccount(fullName: string, requestedRole: AccountRole) {
   const db = initializeDatabase()
   const normalized = normalizeFullName(fullName)
@@ -246,6 +251,7 @@ export async function requestRegistration(input: {
       email: identity.normalizedEmail,
       fullName: existing?.fullName ?? fullName,
       mailer: input.mailer,
+      purpose: "registration",
       security: input.security,
       standing: existing?.standing ?? "new",
       subjectKey: identity.subjectKey,
@@ -314,15 +320,23 @@ export function confirmRegistration(input: {
     onVerified: (tx, email): RegistrationConfirmation => {
       const existing = registrationStandingFor(identity.subjectKey, tx)
       if (existing) {
+        const onboardingCompleted = onboardingCompletedFor(
+          existing.accountId,
+          existing.standing,
+          tx,
+        )
+        // Same rule as the status door: offer the password step here too.
+        if (input.activationToken && passwordStepReachable({ ...existing, onboardingCompleted })) {
+          saveActivationClaim(
+            { accountId: existing.accountId, token: input.activationToken },
+            { database: tx, now },
+          )
+        }
         return {
           academyId: existing.academyId,
           accountId: null,
           activated: existing.activated,
-          onboardingCompleted: onboardingCompletedFor(
-            existing.accountId,
-            existing.standing,
-            tx,
-          ),
+          onboardingCompleted,
           standing: existing.standing,
         }
       }
@@ -442,6 +456,7 @@ export async function requestRegistrationStatus(input: {
       email: identity.normalizedEmail,
       fullName: existing?.fullName ?? fullName,
       mailer: input.mailer,
+      purpose: "status",
       security: input.security,
       standing: existing?.standing ?? "new",
       subjectKey: identity.subjectKey,
@@ -503,9 +518,7 @@ export function confirmRegistrationStatus(input: {
        * Email verification is the same proof password recovery already accepts,
        * and the claim is written inside the transaction that burned the code.
        */
-      const activatable = existing.standing === "approved"
-        && onboardingCompleted
-        && !existing.activated
+      const activatable = passwordStepReachable({ ...existing, onboardingCompleted })
       /*
        * Never for an account that already has a password. saveActivationClaim
        * upserts with `consumedAt: null`, so minting here un-spent the claim that
@@ -612,6 +625,7 @@ export function approveRegistration(
   assertApprovingCoach(coachAccountId)
   const db = initializeDatabase()
 
+  // Immediate, so two approvals of one request cannot both pass the pending read.
   return db.transaction((tx) => {
     const registration = tx.select().from(accounts)
       .where(and(eq(accounts.id, registrationId), eq(accounts.approvalStatus, "pending")))
@@ -694,6 +708,13 @@ export function approveRegistration(
         updatedAt: now,
       }).run()
     }
+    writeAuthSecurityEvent({
+      accountId: registration.id,
+      actorAccountId: coachAccountId,
+      eventType: "registration_approved",
+      metadata: { role: registration.requestedRole },
+      outcome: "success",
+    }, { database: tx, now })
 
     return {
       academyId,
@@ -702,24 +723,111 @@ export function approveRegistration(
       fullName: registration.fullName,
       role: registration.requestedRole,
     }
-  })
+  }, { behavior: "immediate" })
 }
 
-export function rejectRegistration(registrationId: string, coachAccountId: string) {
-  assertApprovingCoach(coachAccountId)
-  const now = new Date()
-  const result = initializeDatabase().update(accounts).set({
-    approvalStatus: "rejected",
-    rejectedAt: now,
-    rejectedByAccountId: coachAccountId,
-    updatedAt: now,
-  }).where(and(eq(accounts.id, registrationId), eq(accounts.approvalStatus, "pending"))).run()
+/** Writes only the three rejection columns, so {@link undoRegistrationRejection} can reverse it. */
+export function rejectRegistration(
+  registrationId: string,
+  coachAccountId: string,
+  {
+    database = initializeDatabase(),
+    now = new Date(),
+  }: {
+    database?: SmbaDatabase
+    now?: Date
+  } = {},
+) {
+  requireHeadAdminAccess(coachAccountId, { database })
+  database.transaction((tx) => {
+    const result = tx.update(accounts).set({
+      approvalStatus: "rejected",
+      rejectedAt: now,
+      rejectedByAccountId: coachAccountId,
+      updatedAt: now,
+    }).where(and(eq(accounts.id, registrationId), eq(accounts.approvalStatus, "pending"))).run()
 
-  if (!result.changes) {
-    operationalActionError(
-      "NOT_FOUND",
-      "This registration is no longer pending.",
-      "registrationId",
-    )
-  }
+    if (!result.changes) {
+      operationalActionError(
+        "NOT_FOUND",
+        "This registration is no longer pending.",
+        "registrationId",
+      )
+    }
+    writeAuthSecurityEvent({
+      accountId: registrationId,
+      actorAccountId: coachAccountId,
+      eventType: "registration_rejected",
+      outcome: "success",
+    }, { database: tx, now })
+  }, { behavior: "immediate" })
+}
+
+/**
+ * Puts a rejected request back in the review queue. Rejecting only set these
+ * three columns, so clearing them restores the request as it was.
+ */
+export function undoRegistrationRejection(
+  registrationId: string,
+  coachAccountId: string,
+  {
+    database = initializeDatabase(),
+    now = new Date(),
+  }: {
+    database?: SmbaDatabase
+    now?: Date
+  } = {},
+) {
+  requireHeadAdminAccess(coachAccountId, { database })
+  database.transaction((tx) => {
+    const result = tx.update(accounts).set({
+      approvalStatus: "pending",
+      rejectedAt: null,
+      rejectedByAccountId: null,
+      updatedAt: now,
+    }).where(and(eq(accounts.id, registrationId), eq(accounts.approvalStatus, "rejected"))).run()
+    if (!result.changes) {
+      operationalActionError(
+        "NOT_FOUND",
+        "This request is no longer rejected. Refresh the page to see where it stands.",
+        "registrationId",
+      )
+    }
+    writeAuthSecurityEvent({
+      accountId: registrationId,
+      actorAccountId: coachAccountId,
+      eventType: "registration_rejection_undone",
+      outcome: "success",
+    }, { database: tx, now })
+  }, { behavior: "immediate" })
+}
+
+/** Every rejected request, newest rejection first, for the head coach's Rejected list. */
+export function listRejectedRegistrations({
+  database = initializeDatabase(),
+}: {
+  database?: SmbaDatabaseExecutor
+} = {}): RejectedRegistration[] {
+  return database.select({
+    contactEmail: accounts.contactEmail,
+    createdAt: accounts.createdAt,
+    fullName: accounts.fullName,
+    id: accounts.id,
+    rejectedAt: accounts.rejectedAt,
+    requestedRole: accounts.requestedRole,
+  }).from(accounts)
+    .where(and(
+      inArray(accounts.requestedRole, ["player", "coach"]),
+      eq(accounts.approvalStatus, "rejected"),
+    ))
+    .orderBy(desc(accounts.rejectedAt), asc(accounts.fullName))
+    .all()
+    .map((request) => ({
+      contactEmail: request.contactEmail,
+      createdAt: request.createdAt.toISOString(),
+      fullName: request.fullName,
+      id: request.id,
+      rejectedAt: request.rejectedAt?.toISOString() ?? null,
+      requestedRole: request.requestedRole === "coach" ? "coach" as const : "player" as const,
+    }))
 }

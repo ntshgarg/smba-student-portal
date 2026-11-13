@@ -28,6 +28,15 @@ export type RegistrationValues = {
 
 export type RegistrationStanding = "new" | "pending" | "approved" | "rejected"
 
+/** Approved, set up, no password yet: both doors offer the password step only then. */
+export function passwordStepReachable(input: {
+  activated: boolean
+  onboardingCompleted: boolean
+  standing: RegistrationStanding | null
+}) {
+  return input.standing === "approved" && input.onboardingCompleted && !input.activated
+}
+
 /**
  * `values` rides the state so a refused submit re-renders what was typed. The
  * step is explicit rather than inferred from which fields are filled, because
@@ -63,6 +72,16 @@ export const EMPTY_REGISTRATION_STATE: RegistrationFormState = {
   standing: null,
   step: "details",
   values: EMPTY_REGISTRATION_VALUES,
+}
+
+/** A request the head coach rejected, as the Rejected list on the intake register shows it. */
+export type RejectedRegistration = {
+  contactEmail: string | null
+  createdAt: string
+  fullName: string
+  id: string
+  rejectedAt: string | null
+  requestedRole: "coach" | "player"
 }
 
 /**

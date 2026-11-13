@@ -37,7 +37,18 @@ export type OnboardingDuplicateSignal = {
   academyId: string | null
   fullName: string
   reason: "same-contact" | "same-name-and-birthday"
-  standing: "pending" | "approved"
+  /** "archived": someone who has left and may be registering again. */
+  standing: "pending" | "approved" | "archived"
+}
+
+/** A member who has left, compared for the duplicate hint only. */
+export type OnboardingFormerRecord = {
+  academyId: string | null
+  contactEmail: string | null
+  dateOfBirth: string | null
+  fullName: string
+  id: string
+  standing: "archived"
 }
 
 export type OnboardingPendingRequest = {
@@ -173,6 +184,7 @@ type OnboardingSummaryInput = {
 }
 
 type OnboardingWorkspaceInput = Omit<OnboardingSummaryInput, "newRequestCount" | "players"> & {
+  formerRecords?: OnboardingFormerRecord[]
   pendingRequests: OnboardingPendingRequest[]
   players: OnboardingWorkspacePlayer[]
   /** Players with anything recorded yet (see `PlayerOnboardingCase.hasRecords`). */
@@ -386,7 +398,7 @@ type DuplicateCandidate = {
   dateOfBirth?: string | null
   fullName: string
   id: string
-  standing: "pending" | "approved"
+  standing: OnboardingDuplicateSignal["standing"]
 }
 
 /**
@@ -431,6 +443,7 @@ const STAGE_ORDER: Record<PlayerOnboardingStage, number> = {
 export function derivePlayerOnboardingWorkspace({
   assignments,
   feePlans,
+  formerRecords = [],
   pendingRequests,
   players,
   playersWithRecords = new Set<string>(),
@@ -455,6 +468,7 @@ export function derivePlayerOnboardingWorkspace({
       id: player.id,
       standing: "approved" as const,
     })),
+    ...formerRecords,
   ]
   const requestCases: PlayerOnboardingCase[] = pendingRequests.map((request) => ({
     activatedAt: null,

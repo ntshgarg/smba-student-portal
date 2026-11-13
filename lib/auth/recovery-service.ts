@@ -52,6 +52,8 @@ import {
 export const RECOVERY_SESSION_COOKIE = "smba_password_recovery"
 export const AUTHENTICATOR_RECOVERY_COOKIE = "smba_authenticator_recovery"
 export const HEAD_SETUP_EMAIL_COOKIE = "smba_head_setup_email"
+/** How long a verified setup email stays usable, counted from verification. */
+export const HEAD_SETUP_VERIFIED_EMAIL_LIFETIME_MS = 30 * 60 * 1000
 export const EMAIL_VERIFICATION_LIFETIME_MS = 10 * 60 * 1000
 export const PASSWORD_RECOVERY_LIFETIME_MS = 20 * 60 * 1000
 const AUTHENTICATOR_RESET_REQUEST_LIFETIME_MS = 24 * 60 * 60 * 1000
@@ -497,6 +499,7 @@ export function confirmRecoveryEmailVerification(input: {
 
   const receiptToken = randomBytes(32).toString("base64url")
   database.update(authEmailChallenges).set({
+    expiresAt: new Date(now.getTime() + HEAD_SETUP_VERIFIED_EMAIL_LIFETIME_MS),
     failedAttempts: 0,
     secretHash: challengeSecretHash(
       "verify_email",
@@ -634,6 +637,7 @@ export async function requestRegistrationVerification(input: {
   email: string
   fullName: string
   mailer?: AuthMailer
+  purpose?: "registration" | "status"
   security?: SecurityMetadata
   standing: "new" | "pending" | "approved" | "rejected"
   subjectKey: string
@@ -738,6 +742,7 @@ export async function requestRegistrationVerification(input: {
     await (input.mailer ?? createAuthMailer()).sendRegistrationVerification({
       academyId: input.academyId ?? null,
       code,
+      purpose: input.purpose ?? "registration",
       expiresInMinutes: EMAIL_VERIFICATION_LIFETIME_MS / 60_000,
       fullName,
       standing: input.standing,

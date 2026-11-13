@@ -231,7 +231,21 @@ export function getActivationClaimStatus(token: string | null | undefined, {
     .where(eq(authActivationClaims.tokenHash, activationClaimHash(token)))
     .get()
 
-  if (!row || row.archivedAt || row.consumedAt) return { state: "missing" }
+  if (!row || row.archivedAt) return { state: "missing" }
+  if (row.consumedAt) {
+    // A spent receipt on an account with a password: this browser just activated.
+    return row.credentialStatus === "active"
+      && row.academyId
+      && (row.role === "coach" || row.role === "player")
+      ? {
+        academyId: row.academyId,
+        accountId: row.accountId,
+        fullName: row.fullName,
+        role: row.role,
+        state: "active",
+      }
+      : { state: "missing" }
+  }
   if (row.expiresAt <= now) return { state: "expired" }
   if (row.approvalStatus === "rejected") return { state: "rejected" }
   if (row.approvalStatus === "pending") {

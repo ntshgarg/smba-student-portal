@@ -229,6 +229,24 @@ describe("production credential lifecycle", () => {
       token: activationToken,
       password: PASSWORD,
     }, { database, now: new Date(NOW.getTime() + 1_000) })).resolves.toBeNull()
+
+    /*
+     * The spent receipt now reads "active" rather than "missing", so the browser
+     * that just activated is told to sign in instead of being shown the
+     * name-and-email lookup -- including when the automatic sign-in after
+     * activation failed, which is when that message matters most. It still
+     * grants nothing: the second activation above was refused.
+     */
+    expect(getActivationClaimStatus(activationToken, {
+      database,
+      now: new Date(NOW.getTime() + 1_000),
+    })).toEqual({
+      academyId,
+      accountId: playerId,
+      fullName: "Mira Rao",
+      role: "player",
+      state: "active",
+    })
   })
 
   it("supports PIN setup, change, verification, removal, and permanent password fallback", async () => {

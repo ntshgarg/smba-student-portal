@@ -1,4 +1,5 @@
 import { PlayerOnboardingRegister } from "@/components/coach/onboarding/player-onboarding-register"
+import { listRejectedRegistrations } from "@/lib/auth/account-service"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { academyToday } from "@/lib/clock"
 import {
@@ -20,6 +21,7 @@ export default async function CoachOnboardingPage() {
     <PlayerOnboardingRegister
       financeActive={Boolean(getFinanceActivation())}
       referenceDate={today}
+      rejectedRequests={listRejectedRegistrations()}
       sessionSeries={listSessionSeries()}
       workspace={workspace}
     />
