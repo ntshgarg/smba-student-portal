@@ -171,6 +171,10 @@ export default async function CoachDashboardPage({
     ? series.find((item) => item.id === nextOccurrence.seriesId)
     : null
   const sessionPosition = nextOccurrence?.id === todaySessions[0]?.id ? "first" : "next"
+  const sessionOnCourt = todaySessions.some((occurrence) => {
+    const startsAt = new Date(occurrence.startsAt).getTime()
+    return startsAt <= now.getTime() && now.getTime() < startsAt + occurrence.durationMinutes * 60_000
+  })
   const dateLabel = formatAcademyDate(now, {
     day: "numeric",
     month: "long",
@@ -224,6 +228,7 @@ export default async function CoachDashboardPage({
           venue: nextOccurrence.venue,
         } : null}
         sessionCount={todaySessions.length}
+        sessionOnCourt={sessionOnCourt}
         sessionPosition={sessionPosition}
       />
       <CoachDashboardStack id="attendance">

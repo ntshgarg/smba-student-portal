@@ -64,7 +64,7 @@ export default async function HeadCoachSetupPage() {
             />
           ) : (
           <div className="login-empty-state" role="status">
-            <p>This setup session is unavailable, expired, or has already been completed.</p>
+            <p>This setup session has expired, was replaced by a newer one opened on another device, or has already been completed. Ask the academy owner to open setup again if you still need it.</p>
             <Link href="/login">Return to login</Link>
           </div>
         )}

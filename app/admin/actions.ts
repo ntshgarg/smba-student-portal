@@ -12,6 +12,7 @@ import {
   createHeadCoachSetupClaim,
   headCoachSetupAvailable,
 } from "@/lib/auth/initial-setup"
+import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import {
   approveAuthenticatorResetRequest,
@@ -64,7 +65,7 @@ export async function startAdminPreviewAction(formData: FormData) {
     maxAge: 60 * 60,
     path: "/",
     sameSite: "strict",
-    secure: process.env.VERCEL === "1",
+    secure: secureAuthCookiesRequired(),
   })
   writeAuthSecurityEvent({
     accountId: targetAccountId,
@@ -88,7 +89,7 @@ export async function openHeadCoachSetupAction() {
     maxAge: 60 * 60,
     path: "/setup/head-coach",
     sameSite: "strict",
-    secure: process.env.VERCEL === "1",
+    secure: secureAuthCookiesRequired(),
   })
   // This device is handed to the coach, so sign the owner out of it.
   cookieStore.delete(ADMIN_PREVIEW_COOKIE)

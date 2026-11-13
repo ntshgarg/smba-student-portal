@@ -70,9 +70,10 @@ function attemptedAcademyId(path: string, body: unknown) {
  * The account/IP lockout and the audit rows for password sign-in, spent at the
  * endpoint rather than in the caller, because `POST /sign-in/username` has two
  * callers. `loginWithAcademyId` (app/login/actions.ts) reaches it through
- * `auth.api.signInUsername`, and app/api/auth/[...all]/route.ts mounts the same
- * endpoint publicly. A guard in the server action covers the first caller and
- * leaves the second open, which is what it did: six wrong passwords driven at
+ * `auth.api.signInUsername`, and so can any code that calls the endpoint
+ * directly (no Better Auth HTTP route is mounted today). A guard in the server
+ * action covers the first caller and leaves the second open, which is what it
+ * did: six wrong passwords driven at
  * the endpoint through `auth.api.signInUsername`, bypassing the action the way
  * the router does, answered UNAUTHORIZED six times, left auth_login_attempts
  * and auth_security_events empty, and locked nothing.

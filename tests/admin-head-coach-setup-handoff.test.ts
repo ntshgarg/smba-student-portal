@@ -81,4 +81,17 @@ describe("opening head-coach setup on the coach's device", () => {
     expect(mocks.order.indexOf("signed-out")).toBeLessThan(mocks.order.indexOf("redirect:/setup/head-coach"))
     expect(mocks.order.indexOf("set:smba_head_coach_setup")).toBeLessThan(mocks.order.indexOf("signed-out"))
   })
+
+  it("marks the setup pass secure on a production host outside Vercel", async () => {
+    vi.stubEnv("VERCEL", "")
+    vi.stubEnv("NODE_ENV", "production")
+    try {
+      await expect(openHeadCoachSetupAction()).rejects.toMatchObject({ target: "/setup/head-coach" })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+    expect(mocks.cookieSet).toHaveBeenCalledWith("smba_head_coach_setup", "setup-token", expect.objectContaining({
+      secure: true,
+    }))
+  })
 })
