@@ -35,6 +35,11 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
   }),
 }))
 
+// The record guards unfinished forms; nothing here starts one.
+vi.mock("@/components/unsaved-work-guard", () => ({
+  useUnsavedWorkGuard: () => ({ confirmDiscard: () => true, confirmNavigation: () => true }),
+}))
+
 // The record's buttons call server actions; nothing here presses them.
 vi.mock("@/app/coach/members/training-actions", () => ({}))
 

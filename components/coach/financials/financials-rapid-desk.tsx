@@ -500,6 +500,12 @@ export function FinancialsRapidDesk({
 }) {
   const router = useRouter()
   const [query, setQuery] = useState(initialQuery.slice(0, 120))
+  // Back and Forward change the address under this same screen, so the box follows it.
+  const [addressQuery, setAddressQuery] = useState(initialQuery)
+  if (addressQuery !== initialQuery) {
+    setAddressQuery(initialQuery)
+    setQuery(initialQuery.slice(0, 120))
+  }
   const [resultsExpanded, setResultsExpanded] = useState(Boolean(initialQuery))
   const [completionFeedback, setCompletionFeedback] = useState<ActionFeedback | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)

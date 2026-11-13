@@ -22,6 +22,7 @@ import { FormShell } from "@/components/coach/members/directory/form-shell"
 import styles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
+import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
 import { describeSaveFailure, signInInNewTab } from "@/lib/client/network-failure"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
@@ -96,8 +97,14 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   const { sessionAssignments, sessionSeries } = useMemberDirectoryPortal()
   const router = useRouter()
   const [open, setOpen] = useState<OpenForm>(null)
+  const [started, setStarted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<ActionFeedback | null>(null)
+  const { confirmDiscard } = useUnsavedWorkGuard({
+    isDirty: open !== null && started,
+    message: "Discard the unfinished change to this member?",
+    scope: "coach-member-training",
+  })
 
   const memberId = player.member.id
   const summary = data?.summaries[memberId] ?? null
@@ -176,14 +183,20 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   }
 
   function toggle(form: OpenForm) {
+    if (!confirmDiscard()) return
     setNotice(null)
+    setStarted(false)
     setOpen((value) => (value === form ? null : form))
   }
 
   const scheduledSeries = scheduled?.seriesId ? seriesById.get(scheduled.seriesId) : null
 
   return (
-    <section className={styles.section} aria-labelledby={`training-actions-${memberId}`}>
+    <section
+      className={styles.section}
+      aria-labelledby={`training-actions-${memberId}`}
+      onChange={() => setStarted(true)}
+    >
       <div className={styles.columns}>
         <div className={styles.column}>
           <span className={styles.eyebrow}>Training</span>

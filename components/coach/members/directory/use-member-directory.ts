@@ -237,7 +237,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     : null
   const isDirty = Boolean(editingPlayer && draft
     && JSON.stringify(draft) !== JSON.stringify(draftFromPlayer(editingPlayer)))
-  const { confirmDiscard } = useUnsavedWorkGuard({
+  const { confirmNavigation } = useUnsavedWorkGuard({
     isDirty,
     message: "Discard the unsaved changes to this member?",
     scope: "coach-member-editor",
@@ -354,8 +354,9 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     setMemberWindow(memberWindowAfterEditingEnds)
   }
 
+  // Asks about any unfinished work on the record: the edit form or a training or fee form.
   function canDiscardChanges() {
-    return !isDirty || confirmDiscard()
+    return confirmNavigation()
   }
 
   function openMember(memberId: string) {
@@ -387,6 +388,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
   }
 
   function beginEditing(player: PlayerMemberRecord) {
+    if (!canDiscardChanges()) return
     setEditingMemberId(player.member.id)
     setEditingRevision(player.training.recordRevision)
     setDraft(draftFromPlayer(player))
