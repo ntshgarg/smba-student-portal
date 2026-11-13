@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
+import { undoRegistrationRejection } from "@/lib/auth/account-service"
 import type { SmbaDatabase } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
 import { INITIAL_COACH_ACCOUNT_ID, seedDatabase } from "@/lib/db/seed"
@@ -94,6 +95,7 @@ describe("retention of operational telemetry", () => {
       emailCodes: 0,
       expiredSessions: 0,
       rateLimits: 0,
+      registrationRequests: 0,
       securityEvents: 0,
       serverErrors: 0,
     })
@@ -207,5 +209,135 @@ describe("retention of expired sign-in records", () => {
     // So the next ordinary write within the hour still clears it.
     purgeExpiredTelemetryOccasionally({ database, now: new Date(NOW.getTime() + 60_000) })
     expect(database.select().from(schema.clientErrorReports).all()).toHaveLength(0)
+  })
+})
+
+function addRegistrationRequest(id: string, input: { createdAt: Date; rejectedAt?: Date }) {
+  const settledAt = input.rejectedAt ?? input.createdAt
+  database.insert(schema.accounts).values({
+    approvalStatus: input.rejectedAt ? "rejected" : "pending",
+    contactEmail: `${id}@example.com`,
+    createdAt: input.createdAt,
+    fullName: id,
+    id,
+    normalizedName: id,
+    registrationIdentityKey: `identity-${id}`,
+    rejectedAt: input.rejectedAt,
+    rejectedByAccountId: input.rejectedAt ? INITIAL_COACH_ACCOUNT_ID : undefined,
+    requestedRole: "player",
+    updatedAt: settledAt,
+  }).run()
+  database.insert(schema.authRecoveryEmails).values({
+    accountId: id,
+    createdAt: input.createdAt,
+    email: `${id}@example.com`,
+    updatedAt: input.createdAt,
+    verifiedAt: input.createdAt,
+  }).run()
+  database.insert(schema.authActivationClaims).values({
+    accountId: id,
+    createdAt: input.createdAt,
+    expiresAt: day(-30),
+    tokenHash: `token-${id}`,
+    updatedAt: input.createdAt,
+  }).run()
+  database.insert(schema.authSecurityEvents).values({
+    accountId: id,
+    eventType: "recovery_email_verified",
+    id: `event-${id}`,
+    occurredAt: day(100),
+    outcome: "success",
+  }).run()
+}
+
+const accountIds = () => database.select({ id: schema.accounts.id }).from(schema.accounts)
+  .all().map((row) => row.id).sort()
+
+/*
+ * The policy's "rejected or abandoned registration request: 90 days after final
+ * decision/activity" row had no code behind it either, so every request ever
+ * made kept its name, address, phone and date of birth for good.
+ */
+describe("retention of rejected and abandoned registration requests", () => {
+  it("deletes a rejected request 90 days after the decision, keeping the audit trail", () => {
+    addRegistrationRequest("rejected-old", { createdAt: day(200), rejectedAt: day(91) })
+    // Asked long ago but only turned down recently: the decision starts the clock.
+    addRegistrationRequest("rejected-recent", { createdAt: day(200), rejectedAt: day(89) })
+    addEmailCode("registration-code", day(10))
+
+    const removed = purgeExpiredTelemetry({ database, now: NOW })
+
+    expect(removed.registrationRequests).toBe(1)
+    expect(accountIds()).toEqual([INITIAL_COACH_ACCOUNT_ID, "rejected-recent"].sort())
+    expect(database.select().from(schema.authRecoveryEmails).all().map((row) => row.accountId))
+      .toEqual(["rejected-recent"])
+    expect(database.select().from(schema.authActivationClaims).all().map((row) => row.accountId))
+      .toEqual(["rejected-recent"])
+    // Security events keep their own 180 days; only the link to the deleted request goes.
+    expect(database.select().from(schema.authSecurityEvents).all()
+      .map((row) => [row.id, row.accountId]).sort())
+      .toEqual([["event-rejected-old", null], ["event-rejected-recent", "rejected-recent"]])
+    expect(database.select().from(schema.authEmailChallenges).all()).toHaveLength(1)
+    // The person can ask again: the identity the request held is free.
+    expect(() => database.insert(schema.accounts).values({
+      approvalStatus: "pending",
+      createdAt: NOW,
+      fullName: "Again",
+      id: "again",
+      normalizedName: "again",
+      registrationIdentityKey: "identity-rejected-old",
+      requestedRole: "player",
+      updatedAt: NOW,
+    }).run()).not.toThrow()
+  })
+
+  it("deletes a request nobody decided 90 days after it was made, but not one just put back", () => {
+    addRegistrationRequest("pending-old", { createdAt: day(91) })
+    addRegistrationRequest("pending-recent", { createdAt: day(89) })
+    // Rejected long ago, then undone yesterday: the head coach is looking at it.
+    addRegistrationRequest("put-back", { createdAt: day(200), rejectedAt: day(120) })
+    undoRegistrationRejection("put-back", INITIAL_COACH_ACCOUNT_ID, { database, now: day(1) })
+
+    expect(purgeExpiredTelemetry({ database, now: NOW }).registrationRequests).toBe(1)
+    expect(accountIds()).toEqual([INITIAL_COACH_ACCOUNT_ID, "pending-recent", "put-back"].sort())
+  })
+
+  it("never deletes an approved or archived member, however old", () => {
+    const old = day(400)
+    database.insert(schema.accounts).values([
+      {
+        approvalStatus: "approved",
+        approvedAt: old,
+        createdAt: old,
+        fullName: "Approved",
+        id: "approved",
+        normalizedName: "approved",
+        registrationIdentityKey: "identity-approved",
+        requestedRole: "player",
+        role: "player",
+        updatedAt: old,
+      },
+      {
+        approvalStatus: "approved",
+        approvedAt: old,
+        archivedAt: day(100),
+        createdAt: old,
+        fullName: "Archived",
+        id: "archived",
+        normalizedName: "archived",
+        requestedRole: "player",
+        role: "player",
+        updatedAt: day(100),
+      },
+    ]).run()
+    database.insert(schema.academyIdAllocations).values({ accountId: "approved", createdAt: old }).run()
+    database.insert(schema.playerEnrollments).values({
+      accountId: "approved",
+      trainingStartOn: "2025-10-01",
+      updatedAt: old,
+    }).run()
+
+    expect(purgeExpiredTelemetry({ database, now: NOW }).registrationRequests).toBe(0)
+    expect(accountIds()).toEqual([INITIAL_COACH_ACCOUNT_ID, "approved", "archived"].sort())
   })
 })

@@ -4,7 +4,7 @@ import { Undo2 } from "lucide-react"
 import { useState } from "react"
 
 import { undoRegistrationRejectionAction } from "@/app/coach/actions"
-import { InlineNotice } from "@/components/inline-notice"
+import { InlineNotice, type InlineNoticeAction } from "@/components/inline-notice"
 import type { RejectedRegistration } from "@/lib/auth/registration-form"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 
@@ -20,12 +20,22 @@ export function RejectedRequests({
   requests: RejectedRegistration[]
 }) {
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [feedback, setFeedback] = useState<{ message: string; requestId: string; tone: "error" } | null>(null)
+  const [feedback, setFeedback] = useState<{
+    action?: InlineNoticeAction
+    message: string
+    requestId: string
+    tone: "error"
+  } | null>(null)
+  // The row stays listed until the refresh lands, so a second press must not go through.
+  const [restored, setRestored] = useState<string[]>([])
 
   if (!requests.length) return null
 
+  // Keyed to the rejection, so rejecting the same person again re-enables Undo.
+  const rejectionKey = (request: RejectedRegistration) => `${request.id}:${request.rejectedAt}`
+
   async function undo(request: RejectedRegistration) {
-    if (busyId) return
+    if (busyId || restored.includes(rejectionKey(request))) return
     setBusyId(request.id)
     setFeedback(null)
     let result: Awaited<ReturnType<typeof undoRegistrationRejectionAction>>
@@ -38,7 +48,7 @@ export function RejectedRequests({
         unconfirmed: "Reload this page to see whether the request is back in the queue",
         subject: "The undo",
       })
-      setFeedback({ message: failure.message, requestId: request.id, tone: "error" })
+      setFeedback({ action: failure.signIn, message: failure.message, requestId: request.id, tone: "error" })
       return
     } finally {
       setBusyId(null)
@@ -47,6 +57,7 @@ export function RejectedRequests({
       setFeedback({ message: result.message, requestId: request.id, tone: "error" })
       return
     }
+    setRestored((keys) => [...keys, rejectionKey(request)])
     onRestored({
       message: `${request.fullName}’s request is back in the queue for review. Nothing was approved.`,
     })
@@ -75,7 +86,7 @@ export function RejectedRequests({
               <button
                 className={styles.openButton}
                 type="button"
-                disabled={Boolean(busyId)}
+                disabled={Boolean(busyId) || restored.includes(rejectionKey(request))}
                 onClick={() => void undo(request)}
               >
                 {busyId === request.id ? "Undoing…" : "Undo rejection"}
@@ -83,7 +94,7 @@ export function RejectedRequests({
               </button>
             </div>
             {feedback?.requestId === request.id ? (
-              <InlineNotice message={feedback.message} tone={feedback.tone} reserveSpace={false} />
+              <InlineNotice action={feedback.action} message={feedback.message} tone={feedback.tone} reserveSpace={false} />
             ) : null}
           </li>
         ))}
