@@ -27,6 +27,7 @@ export function MemberEditForm({
   editor,
   feedback,
   hasActiveAssignments,
+  holdsPlace,
   player,
   retryAction,
 }: {
@@ -34,6 +35,7 @@ export function MemberEditForm({
   editor: MemberEditor
   feedback: MemberFeedback | null
   hasActiveAssignments: boolean
+  holdsPlace: boolean
   player: PlayerMemberRecord
   retryAction: "archive" | "save" | undefined
 }) {
@@ -51,7 +53,9 @@ export function MemberEditForm({
   const memberId = player.member.id
   const classificationLockId = `member-${memberId}-classification-lock`
   // Once onboarding is finished, the training actions own the classification.
-  const classificationLocked = hasActiveAssignments || Boolean(player.member.onboardingCompletedAt)
+  // Until then an ended place locks it too, as the onboarding screens do.
+  const onboarded = Boolean(player.member.onboardingCompletedAt)
+  const classificationLocked = hasActiveAssignments || holdsPlace || onboarded
 
   return (
     <form
@@ -137,8 +141,9 @@ export function MemberEditForm({
             id={classificationLockId}
             className="coach-member-classification-lock"
           >
-            Level, batch and plan change with Change schedule or Start training on
-            the member record.
+            {onboarded
+              ? "Level, batch and plan change with Change schedule or Start training on the member record."
+              : "Level, batch and plan are fixed until onboarding is finished."}
           </p>
         ) : null}
         <div className="coach-member-form-grid">

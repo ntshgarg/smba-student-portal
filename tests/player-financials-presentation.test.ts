@@ -461,7 +461,7 @@ describe("player financial presentation", () => {
     })
   })
 
-  it("places every receipt in its received month rather than its charge month", () => {
+  it("places a late receipt under the fee month it paid for, with the date it was received", () => {
     const julyCharge = charge({
       id: "charge-july",
       feeReference: "SMBA-FEE-2026-0007",
@@ -506,15 +506,16 @@ describe("player financial presentation", () => {
       requestedMonth: "2026-07",
       requestedYear: "2026",
     }), "2026-07")
-    const august = selectedMonthMarkup(renderRecord(record, {
+    const august = renderRecord(record, {
       requestedMonth: "2026-08",
       requestedYear: "2026",
-    }), "2026-08")
+    })
 
-    expect(july).not.toContain("SMBA-RCP-JULY-LATE")
-    expect(august).toContain("SMBA-RCP-JULY-LATE")
-    expect(august).toContain("July monthly fee")
-    expect(august).toContain("Monthly fee receipt")
+    expect(july).toContain("SMBA-RCP-JULY-LATE")
+    expect(july).toContain("Monthly fee receipt")
+    expect(july).toContain("2 August 2026")
+    expect(july).not.toContain("No offline payment")
+    expect(august).not.toMatch(/<a[^>]*data-fee-month-cell="2026-08"/u)
   })
 
   it("adds a receipt year outside the default season window and restores its month", () => {

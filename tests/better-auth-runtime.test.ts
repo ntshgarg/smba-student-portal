@@ -195,6 +195,8 @@ describe("Better Auth runtime adapter", () => {
     expect(pendingChallenges.count).toBe(2)
     const signedChallenge = decodeURIComponent(twoFactorCookie.split("=")[1] ?? "")
     const challengeIdentifier = signedChallenge.split(".")[0]
+    // Marks the challenge as PIN-started, so the code screen hides the trust tick.
+    expect(challengeIdentifier).toMatch(/^2fa-pin-/u)
     const suppliedSignature = signedChallenge.slice(challengeIdentifier.length + 1)
     expect(suppliedSignature).toBe(
       createHmac("sha256", process.env.BETTER_AUTH_SECRET!)

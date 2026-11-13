@@ -190,14 +190,17 @@ class ResendAuthMailer implements AuthMailer {
     const name = escapeHtml(message.fullName)
     const academyId = escapeHtml(message.academyId)
     const activateUrl = escapeHtml(absoluteSiteUrl("/activate"))
+    // A player can only set a password once the coach has finished onboarding,
+    // and is emailed again then (app/coach/financials/actions.ts).
     const nextStep = message.role === "coach"
       ? "Visit the link below to activate your staff account and set a password."
-      : "Visit the link below to activate your account and set a password."
+      : "Your coach is now setting up your training. We will email you again when you can set a password. Until then, the link below shows where things stand."
+    const linkLabel = message.role === "coach" ? "Activate your account" : "Check your account"
     await this.send({
       to: message.to,
       subject: "Your SMBA Academy ID",
       text: `Hello ${message.fullName},\n\nYour SMBA Academy ID is ${message.academyId}. This is your permanent username -- use it to log in from now on.\n\n${nextStep}\n${activateUrl}\n\nIf you registered on this device, the page will recognize you automatically. On a different device, it will ask for your full name and email to look up your account.`,
-      html: `<p>Hello ${name},</p><p>Your SMBA Academy ID is:</p><p style="font-size:28px;letter-spacing:0.08em"><strong>${academyId}</strong></p><p>This is your permanent username -- use it to log in from now on.</p><p>${nextStep}</p><p><a href="${activateUrl}">Activate your account</a></p><p>If you registered on this device, the page will recognize you automatically. On a different device, it will ask for your full name and email to look up your account.</p>`,
+      html: `<p>Hello ${name},</p><p>Your SMBA Academy ID is:</p><p style="font-size:28px;letter-spacing:0.08em"><strong>${academyId}</strong></p><p>This is your permanent username -- use it to log in from now on.</p><p>${nextStep}</p><p><a href="${activateUrl}">${linkLabel}</a></p><p>If you registered on this device, the page will recognize you automatically. On a different device, it will ask for your full name and email to look up your account.</p>`,
     })
   }
 

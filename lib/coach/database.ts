@@ -346,6 +346,8 @@ export function getPlayerOnboardingWorkspace(
       academyPlan: player.academyPlan,
       approvedAt: player.approvedAt?.toISOString() ?? null,
       batch: player.batch,
+      contactEmail: player.contactEmail,
+      dateOfBirth: player.dateOfBirth,
       fullName: player.fullName,
       id: player.id,
       onboardingCompletedAt: player.onboardingCompletedAt?.toISOString() ?? null,

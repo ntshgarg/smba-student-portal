@@ -17,9 +17,11 @@ export function PlayerFeeRecordCard({
   const copy = dashboardFeeRecordCopy(summary)
   const context = !summary
     ? "Unavailable"
-    : summary.currentBalancePaise === 0
-      ? "Up to date"
-      : financeStatusLabel(summary.status)
+    : summary.status === "setup_required"
+      ? "Not started yet"
+      : summary.currentBalancePaise === 0
+        ? "Up to date"
+        : financeStatusLabel(summary.status)
   const tone = !summary || (
     summary.currentBalancePaise > 0 && financeStatusTone(summary.status) === "attention"
   )

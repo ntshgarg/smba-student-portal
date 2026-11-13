@@ -210,6 +210,41 @@ describe("registration review lifecycle", () => {
     })
   })
 
+  describe("an approved player's registration details", () => {
+    /*
+     * The approved player's email and birth date were read for the duplicate
+     * hint but never passed on, so a second sign-up for a child already here
+     * raised no hint. The mobile was dropped at approval, so Members said
+     * "Not added".
+     */
+    it("flags a second sign-up for a player who is already approved", async () => {
+      await register("Rohan Mehta", "mehta.family@example.com", "2014-06-09")
+      const firstId = accountIdFor("Rohan Mehta")!
+      const first = accountService.approveRegistration(firstId, coachId, { now: tick() })
+
+      await register("Rohaan Mehta", "mehta.family@example.com", "2014-06-09")
+      const secondId = accountIdFor("Rohaan Mehta")!
+
+      const request = coachDatabase.getPlayerOnboardingWorkspace().cases
+        .find((item) => item.id === secondId)
+      expect(request?.duplicateSignals).toContainEqual({
+        academyId: first.academyId,
+        fullName: "Rohan Mehta",
+        reason: "same-contact",
+        standing: "approved",
+      })
+    })
+
+    it("gives Members the mobile the family registered with", async () => {
+      await register("Tara Nair", "nair.family@example.com")
+      const accountId = accountIdFor("Tara Nair")!
+      accountService.approveRegistration(accountId, coachId, { now: tick() })
+
+      expect(coachDatabase.listApprovedPlayerRecords().members
+        .find((member) => member.id === accountId)?.primaryContact.phone).toBe("+919876543210")
+    })
+  })
+
   describe("the registration door for a player ready to set a password", () => {
     /*
      * The registration door said "create a password" for this standing but

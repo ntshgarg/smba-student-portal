@@ -474,11 +474,12 @@ export function retractAcademyHoliday({
 
     // Clear the review flags this closure raised (stamped with its createdAt):
     // make-ups completed on this day, or making up a session it suspended,
-    // unless another date of the same closure, still closed, also touches them.
-    const otherDates = tx.select({ dateKey: academyHolidays.dateKey }).from(academyHolidays).where(and(
-      eq(academyHolidays.createdAt, holiday.createdAt),
-      ne(academyHolidays.id, holiday.id),
-    )).all().map((row) => row.dateKey)
+    // unless another closure, still standing, also touches them.
+    const otherHolidays = tx.select({
+      createdAt: academyHolidays.createdAt,
+      dateKey: academyHolidays.dateKey,
+    }).from(academyHolidays).where(ne(academyHolidays.id, holiday.id)).all()
+    const otherDates = otherHolidays.map((row) => row.dateKey)
     const reviewFlagsCleared = tx.update(attendanceAdjustments)
       .set({ reviewRequiredAt: null })
       .where(and(
@@ -502,6 +503,34 @@ export function retractAcademyHoliday({
           ]
           : []),
       )).run().changes
+
+    // A flag kept because a closure from another request still touches it moves
+    // to that closure's stamp, so removing that one later clears it too.
+    if (otherDates.length) {
+      tx.select({
+        completedOn: attendanceAdjustments.completedOn,
+        id: attendanceAdjustments.id,
+        sourceDate: sessionOccurrences.occurrenceDate,
+      }).from(attendanceAdjustments).innerJoin(
+        sessionOccurrences,
+        eq(sessionOccurrences.id, attendanceAdjustments.sourceOccurrenceId),
+      ).where(and(
+        isNull(attendanceAdjustments.voidedAt),
+        eq(attendanceAdjustments.reviewRequiredAt, holiday.createdAt),
+        or(
+          inArray(attendanceAdjustments.completedOn, otherDates),
+          inArray(sessionOccurrences.occurrenceDate, otherDates),
+        ),
+      )).all().forEach((row) => {
+        const keeper = otherHolidays.find((other) => (
+          other.createdAt.getTime() !== holiday.createdAt.getTime()
+          && (other.dateKey === row.completedOn || other.dateKey === row.sourceDate)
+        ))
+        if (!keeper) return
+        tx.update(attendanceAdjustments).set({ reviewRequiredAt: keeper.createdAt })
+          .where(eq(attendanceAdjustments.id, row.id)).run()
+      })
+    }
 
     tx.delete(academyHolidays).where(eq(academyHolidays.id, holiday.id)).run()
 

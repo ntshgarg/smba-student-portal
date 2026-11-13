@@ -129,14 +129,14 @@ function toPlayerProfile(accountId: string): PlayerProfile | null {
   const database = initializeDatabase()
   const openPlaces = loadOpenPlaces(database, [accountId]).get(accountId) ?? []
   const finishedOn = termFinishedOn(openPlaces, academyToday())
-  // Once the head coach has booked their move, the family is told when it
-  // starts rather than to wait for a schedule that is already confirmed.
-  const bookedMove = finishedOn
-    ? database.select({ effectiveOn: trainingChanges.effectiveOn }).from(trainingChanges).where(and(
-      eq(trainingChanges.playerAccountId, accountId),
-      eq(trainingChanges.status, "scheduled"),
-      eq(trainingChanges.kind, "change"),
-    )).get()
+  // Once the head coach has booked their move or end of training, the family
+  // is told when it happens rather than to wait for or ask about it.
+  const booked = finishedOn || player.status === "paused"
+    ? database.select({ effectiveOn: trainingChanges.effectiveOn, kind: trainingChanges.kind })
+      .from(trainingChanges).where(and(
+        eq(trainingChanges.playerAccountId, accountId),
+        eq(trainingChanges.status, "scheduled"),
+      )).get()
     : undefined
 
   return {
@@ -153,7 +153,8 @@ function toPlayerProfile(accountId: string): PlayerProfile | null {
     currentFocus: player.status === "unassigned" ? "First assessment" : "Current training block",
     status: player.status,
     termFinishedOn: finishedOn,
-    nextScheduleStartsOn: bookedMove?.effectiveOn ?? null,
+    nextScheduleStartsOn: booked?.kind === "change" ? booked.effectiveOn : null,
+    trainingEndsOn: booked?.kind === "end" ? booked.effectiveOn : null,
   }
 }
 

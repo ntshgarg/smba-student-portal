@@ -21,6 +21,7 @@ export function MemberDetailRow({
   draft,
   editor,
   feedback,
+  holdsPlace,
   isArchiving,
   isEditing,
   onArchive,
@@ -36,6 +37,8 @@ export function MemberDetailRow({
   draft: MemberDraft | null
   editor: MemberEditor
   feedback: MemberFeedback | null
+  /** Any schedule place, open or ended. */
+  holdsPlace: boolean
   isArchiving: boolean
   isEditing: boolean
   onArchive: (player: PlayerMemberRecord) => Promise<void>
@@ -86,6 +89,7 @@ export function MemberDetailRow({
               editor={editor}
               feedback={feedback}
               hasActiveAssignments={hasActiveAssignments}
+              holdsPlace={holdsPlace}
               player={player}
               retryAction={retryAction}
             />

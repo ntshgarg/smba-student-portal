@@ -115,6 +115,8 @@ export function loadFeeRegister(
     .orderBy(desc(financialCharges.issuedAt), desc(financialCharges.id)).all()
   const chargesByPlayer = new Map<string, typeof chargeRows>()
   chargeRows.forEach((charge) => {
+    // A voided month is issued again like an unissued one, so it reads "Not issued".
+    if (charge.lifecycle === "void" && awaitingFeePlayerIds.has(charge.playerAccountId)) return
     chargesByPlayer.set(charge.playerAccountId, [
       ...(chargesByPlayer.get(charge.playerAccountId) ?? []),
       charge,

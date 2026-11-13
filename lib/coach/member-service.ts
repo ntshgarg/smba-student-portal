@@ -36,7 +36,7 @@ import {
   sessionSeries,
   trainingChanges,
 } from "@/lib/db/schema"
-import { readPlayerFinancialCloseoutState } from "@/lib/finance/service"
+import { readFirstUnissuedMonthLabel, readPlayerFinancialCloseoutState } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
 import { formatTermDate, playerTrainingStatus } from "@/lib/sessions/term"
@@ -140,10 +140,12 @@ function validateMemberUpdate(input: UpdateMemberInput):
   const contactPhone = contactPhoneValue ?? ""
   const hasContact = Boolean(contactName || contactRelationship || contactPhone)
   if (hasContact) {
-    if (contactName.length < 2 || contactName.length > 80) {
+    // Approval copies only the registration mobile, so a number alone must still save.
+    const phoneOnly = !contactName && !contactRelationship
+    if (!phoneOnly && (contactName.length < 2 || contactName.length > 80)) {
       fieldErrors["primaryContact.name"] = "Enter a contact name between 2 and 80 characters."
     }
-    if (!CONTACT_RELATIONSHIPS.includes(
+    if (!phoneOnly && !CONTACT_RELATIONSHIPS.includes(
       contactRelationship as typeof CONTACT_RELATIONSHIPS[number],
     )) {
       fieldErrors["primaryContact.relationship"] = "Choose Parent, Guardian, Self or Other."
@@ -368,6 +370,19 @@ export function updateMemberRecord({
         "End the player’s active sessions before changing their training classification.",
       )
     }
+    // Until onboarding is finished a place that has ended still counts, as it
+    // does on the onboarding screens: changing the classification under it
+    // leaves onboarding with no way forward.
+    if (classificationChanges && !current.onboardingCompletedAt && tx.select({
+      id: sessionAssignments.id,
+    }).from(sessionAssignments)
+      .where(eq(sessionAssignments.accountId, input.memberId))
+      .get()) {
+      return memberFailure(
+        "ACTIVE_ASSIGNMENTS",
+        "Finish onboarding before changing the level, batch or plan. This player already has a schedule place.",
+      )
+    }
     if (activeAssignments.some(({ series }) => (
       series.programme !== validated.value.level
       || series.batch !== validated.value.batch
@@ -489,6 +504,14 @@ export function archiveMemberRecord({
         ok: false,
         code: "FINANCIAL_CLOSEOUT_REQUIRED",
         ...financialCloseout,
+      }
+    }
+    const unissuedMonth = readFirstUnissuedMonthLabel(tx, input.memberId, now)
+    if (unissuedMonth) {
+      return {
+        ok: false,
+        code: "FEES_NOT_ISSUED",
+        message: `${unissuedMonth} fees are not issued for this member yet (a voided fee counts as not issued). Issue them in Financials before archiving, or they can never be billed.`,
       }
     }
 

@@ -14,7 +14,7 @@ import { getPlayerFinanceDashboardSummary } from "@/lib/finance/service"
 import { formatSessionDate } from "@/lib/format"
 import { currentGreeting } from "@/lib/greeting"
 import { listActivePlayerAnnouncements } from "@/lib/announcements/queries"
-import { termFinishedMessage } from "@/lib/sessions/term"
+import { bookedStepMessage, termFinishedMessage } from "@/lib/sessions/term"
 import { getCurrentStudent } from "@/lib/student/current-student"
 import { describeFailureCause } from "@/lib/telemetry/failure-cause"
 
@@ -138,9 +138,14 @@ export default async function DashboardPage() {
                     : playerState === "schedule-pending"
                       ? "Your coach is preparing your first training schedule."
                       : playerState === "paused"
-                        ? "No sessions are booked for you. Speak to your coach if you want to train again."
+                        ? bookedStepMessage(dashboard.player.nextScheduleStartsOn, dashboard.player.trainingEndsOn)
+                          ?? "No sessions are booked for you. Speak to your coach if you want to train again."
                         : playerState === "term-finished" && termFinishedOn
-                          ? termFinishedMessage(termFinishedOn, dashboard.player.nextScheduleStartsOn)
+                          ? termFinishedMessage(
+                            termFinishedOn,
+                            dashboard.player.nextScheduleStartsOn,
+                            dashboard.player.trainingEndsOn,
+                          )
                           : "Your next session will appear here as soon as it is scheduled."}
                 </p>
                 {playerState === "assessment-pending" ? (

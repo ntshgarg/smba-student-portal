@@ -33,6 +33,24 @@ describe("the head coach's Rejected list", () => {
     expect(html).toContain("Undo rejection")
   })
 
+  it("dates a rejection in India time, not UTC", () => {
+    const html = renderToStaticMarkup(
+      <RejectedRequests
+        onRestored={vi.fn()}
+        requests={[{
+          contactEmail: "mira.family@example.com",
+          fullName: "Mira Rao",
+          id: "request-1",
+          // 01:30 on 13 Nov in India.
+          rejectedAt: "2026-11-12T20:00:00.000Z",
+          requestedRole: "player",
+        }]}
+      />,
+    )
+
+    expect(html).toContain("Rejected 13 Nov")
+  })
+
   it("shows nothing when nothing has been rejected", () => {
     expect(renderToStaticMarkup(<RejectedRequests onRestored={vi.fn()} requests={[]} />)).toBe("")
   })
@@ -68,5 +86,14 @@ describe("the duplicate hint on a request", () => {
 
     expect(html).toContain("was SMBA-PL-0042, has left the academy")
     expect(html).toContain("Approving gives them a new Academy ID")
+  })
+
+  it("dates a request in India time, not UTC", () => {
+    const html = renderToStaticMarkup(
+      // 01:30 on 13 Nov in India.
+      <RequestStep item={{ ...request, requestedAt: "2026-11-12T20:00:00.000Z" }} onSuccess={vi.fn()} />,
+    )
+
+    expect(html).toContain("<dd>13 Nov</dd>")
   })
 })

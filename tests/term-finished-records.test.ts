@@ -247,7 +247,7 @@ describe("term-finished players across the coach's and the family's records", ()
       database,
       now: setupNow,
     }).summaries
-    expect(october[players.finished].fee).toMatchObject({ nextMonthNoFee: "no-schedule" })
+    expect(october[players.finished].fee).toMatchObject({ nextMonthNoFee: "schedule-ends" })
   })
 
   it("counts only the term-finished players with nothing booked as the head coach's to-do", () => {
@@ -257,6 +257,15 @@ describe("term-finished players across the coach's and the family's records", ()
     expect(profiles.find((item) => item.memberId === players.booked)?.status).toBe("finished")
     expect(profiles.find((item) => item.memberId === players.ending)?.status).toBe("finished")
     expect(summaries.listTermFinishedPlayersToMove(profiles, { database })).toEqual([players.finished])
+
+    // Someone still in Player onboarding cannot be moved yet, so is not counted.
+    const onboarding = (completedAt: Date | null) => database.update(schema.playerEnrollments)
+      .set({ onboardingCompletedAt: completedAt })
+      .where(eq(schema.playerEnrollments.accountId, players.finished))
+      .run()
+    onboarding(null)
+    expect(summaries.listTermFinishedPlayersToMove(profiles, { database })).toEqual([])
+    onboarding(setupNow)
 
     // Members reads the same booked changes for its "Term finished" filter.
     const read = summaries.listMemberTrainingSummaries([players.booked, players.ending, players.finished], {
@@ -307,7 +316,26 @@ describe("term-finished players across the coach's and the family's records", ()
         termFinishedOn: "2026-10-31",
       })
       expect(await repository.getPlayer(players.mixed)).toMatchObject({ termFinishedOn: null })
+      // What the head coach has booked is what the family is told.
+      expect(await repository.getPlayer(players.booked)).toMatchObject({
+        nextScheduleStartsOn: "2026-12-01",
+        trainingEndsOn: null,
+      })
+      expect(await repository.getPlayer(players.ending)).toMatchObject({
+        nextScheduleStartsOn: null,
+        trainingEndsOn: "2026-12-01",
+      })
+      // A paused player has no open place, but a booked return still counts.
+      expect(await repository.getPlayer(players.resting)).toMatchObject({ nextScheduleStartsOn: null })
+      bookChange(players.resting, "change", season)
+      expect(await repository.getPlayer(players.resting)).toMatchObject({
+        nextScheduleStartsOn: "2026-12-01",
+        status: "paused",
+        trainingEndsOn: null,
+      })
     } finally {
+      database.delete(schema.trainingChanges)
+        .where(eq(schema.trainingChanges.playerAccountId, players.resting)).run()
       vi.useRealTimers()
     }
   })

@@ -52,9 +52,21 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
     .map((adjustment) => ({ adjustment, charge })))
   const voidableCharges = activeCharges.filter((charge) => charge.canVoid)
   const [mode, setMode] = useState<CorrectionMode>("manual_credit")
-  const [chargeId, setChargeId] = useState(activeCharges[0]?.id ?? "")
-  const [paymentId, setPaymentId] = useState(receipts[0]?.id ?? "")
-  const [adjustmentId, setAdjustmentId] = useState(adjustments[0]?.adjustment.id ?? "")
+  const [pickedChargeId, setChargeId] = useState(activeCharges[0]?.id ?? "")
+  const [pickedPaymentId, setPaymentId] = useState(receipts[0]?.id ?? "")
+  const [pickedAdjustmentId, setAdjustmentId] = useState(adjustments[0]?.adjustment.id ?? "")
+  // A corrected record leaves these lists. The box then shows the first one
+  // left, so that is the one the correction must act on, not the one just fixed.
+  const chargeChoices = mode === "void_charge" ? voidableCharges : activeCharges
+  const chargeId = chargeChoices.some((charge) => charge.id === pickedChargeId)
+    ? pickedChargeId
+    : chargeChoices[0]?.id ?? ""
+  const paymentId = receipts.some((receipt) => receipt.id === pickedPaymentId)
+    ? pickedPaymentId
+    : receipts[0]?.id ?? ""
+  const adjustmentId = adjustments.some(({ adjustment }) => adjustment.id === pickedAdjustmentId)
+    ? pickedAdjustmentId
+    : adjustments[0]?.adjustment.id ?? ""
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
@@ -244,7 +256,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
             <label className={styles.field}>
               <span>Charge</span>
               <select name="chargeId" value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
-                {(mode === "void_charge" ? voidableCharges : activeCharges).map((charge) => (
+                {chargeChoices.map((charge) => (
                   <option key={charge.id} value={charge.id}>{charge.description} · {charge.feeReference}</option>
                 ))}
               </select>

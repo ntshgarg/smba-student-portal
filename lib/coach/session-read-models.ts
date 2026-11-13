@@ -141,15 +141,44 @@ function getCoachSessionSnapshotForWindow({
   }
 }
 
+/**
+ * A session moved into another month has its replacement outside the month
+ * loaded, so the calendar would call the original "Cancelled" instead of
+ * "Moved". Added after the roster is worked out, so they only serve that label.
+ */
+function withReplacementsOutsideMonth(sessionOccurrences: TrainingSessionOccurrence[]) {
+  const database = initializeDatabase()
+  const known = new Set(sessionOccurrences.map((occurrence) => occurrence.id))
+  const replacements: TrainingSessionOccurrence[] = []
+  // A move can be moved again, so follow the replacements while they are cancelled too.
+  let cancelled = sessionOccurrences.filter((occurrence) => occurrence.status === "cancelled")
+  while (cancelled.length) {
+    const ids = database.select({ id: sessionOccurrenceRows.id }).from(sessionOccurrenceRows)
+      .where(inArray(
+        sessionOccurrenceRows.replacementForOccurrenceId,
+        cancelled.map((occurrence) => occurrence.id),
+      )).all().map((row) => row.id).filter((id) => !known.has(id))
+    if (!ids.length) break
+    ids.forEach((id) => known.add(id))
+    const found = listSessionOccurrencesByIds(ids)
+    replacements.push(...found)
+    cancelled = found.filter((occurrence) => occurrence.status === "cancelled")
+  }
+  return [...sessionOccurrences, ...replacements]
+}
+
 export function getCoachCalendarMonthSnapshot(month: string): CoachCalendarMonthSnapshot {
-  const window = calendarWindowForMonth(month)
-  const sessions = getCoachSessionSnapshotForWindow(window)
+  const sessions = getCoachCalendarMonthSessionSnapshot(month)
   const playerIds = unique(sessions.sessionAssignments.map((assignment) => assignment.playerId))
   return { ...sessions, ...listOperationalPlayerRecords(playerIds) }
 }
 
 export function getCoachCalendarMonthSessionSnapshot(month: string): CoachSessionWindowSnapshot {
-  return getCoachSessionSnapshotForWindow(calendarWindowForMonth(month))
+  const sessions = getCoachSessionSnapshotForWindow(calendarWindowForMonth(month))
+  return {
+    ...sessions,
+    sessionOccurrences: withReplacementsOutsideMonth(sessions.sessionOccurrences),
+  }
 }
 
 export function getCoachAttendanceRecorderSnapshot(

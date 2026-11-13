@@ -117,7 +117,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     () => buildMemberDirectoryIndex(players, sessionAssignments, sessionSeries, today),
     [players, sessionAssignments, sessionSeries, today],
   )
-  const { playerById, sessionLabelsByPlayer } = memberIndex
+  const { earliestByPlayer, playerById, sessionLabelsByPlayer } = memberIndex
   const urlCriteria = useMemo(
     () => parseMemberDirectoryCriteria(searchParams),
     [searchParams],
@@ -167,6 +167,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
           ? termFinishedToMove(
             player.training.status,
             Boolean(memberTraining?.summaries[player.member.id]?.scheduled),
+            player.member.onboardingCompletedAt === null,
           )
           : player.training.status === status)
         const matchesBatch = batch === "All batches" || player.training.batch === batch
@@ -236,7 +237,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     : null
   const isDirty = Boolean(editingPlayer && draft
     && JSON.stringify(draft) !== JSON.stringify(draftFromPlayer(editingPlayer)))
-  const { confirmDiscard } = useUnsavedWorkGuard({
+  const { confirmNavigation } = useUnsavedWorkGuard({
     isDirty,
     message: "Discard the unsaved changes to this member?",
     scope: "coach-member-editor",
@@ -353,8 +354,9 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     setMemberWindow(memberWindowAfterEditingEnds)
   }
 
+  // Asks about any unfinished work on the record: the edit form or a training or fee form.
   function canDiscardChanges() {
-    return !isDirty || confirmDiscard()
+    return confirmNavigation()
   }
 
   function openMember(memberId: string) {
@@ -386,6 +388,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
   }
 
   function beginEditing(player: PlayerMemberRecord) {
+    if (!canDiscardChanges()) return
     setEditingMemberId(player.member.id)
     setEditingRevision(player.training.recordRevision)
     setDraft(draftFromPlayer(player))
@@ -644,6 +647,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     directoryFeedback,
     directorySummaryRef,
     draft,
+    earliestByPlayer,
     editingMemberId,
     editor,
     expandedMemberId,

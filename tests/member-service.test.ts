@@ -224,6 +224,17 @@ describe("member directory service", () => {
       .from(schema.playerEnrollments)
       .where(eq(schema.playerEnrollments.accountId, playerId)).get()?.revision).toBe(3)
 
+    // An ended place still holds the classification until onboarding is finished.
+    expect(memberService.updateMemberRecord({
+      coachId: coach.accountId,
+      database,
+      input: {
+        ...validInput,
+        expectedRevision: 3,
+        training: { ...validInput.training, level: "Intermediate" },
+      },
+    })).toMatchObject({ ok: false, code: "ACTIVE_ASSIGNMENTS" })
+
     database.update(schema.playerEnrollments).set({ status: "active" })
       .where(eq(schema.playerEnrollments.accountId, playerId)).run()
     expect(coachDatabase.listApprovedPlayerRecords().trainingProfiles
@@ -370,5 +381,23 @@ describe("member directory service", () => {
         training: { academyPlan: null, batch: "Assessment pending", level: "Assessment pending" },
       },
     })).toMatchObject({ ok: false, code: "ACTIVE_ASSIGNMENTS" })
+  })
+
+  it("lets a newly approved player be edited with only the registration mobile on file", () => {
+    const coach = accountService.findApprovedAccountByAcademyId("SMBA#0001")
+    if (!coach) throw new Error("Seed coach was not created.")
+    const playerId = accountService.registerAccount("Tara Sen", "player")
+    accountService.approveRegistration(playerId, coach.accountId)
+
+    expect(memberService.updateMemberRecord({
+      coachId: coach.accountId,
+      database,
+      input: {
+        memberId: playerId,
+        expectedRevision: 0,
+        profile: { fullName: "Tara Sen", primaryContact: { name: "", phone: "98765 43210", relationship: "" } },
+        training: { academyPlan: null, batch: "Assessment pending", level: "Assessment pending" },
+      },
+    })).toMatchObject({ ok: true })
   })
 })

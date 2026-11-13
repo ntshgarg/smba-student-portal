@@ -35,6 +35,11 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
   }),
 }))
 
+// The record guards unfinished forms; nothing here starts one.
+vi.mock("@/components/unsaved-work-guard", () => ({
+  useUnsavedWorkGuard: () => ({ confirmDiscard: () => true, confirmNavigation: () => true }),
+}))
+
 // The record's buttons call server actions; nothing here presses them.
 vi.mock("@/app/coach/members/training-actions", () => ({}))
 
@@ -283,6 +288,15 @@ describe("Members shows a finished term", () => {
 
     expect(nextMonthLine(html)).toBe("No fee: not on a schedule")
     expect(html).not.toContain(">Change fee<")
+  })
+
+  it("says a running schedule that ends this month leaves next month without a fee", () => {
+    const html = renderActions(
+      player("running", { activeSessionIds: ["season"] }),
+      fee({ nextMonthNoFee: "schedule-ends" }),
+    )
+
+    expect(nextMonthLine(html)).toBe("No fee: schedule ends this month")
   })
 
   it("leaves a running player's fee and Change fee as they were", () => {

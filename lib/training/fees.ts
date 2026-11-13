@@ -58,7 +58,8 @@ function monthLabel(dateKey: string) {
  * The month a fee change made today starts from. Shared by the change itself
  * and the Members form, so the confirmation the head coach approves names the
  * month the new fee actually takes: on the 1st, before that month's fee is
- * issued, it is this month, not next.
+ * issued, it is this month, not next. A plan that began today is corrected
+ * in place, so a second change the same day can still fix a typo.
  */
 export function feeChangeStartsOn({
   activePlanFrom,
@@ -70,7 +71,7 @@ export function feeChangeStartsOn({
   today: string
 }) {
   const thisMonth = monthStartOf(today)
-  return today === thisMonth && !thisMonthIssued && activePlanFrom < thisMonth
+  return today === thisMonth && !thisMonthIssued && activePlanFrom <= thisMonth
     ? thisMonth
     : nextMonthStartOf(today)
 }

@@ -21,7 +21,7 @@ import type {
   SaveAssessmentInput,
 } from "@/lib/assessments/contracts"
 import { formatAssessmentDate, sectionTone } from "@/lib/assessments/display"
-import { describeSaveFailure } from "@/lib/client/network-failure"
+import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import type { PreviousAssessment } from "@/lib/assessments/queries"
 import {
   ASSESSMENT_RATING_LABELS,
@@ -48,6 +48,12 @@ type FormPlayer = {
 }
 
 const SNAP_MILLISECONDS = 180
+
+/**
+ * Courtside connections stall rather than fail, so this only has to beat an
+ * indefinite hang. A deadline, not a cancellation: see `withSaveDeadline`.
+ */
+const saveDeadlineMs = 20_000
 
 type Notice = ActionFeedback & { action?: InlineNoticeAction }
 
@@ -292,9 +298,12 @@ export function AssessmentForm({
     // made mid-save as already saved.
     const submitted = serialise(values)
     try {
-      const result = await (kind === "publish"
-        ? publishAssessmentAction(payload())
-        : saveAssessmentDraftAction(payload()))
+      const result = await withSaveDeadline(
+        kind === "publish"
+          ? publishAssessmentAction(payload())
+          : saveAssessmentDraftAction(payload()),
+        saveDeadlineMs,
+      )
       if (!result.ok) {
         // Published elsewhere: stop showing a draft. A new count is taken on
         // once the coach has been told, so publishing again goes through.
@@ -334,7 +343,10 @@ export function AssessmentForm({
     if (!assessmentId || busy) return
     setPending("discard")
     try {
-      const result = await discardAssessmentDraftAction({ assessmentId, playerId: player.playerId })
+      const result = await withSaveDeadline(
+        discardAssessmentDraftAction({ assessmentId, playerId: player.playerId }),
+        saveDeadlineMs,
+      )
       if (!result.ok) {
         if (result.code === "NOT_FOUND") {
           // Already gone, discarded somewhere else: what the coach asked for.

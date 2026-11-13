@@ -372,6 +372,17 @@ describe("fee changes reach the fee the family is billed", () => {
       monthlyFeePaise: 450_000,
       playerId: players.firstDay,
     }, context(firstNovember))).toMatchObject({ startsOn: "2026-11-01" })
+
+    // A slip fixed the same morning corrects that month, instead of waiting for next month.
+    expect(fees.changeMonthlyFee({
+      idempotencyKey: "first-day-fixed-fee",
+      monthlyFeePaise: 350_000,
+      playerId: players.firstDay,
+    }, context(firstNovember))).toMatchObject({ startsOn: "2026-11-01" })
+    const plans = database.select().from(schema.feeAgreements)
+      .where(eq(schema.feeAgreements.playerAccountId, players.firstDay)).all()
+    expect(plans.filter((agreement) => agreement.effectiveFrom >= "2026-11-01"))
+      .toEqual([expect.objectContaining({ agreedMonthlyFeePaise: 350_000, status: "active" })])
   })
 
   it("bills the days trained before a schedule was ended, even if the month was not yet issued", () => {

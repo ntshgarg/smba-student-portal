@@ -551,6 +551,38 @@ describe("retracting a holiday", () => {
       .toBeInstanceOf(Date)
   })
 
+  it("keeps a review flag that a separately declared closure still explains, until that one goes too", () => {
+    const playerId = addAccount("Make-up Player", "player")
+    database.insert(schema.attendanceAdjustments).values({
+      completedOn: NEXT_MONDAY,
+      completionOccurrenceId: occurrenceOn(eveningSeriesId, NEXT_MONDAY).id,
+      id: "two-requests",
+      playerId,
+      publishedAt: NOW,
+      publishedByAccountId: COACH_ID,
+      sourceOccurrenceId: occurrenceOn(morningSeriesId, MONDAY).id,
+      type: "makeup",
+    }).run()
+    markHoliday([NEXT_MONDAY])
+    markAcademyHolidays({
+      coachId: COACH_ID,
+      database,
+      dateKeys: [MONDAY],
+      label: "Diwali",
+      now: new Date(NOW.getTime() + 60_000),
+    })
+    const reviewOf = () => database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, "two-requests")).get()?.reviewRequiredAt
+
+    const first = retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: NEXT_MONDAY, now: NOW })
+    expect(first.reviewFlagsCleared).toBe(0)
+    expect(reviewOf()).toBeInstanceOf(Date)
+
+    const second = retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: MONDAY, now: NOW })
+    expect(second.reviewFlagsCleared).toBe(1)
+    expect(reviewOf()).toBeNull()
+  })
+
   it("refuses a date that is not a holiday", () => {
     expect(() => retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: MONDAY }))
       .toThrowError(expect.objectContaining({ code: "NOT_FOUND" }))

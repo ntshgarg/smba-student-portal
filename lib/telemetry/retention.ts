@@ -1,13 +1,16 @@
 import "server-only"
 
-import { and, isNull, lt, or } from "drizzle-orm"
+import { and, eq, inArray, isNull, lt, or } from "drizzle-orm"
 import { SQLiteTransaction } from "drizzle-orm/sqlite-core"
 
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
+  accounts,
+  authActivationClaims,
   authEmailChallenges,
   authLoginAttempts,
   authRateLimits,
+  authRecoveryEmails,
   authRuntimeSessions,
   authSecurityEvents,
   authSessions,
@@ -27,6 +30,8 @@ export const APPLICATION_ERROR_RETENTION_DAYS = 90
 export const AUTH_SECURITY_EVENT_RETENTION_DAYS = 180
 // The policy also deletes expired email codes, sessions and rate limits within 90 days.
 export const EXPIRED_SIGN_IN_RECORD_RETENTION_DAYS = 90
+// And rejected or abandoned registration requests, 90 days after the final decision or activity.
+export const REGISTRATION_REQUEST_RETENTION_DAYS = 90
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -35,6 +40,42 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // that should be paying, and a second instance purging again deletes nothing.
 const PURGE_INTERVAL_MS = 60 * 60 * 1000
 let lastPurgeAt = 0
+
+/*
+ * A request goes 90 days after it was rejected or, if nobody ever decided it,
+ * 90 days after it was made. Undoing a rejection counts as activity, so a
+ * request the head coach has just put back is not deleted that night. Only a
+ * row that was never approved or archived can match.
+ *
+ * The request's own recovery email and activation claim go with it. Security
+ * events stay for their own 180 days, minus the link to the deleted request.
+ * Email codes never point at a request, so they keep their own rule. Deleting
+ * the row also frees its registration identity, so the person can ask again.
+ * One transaction, so an approval cannot land half-way through.
+ */
+function purgeExpiredRegistrationRequests(database: SmbaDatabaseExecutor, cutoff: Date) {
+  return database.transaction((tx) => {
+    const expired = tx.select({ id: accounts.id }).from(accounts).where(and(
+      inArray(accounts.requestedRole, ["player", "coach"]),
+      isNull(accounts.role),
+      isNull(accounts.approvedAt),
+      isNull(accounts.archivedAt),
+      or(
+        and(eq(accounts.approvalStatus, "rejected"), lt(accounts.rejectedAt, cutoff)),
+        and(
+          eq(accounts.approvalStatus, "pending"),
+          lt(accounts.createdAt, cutoff),
+          lt(accounts.updatedAt, cutoff),
+        ),
+      ),
+    ))
+    tx.update(authSecurityEvents).set({ accountId: null })
+      .where(inArray(authSecurityEvents.accountId, expired)).run()
+    tx.delete(authRecoveryEmails).where(inArray(authRecoveryEmails.accountId, expired)).run()
+    tx.delete(authActivationClaims).where(inArray(authActivationClaims.accountId, expired)).run()
+    return tx.delete(accounts).where(inArray(accounts.id, expired)).run().changes
+  }, { behavior: "immediate" })
+}
 
 /** Deletes everything past its retention period. Returns how many rows went. */
 export function purgeExpiredTelemetry({
@@ -47,6 +88,7 @@ export function purgeExpiredTelemetry({
   const errorCutoff = new Date(now.getTime() - APPLICATION_ERROR_RETENTION_DAYS * DAY_MS)
   const securityCutoff = new Date(now.getTime() - AUTH_SECURITY_EVENT_RETENTION_DAYS * DAY_MS)
   const signInCutoff = new Date(now.getTime() - EXPIRED_SIGN_IN_RECORD_RETENTION_DAYS * DAY_MS)
+  const registrationCutoff = new Date(now.getTime() - REGISTRATION_REQUEST_RETENTION_DAYS * DAY_MS)
 
   const clientErrors = database.delete(clientErrorReports)
     .where(lt(clientErrorReports.occurredAt, errorCutoff)).run().changes
@@ -73,11 +115,14 @@ export function purgeExpiredTelemetry({
         or(isNull(authLoginAttempts.blockedUntil), lt(authLoginAttempts.blockedUntil, signInCutoff)),
       )).run().changes
 
+  const registrationRequests = purgeExpiredRegistrationRequests(database, registrationCutoff)
+
   return {
     clientErrors,
     emailCodes,
     expiredSessions,
     rateLimits,
+    registrationRequests,
     securityEvents,
     serverErrors,
   }

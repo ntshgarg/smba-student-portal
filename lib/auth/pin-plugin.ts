@@ -125,7 +125,9 @@ export function smbaPinLogin() {
         if (!user) throw context.error("UNAUTHORIZED", { message: INVALID_PIN_LOGIN })
         if (verified.twoFactorEnabled) {
           const maxAge = 10 * 60
-          const identifier = `2fa-${randomBytes(20).toString("base64url")}`
+          // "2fa-pin-" lets the code screen tell a PIN sign-in from a password one
+          // (challengeStartedWithPin): a trusted device only skips the code for the latter.
+          const identifier = `2fa-pin-${randomBytes(20).toString("base64url")}`
           const expiresAt = new Date(Date.now() + maxAge * 1_000)
           await context.context.internalAdapter.createVerificationValue({
             value: user.id,

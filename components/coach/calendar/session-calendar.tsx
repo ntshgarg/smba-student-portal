@@ -115,10 +115,9 @@ export function holidayRemovedMessage(
 
 /**
  * Why a cancelled session is off, as far as this screen can tell: a holiday, a
- * move to another day or time (when the session it ended up as is in the loaded
- * month), or an ordinary cancellation. A move can be moved again, so the chain
- * of replacements is followed to its end. Ending a schedule is recorded the same
- * way as an ordinary cancellation, so it reads as "Cancelled".
+ * move to another day or time, or an ordinary cancellation. A move can be moved
+ * again, so the chain of replacements is followed to its end. Ending a schedule
+ * is recorded the same way as an ordinary cancellation, so it reads as "Cancelled".
  */
 export function cancellationLabel(
   occurrence: Pick<TrainingSessionOccurrence, "holidayId" | "id" | "occurrenceDate">,

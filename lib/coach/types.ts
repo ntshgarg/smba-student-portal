@@ -167,6 +167,6 @@ export type ArchiveMemberResult =
     }
   | {
       ok: false
-      code: "STALE_RECORD" | "ACTIVE_ASSIGNMENTS" | "NOT_FOUND"
+      code: "STALE_RECORD" | "ACTIVE_ASSIGNMENTS" | "FEES_NOT_ISSUED" | "NOT_FOUND"
       message: string
     }

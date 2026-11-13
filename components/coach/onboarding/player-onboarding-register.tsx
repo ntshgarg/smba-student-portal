@@ -26,7 +26,7 @@ import type { TrainingSessionSeries } from "@/lib/sessions/types"
 
 import styles from "./player-onboarding-register.module.css"
 import { OnboardingEditor } from "./register/onboarding-editor"
-import { folio, shortDate, STAGES } from "./register/shared"
+import { folio, shortDate, shortInstant, STAGES } from "./register/shared"
 import { RejectedRequests } from "./rejected-requests"
 
 function onboardingHref(
@@ -47,7 +47,7 @@ function stageLabel(stage: PlayerOnboardingStage) {
 
 function rowMeta(item: PlayerOnboardingCase) {
   if (item.stage === "request" && item.requestedAt) {
-    return `Requested ${shortDate(item.requestedAt)}`
+    return `Requested ${shortInstant(item.requestedAt)}`
   }
   const trainingStart = shownTrainingStart(item)
   return [

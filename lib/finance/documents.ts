@@ -6,6 +6,7 @@ import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
 import { initializeDatabase } from "@/lib/db/client"
 import { financialCharges, payments } from "@/lib/db/schema"
+import { combineFinanceStatuses } from "@/lib/finance/domain"
 import {
   loadChargeViews,
   loadPlayerFeeRecord,
@@ -241,6 +242,7 @@ export function getPlayerFeeStatement(
         })),
       }]
     })
+  const chargeStatus = combineFinanceStatuses(charges.map((charge) => charge.status))
   const generatedAt = now.toISOString()
   const receiptPlayer = {
     playerId: record.playerId,
@@ -253,7 +255,10 @@ export function getPlayerFeeStatement(
     playerName: record.fullName,
     academyId: record.academyId,
     archived: record.archived,
-    status: record.status,
+    // "Setup required" is the coach's to-do, not a status for the family.
+    status: record.status === "setup_required"
+      ? chargeStatus === "setup_required" ? "not_prepared" : chargeStatus
+      : record.status,
     currentBalancePaise: record.currentBalancePaise,
     charges,
     receipts: record.receipts.map((receipt) => {

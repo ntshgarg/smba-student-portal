@@ -15,6 +15,7 @@ import {
 } from "@/components/coach/members/member-directory-query"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
 import {
+  bookedStepMessage,
   formatTermDate,
   monthAfterFinishedTerm,
   placeReachesWindow,
@@ -138,6 +139,12 @@ describe("the shared term rule", () => {
     expect(termFinishedMessage("2026-10-31", "2026-12-01")).toBe(
       "Your term finished on 31 October 2026. Your next schedule starts on 1 December 2026.",
     )
+    // A booked end of training is not a promise of a new schedule.
+    expect(termFinishedMessage("2026-10-31", null, "2026-12-01")).toBe(
+      "Your term finished on 31 October 2026. Your training ends on 1 December 2026.",
+    )
+    expect(bookedStepMessage()).toBeNull()
+    expect(bookedStepMessage("2026-12-01")).toBe("Your next schedule starts on 1 December 2026.")
     expect(trainingStatusLabel("finished")).toBe("Term finished")
     expect(trainingStatusLabel("paused")).toBe("paused")
   })
@@ -236,6 +243,7 @@ describe("what is left to do once a term has finished", () => {
   it("leaves a player whose move or end is booked out of the players to move", () => {
     expect(termFinishedToMove("finished", false)).toBe(true)
     expect(termFinishedToMove("finished", true)).toBe(false)
+    expect(termFinishedToMove("finished", false, true)).toBe(false)
     // Only a finished term is ever "to move".
     expect(termFinishedToMove("active", false)).toBe(false)
     expect(termFinishedToMove("paused", false)).toBe(false)

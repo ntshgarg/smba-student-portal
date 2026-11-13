@@ -22,6 +22,7 @@ import { FormShell } from "@/components/coach/members/directory/form-shell"
 import styles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
+import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
 import { describeSaveFailure, signInInNewTab } from "@/lib/client/network-failure"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
@@ -96,8 +97,14 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   const { sessionAssignments, sessionSeries } = useMemberDirectoryPortal()
   const router = useRouter()
   const [open, setOpen] = useState<OpenForm>(null)
+  const [started, setStarted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<ActionFeedback | null>(null)
+  const { confirmDiscard } = useUnsavedWorkGuard({
+    isDirty: open !== null && started,
+    message: "Discard the unfinished change to this member?",
+    scope: "coach-member-training",
+  })
 
   const memberId = player.member.id
   const summary = data?.summaries[memberId] ?? null
@@ -176,14 +183,20 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   }
 
   function toggle(form: OpenForm) {
+    if (!confirmDiscard()) return
     setNotice(null)
+    setStarted(false)
     setOpen((value) => (value === form ? null : form))
   }
 
   const scheduledSeries = scheduled?.seriesId ? seriesById.get(scheduled.seriesId) : null
 
   return (
-    <section className={styles.section} aria-labelledby={`training-actions-${memberId}`}>
+    <section
+      className={styles.section}
+      aria-labelledby={`training-actions-${memberId}`}
+      onChange={() => setStarted(true)}
+    >
       <div className={styles.columns}>
         <div className={styles.column}>
           <span className={styles.eyebrow}>Training</span>
@@ -298,9 +311,11 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                 </div>
                 <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthNoFee === "term-finished"
                   ? "No fee: term finished"
-                  : fee.nextMonthNoFee === "no-schedule"
-                    ? "No fee: not on a schedule"
-                    : fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
+                  : fee.nextMonthNoFee === "schedule-ends"
+                    ? "No fee: schedule ends this month"
+                    : fee.nextMonthNoFee === "no-schedule"
+                      ? "No fee: not on a schedule"
+                      : fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
                 <div>
                   <dt>Concession</dt>
                   <dd>{fee.concession
@@ -456,6 +471,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           busy={busy}
           currentFee={fee.monthlyFeePaise}
           name={player.member.fullName}
+          nextMonthStart={data.nextMonthStart}
           startsMonth={monthName(fee.feeChangeStartsOn)}
           startsThisMonth={fee.feeChangeStartsOn <= data.today}
           onCancel={() => setOpen(null)}
@@ -481,6 +497,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           monthlyFee={fee.nextMonthNoFee ? null : fee.nextMonthFeePaise}
           name={player.member.fullName}
           nextMonth={nextMonth}
+          nextMonthStart={data.nextMonthStart}
           onCancel={() => setOpen(null)}
           onSubmit={submit}
           playerId={memberId}
@@ -903,7 +920,7 @@ function EndForm({
         void onSubmit<unknown>(
           () => leftAlready
             ? endTrainingNowAction({ playerId, stopFees: financeActive && stopFees })
-            : scheduleEndOfTrainingAction({ playerId, stopFees: financeActive && stopFees }),
+            : scheduleEndOfTrainingAction({ nextMonthStart, playerId, stopFees: financeActive && stopFees }),
           () => leftAlready ? "Training ended today" : `Training ends after ${thisMonth}`,
         )
       }}
@@ -1005,6 +1022,7 @@ function FeeForm({
   busy,
   currentFee,
   name,
+  nextMonthStart,
   onCancel,
   onSubmit,
   playerId,
@@ -1015,6 +1033,7 @@ function FeeForm({
   busy: boolean
   currentFee: number | null
   name: string
+  nextMonthStart: string
   onCancel: () => void
   onSubmit: Submit
   playerId: string
@@ -1037,7 +1056,7 @@ function FeeForm({
       onConfirm={() => {
         if (amount === null) return
         void onSubmit(
-          () => changeMonthlyFeeAction({ idempotencyKey: `member-fee:${key}`, monthlyFeePaise: amount, playerId }),
+          () => changeMonthlyFeeAction({ idempotencyKey: `member-fee:${key}`, monthlyFeePaise: amount, nextMonthStart, playerId }),
           (result) => `New fee from ${monthName(result.startsOn)}`,
         )
       }}
@@ -1068,6 +1087,7 @@ function ConcessionForm({
   monthlyFee,
   name,
   nextMonth,
+  nextMonthStart,
   onCancel,
   onSubmit,
   playerId,
@@ -1076,6 +1096,7 @@ function ConcessionForm({
   monthlyFee: number | null
   name: string
   nextMonth: string
+  nextMonthStart: string
   onCancel: () => void
   onSubmit: Submit
   playerId: string
@@ -1105,6 +1126,7 @@ function ConcessionForm({
             duration,
             months: duration === "months" ? Number(months) : undefined,
             mutationId: key,
+            nextMonthStart,
             playerId,
             value: value as number,
             valueKind: kind,

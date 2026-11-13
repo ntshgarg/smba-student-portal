@@ -218,6 +218,14 @@ function save(
           { currentStatus: existing.status },
         )
       }
+      if (
+        publishing && existing.status === "published" && !input.assessmentId
+        && (["assessedOn", "comments", "improvements", "ratings", "strengths"] as const)
+          .every((field) => existing[field] === content[field])
+      ) {
+        // A first publish repeated after a lost reply, with nothing changed, is not an edit.
+        return existing.id
+      }
       if (publishing && existing.status === "draft") requireExpectedPublishedCount(tx, input)
       tx.update(playerAssessments).set(publishing
         ? {

@@ -13,7 +13,7 @@ import { useResilientActionState } from "@/lib/client/use-resilient-action-state
 
 const initialState: TotpVerificationState = { error: null }
 
-export function TwoFactorVerificationForm() {
+export function TwoFactorVerificationForm({ canTrustDevice = true }: { canTrustDevice?: boolean }) {
   const [useRecovery, setUseRecovery] = useState(false)
   const [totpState, totpAction, totpPending] = useResilientActionState(
     verifyTotpSignIn,
@@ -99,10 +99,14 @@ export function TwoFactorVerificationForm() {
               />
             )}
           </AuthField>
-          <label className="totp-trust-device">
-            <input type="checkbox" name="trustDevice" />
-            Trust this private device for 30 days
-          </label>
+          {canTrustDevice ? (
+            <label className="totp-trust-device">
+              <input type="checkbox" name="trustDevice" />
+              Trust this private device for 30 days
+            </label>
+          ) : (
+            <p className="login-helper">Trusting a device only works when you sign in with your password.</p>
+          )}
           <button className="login-submit" type="submit" disabled={totpPending}>
             {totpPending ? "Verifying…" : "Verify and continue"}
           </button>
