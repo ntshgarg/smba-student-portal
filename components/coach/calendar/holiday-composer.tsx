@@ -31,7 +31,7 @@ export function expandDateRange(from: string, to: string): string[] {
   return dates
 }
 
-function pluralSessions(count: number) {
+export function pluralSessions(count: number) {
   return `${count} ${count === 1 ? "session" : "sessions"}`
 }
 

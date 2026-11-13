@@ -397,12 +397,7 @@ export async function previewAcademyHolidaysAction(
 export async function markAcademyHolidaysAction(input: {
   dateKeys: string[]
   label: string
-  /**
-   * The month the calendar has on screen. The snapshot returned replaces the
-   * calendar's sessions and holidays wholesale, so it has to be that month's:
-   * closing Christmas from November used to hand back December and wipe
-   * November's Diwali off the screen until a reload.
-   */
+  /** The month on screen; the returned snapshot is that month's. */
   viewMonth?: string
 }) {
   const coach = await requireCoach()

@@ -361,7 +361,6 @@ export function StaffRollCall({
               <span>Academy closed</span>
               <strong>{closedFor}</strong>
             </div>
-            <p>Nobody is marked on a closed day, and it does not count towards anyone’s attendance. A mark saved before the closure is kept and comes back if the holiday is removed.</p>
           </div>
         ) : null}
 

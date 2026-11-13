@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm"
 
 import { operationalActionError } from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
@@ -473,7 +473,12 @@ export function retractAcademyHoliday({
       : 0
 
     // Clear the review flags this closure raised (stamped with its createdAt):
-    // make-ups completed on this day, or making up a session it suspended.
+    // make-ups completed on this day, or making up a session it suspended,
+    // unless another date of the same closure, still closed, also touches them.
+    const otherDates = tx.select({ dateKey: academyHolidays.dateKey }).from(academyHolidays).where(and(
+      eq(academyHolidays.createdAt, holiday.createdAt),
+      ne(academyHolidays.id, holiday.id),
+    )).all().map((row) => row.dateKey)
     const reviewFlagsCleared = tx.update(attendanceAdjustments)
       .set({ reviewRequiredAt: null })
       .where(and(
@@ -483,6 +488,19 @@ export function retractAcademyHoliday({
           eq(attendanceAdjustments.completedOn, dateKey),
           inArray(attendanceAdjustments.sourceOccurrenceId, suspended.map((occurrence) => occurrence.id)),
         ),
+        ...(otherDates.length
+          ? [
+            or(
+              isNull(attendanceAdjustments.completedOn),
+              notInArray(attendanceAdjustments.completedOn, otherDates),
+            ),
+            notInArray(
+              attendanceAdjustments.sourceOccurrenceId,
+              tx.select({ id: sessionOccurrences.id }).from(sessionOccurrences)
+                .where(inArray(sessionOccurrences.occurrenceDate, otherDates)),
+            ),
+          ]
+          : []),
       )).run().changes
 
     tx.delete(academyHolidays).where(eq(academyHolidays.id, holiday.id)).run()

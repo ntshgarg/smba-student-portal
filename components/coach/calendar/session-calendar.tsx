@@ -16,7 +16,7 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Fragment, useEffect, useRef, useState } from "react"
 
-import { HolidayComposer } from "@/components/coach/calendar/holiday-composer"
+import { HolidayComposer, pluralSessions } from "@/components/coach/calendar/holiday-composer"
 import {
   useMemberPortal,
   useSessionPortal,
@@ -80,10 +80,6 @@ function dayOccurrenceSummary(scheduledCount: number, cancelledCount: number) {
   return `${scheduledCount} scheduled · ${cancelledCount} cancelled`
 }
 
-function sessionCount(count: number) {
-  return `${count} ${count === 1 ? "session" : "sessions"}`
-}
-
 /**
  * What removing a holiday actually did, in the coach's words. It names the day:
  * the notice sits above the calendar and the coach may be looking at another
@@ -104,11 +100,11 @@ export function holidayRemovedMessage(
   const day = formatDateKey(dateKey)
   const parts = [
     restoredSessions
-      ? `Holiday on ${day} removed. ${sessionCount(restoredSessions)} ${restoredSessions === 1 ? "is" : "are"} back on.`
+      ? `Holiday on ${day} removed. ${pluralSessions(restoredSessions)} ${restoredSessions === 1 ? "is" : "are"} back on.`
       : `Holiday on ${day} removed. No sessions needed restoring.`,
   ]
   if (keptCancelledSessions) {
-    parts.push(`${sessionCount(keptCancelledSessions)} stayed cancelled because ${keptCancelledSessions === 1 ? "its schedule has" : "their schedules have"} ended or already ${keptCancelledSessions === 1 ? "has" : "have"} a session that day.`)
+    parts.push(`${pluralSessions(keptCancelledSessions)} stayed cancelled because ${keptCancelledSessions === 1 ? "its schedule has" : "their schedules have"} ended or already ${keptCancelledSessions === 1 ? "has" : "have"} a session that day.`)
   }
   if (reviewFlagsCleared) {
     parts.push(`${reviewFlagsCleared} make-up${reviewFlagsCleared === 1 ? " is" : "s are"} no longer waiting for review.`)
@@ -452,12 +448,7 @@ export function SessionCalendar({
                 <span>Academy closed</span>
                 <strong>{selectedHoliday.label}</strong>
               </div>
-              {/*
-                * Removing a holiday puts back only the sessions that holiday
-                * cancelled, so a session called off separately beforehand stays
-                * off, and so does one of a schedule ended since. The notice
-                * afterwards says what came back.
-                */}
+              {/* Removing a holiday puts back only the sessions it cancelled, except upcoming ones of a schedule ended since. */}
               <button
                 type="button"
                 disabled={retractingHoliday}
@@ -466,7 +457,7 @@ export function SessionCalendar({
                   const dateKey = selectedDate
                   const day = formatDateKey(dateKey)
                   const confirmed = window.confirm(
-                    `Remove the ${selectedHoliday.label} holiday on ${day}? The sessions it cancelled come back, except any whose schedule has ended since or already has a session that day.`,
+                    `Remove the ${selectedHoliday.label} holiday on ${day}? The sessions it cancelled come back, except upcoming ones whose schedule has ended since, and any whose schedule already has a session that day.`,
                   )
                   if (!confirmed) return
                   setRetractingHolidayDates((current) => [...current, dateKey])

@@ -170,10 +170,7 @@ export function SessionScheduleCreate({
       // A schedule created for a player in onboarding sends the coach back to
       // that player's Session step, which is now the only place a player is
       // added to a schedule.
-      //
-      // Through `navigateAfterCommit`: the form was dirty a moment ago, so the
-      // unsaved-work guard still held a history entry, and releasing it on the
-      // next render stepped history back and cancelled a plain `router.push`.
+      // Via navigateAfterCommit so the guard's history step-back cannot cancel the push.
       if (guidedPlayer) {
         const playerId = guidedPlayer.member.id
         navigateAfterCommit(() => {

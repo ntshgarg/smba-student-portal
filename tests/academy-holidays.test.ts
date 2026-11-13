@@ -530,6 +530,27 @@ describe("retracting a holiday", () => {
     expect(reviewOf("flagged-before")).toEqual(earlierFlag)
   })
 
+  it("keeps a review flag that another closed date of the same closure still explains", () => {
+    const playerId = addAccount("Make-up Player", "player")
+    database.insert(schema.attendanceAdjustments).values({
+      completedOn: NEXT_MONDAY,
+      completionOccurrenceId: occurrenceOn(eveningSeriesId, NEXT_MONDAY).id,
+      id: "both-days-closed",
+      playerId,
+      publishedAt: NOW,
+      publishedByAccountId: COACH_ID,
+      sourceOccurrenceId: occurrenceOn(morningSeriesId, MONDAY).id,
+      type: "makeup",
+    }).run()
+    markHoliday([MONDAY, NEXT_MONDAY])
+
+    retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: MONDAY, now: NOW })
+
+    expect(database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, "both-days-closed")).get()?.reviewRequiredAt)
+      .toBeInstanceOf(Date)
+  })
+
   it("refuses a date that is not a holiday", () => {
     expect(() => retractAcademyHoliday({ coachId: COACH_ID, database, dateKey: MONDAY }))
       .toThrowError(expect.objectContaining({ code: "NOT_FOUND" }))
