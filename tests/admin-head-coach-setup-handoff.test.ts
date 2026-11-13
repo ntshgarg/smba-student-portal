@@ -23,7 +23,10 @@ vi.mock("next/headers", () => ({
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
 vi.mock("@/lib/auth/session", () => ({
   clearDatabaseSession: mocks.clearDatabaseSession,
-  getRawAuthSession: vi.fn(async () => ({ user: { id: "owner", twoFactorEnabled: true } })),
+  getRawAuthSession: vi.fn(async () => ({
+    session: { token: "owner-session" },
+    user: { id: "owner", twoFactorEnabled: true },
+  })),
 }))
 vi.mock("@/lib/auth/admin-preview", () => ({
   ADMIN_PREVIEW_COOKIE: "smba_admin_preview",
