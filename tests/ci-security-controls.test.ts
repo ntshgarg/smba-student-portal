@@ -151,24 +151,14 @@ function hoistedSecretEnvEntries(workflow: string) {
 }
 
 /*
- * Steps that are this shape today and are not this lane's to change. Both hold
- * SMBA_BACKUP_PASSPHRASE and interpolate into their own shell:
- *
- *   encrypted-production-backup.yml   github.run_id / github.run_attempt
- *   encrypted-backup-restore.yml      steps.workspace.outputs.*
- *
- * Neither value is attacker-supplied the way `inputs.confirm` and the
- * preview-smoke webhook origin were, which is presumably why the audit filed
- * only those two. They are still the same construct and both fix the same way
- * -- bind the expression to an `env:` key, read it as "$VAR" -- so they are
- * recorded rather than excused. The assertion is an equality, not an allow
- * list: a new offender fails it, and so does a stale entry here once the
- * workflow that owns it is fixed.
+ * Steps allowed to splice an expression into a shell that holds a secret. The
+ * last two -- the backup's encrypt step (github.run_id) and the restore's
+ * decrypt step (steps.workspace.outputs.*) -- were fixed the same way as the
+ * rest, by binding the value to an `env:` key and reading it as "$VAR", when
+ * the backups moved to the private store. The assertion is an equality, not an
+ * allow list: a new offender fails it.
  */
-const secretBearingShellInterpolations = [
-  "encrypted-backup-restore.yml :: Decrypt, inspect and verify stored snapshot",
-  "encrypted-production-backup.yml :: Encrypt snapshot and manifest",
-]
+const secretBearingShellInterpolations: string[] = []
 
 describe("CI security controls", () => {
   it("limits backup credentials to the snapshot and encryption steps", () => {
@@ -230,19 +220,62 @@ describe("CI security controls", () => {
       .toBeLessThan(workflow.indexOf("Check out repository"))
   })
 
-  it("gives the stored restore only Actions read access and step-scoped passphrase", () => {
+  /*
+   * The head coach's decision of 13 Nov 2026: a nightly backup kept for 30
+   * days in private storage, and a monthly restore check of the newest one.
+   * "Private" rules out this repository's own artifacts (see the test above),
+   * so the file goes to a separate repository that backup-store.js checks is
+   * private before every upload.
+   */
+  it("takes a nightly backup and keeps it only in a store it has checked is private", () => {
+    const workflow = readRepositoryFile(".github/workflows/encrypted-production-backup.yml")
+    const steps = workflowSteps(workflow)
+    const storing = steps.find((step) => step.includes("- name: Keep the encrypted snapshot in the private store\n"))
+
+    expect(workflow).toMatch(/^ {2}schedule:\n {4}# .*\n {4}- cron: "17 21 \* \* \*"$/mu)
+    expect(storing).toBeTypeOf("string")
+    expect(storing).toContain("github-token: ${{ secrets.SMBA_BACKUP_STORE_TOKEN }}")
+    expect(storing).toContain("backupStore.storeBackup(")
+    expect(storing).toContain("backupStore.pruneStoredBackups(")
+    // The store is checked before the database is even read, so a store that
+    // is missing or public costs nothing and touches nothing.
+    expect(workflow.indexOf("- name: Check the backup store is private"))
+      .toBeLessThan(workflow.indexOf("- name: Create logical snapshot"))
+    // The store token is never handed to a shell.
+    expect(workflow.match(/SMBA_BACKUP_STORE_TOKEN: \$\{\{ secrets\.SMBA_BACKUP_STORE_TOKEN \}\}/gu))
+      .toHaveLength(1)
+    expect(workflow).toContain('if [ -z "$SMBA_BACKUP_STORE_TOKEN" ]; then')
+  })
+
+  it("gives the stored restore only the store token and a step-scoped passphrase", () => {
     const workflow = readRepositoryFile(".github/workflows/encrypted-backup-restore.yml")
 
-    expect(workflow).toContain("permissions:\n  actions: read\n  contents: read")
+    expect(workflow).toContain("permissions:\n  contents: read\n")
+    expect(workflow).not.toContain("actions: read")
     expect(workflow).not.toContain("SMBA_BACKUP_DATABASE_URL")
     expect(workflow).not.toContain("SMBA_BACKUP_DATABASE_TOKEN")
     expect(workflow.match(/SMBA_BACKUP_PASSPHRASE: \$\{\{ secrets\.SMBA_BACKUP_PASSPHRASE \}\}/gu))
       .toHaveLength(1)
     expect(workflow).toContain('- cron: "47 4 1 * *"')
-    expect(workflow).toContain("run-id: ${{ steps.backup.outputs.run-id }}")
-    expect(workflow).toContain("repository: ${{ github.repository }}")
+    expect(workflow).toContain("backupStore.downloadStoredBackup(")
     expect(workflow).toContain("cleanup-restore-workspace.mjs")
     expect(workflow).not.toContain("upload-artifact")
+    expect(workflow).not.toContain("download-artifact")
+  })
+
+  it("checks the private store for a recent backup before emptying the academy", () => {
+    const workflow = readRepositoryFile(".github/workflows/empty-academy.yml")
+    const check = workflowSteps(workflow)
+      .find((step) => step.includes("- name: Require a backup from the last 30 hours\n"))
+
+    expect(check).toBeTypeOf("string")
+    expect(check).toContain("backupStore.requireRecentBackup(")
+    expect(check).toContain("core.setFailed(error.message)")
+    // Before anything that reads or writes the production database.
+    for (const later of ["- name: Check the database can be read first", "- name: Empty the academy"]) {
+      expect(workflow.indexOf("- name: Require a backup from the last 30 hours"))
+        .toBeLessThan(workflow.indexOf(later))
+    }
   })
 
   it("exposes monitor credentials only to the read-only monitoring step", () => {

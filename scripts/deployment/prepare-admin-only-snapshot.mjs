@@ -1,8 +1,16 @@
+// Builds the owner-only source that reset-empty-academy.mjs loads. Reads the
+// remote, never writes it; drops the owner's authenticator, as reset-academy.ts does.
+
 import fs from "node:fs"
 import path from "node:path"
 
 import BetterSqlite3 from "better-sqlite3"
 import LibsqlDatabase from "libsql"
+
+import {
+  PLATFORM_OWNER_ACADEMY_ID,
+  soleOwnerQuery,
+} from "./academy-owner.mjs"
 
 const CONFIRMATION = "PREPARE-ADMIN-ONLY-SNAPSHOT"
 const outputArgument = process.argv[2]
@@ -33,7 +41,6 @@ const PRESERVED_TABLES = new Set([
   "auth_pin_credentials",
   "auth_provider_accounts",
   "auth_recovery_emails",
-  "auth_two_factors",
   "auth_users",
   "batches",
 ])
@@ -103,28 +110,17 @@ try {
   })
   clone.immediate()
 
-  const admins = snapshot.prepare(`
-    SELECT accounts.id, auth_methods.identifier
-    FROM accounts
-    INNER JOIN auth_methods
-      ON auth_methods.account_id = accounts.id
-      AND auth_methods.revoked_at IS NULL
-    WHERE accounts.role = 'platform_admin'
-  `).all()
-  if (admins.length !== 1) {
-    throw new Error(`Expected exactly one active platform admin, found ${admins.length}.`)
+  // Same owner rule as scripts/database/reset-academy.ts.
+  const owners = snapshot.prepare(soleOwnerQuery).all()
+  if (owners.length !== 1) {
+    throw new Error(`Expected exactly one approved platform owner, found ${owners.length}.`)
   }
-
-  const admin = admins[0]
-  const adminUsers = snapshot.prepare(`
-    SELECT id
-    FROM auth_users
-    WHERE id = ? OR username = ?
-  `).all(admin.id, admin.identifier)
-  if (adminUsers.length !== 1) {
-    throw new Error(`Expected exactly one platform-admin auth user, found ${adminUsers.length}.`)
+  const owner = owners[0]
+  if (owner.username !== PLATFORM_OWNER_ACADEMY_ID) {
+    throw new Error(
+      `The platform owner signs in as ${owner.username ?? "(no username)"}, not ${PLATFORM_OWNER_ACADEMY_ID}.`,
+    )
   }
-  const adminUserId = adminUsers[0].id
 
   const sanitize = snapshot.transaction(() => {
     for (const table of schema.tables) {
@@ -133,9 +129,10 @@ try {
       }
     }
 
-    snapshot.prepare("DELETE FROM auth_two_factors WHERE user_id <> ?").run(adminUserId)
-    snapshot.prepare("DELETE FROM auth_provider_accounts WHERE user_id <> ?").run(adminUserId)
-    snapshot.prepare("DELETE FROM auth_users WHERE id <> ?").run(adminUserId)
+    snapshot.prepare("DELETE FROM auth_provider_accounts WHERE user_id <> ?").run(owner.id)
+    snapshot.prepare("DELETE FROM auth_users WHERE id <> ?").run(owner.id)
+    // The authenticator row was deleted above; clear the flag so the owner can sign in.
+    snapshot.prepare("UPDATE auth_users SET two_factor_enabled = 0 WHERE id = ?").run(owner.id)
 
     for (const table of [
       "academy_id_allocations",
@@ -144,9 +141,9 @@ try {
       "auth_pin_credentials",
       "auth_recovery_emails",
     ]) {
-      snapshot.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE account_id <> ?`).run(admin.id)
+      snapshot.prepare(`DELETE FROM ${quoteIdentifier(table)} WHERE account_id <> ?`).run(owner.id)
     }
-    snapshot.prepare("DELETE FROM accounts WHERE id <> ?").run(admin.id)
+    snapshot.prepare("DELETE FROM accounts WHERE id <> ?").run(owner.id)
     snapshot.prepare("DELETE FROM sqlite_sequence").run()
   })
   sanitize.immediate()
@@ -154,13 +151,14 @@ try {
 
   const result = {
     accounts: count(snapshot, "SELECT count(*) AS count FROM accounts"),
+    authenticators: count(snapshot, "SELECT count(*) AS count FROM auth_two_factors"),
+    authenticatorFlag: count(snapshot, "SELECT count(*) AS count FROM auth_users WHERE two_factor_enabled <> 0"),
     batches: count(snapshot, "SELECT count(*) AS count FROM batches"),
     headCoaches: count(snapshot, "SELECT count(*) AS count FROM coach_profiles"),
-    pinCredentials: count(snapshot, "SELECT count(*) AS count FROM auth_pin_credentials WHERE account_id = ?", admin.id),
+    pinCredentials: count(snapshot, "SELECT count(*) AS count FROM auth_pin_credentials WHERE account_id = ?", owner.id),
     platformAdmins: count(snapshot, "SELECT count(*) AS count FROM accounts WHERE role = 'platform_admin'"),
     players: count(snapshot, "SELECT count(*) AS count FROM player_enrollments"),
-    recoveryEmails: count(snapshot, "SELECT count(*) AS count FROM auth_recovery_emails WHERE account_id = ?", admin.id),
-    verifiedFactors: count(snapshot, "SELECT count(*) AS count FROM auth_two_factors WHERE user_id = ? AND verified = 1", adminUserId),
+    recoveryEmails: count(snapshot, "SELECT count(*) AS count FROM auth_recovery_emails WHERE account_id = ?", owner.id),
   }
   if (result.accounts !== 1
     || result.platformAdmins !== 1
@@ -168,7 +166,8 @@ try {
     || result.players !== 0
     || result.pinCredentials !== 1
     || result.recoveryEmails !== 1
-    || result.verifiedFactors !== 1) {
+    || result.authenticators !== 0
+    || result.authenticatorFlag !== 0) {
     throw new Error(`Admin-only snapshot verification failed: ${JSON.stringify(result)}`)
   }
 

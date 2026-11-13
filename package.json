@@ -11,7 +11,7 @@
     "db:prepare:local": "DB_FILE_NAME=.data/academy-clean.db NODE_PATH=./node_modules/next/dist/compiled NODE_OPTIONS=--conditions=react-server tsx scripts/database/prepare.ts --seed",
     "dev": "DB_FILE_NAME=.data/academy-empty.db npm run db:prepare:empty && WATCHPACK_POLLING=true SMBA_REQUIRE_COACH_TOTP=true DB_FILE_NAME=.data/academy-empty.db next dev -p 3000",
     "build": "SMBA_ALLOW_LOCAL_AUTH_SECRET=true next build",
-    "vercel-build": "npm run db:prepare:empty && next build",
+    "vercel-build": "next build && npm run db:prepare:empty",
     "start": "next start -p 3000",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.check.json --noEmit",

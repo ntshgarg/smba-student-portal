@@ -5,6 +5,7 @@ import type { Instrumentation } from "next"
 
 import { initializeDatabase } from "@/lib/db/client"
 import { operationalEvents } from "@/lib/db/schema"
+import { purgeExpiredTelemetryOccasionally } from "@/lib/telemetry/retention"
 
 /*
  * Two bounds, because this runs for every server-side throw and an anonymous
@@ -81,6 +82,10 @@ export const recordRequestError: Instrumentation.onRequestError = async (
      * seen this window is always admitted -- which is the one property an
      * operator needs during an incident.
      */
+
+    // This table grows here, so the hourly clear-out runs here too, rather than
+    // waiting for someone to sign in or for a screen to report an error.
+    purgeExpiredTelemetryOccasionally({ database })
 
     database.insert(operationalEvents).values({
       id: randomUUID(),

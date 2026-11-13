@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 
 import BetterSqlite3 from "better-sqlite3"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   createDatabaseSnapshot,
@@ -79,5 +79,38 @@ describe("database snapshots", () => {
 
     expect(() => verifyDatabaseSnapshot({ snapshotPath }))
       .toThrow("checksum does not match")
+  })
+})
+
+describe("a snapshot that fails at the last step", () => {
+  it("leaves nothing behind, so the same path can be used again", () => {
+    const directory = temporaryDirectory()
+    const sourcePath = path.join(directory, "source.db")
+    const snapshotPath = path.join(directory, "backup.db")
+    const source = new BetterSqlite3(sourcePath)
+    source.exec("CREATE TABLE sample (id INTEGER PRIMARY KEY, value TEXT NOT NULL); INSERT INTO sample VALUES (1, 'one');")
+    source.close()
+
+    // The disk fills up just as the manifest is written: the copy has already
+    // been moved to its final name, and nothing describes it.
+    const realWrite = fs.writeFileSync
+    const writeFileSync = vi.spyOn(fs, "writeFileSync").mockImplementation((file, ...rest) => {
+      if (String(file).endsWith(".manifest.json")) {
+        throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" })
+      }
+      return realWrite(file, ...rest)
+    })
+    try {
+      expect(() => createDatabaseSnapshot({ outputPath: snapshotPath, source: sourcePath }))
+        .toThrow("no space left on device")
+    } finally {
+      writeFileSync.mockRestore()
+    }
+
+    expect(fs.existsSync(snapshotPath)).toBe(false)
+    expect(fs.existsSync(`${snapshotPath}.manifest.json`)).toBe(false)
+
+    createDatabaseSnapshot({ outputPath: snapshotPath, source: sourcePath })
+    expect(verifyDatabaseSnapshot({ snapshotPath })).toMatchObject({ file: "backup.db", tables: 1 })
   })
 })

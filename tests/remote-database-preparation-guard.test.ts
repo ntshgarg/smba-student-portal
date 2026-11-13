@@ -166,3 +166,22 @@ describe("remote database preparation guard", () => {
     expect(await preparationBlocked()).toBe(true)
   })
 })
+
+/*
+ * The production deploy used to change the live database first and build the
+ * new version second. For the whole build -- and for good if the build then
+ * failed -- the live site ran the old screens against the new layout. Building
+ * first means a failed build never touches the database, and the window where
+ * old code meets new tables shrinks to Vercel's switch-over.
+ */
+describe("production deploy order", () => {
+  it("builds the new version before it changes the live database", async () => {
+    const { readFileSync } = await import("node:fs")
+    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+      scripts: Record<string, string>
+    }
+    const steps = manifest.scripts["vercel-build"].split("&&").map((step) => step.trim())
+
+    expect(steps).toEqual(["next build", "npm run db:prepare:empty"])
+  })
+})

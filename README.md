@@ -127,6 +127,15 @@ The configured origin is used by canonical metadata, Open Graph URLs, `robots.tx
 header. Keep the locality-only address in structured data until SMBA's full street
 address, postal code and coordinates have been verified.
 
+## Backups
+
+Every night a GitHub Actions job copies the production database, encrypts it and keeps it for 30 days
+in a separate **private** GitHub repository; once a month another job proves the newest copy can be
+restored. Nothing is backed up until the owner sets that repository up and adds these Actions secrets:
+`SMBA_BACKUP_STORE_TOKEN`, `SMBA_BACKUP_DATABASE_URL`, `SMBA_BACKUP_DATABASE_TOKEN` and
+`SMBA_BACKUP_PASSPHRASE`. The steps are in
+[`docs/PRODUCTION-OPERATIONS.md`](docs/PRODUCTION-OPERATIONS.md), "Scheduled encrypted backups".
+
 ## Remote development preview
 
 The Vercel deployment is available at
