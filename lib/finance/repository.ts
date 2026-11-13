@@ -1,11 +1,12 @@
 import "server-only"
 
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm"
 
 import { weekdayForDateKey } from "@/lib/date-keys"
 import { academyIdSerial, formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
+  academyHolidays,
   academyIdAllocations,
   accounts,
   chargeAdjustments,
@@ -280,10 +281,18 @@ export function readFirstMonthSessionProration(
   const rows = database.select().from(sessionOccurrences).where(and(
     inArray(sessionOccurrences.seriesId, seriesIds),
     wholeMonth
-      // A holiday's cancellations never count; End schedule's do (see below).
+      // A holiday's cancellations never count (End schedule detaches them,
+      // so the date is checked too); End schedule's do (see below).
       ? or(
         eq(sessionOccurrences.status, "scheduled"),
-        and(eq(sessionOccurrences.status, "cancelled"), isNull(sessionOccurrences.holidayId)),
+        and(
+          eq(sessionOccurrences.status, "cancelled"),
+          isNull(sessionOccurrences.holidayId),
+          notInArray(
+            sessionOccurrences.occurrenceDate,
+            database.select({ dateKey: academyHolidays.dateKey }).from(academyHolidays),
+          ),
+        ),
       )
       : eq(sessionOccurrences.status, "scheduled"),
   )).orderBy(asc(sessionOccurrences.startsAt), asc(sessionOccurrences.id)).all()

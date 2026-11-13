@@ -490,4 +490,23 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       now,
     })).toMatchObject({ ok: false, message: expect.stringContaining("booked to start on 1 December 2026") })
   })
+
+  it("leaves a holiday out of an ended first term's last month, and counts it once removed", async () => {
+    const holidays = await import("@/lib/sessions/holidays")
+    const closing = series("11:00", "2026-10-01", "2027-03-31")
+    const hema = newPlayer("Hema Holiday Removed")
+    assign(hema, closing, "2026-11-02")
+    mark(hema, occurrenceOn(closing, "2026-11-02"), "present")
+    holidays.markAcademyHolidays({ coachId, database, dateKeys: ["2026-11-20"], label: "Closure", now })
+    sessions.endSessionSeriesRecords({ coachId, database, now, seriesId: closing, stopFees: true })
+
+    // End schedule detaches the closed day's session from the holiday, but a
+    // holiday still never counts: 5 of November's 12 open sessions.
+    expect(completeOnboarding(hema).preview.lines[1]).toMatchObject({ denominator: 12, numerator: 5 })
+
+    // Removed, the day stays off because the schedule has ended, and counts as
+    // End schedule's other cancellations do: as if it had never been a holiday.
+    holidays.retractAcademyHoliday({ coachId, database, dateKey: "2026-11-20", now })
+    expect(completeOnboarding(hema).preview.lines[1]).toMatchObject({ denominator: 13, numerator: 5 })
+  })
 })
