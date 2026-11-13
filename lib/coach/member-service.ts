@@ -140,10 +140,12 @@ function validateMemberUpdate(input: UpdateMemberInput):
   const contactPhone = contactPhoneValue ?? ""
   const hasContact = Boolean(contactName || contactRelationship || contactPhone)
   if (hasContact) {
-    if (contactName.length < 2 || contactName.length > 80) {
+    // Approval copies only the registration mobile, so a number alone must still save.
+    const phoneOnly = !contactName && !contactRelationship
+    if (!phoneOnly && (contactName.length < 2 || contactName.length > 80)) {
       fieldErrors["primaryContact.name"] = "Enter a contact name between 2 and 80 characters."
     }
-    if (!CONTACT_RELATIONSHIPS.includes(
+    if (!phoneOnly && !CONTACT_RELATIONSHIPS.includes(
       contactRelationship as typeof CONTACT_RELATIONSHIPS[number],
     )) {
       fieldErrors["primaryContact.relationship"] = "Choose Parent, Guardian, Self or Other."

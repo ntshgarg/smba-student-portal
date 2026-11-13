@@ -382,4 +382,22 @@ describe("member directory service", () => {
       },
     })).toMatchObject({ ok: false, code: "ACTIVE_ASSIGNMENTS" })
   })
+
+  it("lets a newly approved player be edited with only the registration mobile on file", () => {
+    const coach = accountService.findApprovedAccountByAcademyId("SMBA#0001")
+    if (!coach) throw new Error("Seed coach was not created.")
+    const playerId = accountService.registerAccount("Tara Sen", "player")
+    accountService.approveRegistration(playerId, coach.accountId)
+
+    expect(memberService.updateMemberRecord({
+      coachId: coach.accountId,
+      database,
+      input: {
+        memberId: playerId,
+        expectedRevision: 0,
+        profile: { fullName: "Tara Sen", primaryContact: { name: "", phone: "98765 43210", relationship: "" } },
+        training: { academyPlan: null, batch: "Assessment pending", level: "Assessment pending" },
+      },
+    })).toMatchObject({ ok: true })
+  })
 })
