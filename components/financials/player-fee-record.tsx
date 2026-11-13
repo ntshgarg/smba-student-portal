@@ -77,16 +77,28 @@ function recordYears(record: PlayerFeeRecord, currentPeriod: string) {
   return [...years].filter((year) => VALID_YEAR.test(year)).sort()
 }
 
+/*
+ * A receipt sits under the fee month it paid for, so a fee paid late still
+ * shows its payment; the row carries the date it was received. A receipt with
+ * no monthly fee (registration) sits under the month it was received.
+ */
 function receiptsByPeriod(record: PlayerFeeRecord) {
   const result = new Map<string, ReceiptRow[]>()
-  const seenReceiptIds = new Set<string>()
+  const seenReceipts = new Set<string>()
 
   record.receipts.forEach((receipt) => {
-    const period = receipt.receivedOn.slice(0, 7)
-    if (!VALID_PERIOD.test(period) || seenReceiptIds.has(receipt.id)) return
+    const feePeriods = receipt.allocations
+      .map((allocation) => allocation.billingPeriod ?? "")
+      .filter((period) => VALID_PERIOD.test(period))
+    const periods = feePeriods.length ? new Set(feePeriods) : new Set([receipt.receivedOn.slice(0, 7)])
 
-    seenReceiptIds.add(receipt.id)
-    result.set(period, [...(result.get(period) ?? []), { receipt }])
+    periods.forEach((period) => {
+      const key = `${period}:${receipt.id}`
+      if (!VALID_PERIOD.test(period) || seenReceipts.has(key)) return
+
+      seenReceipts.add(key)
+      result.set(period, [...(result.get(period) ?? []), { receipt }])
+    })
   })
 
   result.forEach((rows) => rows.sort((first, second) => (

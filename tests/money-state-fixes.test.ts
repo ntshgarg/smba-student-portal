@@ -518,6 +518,9 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
 
     const record = coachRecord(players.legacy, secondNovember)
     expect(record.status).toBe("setup_required")
+    // The family's statement says what the fees say, not the coach's to-do.
+    expect(documents.getPlayerFeeStatement(players.legacy, context(secondNovember))?.status)
+      .toBe("paid")
   })
 
   it("does not offer a refund on the 1st, when every withdrawal date would be refused", () => {
