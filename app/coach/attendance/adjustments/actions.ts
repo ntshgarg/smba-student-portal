@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import {
+  keepAttendanceAdjustment,
   publishMakeupAttendanceAdjustment,
   voidAttendanceAdjustment,
 } from "@/lib/attendance/adjustments"
@@ -58,6 +59,18 @@ export async function voidAttendanceAdjustmentAction(adjustmentId: string) {
   const coach = await requireCoach()
   return runOperationalAction(() => {
     const adjustment = voidAttendanceAdjustment({
+      adjustmentId,
+      coachId: coach.subjectId,
+    })
+    revalidateAttendanceSurfaces()
+    return adjustment
+  })
+}
+
+export async function keepAttendanceAdjustmentAction(adjustmentId: string) {
+  const coach = await requireCoach()
+  return runOperationalAction(() => {
+    const adjustment = keepAttendanceAdjustment({
       adjustmentId,
       coachId: coach.subjectId,
     })

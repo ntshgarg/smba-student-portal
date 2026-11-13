@@ -133,6 +133,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const {
     attendanceAdjustments,
     attendanceRecords,
+    keepAttendanceAdjustment,
     publishAttendanceAdjustment,
     voidAttendanceAdjustment,
   } = useAttendancePortal()
@@ -216,9 +217,22 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     () => attendanceAdjustments.filter((item) => !item.voidedAt),
     [attendanceAdjustments],
   )
+  // Per player: two players can miss the same session, and a make-up recorded
+  // for one of them says nothing about the other's absence.
+  const playerActiveAdjustments = useMemo(
+    () => activeAdjustments.filter((item) => item.playerId === selectedPlayerId),
+    [activeAdjustments, selectedPlayerId],
+  )
   const adjustedSourceIds = useMemo(
-    () => new Set(activeAdjustments.map((item) => item.sourceOccurrenceId)),
-    [activeAdjustments],
+    () => new Set(playerActiveAdjustments.map((item) => item.sourceOccurrenceId)),
+    [playerActiveAdjustments],
+  )
+  // A session that proves one make-up cannot also be another's missed session.
+  const usedCompletionIds = useMemo(
+    () => new Set(playerActiveAdjustments.flatMap((item) => (
+      item.completionOccurrenceId ? [item.completionOccurrenceId] : []
+    ))),
+    [playerActiveAdjustments],
   )
   const sourceOptions = useMemo(() => {
     if (!selectedPlayerId) return []
@@ -228,6 +242,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         occurrence.status === "scheduled"
         && attendanceRecords[occurrence.id]?.[selectedPlayerId] === "absent"
         && !adjustedSourceIds.has(occurrence.id)
+        && !usedCompletionIds.has(occurrence.id)
         && occurrence.occurrenceDate <= todayKey
         && !occurrenceIsUpcoming(occurrence, referenceInstant)
       ))
@@ -242,6 +257,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     selectedPlayerId,
     sessionOccurrences,
     todayKey,
+    usedCompletionIds,
   ])
   const sourceOccurrence = sourceOccurrenceId
     ? occurrenceById.get(sourceOccurrenceId)
@@ -291,16 +307,8 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     const playerAssignments = sessionAssignments.filter(
       (assignment) => assignment.playerId === selectedPlayerId,
     )
-    const usedCompletionIds = new Set(activeAdjustments
-      .filter((adjustment) => adjustment.playerId === selectedPlayerId)
-      .flatMap((adjustment) => adjustment.completionOccurrenceId
-        ? [adjustment.completionOccurrenceId]
-        : []))
-    const legacyCompletionDates = new Set(activeAdjustments
-      .filter((adjustment) => (
-        adjustment.playerId === selectedPlayerId
-        && !adjustment.completionOccurrenceId
-      ))
+    const legacyCompletionDates = new Set(playerActiveAdjustments
+      .filter((adjustment) => !adjustment.completionOccurrenceId)
       .map((adjustment) => adjustment.completedOn))
 
     return sessionOccurrences
@@ -322,8 +330,8 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         || first.id.localeCompare(second.id)
       ))
   }, [
-    activeAdjustments,
     attendanceRecords,
+    playerActiveAdjustments,
     referenceInstant,
     selectedPlayer,
     selectedPlayerId,
@@ -331,6 +339,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     sessionOccurrences,
     sourceOccurrence,
     todayKey,
+    usedCompletionIds,
   ])
   const completionOccurrence = completionOccurrenceId
     ? occurrenceById.get(completionOccurrenceId)
@@ -518,10 +527,43 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     }
   }
 
+  async function keepAdjustment(adjustment: AttendanceAdjustmentRecord) {
+    const pendingKey = `keep:${adjustment.id}`
+    setPendingAction(pendingKey)
+    setFeedback(null)
+    try {
+      const result = await keepAttendanceAdjustment(adjustment.id)
+      if (!result.ok) {
+        setFeedback({ field: result.field, message: result.message, tone: "error" })
+        return
+      }
+      setFeedback({ message: "Make-up kept", tone: "success" })
+    } catch (error) {
+      const failure = describeSaveFailure({
+        error,
+        fallbackMessage: "The make-up could not be kept",
+        retained: "It still needs review",
+        subject: "Keeping the make-up",
+      })
+      setFeedback({
+        message: failure.message,
+        offerRetry: failure.offerRetry,
+        retryAction: pendingKey,
+        tone: "error",
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
   async function voidAdjustment(adjustment: AttendanceAdjustmentRecord) {
     const player = playerById.get(adjustment.playerId)
+    // A missed session cancelled since no longer counts, so no absence comes back.
+    const missedCancelled = occurrenceById.get(adjustment.sourceOccurrenceId)?.status === "cancelled"
     const confirmed = window.confirm(
-      `Void this make-up adjustment${player ? ` for ${player.member.fullName}` : ""}? The original absence will be restored.`,
+      `Void this make-up adjustment${player ? ` for ${player.member.fullName}` : ""}? ${missedCancelled
+        ? "Its missed session was cancelled afterwards, so no absence will count against them."
+        : "The original absence will be restored."}`,
     )
     if (!confirmed) return
 
@@ -889,6 +931,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   const isVoided = Boolean(adjustment.voidedAt)
                   const requiresReview = Boolean(adjustment.reviewRequiredAt) && !isVoided
                   const isExpanded = adjustment.id === expandedAdjustmentId
+                  const keepKey = `keep:${adjustment.id}`
 
                   return (
                     <article
@@ -941,7 +984,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                           {requiresReview ? (
                             <div className="coach-adjustment-review-warning">
                               <CircleAlert aria-hidden="true" />
-                              <p><strong>This adjustment requires review.</strong> Check the ordinary attendance recorded on its completion date.</p>
+                              <p><strong>This adjustment requires review.</strong> A session it rests on has changed since it was recorded. Keep the make-up if the player trained, or void it.</p>
                             </div>
                           ) : null}
                           <dl>
@@ -951,6 +994,21 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                             <div><dt>Traceability</dt><dd>{resolvedOccurrence ? sessionLabel(resolvedOccurrence.id) : "Date-level record"}</dd></div>
                             {adjustment.reason ? <div className="is-wide"><dt>Reason</dt><dd>{adjustment.reason}</dd></div> : null}
                           </dl>
+                          {requiresReview ? (
+                            <button
+                              className="coach-adjustment-history-void is-keep"
+                              type="button"
+                              disabled={pendingAction !== null}
+                              onClick={() => void keepAdjustment(adjustment)}
+                            >
+                              <Check aria-hidden="true" />
+                              {pendingAction === keepKey
+                                ? "Keeping…"
+                                : retryAction === keepKey
+                                  ? "Keep make-up again"
+                                  : "Keep make-up"}
+                            </button>
+                          ) : null}
                           {!isVoided ? (
                             <button
                               className="coach-adjustment-history-void"

@@ -120,6 +120,34 @@ describe("describeSaveFailure", () => {
     })
   })
 
+  // A connection that drops after the request was sent raises the same error
+  // as one that never left, so for a save that is safe to repeat -- the
+  // attendance registers -- "could not be saved" may be false.
+  it("calls a dropped connection an unknown outcome for a save that is safe to repeat", () => {
+    expect(describeSaveFailure({
+      ...attendanceCopy,
+      error: new TypeError("Load failed"),
+      isOnline: true,
+      repeatable: true,
+    })).toEqual({
+      kind: "unreachable",
+      message: "Attendance may or may not have been recorded because the connection dropped."
+        + " Your marks are still on screen."
+        + " Saving again is safe and will confirm the result.",
+      offerRetry: true,
+    })
+    expect(describeSaveFailure({
+      ...attendanceCopy,
+      error: new TypeError("Failed to fetch"),
+      isOnline: false,
+      repeatable: true,
+    }).message).toBe(
+      "Attendance may or may not have been recorded because this device went offline."
+      + " Your marks are still on screen."
+      + " Saving again when the connection returns is safe and will confirm the result.",
+    )
+  })
+
   it("reports a deadline as an unknown outcome rather than a failure", () => {
     const description = describeSaveFailure({
       ...attendanceCopy,

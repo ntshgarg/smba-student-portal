@@ -350,6 +350,16 @@ describe("make-up sessions completed on a day that becomes a holiday", () => {
       .where(eq(schema.attendanceAdjustments.id, adjustmentId)).get()?.reviewRequiredAt)
       .toBeInstanceOf(Date)
   })
+
+  it("flags them when the missed session's day becomes a holiday", () => {
+    const adjustmentId = addMakeUp(NEXT_MONDAY)
+    const result = markHoliday([MONDAY])
+
+    expect(result.adjustmentsFlaggedForReview).toBe(1)
+    expect(database.select().from(schema.attendanceAdjustments)
+      .where(eq(schema.attendanceAdjustments.id, adjustmentId)).get()?.reviewRequiredAt)
+      .toBeInstanceOf(Date)
+  })
 })
 
 describe("retracting a holiday", () => {

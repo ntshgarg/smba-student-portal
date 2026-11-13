@@ -76,6 +76,13 @@ export function describeRefusedSave(
     subject: string
   },
 ): RefusedSaveDescription {
+  // A refresh only brings the marks back if the device kept them.
+  if (result.code === "CONFLICT" && !marksOnDevice()) {
+    return {
+      message: `${result.message} These marks are only on this screen and a refresh`
+        + " will clear them, so note them before you refresh.",
+    }
+  }
   if (result.code !== sessionExpiredCode) return { message: result.message }
 
   const signIn = { href: signInHref, label: "Sign in" }

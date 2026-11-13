@@ -85,19 +85,23 @@ function isSaveTimeout(error: unknown) {
  * punctuation.
  *
  * A timeout is deliberately never described as a failure, because the write may
- * have landed. Offline and unreachable are safe to call failures: the request
- * never reached the server, so nothing can have been recorded.
+ * have landed. Offline and unreachable are described as failures by default.
+ *
+ * `repeatable` saves (the attendance registers) can be safely sent again, so a
+ * dropped connection is reported as an unknown outcome, like a timeout.
  */
 export function describeSaveFailure({
   error,
   fallbackMessage,
   isOnline,
+  repeatable = false,
   retained,
   subject,
 }: {
   error: unknown
   fallbackMessage: string
   isOnline?: boolean
+  repeatable?: boolean
   retained: string
   subject: string
 }): SaveFailureDescription {
@@ -116,6 +120,19 @@ export function describeSaveFailure({
       kind: "unknown",
       message: error instanceof Error ? error.message : fallbackMessage,
       offerRetry: false,
+    }
+  }
+
+  if (repeatable) {
+    const lost = failure === "offline"
+      ? "this device went offline"
+      : "the connection dropped"
+    const whenToRetry = failure === "offline" ? " when the connection returns" : ""
+    return {
+      kind: failure,
+      message: `${subject} may or may not have been recorded because ${lost}.`
+        + ` ${retained}. Saving again${whenToRetry} is safe and will confirm the result.`,
+      offerRetry: true,
     }
   }
 

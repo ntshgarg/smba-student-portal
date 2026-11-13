@@ -170,15 +170,17 @@ function readDraftMarks(
   }
 }
 
+/** Reports whether the device kept the draft. */
 function writeDraftMarks(
   key: string,
   draft: StoredAttendanceDraft,
   storage: Storage | null,
 ) {
-  if (!storage) return
+  if (!storage) return false
 
   try {
     storage.setItem(key, JSON.stringify(draft))
+    return true
   } catch {
     // Quota exhausted, or storage refused the write. Clear what has already
     // expired and try once; a draft that cannot be stored must never cost the
@@ -186,8 +188,10 @@ function writeDraftMarks(
     pruneExpiredAttendanceDrafts(storage, draft.savedAt)
     try {
       storage.setItem(key, JSON.stringify(draft))
+      return true
     } catch {
       // Nothing further to try. The marks remain in component state.
+      return false
     }
   }
 }
@@ -222,9 +226,9 @@ export function persistPlayerAttendanceDraft(
   const key = playerAttendanceDraftKey(occurrenceId)
   if (!changes.length) {
     clearDraft(key, storage)
-    return
+    return false
   }
-  writeDraftMarks(key, {
+  return writeDraftMarks(key, {
     context: occurrenceId,
     marks: changes.map((change) => ({
       choice: change.choice,
@@ -263,9 +267,9 @@ export function persistStaffAttendanceDraft(
   const key = staffAttendanceDraftKey(dateKey)
   if (!changes.length) {
     clearDraft(key, storage)
-    return
+    return false
   }
-  writeDraftMarks(key, {
+  return writeDraftMarks(key, {
     context: dateKey,
     marks: changes.map((change) => ({
       choice: change.choice,
@@ -353,15 +357,36 @@ export function rebaseRestoredAttendanceDraft<Change extends {
  * last: what is on screen, then what changed beneath it, then that none of it is
  * recorded yet.
  */
+export type DraftSubjects = { one: string; many: string }
+
+const playerSubjects: DraftSubjects = { one: "that player", many: "those players" }
+
+function leftOutClause(leftOut: number, subjects: DraftSubjects) {
+  return `${leftOut} ${leftOut === 1 ? "mark was" : "marks were"} left out because`
+    + ` ${leftOut === 1 ? subjects.one : subjects.many} can no longer be marked here.`
+}
+
+/** Every restored mark was left out. */
+export function leftOutAttendanceDraftNotice(
+  leftOut: number,
+  subjects: DraftSubjects = playerSubjects,
+) {
+  return `Unsaved marks from an earlier visit were found. ${leftOutClause(leftOut, subjects)}`
+}
+
 export function restoredAttendanceDraftNotice(
   count: number,
   saveAction: string,
   changedUnderneath = 0,
+  leftOut = 0,
+  subjects: DraftSubjects = playerSubjects,
 ) {
   return `${count} unsaved ${count === 1 ? "change" : "changes"} restored from an`
     + ` earlier visit.${changedUnderneath
       ? ` ${changedUnderneath} ${changedUnderneath === 1 ? "was" : "were"} marked`
         + " differently elsewhere since."
+      : ""}${leftOut
+      ? ` ${leftOutClause(leftOut, subjects)}`
       : ""}`
     + ` Nothing is recorded until you ${saveAction}`
 }

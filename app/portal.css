@@ -944,6 +944,17 @@
   height: 13px;
 }
 
+/* "Keep make-up" sits beside Void on a make-up that needs review and shares
+   its shape; green because it keeps the player's credit. */
+.coach-adjustment-history-void.is-keep {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.coach-adjustment-history-void.is-keep:hover:not(:disabled) {
+  background: var(--green-soft);
+}
+
 .coach-adjustment-history-details {
   grid-column: 1 / -1;
   padding: var(--space-copy) 52px 18px;
