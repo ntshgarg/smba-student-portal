@@ -4,9 +4,11 @@ import { cookies, headers } from "next/headers"
 
 import {
   confirmRegistrationStatus,
+  registrationCodeChecksPaused,
   requestRegistrationStatus,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
+import { CODE_CHECKS_PAUSED_MESSAGE } from "@/lib/auth/registration-form"
 import {
   ACTIVATION_CLAIM_COOKIE,
   ACTIVATION_CLAIM_LIFETIME_MS,
@@ -97,7 +99,17 @@ export async function confirmRegistrationStatusCode(
     fullName: values.fullName,
     security: requestSecurityContext(requestHeaders),
   })
-  if (!result) return { ...base, error: INVALID_CODE_MESSAGE, errorField: "code" }
+  if (!result) {
+    return {
+      ...base,
+      error: registrationCodeChecksPaused({
+        email: values.email,
+        fullName: values.fullName,
+        security: requestSecurityContext(requestHeaders),
+      }) ? CODE_CHECKS_PAUSED_MESSAGE : INVALID_CODE_MESSAGE,
+      errorField: "code",
+    }
+  }
 
   if (result.standing === "approved" && result.onboardingCompleted && !result.activated) {
     // The claim was written inside the code's own transaction, so the cookie is

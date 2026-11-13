@@ -13,6 +13,7 @@ import {
 import {
   findApprovedAccountByAcademyId,
   confirmRegistration,
+  registrationCodeChecksPaused,
   requestRegistration,
 } from "@/lib/auth/account-service"
 import { OperationalActionError } from "@/lib/actions/operational-result"
@@ -37,6 +38,7 @@ import {
 } from "@/lib/auth/security-context"
 import { clearDatabaseSession } from "@/lib/auth/session"
 import {
+  CODE_CHECKS_PAUSED_MESSAGE,
   type RegistrationField,
   type RegistrationFormState,
   type RegistrationValues,
@@ -390,7 +392,17 @@ export async function confirmRegistrationCode(
     requestedRole: values.requestedRole,
     security: requestSecurityContext(requestHeaders),
   })
-  if (!result) return { ...base, error: INVALID_CODE_MESSAGE, errorField: "code" }
+  if (!result) {
+    return {
+      ...base,
+      error: registrationCodeChecksPaused({
+        email: values.email,
+        fullName: values.fullName,
+        security: requestSecurityContext(requestHeaders),
+      }) ? CODE_CHECKS_PAUSED_MESSAGE : INVALID_CODE_MESSAGE,
+      errorField: "code",
+    }
+  }
 
   if (result.standing === "new") {
     /*

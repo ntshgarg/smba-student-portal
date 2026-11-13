@@ -1,0 +1,109 @@
+// Continue on an emailed link uses it up and gives this browser a pass cookie under the recovery path.
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const mocks = vi.hoisted(() => ({
+  claimPasswordRecovery: vi.fn<(token: string, options?: { intent?: string }) => string | null>(),
+  completePasswordRecovery: vi.fn(),
+  cookieDelete: vi.fn(),
+  cookieGet: vi.fn(() => ({ value: "browser-pass" })),
+  cookieSet: vi.fn(),
+  getAuthenticatorRecoveryStatus: vi.fn(() => ({ state: "missing" })),
+  getPasswordRecoveryStatus: vi.fn(() => ({ state: "missing" })),
+  redirect: vi.fn((destination: string) => {
+    const error = new Error(`NEXT_REDIRECT:${destination}`) as Error & { digest: string }
+    error.digest = `NEXT_REDIRECT;push;${destination};307;`
+    throw error
+  }),
+  submitAuthenticatorResetRequest: vi.fn(),
+  verifyPasswordRecoverySecondFactor: vi.fn(),
+}))
+
+vi.mock("server-only", () => ({}))
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => ({ delete: mocks.cookieDelete, get: mocks.cookieGet, set: mocks.cookieSet })),
+  headers: vi.fn(async () => new Headers()),
+}))
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
+vi.mock("@/lib/auth/cookie-policy", () => ({ secureAuthCookiesRequired: () => true }))
+vi.mock("@/lib/auth/credential-service", () => ({ validateNewPassword: () => null }))
+vi.mock("@/lib/auth/security-context", () => ({
+  requestSecurityContext: () => ({ ipHash: "ip", userAgent: "test" }),
+}))
+vi.mock("@/lib/auth/recovery-service", () => ({
+  AUTHENTICATOR_RECOVERY_COOKIE: "smba_authenticator_recovery",
+  claimPasswordRecovery: mocks.claimPasswordRecovery,
+  completePasswordRecovery: mocks.completePasswordRecovery,
+  getAuthenticatorRecoveryStatus: mocks.getAuthenticatorRecoveryStatus,
+  getPasswordRecoveryStatus: mocks.getPasswordRecoveryStatus,
+  PASSWORD_RECOVERY_LIFETIME_MS: 20 * 60 * 1000,
+  RECOVERY_SESSION_COOKIE: "smba_password_recovery",
+  requestPasswordRecovery: vi.fn(),
+  submitAuthenticatorResetRequest: mocks.submitAuthenticatorResetRequest,
+  verifyPasswordRecoverySecondFactor: mocks.verifyPasswordRecoverySecondFactor,
+}))
+
+import {
+  completePasswordRecoveryAction,
+  openPasswordRecoveryLinkAction,
+} from "@/app/recover/actions"
+import {
+  openAuthenticatorRecoveryLinkAction,
+} from "@/app/auth/two-factor/recovery/actions"
+
+function tokenForm(token: string) {
+  const formData = new FormData()
+  formData.set("token", token)
+  return formData
+}
+
+describe("opening an emailed link", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("gives this browser its own pass, under the recovery path", async () => {
+    mocks.claimPasswordRecovery.mockReturnValue("browser-pass")
+    await expect(openPasswordRecoveryLinkAction(tokenForm("emailed-token")))
+      .rejects.toThrow("NEXT_REDIRECT:/recover/reset")
+    expect(mocks.claimPasswordRecovery).toHaveBeenCalledWith("emailed-token")
+    expect(mocks.cookieSet).toHaveBeenCalledWith("smba_password_recovery", "browser-pass", expect.objectContaining({
+      httpOnly: true,
+      path: "/recover",
+    }))
+  })
+
+  it("sends a second tap on to the reset the first tap already opened here", async () => {
+    // On a slow phone the second press arrives after the first has spent the
+    // link and tied the reset to this browser; that is not an invalid link.
+    mocks.claimPasswordRecovery.mockReturnValue(null)
+    mocks.getPasswordRecoveryStatus.mockReturnValue({
+      academyId: "SMBA-PL-0001",
+      requiresSecondFactor: false,
+      secondFactorVerified: false,
+      state: "active",
+    } as never)
+    await expect(openPasswordRecoveryLinkAction(tokenForm("spent")))
+      .rejects.toThrow("NEXT_REDIRECT:/recover/reset")
+    expect(mocks.getPasswordRecoveryStatus).toHaveBeenCalledWith("browser-pass")
+    expect(mocks.cookieSet).not.toHaveBeenCalled()
+
+    mocks.getAuthenticatorRecoveryStatus.mockReturnValue({ state: "verified" } as never)
+    await expect(openAuthenticatorRecoveryLinkAction(tokenForm("spent")))
+      .rejects.toThrow("NEXT_REDIRECT:/auth/two-factor/recovery?verified=1")
+    mocks.getAuthenticatorRecoveryStatus.mockReturnValue({ state: "missing" } as never)
+    await expect(openAuthenticatorRecoveryLinkAction(tokenForm("spent")))
+      .rejects.toThrow("NEXT_REDIRECT:/auth/two-factor/recovery?error=invalid")
+  })
+})
+
+describe("finishing with the pass", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("removes the pass cookie from the path it was set on", async () => {
+    mocks.completePasswordRecovery.mockResolvedValue(true)
+    const formData = new FormData()
+    formData.set("password", "A brand new secure password")
+    formData.set("confirmPassword", "A brand new secure password")
+    await expect(completePasswordRecoveryAction({ error: null, errorField: null }, formData))
+      .rejects.toThrow("NEXT_REDIRECT:/login?recovered=1")
+    expect(mocks.cookieDelete).toHaveBeenCalledWith({ name: "smba_password_recovery", path: "/recover" })
+  })
+})

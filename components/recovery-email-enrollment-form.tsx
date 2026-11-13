@@ -6,6 +6,7 @@ import { useState } from "react"
 import {
   type RecoveryEmailEnrollmentState,
 } from "@/app/account/recovery-email/actions"
+import { PasswordInput } from "@/components/password-input"
 import { useResilientActionState } from "@/lib/client/use-resilient-action-state"
 
 const initialRecoveryEmailEnrollmentState: RecoveryEmailEnrollmentState = {
@@ -52,11 +53,14 @@ export function RecoveryEmailEnrollmentForm({
   confirmAction,
   defaultName = "",
   requestAction,
+  requireCurrentPassword = false,
 }: {
   collectName?: boolean
   confirmAction: EnrollmentAction
   defaultName?: string
   requestAction: EnrollmentAction
+  /** Signed-in enrolment: the first address decides who can reset the password. */
+  requireCurrentPassword?: boolean
 }) {
   /**
    * The pair of results the coach has retired by asking for the address field
@@ -150,9 +154,25 @@ export function RecoveryEmailEnrollmentForm({
           <span>{confirming ? "Verifying…" : "Verify recovery email"}</span>
           <ArrowRight aria-hidden="true" />
         </button>
-        <button className="totp-switch" type="submit" formAction={send} disabled={sending || confirming}>
-          {sending ? "Sending another code…" : "Send another code"}
-        </button>
+        {requireCurrentPassword ? (
+          /*
+           * Every send here needs the password or PIN, which the code step
+           * does not hold, so "another code" goes back to the address step
+           * with the address kept, where it is asked for again.
+           */
+          <button
+            className="totp-switch"
+            type="button"
+            disabled={sending || confirming}
+            onClick={() => setRetired({ confirm: confirmState, request: requestState })}
+          >
+            Send another code
+          </button>
+        ) : (
+          <button className="totp-switch" type="submit" formAction={send} disabled={sending || confirming}>
+            {sending ? "Sending another code…" : "Send another code"}
+          </button>
+        )}
         <button
           className="totp-switch"
           type="button"
@@ -198,6 +218,21 @@ export function RecoveryEmailEnrollmentForm({
           This address is used only for account security and may be shared by siblings.
         </p>
       </div>
+      {requireCurrentPassword ? (
+        <div className="login-field">
+          <label htmlFor="recovery-email-current-password">Current password or PIN</label>
+          <PasswordInput
+            id="recovery-email-current-password"
+            name="currentPassword"
+            autoComplete="current-password"
+            required
+            aria-describedby="recovery-email-password-help"
+          />
+          <p id="recovery-email-password-help" className="login-helper">
+            Password resets will go to this address, so we check it is you first. Your six-digit PIN works too.
+          </p>
+        </div>
+      ) : null}
       {liveRequest?.error ? <p className="login-error" role="alert">{liveRequest.error}</p> : null}
       <button className="login-submit" type="submit" disabled={sending}>
         <span>{sending ? "Sending code…" : "Send verification code"}</span>

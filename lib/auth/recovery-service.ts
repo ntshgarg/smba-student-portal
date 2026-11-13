@@ -5,11 +5,12 @@ import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 
 
 import { createOTP } from "@better-auth/utils/otp"
 import { hashPassword, symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto"
-import { and, desc, eq, gt, isNull, lte, ne, sql } from "drizzle-orm"
+import { and, desc, eq, gt, isNull, lt, lte, ne, sql } from "drizzle-orm"
 
 import { normalizeAcademyId } from "@/lib/auth/identity"
 import { authEmailRequired, createAuthMailer, type AuthMailer } from "@/lib/auth/mailer"
 import {
+  clearSignInPauses,
   loginIsBlocked,
   recordLoginFailure,
   recordLoginSuccess,
@@ -20,7 +21,11 @@ import {
   type SecondFactorScope,
   validateNewPassword,
 } from "@/lib/auth/credential-service"
-import { authSubjectHash, writeAuthSecurityEvent } from "@/lib/auth/security-context"
+import {
+  authSubjectHash,
+  unknownIpHash,
+  writeAuthSecurityEvent,
+} from "@/lib/auth/security-context"
 import { absoluteSiteUrl } from "@/lib/config"
 import {
   initializeDatabase,
@@ -151,11 +156,51 @@ function challengeSecretHash(
  * an academy's wifi, or from a carrier NAT, locked out every unrelated person on
  * it. A registration flood should throttle registration and nothing else.
  */
-function requestThrottleKeys(subject: string, ipHash?: string | null) {
+// Sends and code checks use separate address buckets. With no visible address, the address half is scoped
+// to the subject, so strangers never share one global bucket.
+type RequestBucket = "recovery-code" | "recovery-request"
+
+function requestThrottleKeys(
+  subject: string,
+  ipHash?: string | null,
+  bucket: RequestBucket = "recovery-request",
+) {
+  const addressUnknown = !ipHash || ipHash === unknownIpHash()
   return {
-    ipHash: authSubjectHash(`recovery-request:${ipHash ?? "unknown-ip"}`),
+    ipHash: authSubjectHash(addressUnknown
+      ? `${bucket}:unknown-address:${subject}`
+      : `${bucket}:${ipHash}`),
     subjectHash: authSubjectHash(subject),
   }
+}
+
+function recoveryEmailCodeAttempt(hashedSubject: string, ipHash?: string | null) {
+  return requestThrottleKeys(`recovery-email-code:${hashedSubject}`, ipHash, "recovery-code")
+}
+
+function registrationCodeAttempt(hashedSubject: string, ipHash?: string | null) {
+  return requestThrottleKeys(
+    `registration-code:${hashedSubject}:${authSubjectHash(ipHash ?? "unknown-ip")}`,
+    ipHash,
+    "recovery-code",
+  )
+}
+
+/** Whether registration code checks are paused from this address. Read-only. */
+export function emailCodeChecksPaused(input: {
+  security?: SecurityMetadata
+  subjectKey: string
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  return loginIsBlocked(
+    registrationCodeAttempt(subjectHash(input.subjectKey), input.security?.ipHash),
+    { database, now },
+  )
 }
 
 /*
@@ -222,6 +267,59 @@ function accountName(accountId: string, database: SmbaDatabaseExecutor) {
     .get()?.fullName ?? null
 }
 
+const RECOVERY_EMAIL_SEND_PAUSED = "Wait a few minutes before requesting another code."
+const RECOVERY_EMAIL_RESEND_COOLDOWN = "Wait one minute before requesting another code."
+
+function recoveryEmailSendAttempt(hashedSubject: string, ipHash?: string | null) {
+  return requestThrottleKeys(`recovery-email-send:${hashedSubject}`, ipHash)
+}
+
+function recoveryEmailSendState(
+  hashedSubject: string,
+  ipHash: string | null | undefined,
+  database: SmbaDatabaseExecutor,
+  now: Date,
+): "blocked" | "cooling" | null {
+  if (loginIsBlocked(recoveryEmailSendAttempt(hashedSubject, ipHash), { database, now })) {
+    return "blocked"
+  }
+  const latest = database.select({ createdAt: authEmailChallenges.createdAt })
+    .from(authEmailChallenges)
+    .where(and(
+      eq(authEmailChallenges.subjectHash, hashedSubject),
+      eq(authEmailChallenges.purpose, "verify_email"),
+      isNull(authEmailChallenges.consumedAt),
+    ))
+    .orderBy(desc(authEmailChallenges.createdAt))
+    .get()
+  if (latest && now.getTime() - latest.createdAt.getTime() < EMAIL_RESEND_COOLDOWN_MS) {
+    return "cooling"
+  }
+  return null
+}
+
+// Why a recovery-email code would not be sent now, or null. Read-only, so it is checked before any code is spent.
+export function recoveryEmailSendRefusal(input: {
+  security?: SecurityMetadata
+  subjectKey: string
+}, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  const state = recoveryEmailSendState(
+    subjectHash(input.subjectKey),
+    input.security?.ipHash,
+    database,
+    now,
+  )
+  if (state === "blocked") return RECOVERY_EMAIL_SEND_PAUSED
+  if (state === "cooling") return RECOVERY_EMAIL_RESEND_COOLDOWN
+  return null
+}
+
 export async function requestRecoveryEmailVerification(input: {
   accountId?: string
   email: string
@@ -243,11 +341,9 @@ export async function requestRecoveryEmailVerification(input: {
     : input.fullName?.trim()
   if (!fullName) throw new Error("This account is unavailable.")
   const hashedSubject = subjectHash(input.subjectKey)
-  const attempt = requestThrottleKeys(
-    `recovery-email-send:${hashedSubject}`,
-    input.security?.ipHash,
-  )
-  if (loginIsBlocked(attempt, { database, now })) {
+  const attempt = recoveryEmailSendAttempt(hashedSubject, input.security?.ipHash)
+  const sendState = recoveryEmailSendState(hashedSubject, input.security?.ipHash, database, now)
+  if (sendState === "blocked") {
     writeAuthSecurityEvent({
       accountId: input.accountId,
       eventType: "recovery_email_verification_requested",
@@ -255,20 +351,9 @@ export async function requestRecoveryEmailVerification(input: {
       outcome: "blocked",
       userAgent: input.security?.userAgent,
     }, { database, now })
-    throw new Error("Wait a few minutes before requesting another code.")
+    throw new Error(RECOVERY_EMAIL_SEND_PAUSED)
   }
-  const latest = database.select({ createdAt: authEmailChallenges.createdAt })
-    .from(authEmailChallenges)
-    .where(and(
-      eq(authEmailChallenges.subjectHash, hashedSubject),
-      eq(authEmailChallenges.purpose, "verify_email"),
-      isNull(authEmailChallenges.consumedAt),
-    ))
-    .orderBy(desc(authEmailChallenges.createdAt))
-    .get()
-  if (latest && now.getTime() - latest.createdAt.getTime() < EMAIL_RESEND_COOLDOWN_MS) {
-    throw new Error("Wait one minute before requesting another code.")
-  }
+  if (sendState === "cooling") throw new Error(RECOVERY_EMAIL_RESEND_COOLDOWN)
 
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0")
   const challengeId = randomUUID()
@@ -300,10 +385,10 @@ export async function requestRecoveryEmailVerification(input: {
       fullName,
       to: email,
     })
-    recordLoginSuccess(requestThrottleKeys(
-      `recovery-email-code:${hashedSubject}`,
-      input.security?.ipHash,
-    ).subjectHash, { database })
+    recordLoginSuccess(
+      recoveryEmailCodeAttempt(hashedSubject, input.security?.ipHash).subjectHash,
+      { database },
+    )
   } catch (error) {
     database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
       .where(eq(authEmailChallenges.id, challengeId)).run()
@@ -346,10 +431,7 @@ export function confirmRecoveryEmailVerification(input: {
 } = {}) {
   const email = normalizeEmailAddress(input.email)
   const hashedSubject = subjectHash(input.subjectKey)
-  const attempt = requestThrottleKeys(
-    `recovery-email-code:${hashedSubject}`,
-    input.security?.ipHash,
-  )
+  const attempt = recoveryEmailCodeAttempt(hashedSubject, input.security?.ipHash)
   if (!email || !/^\d{6}$/u.test(input.code)) return null
   if (loginIsBlocked(attempt, { database, now })) return null
   const challenge = database.select().from(authEmailChallenges)
@@ -395,6 +477,9 @@ export function confirmRecoveryEmailVerification(input: {
         verifiedAt: now,
         updatedAt: now,
       }).where(eq(authEmailChallenges.id, challenge.id)).run()
+      if (existing && existing.email !== email) {
+        retireRecoveryWorkForOldAddress(input.accountId!, email, tx, now)
+      }
       writeAuthSecurityEvent({
         accountId: input.accountId,
         eventType: existing ? "recovery_email_changed" : "recovery_email_verified",
@@ -403,7 +488,11 @@ export function confirmRecoveryEmailVerification(input: {
         userAgent: input.security?.userAgent,
       }, { database: tx, now })
     }, { behavior: "immediate" })
-    return { email, receiptToken: null }
+    return {
+      email,
+      previousEmail: existing && existing.email !== email ? existing.email : null,
+      receiptToken: null,
+    }
   }
 
   const receiptToken = randomBytes(32).toString("base64url")
@@ -418,7 +507,70 @@ export function confirmRecoveryEmailVerification(input: {
     verifiedAt: now,
     updatedAt: now,
   }).where(eq(authEmailChallenges.id, challenge.id)).run()
-  return { email, receiptToken }
+  return { email, previousEmail: null, receiptToken }
+}
+
+// A changed recovery address retires reset links and reset requests tied to the old inbox.
+function retireRecoveryWorkForOldAddress(
+  accountId: string,
+  newEmail: string,
+  database: SmbaDatabaseExecutor,
+  now: Date,
+) {
+  database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
+    .where(and(
+      eq(authEmailChallenges.accountId, accountId),
+      eq(authEmailChallenges.purpose, "password_reset"),
+      isNull(authEmailChallenges.consumedAt),
+    )).run()
+  // Withdrawn by the account itself, not "expired": the coach made this change
+  // and is not to be told later that the request ran out unanswered.
+  database.update(authAuthenticatorResetRequests).set({
+    resolvedAt: now,
+    resolvedByAccountId: accountId,
+    status: "rejected",
+    updatedAt: now,
+  }).where(and(
+    eq(authAuthenticatorResetRequests.accountId, accountId),
+    eq(authAuthenticatorResetRequests.status, "pending"),
+    ne(authAuthenticatorResetRequests.recoveryEmail, newEmail),
+  )).run()
+}
+
+/**
+ * Tells the address that was just replaced. Best effort: the change has
+ * already happened, and a mail outage must not turn it into an error. Nothing
+ * is sent when the address did not actually change.
+ */
+export async function notifyRecoveryEmailReplaced(input: {
+  accountId: string
+  mailer?: AuthMailer
+  newEmail: string
+  previousEmail: string | null | undefined
+}, {
+  database = initializeDatabase(),
+}: {
+  database?: SmbaDatabaseExecutor
+} = {}) {
+  if (!input.previousEmail || input.previousEmail === input.newEmail) return false
+  const fullName = accountName(input.accountId, database)
+  if (!fullName) return false
+  try {
+    const mailer = input.mailer ?? createAuthMailer()
+    if (!mailer.sendSecurityNotice) return false
+    await mailer.sendSecurityNotice({
+      fullName,
+      lines: [
+        `The recovery email for your SMBA account was changed to ${maskRecoveryEmail(input.newEmail)}. Password reset emails now go there, and any reset link sent to this address no longer works.`,
+        "If you made this change, there is nothing more to do. If you did not, speak to the academy straight away.",
+      ],
+      subject: "Your SMBA recovery email was changed",
+      to: input.previousEmail,
+    })
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function consumeVerifiedSetupRecoveryEmail(input: {
@@ -454,6 +606,14 @@ export function consumeVerifiedSetupRecoveryEmail(input: {
   }).run()
   database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
     .where(eq(authEmailChallenges.id, challenge.id)).run()
+  // Every other path that records a recovery address leaves this row; the
+  // head coach's own setup was the one that did not.
+  writeAuthSecurityEvent({
+    accountId: input.accountId,
+    eventType: "recovery_email_verified",
+    metadata: { source: "head_coach_setup" },
+    outcome: "success",
+  }, { database, now })
   return challenge.email
 }
 
@@ -608,7 +768,9 @@ export async function requestRegistrationVerification(input: {
       eq(authEmailChallenges.subjectHash, hashedSubject),
       eq(authEmailChallenges.purpose, "verify_email"),
       isNull(authEmailChallenges.consumedAt),
-      ne(authEmailChallenges.id, challengeId),
+      // Only codes asked for before this one: two overlapping requests used to
+      // retire each other, leaving neither emailed code usable.
+      lt(authEmailChallenges.createdAt, now),
     )).run()
   return { email }
 }
@@ -646,10 +808,7 @@ export function confirmRegistrationVerification<T>(input: {
    * The per-challenge `failedAttempts` counter below is the brute-force limit on
    * the code itself, and it is deliberately not IP-scoped.
    */
-  const attempt = requestThrottleKeys(
-    `registration-code:${hashedSubject}:${authSubjectHash(input.security?.ipHash ?? "unknown-ip")}`,
-    input.security?.ipHash,
-  )
+  const attempt = registrationCodeAttempt(hashedSubject, input.security?.ipHash)
   const code = input.code.replace(/\s+/gu, "")
   if (!/^\d{6}$/u.test(code)) return null
   if (loginIsBlocked(attempt, { database, now })) return null
@@ -721,10 +880,27 @@ export function getVerifiedSetupRecoveryEmail(input: {
   return challenge?.verifiedAt ? challenge.email : null
 }
 
+// Which page a recovery link belongs to; folded into the stored hash so a link only opens its own page.
+export type RecoveryLinkIntent = "authenticator" | "password"
+
+function recoverySecretHash(
+  intent: RecoveryLinkIntent,
+  hashedSubject: string,
+  challengeId: string,
+  value: string,
+) {
+  return challengeSecretHash(
+    "password_reset",
+    hashedSubject,
+    challengeId,
+    intent === "password" ? value : `authenticator:${value.trim()}`,
+  )
+}
+
 export async function requestPasswordRecovery(input: {
   academyId: string
   email: string
-  intent?: "authenticator" | "password"
+  intent?: RecoveryLinkIntent
   mailer?: AuthMailer
   security?: SecurityMetadata
 }, {
@@ -829,25 +1005,17 @@ export async function requestPasswordRecovery(input: {
 
   const token = randomBytes(32).toString("base64url")
   const challengeId = randomUUID()
-  database.transaction((tx) => {
-    tx.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
-      .where(and(
-        eq(authEmailChallenges.accountId, account.accountId),
-        eq(authEmailChallenges.purpose, "password_reset"),
-        isNull(authEmailChallenges.consumedAt),
-      )).run()
-    tx.insert(authEmailChallenges).values({
-      id: challengeId,
-      accountId: account.accountId,
-      subjectHash: hashedSubject,
-      purpose: "password_reset",
-      email,
-      secretHash: challengeSecretHash("password_reset", hashedSubject, challengeId, token),
-      expiresAt: new Date(now.getTime() + PASSWORD_RECOVERY_LIFETIME_MS),
-      createdAt: now,
-      updatedAt: now,
-    }).run()
-  }, { behavior: "immediate" })
+  database.insert(authEmailChallenges).values({
+    id: challengeId,
+    accountId: account.accountId,
+    subjectHash: hashedSubject,
+    purpose: "password_reset",
+    email,
+    secretHash: recoverySecretHash(intent, hashedSubject, challengeId, token),
+    expiresAt: new Date(now.getTime() + PASSWORD_RECOVERY_LIFETIME_MS),
+    createdAt: now,
+    updatedAt: now,
+  }).run()
 
   try {
     const mailer = input.mailer ?? createAuthMailer()
@@ -866,14 +1034,6 @@ export async function requestPasswordRecovery(input: {
         to: email,
       })
     }
-    writeAuthSecurityEvent({
-      accountId: account.accountId,
-      eventType: intent === "authenticator" ? "totp_recovery_email_sent" : "password_recovery_requested",
-      ipHash: input.security?.ipHash,
-      outcome: "success",
-      subjectHash: publicSubject,
-      userAgent: input.security?.userAgent,
-    }, { database, now })
   } catch {
     database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
       .where(eq(authEmailChallenges.id, challengeId)).run()
@@ -886,11 +1046,43 @@ export async function requestPasswordRecovery(input: {
       subjectHash: publicSubject,
       userAgent: input.security?.userAgent,
     }, { database, now })
+    return genericRecoveryResponse(startedAt)
   }
+  // Older links are retired only after the new one is delivered, and a link already opened in a browser is left alone.
+  database.update(authEmailChallenges).set({ consumedAt: now, updatedAt: now })
+    .where(and(
+      eq(authEmailChallenges.accountId, account.accountId),
+      eq(authEmailChallenges.purpose, "password_reset"),
+      isNull(authEmailChallenges.consumedAt),
+      isNull(authEmailChallenges.claimedAt),
+      // Only links asked for before this one. Retiring every other link let
+      // two overlapping requests (a double tap, two tabs) retire each other,
+      // and both emailed links were dead; now the later one always survives.
+      lt(authEmailChallenges.createdAt, now),
+    )).run()
+  writeAuthSecurityEvent({
+    accountId: account.accountId,
+    eventType: intent === "authenticator" ? "totp_recovery_email_sent" : "password_recovery_requested",
+    ipHash: input.security?.ipHash,
+    outcome: "success",
+    subjectHash: publicSubject,
+    userAgent: input.security?.userAgent,
+  }, { database, now })
   return genericRecoveryResponse(startedAt)
 }
 
-function recoveryChallenge(token: string, database: SmbaDatabaseExecutor, now: Date) {
+/*
+ * The live challenge a link or a browser pass opens. It must still be sent to
+ * the account's current recovery address: a family that replaces the address
+ * because someone else can read the old inbox has to be able to rely on every
+ * link in that inbox dying with the change.
+ */
+function recoveryChallenge(
+  token: string,
+  intent: RecoveryLinkIntent,
+  database: SmbaDatabaseExecutor,
+  now: Date,
+) {
   if (!/^[A-Za-z0-9_-]{40,}$/u.test(token)) return null
   const rows = database.select({
     accessLevel: coachProfiles.accessLevel,
@@ -913,6 +1105,10 @@ function recoveryChallenge(token: string, database: SmbaDatabaseExecutor, now: D
       isNull(authMethods.revokedAt),
     ))
     .innerJoin(authUsers, eq(authUsers.id, accounts.id))
+    .innerJoin(authRecoveryEmails, and(
+      eq(authRecoveryEmails.accountId, accounts.id),
+      eq(authRecoveryEmails.email, authEmailChallenges.email),
+    ))
     .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
     .where(and(
       eq(authEmailChallenges.purpose, "password_reset"),
@@ -923,7 +1119,7 @@ function recoveryChallenge(token: string, database: SmbaDatabaseExecutor, now: D
     )).all()
   for (const row of rows) {
     const hashedSubject = subjectHash(recoverySubjectKeyForAccount(row.accountId!))
-    const suppliedHash = challengeSecretHash("password_reset", hashedSubject, row.challengeId, token)
+    const suppliedHash = recoverySecretHash(intent, hashedSubject, row.challengeId, token)
     if (equalDigest(row.secretHash, suppliedHash)) return row
   }
   return null
@@ -937,26 +1133,134 @@ function roleRequiresRecoverySecondFactor(row: {
     || (row.role === "coach" && row.accessLevel === "head_admin")
 }
 
-export function claimPasswordRecovery(token: string, {
+/**
+ * How long after the owner approves an authenticator reset the head coach may
+ * also reset a forgotten password by email alone. The same span the request
+ * itself was allowed to wait for approval.
+ */
+export const APPROVED_RESET_PASSWORD_WINDOW_MS = AUTHENTICATOR_RESET_REQUEST_LIFETIME_MS
+
+function recentlyApprovedAuthenticatorReset(
+  accountId: string,
+  email: string,
+  database: SmbaDatabaseExecutor,
+  now: Date,
+) {
+  return Boolean(database.select({ id: authAuthenticatorResetRequests.id })
+    .from(authAuthenticatorResetRequests)
+    .where(and(
+      eq(authAuthenticatorResetRequests.accountId, accountId),
+      eq(authAuthenticatorResetRequests.status, "approved"),
+      // Only for the inbox the owner approved. A recovery address changed
+      // since then has not been vouched for by anybody.
+      eq(authAuthenticatorResetRequests.recoveryEmail, email),
+      gt(authAuthenticatorResetRequests.resolvedAt, new Date(now.getTime() - APPROVED_RESET_PASSWORD_WINDOW_MS)),
+    ))
+    .get())
+}
+
+/*
+ * What a protected account (head coach, owner) must show besides the emailed
+ * link before its password can be reset.
+ *
+ * The rule exists so that the recovery inbox alone cannot take the account.
+ * With a connected authenticator, that is the authenticator. Without one there
+ * was nothing to show at all, so a head coach who lost the phone and also
+ * forgot the password was stuck even after the owner approved the reset --
+ * the very approval that already accepted "this inbox plus the owner's yes" as
+ * enough to remove the authenticator. For a day after that approval, and only
+ * from the inbox that was approved, the same proof is enough to set a new
+ * password. The owner's queue says so beside the Approve button, so the owner
+ * knows that is what they are agreeing to. Outside it there is still no way
+ * through by email, and the page says so rather than asking for a code that
+ * cannot exist.
+ */
+function recoverySecondFactorRule(row: {
+  accessLevel: "head_admin" | "junior_coach" | null
+  accountId: string | null
+  email: string
+  role: "coach" | "platform_admin" | "player" | null
+}, database: SmbaDatabaseExecutor, now: Date): "not_required" | "required" | "unavailable" {
+  if (!roleRequiresRecoverySecondFactor(row) || !row.accountId) return "not_required"
+  const factor = database.select({ verified: authTwoFactors.verified })
+    .from(authTwoFactors)
+    .where(eq(authTwoFactors.userId, row.accountId))
+    .get()
+  if (factor?.verified) return "required"
+  if (row.role === "coach" && recentlyApprovedAuthenticatorReset(row.accountId, row.email, database, now)) {
+    return "not_required"
+  }
+  return "unavailable"
+}
+
+/**
+ * Whether an emailed link can still be opened. Read-only: opening the email
+ * link only shows a page, and nothing is used up until the person presses
+ * Continue on it, so a mail scanner or a link preview that fetches the link
+ * first no longer spends it.
+ */
+export function recoveryLinkIsOpenable(token: string, intent: RecoveryLinkIntent, {
   database = initializeDatabase(),
   now = new Date(),
 }: {
   database?: SmbaDatabaseExecutor
   now?: Date
 } = {}) {
-  const challenge = recoveryChallenge(token, database, now)
-  if (!challenge || challenge.claimedAt) return false
-  return database.update(authEmailChallenges).set({ claimedAt: now, updatedAt: now })
+  const challenge = recoveryChallenge(token, intent, database, now)
+  return Boolean(challenge && !challenge.claimedAt)
+}
+
+/**
+ * Whether an unopened password link leads to a reset that email alone cannot
+ * finish (a protected account with no authenticator and no recent approval).
+ * The link page says so up front instead of promising a new password and
+ * spending the link on Continue only to say it there.
+ */
+export function passwordRecoveryLinkBlocked(token: string, {
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  const challenge = recoveryChallenge(token, "password", database, now)
+  if (!challenge || challenge.claimedAt || !challenge.role) return null
+  return recoverySecondFactorRule(challenge, database, now) === "unavailable"
+    ? { academyId: challenge.academyId, owner: challenge.role === "platform_admin" }
+    : null
+}
+
+// Opens an emailed link once: the stored hash moves to a new pass for this browser's cookie. Null when unusable.
+export function claimPasswordRecovery(token: string, {
+  database = initializeDatabase(),
+  intent = "password",
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  intent?: RecoveryLinkIntent
+  now?: Date
+} = {}) {
+  const challenge = recoveryChallenge(token, intent, database, now)
+  if (!challenge?.accountId || challenge.claimedAt) return null
+  const pass = randomBytes(32).toString("base64url")
+  const hashedSubject = subjectHash(recoverySubjectKeyForAccount(challenge.accountId))
+  const claimed = database.update(authEmailChallenges).set({
+    claimedAt: now,
+    secretHash: recoverySecretHash(intent, hashedSubject, challenge.challengeId, pass),
+    updatedAt: now,
+  })
     .where(and(
       eq(authEmailChallenges.id, challenge.challengeId),
       isNull(authEmailChallenges.claimedAt),
       isNull(authEmailChallenges.consumedAt),
       gt(authEmailChallenges.expiresAt, now),
     )).run().changes === 1
+  return claimed ? pass : null
 }
 
 export type PasswordRecoveryStatus =
   | { state: "missing" }
+  | { academyId: string; owner: boolean; state: "unavailable" }
   | {
     academyId: string
     requiresSecondFactor: boolean
@@ -971,9 +1275,17 @@ export function getPasswordRecoveryStatus(token: string, {
   database?: SmbaDatabaseExecutor
   now?: Date
 } = {}): PasswordRecoveryStatus {
-  const challenge = recoveryChallenge(token, database, now)
+  const challenge = recoveryChallenge(token, "password", database, now)
   if (!challenge?.claimedAt || !challenge.role) return { state: "missing" }
-  const requiresSecondFactor = roleRequiresRecoverySecondFactor(challenge)
+  const rule = recoverySecondFactorRule(challenge, database, now)
+  if (rule === "unavailable") {
+    return {
+      academyId: challenge.academyId,
+      owner: challenge.role === "platform_admin",
+      state: "unavailable",
+    }
+  }
+  const requiresSecondFactor = rule === "required"
   return {
     academyId: challenge.academyId,
     requiresSecondFactor,
@@ -993,7 +1305,7 @@ export function getAuthenticatorRecoveryStatus(token: string, {
   database?: SmbaDatabaseExecutor
   now?: Date
 } = {}): AuthenticatorRecoveryStatus {
-  const challenge = recoveryChallenge(token, database, now)
+  const challenge = recoveryChallenge(token, "authenticator", database, now)
   if (!challenge?.accountId
     || !challenge.claimedAt
     || challenge.role !== "coach"
@@ -1016,7 +1328,7 @@ export function submitAuthenticatorResetRequest(input: {
   database?: SmbaDatabase
   now?: Date
 } = {}) {
-  const challenge = recoveryChallenge(input.token, database, now)
+  const challenge = recoveryChallenge(input.token, "authenticator", database, now)
   if (!challenge?.accountId
     || !challenge.claimedAt
     || challenge.role !== "coach"
@@ -1093,7 +1405,9 @@ export function submitAuthenticatorResetRequest(input: {
 async function verifyAccountSecondFactor(input: {
   accountId: string
   credential: string
+  operation: string
   scope: SecondFactorScope
+  security?: SecurityMetadata
 }, {
   database,
   now,
@@ -1155,22 +1469,49 @@ async function verifyAccountSecondFactor(input: {
     return "invalid"
   }
 
-  const update = updatedBackupCodes
-    ? database.update(authTwoFactors).set({
-      backupCodes: updatedBackupCodes,
-      failedVerificationCount: 0,
-      lockedUntil: null,
-    }).where(and(
-      eq(authTwoFactors.id, factor.id),
-      eq(authTwoFactors.backupCodes, factor.backupCodes),
-    )).run()
-    : database.update(authTwoFactors).set({
+  /*
+   * A signed-in check keeps off the sign-in lock in success as it does in
+   * failure: proving the code inside a session used to clear a lock that
+   * somebody guessing at the sign-in page had run up, handing them a fresh
+   * eight. Only a spent recovery code is written back from a signed-in check.
+   */
+  if (updatedBackupCodes) {
+    const update = database.update(authTwoFactors).set(signInScope
+      ? { backupCodes: updatedBackupCodes, failedVerificationCount: 0, lockedUntil: null }
+      : { backupCodes: updatedBackupCodes })
+      .where(and(
+        eq(authTwoFactors.id, factor.id),
+        eq(authTwoFactors.backupCodes, factor.backupCodes),
+      )).run()
+    if (update.changes !== 1) return "invalid"
+    // A recovery code stands in for the authenticator, and each is single-use,
+    // so every use is one the owner's security alert must hear about --
+    // including here, where a recovery code is spent to reset a password or
+    // move the recovery email.
+    writeAuthSecurityEvent({
+      accountId: input.accountId,
+      eventType: "totp_verified",
+      ipHash: input.security?.ipHash,
+      metadata: { method: "backup_code", operation: input.operation },
+      outcome: "success",
+      userAgent: input.security?.userAgent,
+    }, { database, now })
+  } else if (signInScope) {
+    database.update(authTwoFactors).set({
       failedVerificationCount: 0,
       lockedUntil: null,
     }).where(eq(authTwoFactors.id, factor.id)).run()
-  if (update.changes !== 1) return "invalid"
+  }
   releaseSecondFactorAttempt(input.accountId, { database })
   return "verified"
+}
+
+function passwordRecoveryFactorAttempt(accountId: string, ipHash?: string | null) {
+  return requestThrottleKeys(`recovery-factor:${accountId}`, ipHash, "recovery-code")
+}
+
+function freshAccountFactorAttempt(accountId: string, ipHash?: string | null) {
+  return requestThrottleKeys(`fresh-account-factor:${accountId}`, ipHash, "recovery-code")
 }
 
 export async function verifyPasswordRecoverySecondFactor(input: {
@@ -1184,14 +1525,11 @@ export async function verifyPasswordRecoverySecondFactor(input: {
   database?: SmbaDatabase
   now?: Date
 } = {}) {
-  const challenge = recoveryChallenge(input.token, database, now)
+  const challenge = recoveryChallenge(input.token, "password", database, now)
   if (!challenge?.accountId || !challenge.claimedAt || !roleRequiresRecoverySecondFactor(challenge)) {
     return false
   }
-  const attempt = requestThrottleKeys(
-    `recovery-factor:${challenge.accountId}`,
-    input.security?.ipHash,
-  )
+  const attempt = passwordRecoveryFactorAttempt(challenge.accountId, input.security?.ipHash)
   const blocked = () => {
     writeAuthSecurityEvent({
       accountId: challenge.accountId,
@@ -1207,7 +1545,9 @@ export async function verifyPasswordRecoverySecondFactor(input: {
   const result = await verifyAccountSecondFactor({
     accountId: challenge.accountId,
     credential: input.credential,
+    operation: "password_recovery",
     scope: "challenge",
+    security: input.security,
   }, { database, now })
   if (result === "blocked") return blocked()
   if (result === "invalid") {
@@ -1238,6 +1578,7 @@ export async function verifyPasswordRecoverySecondFactor(input: {
 export async function verifyFreshAccountSecondFactor(input: {
   accountId: string
   credential: string
+  operation?: string
   security?: SecurityMetadata
 }, options?: {
   database?: SmbaDatabase
@@ -1245,15 +1586,14 @@ export async function verifyFreshAccountSecondFactor(input: {
 }) {
   const database = options?.database ?? initializeDatabase()
   const now = options?.now ?? new Date()
-  const attempt = requestThrottleKeys(
-    `fresh-account-factor:${input.accountId}`,
-    input.security?.ipHash,
-  )
+  const attempt = freshAccountFactorAttempt(input.accountId, input.security?.ipHash)
   if (!reserveLoginAttempt(attempt, { database, now })) return false
   const result = await verifyAccountSecondFactor({
     accountId: input.accountId,
     credential: input.credential,
+    operation: input.operation ?? "change_recovery_email",
     scope: "session",
+    security: input.security,
   }, { database, now })
   if (result !== "verified") return false
   releaseLoginAttempt(attempt, { database, now })
@@ -1272,9 +1612,11 @@ export async function completePasswordRecovery(input: {
   now?: Date
 } = {}) {
   if (validateNewPassword(input.password)) return false
-  const challenge = recoveryChallenge(input.token, database, now)
+  const challenge = recoveryChallenge(input.token, "password", database, now)
   if (!challenge?.accountId || !challenge.claimedAt || !challenge.role) return false
-  if (roleRequiresRecoverySecondFactor(challenge) && !challenge.secondFactorVerifiedAt) return false
+  const rule = recoverySecondFactorRule(challenge, database, now)
+  if (rule === "unavailable") return false
+  if (rule === "required" && !challenge.secondFactorVerifiedAt) return false
   const passwordHash = await hashPassword(input.password)
 
   return database.transaction((tx) => {
@@ -1314,6 +1656,10 @@ export async function completePasswordRecovery(input: {
         eq(authAccessCodes.purpose, "password_reset"),
         isNull(authAccessCodes.consumedAt),
       )).run()
+    // The person has just proved the account is theirs and chosen a new
+    // password; the pause their earlier wrong guesses ran up would otherwise
+    // refuse that new password with "wait a few minutes".
+    clearSignInPauses(challenge.academyId, { database: tx })
     if (removedPin) {
       writeAuthSecurityEvent({
         accountId: challenge.accountId,
@@ -1339,4 +1685,11 @@ export async function completePasswordRecovery(input: {
     }, { database: tx, now })
     return true
   }, { behavior: "immediate" })
+}
+
+/** Why email alone cannot reset a protected account with no authenticator. */
+export function protectedResetUnavailableCopy(academyId: string, owner: boolean) {
+  return owner
+    ? `${academyId} is the platform admin account and has no authenticator connected, so its password cannot be reset by email. It needs a manual fix by whoever looks after the portal’s hosting.`
+    : `${academyId} is a protected account with no authenticator connected, so its password cannot be reset by email alone. That is only possible for 24 hours after the platform admin approves an authenticator reset sent from this recovery email. Contact the platform admin, confirm who you are, and ask them to help you back in.`
 }

@@ -98,7 +98,7 @@ export async function approveAuthenticatorResetRequestAction(requestId: string) 
   revalidatePath("/admin")
   return approved
     ? { message: "Authenticator reset approved. The coach can now sign in and connect a new authenticator.", ok: true as const }
-    : { message: "This request is unavailable, expired, or no longer matches the verified recovery email.", ok: false as const }
+    : { message: "This request is unavailable, expired, withdrawn by the coach, or no longer matches the verified recovery email.", ok: false as const }
 }
 
 export async function rejectAuthenticatorResetRequestAction(requestId: string) {
@@ -107,5 +107,5 @@ export async function rejectAuthenticatorResetRequestAction(requestId: string) {
   revalidatePath("/admin")
   return rejected
     ? { message: "Authenticator reset request rejected.", ok: true as const }
-    : { message: "This request is unavailable or expired.", ok: false as const }
+    : { message: "This request is unavailable, expired or withdrawn by the coach.", ok: false as const }
 }

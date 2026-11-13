@@ -9,6 +9,7 @@ import {
 } from "@/components/recovery-reset-forms"
 import {
   getPasswordRecoveryStatus,
+  protectedResetUnavailableCopy,
   RECOVERY_SESSION_COOKIE,
 } from "@/lib/auth/recovery-service"
 import { publicSiteUrl } from "@/lib/config"
@@ -33,20 +34,35 @@ export default async function RecoveryResetPage() {
           <h1 id="recovery-reset-title">
             {status.state === "missing"
               ? "This recovery link is unavailable."
-              : status.requiresSecondFactor && !status.secondFactorVerified
-                ? "Verify it’s you."
-                : "Create a new password."}
+              : status.state === "unavailable"
+                ? "This reset needs the platform admin."
+                : status.requiresSecondFactor && !status.secondFactorVerified
+                  ? "Verify it’s you."
+                  : "Create a new password."}
           </h1>
           <p>{status.state === "missing"
             ? "Request a new email from the recovery page."
-            : status.requiresSecondFactor && !status.secondFactorVerified
-              ? "This protected account also requires its existing authenticator."
-              : `Resetting ${status.academyId} will log out every device and remove its old PIN.`}</p>
+            : status.state === "unavailable"
+              ? protectedResetUnavailableCopy(status.academyId, status.owner)
+              : status.requiresSecondFactor && !status.secondFactorVerified
+                ? "This protected account also requires its existing authenticator."
+                : `Resetting ${status.academyId} will log out every device and remove its old PIN.`}</p>
         </div>
         {status.state === "missing" ? (
           <div className="login-empty-state"><Link href="/recover">Request another link</Link></div>
+        ) : status.state === "unavailable" ? (
+          <div className="login-empty-state"><Link href="/login">Back to sign-in</Link></div>
         ) : status.requiresSecondFactor && !status.secondFactorVerified
-          ? <RecoverySecondFactorForm />
+          ? (
+            <>
+              <RecoverySecondFactorForm />
+              <p className="login-helper">
+                Lost your authenticator and every recovery code?{" "}
+                <Link href="/auth/two-factor/recovery">Ask the platform admin to reset the authenticator</Link>.
+                Once they approve, use “Forgot password?” again within 24 hours and no code will be asked for.
+              </p>
+            </>
+          )
           : <RecoveryPasswordForm />}
         <Link className="login-back" href="/login">← Back to login</Link>
       </section>

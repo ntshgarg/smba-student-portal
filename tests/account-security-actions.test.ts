@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   disableTwoFactor: vi.fn(),
+  endExpiredSessions: vi.fn<(accountId: string) => number>(() => 3),
   forgetTrustedDevices: vi.fn<(accountId: string) => number>(() => 2),
   generateBackupCodes: vi.fn(),
   getCoachAccessProfile: vi.fn(),
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   verifyCurrentPassword: vi.fn(),
   verifyCurrentPasswordAttempt: vi.fn(),
   verifyTOTP: vi.fn(),
+  withdrawPendingAuthenticatorResetRequests: vi.fn(),
   writeAuthSecurityEvent: vi.fn(),
 }))
 
@@ -65,7 +67,11 @@ vi.mock("@/lib/auth/security-context", () => ({
 }))
 vi.mock("@/lib/auth/session", () => ({ getRawAuthSession: mocks.getRawAuthSession }))
 vi.mock("@/lib/auth/second-factor-reset", () => ({
+  endExpiredSessions: mocks.endExpiredSessions,
   forgetTrustedDevices: mocks.forgetTrustedDevices,
+}))
+vi.mock("@/lib/auth/authenticator-reset-service", () => ({
+  withdrawPendingAuthenticatorResetRequests: mocks.withdrawPendingAuthenticatorResetRequests,
 }))
 vi.mock("@/lib/data", () => ({
   sessionProvider: { getCurrentIdentity: mocks.getCurrentIdentity },

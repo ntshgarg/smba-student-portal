@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
 
 import { getAuth } from "@/lib/auth/better-auth"
+import { withdrawPendingAuthenticatorResetRequests } from "@/lib/auth/authenticator-reset-service"
 import {
   hasPinCredential,
   releaseLoginAttempt,
@@ -20,7 +21,7 @@ import {
 } from "@/lib/auth/credential-service"
 import { getCoachAccessProfile } from "@/lib/auth/coach-access"
 import { normalizeAcademyId } from "@/lib/auth/identity"
-import { forgetTrustedDevices } from "@/lib/auth/second-factor-reset"
+import { endExpiredSessions, forgetTrustedDevices } from "@/lib/auth/second-factor-reset"
 import { getRawAuthSession } from "@/lib/auth/session"
 import { sessionProvider } from "@/lib/data"
 import {
@@ -160,6 +161,9 @@ export async function revokeOtherSessionsAction() {
   const identity = await requireIdentity()
   const requestHeaders = await headers()
   await getAuth().api.revokeOtherSessions({ headers: requestHeaders })
+  // The library ends only live sign-ins; the dead ones it leaves behind would
+  // still be listed and counted as devices afterwards.
+  endExpiredSessions(identity.subjectId)
   /*
    * Trusted browsers go too, this one included. Ending a lost phone's session
    * is not enough while that phone is still trusted to skip the authenticator
@@ -197,17 +201,58 @@ export async function revokeSessionAction(sessionId: string) {
   const identity = await requireIdentity()
   if (typeof sessionId !== "string" || !sessionId.trim()) return
   const database = initializeDatabase()
-  database.delete(authRuntimeSessions).where(and(
+  const ended = database.delete(authRuntimeSessions).where(and(
     eq(authRuntimeSessions.id, sessionId),
     eq(authRuntimeSessions.userId, identity.subjectId),
-  )).run()
-  writeAuthSecurityEvent({
-    accountId: identity.subjectId,
-    actorAccountId: identity.subjectId,
-    eventType: "sessions_revoked",
-    metadata: { scope: "one_device" },
-    outcome: "success",
-  })
+  )).run().changes
+  // Recorded only when a device was actually signed out: a second press, or an
+  // id that is not this account's, ends nothing and is not a security event.
+  if (ended > 0) {
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      actorAccountId: identity.subjectId,
+      eventType: "sessions_revoked",
+      metadata: { scope: "one_device" },
+      outcome: "success",
+    })
+  }
+  revalidatePath("/account/security")
+}
+
+/**
+ * Forgets every browser trusted to skip the authenticator code, this one
+ * included. Until now the only way to undo a "trust this device" was to log
+ * every other device out as well, and nothing showed which browsers were
+ * trusted in the first place.
+ */
+export async function forgetTrustedBrowsersAction() {
+  const identity = await requireIdentity()
+  if (identity.previewMode) return
+  const forgottenDevices = forgetTrustedDevices(identity.subjectId)
+  if (forgottenDevices > 0) {
+    const security = requestSecurityContext(await headers())
+    writeAuthSecurityEvent({
+      accountId: identity.subjectId,
+      actorAccountId: identity.subjectId,
+      eventType: "sessions_revoked",
+      ipHash: security.ipHash,
+      metadata: { forgottenDevices, scope: "trusted_browsers" },
+      outcome: "success",
+      userAgent: security.userAgent,
+    })
+  }
+  revalidatePath("/account/security")
+}
+
+/**
+ * Withdraws an authenticator reset request still waiting for the owner --
+ * the coach found the phone, or never asked and someone holding the recovery
+ * inbox did. Nothing else about the account changes.
+ */
+export async function cancelAuthenticatorResetRequestAction() {
+  const identity = await requireIdentity()
+  if (identity.previewMode) return
+  withdrawPendingAuthenticatorResetRequests(identity.subjectId, { reason: "cancelled_by_coach" })
   revalidatePath("/account/security")
 }
 

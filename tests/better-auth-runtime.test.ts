@@ -307,6 +307,73 @@ describe("Better Auth runtime adapter", () => {
     })).rejects.toThrow()
   })
 
+  // "Trust this private device for 30 days" means 30 days from when it was first given.
+  it("holds a renewed trust to the date it was first given", async () => {
+    clearLoginAttempts()
+    const readSecret = async () => {
+      const sqlite = new Database(databasePath, { readonly: true })
+      const row = sqlite.prepare("select secret from auth_two_factors limit 1").get() as { secret: string }
+      sqlite.close()
+      return symmetricDecrypt({ data: row.secret, key: process.env.BETTER_AUTH_SECRET! })
+    }
+    const cookieFrom = (headers: Headers, name: string) => headers.getSetCookie()
+      .filter((cookie) => cookie.startsWith(`smba.${name}=`) && !cookie.includes("Max-Age=0"))
+      .at(-1)
+      ?.split(";")[0] ?? ""
+    const trustRows = () => {
+      const sqlite = new Database(databasePath, { readonly: true })
+      const rows = sqlite.prepare(
+        "select expires_at as expiresAt from auth_verifications where value = ? and identifier like 'trust-device-%'",
+      ).all(coachAccountId) as { expiresAt: number }[]
+      sqlite.close()
+      return rows
+    }
+
+    const challenge = await auth.api.signInUsername({
+      body: { password: "SMBA local access 2026!", username: "SMBA#0001" },
+      headers: new Headers(),
+      returnHeaders: true,
+    })
+    expect(challenge.response).toMatchObject({ twoFactorRedirect: true })
+    const trusted = await auth.api.verifyTOTP({
+      body: { code: await createOTP(await readSecret()).totp(), trustDevice: true },
+      headers: new Headers({ cookie: cookieFrom(challenge.headers, "two_factor") }),
+      returnHeaders: true,
+    })
+    const trustCookie = cookieFrom(trusted.headers, "trust_device")
+    expect(trustCookie).toContain("smba.trust_device=")
+    expect(trustRows()).toHaveLength(1)
+
+    // Pretend the box was ticked 29 days ago: one day of trust is left.
+    const firstGivenUntil = Date.now() + 24 * 60 * 60 * 1000
+    const writable = new Database(databasePath)
+    writable.prepare("update auth_verifications set expires_at = ? where value = ? and identifier like 'trust-device-%'")
+      .run(firstGivenUntil, coachAccountId)
+    writable.close()
+
+    const renewed = await auth.api.signInUsername({
+      body: { password: "SMBA local access 2026!", username: "SMBA#0001" },
+      headers: new Headers({ cookie: trustCookie }),
+      returnHeaders: true,
+    })
+    expect(renewed.response).not.toMatchObject({ twoFactorRedirect: true })
+    const renewedRows = trustRows()
+    expect(renewedRows).toHaveLength(1)
+    // Not another thirty days from now: the day that was left, and no more.
+    expect(renewedRows[0]!.expiresAt).toBeLessThanOrEqual(firstGivenUntil)
+    const renewedCookie = cookieFrom(renewed.headers, "trust_device") || trustCookie
+
+    // Once the first date passes, the code is asked for again.
+    const expired = new Database(databasePath)
+    expired.prepare("update auth_verifications set expires_at = ? where value = ? and identifier like 'trust-device-%'")
+      .run(Date.now() - 1_000, coachAccountId)
+    expired.close()
+    await expect(auth.api.signInUsername({
+      body: { password: "SMBA local access 2026!", username: "SMBA#0001" },
+      headers: new Headers({ cookie: renewedCookie }),
+    })).resolves.toMatchObject({ twoFactorRedirect: true })
+  })
+
   it("rejects an incorrect password through the same adapter", async () => {
     await expect(auth.api.signInUsername({
       body: {

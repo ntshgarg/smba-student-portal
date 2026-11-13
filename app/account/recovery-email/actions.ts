@@ -11,8 +11,12 @@ import {
 import { secureAuthCookiesRequired } from "@/lib/auth/cookie-policy"
 import {
   confirmRecoveryEmailVerification,
+  EMAIL_VERIFICATION_LIFETIME_MS,
   getRecoveryEmail,
   HEAD_SETUP_EMAIL_COOKIE,
+  normalizeEmailAddress,
+  notifyRecoveryEmailReplaced,
+  recoveryEmailSendRefusal,
   recoverySubjectKeyForAccount,
   recoverySubjectKeyForHeadSetup,
   requestRecoveryEmailVerification,
@@ -38,6 +42,8 @@ export type RecoveryEmailEnrollmentState = {
 async function securityContext() {
   return requestSecurityContext(await headers())
 }
+
+const TOO_MANY_ATTEMPTS = "Too many attempts. Wait a few minutes before trying again."
 
 export async function requestActivationRecoveryEmail(
   _previousState: RecoveryEmailEnrollmentState,
@@ -105,12 +111,44 @@ export async function requestCurrentRecoveryEmail(
   // for the current password and, for privileged roles, a fresh second factor.
   if (getRecoveryEmail(identity.subjectId)) redirect("/account/security")
   const email = String(formData.get("email") ?? "")
+  const currentPassword = String(formData.get("currentPassword") ?? "")
+  if (!email.trim()) {
+    return { email, error: "Enter a valid recovery email address.", sent: false }
+  }
+  if (!currentPassword) {
+    return { email, error: "Enter your current password or PIN.", sent: false }
+  }
+  const security = await securityContext()
+  const subjectKey = recoverySubjectKeyForAccount(identity.subjectId)
+  // Read before the password is checked, so a refusal to send costs nothing.
+  const refusal = recoveryEmailSendRefusal({ security, subjectKey })
+  if (refusal) return { email, error: refusal, sent: false }
+  // The first recovery address also needs the password (or PIN, for players
+  // who only use a PIN), so a borrowed signed-in device cannot take the account.
+  const passwordResult = await verifyCurrentPasswordAttempt({
+    academyId: identity.academyId,
+    accountId: identity.subjectId,
+    ipHash: security.ipHash,
+    allowPin: true,
+    operation: "add_recovery_email",
+    password: currentPassword,
+    userAgent: security.userAgent,
+  })
+  if (passwordResult !== "verified") {
+    return {
+      email,
+      error: passwordResult === "blocked"
+        ? TOO_MANY_ATTEMPTS
+        : "That password or PIN could not be verified.",
+      sent: false,
+    }
+  }
   try {
     const sent = await requestRecoveryEmailVerification({
       accountId: identity.subjectId,
       email,
-      security: await securityContext(),
-      subjectKey: recoverySubjectKeyForAccount(identity.subjectId),
+      security,
+      subjectKey,
     })
     return { email: sent.email, error: null, sent: true }
   } catch (error) {
@@ -162,6 +200,10 @@ export async function requestRecoveryEmailChange(
     return { email, error: "Enter your current password.", sent: false }
   }
   const context = await securityContext()
+  const subjectKey = recoverySubjectKeyForAccount(identity.subjectId)
+  // Read before any check, so a refusal to send spends no code.
+  const refusal = recoveryEmailSendRefusal({ security: context, subjectKey })
+  if (refusal) return { email, error: refusal, sent: false }
   const passwordResult = await verifyCurrentPasswordAttempt({
     academyId: identity.academyId,
     accountId: identity.subjectId,
@@ -190,6 +232,7 @@ export async function requestRecoveryEmailChange(
     if (!await verifyFreshAccountSecondFactor({
       accountId: identity.subjectId,
       credential,
+      operation: "change_recovery_email",
       security: context,
     })) {
       return { email, error: "The authenticator or backup code was not accepted.", sent: false }
@@ -199,8 +242,8 @@ export async function requestRecoveryEmailChange(
     const sent = await requestRecoveryEmailVerification({
       accountId: identity.subjectId,
       email,
-      security: await securityContext(),
-      subjectKey: recoverySubjectKeyForAccount(identity.subjectId),
+      security: context,
+      subjectKey,
     })
     return { email: sent.email, error: null, sent: true }
   } catch (error) {
@@ -227,7 +270,22 @@ export async function confirmRecoveryEmailChange(
     security: await securityContext(),
     subjectKey: recoverySubjectKeyForAccount(identity.subjectId),
   })
-  if (!confirmed) return { email, error: "That code is invalid or expired.", sent: true }
+  if (!confirmed) {
+    // A lost response may hide a change that landed: if this address was just confirmed, say so.
+    const current = getRecoveryEmail(identity.subjectId)
+    const submitted = normalizeEmailAddress(email)
+    if (current && submitted && current.email === submitted
+      && Date.now() - current.verifiedAt.getTime() < EMAIL_VERIFICATION_LIFETIME_MS) {
+      redirect("/account/security?emailChanged=1")
+    }
+    return { email, error: "That code is invalid or expired.", sent: true }
+  }
+  // Tell the replaced address.
+  await notifyRecoveryEmailReplaced({
+    accountId: identity.subjectId,
+    newEmail: confirmed.email,
+    previousEmail: confirmed.previousEmail,
+  })
   redirect("/account/security?emailChanged=1")
 }
 

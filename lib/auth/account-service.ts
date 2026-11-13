@@ -37,11 +37,13 @@ import {
 } from "@/lib/auth/credential-service"
 import {
   confirmRegistrationVerification,
+  emailCodeChecksPaused,
   genericAcceptedResponse,
   normalizeEmailAddress,
   registrationSubjectKey,
   requestRegistrationVerification,
 } from "@/lib/auth/recovery-service"
+import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { authRecoveryEmails } from "@/lib/db/schema"
 import type { AuthMailer } from "@/lib/auth/mailer"
 import type { RegistrationStanding } from "@/lib/auth/registration-form"
@@ -96,6 +98,23 @@ export function registrationIdentity(fullName: string, email: string) {
     normalizedName,
     subjectKey: registrationSubjectKey(normalizedEmail, normalizedName),
   }
+}
+
+/** Whether registration code checks are paused from this connection. Read-only. */
+export function registrationCodeChecksPaused(input: {
+  email: string
+  fullName: string
+  security?: RegistrationSecurity
+}, options?: {
+  database?: SmbaDatabase
+  now?: Date
+}) {
+  const identity = registrationIdentity(normalizeFullName(input.fullName), input.email)
+  if (!identity) return false
+  return emailCodeChecksPaused({
+    security: input.security,
+    subjectKey: identity.subjectKey,
+  }, options)
 }
 
 export function normalizeRegistrationPhone(value: string) {
@@ -347,6 +366,14 @@ export function confirmRegistration(input: {
         createdAt: now,
         updatedAt: now,
       }).run()
+      // Recorded as every other path that sets a recovery address records it,
+      // so the security log shows where each account's address came from.
+      writeAuthSecurityEvent({
+        accountId,
+        eventType: "recovery_email_verified",
+        metadata: { source: "registration" },
+        outcome: "success",
+      }, { database: tx, now })
       if (input.activationToken) {
         saveActivationClaim({ accountId, token: input.activationToken }, { database: tx, now })
       }

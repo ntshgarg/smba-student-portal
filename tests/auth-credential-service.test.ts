@@ -712,4 +712,34 @@ describe("production credential lifecycle", () => {
     })).resolves.toBe("invalid")
   })
 
+  it("accepts the PIN in place of the password only where it is allowed", async () => {
+    const playerId = "pin-confirmation-player"
+    const { academyId, activationToken } = createApprovedPlayer(playerId, "Pin Confirmation Player")
+    await completeAccountActivation({ token: activationToken, password: PASSWORD }, { database, now: NOW })
+    await setPinCredential({ accountId: playerId, pin: "618203" }, { database, now: NOW })
+    const attempt = {
+      academyId,
+      accountId: playerId,
+      ipHash: "pin-confirmation-ip",
+      operation: "add_recovery_email",
+      userAgent: "test",
+    }
+
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, password: "618203" }, { database, now: NOW }))
+      .resolves.toBe("invalid")
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, allowPin: true, password: "618203" }, {
+      database,
+      now: NOW,
+    })).resolves.toBe("verified")
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, allowPin: true, password: "618204" }, {
+      database,
+      now: NOW,
+    })).resolves.toBe("invalid")
+    // The password still works where the PIN is allowed.
+    await expect(verifyCurrentPasswordAttempt({ ...attempt, allowPin: true, password: PASSWORD }, {
+      database,
+      now: NOW,
+    })).resolves.toBe("verified")
+  })
+
 })
