@@ -21,6 +21,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react"
 
 import {
@@ -143,6 +144,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     sessionSeries,
   } = useSessionPortal()
   const router = useRouter()
+  const [isChangingPlayer, startPlayerChange] = useTransition()
   const initialAdjustment = attendanceAdjustments.find((item) => item.id === initialAdjustmentId)
   const requestedInitialPlayerId = initialAdjustment?.playerId ?? initialPlayerId
   const validInitialPlayerId = players.some(
@@ -425,7 +427,11 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     if (playerId) params.set("player", playerId)
     else params.delete("player")
     const query = params.toString()
-    router.replace(`${window.location.pathname}${query ? `?${query}` : ""}`, { scroll: false })
+    // Only the player's own absences are loaded, so until this lands the records
+    // on screen belong to the player just left, not to the one chosen.
+    startPlayerChange(() => {
+      router.replace(`${window.location.pathname}${query ? `?${query}` : ""}`, { scroll: false })
+    })
   }
 
   function chooseSource(occurrenceId: string) {
@@ -765,6 +771,11 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                           ))}
                         </div>
                       ) : null}
+                    </div>
+                  ) : isChangingPlayer ? (
+                    <div className="coach-adjustment-empty-step is-compact" role="status">
+                      <CalendarDays aria-hidden="true" />
+                      <p>Checking for missed sessions…</p>
                     </div>
                   ) : (
                     <div className="coach-adjustment-empty-step is-compact">
