@@ -27,6 +27,12 @@ export function ConcessionManagement({
   // A recurring concession whose last month has passed reads as ended, as in Members.
   const running = (concession: CoachConcessionView) => concession.lifecycle === "active"
     && !(concession.endsPeriod && concession.endsPeriod < thisMonth)
+  // A new concession starts next month, so it is not yet in force.
+  const statusLabel = (concession: CoachConcessionView) => !running(concession)
+    ? "Ended"
+    : concession.startsPeriod && concession.startsPeriod > thisMonth
+      ? `Starts ${periodLabel(concession.startsPeriod)}`
+      : "Active"
 
   return (
     <details className={styles.concessions}>
@@ -51,7 +57,7 @@ export function ConcessionManagement({
                     <strong>{concessionValueLabel(concession)}</strong>
                   </div>
                   <em className={running(concession) ? undefined : styles.concessionEnded}>
-                    {running(concession) ? "Active" : "Ended"}
+                    {statusLabel(concession)}
                   </em>
                 </header>
                 <p>{concession.reason}</p>

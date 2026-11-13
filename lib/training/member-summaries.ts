@@ -8,6 +8,7 @@ import {
   concessions,
   feeAgreements,
   financialCharges,
+  playerEnrollments,
   trainingChanges,
 } from "@/lib/db/schema"
 import { loadChargeViews } from "@/lib/finance/repository"
@@ -76,10 +77,11 @@ export type MemberFeeSummary = {
    * Why no fee will be issued next month although the plan has one: no
    * running place reaches into next month and no booked move gives them one.
    * "term-finished" when the player's term has finished
-   * (lib/sessions/term.ts), "no-schedule" otherwise. Null when next month's
-   * fee is issued as shown.
+   * (lib/sessions/term.ts), "schedule-ends" when a running schedule ends this
+   * month, "no-schedule" otherwise. Null when next month's fee is issued as
+   * shown.
    */
-  nextMonthNoFee: "no-schedule" | "term-finished" | null
+  nextMonthNoFee: "no-schedule" | "schedule-ends" | "term-finished" | null
   thisMonth: {
     amountPaise: number
     /**
@@ -113,9 +115,10 @@ export type MemberTrainingSummaries = {
 }
 
 /**
- * The term-finished players the head coach still has to move: those with no
- * move or end of training booked for them in Members yet (termFinishedToMove
- * in lib/sessions/term.ts). The dashboard's to-do counts them; Members'
+ * The term-finished players the head coach still has to move: those past
+ * Player onboarding with no move or end of training booked for them in
+ * Members yet (termFinishedToMove in lib/sessions/term.ts). The dashboard's
+ * to-do counts them; Members'
  * "Term finished" filter lists the same players, reading the booked change
  * from listMemberTrainingSummaries below.
  */
@@ -135,7 +138,19 @@ export function listTermFinishedPlayersToMove(
     ))
     .all()
     .map((row) => row.playerId))
-  return finished.filter((playerId) => termFinishedToMove("finished", booked.has(playerId)))
+  const inOnboarding = new Set(database.select({ playerId: playerEnrollments.accountId })
+    .from(playerEnrollments)
+    .where(and(
+      inArray(playerEnrollments.accountId, finished),
+      isNull(playerEnrollments.onboardingCompletedAt),
+    ))
+    .all()
+    .map((row) => row.playerId))
+  return finished.filter((playerId) => termFinishedToMove(
+    "finished",
+    booked.has(playerId),
+    inOnboarding.has(playerId),
+  ))
 }
 
 function covers(
@@ -295,7 +310,11 @@ export function listMemberTrainingSummaries(
       nextMonthFeePaise: feesStop ? null : scheduledFee ?? next?.agreedMonthlyFeePaise ?? null,
       nextMonthNoFee: placeNextMonth || feesStop
         ? null
-        : termFinishedOn(places, today) ? "term-finished" : "no-schedule",
+        : termFinishedOn(places, today)
+          ? "term-finished"
+          : places.some((place) => scheduleIsRunning(place, today) && place.endsOn && place.endsOn < nextMonthStart)
+            ? "schedule-ends"
+            : "no-schedule",
       waitingFeeChange: waitingFee
         ? {
           agreementId: waitingFee.change.id,

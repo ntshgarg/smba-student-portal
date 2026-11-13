@@ -298,9 +298,11 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                 </div>
                 <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthNoFee === "term-finished"
                   ? "No fee: term finished"
-                  : fee.nextMonthNoFee === "no-schedule"
-                    ? "No fee: not on a schedule"
-                    : fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
+                  : fee.nextMonthNoFee === "schedule-ends"
+                    ? "No fee: schedule ends this month"
+                    : fee.nextMonthNoFee === "no-schedule"
+                      ? "No fee: not on a schedule"
+                      : fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
                 <div>
                   <dt>Concession</dt>
                   <dd>{fee.concession

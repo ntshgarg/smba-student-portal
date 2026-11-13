@@ -243,6 +243,7 @@ describe("what is left to do once a term has finished", () => {
   it("leaves a player whose move or end is booked out of the players to move", () => {
     expect(termFinishedToMove("finished", false)).toBe(true)
     expect(termFinishedToMove("finished", true)).toBe(false)
+    expect(termFinishedToMove("finished", false, true)).toBe(false)
     // Only a finished term is ever "to move".
     expect(termFinishedToMove("active", false)).toBe(false)
     expect(termFinishedToMove("paused", false)).toBe(false)

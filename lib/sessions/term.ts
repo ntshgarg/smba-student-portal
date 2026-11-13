@@ -85,10 +85,15 @@ export function playerTrainingStatus({
  * change) has dealt with them: they stay "Term finished" until it happens on
  * its day, because their place stays open until then, but they leave the
  * dashboard's to-do and the Members list it links to, so both show only who
- * is left.
+ * is left. A player still in Player onboarding cannot be moved yet (Members
+ * asks for onboarding first), so they are not counted either.
  */
-export function termFinishedToMove(status: PlayerTrainingStatus, hasBookedChange: boolean) {
-  return status === "finished" && !hasBookedChange
+export function termFinishedToMove(
+  status: PlayerTrainingStatus,
+  hasBookedChange: boolean,
+  inOnboarding = false,
+) {
+  return status === "finished" && !hasBookedChange && !inOnboarding
 }
 
 /**

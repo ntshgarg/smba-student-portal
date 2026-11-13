@@ -167,6 +167,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
           ? termFinishedToMove(
             player.training.status,
             Boolean(memberTraining?.summaries[player.member.id]?.scheduled),
+            player.member.onboardingCompletedAt === null,
           )
           : player.training.status === status)
         const matchesBatch = batch === "All batches" || player.training.batch === batch

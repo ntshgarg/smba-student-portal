@@ -285,6 +285,15 @@ describe("Members shows a finished term", () => {
     expect(html).not.toContain(">Change fee<")
   })
 
+  it("says a running schedule that ends this month leaves next month without a fee", () => {
+    const html = renderActions(
+      player("running", { activeSessionIds: ["season"] }),
+      fee({ nextMonthNoFee: "schedule-ends" }),
+    )
+
+    expect(nextMonthLine(html)).toBe("No fee: schedule ends this month")
+  })
+
   it("leaves a running player's fee and Change fee as they were", () => {
     const html = renderActions(player("running", { activeSessionIds: ["season"] }), fee())
 
