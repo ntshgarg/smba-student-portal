@@ -996,7 +996,8 @@ async function reviewRegistration(
   } else {
     coachPage.once("dialog", (dialog) => dialog.accept())
     await row.getByRole("button", { name: "Reject request" }).click()
-    await expect(row).toBeHidden()
+    // A rejected request moves to Rejected requests, where it can be undone.
+    await expect(row.getByRole("button", { name: "Undo rejection" })).toBeVisible()
   }
 }
 
