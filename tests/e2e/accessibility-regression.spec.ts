@@ -103,17 +103,31 @@ function accountIdForAcademyId(database: Database.Database, academyId: string) {
   return row.accountId
 }
 
-function insertRecoveryChallenge(academyId: string, email: string) {
+function insertRecoveryChallenge(
+  academyId: string,
+  email: string,
+  intent: "password" | "authenticator" = "password",
+) {
   const database = new Database(databasePath)
   try {
     const accountId = accountIdForAcademyId(database, academyId)
     const challengeId = randomUUID()
     const token = randomBytes(32).toString("base64url")
     const now = Date.now()
+    // A link only works for the address currently on file, so send it there.
+    const onFile = database.prepare("select email from auth_recovery_emails where account_id = ?")
+      .get(accountId) as { email: string } | undefined
+    if (!onFile) {
+      database.prepare(`
+        insert into auth_recovery_emails (account_id, email, verified_at, created_at, updated_at)
+        values (?, ?, ?, ?, ?)
+      `).run(accountId, email, now, now, now)
+    }
+    const challengeEmail = onFile?.email ?? email
     const subject = recoveryDigest("recovery-subject", `account:${accountId}`)
     const secretHash = recoveryDigest(
       "email-password_reset",
-      `${subject}:${challengeId}:${token}`,
+      `${subject}:${challengeId}:${intent === "password" ? token : `authenticator:${token}`}`,
     )
     database.prepare(`
       insert into auth_email_challenges (
@@ -124,23 +138,27 @@ function insertRecoveryChallenge(academyId: string, email: string) {
       challengeId,
       accountId,
       subject,
-      email,
+      challengeEmail,
       secretHash,
       now + 20 * 60 * 1000,
       now,
       now,
       now,
     )
-    return { accountId, challengeId, token }
+    return { accountId, challengeId, insertedRecoveryEmail: !onFile, token }
   } finally {
     database.close()
   }
 }
 
-function deleteRecoveryChallenge(challengeId: string) {
+function deleteRecoveryChallenge(challenge: ReturnType<typeof insertRecoveryChallenge>) {
   const database = new Database(databasePath)
   try {
-    database.prepare("delete from auth_email_challenges where id = ?").run(challengeId)
+    database.prepare("delete from auth_email_challenges where id = ?").run(challenge.challengeId)
+    if (challenge.insertedRecoveryEmail) {
+      database.prepare("delete from auth_recovery_emails where account_id = ?")
+        .run(challenge.accountId)
+    }
   } finally {
     database.close()
   }
@@ -153,7 +171,10 @@ type RecoveryEmailSnapshot = {
   verifiedAt: number
 }
 
-function prepareHeadCoachRecovery(email: string) {
+// `authenticator` also gives the head coach a verified authenticator: a protected
+// password reset asks for one, and without it the link only says the platform
+// admin has to help.
+function prepareHeadCoachRecovery(email: string, { authenticator = false } = {}) {
   const database = new Database(databasePath)
   const accountId = accountIdForAcademyId(database, "SMBA-HC-0001")
   const authUser = database.prepare(`
@@ -185,6 +206,18 @@ function prepareHeadCoachRecovery(email: string) {
       verified_at = excluded.verified_at,
       updated_at = excluded.updated_at
   `).run(accountId, email, now, originalRecoveryEmail?.createdAt ?? now, now)
+  const insertedFactorId = authenticator && !database.prepare(
+    "select id from auth_two_factors where user_id = ?",
+  ).get(accountId)
+    ? randomUUID()
+    : null
+  if (insertedFactorId) {
+    // Never decrypted: the page only renders the code form.
+    database.prepare(`
+      insert into auth_two_factors (id, secret, backup_codes, user_id, verified)
+      values (?, 'accessibility-fixture', '[]', ?, 1)
+    `).run(insertedFactorId, accountId)
+  }
   database.close()
 
   return {
@@ -195,6 +228,10 @@ function prepareHeadCoachRecovery(email: string) {
         restoreDatabase.prepare(
           "update auth_users set two_factor_enabled = ?, updated_at = ? where id = ?",
         ).run(authUser.twoFactorEnabled, Date.now(), accountId)
+        if (insertedFactorId) {
+          restoreDatabase.prepare("delete from auth_two_factors where id = ?")
+            .run(insertedFactorId)
+        }
         if (originalRecoveryEmail) {
           restoreDatabase.prepare(`
             update auth_recovery_emails
@@ -1115,10 +1152,12 @@ async function auditStressRecoveryStates(
     })
   } finally {
     await playerContext.close()
-    deleteRecoveryChallenge(playerChallenge.challengeId)
+    deleteRecoveryChallenge(playerChallenge)
   }
 
-  const protectedRecovery = prepareHeadCoachRecovery("accessibility-coach@example.test")
+  const protectedRecovery = prepareHeadCoachRecovery("accessibility-coach@example.test", {
+    authenticator: true,
+  })
   const coachPasswordChallenge = insertRecoveryChallenge(
     "SMBA-HC-0001",
     "accessibility-coach@example.test",
@@ -1126,6 +1165,7 @@ async function auditStressRecoveryStates(
   const coachAuthenticatorChallenge = insertRecoveryChallenge(
     "SMBA-HC-0001",
     "accessibility-coach@example.test",
+    "authenticator",
   )
   const passwordContext = await newContext(browser)
   const authenticatorContext = await newContext(browser)
@@ -1173,8 +1213,8 @@ async function auditStressRecoveryStates(
     })
   } finally {
     await Promise.all([passwordContext.close(), authenticatorContext.close()])
-    deleteRecoveryChallenge(coachPasswordChallenge.challengeId)
-    deleteRecoveryChallenge(coachAuthenticatorChallenge.challengeId)
+    deleteRecoveryChallenge(coachPasswordChallenge)
+    deleteRecoveryChallenge(coachAuthenticatorChallenge)
     protectedRecovery.restore()
   }
 }

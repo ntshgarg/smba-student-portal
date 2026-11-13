@@ -1634,6 +1634,13 @@
   line-height: 1.5;
 }
 
+/* A link inside helper text still needs a 24px target (WCAG 2.5.8). */
+.login-helper a {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+}
+
 .login-register-link {
   color: var(--steel);
   font-size: 0.75rem;
