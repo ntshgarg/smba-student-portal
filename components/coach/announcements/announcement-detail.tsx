@@ -216,7 +216,7 @@ export function PublishedAnnouncementDetail({
   )
 
   async function togglePin() {
-    if (pinPending || announcement.status === "withdrawn") return
+    if (pinPending || announcement.status !== "active") return
     setPinPending(true)
     setFeedback(null)
     try {
@@ -304,10 +304,12 @@ export function PublishedAnnouncementDetail({
               ))}
             </dd>
           </div>
-          <div>
-            <dt>Display priority</dt>
-            <dd>{announcement.pinned ? "Pinned" : "Standard"}</dd>
-          </div>
+          {announcement.status === "active" ? (
+            <div>
+              <dt>Display priority</dt>
+              <dd>{announcement.pinned ? "Pinned" : "Standard"}</dd>
+            </div>
+          ) : null}
         </dl>
 
         {announcement.withdrawal ? (
@@ -324,7 +326,9 @@ export function PublishedAnnouncementDetail({
           </aside>
         ) : null}
 
-        {announcement.status !== "withdrawn" ? (
+        {/* An expired notice is already off every screen, so there is nothing
+            left to pin or withdraw; it stays here as history. */}
+        {announcement.status === "active" ? (
           <div className={styles.detailActions}>
             <button type="button" onClick={togglePin} disabled={pinPending}>
               {announcement.pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}

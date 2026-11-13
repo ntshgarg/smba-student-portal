@@ -151,11 +151,7 @@ export function listAssessmentHome(
   return { drafts: home.filter((player) => player.draft).length, players: home }
 }
 
-function previousPublished(
-  database: SmbaDatabaseExecutor,
-  playerId: string,
-  { before, excludeId }: { before?: string; excludeId?: string },
-) {
+function publishedNewestFirst(database: SmbaDatabaseExecutor, playerId: string) {
   return database.select().from(playerAssessments)
     .where(and(
       eq(playerAssessments.playerAccountId, playerId),
@@ -163,7 +159,15 @@ function previousPublished(
     ))
     .orderBy(desc(playerAssessments.assessedOn), desc(playerAssessments.createdAt))
     .all()
-    .find((row) => row.id !== excludeId && (before === undefined || row.assessedOn <= before))
+}
+
+/** Dated earlier, or on the same date but written earlier, so two on one date are not each other's previous. */
+function previousPublished(published: AssessmentRow[], self: AssessmentRow) {
+  const found = published.find((row) => row.id !== self.id && (
+    row.assessedOn < self.assessedOn
+    || (row.assessedOn === self.assessedOn && row.createdAt < self.createdAt)
+  ))
+  return found ? toPrevious(found) : null
 }
 
 /** What the "new assessment" screen needs: the player, their open draft if any, and last time's scores. */
@@ -181,11 +185,12 @@ export function getAssessmentStart(
       eq(playerAssessments.status, "draft"),
     ))
     .get()
-  const previous = previousPublished(database, playerId, {})
+  const published = publishedNewestFirst(database, playerId)
   return {
     draftId: draft?.id ?? null,
     player: toPlayer(row),
-    previous: previous ? toPrevious(previous) : null,
+    previous: published[0] ? toPrevious(published[0]) : null,
+    publishedCount: published.length,
   }
 }
 
@@ -210,14 +215,12 @@ export function getCoachAssessment(
   }).from(playerEnrollments)
     .where(eq(playerEnrollments.accountId, row.playerAccountId))
     .get()
-  const previous = previousPublished(database, row.playerAccountId, {
-    before: row.assessedOn,
-    excludeId: row.id,
-  })
+  const published = publishedNewestFirst(database, row.playerAccountId)
   return {
     assessment: toRecord(row, player.fullName),
     group: groupLabel(enrollment?.level ?? null, enrollment?.batch ?? null),
-    previous: previous ? toPrevious(previous) : null,
+    previous: previousPublished(published, row),
+    publishedCount: published.length,
   }
 }
 
@@ -282,12 +285,8 @@ export function getPublishedAssessmentForPlayer(
     .where(eq(accounts.id, playerId))
     .get()
   if (!player) return null
-  const previous = previousPublished(database, playerId, {
-    before: row.assessedOn,
-    excludeId: row.id,
-  })
   return {
     assessment: toRecord(row, player.fullName),
-    previous: previous ? toPrevious(previous) : null,
+    previous: previousPublished(publishedNewestFirst(database, playerId), row),
   }
 }

@@ -6,8 +6,13 @@ import { useEffect, useRef, useState } from "react"
 
 import { publishAnnouncementAction } from "@/app/coach/announcements/actions"
 import { announcementParagraphs } from "@/components/announcements/announcement-presentation"
-import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
+import {
+  InlineNotice,
+  type ActionFeedback,
+  type InlineNoticeAction,
+} from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import type { AnnouncementActionResult } from "@/lib/announcements/contracts"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import { formatDateKey } from "@/lib/format"
 
@@ -56,6 +61,33 @@ const publishDeadlineMs = 20_000
 const publishedAfterExitMessage = "Announcement published. The publish you left in"
   + " the review finished on its own, so the notice is live and does not need sending again."
 
+/** Said when a version of this notice is live and it may not be what is on screen. */
+const otherVersionLiveMessage = "Another version of this announcement is already live."
+  + " Open it to check it, and withdraw it if this one replaces it."
+
+type Notice = ActionFeedback & { action?: InlineNoticeAction }
+
+/** A version of this notice known to be live; `payload` is what it said, when known. */
+export type LiveVersion = {
+  announcementId: string
+  key: string
+  payload: string | null
+}
+
+function announcementHref(announcementId: string) {
+  return `/coach/announcements/${encodeURIComponent(announcementId)}`
+}
+
+/** Worked out on each render, so an edit made since is never called published. */
+export function liveVersionNotice(version: LiveVersion, onScreen: string): Notice {
+  // Opened beside the editor, so checking it does not discard unpublished wording.
+  const action = { href: announcementHref(version.announcementId), label: "Open it", newTab: true }
+  if (version.payload === onScreen) {
+    return { action, message: publishedAfterExitMessage, tone: "success" }
+  }
+  return { action, message: otherVersionLiveMessage, tone: "info" }
+}
+
 function createMutationKey() {
   return globalThis.crypto.randomUUID()
 }
@@ -71,7 +103,7 @@ function createMutationKey() {
  * for identical content is a second live notice that only a permanently audited
  * withdrawal can take down.
  */
-function publicationPayload(values: ComposerValues) {
+export function publicationPayload(values: ComposerValues) {
   return JSON.stringify({
     channels: [...new Set(values.channels)].sort(),
     content: values.content.replace(/\r\n?/gu, "\n").trim(),
@@ -79,6 +111,25 @@ function publicationPayload(values: ComposerValues) {
     pinned: values.pinned,
     title: values.title.replace(/\s+/gu, " ").trim(),
   })
+}
+
+/**
+ * The publication key a review should publish with. Unchanged message: the
+ * same key, so a retry resolves to the same notice. Changed message whose key
+ * was sent and may still land: the same key, so the server takes whichever
+ * version arrives first and refuses the other. Otherwise a fresh key, because
+ * the server refuses a key reused for different content.
+ */
+export function publicationForReview(
+  current: { key: string; payload: string },
+  payload: string,
+  { keySent, liveVersions }: { keySent: boolean; liveVersions: readonly LiveVersion[] },
+  mint: () => string = createMutationKey,
+) {
+  if (current.payload === payload) return current
+  const keyLive = liveVersions.some((version) => version.key === current.key)
+  if (keySent && !keyLive) return { key: current.key, payload }
+  return { key: mint(), payload }
 }
 
 function firstInvalidField(values: ComposerValues, academyToday: string): FieldName | null {
@@ -91,21 +142,34 @@ function firstInvalidField(values: ComposerValues, academyToday: string): FieldN
 
 function ReviewDialog({
   onBack,
-  onOutcomeAfterExit,
+  onConflict,
+  onFailureAfterExit,
+  onLive,
   onPublished,
+  onSent,
   onValidationFailure,
+  otherLiveAnnouncementId,
   publicationKey,
   values,
 }: {
   onBack: () => void
-  onOutcomeAfterExit: (outcome: { feedback: ActionFeedback; published: boolean }) => void
+  /** Another version sent under the same key got there first and is live. */
+  onConflict: (refusal: { announcementId: string; key: string }) => void
+  /** A publish finished after the dialog was left. */
+  onLive: (version: LiveVersion) => void
+  onFailureAfterExit: (feedback: ActionFeedback) => void
   onPublished: (announcementId: string) => void
+  /** A publish with this key has left the browser and may land at any time. */
+  onSent: (publicationKey: string) => void
   onValidationFailure: (field: FieldName, message: string) => void
+  /** A different version of this notice that is already live. */
+  otherLiveAnnouncementId: string | null
   publicationKey: string
   values: ComposerValues
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const backButtonRef = useRef<HTMLButtonElement>(null)
   const publishButtonRef = useRef<HTMLButtonElement>(null)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
@@ -113,7 +177,7 @@ function ReviewDialog({
    * Set once this dialog has left the screen. A publish that settles afterwards
    * must not navigate the page or pull focus back out of the editor the coach
    * has returned to, but it must still be reported: it is reported through
-   * `onOutcomeAfterExit`, onto the composer's own notice, because this dialog's
+   * `onLive` or `onFailureAfterExit`, onto the composer's own notice, because this dialog's
    * notice no longer exists to be read. Cleared on every mount because an effect
    * cleanup also runs between Strict Mode's paired development mounts, which
    * would otherwise retire the dialog before its first publish ever ran.
@@ -140,54 +204,64 @@ function ReviewDialog({
     }
   }, [])
 
+  /** Acts on a publish's answer, inside the deadline or whenever it arrives after it. */
+  function settle(
+    result: AnnouncementActionResult,
+    sent: { key: string; payload: string },
+  ) {
+    if (result.ok) {
+      if (dismissed.current) {
+        onLive({ announcementId: result.announcement.id, key: sent.key, payload: sent.payload })
+        return
+      }
+      onPublished(result.announcement.id)
+      return
+    }
+    if (result.code === "PUBLICATION_CONFLICT" && result.announcementId) {
+      // The composer records it, so this dialog warns beside the button.
+      onConflict({ announcementId: result.announcementId, key: sent.key })
+      if (dismissed.current) return
+      setFeedback({ message: result.message, tone: "error" })
+      // Not the publish button: pressing it again now puts up a second notice,
+      // and a coach retrying by keyboard should not do that by reflex.
+      backButtonRef.current?.focus()
+      return
+    }
+    if (dismissed.current) {
+      // Not routed through `onValidationFailure`: that focuses the field it
+      // names, and the coach is already typing somewhere in the editor.
+      onFailureAfterExit({ message: result.message, tone: "error" })
+      return
+    }
+    if (
+      result.field === "title"
+      || result.field === "content"
+      || result.field === "channels"
+      || result.field === "expiresOn"
+    ) {
+      onValidationFailure(result.field, result.message)
+      return
+    }
+    setFeedback({ message: result.message, tone: "error" })
+    publishButtonRef.current?.focus()
+  }
+
   async function publish() {
     if (pending) return
     setPending(true)
     setFeedback(null)
+    const sent = { key: publicationKey, payload: publicationPayload(values) }
+    onSent(sent.key)
+    const request = publishAnnouncementAction({
+      channels: values.channels,
+      content: values.content.trim(),
+      expiresOn: values.expiresOn || null,
+      pinned: values.pinned,
+      publicationKey: sent.key,
+      title: values.title.trim(),
+    })
     try {
-      const result = await withSaveDeadline(
-        publishAnnouncementAction({
-          channels: values.channels,
-          content: values.content.trim(),
-          expiresOn: values.expiresOn || null,
-          pinned: values.pinned,
-          publicationKey,
-          title: values.title.trim(),
-        }),
-        publishDeadlineMs,
-      )
-      if (!result.ok) {
-        if (dismissed.current) {
-          // Not routed through `onValidationFailure`: that focuses the field it
-          // names, and the coach is already typing somewhere in the editor.
-          onOutcomeAfterExit({
-            feedback: { message: result.message, tone: "error" },
-            published: false,
-          })
-          return
-        }
-        if (
-          result.field === "title"
-          || result.field === "content"
-          || result.field === "channels"
-          || result.field === "expiresOn"
-        ) {
-          onValidationFailure(result.field, result.message)
-          return
-        }
-        setFeedback({ message: result.message, tone: "error" })
-        publishButtonRef.current?.focus()
-        return
-      }
-
-      if (dismissed.current) {
-        onOutcomeAfterExit({
-          feedback: { message: publishedAfterExitMessage, tone: "success" },
-          published: true,
-        })
-        return
-      }
-      onPublished(result.announcement.id)
+      settle(await withSaveDeadline(request, publishDeadlineMs), sent)
     } catch (error) {
       const failure = describeSaveFailure({
         error,
@@ -195,11 +269,12 @@ function ReviewDialog({
         retained: "Your message is still here",
         subject: "The announcement",
       })
+      if (failure.kind === "timeout") {
+        // The request is still running; report whatever it ends with.
+        request.then((result) => settle(result, sent), () => {})
+      }
       if (dismissed.current) {
-        onOutcomeAfterExit({
-          feedback: { message: failure.message, tone: "error" },
-          published: false,
-        })
+        onFailureAfterExit({ message: failure.message, tone: "error" })
         return
       }
       setFeedback({ message: failure.message, tone: "error" })
@@ -297,6 +372,21 @@ function ReviewDialog({
           </p>
         ) : null}
 
+        {otherLiveAnnouncementId ? (
+          // In the dialog, because the modal covers the composer's own notice.
+          <p className={styles.publicWarning} id="announcement-review-live-warning" role="note">
+            <strong>Another version is already live.</strong> Publishing this one adds a
+            second notice. Withdraw the other one if this replaces it.{" "}
+            <Link
+              href={announcementHref(otherLiveAnnouncementId)}
+              rel="noopener"
+              target="_blank"
+            >
+              Open the live notice<span className="sr-only"> (opens in a new tab)</span>
+            </Link>
+          </p>
+        ) : null}
+
         <InlineNotice
           className={styles.dialogNotice}
           message={feedback?.message}
@@ -304,16 +394,19 @@ function ReviewDialog({
         />
 
         <div className={styles.dialogActions}>
-          <button type="button" onClick={onBack}>Back to edit</button>
+          <button ref={backButtonRef} type="button" onClick={onBack}>Back to edit</button>
           <button
             ref={publishButtonRef}
+            aria-describedby={otherLiveAnnouncementId ? "announcement-review-live-warning" : undefined}
             className={styles.primaryButton}
             type="button"
             onClick={publish}
             disabled={pending}
           >
             <Send aria-hidden="true" />
-            {pending ? "Publishing…" : "Publish announcement"}
+            {pending
+              ? "Publishing…"
+              : otherLiveAnnouncementId ? "Publish as a second notice" : "Publish announcement"}
           </button>
         </div>
       </section>
@@ -331,21 +424,26 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
    * here rather than inside the dialog so that dismissing a stalled publish and
    * reviewing again retries the same key. `publishAnnouncement` treats a reused
    * key as the same publication only while the payload fingerprint matches and
-   * rejects it outright once it does not, so the key has to be reminted exactly
-   * when that fingerprint would change and no sooner — hence `publicationPayload`
-   * rather than a reference check.
+   * refuses it once it does not; see `publicationForReview`.
    */
   const [publication, setPublication] = useState(() => ({
     key: createMutationKey(),
     payload: publicationPayload(EMPTY_VALUES),
   }))
-  // Reports a publish that settled after the review dialog had gone. Nothing
-  // else writes here: while the dialog is up it carries its own notice.
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  // Reports a publish that failed after the review dialog had gone. A live
+  // version is reported from `liveVersions` instead.
+  const [feedback, setFeedback] = useState<Notice | null>(null)
+  /** Versions of this notice known to be live while the coach is still here, oldest first. */
+  const [liveVersions, setLiveVersions] = useState<LiveVersion[]>([])
+  /** Keys a publish was sent with; until its outcome is known it may still land. */
+  const sentKeys = useRef<Set<string>>(new Set())
+  /** Set once the composer starts leaving for the published notice. */
+  const leaving = useRef<string | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
   const channelGroupRef = useRef<HTMLFieldSetElement>(null)
   const expiryRef = useRef<HTMLInputElement>(null)
+  const currentPayload = publicationPayload(values)
   const isDirty = !published && (
     values.title !== ""
     || values.content !== ""
@@ -353,10 +451,19 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
     || values.pinned
     || values.expiresOn !== ""
   )
+  // Warn in the review when publishing would add a second notice.
+  const latestLive = liveVersions.at(-1) ?? null
+  const otherLiveAnnouncementId = latestLive && latestLive.payload !== publication.payload
+    ? latestLive.announcementId
+    : null
+  const notice = feedback ?? (latestLive ? liveVersionNotice(latestLive, currentPayload) : null)
 
   const { navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty,
-    message: "This announcement has not been published. Leave and discard it?",
+    message: latestLive
+      ? "Your latest changes have not been published; only the earlier wording is live."
+        + " Leave and discard them?"
+      : "This announcement has not been published. Leave and discard it?",
     scope: "announcement-composer",
   })
 
@@ -401,14 +508,18 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
       focusField(invalid)
       return
     }
-    const payload = publicationPayload(values)
-    if (publication.payload !== payload) {
-      setPublication({ key: createMutationKey(), payload })
-    }
+    const next = publicationForReview(publication, currentPayload, {
+      keySent: sentKeys.current.has(publication.key),
+      liveVersions,
+    })
+    if (next !== publication) setPublication(next)
     setReviewing(true)
   }
 
   function completePublication(announcementId: string) {
+    // A publish retried after its deadline can answer twice; leave once.
+    if (leaving.current) return
+    leaving.current = announcementId
     setPublished(true)
     setReviewing(false)
     navigateAfterCommit(() => {
@@ -418,17 +529,27 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
     })
   }
 
-  function reportOutcomeAfterExit(
-    { feedback: outcome, published: didPublish }: {
-      feedback: ActionFeedback
-      published: boolean
-    },
-  ) {
-    // A published notice is no longer unsaved work, whichever screen the coach
-    // was on when it landed: leaving the guard armed would ask them to discard
-    // an announcement the academy can already read.
-    if (didPublish) setPublished(true)
-    setFeedback(outcome)
+  function recordSent(key: string) {
+    sentKeys.current.add(key)
+  }
+
+  function recordLiveVersion(version: LiveVersion) {
+    setLiveVersions((current) => [
+      ...current.filter((known) => known.announcementId !== version.announcementId),
+      version,
+    ])
+    // The key is spent: a different wording under it needs a fresh one.
+    setPublication((current) => (
+      current.key === version.key && current.payload !== version.payload
+        ? { key: createMutationKey(), payload: current.payload }
+        : current
+    ))
+    setFeedback(null)
+  }
+
+  function recordConflict({ announcementId, key }: { announcementId: string; key: string }) {
+    // Which wording went live is not known here.
+    recordLiveVersion({ announcementId, key, payload: null })
   }
 
   function handleServerValidation(field: FieldName, message: string) {
@@ -451,10 +572,11 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
       </header>
 
       <InlineNotice
+        action={notice?.action}
         className={styles.composerNotice}
-        message={feedback?.message}
+        message={notice?.message}
         reserveSpace={false}
-        tone={feedback?.tone}
+        tone={notice?.tone}
       />
 
       <section className={styles.noticeSlip} aria-labelledby="announcement-editor-title">
@@ -641,9 +763,13 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
       {reviewing ? (
         <ReviewDialog
           onBack={() => setReviewing(false)}
-          onOutcomeAfterExit={reportOutcomeAfterExit}
+          onConflict={recordConflict}
+          onFailureAfterExit={setFeedback}
+          onLive={recordLiveVersion}
           onPublished={completePublication}
+          onSent={recordSent}
           onValidationFailure={handleServerValidation}
+          otherLiveAnnouncementId={otherLiveAnnouncementId}
           publicationKey={publication.key}
           values={values}
         />

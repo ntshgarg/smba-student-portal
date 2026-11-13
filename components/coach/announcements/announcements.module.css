@@ -777,6 +777,7 @@
 }
 
 .monthControl > a:first-child,
+.monthControl > .disabledMonthControl:first-child,
 .monthControl > div {
   border-right: 1px solid var(--line);
 }

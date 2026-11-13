@@ -130,12 +130,19 @@ function coachAnnouncementFromRow(
   }
 }
 
+/** `getAnnouncementStatus(...) === "active"` as a query condition; needs the `broadcastWithdrawals` left join. */
+function isLiveAnnouncement(now: Date) {
+  return and(
+    isNull(broadcastWithdrawals.broadcastId),
+    or(isNull(broadcasts.expiresOn), gte(broadcasts.expiresOn, getAcademyDateKey(now))),
+  )
+}
+
 function activeChannelRows(
   channel: AnnouncementChannel,
   database: SmbaDatabaseExecutor,
   now: Date,
 ) {
-  const academyDate = getAcademyDateKey(now)
   return database.select({
     content: broadcasts.content,
     expiresOn: broadcasts.expiresOn,
@@ -162,10 +169,7 @@ function activeChannelRows(
       broadcastWithdrawals,
       eq(broadcastWithdrawals.broadcastId, broadcasts.id),
     )
-    .where(and(
-      isNull(broadcastWithdrawals.broadcastId),
-      or(isNull(broadcasts.expiresOn), gte(broadcasts.expiresOn, academyDate)),
-    ))
+    .where(isLiveAnnouncement(now))
     .orderBy(desc(broadcasts.pinned), desc(broadcasts.publishedAt), desc(broadcasts.id))
     .all()
 }
@@ -245,7 +249,9 @@ export function listCoachAnnouncements(
 
   return rows.flatMap((row) => {
     const announcement = coachAnnouncementFromRow(row, channels.get(row.id) ?? [], now)
-    if (filters.month && getAcademyMonthKey(row.publishedAt) !== filters.month) return []
+    const publishedMonth = getAcademyMonthKey(row.publishedAt)
+    if (filters.month && publishedMonth !== filters.month) return []
+    if (filters.publishedBeforeMonth && publishedMonth >= filters.publishedBeforeMonth) return []
     if (filters.status && filters.status !== "all" && announcement.status !== filters.status) {
       return []
     }
@@ -274,18 +280,13 @@ export function listCoachAnnouncements(
   })
 }
 
-/**
- * Answers whether the academy has ever published an announcement. The archive
- * asked this by reading every announcement unfiltered and comparing the length
- * against zero; the filters only ever remove items, so existence is the whole
- * question.
- */
-export function hasCoachAnnouncements({
+/** The academy month of the first announcement, or null; the archive's earliest month. */
+export function firstCoachAnnouncementMonth({
   coachId,
   database = initializeDatabase(),
-}: CoachAnnouncementQueryOptions): boolean {
+}: CoachAnnouncementQueryOptions): string | null {
   requireHeadAdminAccess(coachId, { database })
-  return Boolean(database.select({ id: broadcasts.id }).from(broadcasts)
+  const first = database.select({ publishedAt: broadcasts.publishedAt }).from(broadcasts)
     .innerJoin(
       broadcastAudienceTargets,
       and(
@@ -293,7 +294,9 @@ export function hasCoachAnnouncements({
         eq(broadcastAudienceTargets.audience, "everyone"),
       ),
     )
-    .get())
+    .orderBy(asc(broadcasts.publishedAt))
+    .get()
+  return first ? getAcademyMonthKey(first.publishedAt) : null
 }
 
 /**
@@ -308,7 +311,6 @@ export function countActiveCoachAnnouncements({
   now = academyNow(),
 }: CoachAnnouncementQueryOptions): number {
   requireHeadAdminAccess(coachId, { database })
-  const academyDate = getAcademyDateKey(now)
   return database.select({ total: sql<number>`count(*)` }).from(broadcasts)
     .innerJoin(
       broadcastAudienceTargets,
@@ -321,10 +323,7 @@ export function countActiveCoachAnnouncements({
       broadcastWithdrawals,
       eq(broadcastWithdrawals.broadcastId, broadcasts.id),
     )
-    .where(and(
-      isNull(broadcastWithdrawals.broadcastId),
-      or(isNull(broadcasts.expiresOn), gte(broadcasts.expiresOn, academyDate)),
-    ))
+    .where(isLiveAnnouncement(now))
     .get()?.total ?? 0
 }
 

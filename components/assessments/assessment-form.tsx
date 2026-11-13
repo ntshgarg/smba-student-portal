@@ -201,12 +201,15 @@ export function AssessmentForm({
   group,
   player,
   previous,
+  publishedCount,
   today,
 }: {
   assessment: AssessmentRecord | null
   group: string | null
   player: FormPlayer
   previous: PreviousAssessment | null
+  /** How many assessments the player had published when this opened. */
+  publishedCount: number
   today: string
 }) {
   const initial: FormValues = {
@@ -219,6 +222,17 @@ export function AssessmentForm({
   const [values, setValues] = useState<FormValues>(initial)
   const [saved, setSaved] = useState(() => serialise(initial))
   const [assessmentId, setAssessmentId] = useState(assessment?.id ?? null)
+  /**
+   * The id a brand-new assessment will have, chosen here so that a save repeated
+   * after a dropped connection finds what the first attempt created.
+   */
+  const [newAssessmentId] = useState(() => globalThis.crypto.randomUUID())
+  /**
+   * The published count this form opened with, kept rather than read from the
+   * prop, which a refresh after saving a draft would move on. Moved on only by
+   * a refusal that has told the coach why.
+   */
+  const [expectedPublishedCount, setExpectedPublishedCount] = useState(publishedCount)
   const [published, setPublished] = useState(assessment?.status === "published")
   const [pending, setPending] = useState<"discard" | "draft" | "publish" | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
@@ -254,10 +268,17 @@ export function AssessmentForm({
 
   function payload(): SaveAssessmentInput {
     return {
-      ...(assessmentId ? { assessmentId } : {}),
+      ...(assessmentId ? { assessmentId } : { newAssessmentId }),
+      ...(!published ? { expectedPublishedCount } : {}),
       ...values,
       playerId: player.playerId,
     }
+  }
+
+  const historyAction: InlineNoticeAction = {
+    href: `/coach/assessments/players/${encodeURIComponent(player.playerId)}`,
+    label: `Open ${firstName}’s assessments`,
+    newTab: true,
   }
 
   async function submit(kind: "draft" | "publish") {
@@ -273,7 +294,15 @@ export function AssessmentForm({
         ? publishAssessmentAction(payload())
         : saveAssessmentDraftAction(payload()))
       if (!result.ok) {
-        setNotice({ message: result.message, tone: "error" })
+        // Published elsewhere: stop showing a draft. A new count is taken on
+        // once the coach has been told, so publishing again goes through.
+        if (result.currentStatus === "published") setPublished(true)
+        if (result.currentPublishedCount !== undefined) {
+          setExpectedPublishedCount(result.currentPublishedCount)
+        }
+        setNotice(result.code === "CONFLICT"
+          ? { action: historyAction, message: result.message, tone: "error" }
+          : { message: result.message, tone: "error" })
         return
       }
       if ("discarded" in result) return
@@ -287,9 +316,12 @@ export function AssessmentForm({
         tone: "success",
       })
     } catch {
+      // The save may have landed before the connection dropped. Saving again
+      // carries the same id, so it cannot make a second copy.
       setNotice({
         action: { href: "/login", label: "Sign in again" },
-        message: "This could not be saved. Check your connection, or sign in again if it keeps happening.",
+        message: "The save could not be confirmed. Your changes are still here, and saving again"
+          + " will not make a second copy. If it keeps happening, sign in again.",
         tone: "error",
       })
     } finally {
@@ -303,7 +335,16 @@ export function AssessmentForm({
     try {
       const result = await discardAssessmentDraftAction({ assessmentId, playerId: player.playerId })
       if (!result.ok) {
-        setNotice({ message: result.message, tone: "error" })
+        if (result.code === "NOT_FOUND") {
+          // Already gone, discarded somewhere else: what the coach asked for.
+          setDiscarded(true)
+          navigateAfterCommit(() => window.location.replace("/coach/assessments"))
+          return
+        }
+        // Published somewhere else, so it stays on the record. The screen
+        // stops calling it a draft, and the coach is pointed at the list.
+        if (result.currentStatus === "published") setPublished(true)
+        setNotice({ action: historyAction, message: result.message, tone: "error" })
         setConfirmingDiscard(false)
         return
       }

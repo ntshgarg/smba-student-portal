@@ -56,6 +56,8 @@ const { controls } = vi.hoisted(() => {
   const controls = {
     composed,
     content,
+    /** The composer's known live versions; the only array any of these components holds. */
+    liveVersions: [] as unknown[],
     publication: { ...unminted } as { key: string; payload: unknown },
     /** Overridden by a test that needs the action to answer rather than hang. */
     publishReply: null as null | (() => Promise<unknown>),
@@ -70,6 +72,7 @@ const { controls } = vi.hoisted(() => {
     withdrawReply: null as null | (() => Promise<unknown>),
 
     reset() {
+      controls.liveVersions = []
       controls.publication = { ...unminted }
       controls.publishReply = null
       controls.refs.length = 0
@@ -93,6 +96,7 @@ const { controls } = vi.hoisted(() => {
       if (value === "") return controls.reason
       if (isRecord(value) && "payload" in value) return controls.publication
       if (isRecord(value) && "content" in value) return controls.values
+      if (Array.isArray(value)) return controls.liveVersions
       return value
     },
   }
@@ -135,9 +139,12 @@ vi.mock("@/app/coach/announcements/actions", () => ({
   withdrawAnnouncementAction: () => (controls.withdrawReply ?? controls.stalled)(),
 }))
 
-const { AnnouncementComposer } = await import(
-  "@/components/coach/announcements/announcement-composer"
-)
+const {
+  AnnouncementComposer,
+  liveVersionNotice,
+  publicationForReview,
+  publicationPayload,
+} = await import("@/components/coach/announcements/announcement-composer")
 const { PublishedAnnouncementDetail } = await import(
   "@/components/coach/announcements/announcement-detail"
 )
@@ -234,6 +241,23 @@ function noticeIn(updates: unknown[]) {
   return updates.find((update): update is Notice => (
     isRecord(update) && typeof update.message === "string" && typeof update.tone === "string"
   ))
+}
+
+/**
+ * The composer's live versions after a run of updates. They are recorded with
+ * a function update -- the request that reports them answers long after the
+ * render that started it -- so each update is applied to what the composer
+ * held, and the one that adds a live version is the one returned.
+ */
+function liveVersionsIn(updates: unknown[], held: unknown[] = []) {
+  for (const update of updates) {
+    if (typeof update !== "function") continue
+    const next = (update as (current: unknown) => unknown)(held)
+    if (Array.isArray(next) && next.length > held.length) {
+      return next as Array<{ announcementId: string; key: string; payload: string | null }>
+    }
+  }
+  return []
 }
 
 function publicationIn(updates: unknown[]) {
@@ -448,11 +472,17 @@ describe("an announcement action that settles after its dialog is gone", () => {
 
     const updates = await pressAndWait(publish, 0)
 
-    expect(noticeIn(updates)?.tone).toBe("success")
-    expect(noticeIn(updates)?.message).toContain("does not need sending again")
-    // Published, so the beforeunload guard stops asking the coach to discard a
-    // notice the academy can already read.
-    expect(updates).toContain(true)
+    // Recorded as the live version, with what it said.
+    const [live] = liveVersionsIn(updates)
+    expect(live).toEqual({
+      announcementId: announcement.id,
+      key: controls.publication.key,
+      payload: publicationPayload(controls.composed as never),
+    })
+    // The composer's notice is worked out from it against what is on screen.
+    const notice = liveVersionNotice(live, publicationPayload(controls.composed as never))
+    expect(notice.tone).toBe("success")
+    expect(notice.message).toContain("does not need sending again")
     // And no navigation: the coach is typing somewhere behind this, and the
     // whole reason the exits were opened was to stop yanking them around.
     expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
@@ -505,5 +535,193 @@ describe("the publication key a retry reuses", () => {
     // The server rejects a reused key outright once the fingerprint disagrees,
     // so reuse has to end exactly where the announcement changes.
     expect(publicationIn(press(reviewButton(composer())))?.key).not.toBe(minted?.key)
+  })
+})
+
+describe("a publish whose outcome is unknown when the coach edits the notice", () => {
+  const sent = { key: "a3c1d5e2-7b4f-4c8e-9a1d-2f6e8b0c4d17", payload: "first wording" }
+  const live = [{ announcementId: "live-notice", key: sent.key, payload: sent.payload }]
+  const mint = () => "fresh-key"
+
+  it("keeps the key of a sent publish across an edit, so only one version can go live", () => {
+    // Before: an edit always minted a new key, so the stalled original and the
+    // corrected version were two different publications and both went live.
+    expect(publicationForReview(sent, "corrected wording", { keySent: true, liveVersions: [] }, mint))
+      .toEqual({ key: sent.key, payload: "corrected wording" })
+  })
+
+  it("mints a fresh key for an edit when nothing was sent, or once the first version is live", () => {
+    expect(publicationForReview(sent, "corrected wording", { keySent: false, liveVersions: [] }, mint))
+      .toEqual({ key: "fresh-key", payload: "corrected wording" })
+    expect(publicationForReview(sent, "corrected wording", { keySent: true, liveVersions: live }, mint))
+      .toEqual({ key: "fresh-key", payload: "corrected wording" })
+    expect(publicationForReview(sent, sent.payload, { keySent: true, liveVersions: live }, mint))
+      .toBe(sent)
+  })
+})
+
+describe("an earlier version that went live first", () => {
+  const earlierId = "7d2e9c41-0b5a-4f3e-8c6d-1a2b3c4d5e6f"
+
+  function noticesIn(updates: unknown[]) {
+    return updates.filter((update): update is Notice => (
+      isRecord(update) && typeof update.message === "string" && typeof update.tone === "string"
+    ))
+  }
+
+  const refusal = "Another version of this announcement was already published. Nothing new was published."
+
+  it("records the live version and says so in the open review when the server refuses a second one", async () => {
+    vi.useFakeTimers()
+    controls.publishReply = () => Promise.resolve({
+      announcementId: earlierId,
+      code: "PUBLICATION_CONFLICT",
+      field: "publicationKey",
+      message: refusal,
+      ok: false,
+    })
+    const { tree } = openIdleDialog(composer(), "onPublished")
+
+    const updates = await pressAndWait(button(tree, "Publish announcement"), 0)
+
+    // Which wording went live cannot be told from here.
+    const [live] = liveVersionsIn(updates)
+    expect(live).toEqual({ announcementId: earlierId, key: controls.publication.key, payload: null })
+    // The composer's notice links to the live one, beside the editor...
+    expect(liveVersionNotice(live, "anything on screen")).toMatchObject({
+      action: { href: `/coach/announcements/${earlierId}`, label: "Open it", newTab: true },
+      message: expect.stringContaining("Another version of this announcement is already live"),
+    })
+    // ...and the dialog the coach is looking at says it too.
+    expect(noticesIn(updates).map((notice) => notice.message)).toContain(refusal)
+    expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
+  })
+
+  it("moves focus off the publish button, whose next press would add a second notice", async () => {
+    vi.useFakeTimers()
+    controls.publishReply = () => Promise.resolve({
+      announcementId: earlierId,
+      code: "PUBLICATION_CONFLICT",
+      field: "publicationKey",
+      message: refusal,
+      ok: false,
+    })
+    const { tree } = openIdleDialog(composer(), "onPublished")
+    const back = button(tree, "Back to edit")
+    const publish = button(tree, "Publish announcement")
+    const focus = { back: vi.fn(), publish: vi.fn() }
+    // The refs are attached by React; here they are handed the two buttons.
+    const refFor = (control: AnyElement) => control.props.ref as { current: unknown }
+    refFor(back).current = { focus: focus.back }
+    refFor(publish).current = { focus: focus.publish }
+
+    await pressAndWait(publish, 0)
+
+    expect(focus.back).toHaveBeenCalledOnce()
+    expect(focus.publish).not.toHaveBeenCalled()
+  })
+
+  it("puts the warning inside the review dialog, and on the button it applies to", () => {
+    const { host } = openDialog(composer(), "onPublished")
+    const render = host.type as (props: Record<string, unknown>) => ReactNode
+    controls.steer = "idle"
+    const warned = render({ ...host.props, otherLiveAnnouncementId: earlierId })
+
+    const link = element(warned, (node) => node.props.href === `/coach/announcements/${earlierId}`)
+    expect(captionOf(link)).toContain("Open the live notice")
+    // Opened beside the review, so checking it does not cost the new wording.
+    expect(link.props.target).toBe("_blank")
+    const publish = button(warned, "Publish as a second notice")
+    expect(publish.props["aria-describedby"]).toBe("announcement-review-live-warning")
+    expect(element(warned, (node) => node.props.id === "announcement-review-live-warning"))
+      .toBeDefined()
+
+    const plain = render({ ...host.props, otherLiveAnnouncementId: null })
+    expect(descendants(plain)
+      .some((node) => node.props.href === `/coach/announcements/${earlierId}`)).toBe(false)
+    expect(button(plain, "Publish announcement").props["aria-describedby"]).toBeUndefined()
+  })
+})
+
+describe("what the composer says about a live version", () => {
+  const wording = { a: "the stalled original", b: "the correction" }
+  const version = { announcementId: "live-notice", key: "k1", payload: wording.a }
+
+  it("says published only while the screen holds exactly the live wording", () => {
+    expect(liveVersionNotice(version, wording.a)).toMatchObject({
+      message: expect.stringContaining("does not need sending again"),
+      tone: "success",
+    })
+  })
+
+  it("stops saying published once the coach has changed the message", () => {
+    // Before: "does not need sending again" even with the correction on
+    // screen, while only the uncorrected notice was live.
+    const notice = liveVersionNotice(version, wording.b)
+    expect(notice.tone).toBe("info")
+    expect(notice.message).toContain("Another version of this announcement is already live")
+    expect(notice.message).not.toContain("does not need sending again")
+  })
+})
+
+describe("a composer that already has a live version", () => {
+  const liveId = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+
+  it("warns in the review when the wording on screen is not the live one", () => {
+    controls.liveVersions = [{ announcementId: liveId, key: "live-key", payload: "the stalled original" }]
+    controls.publication = {
+      key: "fresh-key",
+      payload: publicationPayload(controls.composed as never),
+    }
+
+    const { host } = openDialog(composer(), "onPublished")
+    expect(host.props.otherLiveAnnouncementId).toBe(liveId)
+  })
+})
+
+describe("a publish that answers after its deadline", () => {
+  function lateReply(afterMs: number, reply: unknown) {
+    return () => new Promise((resolve) => setTimeout(() => resolve(reply), afterMs))
+  }
+
+  it("takes the coach to the notice when it lands while the review is still open", async () => {
+    vi.useFakeTimers()
+    controls.publishReply = lateReply(deadlineMs + 5_000, {
+      announcement: { id: announcement.id },
+      ok: true,
+      reusedPublication: false,
+    })
+    const { tree } = openIdleDialog(composer(), "onPublished")
+
+    await pressAndWait(button(tree, "Publish announcement"), deadlineMs)
+    expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
+
+    // Before: the answer after the deadline went nowhere, so the coach was left
+    // on "not confirmed in time" with a notice already live.
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(guard.navigateAfterCommit).toHaveBeenCalledOnce()
+  })
+
+  it("reports a late landing on the composer once the review has been left", async () => {
+    vi.useFakeTimers()
+    controls.publishReply = lateReply(deadlineMs + 5_000, {
+      announcement: { id: announcement.id },
+      ok: true,
+      reusedPublication: false,
+    })
+    const { tree } = openIdleDialog(composer(), "onPublished")
+    const publish = button(tree, "Publish announcement")
+    retireDialog()
+
+    await pressAndWait(publish, deadlineMs)
+    controls.stateUpdates.length = 0
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(liveVersionsIn(controls.stateUpdates)).toEqual([{
+      announcementId: announcement.id,
+      key: controls.publication.key,
+      payload: publicationPayload(controls.composed as never),
+    }])
+    expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
   })
 })

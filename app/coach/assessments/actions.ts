@@ -27,7 +27,16 @@ function revalidateAssessments(playerId: string, assessmentId?: string) {
 }
 
 function failure(error: AssessmentServiceError): AssessmentActionResult {
-  return { ok: false, code: error.code, field: error.field, message: error.message }
+  return {
+    ok: false,
+    code: error.code,
+    ...(error.currentStatus ? { currentStatus: error.currentStatus } : {}),
+    ...(error.currentPublishedCount !== undefined
+      ? { currentPublishedCount: error.currentPublishedCount }
+      : {}),
+    field: error.field,
+    message: error.message,
+  }
 }
 
 function saved(

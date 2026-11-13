@@ -17,7 +17,7 @@ function AnnouncementLabels({
   announcement: AnnouncementSummary
   dashboard?: boolean
 }) {
-  const isNew = announcementIsNew(announcement.publishedAt)
+  const isNew = announcement.isNew ?? announcementIsNew(announcement.publishedAt)
 
   if (!announcement.pinned && !isNew) return null
 

@@ -17,6 +17,7 @@ import {
   type SetAnnouncementPinnedInput,
   type WithdrawAnnouncementInput,
 } from "@/lib/announcements/contracts"
+import { getAnnouncementStatus } from "@/lib/announcements/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { initializeDatabase, type SmbaDatabase } from "@/lib/db/client"
 import {
@@ -33,16 +34,20 @@ const DATE_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/u
 export class AnnouncementServiceError extends Error {
   readonly code: AnnouncementMutationCode
   readonly field?: AnnouncementMutationField
+  /** The announcement the refusal is about, when the coach may want to open it. */
+  readonly announcementId?: string
 
   constructor(
     code: AnnouncementMutationCode,
     message: string,
     field?: AnnouncementMutationField,
+    announcementId?: string,
   ) {
     super(message)
     this.name = "AnnouncementServiceError"
     this.code = code
     this.field = field
+    this.announcementId = announcementId
   }
 }
 
@@ -208,10 +213,13 @@ export async function publishAnnouncement(
       .get()
     if (existing) {
       if (existing.payloadFingerprint !== validated.fingerprint) {
-        fail(
+        // Another version sent under this key got here first; refuse this one
+        // rather than put up a second live notice, and name the live one.
+        throw new AnnouncementServiceError(
           "PUBLICATION_CONFLICT",
-          "This publication request was already used for a different announcement.",
+          "Another version of this announcement was already published. Nothing new was published.",
           "publicationKey",
+          existing.id,
         )
       }
       return { announcementId: existing.id, reusedPublication: true }
@@ -276,6 +284,7 @@ export async function setAnnouncementPinned(
   const result = database.transaction((tx) => {
     requireHeadAdminAccess(coachId, { database: tx })
     const current = tx.select({
+      expiresOn: broadcasts.expiresOn,
       pinned: broadcasts.pinned,
       presentationRevision: broadcasts.presentationRevision,
       withdrawnAt: broadcastWithdrawals.withdrawnAt,
@@ -291,6 +300,9 @@ export async function setAnnouncementPinned(
       fail("ALREADY_WITHDRAWN", "A withdrawn announcement cannot be pinned.", "announcementId")
     }
     if (current.pinned === input.pinned) return { reused: true }
+    if (input.pinned && getAnnouncementStatus(current, now) === "expired") {
+      fail("INVALID_INPUT", "An expired announcement cannot be pinned.", "announcementId")
+    }
     if (current.presentationRevision !== input.expectedPresentationRevision) {
       fail(
         "REVISION_CONFLICT",

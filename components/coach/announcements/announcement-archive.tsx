@@ -68,17 +68,26 @@ function detailHref(id: string, query: AnnouncementArchiveQuery) {
 export function PublishedAnnouncementArchive({
   announcements,
   currentMonth,
+  firstMonth = null,
   hasPublishedAnnouncements,
   query,
+  stillShowing = [],
 }: {
   announcements: CoachAnnouncementSummary[]
   currentMonth: string
+  /** The month of the first announcement ever published; nothing exists before it. */
+  firstMonth?: string | null
   hasPublishedAnnouncements: boolean
   query: AnnouncementArchiveQuery
+  /** Live notices published before this month, shown at the top of the current month. */
+  stillShowing?: CoachAnnouncementSummary[]
 }) {
   const monthLabel = formatMonth(query.month)
   const nextDisabled = query.month >= currentMonth
+  const previousDisabled = firstMonth !== null && query.month <= firstMonth
   const filtersActive = query.status !== "all" || query.channel !== "all"
+  // Live notices from earlier months lead the current month, as the dashboard counts them.
+  const rows = [...stillShowing, ...announcements]
 
   return (
     <div className={`${styles.workspace} page-shell`}>
@@ -95,12 +104,16 @@ export function PublishedAnnouncementArchive({
 
         {hasPublishedAnnouncements ? (
           <div className={styles.monthControl} role="group" aria-label="Choose announcement month">
-            <Link
-              href={archiveHref(query, { month: shiftMonth(query.month, -1) })}
-              aria-label={`Show ${formatMonth(shiftMonth(query.month, -1))}`}
-            >
-              <ChevronLeft aria-hidden="true" />
-            </Link>
+            {previousDisabled ? (
+              <span className={styles.disabledMonthControl} aria-hidden="true"><ChevronLeft /></span>
+            ) : (
+              <Link
+                href={archiveHref(query, { month: shiftMonth(query.month, -1) })}
+                aria-label={`Show ${formatMonth(shiftMonth(query.month, -1))}`}
+              >
+                <ChevronLeft aria-hidden="true" />
+              </Link>
+            )}
             <div>
               <span>Publication month</span>
               <strong>{monthLabel}</strong>
@@ -190,12 +203,12 @@ export function PublishedAnnouncementArchive({
 
           {query.query || filtersActive ? (
             <div className={styles.resultBar} aria-live="polite">
-              <p>{announcements.length} {announcements.length === 1 ? "result" : "results"}</p>
+              <p>{rows.length} {rows.length === 1 ? "result" : "results"}</p>
               {query.query ? <Link href={archiveHref(query, { query: "" })}>Clear search</Link> : null}
             </div>
           ) : null}
 
-          {announcements.length === 0 ? (
+          {rows.length === 0 ? (
             <div className={`${styles.emptyState} ${styles.compactEmptyState}`}>
               <Megaphone aria-hidden="true" />
               <h3>No matching announcements.</h3>
@@ -206,12 +219,15 @@ export function PublishedAnnouncementArchive({
             </div>
           ) : (
             <ol className={styles.announcementList} aria-label={`${monthLabel} announcements`}>
-              {announcements.map((announcement) => (
+              {rows.map((announcement) => (
                 <li key={announcement.id}>
                   <article className={styles.announcementRow}>
                     <div className={styles.announcementIdentity}>
                       <div>
-                        {announcement.pinned ? <Pin aria-label="Pinned announcement" /> : null}
+                        {/* Pinning only orders live notices. */}
+                        {announcement.pinned && announcement.status === "active"
+                          ? <Pin aria-label="Pinned announcement" />
+                          : null}
                         <h3>{announcement.title}</h3>
                       </div>
                       <p>{announcement.preview}</p>

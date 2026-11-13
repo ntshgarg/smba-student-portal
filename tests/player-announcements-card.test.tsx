@@ -118,6 +118,20 @@ describe("PlayerAnnouncementsCard", () => {
     expect(html.match(/href="\/player\/announcements"/gu)).toHaveLength(1)
     expect(html).toContain("Open all announcements")
   })
+
+  it("takes 'New' from the server's academy clock rather than this device's", () => {
+    // Published today by the device's clock, but the server said it is not new.
+    const today = new Date().toISOString()
+    const stale = renderToStaticMarkup(
+      <PlayerAnnouncementsCard announcements={[announcement({ isNew: false, publishedAt: today })]} />,
+    )
+    const fresh = renderToStaticMarkup(
+      <PlayerAnnouncementsCard announcements={[announcement({ isNew: true, publishedAt: "2020-01-01T00:00:00.000Z" })]} />,
+    )
+
+    expect(stale).not.toContain("<span>New</span>")
+    expect(fresh).toContain("<span>New</span>")
+  })
 })
 
 describe("Player Dashboard read failure isolation", () => {

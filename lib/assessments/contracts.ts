@@ -17,6 +17,10 @@ export type AssessmentField =
 export type SaveAssessmentInput = {
   /** Absent the first time a coach saves; present once the assessment exists. */
   assessmentId?: string
+  /** Chosen by the form for a new assessment, so a repeated first save finds it. */
+  newAssessmentId?: string
+  /** Published assessments when the form opened; a first publish is refused if it changed. */
+  expectedPublishedCount?: number
   assessedOn: string
   comments: string
   improvements: string
@@ -50,4 +54,13 @@ export type AssessmentRecord = {
 export type AssessmentActionResult =
   | { ok: true; assessment: AssessmentRecord; message: string }
   | { ok: true; discarded: true; message: string }
-  | { ok: false; code: AssessmentErrorCode; field?: AssessmentField; message: string }
+  | {
+    ok: false
+    code: AssessmentErrorCode
+    /** What the assessment is now, when it changed elsewhere. */
+    currentStatus?: AssessmentStatus
+    /** The player's published count now, when a first publish was refused for it. */
+    currentPublishedCount?: number
+    field?: AssessmentField
+    message: string
+  }
