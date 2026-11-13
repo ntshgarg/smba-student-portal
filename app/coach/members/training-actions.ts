@@ -66,6 +66,16 @@ async function run<T>(operation: (coachId: string) => T): Promise<OperationalAct
   }
 }
 
+/** A form opened last month must not book a month it never showed (after midnight on the last day). */
+function requireSameMonth(shownNextMonthStart: string) {
+  if (shownNextMonthStart !== nextMonthStartOf(getAcademyDateKey(academyNow()))) {
+    operationalActionError(
+      "CONFLICT",
+      "A new month has started since this form was opened. Reload the page and open it again.",
+    )
+  }
+}
+
 /**
  * "Change schedule": starting on the 1st of next month it is scheduled and can
  * change anything; starting on a day this month it happens now, under the
@@ -75,12 +85,7 @@ export async function changeScheduleAction(input: ChangeThisMonthInput & { when?
   return run((coachId) => {
     const nextMonthStart = nextMonthStartOf(getAcademyDateKey(academyNow()))
     // A "next month" form sent after midnight on the last day must not apply at once.
-    if (input.when === "next" && input.startsOn !== nextMonthStart) {
-      operationalActionError(
-        "CONFLICT",
-        "A new month has started since this form was opened. Close it and open it again.",
-      )
-    }
+    if (input.when === "next") requireSameMonth(input.startsOn)
     if (input.startsOn === nextMonthStart) {
       const scheduled = scheduleTrainingChange(input, { coachId })
       return { kind: "scheduled" as const, startsOn: scheduled.effectiveOn, result: null }
@@ -90,8 +95,13 @@ export async function changeScheduleAction(input: ChangeThisMonthInput & { when?
   })
 }
 
-export async function scheduleEndOfTrainingAction(input: { playerId: string; stopFees: boolean }) {
-  return run((coachId) => scheduleEndOfTraining(input, { coachId }))
+export async function scheduleEndOfTrainingAction(
+  input: { nextMonthStart: string; playerId: string; stopFees: boolean },
+) {
+  return run((coachId) => {
+    requireSameMonth(input.nextMonthStart)
+    return scheduleEndOfTraining(input, { coachId })
+  })
 }
 
 export async function endTrainingNowAction(input: { playerId: string; stopFees: boolean }) {
@@ -114,13 +124,19 @@ export async function previewScheduleChangeAction(input: { playerId: string; sta
 }
 
 export async function changeMonthlyFeeAction(
-  input: { idempotencyKey: string; monthlyFeePaise: number; playerId: string },
+  input: { idempotencyKey: string; monthlyFeePaise: number; nextMonthStart: string; playerId: string },
 ) {
-  return run((coachId) => changeMonthlyFee(input, { coachId }))
+  return run((coachId) => {
+    requireSameMonth(input.nextMonthStart)
+    return changeMonthlyFee(input, { coachId })
+  })
 }
 
-export async function giveConcessionAction(input: GiveConcessionInput) {
-  return run((coachId) => giveConcession(input, { coachId }))
+export async function giveConcessionAction(input: GiveConcessionInput & { nextMonthStart: string }) {
+  return run((coachId) => {
+    requireSameMonth(input.nextMonthStart)
+    return giveConcession(input, { coachId })
+  })
 }
 
 export async function stopConcessionAction(
