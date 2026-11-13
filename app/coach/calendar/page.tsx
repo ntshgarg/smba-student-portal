@@ -39,7 +39,6 @@ export default async function CoachCalendarPage({
       initialTrainingProfiles={snapshot.trainingProfiles}
     >
       <SessionCalendar
-        referenceDate={today}
         referenceInstant={now.getTime()}
         selectedDate={requestedDate}
       />

@@ -570,7 +570,10 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
         setFeedback({ field: result.field, message: result.message, tone: "error" })
         return
       }
-      setFeedback({ message: "Adjustment voided and original absence restored", tone: "success" })
+      setFeedback({
+        message: missedCancelled ? "Adjustment voided" : "Adjustment voided and original absence restored",
+        tone: "success",
+      })
     } catch (error) {
       const failure = describeSaveFailure({
         error,

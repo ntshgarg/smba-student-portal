@@ -53,9 +53,10 @@ export function StaffAttendanceRegister({
     visibleWindow,
   } = useAttendanceRegisterWindow({
     dateCount: dates.length,
-    initialIndex: 0,
+    // Opens on today in the current year, as the player register does.
+    initialIndex: activeYear === currentYear ? Math.max(todayIndex, 0) : 0,
     resetKey: String(activeYear),
-    scrollOnReset: false,
+    scrollOnReset: activeYear === currentYear,
   })
   const visibleDates = useMemo(
     () => dates.slice(visibleWindow.start, visibleWindow.end),

@@ -181,6 +181,8 @@ export function SessionScheduleCreate({
       const failure = describeSaveFailure({
         error,
         retained: "Your schedule details are still on screen",
+        // Creating again after a save that landed only meets the clash refusal.
+        unconfirmed: "Check the connection, then open Schedules & rosters to see whether the schedule was created",
         subject: "The schedule",
       })
       setFeedback({

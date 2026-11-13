@@ -211,8 +211,10 @@ export function SessionSchedules({
     if (seriesId) params.set("series", seriesId)
     else params.delete("series")
     const query = params.toString()
+    // `null`, not the current state: Next treats a call carrying its own state as
+    // internal and would not take the new address, so a refresh put the old one back.
     window.history.replaceState(
-      window.history.state,
+      null,
       "",
       `${window.location.pathname}${query ? `?${query}` : ""}`,
     )

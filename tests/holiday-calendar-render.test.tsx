@@ -7,6 +7,7 @@ import type { TrainingSessionOccurrence, TrainingSessionSeries } from "@/lib/ses
 const portal = vi.hoisted(() => ({
   actions: {
     cancelSessionOccurrenceAction: vi.fn(),
+    publishAttendanceAdjustmentAction: vi.fn(),
     replaceSessionOccurrenceAction: vi.fn(),
     retractAcademyHolidayAction: vi.fn(),
   },
@@ -41,7 +42,8 @@ vi.mock("@/app/coach/actions", () => ({
   saveMemberAction: vi.fn(),
 }))
 vi.mock("@/app/coach/attendance/adjustments/actions", () => ({
-  publishAttendanceAdjustmentAction: vi.fn(),
+  keepAttendanceAdjustmentAction: vi.fn(),
+  publishAttendanceAdjustmentAction: portal.actions.publishAttendanceAdjustmentAction,
   voidAttendanceAdjustmentAction: vi.fn(),
 }))
 vi.mock("@/components/coach/coach-portal-provider", async (importOriginal) => {
@@ -54,12 +56,13 @@ vi.mock("@/components/coach/coach-portal-provider", async (importOriginal) => {
 })
 
 const { SessionCalendar } = await import("@/components/coach/calendar/session-calendar")
-const { CoachPortalProvider, useSessionPortal } = await import("@/components/coach/coach-portal-provider")
+const { CoachPortalProvider, useAttendancePortal, useSessionPortal } = await import("@/components/coach/coach-portal-provider")
 
 afterEach(() => {
   portal.fake = null
   portal.refresh.mockReset()
   portal.actions.cancelSessionOccurrenceAction.mockReset()
+  portal.actions.publishAttendanceAdjustmentAction.mockReset()
   portal.actions.replaceSessionOccurrenceAction.mockReset()
   portal.actions.retractAcademyHolidayAction.mockReset()
 })
@@ -109,7 +112,7 @@ function renderCalendar({
     sessionSeries: [series],
   }
   return renderToStaticMarkup(
-    <SessionCalendar referenceDate="2026-11-13" referenceInstant={Date.parse("2026-11-13T04:00:00Z")} selectedDate="2026-11-13" />,
+    <SessionCalendar referenceInstant={Date.parse("2026-11-13T04:00:00Z")} selectedDate="2026-11-13" />,
   )
 }
 
@@ -216,6 +219,31 @@ describe("the calendar after the server turns an action down", () => {
       ok: false,
     })
     await sessions.replaceSessionOccurrence(move)
+    expect(portal.refresh).toHaveBeenCalledOnce()
+  })
+})
+
+describe("the make-up screen after the server turns a reschedule down", () => {
+  it("refetches, so a missed session made up in another tab stops being offered", async () => {
+    let captured: ReturnType<typeof useAttendancePortal> | null = null
+    function Capture() {
+      captured = useAttendancePortal()
+      return null
+    }
+    renderToStaticMarkup(<CoachPortalProvider><Capture /></CoachPortalProvider>)
+    portal.actions.publishAttendanceAdjustmentAction.mockResolvedValue({
+      code: "CONFLICT",
+      field: "sourceOccurrenceId",
+      message: "That missed session has already been rescheduled.",
+      ok: false,
+    })
+
+    await captured!.publishAttendanceAdjustment({
+      completionOccurrenceId: "occurrence-2",
+      playerId: "player-1",
+      sourceOccurrenceId: "occurrence-1",
+    })
+
     expect(portal.refresh).toHaveBeenCalledOnce()
   })
 })

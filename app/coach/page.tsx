@@ -156,12 +156,12 @@ export default async function CoachDashboardPage({
     ? series.find((item) => item.id === nextScheduledSession.seriesId)
     : null
   const nextSessionLabel = nextScheduledSession && nextScheduledSeries
-    ? formatSessionLabel({
+    ? `${formatDateKey(nextScheduledSession.occurrenceDate)} · ${formatSessionLabel({
         programme: nextScheduledSeries.programme,
         batch: nextScheduledSeries.batch,
         startTime: academyTimeInputValue(nextScheduledSession.startsAt),
         durationMinutes: nextScheduledSession.durationMinutes,
-      })
+      })}`
     : null
   const nextOccurrence = resolveNextScheduledOccurrence({
     occurrences: todaySessions,

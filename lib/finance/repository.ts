@@ -351,7 +351,11 @@ export function hasCurrentOrFutureMatchingAssignment(
       const startsOn = assignment.effectiveFrom > assignment.seriesStartsOn
         ? assignment.effectiveFrom
         : assignment.seriesStartsOn
-      const endsOn = [assignment.effectiveTo, assignment.seriesEndsOn]
+      // `effectiveTo` is the first day off, so the place's last day is the one before.
+      const lastPlaceDay = assignment.effectiveTo === null
+        ? null
+        : addCalendarDays(assignment.effectiveTo, -1)
+      const endsOn = [lastPlaceDay, assignment.seriesEndsOn]
         .filter((value): value is string => value !== null)
         .reduce<string | null>((earliest, value) => (
           earliest === null || value < earliest ? value : earliest

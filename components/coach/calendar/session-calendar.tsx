@@ -41,6 +41,7 @@ import {
   formatAcademyTime,
   formatDateKey,
   formatSessionLabel,
+  getAcademyDateKey,
 } from "@/lib/format"
 import type { TrainingSessionOccurrence, TrainingSessionSeries } from "@/lib/sessions/types"
 
@@ -176,11 +177,9 @@ function replacementDraftFor(occurrence: TrainingSessionOccurrence): Replacement
 }
 
 export function SessionCalendar({
-  referenceDate,
   referenceInstant: initialReferenceInstant,
   selectedDate,
 }: {
-  referenceDate: string
   referenceInstant: number
   selectedDate: string
 }) {
@@ -198,7 +197,8 @@ export function SessionCalendar({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const today = referenceDate
+  // From the ticking clock, so a page left open past midnight moves on to the new day.
+  const today = getAcademyDateKey(referenceInstant)
   const selectedMonth = selectedDate.slice(0, 7)
   const monthWindow = calendarWindowForMonth(selectedMonth)
   const monthOccurrences = sessionOccurrences.filter((occurrence) => (
@@ -320,6 +320,10 @@ export function SessionCalendar({
       if (openDay) setMobileView("day")
       return
     }
+    // Stay on the day until a cancel or move has its answer, so its outcome is seen.
+    if (pendingSessionAction !== null) return
+    // A month change remounts this screen, which would drop a removal's answer.
+    if (retractingHolidayDates.length && dateKey.slice(0, 7) !== selectedMonth) return
     if (!replacementGuard.confirmDiscard(
       "Leave this day and discard the unsaved replacement details?",
     )) return
@@ -331,7 +335,10 @@ export function SessionCalendar({
       setMobileView("day")
       shouldFocusDay.current = true
     }
-    router.push(`${pathname}?${dateQuery(new URLSearchParams(searchParams.toString()), dateKey)}`, { scroll: false })
+    // Via navigateAfterCommit so the guard's history step-back cannot cancel the push.
+    replacementGuard.navigateAfterCommit(() => {
+      router.push(`${pathname}?${dateQuery(new URLSearchParams(searchParams.toString()), dateKey)}`, { scroll: false })
+    })
   }
 
   function openOccurrence(occurrence: TrainingSessionOccurrence) {

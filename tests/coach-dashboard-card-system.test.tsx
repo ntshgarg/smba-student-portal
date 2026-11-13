@@ -107,7 +107,7 @@ describe("coach dashboard Court Operations Board", () => {
   it.each([
     [4, "Beginner · Weekday · 6–7 am", "4 today", "4 sessions today"],
     [0, "Beginner · Weekday · 6–7 am", "Clear", "Next · Beginner · Weekday · 6–7 am"],
-    [0, null, "Setup", "No training scheduled yet."],
+    [0, null, "Setup", "No training scheduled."],
   ] as const)(
     "preserves the Sessions priority branches",
     (todaySessionCount, nextSessionLabel, status, detail) => {

@@ -182,6 +182,25 @@ describe("Fee Plan session-assignment gate", () => {
     )).toThrow(expect.objectContaining({ code: "SETUP_REQUIRED" }))
   })
 
+  // A place's end date is its first day off.
+  it("does not count a place that ends today or was cancelled before it began", () => {
+    const playerId = createPlayer("Ended Places")
+    addAssignment({ playerId, effectiveTo: "2026-08-16" })
+    addAssignment({
+      playerId,
+      effectiveFrom: "2026-09-01",
+      effectiveTo: "2026-09-01",
+      startsOn: "2026-09-01",
+    })
+
+    expect(repository.hasCurrentOrFutureMatchingAssignment(
+      database,
+      playerId,
+      "2026-08-16",
+      { programme: "Beginner", batch: "Weekday" },
+    )).toBe(false)
+  })
+
   it("accepts a matching active assignment that starts in the future", () => {
     const playerId = createPlayer("Future Assignment")
     addAssignment({

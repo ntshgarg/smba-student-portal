@@ -379,9 +379,10 @@ export async function cancelSessionOccurrenceAction(occurrenceId: string) {
  * backwards, so it is split into a read and a write. The read reports what the
  * closure would touch -- in particular attendance already recorded, which no
  * other cancellation path can ever encounter -- and the coach confirms against
- * it. Preview and apply deliberately do not share a token: a stale preview
- * over-reports at worst, and refusing the write on a changed preview would
- * block a holiday for the sake of a count.
+ * it. Preview and apply deliberately do not share a token: a stale preview can
+ * miss marks taken since the check (they come back if the holiday is removed),
+ * and refusing the write on a changed preview would block a holiday for the
+ * sake of a count.
  */
 export async function previewAcademyHolidaysAction(
   dateKeys: string[],

@@ -235,6 +235,19 @@ export function CoachPortalProvider({
     return result
   }, [])
 
+  /*
+   * A session, holiday or make-up action the server turns down because the day
+   * or the session changed elsewhere -- another tab, another device -- means this
+   * screen is out of date. Without a refetch the coach kept the old session and
+   * buttons that failed the same way every time until a reload.
+   */
+  const refreshAfterRefusal = useCallback((result: { ok: boolean; code?: string }) => {
+    if (result.ok) return
+    if (result.code === "CONFLICT" || result.code === "NOT_FOUND" || result.code === "BUSINESS_RULE") {
+      router.refresh()
+    }
+  }, [router])
+
   const publishAttendanceAdjustment = useCallback(async (input: {
     completionOccurrenceId: string
     playerId: string
@@ -242,7 +255,10 @@ export function CoachPortalProvider({
     sourceOccurrenceId: string
   }) => {
     const result = await publishAttendanceAdjustmentAction(input)
-    if (!result.ok) return result
+    if (!result.ok) {
+      refreshAfterRefusal(result)
+      return result
+    }
     const published = result.data
     setAttendanceAdjustments((current) => [
       published,
@@ -250,29 +266,35 @@ export function CoachPortalProvider({
     ])
     router.refresh()
     return result
-  }, [router])
+  }, [refreshAfterRefusal, router])
 
   const voidAdjustment = useCallback(async (adjustmentId: string) => {
     const result = await voidAttendanceAdjustmentAction(adjustmentId)
-    if (!result.ok) return result
+    if (!result.ok) {
+      refreshAfterRefusal(result)
+      return result
+    }
     const voided = result.data
     setAttendanceAdjustments((current) => current.map((item) => (
       item.id === voided.id ? voided : item
     )))
     router.refresh()
     return result
-  }, [router])
+  }, [refreshAfterRefusal, router])
 
   const keepAdjustment = useCallback(async (adjustmentId: string) => {
     const result = await keepAttendanceAdjustmentAction(adjustmentId)
-    if (!result.ok) return result
+    if (!result.ok) {
+      refreshAfterRefusal(result)
+      return result
+    }
     const kept = result.data
     setAttendanceAdjustments((current) => current.map((item) => (
       item.id === kept.id ? kept : item
     )))
     router.refresh()
     return result
-  }, [router])
+  }, [refreshAfterRefusal, router])
 
   /*
    * Every session mutation returns the same window snapshot, and each used to
@@ -286,19 +308,6 @@ export function CoachPortalProvider({
     setSessionOccurrences(snapshot.sessionOccurrences)
     setSessionSeries(snapshot.sessionSeries)
   }, [])
-
-  /*
-   * A session or holiday action the server turns down because the day or the
-   * session changed elsewhere -- another tab, another device -- means this
-   * screen is out of date. Without a refetch the coach kept the old session and
-   * buttons that failed the same way every time until a reload.
-   */
-  const refreshAfterRefusal = useCallback((result: { ok: boolean; code?: string }) => {
-    if (result.ok) return
-    if (result.code === "CONFLICT" || result.code === "NOT_FOUND" || result.code === "BUSINESS_RULE") {
-      router.refresh()
-    }
-  }, [router])
 
   const createSessionSeries = useCallback(async (input: CreateSessionSeriesInput) => {
     const result = await createSessionSeriesAction(input)

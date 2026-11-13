@@ -315,7 +315,16 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     const payment = pay(players.rejoiner, 400_000, "2026-10-02")
     changes.endTrainingNow({ playerId: players.rejoiner, stopFees: false }, context())
     const recorded = refund(payment.receipt.id, 50_000, "2026-10-04")
-    // Back from 1 November on a new fee plan.
+    // Back from 1 November on a new place and fee plan.
+    database.insert(schema.sessionAssignments).values({
+      id: "assignment-rejoiner-november",
+      accountId: players.rejoiner,
+      seriesId: morning,
+      effectiveFrom: "2026-11-01",
+      effectiveTo: null,
+      assignedByAccountId: coachId,
+      assignedAt: now,
+    }).run()
     finance.createOrReplaceFeeAgreement({
       ...fiveDay,
       agreedMonthlyFeePaise: 450_000,
