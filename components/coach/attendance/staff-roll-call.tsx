@@ -80,11 +80,14 @@ type SaveFeedback = ActionFeedback & {
 const saveDeadlineMs = 15_000
 
 export function StaffRollCall({
+  closedFor,
   initialDate,
   initialRecords,
   juniorCoaches,
   referenceDate,
 }: {
+  /** The holiday's name when the academy was closed on this date. */
+  closedFor: string | null
   initialDate: string
   initialRecords: StaffRecord[]
   juniorCoaches: StaffMember[]
@@ -115,13 +118,16 @@ export function StaffRollCall({
     [drafts],
   )
   const futureDate = selectedDate > referenceDate
+  // Nothing is marked on a closed day; a mark saved before the closure is
+  // kept, uncounted and hidden, and returns if the holiday is removed.
+  const closedDay = Boolean(closedFor) && selectedDate === initialDate
   // Carried on the save button as `aria-disabled` rather than `disabled`:
   // disabling the element that currently holds focus hands focus to `<body>`,
   // and it is the coach's own press that disables it — so every save, including
   // the failure whose "Save staff attendance again" below is the way back, would
   // send the next Tab to the top of the document. `saveRollCall` reads the same
   // constant, so a press that still reaches the handler does nothing.
-  const cannotSave = !drafts.length || isSaving || futureDate
+  const cannotSave = !drafts.length || isSaving || futureDate || closedDay
   // `aria-disabled` on its own would leave the button a permanent tab stop
   // whose press is a silent no-op, and the footer renders on a future date and
   // with nothing marked yet. So only the in-flight save keeps it tabbable: that
@@ -150,6 +156,7 @@ export function StaffRollCall({
   // twice: it only changes when this register's own save succeeds, and that
   // discards the draft before the effect can run again.
   useEffect(() => {
+    if (closedDay) return
     const timer = window.setTimeout(() => {
       const restored = readStaffAttendanceDraft(selectedDate)
       if (!restored.length) return
@@ -170,9 +177,10 @@ export function StaffRollCall({
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [selectedDate, storedByCoach])
+  }, [closedDay, selectedDate, storedByCoach])
 
   function resolvedChoice(coachAccountId: string) {
+    if (closedDay) return "cleared"
     return draftByCoach.get(coachAccountId)
       ?? storedByCoach.get(coachAccountId)
       ?? "cleared"
@@ -194,7 +202,7 @@ export function StaffRollCall({
     coachAccountId: string,
     choice: StaffAttendanceChoice,
   ) {
-    if (isSaving) return
+    if (isSaving || closedDay) return
     const base = storedByCoach.get(coachAccountId) ?? "cleared"
     const current = resolvedChoice(coachAccountId)
     const next = current === choice ? "cleared" : choice
@@ -299,6 +307,16 @@ export function StaffRollCall({
           <p>{formatDateKey(selectedDate, { year: "numeric" })}</p>
         </div>
 
+        {closedDay ? (
+          <div className="coach-day-holiday">
+            <div>
+              <span>Academy closed</span>
+              <strong>{closedFor}</strong>
+            </div>
+            <p>Nobody is marked on a closed day, and it does not count towards anyone’s attendance. A mark saved before the closure is kept and comes back if the holiday is removed.</p>
+          </div>
+        ) : null}
+
         <div className="attendance-record-section-heading staff-roll-call-heading">
           <div>
             <span>Daily staff record</span>
@@ -321,7 +339,7 @@ export function StaffRollCall({
               <span>Attendance status</span>
             </div>
             {juniorCoaches.map((coach, index) => {
-              const unavailable = futureDate || selectedDate < coach.joinedOn
+              const unavailable = futureDate || closedDay || selectedDate < coach.joinedOn
               const currentChoice = resolvedChoice(coach.accountId)
               const folio = String(index + 1).padStart(2, "0")
               return (
@@ -331,7 +349,9 @@ export function StaffRollCall({
                     <div>
                       <strong>{coach.fullName}</strong>
                       <small>{unavailable
-                        ? futureDate ? "Future date" : `Joined ${formatDateKey(coach.joinedOn)}`
+                        ? futureDate
+                          ? "Future date"
+                          : closedDay ? "Academy closed" : `Joined ${formatDateKey(coach.joinedOn)}`
                         : "Assistant coach"}</small>
                     </div>
                   </div>

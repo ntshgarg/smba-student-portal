@@ -199,6 +199,7 @@ const playerDiscardPrompt = "Leave this session and discard the unsaved attendan
 function rollCall(): ReactElement {
   return (
     <StaffRollCall
+      closedFor={null}
       initialDate="2026-08-21"
       initialRecords={[{ choice: "cleared", coachAccountId: "coach-1" }]}
       juniorCoaches={[{

@@ -24,6 +24,8 @@ import {
   coachProfiles,
   staffAttendanceRecords,
 } from "@/lib/db/schema"
+import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
+import { academyHolidaysOnDates } from "@/lib/sessions/holidays"
 
 export type StaffAttendanceChoice = "present" | "absent" | "cleared"
 
@@ -270,10 +272,14 @@ export function listStaffAttendanceRecords({
   }).get(coachAccountId) ?? []
 }
 
+/** A closed day leaves the count, as it does for players. */
 export function getStaffAttendanceSummary(
   input: AttendanceReadInput,
 ): StaffAttendanceSummary {
+  const closed = new Set(listAcademyHolidaysInWindow(input.from, input.to, input.database)
+    .map((holiday) => holiday.dateKey))
   const records = listStaffAttendanceRecords(input)
+    .filter((record) => !closed.has(record.dateKey))
   const present = records.filter((record) => record.choice === "present").length
   const absent = records.filter((record) => record.choice === "absent").length
   const recorded = present + absent
@@ -400,6 +406,7 @@ export function saveStaffAttendanceRecords({
       changes.map((change) => change.coachAccountId),
     )
     const storedChoices = loadStoredStaffChoices(transaction, changes)
+    const closures = academyHolidaysOnDates(transaction, changes.map((change) => change.dateKey))
     // Every validation below stays in its original position, so the change that
     // failed first still fails first with the same code. Deferring the writes is
     // invisible: an error rolls the transaction back either way, and the
@@ -461,6 +468,15 @@ export function saveStaffAttendanceRecords({
         operationalActionError(
           "BUSINESS_RULE",
           "Coach attendance cannot be marked before the joining date.",
+          "changes",
+        )
+      }
+      // Clearing records nothing, so only a new mark is refused.
+      const closure = closures.get(change.dateKey)
+      if (closure && change.choice !== "cleared") {
+        operationalActionError(
+          "BUSINESS_RULE",
+          `The academy was closed on this day for ${closure.label}, so there is no staff attendance to mark.`,
           "changes",
         )
       }

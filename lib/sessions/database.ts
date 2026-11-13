@@ -2,7 +2,7 @@ import "server-only"
 
 import { and, asc, eq, gte, inArray, lte, ne } from "drizzle-orm"
 
-import { initializeDatabase } from "@/lib/db/client"
+import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   academyHolidays,
   sessionAssignments,
@@ -69,6 +69,7 @@ function occurrenceRecords(
     venue: occurrence.venue,
     status: occurrence.status,
     replacementForOccurrenceId: occurrence.replacementForOccurrenceId,
+    holidayId: occurrence.holidayId,
   }))
   return resolveOccurrenceEligibilityDates(db, occurrences)
 }
@@ -78,8 +79,12 @@ function occurrenceRecords(
  * the same range. Kept separate from the occurrence read because the register
  * spans a whole year and a closure is one small row per date, not per session.
  */
-export function listAcademyHolidaysInWindow(from: string, to: string): AcademyHolidayRecord[] {
-  return initializeDatabase().select({
+export function listAcademyHolidaysInWindow(
+  from: string,
+  to: string,
+  database: SmbaDatabaseExecutor = initializeDatabase(),
+): AcademyHolidayRecord[] {
+  return database.select({
     dateKey: academyHolidays.dateKey,
     id: academyHolidays.id,
     label: academyHolidays.label,

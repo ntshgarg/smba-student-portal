@@ -8,6 +8,7 @@ import {
   listJuniorCoachProfiles,
   listStaffAttendanceRecordsByCoach,
 } from "@/lib/coach/staff-attendance"
+import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
 
 export const metadata = {
   title: "Staff roll call",
@@ -48,6 +49,7 @@ export default async function StaffRollCallPage({
   return (
     <StaffRollCall
       key={selectedDate}
+      closedFor={listAcademyHolidaysInWindow(selectedDate, selectedDate)[0]?.label ?? null}
       initialDate={selectedDate}
       initialRecords={records.map((record) => ({
         choice: record.choice,

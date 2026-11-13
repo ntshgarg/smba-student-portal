@@ -12085,6 +12085,23 @@ tr.is-expanded .coach-member-row-action button svg {
   color: var(--steel);
 }
 
+/* What the last holiday change did, above both calendar panes. */
+.coach-calendar-holiday-notice:not([data-empty="true"]) {
+  margin-top: var(--space-copy);
+}
+
+/* The staff roll call on a closed day says why nothing can be marked. */
+.coach-day-holiday {
+  flex-wrap: wrap;
+}
+
+.coach-day-holiday p {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--steel);
+  font-size: 0.875rem;
+}
+
 /* Month grid. */
 .coach-month-grid button.is-holiday {
   border-color: var(--navy);

@@ -87,6 +87,8 @@ type SessionPortalContextValue = {
   markAcademyHolidays: (input: {
     dateKeys: string[]
     label: string
+    /** The month on screen, so the calendar gets that month back. */
+    viewMonth?: string
   }) => Promise<OperationalActionResult<ReturnTypeSnapshot & MarkHolidaysSummary>>
   previewAcademyHolidays: (
     dateKeys: string[],
@@ -103,7 +105,11 @@ type SessionPortalContextValue = {
   }) => Promise<OperationalActionResult<ReturnTypeSnapshot>>
   retractAcademyHoliday: (
     dateKey: string,
-  ) => Promise<OperationalActionResult<ReturnTypeSnapshot & { restoredSessions: number }>>
+  ) => Promise<OperationalActionResult<ReturnTypeSnapshot & {
+    keptCancelledSessions: number
+    restoredSessions: number
+    reviewFlagsCleared: number
+  }>>
 }
 
 type MarkHolidaysSummary = {
@@ -179,8 +185,13 @@ export function CoachPortalProvider({
   // Server refreshes reconcile academy data without remounting the workspace.
   // Local drafts live in their editing surfaces and therefore survive an
   // unrelated successful save elsewhere on the same page.
+  //
+  // Holidays are part of that: a refresh that brought new occurrences but kept
+  // the old holiday list showed a day as closed after it had been reopened
+  // elsewhere, or sessions cancelled with no sign a holiday did it.
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      setAcademyHolidays(initialAcademyHolidays)
       setAttendanceAdjustments(initialAttendanceAdjustments)
       setAttendanceRecords(initialAttendanceRecords)
       setMembers(initialMembers)
@@ -192,6 +203,7 @@ export function CoachPortalProvider({
 
     return () => window.clearTimeout(timer)
   }, [
+    initialAcademyHolidays,
     initialAttendanceAdjustments,
     initialAttendanceRecords,
     initialMembers,
@@ -260,6 +272,19 @@ export function CoachPortalProvider({
     setSessionSeries(snapshot.sessionSeries)
   }, [])
 
+  /*
+   * A session or holiday action the server turns down because the day or the
+   * session changed elsewhere -- another tab, another device -- means this
+   * screen is out of date. Without a refetch the coach kept the old session and
+   * buttons that failed the same way every time until a reload.
+   */
+  const refreshAfterRefusal = useCallback((result: { ok: boolean; code?: string }) => {
+    if (result.ok) return
+    if (result.code === "CONFLICT" || result.code === "NOT_FOUND" || result.code === "BUSINESS_RULE") {
+      router.refresh()
+    }
+  }, [router])
+
   const createSessionSeries = useCallback(async (input: CreateSessionSeriesInput) => {
     const result = await createSessionSeriesAction(input)
     if (!result.ok) return result
@@ -279,11 +304,14 @@ export function CoachPortalProvider({
 
   const cancelOccurrence = useCallback(async (occurrenceId: string) => {
     const result = await cancelSessionOccurrenceAction(occurrenceId)
-    if (!result.ok) return result
+    if (!result.ok) {
+      refreshAfterRefusal(result)
+      return result
+    }
     const snapshot = result.data
     applySessionSnapshot(snapshot)
     return result
-  }, [applySessionSnapshot])
+  }, [applySessionSnapshot, refreshAfterRefusal])
 
   const replaceOccurrence = useCallback(async (input: {
     occurrenceId: string
@@ -293,11 +321,17 @@ export function CoachPortalProvider({
     venue: string
   }) => {
     const result = await replaceSessionOccurrenceAction(input)
-    if (!result.ok) return result
+    if (!result.ok) {
+      // A wrong field the coach can fix in the form needs no refetch.
+      if (result.field !== "startTime" && result.field !== "durationMinutes" && result.field !== "venue") {
+        refreshAfterRefusal(result)
+      }
+      return result
+    }
     const snapshot = result.data
     applySessionSnapshot(snapshot)
     return result
-  }, [applySessionSnapshot])
+  }, [applySessionSnapshot, refreshAfterRefusal])
 
   const previewEndSeries = useCallback(
     (seriesId: string) => previewEndSessionSeriesAction(seriesId),
@@ -309,7 +343,11 @@ export function CoachPortalProvider({
     [],
   )
 
-  const markHolidays = useCallback(async (input: { dateKeys: string[]; label: string }) => {
+  const markHolidays = useCallback(async (input: {
+    dateKeys: string[]
+    label: string
+    viewMonth?: string
+  }) => {
     const result = await markAcademyHolidaysAction(input)
     if (!result.ok) return result
     applySessionSnapshot(result.data)
@@ -321,11 +359,14 @@ export function CoachPortalProvider({
 
   const retractHoliday = useCallback(async (dateKey: string) => {
     const result = await retractAcademyHolidayAction(dateKey)
-    if (!result.ok) return result
+    if (!result.ok) {
+      refreshAfterRefusal(result)
+      return result
+    }
     applySessionSnapshot(result.data)
     router.refresh()
     return result
-  }, [applySessionSnapshot, router])
+  }, [applySessionSnapshot, refreshAfterRefusal, router])
 
   const saveMember = useCallback(async (input: UpdateMemberInput) => {
     const result = await saveMemberAction(input)
