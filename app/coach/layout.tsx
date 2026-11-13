@@ -39,7 +39,7 @@ export default async function CoachLayout({ children }: { children: React.ReactN
       <>
         {identity.previewMode ? <AdminPreviewBanner label={`${identity.fullName} · Assistant coach`} /> : null}
         <UnsavedWorkProvider>
-          <CoachShell coach={coach}>{children}</CoachShell>
+          <CoachShell coach={coach} previewMode={identity.previewMode === true}>{children}</CoachShell>
         </UnsavedWorkProvider>
       </>
     )
@@ -49,7 +49,7 @@ export default async function CoachLayout({ children }: { children: React.ReactN
     <>
       {identity.previewMode ? <AdminPreviewBanner label={`${identity.fullName} · Head coach`} /> : null}
       <UnsavedWorkProvider>
-        <CoachShell coach={coach}>{children}</CoachShell>
+        <CoachShell coach={coach} previewMode={identity.previewMode === true}>{children}</CoachShell>
       </UnsavedWorkProvider>
     </>
   )

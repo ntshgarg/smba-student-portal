@@ -58,9 +58,18 @@ export type RecoveryCodeReissueState = {
   errorField?: "currentPassword" | "secondFactor" | null
 }
 
-async function requireIdentity() {
+async function requireSignedIn() {
   const identity = await sessionProvider.getCurrentIdentity()
   if (!identity) throw new Error("Authentication is required.")
+  return identity
+}
+
+// Second lock behind the proxy: during a preview `subjectId` is the person viewed.
+async function requireIdentity() {
+  const identity = await requireSignedIn()
+  if (identity.previewMode) {
+    throw new Error("Admin preview is read-only. Exit preview before making changes.")
+  }
   return identity
 }
 
@@ -353,7 +362,7 @@ export async function reissueRecoveryCodesAction(
   _previousState: RecoveryCodeReissueState,
   formData: FormData,
 ): Promise<RecoveryCodeReissueState> {
-  const identity = await requireIdentity()
+  const identity = await requireSignedIn()
   // A previewing platform admin holds their own session while `identity`
   // describes the coach on screen, so the credential gates below would test one
   // account and Better Auth would reissue the other's codes. The page redirects

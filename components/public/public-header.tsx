@@ -23,6 +23,7 @@ export type HeaderAccount = {
   initials: string
   dashboardHref: string
   dashboardLabel: string
+  previewMode: boolean
 }
 
 function accountFromSessionSummary(value: unknown): HeaderAccount | null {
@@ -45,6 +46,7 @@ function accountFromSessionSummary(value: unknown): HeaderAccount | null {
     initials,
     dashboardHref: role === "coach" ? "/coach" : "/player",
     dashboardLabel: role === "coach" ? "Coach Workspace" : "Player Journal",
+    previewMode: summary.account.previewMode === true,
   }
 }
 
@@ -157,20 +159,29 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
                     aria-label="Account navigation"
                   >
                     <p>
-                      <span>Account</span>
+                      <span>{account.previewMode ? "Viewing as" : "Account"}</span>
                       <strong>{account.name}</strong>
                     </p>
                     <a href={account.dashboardHref} onClick={() => setAccountOpen(false)}>
                       {account.dashboardLabel}
                     </a>
-                    <form action={clearSession}>
-                      <button
-                        className="header-account-signout"
-                        type="submit"
-                      >
-                        Sign out
-                      </button>
-                    </form>
+                    {account.previewMode ? (
+                      <form action="/admin/preview/exit" method="post">
+                        <input type="hidden" name="signOut" value="1" />
+                        <button className="header-account-signout" type="submit">
+                          Exit preview and sign out
+                        </button>
+                      </form>
+                    ) : (
+                      <form action={clearSession}>
+                        <button
+                          className="header-account-signout"
+                          type="submit"
+                        >
+                          Sign out
+                        </button>
+                      </form>
+                    )}
                   </nav>
                 ) : null}
               </>

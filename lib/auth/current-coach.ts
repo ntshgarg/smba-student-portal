@@ -31,6 +31,8 @@ export async function requireHeadAdminAction() {
   const identity = await sessionProvider.getCurrentIdentity()
   if (!identity && !(await sessionProvider.hasActiveSession())) throw new SessionExpiredError()
   if (!identity || identity.role !== "coach") throw new Error("Head coach access is required.")
+  // Second lock behind the proxy: a preview never saves in the coach's name.
+  if (identity.previewMode) throw new Error("Admin preview is read-only. Exit preview before making changes.")
   requireHeadAdminAccess(identity.subjectId)
   if (!identity.previewMode) ensureDueTrainingChangesApplied()
   return identity

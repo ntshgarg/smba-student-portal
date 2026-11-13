@@ -73,7 +73,7 @@ export class DatabaseSessionProvider implements SessionProvider {
       && !rawSession.user.twoFactorEnabled) return null
     if (result.role === "platform_admin") {
       const previewToken = (await cookies()).get(ADMIN_PREVIEW_COOKIE)?.value
-      const claim = readAdminPreviewToken(previewToken, result.accountId)
+      const claim = readAdminPreviewToken(previewToken, result.accountId, rawSession.session?.token)
       if (claim) {
         const target = initializeDatabase().select({
           accountId: accounts.id,
@@ -128,4 +128,5 @@ export async function clearDatabaseSession() {
   const cookieStore = await cookies()
   cookieStore.delete(LEGACY_SESSION_COOKIE)
   cookieStore.delete(LEGACY_PROTOTYPE_SESSION_COOKIE)
+  cookieStore.delete(ADMIN_PREVIEW_COOKIE)
 }

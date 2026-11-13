@@ -30,6 +30,8 @@ export const metadata: Metadata = {
 
 export default async function AdminPage() {
   const identity = await sessionProvider.getCurrentIdentity()
+  // During a preview the identity is the person viewed; send them to their portal, not /login.
+  if (identity?.previewMode) redirect(identity.role === "coach" ? "/coach" : "/player")
   if (!identity || identity.role !== "platform_admin") redirect("/login")
   if (recoveryEmailEnrollmentRequired(identity.subjectId)) {
     redirect("/account/recovery-email/setup")

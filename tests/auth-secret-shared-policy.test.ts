@@ -32,7 +32,7 @@ describe("every HMAC key comes from one policy", () => {
     const mod = await load()
     expect(() => mod.authSubjectHash("SMBA-HC-0001")).toThrow(/BETTER_AUTH_SECRET is required/u)
     expect(() => mod.unknownIpHash()).toThrow(/BETTER_AUTH_SECRET is required/u)
-    expect(() => mod.createAdminPreviewToken({ actorAccountId: "a", targetAccountId: "b" }))
+    expect(() => mod.createAdminPreviewToken({ actorAccountId: "a", sessionToken: "s", targetAccountId: "b" }))
       .toThrow(/BETTER_AUTH_SECRET is required/u)
   })
 
