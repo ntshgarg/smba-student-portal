@@ -1,17 +1,4 @@
-/*
- * The page trail in a Fee records address: `cursors` holds the anchor row of
- * every page before the current one, so Previous can step back and the range
- * label ("31–40") can count the rows before this page.
- *
- * It used to be read through the same 120-character cut as a search box. Row
- * ids are 36 characters, so the trail of page 5 (four ids, 147 characters) was
- * cut mid-id, the cut id matched no row, and Next on page 4 opened the
- * "Financials are unavailable" screen once a list passed 40 rows.
- *
- * It is read here instead, whole, by both the records page and the player
- * record's back link. A trail that is too long or malformed reads as page 1,
- * which is what a hand-edited or stale address should do.
- */
+// cursors = anchor id of every earlier page. Read whole (never through the 120-char query cut); a malformed or over-long trail reads as page 1.
 
 /** How many pages a records list can be stepped through with Next. */
 export const RECORDS_PAGE_LIMIT = 100

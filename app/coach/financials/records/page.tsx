@@ -118,15 +118,7 @@ function pagination({
   }
 }
 
-const RESTARTED_NOTICE = "The list changed since the last page, so it starts again from the first page."
-
-/*
- * Reads one page of a records list. When the page's anchor row no longer
- * matches (a player left the filtered status, an entry was reversed, or the
- * address was edited), the list starts again from page 1 with a note rather
- * than replacing the whole workspace with the "Financials are unavailable"
- * screen. Any other failure still reaches that screen.
- */
+// A stale page anchor restarts the list at page 1; any other error still reaches the error screen.
 function readPage<T>(
   trail: string[],
   restartHref: string,
@@ -179,7 +171,6 @@ export default async function FinancialRecordsPage({
   const periodValue = queryValue(params, "period")
   const period = isValidMonthKey(periodValue) ? periodValue : academyCurrentMonth()
   const trail = readRecordsTrail(params.cursors)
-  const notice = queryValue(params, "restarted") === "1" ? RESTARTED_NOTICE : null
 
   if (view === "fees") {
     const mode = validMode(queryValue(params, "mode"))
@@ -195,7 +186,7 @@ export default async function FinancialRecordsPage({
       scope,
       status,
     }
-    const register = readPage(trail, recordsUrl(view, { ...base, restarted: "1" }), (cursor) => getFeeRegister({
+    const register = readPage(trail, recordsUrl(view, base), (cursor) => getFeeRegister({
       cursor,
       limit: PAGE_SIZE,
       mode,
@@ -214,7 +205,6 @@ export default async function FinancialRecordsPage({
     return (
       <FinancialRecordsWorkspace
         activeView="fees"
-        notice={notice}
         feeRegister={{
           exportHref: exportHref("/coach/financials/records/fees.csv", base),
           filters: {
@@ -257,7 +247,7 @@ export default async function FinancialRecordsPage({
         to: selectedRange.to,
         includeReversed: includeReversed ? "true" : undefined,
       }
-      const dayBook = readPage(trail, recordsUrl(view, { ...base, restarted: "1" }), (cursor) => getCollectionsDayBook({
+      const dayBook = readPage(trail, recordsUrl(view, base), (cursor) => getCollectionsDayBook({
         ...selectedRange,
         cursor,
         includeReversed,
@@ -267,7 +257,6 @@ export default async function FinancialRecordsPage({
       return (
         <FinancialRecordsWorkspace
           activeView="collections"
-          notice={notice}
           dayBook={{
             events: dayBook.events.map((event) => ({
               ...event,
@@ -309,7 +298,7 @@ export default async function FinancialRecordsPage({
     from: validDates ? from || undefined : undefined,
     to: validDates ? to || undefined : undefined,
   }
-  const activity = readPage(trail, recordsUrl(view, { ...base, restarted: "1" }), (cursor) => getFinancialActivity({
+  const activity = readPage(trail, recordsUrl(view, base), (cursor) => getFinancialActivity({
     coachId: coachId === "all" ? undefined : coachId,
     cursor,
     eventTypes: eventType === "all" ? undefined : [eventType],
@@ -322,7 +311,6 @@ export default async function FinancialRecordsPage({
   return (
     <FinancialRecordsWorkspace
       activeView="activity"
-      notice={notice}
       activity={{
         coachOptions,
         eventTypeOptions: ACTIVITY_TYPES,

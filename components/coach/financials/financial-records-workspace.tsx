@@ -12,7 +12,6 @@ import {
 import Link from "next/link"
 import type { ReactNode } from "react"
 
-import { RecordsRestartNotice } from "@/components/coach/financials/records-restart-notice"
 
 import {
   formatAcademyDate,
@@ -92,10 +91,7 @@ export type FinancialActivityView = {
   pagination: FinancialRecordsPagination
 }
 
-export type FinancialRecordsWorkspaceProps = {
-  /** Shown once above the list when it started again from page 1. */
-  notice?: string | null
-} & (
+export type FinancialRecordsWorkspaceProps =
   | {
     activeView: "fees"
     activity?: never
@@ -114,7 +110,6 @@ export type FinancialRecordsWorkspaceProps = {
     dayBook?: never
     feeRegister?: never
   }
-)
 
 const statusLabels: Record<FinanceStatus, string> = {
   not_prepared: "Not issued",
@@ -753,7 +748,6 @@ export function FinancialRecordsWorkspace(props: FinancialRecordsWorkspaceProps)
 
       <RecordsNavigation activeView={activeView} />
 
-      {props.notice ? <RecordsRestartNotice message={props.notice} /> : null}
 
       {props.activeView === "fees" ? <FeeRegister register={props.feeRegister} /> : null}
       {props.activeView === "collections" ? <CollectionsDayBook dayBook={props.dayBook} /> : null}

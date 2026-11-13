@@ -5101,12 +5101,7 @@ function recordsQuery<T>(load: () => T) {
   }
 }
 
-/**
- * Whether a records read failed only because its page anchor no longer
- * matches a row: the list changed under the coach (a player moved out of the
- * filtered status, an entry was reversed) or the address was edited. The
- * records page starts the list again instead of showing the error screen.
- */
+/** True when a records read failed only because its page anchor matches no row. */
 export function isStaleRecordsCursor(error: unknown) {
   return error instanceof FinanceServiceError
     && error.code === "INVALID_INPUT"

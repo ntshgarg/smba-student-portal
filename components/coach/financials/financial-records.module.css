@@ -773,10 +773,6 @@
   line-height: 1.45;
 }
 
-.recordsNotice {
-  margin-top: var(--space-group);
-}
-
 .pagination > div {
   display: flex;
   gap: var(--space-tight);

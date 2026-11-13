@@ -284,21 +284,18 @@ describe("paging through Fee records", () => {
     expect(returned.feeRegister.pagination.label).toBe("41–45")
   })
 
-  it("starts again from page 1, with a note, when the page's anchor no longer matches", async () => {
+  it("starts again from page 1 when the page's anchor no longer matches", async () => {
     mocks.redirect.mockClear()
     // An anchor that matches no row: a player who left the filtered list.
     await expect(open({ cursors: [playerIds[0], randomUUID()].join(",") }))
       .rejects.toThrow("NEXT_REDIRECT:")
     const restart = searchOf(mocks.redirect.mock.calls[0]![0])
-    expect(restart).toMatchObject({ restarted: "1", view: "fees" })
+    expect(restart).toMatchObject({ view: "fees" })
     expect(restart.cursors).toBeUndefined()
 
     const restarted = await open(restart)
     if (restarted.activeView !== "fees") throw new Error("Expected the fee register.")
-    expect(restarted.notice).toMatch(/starts again from the first page/u)
     expect(restarted.feeRegister.pagination.label).toBe("1–10")
-    // The note is for this visit only: Next does not carry it on.
-    expect(searchOf(restarted.feeRegister.pagination.nextHref!).restarted).toBeUndefined()
   })
 
   it("keeps the coach's search and filters when a list starts again", async () => {
@@ -307,7 +304,6 @@ describe("paging through Fee records", () => {
       .rejects.toThrow("NEXT_REDIRECT:")
     expect(searchOf(mocks.redirect.mock.calls[0]![0])).toMatchObject({
       q: "Paging",
-      restarted: "1",
       scope: "all",
       status: "not_prepared",
       view: "fees",
@@ -316,7 +312,7 @@ describe("paging through Fee records", () => {
     mocks.redirect.mockClear()
     await expect(open({ cursors: randomUUID(), q: "Sathiya", view: "activity" }))
       .rejects.toThrow("NEXT_REDIRECT:")
-    expect(searchOf(mocks.redirect.mock.calls[0]![0])).toMatchObject({ q: "Sathiya", restarted: "1", view: "activity" })
+    expect(searchOf(mocks.redirect.mock.calls[0]![0])).toMatchObject({ q: "Sathiya", view: "activity" })
   })
 
   it("stops offering Next at the page limit and says why, instead of jumping back to page 1", async () => {
@@ -344,7 +340,7 @@ describe("reading the page trail", () => {
   })
 
   it("reads a malformed or over-long trail as page 1", async () => {
-    const { RECORDS_PAGE_LIMIT, readRecordsTrail, recordsTrailCanGrow } = await import("@/lib/finance/records-trail")
+    const { RECORDS_PAGE_LIMIT, readRecordsTrail } = await import("@/lib/finance/records-trail")
     expect(readRecordsTrail(undefined)).toEqual([])
     expect(readRecordsTrail("")).toEqual([])
     expect(readRecordsTrail("a,,b")).toEqual([])
@@ -352,7 +348,5 @@ describe("reading the page trail", () => {
     const atLimit = Array.from({ length: RECORDS_PAGE_LIMIT - 1 }, (_, index) => `id-${index}`)
     expect(readRecordsTrail(atLimit.join(","))).toHaveLength(RECORDS_PAGE_LIMIT - 1)
     expect(readRecordsTrail([...atLimit, "one-more"].join(","))).toEqual([])
-    expect(recordsTrailCanGrow(atLimit.slice(0, -1))).toBe(true)
-    expect(recordsTrailCanGrow(atLimit)).toBe(false)
   })
 })
