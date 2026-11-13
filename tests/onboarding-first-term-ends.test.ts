@@ -345,7 +345,7 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       database,
       input: { ...classification, academyPlan: "weekday-5-day", expectedRevision: revision, playerId: gita },
       now,
-    })).toThrow(/Use Start again on the Session step/u)
+    })).toThrow(/Start again on the Session step/u)
   })
 
   it("does not add a first schedule to a player whose onboarding is complete", () => {
@@ -446,11 +446,12 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
   it("stops the fee plan at an End training booked while onboarding was open", () => {
     const mira = newPlayer("Mira Booked End")
     assign(mira, autumn, "2026-11-02")
-    // The End form offers no fees choice to a player with no fee plan.
+    // The End form offers no fees choice to a player with no fee plan;
+    // completing onboarding then ends the plan it makes with this end.
     changes.scheduleEndOfTraining({ playerId: mira, stopFees: false }, context())
     expect(database.select().from(schema.trainingChanges)
       .where(eq(schema.trainingChanges.playerAccountId, mira)).get())
-      .toMatchObject({ kind: "end", status: "scheduled", stopFees: true })
+      .toMatchObject({ kind: "end", status: "scheduled" })
 
     const { preview, result } = completeOnboarding(mira)
     expect(preview.blockers).toEqual([])

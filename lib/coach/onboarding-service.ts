@@ -15,10 +15,8 @@ import {
   sessionAssignments,
   sessionAssignmentWeekdays,
   sessionAttendanceRecords,
-  sessionSeries,
   trainingChanges,
 } from "@/lib/db/schema"
-import { getAcademyDateKey } from "@/lib/format"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanIsValid,
@@ -155,11 +153,7 @@ export function saveOnboardingAssessment({
      */
     const assignments = tx.select({
       effectiveFrom: sessionAssignments.effectiveFrom,
-      effectiveTo: sessionAssignments.effectiveTo,
-      seriesEndsOn: sessionSeries.endsOn,
-      seriesStatus: sessionSeries.status,
     }).from(sessionAssignments)
-      .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
       .where(eq(sessionAssignments.accountId, input.playerId))
       .orderBy(asc(sessionAssignments.effectiveFrom))
       .all()
@@ -168,13 +162,6 @@ export function saveOnboardingAssessment({
       || player.batch !== input.batch
       || player.academyPlan !== input.academyPlan
     )) {
-      // Same rule as the Assessment step's lock; names the Session step's own button.
-      const today = getAcademyDateKey(now)
-      const running = assignments.some((assignment) => (
-        assignment.effectiveTo === null
-        && assignment.seriesStatus === "active"
-        && (assignment.seriesEndsOn === null || assignment.seriesEndsOn >= today)
-      ))
       operationalActionError(
         "BUSINESS_RULE",
         onboardingRecordsFor(tx, input.playerId).length
@@ -182,8 +169,7 @@ export function saveOnboardingAssessment({
             + "attendance or fees recorded. Finish onboarding on the Fee Plan step, then change "
             + "them in Members."
           : "Level, batch and Training plan are fixed while this player has a schedule. Use "
-            + `${running ? "Clear this assignment" : "Start again"} on the Session step first, `
-            + "then change them here.",
+            + "Clear this assignment or Start again on the Session step first, then change them here.",
         "academyPlan",
       )
     }

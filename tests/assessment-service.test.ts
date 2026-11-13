@@ -183,7 +183,7 @@ describe("player assessments", () => {
   it("lists never-assessed players first, then whoever has waited longest", () => {
     service.publishAssessment(input({ assessedOn: "2026-08-01", playerId: secondPlayerId }), { coachId, database, now })
     const home = queries.listAssessmentHome(coachId, { database })
-    // Players off a schedule come after the ones training now, marked as such.
+    // The paused player is listed too, marked as off a schedule.
     expect(home.players.map((player) => [player.name, player.offSchedule])).toEqual([
       ["Meera Iyer", false],
       ["Aarav Nair", false],

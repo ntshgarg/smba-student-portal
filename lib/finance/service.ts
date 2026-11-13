@@ -1185,7 +1185,13 @@ function buildOnboardingFinancePreview(
       eq(trainingChanges.kind, "end"),
     ))
     .get()
-  const waitingEndAfter = waitingEnd ? addCalendarDays(waitingEnd.effectiveOn, -1).slice(0, 7) : null
+  // An end already due is applied shortly (lib/training/changes.ts); wait for it.
+  if (waitingEnd && waitingEnd.effectiveOn <= academyDateKey) {
+    blockers.push(`Their End training booked for ${formatDateKey(waitingEnd.effectiveOn)} has not been applied yet. Try again in a few minutes.`)
+  }
+  const waitingEndAfter = waitingEnd && waitingEnd.effectiveOn > academyDateKey
+    ? addCalendarDays(waitingEnd.effectiveOn, -1).slice(0, 7)
+    : null
   const feePlanEndsAfter = [placeEndsAfter, waitingEndAfter]
     .filter((month): month is string => month !== null)
     .sort()[0] ?? null

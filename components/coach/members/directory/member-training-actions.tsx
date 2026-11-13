@@ -337,7 +337,8 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                 Their fee from {monthName(scheduled.effectiveOn)} is set in the scheduled change.
               </p>
             ) : null}
-            {fee?.activeAgreementId && scheduled?.kind === "end" && scheduled.stopFees ? (
+            {fee?.activeAgreementId && scheduled?.kind === "end" && scheduled.stopFees
+              && fee.feeChangeStartsOn >= scheduled.effectiveOn ? (
               <p className={styles.help}>
                 Fees stop after {monthBefore(scheduled.effectiveOn)} with the planned end of training.
               </p>
@@ -346,7 +347,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
               <div className={styles.actions}>
                 {/* Not while a booked change or fee-stopping end decides the fee. */}
                 {hasRunningPlace && !(scheduled?.kind === "change")
-                  && !(scheduled?.kind === "end" && scheduled.stopFees) ? (
+                  && !(scheduled?.kind === "end" && scheduled.stopFees && fee.feeChangeStartsOn >= scheduled.effectiveOn) ? (
                   <button className={`${styles.button} ${styles.primary}`} disabled={busy} onClick={() => toggle("fee")} type="button">
                     Change fee
                   </button>
@@ -920,11 +921,9 @@ function EndForm({
       ) : null}
       {inOnboarding ? (
         <p className={styles.help}>
-          {name} has not finished Player onboarding, so they have no fee plan and cannot sign in
-          yet. Ending training keeps the days they were on their first schedule. Afterwards,
-          finish onboarding to charge the registration fee and the months they trained; no
-          monthly fee is issued after their training ends. If they leave before their first
-          training day, there is nothing to charge: archive them instead.
+          {name} has not finished Player onboarding. Afterwards, finish it to charge the
+          registration fee and the months they trained; if they leave before their first
+          training day, archive them instead.
         </p>
       ) : null}
       <div className={styles.field}>

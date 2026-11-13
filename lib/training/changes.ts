@@ -444,7 +444,7 @@ export function scheduleEndOfTraining(
 ) {
   requireHeadAdminAccess(coachId, { database })
   return database.transaction((tx) => {
-    const player = requirePlayer(tx, input.playerId)
+    requirePlayer(tx, input.playerId)
     if (!openAssignments(tx, input.playerId).length) {
       operationalActionError("BUSINESS_RULE", "This player is not on any schedule.")
     }
@@ -457,8 +457,7 @@ export function scheduleEndOfTraining(
       level: null,
       monthlyFeePaise: null,
       seriesId: null,
-      // In onboarding the plan made at completion stops with this end.
-      stopFees: Boolean(input.stopFees) || !player.onboardingCompletedAt,
+      stopFees: Boolean(input.stopFees),
       updatedAt: now,
       weekdays: "[]",
     }

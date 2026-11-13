@@ -97,13 +97,6 @@ export function changeMonthlyFee(
           `This player's training changes on ${formatTermDate(waiting.effectiveOn)} with its own fee. Edit that change instead.`,
         )
       }
-      // A new fee could only start after a waiting end that stops fees.
-      if (waiting?.kind === "end" && waiting.stopFees) {
-        operationalActionError(
-          "CONFLICT",
-          `This player's training ends and their fees stop from ${formatTermDate(waiting.effectiveOn)}, so there is no later fee to change. Cancel the planned end first to change their fee.`,
-        )
-      }
       const enrollment = tx.select().from(playerEnrollments)
         .where(eq(playerEnrollments.accountId, input.playerId)).get()
       if (!enrollment?.level || !enrollment.batch || !enrollment.academyPlan) {
@@ -125,6 +118,13 @@ export function changeMonthlyFee(
         eq(financialCharges.lifecycle, "issued"),
       )).get())
       const startsOn = feeChangeStartsOn({ activePlanFrom: active.effectiveFrom, thisMonthIssued, today })
+      // A new fee starting on or after a waiting end that stops fees would never be billed.
+      if (waiting?.kind === "end" && waiting.stopFees && startsOn >= waiting.effectiveOn) {
+        operationalActionError(
+          "CONFLICT",
+          `This player's training ends and their fees stop from ${formatTermDate(waiting.effectiveOn)}, so there is no later fee to change. Cancel the planned end first to change their fee.`,
+        )
+      }
 
       if (active.effectiveFrom >= startsOn) {
         // A fee change for that month is already waiting; change its amount.
