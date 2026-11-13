@@ -18,7 +18,7 @@ import {
   type RecoveryCodeReissueState,
 } from "@/app/account/security/actions"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
-import { describeSaveFailure } from "@/lib/client/network-failure"
+import { describeSaveFailure, signInInNewTab } from "@/lib/client/network-failure"
 import { formatAcademyDate } from "@/lib/format"
 import { PasswordInput } from "@/components/password-input"
 import {
@@ -73,6 +73,19 @@ const sessionPreviewCount = 5
  * in the portal. `toLocaleString` used the viewer's machine zone, so a coach
  * travelling, or a browser set to UTC, read times that matched nothing else.
  */
+/** The way out of an expired sign-in, beside the error that names it. */
+function SignInLink({ shown }: { shown?: boolean }) {
+  if (!shown) return null
+  return (
+    <>
+      {" "}
+      <a href={signInInNewTab.href} rel="noopener" target="_blank">
+        {signInInNewTab.label}<span className="sr-only"> (opens in a new tab)</span>
+      </a>
+    </>
+  )
+}
+
 function academyDateTime(value: string) {
   return formatAcademyDate(value, { hour: "numeric", minute: "2-digit" })
 }
@@ -116,7 +129,13 @@ export function AccountSecurityWorkspace({
     {
       // No field was rejected and nothing succeeded, so clear both verdicts
       // rather than leave a stale one beside the failure.
-      fold: (state, error) => ({ ...state, error, errorField: null, success: null }),
+      fold: (state, error, kind) => ({
+        ...state,
+        error,
+        errorField: null,
+        signInExpired: kind === "session-expired",
+        success: null,
+      }),
       subject: "Your new password",
       unconfirmed: "If it went through, your new password is now the one that works and"
         + " other devices were signed out. Reload this page: if you are asked to sign in,"
@@ -124,7 +143,7 @@ export function AccountSecurityWorkspace({
     },
   )
   const [pinState, pinAction, pinPending] = useResilientActionState(savePinAction, initialPinState, {
-    fold: (state, error) => ({ ...state, error, success: null }),
+    fold: (state, error, kind) => ({ ...state, error, signInExpired: kind === "session-expired", success: null }),
     subject: "Your PIN",
     unconfirmed: "Your password still signs you in either way. Reload this page to see"
       + " whether the PIN changed before trying again",
@@ -133,7 +152,7 @@ export function AccountSecurityWorkspace({
     removePinAction,
     initialPinState,
     {
-      fold: (state, error) => ({ ...state, error, success: null }),
+      fold: (state, error, kind) => ({ ...state, error, signInExpired: kind === "session-expired", success: null }),
       subject: "Your PIN removal",
       unconfirmed: "Your password still signs you in either way. Reload this page to see"
         + " whether the PIN was removed",
@@ -152,6 +171,7 @@ export function AccountSecurityWorkspace({
         codes: kind === "session-expired" ? state.codes : null,
         error,
         errorField: null,
+        signInExpired: kind === "session-expired",
       }),
       subject: "Your request for new recovery codes",
       unconfirmed: "If it went through, your old codes no longer work and the new ones could"
@@ -346,7 +366,7 @@ export function AccountSecurityWorkspace({
                 still hold. A recovery code used here is replaced with the rest.
               </p>
             </div>
-            {reissueState.error ? <p className="login-error" id={RECOVERY_CODES_ERROR_ID} role="alert">{reissueState.error}</p> : null}
+            {reissueState.error ? <p className="login-error" id={RECOVERY_CODES_ERROR_ID} role="alert">{reissueState.error}<SignInLink shown={reissueState.signInExpired} /></p> : null}
             <button type="submit" disabled={reissuePending}>{reissuePending ? "Reissuing…" : "Reissue recovery codes"}</button>
           </form>
           {reissuedCodes ? (
@@ -471,7 +491,7 @@ export function AccountSecurityWorkspace({
               <label htmlFor="security-confirm-password"><span>Confirm new password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
               <PasswordInput id="security-confirm-password" name="confirmPassword" autoComplete="new-password" minLength={12} maxLength={128} required {...passwordFieldProps("confirmPassword")} />
             </div>
-            {passwordState.error ? <p className="login-error" id={PASSWORD_ERROR_ID} role="alert">{passwordState.error}</p> : null}
+            {passwordState.error ? <p className="login-error" id={PASSWORD_ERROR_ID} role="alert">{passwordState.error}<SignInLink shown={passwordState.signInExpired} /></p> : null}
             {passwordState.success ? <p className="security-success" role="status">{passwordState.success}</p> : null}
             <button type="submit" disabled={passwordPending}>{passwordPending ? "Changing…" : "Change password"}</button>
           </form>
@@ -597,7 +617,7 @@ export function AccountSecurityWorkspace({
             <label><span>{pinEnabled ? "New PIN" : "PIN"} <span className="security-required-marker" aria-hidden="true">*</span></span><input className="login-pin-input" name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required aria-invalid={pinValidationTarget === "pin" ? true : undefined} /></label>
             <label><span>Confirm PIN <span className="security-required-marker" aria-hidden="true">*</span></span><input className="login-pin-input" name="confirmPin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required aria-invalid={pinValidationTarget === "confirmPin" ? true : undefined} /></label>
             {pinValidationTarget ? <p className="security-validation-message" role="alert">Complete the highlighted required field.</p> : null}
-            {pinState.error ? <p className="login-error" role="alert">{pinState.error}</p> : null}
+            {pinState.error ? <p className="login-error" role="alert">{pinState.error}<SignInLink shown={pinState.signInExpired} /></p> : null}
             {pinState.success ? <p className="security-success" role="status">{pinState.success}</p> : null}
             <button type="submit" disabled={pinPending}>{pinPending ? "Saving…" : pinEnabled ? "Change PIN" : "Enable PIN login"}</button>
           </form>
@@ -607,7 +627,7 @@ export function AccountSecurityWorkspace({
                 <label htmlFor="pin-remove-current-password"><span>Current password <span className="security-required-marker" aria-hidden="true">*</span></span></label>
                 <PasswordInput id="pin-remove-current-password" name="currentPassword" autoComplete="current-password" required />
               </div>
-              {removeState.error ? <p className="login-error" role="alert">{removeState.error}</p> : null}
+              {removeState.error ? <p className="login-error" role="alert">{removeState.error}<SignInLink shown={removeState.signInExpired} /></p> : null}
               {removeState.success ? <p className="security-success" role="status">{removeState.success}</p> : null}
               <button className="security-secondary-action" type="submit" disabled={removePending}>{removePending ? "Removing…" : "Remove PIN"}</button>
             </form>

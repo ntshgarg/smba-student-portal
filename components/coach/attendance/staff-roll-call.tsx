@@ -308,7 +308,6 @@ export function StaffRollCall({
       setFeedback({
         message: failure.message,
         offerRetry: failure.offerRetry,
-        signIn: failure.signIn,
         tone: "error",
       })
     } finally {

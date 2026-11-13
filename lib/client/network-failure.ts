@@ -70,7 +70,6 @@ const programmingErrorShape = new RegExp([
   "can't access property",
   "is not an? (function|constructor|object)",
   "is not iterable",
-  "is not defined",
   "is (undefined|null)\\b",
 ].join("|"), "iu")
 
@@ -123,11 +122,6 @@ export function classifySaveFailure(
   return classifyNetworkFailure(error, isOnline) ?? "unknown"
 }
 
-/** The cause clause for a request whose reply never arrived. */
-export function networkFailureCause(kind: NetworkFailureKind) {
-  return kind === "offline" ? "this device is offline" : "the connection dropped"
-}
-
 /**
  * Turns a rejected save into operational copy. `subject` (singular, no trailing
  * punctuation) names what was being saved; `retained` states what is still on
@@ -143,8 +137,6 @@ export function describeSaveFailure({
   unconfirmed,
 }: {
   error: unknown
-  /** Ignored; kept so older callers still compile. */
-  fallbackMessage?: string
   isOnline?: boolean
   retained: string
   subject: string
@@ -176,7 +168,7 @@ export function describeSaveFailure({
   }
 
   const cause = kind === "offline" || kind === "unreachable"
-    ? `was not confirmed because ${networkFailureCause(kind)}`
+    ? `was not confirmed because ${kind === "offline" ? "this device is offline" : "the connection dropped"}`
     : kind === "timeout"
       ? "was not confirmed in time"
       : "ran into an unexpected problem"

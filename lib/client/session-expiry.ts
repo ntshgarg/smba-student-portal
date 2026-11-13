@@ -8,11 +8,6 @@ import type { OperationalActionErrorCode } from "@/lib/actions/operational-resul
  */
 const sessionExpiredCode: OperationalActionErrorCode = "SESSION_EXPIRED"
 
-/** True for a refused save result whose cause is an expired sign-in. */
-export function refusedForExpiredSignIn(result: { code?: string }) {
-  return result.code === sessionExpiredCode
-}
-
 /**
  * The login page takes no return path -- `app/login/page.tsx` reads only
  * `recovered`, and `postAuthenticationDestination` decides where a signed-in

@@ -40,11 +40,14 @@ export type PasswordChangeField = "currentPassword" | "newPassword" | "confirmPa
 export type PasswordChangeState = {
   error: string | null
   errorField?: PasswordChangeField | null
+  /** Set on screen when the error is an expired sign-in, so a sign-in link is shown. */
+  signInExpired?: boolean
   success: string | null
 }
 
 export type PinManagementState = {
   error: string | null
+  signInExpired?: boolean
   success: string | null
 }
 
@@ -58,6 +61,7 @@ export type RecoveryCodeReissueState = {
   error: string | null
   /** Which credential the reissue form should flag; `null` marks neither. */
   errorField?: "currentPassword" | "secondFactor" | null
+  signInExpired?: boolean
 }
 
 // These pages render only when signed in, so a missing identity is an expired sign-in.

@@ -24,7 +24,6 @@ import { useMemberTraining } from "@/components/coach/members/directory/member-t
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
 import { describeSaveFailure, signInInNewTab } from "@/lib/client/network-failure"
-import { refusedForExpiredSignIn } from "@/lib/client/session-expiry"
 import type { PlayerMemberRecord } from "@/lib/coach/types"
 import type { MemberFeeSummary, MemberScheduledChange } from "@/lib/training/member-summaries"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
@@ -148,7 +147,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
       const result = await action()
       if (!result.ok) {
         // An expired sign-in comes back as a value, not a throw.
-        setNotice(refusedForExpiredSignIn(result)
+        setNotice(result.code === "SESSION_EXPIRED"
           ? {
             action: signInInNewTab,
             message: `This change did not go through because your sign-in has expired. ${formKept}.`

@@ -500,7 +500,6 @@ export function PlayerAttendanceRecorder({
       setFeedback({
         message: failure.message,
         offerRetry: failure.offerRetry,
-        signIn: failure.signIn,
         tone: "error",
       })
     } finally {

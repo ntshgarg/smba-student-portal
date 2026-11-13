@@ -4,7 +4,6 @@ import { unstable_rethrow } from "next/navigation"
 import { useActionState } from "react"
 
 import {
-  classifySaveFailure,
   describeSaveFailure,
   type SaveFailureKind,
 } from "@/lib/client/network-failure"
@@ -48,8 +47,6 @@ export type ResilientActionOptions<State> = {
    * went wrong; only a `"session-expired"` is known to have changed nothing.
    */
   fold?: (state: State, message: string, kind: SaveFailureKind) => State
-  /** Older name for what is still on screen; prefer `unconfirmed`. */
-  retained?: string
   /** What was being submitted, as a singular noun phrase. No trailing punctuation. */
   subject: string
   /** How to find out whether it went through, true either way. No trailing punctuation. */
@@ -102,17 +99,10 @@ export function resilientAction<State extends ActionErrorState>(
        */
       unstable_rethrow(error)
 
-      return fold(state, describeUnconfirmedSubmission(error, wording), classifySaveFailure(error))
+      const failure = describeSaveFailure({ error, retained: "Nothing was changed", ...wording })
+      return fold(state, failure.message, failure.kind)
     }
   }
-}
-
-/** The sentence for a submission whose reply did not come back as an answer. */
-export function describeUnconfirmedSubmission(
-  error: unknown,
-  { retained = "Nothing was changed", subject, unconfirmed }: Omit<ResilientActionOptions<unknown>, "fold">,
-) {
-  return describeSaveFailure({ error, retained, subject, unconfirmed }).message
 }
 
 type ResilientActionState<State> = [

@@ -458,6 +458,26 @@ describe("after a lost reply the credential forms say what may already have chan
     expect(message).toContain("if you are asked to sign in, use your new password")
   })
 
+  it("gives a coach whose sign-in expired mid-change a way to sign in", () => {
+    controls.renderedStates = [{
+      error: "Your new password did not go through because your sign-in has expired.",
+      signInExpired: true,
+    } as CapturedState]
+    const markup = renderToStaticMarkup(
+      <AccountSecurityWorkspace
+        allowPin
+        authenticatorEnabled
+        authenticatorRequired
+        pinEnabled
+        pinRequired={false}
+        sessions={[]}
+        unusedRecoveryCodeCount={9}
+      />,
+    )
+    controls.renderedStates = null
+    expect(markup).toMatch(/your sign-in has expired\.[^<]*<a href="\/login" rel="noopener" target="_blank">Sign in in a new tab/u)
+  })
+
   it("tells a head coach whose reissue reply was lost that the old codes may be dead", async () => {
     const message = await droppedMessage(() => (
       <AccountSecurityWorkspace
