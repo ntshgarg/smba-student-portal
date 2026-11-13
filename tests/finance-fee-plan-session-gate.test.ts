@@ -185,7 +185,7 @@ describe("Fee Plan session-assignment gate", () => {
   // A place's end date is its first day off.
   it("does not count a place that ends today or was cancelled before it began", () => {
     const playerId = createPlayer("Ended Places")
-    addAssignment({ playerId, effectiveTo: "2026-08-16" })
+    addAssignment({ playerId, effectiveFrom: "2026-08-01", effectiveTo: "2026-08-16" })
     addAssignment({
       playerId,
       effectiveFrom: "2026-09-01",
