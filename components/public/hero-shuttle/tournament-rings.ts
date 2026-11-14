@@ -68,7 +68,7 @@ const CHAR_WIDTH = FONT_SIZE * 0.4 + LETTER_SPACING
 const FIRST_RADIUS = 95
 const RING_STEP = 10.9
 const LAST_RADIUS = 780
-const INK_ALPHA = 0.12
+const INK_ALPHA = 0.16
 // letters drawn between yields: a slice stays well inside one frame even on a slow laptop
 const LETTERS_PER_SLICE = 250
 
