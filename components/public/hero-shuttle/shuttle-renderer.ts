@@ -248,7 +248,7 @@ export function startShuttle(host: HTMLElement, options: ShuttleRendererOptions 
   let last = 0
   const paused = { offscreen: false, hidden: document.hidden, lost: false, stopped: false }
 
-  function resize() {
+  function resize(redraw = true) {
     const w = host.clientWidth
     const h = host.clientHeight
     if (!w || !h) return
@@ -271,7 +271,7 @@ export function startShuttle(host: HTMLElement, options: ShuttleRendererOptions 
     unitPx = SCALE * Math.min(w, h)
     // resizing clears the drawing buffer, and the observer fires after this frame's draw: redraw now,
     // or the frame shows blank while a window is being resized
-    if (changed || !running) draw()
+    if (redraw && (changed || !running)) draw()
   }
 
   function draw() {
@@ -347,13 +347,15 @@ export function startShuttle(host: HTMLElement, options: ShuttleRendererOptions 
     gov.level++
     gov.over = 0
     govScale = gov.level === 1 ? 0.75 : 0.55
-    resize()
+    // this frame's draw follows straight after
+    resize(false)
   }
 
   function tick(now: number) {
     raf = requestAnimationFrame(tick)
-    // the motion is slow, so a 120 Hz screen draws every other frame: 60 fps looks the same at half the work
-    if (last && now - last < 14) return
+    // the motion is slow, so a screen faster than about 105 Hz draws every other frame: 60 to 80 fps
+    // looks the same at half the work. Slower screens (75, 90, 100 Hz) draw every frame.
+    if (last && now - last < 9.5) return
     const ms = last ? now - last : 16.7
     last = now
     governor(ms)
@@ -375,7 +377,13 @@ export function startShuttle(host: HTMLElement, options: ShuttleRendererOptions 
   }
 
   const resizeObserver = new ResizeObserver(() => resize())
-  resizeObserver.observe(host)
+  // the box in device pixels also changes when the window moves to a screen with another pixel ratio;
+  // browsers that can't watch it watch the plain box
+  try {
+    resizeObserver.observe(host, { box: "device-pixel-content-box" })
+  } catch {
+    resizeObserver.observe(host)
+  }
   const intersectionObserver = new IntersectionObserver((entries) => {
     paused.offscreen = !entries[entries.length - 1].isIntersecting
     sync()
@@ -389,6 +397,10 @@ export function startShuttle(host: HTMLElement, options: ShuttleRendererOptions 
   const onContextLost = (event: Event) => {
     event.preventDefault()
     paused.lost = true
+    // the canvas is blank until the context comes back, if it ever does: show the still at full strength,
+    // as with no WebGL2. The first frame after a restore hands over to the live drawing again.
+    still?.style.setProperty("opacity", "1")
+    stillOpacity = -1
     sync()
   }
   const onContextRestored = () => {

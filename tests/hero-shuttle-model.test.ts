@@ -167,7 +167,11 @@ describe("hero shuttle model", () => {
 
   it("stays inside the slot through a whole loop at every landscape size", () => {
     // slot sizes (px) measured on the live hero
-    const slots = { "901x800": [405, 724], "1024x768": [460.8, 704.6], "1440x900": [633.6, 824], "2560x1440": [1126.4, 1364] }
+    const slots = {
+      "901x800": [405, 715], "1024x768": [460.8, 683], "1440x900": [633.6, 815], "2560x1440": [1126.4, 1355],
+      // short laptop windows: the hero is as tall as the screen below the header, or its copy
+      "1366x657": [601, 595], "1920x620": [845, 621], "901x480": [405, 573],
+    }
     const tightest: Record<string, number> = {}
     play(LOOP_MS + 1000, 50, (s) => {
       const ps = pose(s)

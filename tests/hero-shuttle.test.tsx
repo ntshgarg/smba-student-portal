@@ -9,6 +9,7 @@ import {
   HeroShuttle,
   controlHeroShuttle,
 } from "@/components/public/hero-shuttle/hero-shuttle"
+import { firstPaintStillOpacity } from "@/components/public/hero-shuttle/shuttle-model"
 import type { ShuttleRenderer } from "@/components/public/hero-shuttle/shuttle-renderer"
 
 const root = path.resolve(__dirname, "..")
@@ -50,6 +51,11 @@ describe("hero shuttle markup", () => {
 
   it("hides the slot with the same test the script uses", () => {
     expect(source("app/public-home.css")).toContain(`@media not all and ${HERO_SHUTTLE_MEDIA} {`)
+  })
+
+  it("starts the still at the strength the live drawing fades it from, so it never jumps", () => {
+    const css = source("app/public-home.css").match(/\.hero-shuttle-still \{[^}]*?opacity: ([\d.]+);/)
+    expect(Number(css?.[1])).toBe(firstPaintStillOpacity(0))
   })
 
   it("keeps the renderer and model out of the page's own bundle", () => {

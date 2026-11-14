@@ -6,10 +6,11 @@ import type { ShuttleRenderer } from "./shuttle-renderer"
 
 /**
  * The owner's rule (14 Nov 2026): the shuttle shows only while the hero is side by side on a landscape
- * screen, never on a phone. The height floor keeps large phones turned sideways (900+ px wide but about
- * 430 px tall) out. app/public-home.css hides the slot with the same test; keep the two in step.
+ * screen, never on a phone. The height floor keeps large phones turned sideways (900+ px wide but at most
+ * about 430 px tall) out, and still lets in short laptop windows. app/public-home.css hides the slot with
+ * the same test; keep the two in step.
  */
-export const HERO_SHUTTLE_MEDIA = "(min-width: 901px) and (orientation: landscape) and (min-height: 600px)"
+export const HERO_SHUTTLE_MEDIA = "(min-width: 901px) and (orientation: landscape) and (min-height: 480px)"
 const REDUCED_MOTION_MEDIA = "(prefers-reduced-motion: reduce)"
 // a valid 1x1 transparent GIF: "data:," is not an image and logs a load error
 const BLANK_IMAGE = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
@@ -168,13 +169,20 @@ export function controlWatermark(slot: HTMLElement, canvas: HTMLCanvasElement, l
           rings = module
           schedule()
         })
-        // without the watermark the hero is simply plainer
-        .catch(() => {})
+        // without the watermark the hero is simply plainer; the next time the slot is shown tries again
+        .catch(() => {
+          cancelWait = null
+        })
     })
   }
 
   const resizeObserver = new ResizeObserver(schedule)
-  resizeObserver.observe(slot)
+  // the box in device pixels also changes when the window moves to a screen with another pixel ratio
+  try {
+    resizeObserver.observe(slot, { box: "device-pixel-content-box" })
+  } catch {
+    resizeObserver.observe(slot)
+  }
   start()
   shown.addEventListener("change", start)
   return () => {

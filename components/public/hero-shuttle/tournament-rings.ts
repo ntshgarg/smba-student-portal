@@ -70,7 +70,7 @@ const RING_STEP = 10.9
 const LAST_RADIUS = 780
 const INK_ALPHA = 0.16
 // letters drawn between yields: a slice stays well inside one frame even on a slow laptop
-const LETTERS_PER_SLICE = 250
+const LETTERS_PER_SLICE = 60
 
 export interface Ring {
   r: number
@@ -104,7 +104,8 @@ export function tournamentRings(): Ring[] {
  * every few hundred letters so the caller can spread the work over frames and never block the page. The
  * drawing is built on its own canvas and copied to `target` only when complete, so a redraw after a
  * resize never shows a half-drawn or blank watermark. Each ring's letters are spaced to close its circle
- * exactly; the ink fades out toward the slot's edges.
+ * exactly. The ink fades out from the centre (full to 38% of the way to a corner, gone by 74%) and over
+ * the slot's left 18%, so it melts into the page before the text column; the faded-out rings aren't drawn.
  */
 export function* drawTournamentRings(
   target: HTMLCanvasElement,
@@ -117,8 +118,7 @@ export function* drawTournamentRings(
   },
 ): Generator<void, void, void> {
   const canvas = document.createElement("canvas")
-  // a CPU canvas: each slice is drawn as it runs. A GPU canvas only records the letters and draws them
-  // all at the next flush, which put the whole cost back into one long frame.
+  // a CPU canvas, so reading a pixel back (below) is cheap
   const ctx = canvas.getContext("2d", { willReadFrequently: true })
   if (!ctx) return
   canvas.width = Math.max(1, Math.round(width * pixelRatio))
@@ -126,6 +126,8 @@ export function* drawTournamentRings(
   const unit = (Math.max(width, height) / 1000) * pixelRatio
   const cx = canvas.width / 2
   const cy = canvas.height / 2
+  const corner = Math.hypot(cx, cy)
+  const edge = 0.18 * canvas.width
   const font = `italic 500 ${FONT_SIZE * unit}px ${fontFamily}`
 
   const advance = new Map<string, number>()
@@ -141,7 +143,6 @@ export function* drawTournamentRings(
   const prepare = () => {
     ctx.font = font
     ctx.fillStyle = ink
-    ctx.globalAlpha = INK_ALPHA
     ctx.textBaseline = "middle"
     ctx.textAlign = "center"
   }
@@ -150,6 +151,9 @@ export function* drawTournamentRings(
   let sinceYield = 0
   for (const ring of tournamentRings()) {
     const r = ring.r * unit
+    const fade = 1 - Math.min(1, Math.max(0, (r / corner - 0.38) / 0.36))
+    // the rings only grow from here
+    if (fade <= 0) break
     const chars = [...ring.text]
     const natural = chars.reduce((sum, ch) => sum + widthOf(ch), 0)
     // spread the gaps so the text closes the circle, as SVG's textLength would
@@ -162,26 +166,23 @@ export function* drawTournamentRings(
       if (ch === " ") continue
       const cos = Math.cos(angle)
       const sin = Math.sin(angle)
+      const x = cx + r * cos
+      const alpha = INK_ALPHA * fade * Math.min(1, x / edge)
+      if (alpha <= 0) continue
+      ctx.globalAlpha = alpha
       // letters stand upright on the ring, facing outward, running clockwise
-      ctx.setTransform(-sin, cos, -cos, -sin, cx + r * cos, cy + r * sin)
+      ctx.setTransform(-sin, cos, -cos, -sin, x, cy + r * sin)
       ctx.fillText(ch, 0, 0)
       if (++sinceYield >= LETTERS_PER_SLICE) {
         sinceYield = 0
+        // the browser only records the letters and draws them all at the end of the frame, which put
+        // the whole drawing into a few long frames: reading a pixel back makes it draw them now
+        ctx.getImageData(0, 0, 1, 1)
         yield
         prepare()
       }
     }
   }
-
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.globalAlpha = 1
-  // fade toward the edges: full strength to 38% of the farthest corner, gone by 74%
-  const fade = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(cx, cy))
-  fade.addColorStop(0.38, "#000")
-  fade.addColorStop(0.74, "rgba(0,0,0,0)")
-  ctx.globalCompositeOperation = "destination-in"
-  ctx.fillStyle = fade
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
 
   target.width = canvas.width
   target.height = canvas.height

@@ -266,10 +266,13 @@
   display: none;
 }
 
+/* Side by side, the hero is exactly the screen below the header (85px: the 60px logo, its padding and
+   border), so the shuttle, centred in it, stays on screen. The space above and below the copy follows the
+   screen's height: on a short laptop screen it shrinks, so the buttons stay on screen too. */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 56fr) minmax(420px, 44fr);
-  min-height: calc(100svh - 76px);
+  min-height: calc(100svh - 85px);
   overflow: hidden;
 }
 
@@ -279,7 +282,7 @@
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(80px, 10vw, 148px) clamp(var(--space-block), 6vw, 108px);
+  padding: clamp(var(--space-block), 7svh, 148px) clamp(var(--space-block), 6vw, 108px);
   padding-left: max(var(--space-block), calc((100vw - var(--shell-max)) / 2));
 }
 
@@ -424,7 +427,6 @@
    fades in over it. */
 .hero-visual {
   position: relative;
-  min-height: 640px;
   overflow: hidden;
 }
 
@@ -1607,11 +1609,28 @@
 /* The owner's rule (14 Nov 2026): the shuttle shows only while the hero is side by side on a landscape
    screen. Everywhere else, phones and upright tablets alike, the hero is its copy alone at full width.
    HERO_SHUTTLE_MEDIA in components/public/hero-shuttle/hero-shuttle.tsx is the same test. The copy
-   alone is only as tall as its content, so an upright tablet shows no empty band where the visual was. */
-@media not all and (min-width: 901px) and (orientation: landscape) and (min-height: 600px) {
+   alone is only as tall as its content, so an upright tablet shows no empty band where the visual was,
+   and it keeps its width-based spacing. */
+@media not all and (min-width: 901px) and (orientation: landscape) and (min-height: 480px) {
   .hero {
     grid-template-columns: 1fr;
     min-height: auto;
+  }
+
+  .hero-copy {
+    padding-block: clamp(80px, 10vw, 148px);
+  }
+
+  .hero-visual {
+    display: none;
+  }
+}
+
+/* Windows high contrast swaps the page's colours but not the drawings' fixed ink, which would leave only
+   the cork's red band showing: the hero is its copy alone there */
+@media (forced-colors: active) {
+  .hero {
+    grid-template-columns: 1fr;
   }
 
   .hero-visual {
