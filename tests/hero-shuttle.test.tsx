@@ -18,9 +18,11 @@ const REDUCED = "(prefers-reduced-motion: reduce)"
 describe("hero shuttle markup", () => {
   const html = renderToStaticMarkup(<HeroShuttle />)
 
-  it("sends only the still: decorative, unfocusable, no canvas", () => {
+  it("sends only the still and an empty watermark canvas: decorative, unfocusable", () => {
     expect(html).toMatch(/^<div class="hero-visual" aria-hidden="true" data-shuttle-state="still">/)
-    expect(html).not.toContain("<canvas")
+    // the watermark is drawn after load; the live shuttle's canvas is added by the renderer
+    expect(html.match(/<canvas/g)).toEqual(["<canvas"])
+    expect(html).toContain('<canvas class="hero-shuttle-watermark"></canvas>')
     expect(html).not.toMatch(/tabindex|<a |<button/i)
     expect(html).toContain('<img class="hero-shuttle-still" src="/images/hero-shuttle-spiral.svg" alt=""')
     // sized, so it never shifts the layout; eager, so it never holds back the first view's largest paint
@@ -53,8 +55,9 @@ describe("hero shuttle markup", () => {
   it("keeps the renderer and model out of the page's own bundle", () => {
     const wrapper = source("components/public/hero-shuttle/hero-shuttle.tsx")
     const staticImports = [...wrapper.matchAll(/^import (?!type ).*from "(.+)"$/gm)].map((m) => m[1])
-    expect(staticImports.filter((s) => /shuttle-(renderer|model)/.test(s))).toEqual([])
+    expect(staticImports.filter((s) => /shuttle-(renderer|model)|tournament-rings/.test(s))).toEqual([])
     expect(wrapper).toContain('import("./shuttle-renderer")')
+    expect(wrapper).toContain('import("./tournament-rings")')
     expect(source("app/(public)/page.tsx")).toContain('export const dynamic = "error"')
   })
 })

@@ -15,6 +15,7 @@ const REDUCED_MOTION_MEDIA = "(prefers-reduced-motion: reduce)"
 const BLANK_IMAGE = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
 
 type LoadRenderer = () => Promise<typeof import("./shuttle-renderer")>
+type LoadRings = () => Promise<typeof import("./tournament-rings")>
 
 /** Run `task` once the page has loaded and the main thread is idle (or 300 ms have passed). Returns a cancel. */
 function whenIdleAfterLoad(task: () => void) {
@@ -104,24 +105,115 @@ export function controlHeroShuttle(
 }
 
 /**
+ * Draws the tournament watermark behind the shuttle once the slot is shown and the page is idle, and again
+ * whenever the slot changes size. It is static, so it is drawn with or without reduced motion. The italic
+ * font is the one the headline already loads; drawing waits for it so the fallback never shows.
+ */
+export function controlWatermark(slot: HTMLElement, canvas: HTMLCanvasElement, loadRings: LoadRings = () => import("./tournament-rings")) {
+  if (typeof window.matchMedia !== "function") return () => {}
+  const shown = window.matchMedia(HERO_SHUTTLE_MEDIA)
+  let rings: Awaited<ReturnType<LoadRings>> | null = null
+  let drawn = ""
+  let frame = 0
+  let cancelWait: (() => void) | null = null
+  let stopped = false
+
+  // a drawing in progress, stepped a slice per frame; a resize starts a fresh one
+  let steps: Generator<void, void, void> | null = null
+  const pump = () => {
+    frame = 0
+    if (!steps) return
+    const until = performance.now() + 6
+    while (performance.now() < until) {
+      if (steps.next().done) {
+        steps = null
+        canvas.dataset.drawn = ""
+        // the slot may have changed size while this drawing was in progress
+        schedule()
+        return
+      }
+    }
+    frame = requestAnimationFrame(pump)
+  }
+  const draw = () => {
+    frame = 0
+    if (!rings || !shown.matches) return
+    const width = slot.clientWidth
+    const height = slot.clientHeight
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+    const size = `${width}x${height}@${pixelRatio}`
+    if (!width || !height || size === drawn) return
+    drawn = size
+    const style = getComputedStyle(slot)
+    steps = rings.drawTournamentRings(canvas, {
+      width,
+      height,
+      pixelRatio,
+      fontFamily: style.getPropertyValue("--font-newsreader").trim() || "Georgia, serif",
+      ink: style.getPropertyValue("--ink").trim() || "#0c1117",
+    })
+    pump()
+  }
+  const schedule = () => {
+    if (!frame && rings) frame = requestAnimationFrame(draw)
+  }
+
+  const start = () => {
+    if (rings || cancelWait || !shown.matches) return schedule()
+    cancelWait = whenIdleAfterLoad(() => {
+      const family = getComputedStyle(slot).getPropertyValue("--font-newsreader").trim()
+      Promise.all([loadRings(), family ? document.fonts.load(`italic 500 16px ${family}`) : null])
+        .then(([module]) => {
+          if (stopped) return
+          rings = module
+          schedule()
+        })
+        // without the watermark the hero is simply plainer
+        .catch(() => {})
+    })
+  }
+
+  const resizeObserver = new ResizeObserver(schedule)
+  resizeObserver.observe(slot)
+  start()
+  shown.addEventListener("change", start)
+  return () => {
+    stopped = true
+    cancelWait?.()
+    if (frame) cancelAnimationFrame(frame)
+    resizeObserver.disconnect()
+    shown.removeEventListener("change", start)
+  }
+}
+
+/**
  * The hero's right-hand visual: a line-drawn shuttlecock that starts as a flat spiral and turns into
  * the shuttle (shuttle-model.ts). Decorative, so hidden from assistive technology and never focusable.
  *
  * The server sends only a still: the faint flat spiral, or the resting shuttle when the visitor asks for
  * reduced motion (the <picture> swaps it, live). The canvas fades in over the still once it is running.
+ * The tournament watermark (tournament-rings.ts) is drawn behind both.
  */
 export function HeroShuttle() {
   const slotRef = useRef<HTMLDivElement>(null)
   const stillRef = useRef<HTMLImageElement>(null)
+  const watermarkRef = useRef<HTMLCanvasElement>(null)
   const [state, setState] = useState<"still" | "live">("still")
 
   useEffect(() => {
     if (!slotRef.current) return
-    return controlHeroShuttle(slotRef.current, stillRef.current, (live) => setState(live ? "live" : "still"))
+    const slot = slotRef.current
+    const stopShuttle = controlHeroShuttle(slot, stillRef.current, (live) => setState(live ? "live" : "still"))
+    const stopWatermark = watermarkRef.current ? controlWatermark(slot, watermarkRef.current) : () => {}
+    return () => {
+      stopShuttle()
+      stopWatermark()
+    }
   }, [])
 
   return (
     <div ref={slotRef} className="hero-visual" aria-hidden="true" data-shuttle-state={state}>
+      <canvas ref={watermarkRef} className="hero-shuttle-watermark" />
       <picture>
         {/* where the slot is hidden (phones, upright tablets) nothing is fetched: a blank inline image */}
         <source media={`not all and ${HERO_SHUTTLE_MEDIA}`} srcSet={BLANK_IMAGE} />

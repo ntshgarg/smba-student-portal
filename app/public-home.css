@@ -428,6 +428,22 @@
   overflow: hidden;
 }
 
+/* the tournament watermark (tournament-rings.ts), drawn once onto its own canvas, fading in when ready */
+.hero-shuttle-watermark {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-enter) var(--ease-out);
+}
+
+.hero-shuttle-watermark[data-drawn] {
+  opacity: 1;
+}
+
 .hero-shuttle-still {
   position: absolute;
   inset: 0;
