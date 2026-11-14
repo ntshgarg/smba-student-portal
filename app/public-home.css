@@ -703,17 +703,15 @@
 /* each card is a pane of glass: its big number sits behind it, crisp where it rises above the pane and
    softly frosted (still readable) where the pane covers it; a gradient, a diagonal sheen and bright
    edges give the glass its depth */
-:is(.training-pillars, .start-steps) li {
+/* The page's signature, shared by the training pillars, the trial steps, the notices and the footer's
+   contact cards: a pane of frosted glass with a big red mark (a number, a date, an icon) rising half out from
+   behind it. --pane-from and --pane-to set how frosted the pane is, --pane-blur how much it blurs. */
+.glass-pane {
   position: relative;
   isolation: isolate;
-  display: flex;
-  min-height: 260px;
-  flex-direction: column;
-  padding: 28px 26px 26px;
-  border-radius: 24px;
 }
 
-:is(.training-pillars, .start-steps) li::before {
+.glass-pane::before {
   position: absolute;
   z-index: -1;
   inset: 0;
@@ -728,11 +726,11 @@
     ),
     linear-gradient(
       150deg,
-      color-mix(in srgb, var(--white) 32%, transparent),
-      color-mix(in srgb, var(--white) 8%, transparent) 70%
+      color-mix(in srgb, var(--white) var(--pane-from, 32%), transparent),
+      color-mix(in srgb, var(--white) var(--pane-to, 8%), transparent) 70%
     );
-  -webkit-backdrop-filter: blur(3px) saturate(1.2);
-  backdrop-filter: blur(3px) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--pane-blur, 3px)) saturate(1.2);
+  backdrop-filter: blur(var(--pane-blur, 3px)) saturate(1.2);
   box-shadow:
     inset 0 1px 0 var(--white),
     inset 1px 0 0 var(--white),
@@ -741,21 +739,32 @@
   content: "";
 }
 
+.glass-pane-mark {
+  position: absolute;
+  z-index: -2;
+  color: color-mix(in srgb, var(--red) 75%, transparent);
+  font-weight: 700;
+  line-height: 1;
+}
+
+:is(.training-pillars, .start-steps) li {
+  display: flex;
+  min-height: 260px;
+  flex-direction: column;
+  padding: 28px 26px 26px;
+  border-radius: 24px;
+}
+
 .training-pillars li:nth-child(even) {
   margin-top: var(--space-editorial);
 }
 
-:is(.training-pillars, .start-steps) span {
-  position: absolute;
-  z-index: -2;
-  /* a little under half of the number rises above the pane; the rest sits behind it */
+/* a little under half of the number rises above the pane; the rest sits behind it */
+:is(.training-pillars, .start-steps) .glass-pane-mark {
   top: -51px;
   right: 26px;
-  color: color-mix(in srgb, var(--red) 75%, transparent);
   font-size: 6.5rem;
-  font-weight: 700;
   letter-spacing: -0.06em;
-  line-height: 1;
 }
 
 :is(.training-pillars, .start-steps) h3 {
@@ -1385,17 +1394,9 @@
   list-style: none;
 }
 
-.footer-reach li {
-  position: relative;
-  isolation: isolate;
-}
-
 .footer-reach-mark {
-  position: absolute;
-  z-index: -2;
   top: -46px;
   right: 18px;
-  color: color-mix(in srgb, var(--red) 75%, transparent);
 }
 
 .footer-reach-mark svg {
@@ -1404,35 +1405,20 @@
   stroke-width: 2.6;
 }
 
+/* a column, so each card's action sits at its foot even when the address above it wraps */
 .footer-reach a {
-  position: relative;
-  display: grid;
+  --pane-from: 45%;
+  --pane-to: 12%;
+  --pane-blur: 4px;
+
+  display: flex;
   height: 100%;
   min-height: 150px;
-  align-content: start;
+  flex-direction: column;
   gap: 4px;
   padding: var(--space-section-sm) 20px 18px;
   border-radius: 20px;
   color: var(--navy);
-}
-
-.footer-reach a::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
-  border-radius: inherit;
-  background: linear-gradient(
-    150deg,
-    color-mix(in srgb, var(--white) 45%, transparent),
-    color-mix(in srgb, var(--white) 12%, transparent) 70%
-  );
-  -webkit-backdrop-filter: blur(4px) saturate(1.2);
-  backdrop-filter: blur(4px) saturate(1.2);
-  box-shadow:
-    inset 0 1px 0 var(--white),
-    0 20px 40px -30px color-mix(in srgb, var(--navy) 40%, transparent);
-  content: "";
 }
 
 .footer-reach small {
@@ -1967,7 +1953,7 @@
     margin-top: var(--space-content);
   }
 
-  :is(.training-pillars, .start-steps) span {
+  :is(.training-pillars, .start-steps) .glass-pane-mark {
     top: -34px;
     font-size: 4.5rem;
   }

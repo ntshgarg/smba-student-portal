@@ -12,9 +12,12 @@
   margin-top: 88px;
 }
 
+/* a .glass-pane (public-home.css), a little more frosted than the training cards */
 .publicNotice {
-  position: relative;
-  isolation: isolate;
+  --pane-from: 40%;
+  --pane-to: 10%;
+  --pane-blur: 4px;
+
   /* the date below sizes itself to the card, so a narrow card never pushes it past its left edge */
   container-type: inline-size;
   display: flex;
@@ -25,46 +28,16 @@
   border-radius: 24px;
 }
 
-.publicNotice::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
-  border-radius: inherit;
-  background:
-    linear-gradient(
-      115deg,
-      transparent 28%,
-      color-mix(in srgb, var(--white) 22%, transparent) 38%,
-      transparent 50%
-    ),
-    linear-gradient(
-      150deg,
-      color-mix(in srgb, var(--white) 40%, transparent),
-      color-mix(in srgb, var(--white) 10%, transparent) 70%
-    );
-  -webkit-backdrop-filter: blur(4px) saturate(1.2);
-  backdrop-filter: blur(4px) saturate(1.2);
-  box-shadow:
-    inset 0 1px 0 var(--white),
-    inset 1px 0 0 var(--white),
-    0 30px 60px -40px color-mix(in srgb, var(--navy) 40%, transparent);
-  content: "";
-}
-
 /* the date, month and day alike, rises a little under half above the pane; the rest sits frosted behind it */
 .publicDay {
-  position: absolute;
-  z-index: -2;
   top: -0.45em;
   right: 26px;
   display: flex;
   gap: 0.2em;
-  color: color-mix(in srgb, var(--red) 75%, transparent);
+  /* browsers without container units keep a fixed size */
+  font-size: 6rem;
   font-size: clamp(3rem, 28cqi, 8rem);
-  font-weight: 700;
   letter-spacing: -0.07em;
-  line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
 }

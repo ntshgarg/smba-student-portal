@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  announcementDay,
   announcementIsNew,
   announcementParagraphs,
   sortAnnouncements,
@@ -24,6 +25,13 @@ describe("announcement presentation", () => {
     expect(announcementIsNew("2026-08-09T00:30:00.000Z", reference)).toBe(true)
     expect(announcementIsNew("2026-08-02T18:30:00.000Z", reference)).toBe(true)
     expect(announcementIsNew("2026-08-02T18:29:59.000Z", reference)).toBe(false)
+  })
+
+  it("dates a notice by the academy's calendar, with a three-letter month", () => {
+    // 20:00 UTC on 31 October is already 1 November in Bengaluru
+    expect(announcementDay("2026-10-31T20:00:00.000Z")).toEqual({ day: "01", month: "Nov" })
+    expect(announcementDay("2026-09-28T04:00:00.000Z")).toEqual({ day: "28", month: "Sep" })
+    expect(announcementDay("2026-01-05T04:00:00.000Z")).toEqual({ day: "05", month: "Jan" })
   })
 
   it("places pinned announcements first and otherwise orders newest first", () => {

@@ -128,8 +128,8 @@ function NumberedCards({
   return (
     <ol className={className} aria-label={label}>
       {items.map(([title, text], index) => (
-        <li key={title}>
-          <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+        <li key={title} className="glass-pane">
+          <span className="glass-pane-mark" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
           <h3>{title}</h3>
           <p>{text}</p>
         </li>
@@ -279,26 +279,6 @@ const trialSteps = [
   ["Train once, then choose", "Attend the free trial and discuss the right program and schedule."],
 ] as const
 
-// Each link is named by its visible words (label, value, action), so voice control can say them
-const reachLinks = [
-  {
-    icon: MessageCircle,
-    label: "WhatsApp",
-    value: contact.phoneDisplay,
-    action: "Message",
-    href: contact.whatsapp,
-  },
-  { icon: Phone, label: "Call", value: contact.phoneDisplay, action: "Call now", href: `tel:${contact.phone}` },
-  { icon: MapPin, label: "Visit", value: contact.venue, action: "Open in Maps", href: contact.maps },
-  {
-    icon: Camera,
-    label: "Instagram",
-    value: contact.academyInstagram.handle,
-    action: "Follow",
-    href: contact.academyInstagram.url,
-  },
-] as const
-
 /** The free trial: what happens after you ask, then the request itself. */
 function StartHere() {
   return (
@@ -319,6 +299,26 @@ function StartHere() {
   )
 }
 
+// Each link is named by its visible words (label, value, action), so voice control can say them
+const reachLinks = [
+  {
+    icon: MessageCircle,
+    label: "WhatsApp",
+    value: contact.phoneDisplay,
+    action: "Message",
+    href: contact.whatsapp,
+  },
+  { icon: Phone, label: "Call", value: contact.phoneDisplay, action: "Call now", href: `tel:${contact.phone}` },
+  { icon: MapPin, label: "Visit", value: contact.venue, action: "Open in Maps", href: contact.maps },
+  {
+    icon: Camera,
+    label: "Instagram",
+    value: contact.academyInstagram.handle,
+    action: "Follow",
+    href: contact.academyInstagram.url,
+  },
+] as const
+
 /* The page ends on one pane of glass: the direct ways to reach the academy, then its mark, the same menu as
    the header, and the way back up */
 function Footer() {
@@ -331,8 +331,12 @@ function Footer() {
             const external = href.startsWith("http")
             return (
               <li key={label}>
-                <span className="footer-reach-mark" aria-hidden="true"><Icon /></span>
-                <a href={href} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+                <a
+                  className="glass-pane"
+                  href={href}
+                  {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                >
+                  <span className="footer-reach-mark glass-pane-mark" aria-hidden="true"><Icon /></span>
                   <small>{label}</small>
                   <strong>{value}</strong>
                   <span className="footer-reach-go">

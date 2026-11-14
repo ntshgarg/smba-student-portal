@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useId, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react"
 
 import {
@@ -53,6 +53,7 @@ export function PublicAnnouncements() {
   const [announcements, setAnnouncements] = useState<AnnouncementSummary[] | null>(null)
   const [expanded, setExpanded] = useState(false)
   const listId = useId()
+  const sectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -76,6 +77,17 @@ export function PublicAnnouncements() {
     return () => controller.abort()
   }, [])
 
+  // The notices arrive after the page has loaded, above the footer. If the visitor has already jumped to a
+  // link below them (the footer's #contact), keep that target in view instead of letting them push it down.
+  useEffect(() => {
+    const section = sectionRef.current
+    const id = decodeURIComponent(window.location.hash.slice(1))
+    const target = id ? document.getElementById(id) : null
+    if (section && target && section.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      target.scrollIntoView()
+    }
+  }, [announcements])
+
   const ordered = useMemo(
     () => announcements ? sortAnnouncements(announcements) : [],
     [announcements],
@@ -87,7 +99,11 @@ export function PublicAnnouncements() {
   const waiting = ordered.length - 2
 
   return (
-    <section className={`section-shell ${styles.publicSection}`} aria-labelledby="public-announcements-title">
+    <section
+      ref={sectionRef}
+      className={`section-shell ${styles.publicSection}`}
+      aria-labelledby="public-announcements-title"
+    >
       <div className="section-intro">
         <p className="public-eyebrow">Announcements</p>
         <h2 id="public-announcements-title">From the academy.</h2>
@@ -98,8 +114,8 @@ export function PublicAnnouncements() {
         {shown.map((announcement) => {
           const { day, month } = announcementDay(announcement.publishedAt)
           return (
-            <article className={styles.publicNotice} key={announcement.id}>
-              <span className={styles.publicDay} aria-hidden="true">
+            <article className={`${styles.publicNotice} glass-pane`} key={announcement.id}>
+              <span className={`${styles.publicDay} glass-pane-mark`} aria-hidden="true">
                 <span>{month}</span>
                 <span>{day}</span>
               </span>
