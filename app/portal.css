@@ -1450,21 +1450,40 @@
   height: 15px;
 }
 
+/* Signing in, registering and recovering share one frame in the homepage's look: the plain cream page and
+   one pane of frosted glass (the gradient, the bright edges and the soft shadow the homepage cards wear). */
 .login-page {
   display: grid;
   min-height: 100svh;
   place-items: center;
-  padding: clamp(20px, 5vw, 64px);
-  background:
-    radial-gradient(circle at 85% 12%, color-mix(in srgb, var(--white) 6%, transparent), transparent 27%),
-    var(--navy);
+  padding: clamp(var(--space-copy), 5vw, 64px);
+  background: var(--ivory);
 }
 
 .login-card {
-  width: min(100%, 610px);
-  padding: clamp(28px, 6vw, 64px);
-  background: var(--ivory);
-  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.18);
+  width: min(100%, 560px);
+  padding: clamp(var(--space-group), 5vw, 52px);
+  border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
+  border-radius: 28px;
+  background:
+    linear-gradient(
+      115deg,
+      transparent 28%,
+      color-mix(in srgb, var(--white) 22%, transparent) 38%,
+      transparent 50%
+    ),
+    linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--white) 62%, transparent),
+      color-mix(in srgb, var(--white) 22%, transparent) 70%
+    );
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow:
+    inset 0 1px 0 var(--white),
+    inset 1px 0 0 var(--white),
+    inset 0 -1px 0 color-mix(in srgb, var(--navy) 6%, transparent),
+    0 40px 80px -48px color-mix(in srgb, var(--navy) 50%, transparent);
 }
 
 .login-brand {
@@ -1498,13 +1517,13 @@
 }
 
 .login-copy {
-  margin-top: clamp(var(--space-section-sm), 9vw, 88px);
+  margin-top: clamp(36px, 6vw, var(--space-section-sm));
 }
 
 .login-copy h1 {
   margin-top: var(--space-copy);
   color: var(--navy);
-  font-size: clamp(48px, 8vw, 70px);
+  font-size: clamp(44px, 6.4vw, 64px);
   font-weight: 570;
   letter-spacing: -0.065em;
   line-height: 0.96;
@@ -1525,27 +1544,26 @@
   margin-top: clamp(38px, 6vw, 54px);
 }
 
+/* a frosted pill track, like the fee planner's Weekday/Weekend; the chosen side fills navy */
 .login-method-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: clamp(30px, 5vw, 44px);
-  border: 1px solid var(--navy);
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--white) 90%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--white) 45%, transparent);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--navy) 8%, transparent);
 }
 
 .login-method-switch button {
-  min-height: 48px;
+  min-height: 44px;
   border: 0;
-  border-right: 1px solid var(--navy);
+  border-radius: 10px;
   background: transparent;
   color: var(--navy);
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.login-method-switch button:last-child {
-  border-right: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
 }
 
 /* #eee8dc on the --ivory card was 1.12:1 — the whole selected state, on the one
@@ -1568,22 +1586,23 @@
 
 .login-field label {
   display: block;
-  color: var(--navy);
-  font-size: 0.6875rem;
+  color: #39434d;
+  font-size: 0.75rem;
   font-weight: 800;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .login-field input,
 .login-field select {
   width: 100%;
-  min-height: 58px;
+  min-height: 52px;
   margin-top: 10px;
   padding: 0 var(--space-copy);
   border: 1px solid var(--line-control);
-  border-radius: 0;
-  background: color-mix(in srgb, var(--white) 68%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--white) 65%, transparent);
+  box-shadow: inset 0 1px 0 var(--white);
   color: var(--navy);
   font-size: 16px;
   transition: border-color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard);
@@ -1643,9 +1662,21 @@
 
 .login-register-link {
   color: var(--steel);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.6;
   text-align: center;
+}
+
+/* the first-visit links sit apart from each other instead of running together */
+.login-page .login-register-link {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 14px;
+}
+
+.login-page .login-register-separator {
+  display: none;
 }
 
 .login-register-link a {
@@ -1673,8 +1704,12 @@
   gap: var(--space-copy);
   margin-top: clamp(38px, 6vw, 54px);
   padding: 30px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--white) 90%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--white) 50%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--white),
+    0 10px 24px -18px color-mix(in srgb, var(--navy) 35%, transparent);
 }
 
 .registration-confirmation > span {
@@ -1741,17 +1776,19 @@
   letter-spacing: 0.02em;
 }
 
+/* red and rounded, like the homepage's "Continue on WhatsApp" */
 .login-submit {
   display: flex;
-  min-height: 56px;
+  min-height: 54px;
   align-items: center;
   justify-content: space-between;
   padding: 0 18px;
   border: 0;
-  background: var(--navy);
+  border-radius: 14px;
+  background: var(--red);
   color: var(--white);
-  font-size: 0.75rem;
-  font-weight: 800;
+  font-size: 1rem;
+  font-weight: 700;
   transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
@@ -1759,7 +1796,7 @@
    in the tab order by aria-disabled while it refuses to act, and a hover lift
    would promise a press that the click handler cancels. */
 .login-submit:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: var(--navy-soft);
+  background: var(--red-dark);
   transform: translateY(-1px);
 }
 
@@ -1806,6 +1843,17 @@
   color: var(--steel);
   font-size: 0.6875rem;
   font-weight: 750;
+}
+
+.login-page .login-back {
+  font-size: 0.8125rem;
+}
+
+.login-page .login-secondary,
+.login-page .totp-switch {
+  border-radius: 14px;
+  font-size: 0.9375rem;
+  font-weight: 700;
 }
 
 .login-back:hover {
@@ -2051,10 +2099,28 @@
   gap: 18px;
 }
 
+/* Account security wears the sign-in pages' look: each panel a pane of frosted glass on the cream page */
 .security-panel {
   padding: clamp(20px, 3vw, var(--space-block));
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 66%, transparent);
+  border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
+  border-radius: 24px;
+  background:
+    linear-gradient(
+      115deg,
+      transparent 28%,
+      color-mix(in srgb, var(--white) 22%, transparent) 38%,
+      transparent 50%
+    ),
+    linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--white) 62%, transparent),
+      color-mix(in srgb, var(--white) 22%, transparent) 70%
+    );
+  box-shadow:
+    inset 0 1px 0 var(--white),
+    inset 1px 0 0 var(--white),
+    inset 0 -1px 0 color-mix(in srgb, var(--navy) 6%, transparent),
+    0 30px 60px -40px color-mix(in srgb, var(--navy) 40%, transparent);
 }
 
 .security-panel > header {
@@ -2089,19 +2155,20 @@
 .security-form label {
   display: grid;
   gap: 7px;
-  color: var(--navy);
-  font-size: 0.6875rem;
+  color: #39434d;
+  font-size: 0.75rem;
   font-weight: var(--weight-label);
-  letter-spacing: 0.07em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .security-form input {
   min-height: 48px;
   padding: 0 13px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--white);
+  border: 1px solid var(--line-control);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--white) 65%, transparent);
+  box-shadow: inset 0 1px 0 var(--white);
   color: var(--navy);
   font-size: 0.9375rem;
 }
@@ -2141,18 +2208,31 @@
   min-height: 44px;
   padding: 0 14px;
   border: 1px solid var(--navy);
-  border-radius: 0;
+  border-radius: 14px;
   background: transparent;
   color: var(--navy);
   font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: var(--weight-label);
+  font-size: 0.875rem;
+  font-weight: 700;
 }
 
+/* the main action of each form is red, like the sign-in pages' Continue */
 .security-form button {
   width: 100%;
-  background: var(--navy);
+  min-height: 48px;
+  border-color: var(--red);
+  background: var(--red);
   color: var(--white);
+  font-size: 1rem;
+}
+
+/* the other buttons in a form stay outlined, so the red one is the clear next step */
+.security-form .security-secondary-action,
+.security-form .login-secondary {
+  border-color: var(--navy);
+  background: transparent;
+  color: var(--navy);
+  font-size: 0.875rem;
 }
 
 .password-input-shell {
@@ -2207,6 +2287,11 @@
 .security-form .password-input-shell .password-visibility-toggle:hover {
   background: #eee8dc;
   color: var(--navy);
+}
+
+/* inside the rounded login fields, the Show button follows the field's corners */
+.login-page .password-input-shell .password-visibility-toggle {
+  border-radius: 0 11px 11px 0;
 }
 
 .password-visibility-toggle svg {
@@ -2373,6 +2458,7 @@
   height: 46px;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--red) 42%, var(--line));
+  border-radius: 12px;
   background: var(--white);
 }
 
@@ -4668,23 +4754,20 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .login-page {
-    place-items: stretch;
-    padding: 0;
-    background: var(--ivory);
+    padding: var(--space-copy);
   }
 
   .login-card {
-    min-height: 100svh;
     padding: 22px 20px 28px;
-    box-shadow: none;
+    border-radius: 24px;
   }
 
   .login-copy {
-    margin-top: clamp(68px, 14vh, 118px);
+    margin-top: clamp(36px, 8vh, 64px);
   }
 
   .login-copy h1 {
-    font-size: clamp(48px, 15vw, 66px);
+    font-size: clamp(42px, 13vw, 58px);
   }
 
   .login-form {
@@ -10799,8 +10882,13 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 .login-empty-state {
-  border: 1px solid color-mix(in srgb, var(--navy) 22%, transparent);
   padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--white) 90%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--white) 50%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--white),
+    0 10px 24px -18px color-mix(in srgb, var(--navy) 35%, transparent);
 }
 
 .login-empty-state a {
@@ -10837,6 +10925,7 @@ tr.is-expanded .coach-member-row-action button svg {
   width: 100%;
   padding: 12px 14px;
   border: 1px solid currentColor;
+  border-radius: 14px;
 }
 
 .admin-page {
