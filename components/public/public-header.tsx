@@ -8,13 +8,7 @@ import { clearSession } from "@/app/login/actions"
 import { IconSwap } from "@/components/motion/icon-swap"
 import { usePresence } from "@/components/motion/use-presence"
 import type { SessionSummaryResponse } from "@/lib/auth/session-summary"
-
-const navItems = [
-  { label: "Academy", href: "#academy" },
-  { label: "Programs", href: "#programs" },
-  { label: "Why SMBA", href: "#why-smba" },
-  { label: "Contact", href: "#contact" },
-] as const
+import { navItems } from "@/lib/public/navigation"
 
 const portalLoginHref = "/login"
 

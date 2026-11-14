@@ -28,7 +28,7 @@ export const contact = {
   phoneDisplay: "+91 70109 28404",
   phone: "+917010928404",
   whatsapp: "https://wa.me/917010928404",
-  location: "Just Play, Mahadevapura, Bengaluru",
+  venue: "Just Play, Mahadevapura",
   maps:
     "https://www.google.com/maps/search/?api=1&query=Just+Play+Mahadevapura+Bengaluru",
   academyInstagram: {
@@ -91,71 +91,50 @@ export const enrollmentTerms = {
 
 export const trainingPrograms = [
   {
-    step: "01",
     title: "Beginner",
     level: "Build the foundation",
-    description:
-      "Build sound fundamentals, confident movement and a technical base that can grow with you.",
     outcomes: ["Grip and stroke basics", "Footwork confidence", "Repeatable technique"],
   },
   {
-    step: "02",
     title: "Intermediate",
     level: "Develop consistency",
-    description:
-      "Turn the basics into consistency, movement efficiency and a stronger capacity to train.",
     outcomes: ["Shot consistency", "Movement efficiency", "Structured match practice"],
   },
   {
-    step: "03",
     title: "Advanced",
     level: "Train for performance",
-    description:
-      "Train with greater frequency and a sharper technical, physical and competitive focus.",
     outcomes: ["Competitive preparation", "Higher training load", "Performance discipline"],
   },
   {
-    step: "04",
     title: "Adult",
     level: "Train with purpose",
-    description:
-      "Purposeful coaching for adults who want skill, movement and a better way to train.",
     outcomes: ["Weekday and weekend options", "Fitness through the game", "Welcoming progression"],
   },
 ] as const
 
-export const proofPoints = [
-  {
-    label: "BWF certified",
-    title: "Coaching with a recognised foundation.",
-    body: "Head coach Sathiya Moorthy brings formal coaching credentials to every stage of player development.",
-  },
-  {
-    label: "12+ years",
-    title: "Experience that stays close to the work.",
-    body: "More than a decade of coaching informs how sessions are structured, observed and progressed.",
-  },
-  {
-    label: "Player development",
-    title: "From first contact to competitive intent.",
-    body: "Experience developing players across international, national and state-level competition.",
-  },
-  {
-    label: "Complete preparation",
-    title: "Technique is only part of performance.",
-    body: "Training brings together match practice, competitive mentality, strength and conditioning.",
-  },
-  {
-    label: "Move well",
-    title: "A body prepared for better badminton.",
-    body: "Mobility and flexibility are integrated into the training approach, not treated as an afterthought.",
-  },
-  {
-    label: "Train with clarity",
-    title: "Professional courts. Structured feedback.",
-    body: "Sessions take place at Just Play, with assessment reports included in the academy registration.",
-  },
-] as const
+export type Schedule = "weekday" | "weekend"
+
+/**
+ * What a level's plan costs and gives for a schedule and a number of weekday days. A level with no weekend
+ * plan (Advanced) falls back to weekdays, and a days count the level doesn't offer falls back to its first.
+ */
+export function programPlan(level: WeekdayProgram["name"], schedule: Schedule, days: number) {
+  const weekday = weekdayPrograms.find((program) => program.name === level)
+  if (!weekday) throw new Error(`No weekday plan for ${level}`)
+  const weekend = weekendPrograms.find((program) => program.name === level)
+  const frequencies = (Object.keys(weekday.fees).map(Number) as (3 | 4 | 5)[])
+  const daysAWeek = frequencies.find((frequency) => frequency === days) ?? frequencies[0]
+  const onWeekend = schedule === "weekend" && weekend !== undefined
+  return {
+    hasWeekend: weekend !== undefined,
+    onWeekend,
+    frequencies,
+    daysAWeek,
+    ...(onWeekend
+      ? { fee: weekend.fee, sessions: 2, duration: weekend.duration }
+      : { fee: weekday.fees[daysAWeek] as number, sessions: daysAWeek, duration: weekday.duration }),
+  }
+}
 
 export function createTrialMessage(values: {
   name: string

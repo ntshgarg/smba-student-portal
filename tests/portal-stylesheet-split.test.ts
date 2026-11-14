@@ -28,13 +28,11 @@ const PUBLIC_ENTRIES = [
   "app/(public)/announcements/[announcementId]/page.tsx",
 ]
 
-// `.sr-only` has no reference in the closure and stays in globals.css anyway:
-// .21st/DESIGN.md pins it there, declared unlayered and !important, as the single
-// visually-hidden utility. Move it behind the login and the homepage, the 404 and
-// both error boundaries lose their only way to hide text from sight but not from
-// a screen reader. It is the only standing exemption; add another only with a
-// reason of that kind.
-const GLOBALS_EXEMPTIONS = new Set(["sr-only"])
+// A class the public closure never references but that must stay in globals.css
+// anyway, each with its reason. `.sr-only` used to be one; the homepage's fee
+// planner now uses it, so it is reachable like any other class. Add one only with
+// a reason of that kind.
+const GLOBALS_EXEMPTIONS = new Set<string>()
 
 function resolveImport(specifier: string, from: string): string | null {
   const base = specifier.startsWith("@/")

@@ -6,6 +6,7 @@ import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react"
 
 import {
   announcementDate,
+  announcementDay,
   sortAnnouncements,
 } from "@/components/announcements/announcement-presentation"
 import type { AnnouncementSummary } from "@/components/announcements/types"
@@ -81,49 +82,46 @@ export function PublicAnnouncements() {
   )
   if (ordered.length === 0) return null
 
-  const visible = expanded ? ordered : ordered.slice(0, 3)
-  const hasMore = ordered.length > 3
+  // Pinned notices sort first, then the newest; two show, and the rest open in place
+  const shown = expanded ? ordered : ordered.slice(0, 2)
+  const waiting = ordered.length - 2
 
   return (
     <section className={`section-shell ${styles.publicSection}`} aria-labelledby="public-announcements-title">
-      <header className={styles.publicHeading}>
-        <div>
-          <p className="public-eyebrow">Announcements</p>
-          <h2 id="public-announcements-title">From the academy.</h2>
-        </div>
-        <p>Current notices from SMBA, kept clear and easy to find.</p>
-      </header>
-
-      <div id={listId} className={styles.publicList}>
-        {visible.map((announcement) => (
-          <article className={styles.publicItem} key={announcement.id}>
-            <div className={styles.publicMeta}>
-              {announcement.pinned ? <span>Pinned</span> : null}
-              <time dateTime={announcement.publishedAt}>
-                {announcementDate(announcement.publishedAt)}
-              </time>
-            </div>
-            <div className={styles.publicCopy}>
-              <h3>
-                <Link href={`/announcements/${announcement.id}`}>
-                  {announcement.title}
-                </Link>
-              </h3>
-              <p>{announcement.preview}</p>
-            </div>
-            <Link
-              className={styles.publicOpen}
-              href={`/announcements/${announcement.id}`}
-              aria-label={`Read announcement: ${announcement.title}`}
-            >
-              Read
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </article>
-        ))}
+      <div className="section-intro">
+        <p className="public-eyebrow">Announcements</p>
+        <h2 id="public-announcements-title">From the academy.</h2>
+        <p className="body-muted">Current notices from SMBA, kept clear and easy to find.</p>
       </div>
 
-      {hasMore ? (
+      <div id={listId} className={styles.publicNotices}>
+        {shown.map((announcement) => {
+          const { day, month } = announcementDay(announcement.publishedAt)
+          return (
+            <article className={styles.publicNotice} key={announcement.id}>
+              <span className={styles.publicDay} aria-hidden="true">
+                <span>{month}</span>
+                <span>{day}</span>
+              </span>
+              <NoticeMeta announcement={announcement} />
+              <h3>
+                <Link href={`/announcements/${announcement.id}`}>{announcement.title}</Link>
+              </h3>
+              <p>{announcement.preview}</p>
+              <Link
+                className={styles.publicOpen}
+                href={`/announcements/${announcement.id}`}
+                aria-label={`Read announcement: ${announcement.title}`}
+              >
+                Read
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </article>
+          )
+        })}
+      </div>
+
+      {waiting > 0 ? (
         <button
           className={styles.publicDisclosure}
           type="button"
@@ -131,10 +129,19 @@ export function PublicAnnouncements() {
           aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
         >
-          {expanded ? "Show fewer announcements" : "Show all current announcements"}
+          {expanded ? "See fewer" : `See more (${waiting})`}
           {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
         </button>
       ) : null}
     </section>
+  )
+}
+
+function NoticeMeta({ announcement }: { announcement: AnnouncementSummary }) {
+  return (
+    <div className={styles.publicMeta}>
+      {announcement.pinned ? <span>Pinned</span> : null}
+      <time dateTime={announcement.publishedAt}>{announcementDate(announcement.publishedAt)}</time>
+    </div>
   )
 }

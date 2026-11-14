@@ -16,6 +16,15 @@ export function announcementDate(value: string) {
   })
 }
 
+/** The day a notice went out on the academy's calendar: the day of the month as two digits, and the month
+ * in three letters. */
+export function announcementDay(value: string) {
+  return {
+    day: getAcademyDateKey(value).slice(8),
+    month: formatAcademyDate(value, { day: undefined, month: "short", year: undefined }),
+  }
+}
+
 export function announcementIsNew(publishedAt: string, referenceDate = new Date()) {
   const publishedDate = dateKeyMilliseconds(getAcademyDateKey(publishedAt))
   const currentDate = dateKeyMilliseconds(getAcademyDateKey(referenceDate))

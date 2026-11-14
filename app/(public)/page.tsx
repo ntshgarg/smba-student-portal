@@ -3,29 +3,36 @@ import Image from "next/image"
 
 import {
   ArrowRight,
+  ArrowUp,
   ArrowUpRight,
   Camera,
-  Check,
   MapPin,
   MessageCircle,
   Phone,
 } from "lucide-react"
 
 import { absoluteSiteUrl } from "@/lib/config"
-import { contact, proofPoints, trainingPrograms } from "@/lib/public/academy"
+import { contact } from "@/lib/public/academy"
+import { navItems } from "@/lib/public/navigation"
 import { PublicAnnouncements } from "@/components/announcements/public-announcements"
 import { HeroShuttle } from "@/components/public/hero-shuttle/hero-shuttle"
 import {
-  FeeExplorer,
-  PrinciplesReveal,
+  ProgramPlanner,
   TrialForm,
 } from "@/components/public/home-interactions"
 import { Header } from "@/components/public/public-header"
 
-const academyPrinciples = [
-  "Technical excellence built through clear, repeatable habits.",
-  "Competitive mentality developed with match practice and intent.",
-  "Strength, mobility and flexibility supporting the whole athlete.",
+const trainingPillars = [
+  ["Technique", "Technical excellence built through clear, repeatable habits."],
+  ["Match mindset", "Competitive mentality developed through match practice and intent."],
+  ["Strength & mobility", "Strength, mobility and flexibility are part of the training, not an afterthought."],
+  ["Structured feedback", "Each player’s progress is tracked through assessment reports."],
+] as const
+
+const coachFacts = [
+  ["12+", "years coaching"],
+  ["BWF", "certified coach"],
+  ["All", "levels coached"],
 ] as const
 
 export const metadata: Metadata = {
@@ -90,22 +97,44 @@ function SectionIntro({
   eyebrow,
   title,
   body,
-  light = false,
   headingId,
 }: {
   id?: string
   eyebrow: string
   title: string
   body?: string
-  light?: boolean
   headingId?: string
 }) {
   return (
     <div id={id} className="section-intro">
-      <p className={`public-eyebrow ${light ? "public-eyebrow-light" : ""}`}>{eyebrow}</p>
-      <h2 id={headingId} className={light ? "text-ivory" : ""}>{title}</h2>
-      {body ? <p className={light ? "body-light" : "body-muted"}>{body}</p> : null}
+      <p className="public-eyebrow">{eyebrow}</p>
+      <h2 id={headingId}>{title}</h2>
+      {body ? <p className="body-muted">{body}</p> : null}
     </div>
+  )
+}
+
+/** Numbered glass cards, each big red number half behind its pane: How we train's pillars, and the steps
+ * after a trial request. */
+function NumberedCards({
+  className,
+  items,
+  label,
+}: {
+  className: string
+  items: readonly (readonly [title: string, text: string])[]
+  label?: string
+}) {
+  return (
+    <ol className={className} aria-label={label}>
+      {items.map(([title, text], index) => (
+        <li key={title}>
+          <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+          <h3>{title}</h3>
+          <p>{text}</p>
+        </li>
+      ))}
+    </ol>
   )
 }
 
@@ -154,46 +183,44 @@ function Hero() {
   )
 }
 
-function About() {
+/**
+ * Everything about the coach in one place: his photo, then who he is on a clear glass card that overlaps
+ * the photo's edge. On a phone the card slides up over the photo.
+ */
+function Coach() {
   return (
-    <section className="about section-shell" aria-labelledby="academy-title">
-      <div className="about-image-wrap">
-        <div className="about-image-frame">
-          <Image
-            src="/images/coach-sathiya-court.jpeg"
-            alt="Coach Sathiya Moorthy"
-            className="about-image"
-            fill
-            sizes="(max-width: 900px) calc(100vw - 32px), (max-width: 1240px) 44vw, 520px"
-          />
-          <div className="about-image-caption">
-            <span>Sathiya Moorthy</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="about-story">
-        <SectionIntro
-          id="academy"
-          headingId="academy-title"
-          eyebrow="The academy"
-          title="Built around the player."
-          body="SMBA exists to make progress deliberate. Technique, movement, physical preparation and competitive thinking are developed together—so each player understands not only what to do, but why it matters."
+    <section id="coach" className="coach" aria-labelledby="coach-title">
+      <figure className="coach-photo">
+        <Image
+          src="/images/coach-sathiya-court.jpeg"
+          alt="Coach Sathiya Moorthy"
+          fill
+          sizes="(max-width: 900px) 100vw, 54vw"
         />
+      </figure>
 
-        <PrinciplesReveal items={academyPrinciples} />
-
-        <h3 className="public-eyebrow about-coach-label">Meet your coach</h3>
-      </div>
-
-      <div className="coach-profile">
-        <blockquote className="coach-philosophy">
+      <div className="coach-panel">
+        <p className="public-eyebrow">Your coach</p>
+        <h2 id="coach-title">
+          <span>Sathiya</span> <span>Moorthy</span>
+        </h2>
+        <p className="coach-lead">
+          Head coach at SMBA, developing players from their first session to state, national and
+          international competition.
+        </p>
+        <blockquote className="coach-quote">
           <p>
-            “Wherever you are starting from, you are welcome at SMBA. We’ll understand
-            your game, coach with clarity, and help you grow with confidence.”
+            “Wherever you are starting from, you are welcome at SMBA. We’ll understand your game,
+            coach with clarity, and help you grow with confidence.”
           </p>
         </blockquote>
-        <p className="coach-credential">BWF-certified · 12+ years coaching</p>
+        <ul className="coach-facts">
+          {coachFacts.map(([figure, label]) => (
+            <li key={label}>
+              <strong>{figure}</strong> {label}
+            </li>
+          ))}
+        </ul>
         <a
           className="coach-instagram"
           href={contact.coachInstagram.url}
@@ -201,8 +228,10 @@ function About() {
           rel="noopener noreferrer"
           aria-label={`Coach Sathiya Moorthy on Instagram ${contact.coachInstagram.handle} (opens in a new tab)`}
         >
-          <Camera aria-hidden="true" />
-          {contact.coachInstagram.handle}
+          <span>
+            <Camera aria-hidden="true" />
+            {contact.coachInstagram.handle}
+          </span>
           <ArrowUpRight aria-hidden="true" />
         </a>
       </div>
@@ -210,231 +239,133 @@ function About() {
   )
 }
 
+/** How SMBA trains: the academy's four pillars, each said once. */
+function Training() {
+  return (
+    <section className="training section-shell" aria-labelledby="training-title">
+      <SectionIntro
+        id="training"
+        headingId="training-title"
+        eyebrow="How we train"
+        title="Built around the player."
+        body="Technique, movement, physical preparation and competitive thinking are developed together, so every player understands not only what to do, but why it matters."
+      />
+
+      <NumberedCards className="training-pillars" items={trainingPillars} />
+    </section>
+  )
+}
+
+/** Programs and their fees as one choice: a level, then a plan for it. */
 function Programs() {
   return (
     <section className="programs section-shell" aria-labelledby="programs-title">
       <SectionIntro
         id="programs"
         headingId="programs-title"
-        eyebrow="Programs"
+        eyebrow="Programs & fees"
         title="Train for what comes next."
         body="Every stage has a different job. Start with the outcome, then choose the training rhythm that fits your week."
       />
 
-      <div className="path-grid">
-        {trainingPrograms.map((program) => (
-          <div className="path-card" key={program.title}>
-            <div className="path-number">{program.step}</div>
-            <p className="path-level">{program.level}</p>
-            <h3>{program.title}</h3>
-            <p className="path-description">{program.description}</p>
-            <ul>
-              {program.outcomes.map((outcome) => (
-                <li key={outcome}>
-                  <Check aria-hidden="true" />
-                  {outcome}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      <FeeExplorer />
+      <ProgramPlanner />
     </section>
   )
 }
 
-function WhySmba() {
+const trialSteps = [
+  ["Tell us about your game", "Your answers prepare a clear WhatsApp message."],
+  ["Confirm a suitable session", "The academy replies with availability and practical details."],
+  ["Train once, then choose", "Attend the free trial and discuss the right program and schedule."],
+] as const
+
+// Each link is named by its visible words (so voice control can say them), with `hint` added for screen
+// readers only.
+const reachLinks = [
+  { icon: MessageCircle, label: "WhatsApp", value: contact.phoneDisplay, href: contact.whatsapp, hint: "" },
+  { icon: Phone, label: "Call", value: contact.phoneDisplay, href: `tel:${contact.phone}`, hint: "" },
+  { icon: MapPin, label: "Visit", value: contact.venue, href: contact.maps, hint: " on Google Maps" },
+  {
+    icon: Camera,
+    label: "Instagram",
+    value: contact.academyInstagram.handle,
+    href: contact.academyInstagram.url,
+    hint: "",
+  },
+] as const
+
+/** The free trial and every other way to reach the academy: what happens after you ask, the request
+ * itself, then the direct lines for anyone who would rather talk first. */
+function StartHere() {
   return (
-    <section className="why section-shell" aria-labelledby="why-smba-title">
+    <section id="trial" className="start section-shell" aria-labelledby="trial-title">
       <SectionIntro
-        id="why-smba"
-        headingId="why-smba-title"
-        eyebrow="Why SMBA"
-        title="Evidence before promises."
-        body="A premium experience is not a claim. It is the quality of attention, the clarity of the plan and the consistency of the work."
+        eyebrow="Your first session"
+        headingId="trial-title"
+        title="Start with one focused session."
+        body="Tell us where your game is today. We’ll help you take the next step."
       />
 
-      <p className="why-mobile-bridge">Here’s what you can expect at SMBA.</p>
-
-      <div className="proof-grid">
-        {proofPoints.map((point) => (
-          <div className="proof-card" key={point.label}>
-            <span>{point.label}</span>
-            <h3>{point.title}</h3>
-            <p>{point.body}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function Trial() {
-  return (
-    <section id="trial" className="trial" aria-labelledby="trial-title">
-      <div className="section-shell trial-inner">
-        <div className="trial-copy">
-          <SectionIntro
-            eyebrow="Your first session"
-            headingId="trial-title"
-            title="Start with one focused session."
-            body="Tell us where your game is today. We’ll help you take the next step."
-            light
-          />
-
-          <div className="next-steps">
-            <p className="public-eyebrow public-eyebrow-light">
-              What happens next
-            </p>
-            {[
-              ["Tell us about your game", "Your answers prepare a clear WhatsApp message."],
-              ["Confirm a suitable session", "The academy replies with availability and practical details."],
-              ["Train once, then choose", "Attend the free trial and discuss the right program and schedule."],
-            ].map(([title, text], index) => (
-              <div className="next-step" key={title}>
-                <span>0{index + 1}</span>
-                <div>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="start-grid">
+        <NumberedCards className="start-steps" items={trialSteps} label="What happens next" />
 
         <TrialForm />
       </div>
-    </section>
-  )
-}
 
-function Contact() {
-  return (
-    <section className="contact section-shell" aria-labelledby="contact-title">
-      <SectionIntro
-        id="contact"
-        headingId="contact-title"
-        eyebrow="Contact & community"
-        title="Talk to the academy."
-        body="A question about levels, fees or the right place to begin? Start with a direct conversation."
-      />
-
-      <div className="contact-grid">
-        <div className="instagram-card">
-          <div className="instagram-card-top">
-            <Camera aria-hidden="true" />
-            <span>Official academy page</span>
-          </div>
-          <div>
-            <h3>Instagram</h3>
-            <p className="instagram-handle">{contact.academyInstagram.handle}</p>
-            <p className="instagram-tagline">Training, progress and life inside SMBA.</p>
-          </div>
-          <a
-            href={contact.academyInstagram.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Follow the official SMBA Instagram ${contact.academyInstagram.handle} (opens in a new tab)`}
-          >
-            Follow the academy
-            <ArrowUpRight aria-hidden="true" />
-          </a>
-        </div>
-
-        <div className="contact-stack">
-          <div className="contact-card">
-            <div className="contact-icon"><MessageCircle aria-hidden="true" /></div>
-            <div>
-              <span>WhatsApp</span>
-              <a
-                href={contact.whatsapp}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Message SMBA on WhatsApp at ${contact.phoneDisplay} (opens in a new tab)`}
-              >
-                {contact.phoneDisplay}
-              </a>
-            </div>
-            <ArrowUpRight aria-hidden="true" />
-          </div>
-          <div className="contact-card">
-            <div className="contact-icon"><Phone aria-hidden="true" /></div>
-            <div>
-              <span>Call the academy</span>
-              <a href={`tel:${contact.phone}`}>{contact.phoneDisplay}</a>
-            </div>
-            <ArrowUpRight aria-hidden="true" />
-          </div>
-          <div className="contact-card">
-            <div className="contact-icon"><MapPin aria-hidden="true" /></div>
-            <div>
-              <span>Train with us</span>
-              <a
-                href={contact.maps}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`${contact.location} on Google Maps (opens in a new tab)`}
-              >
-                {contact.location}
-              </a>
-            </div>
-            <ArrowUpRight aria-hidden="true" />
-          </div>
-        </div>
+      <div id="contact" className="start-reach">
+        <h3 className="public-eyebrow">Or talk to us</h3>
+        <ul>
+          {reachLinks.map(({ icon: Icon, label, value, href, hint }) => {
+            const external = href.startsWith("http")
+            return (
+              <li key={label}>
+                <a href={href} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+                  <span className="start-reach-icon"><Icon aria-hidden="true" /></span>
+                  <span>
+                    <small>{label}</small>
+                    <strong>{value}</strong>
+                    {hint || external ? (
+                      <span className="sr-only">{hint}{external ? " (opens in a new tab)" : ""}</span>
+                    ) : null}
+                  </span>
+                  <ArrowUpRight aria-hidden="true" />
+                </a>
+              </li>
+            )
+          })}
+        </ul>
       </div>
     </section>
   )
 }
 
+/* The page's last word is a single glass bar, made like the contact tiles above it: the academy's mark, the
+   same menu as the header, and the way back up */
 function Footer() {
   return (
-    <footer className="footer">
-      <div className="section-shell footer-main">
-        <div className="footer-brand">
-          <div className="footer-logo">
-            <Image
-              src="/images/smba-logo.png"
-              alt="Sathiya Moorthy Badminton Academy"
-              width={720}
-              height={488}
-              sizes="214px"
-            />
-          </div>
-          <p>Professional badminton coaching in Mahadevapura, Bengaluru.</p>
-        </div>
-
-        <div className="footer-action">
-          <p className="public-eyebrow public-eyebrow-light">Begin with clarity</p>
-          <h2>Your next point starts here.</h2>
-          <a className="button button-light" href="#trial">
-            Book a free trial
-            <ArrowRight aria-hidden="true" />
+    <footer className="footer section-shell">
+      <div className="footer-bar">
+        <Image
+          className="footer-logo"
+          src="/images/smba-logo.png"
+          alt="Sathiya Moorthy Badminton Academy"
+          width={720}
+          height={488}
+          sizes="96px"
+        />
+        <nav className="footer-nav" aria-label="Footer">
+          {navItems.map((item) => (
+            <a key={item.href} href={item.href}>
+              {item.label}
+            </a>
+          ))}
+        </nav>
+        <div className="footer-end">
+          <small>© {new Date().getFullYear()} Sathiya Moorthy Badminton Academy</small>
+          <a href="#top">
+            Back to top
+            <ArrowUp aria-hidden="true" />
           </a>
-        </div>
-      </div>
-
-      <div className="section-shell footer-bottom">
-        <span>© {new Date().getFullYear()} Sathiya Moorthy Badminton Academy</span>
-        <div>
-          <a
-            href={contact.academyInstagram.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="SMBA on Instagram (opens in a new tab)"
-          >
-            Instagram
-          </a>
-          <a
-            href={contact.maps}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="SMBA in Mahadevapura on Google Maps (opens in a new tab)"
-          >
-            Mahadevapura
-          </a>
-          <a href="#top">Back to top</a>
         </div>
       </div>
     </footer>
@@ -454,12 +385,11 @@ export default function Home() {
       <Header />
       <main id="main-content" tabIndex={-1}>
         <Hero />
-        <About />
+        <Coach />
+        <Training />
         <Programs />
-        <WhySmba />
+        <StartHere />
         <PublicAnnouncements />
-        <Trial />
-        <Contact />
       </main>
       <Footer />
     </div>
