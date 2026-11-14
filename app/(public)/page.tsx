@@ -294,8 +294,7 @@ const reachLinks = [
   },
 ] as const
 
-/** The free trial and every other way to reach the academy: what happens after you ask, the request
- * itself, then the direct lines for anyone who would rather talk first. */
+/** The free trial: what happens after you ask, then the request itself. */
 function StartHere() {
   return (
     <section id="trial" className="start section-shell" aria-labelledby="trial-title">
@@ -311,16 +310,24 @@ function StartHere() {
 
         <TrialForm />
       </div>
+    </section>
+  )
+}
 
-      <div id="contact" className="start-reach">
-        <h3 className="public-eyebrow">Or talk to us</h3>
-        <ul>
+/* The page ends on one pane of glass: the direct ways to reach the academy, then its mark, the same menu as
+   the header, and the way back up */
+function Footer() {
+  return (
+    <footer id="contact" className="footer section-shell" aria-labelledby="contact-title">
+      <div className="footer-panel">
+        <h2 id="contact-title" className="public-eyebrow">Talk to the academy</h2>
+        <ul className="footer-reach">
           {reachLinks.map(({ icon: Icon, label, value, href, hint }) => {
             const external = href.startsWith("http")
             return (
               <li key={label}>
                 <a href={href} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
-                  <span className="start-reach-icon"><Icon aria-hidden="true" /></span>
+                  <span className="footer-reach-icon"><Icon aria-hidden="true" /></span>
                   <span>
                     <small>{label}</small>
                     <strong>{value}</strong>
@@ -334,38 +341,30 @@ function StartHere() {
             )
           })}
         </ul>
-      </div>
-    </section>
-  )
-}
 
-/* The page's last word is a single glass bar, made like the contact tiles above it: the academy's mark, the
-   same menu as the header, and the way back up */
-function Footer() {
-  return (
-    <footer className="footer section-shell">
-      <div className="footer-bar">
-        <Image
-          className="footer-logo"
-          src="/images/smba-logo.png"
-          alt="Sathiya Moorthy Badminton Academy"
-          width={720}
-          height={488}
-          sizes="96px"
-        />
-        <nav className="footer-nav" aria-label="Footer">
-          {navItems.map((item) => (
-            <a key={item.href} href={item.href}>
-              {item.label}
+        <div className="footer-bar">
+          <Image
+            className="footer-logo"
+            src="/images/smba-logo.png"
+            alt="Sathiya Moorthy Badminton Academy"
+            width={720}
+            height={488}
+            sizes="96px"
+          />
+          <nav className="footer-nav" aria-label="Footer">
+            {navItems.map((item) => (
+              <a key={item.href} href={item.href}>
+                {item.label}
+              </a>
+            ))}
+          </nav>
+          <div className="footer-end">
+            <small>© {new Date().getFullYear()} Sathiya Moorthy Badminton Academy</small>
+            <a href="#top">
+              Back to top
+              <ArrowUp aria-hidden="true" />
             </a>
-          ))}
-        </nav>
-        <div className="footer-end">
-          <small>© {new Date().getFullYear()} Sathiya Moorthy Badminton Academy</small>
-          <a href="#top">
-            Back to top
-            <ArrowUp aria-hidden="true" />
-          </a>
+          </div>
         </div>
       </div>
     </footer>

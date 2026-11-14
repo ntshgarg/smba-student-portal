@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react"
 import {
+  ArrowDown,
   ArrowUpRight,
   Check,
   MessageCircle,
@@ -280,6 +281,11 @@ export function TrialForm() {
           This opens WhatsApp in a new tab with your details. The website does not
           store your information or collect payment.
         </p>
+        {/* the direct lines live in the footer */}
+        <a className="trial-contact-link" href="#contact">
+          Or contact us
+          <ArrowDown aria-hidden="true" />
+        </a>
         <div className="whatsapp-status-slot" aria-live="polite" aria-atomic="true">
           {whatsappStatus.state === "opened" ? (
             <p className="whatsapp-status">

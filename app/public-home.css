@@ -1084,8 +1084,8 @@
   font-size: 0.9375rem;
 }
 
-/* Start here: what happens after asking (the steps as How we train's glass cards), the free-trial request
-   on navy beside them, and the direct ways to reach the academy as glass tiles, like the coach's facts */
+/* Start here: what happens after asking (the steps as How we train's glass cards) and the free-trial
+   request on navy beside them */
 .start {
   padding-block: 0 clamp(88px, 9vw, 136px);
 }
@@ -1304,6 +1304,31 @@
   text-align: center;
 }
 
+.trial-contact-link {
+  display: flex;
+  width: fit-content;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-tight);
+  margin: 6px auto 0;
+  color: var(--white);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--white) 40%, transparent);
+  text-underline-offset: 5px;
+}
+
+.trial-contact-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (hover: hover) {
+  .trial-contact-link:hover {
+    text-decoration-color: currentColor;
+  }
+}
+
 .whatsapp-status-slot {
   min-height: 52px;
 }
@@ -1334,11 +1359,22 @@
   color: #f47c83;
 }
 
-.start-reach {
-  margin-top: var(--space-content);
+/* The footer: one pane of glass holding the ways to reach the academy, then the mark, the menu and the
+   way back up under a hairline */
+.footer {
+  padding-bottom: var(--space-group);
 }
 
-.start-reach ul {
+.footer-panel {
+  padding: clamp(var(--space-group), 3vw, var(--space-editorial));
+  border: 1px solid color-mix(in srgb, var(--white) 90%, transparent);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--white) 38%, transparent);
+  box-shadow: 0 30px 60px -40px color-mix(in srgb, var(--navy) 40%, transparent);
+  color: var(--navy);
+}
+
+.footer-reach {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
@@ -1347,7 +1383,7 @@
   list-style: none;
 }
 
-.start-reach a {
+.footer-reach a {
   position: relative;
   display: flex;
   height: 100%;
@@ -1357,19 +1393,19 @@
   padding: var(--space-copy);
   border: 1px solid color-mix(in srgb, var(--white) 90%, transparent);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--white) 38%, transparent);
+  background: color-mix(in srgb, var(--white) 55%, transparent);
   box-shadow: 0 10px 24px -18px color-mix(in srgb, var(--navy) 35%, transparent);
   color: var(--navy);
 }
 
-.start-reach a > span:nth-child(2) {
+.footer-reach a > span:nth-child(2) {
   display: grid;
   min-width: 0;
   flex: 1;
   gap: 2px;
 }
 
-.start-reach small {
+.footer-reach small {
   color: #48535e;
   font-size: 0.75rem;
   font-weight: var(--weight-label);
@@ -1377,12 +1413,12 @@
   text-transform: uppercase;
 }
 
-.start-reach strong {
+.footer-reach strong {
   font-weight: 650;
   overflow-wrap: anywhere;
 }
 
-.start-reach-icon {
+.footer-reach-icon {
   display: grid;
   width: 38px;
   height: 38px;
@@ -1393,13 +1429,13 @@
   color: var(--red);
 }
 
-.start-reach svg {
+.footer-reach svg {
   width: 18px;
   height: 18px;
 }
 
 /* the arrow sits in the corner, so the address gets the tile's full width */
-.start-reach a > svg {
+.footer-reach a > svg {
   position: absolute;
   top: 12px;
   right: 12px;
@@ -1409,14 +1445,10 @@
 }
 
 @media (hover: hover) {
-  .start-reach a:hover {
+  .footer-reach a:hover {
     background: color-mix(in srgb, var(--white) 72%, transparent);
     transition: background var(--duration-fast) var(--ease-standard);
   }
-}
-
-.footer {
-  padding-bottom: var(--space-group);
 }
 
 .footer-bar {
@@ -1424,12 +1456,9 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-copy) var(--space-editorial);
-  padding: 18px 28px;
-  border: 1px solid color-mix(in srgb, var(--white) 90%, transparent);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--white) 38%, transparent);
-  box-shadow: 0 10px 24px -18px color-mix(in srgb, var(--navy) 35%, transparent);
-  color: var(--navy);
+  margin-top: var(--space-block);
+  padding-top: var(--space-group);
+  border-top: 1px solid var(--line);
 }
 
 .footer-logo {
@@ -1489,7 +1518,7 @@
     padding-right: 54px;
   }
 
-  .start-reach ul {
+  .footer-reach {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2041,12 +2070,12 @@
     grid-column: 1;
   }
 
-  .start-reach ul {
+  .footer-reach {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .footer-bar {
-    padding: var(--space-copy) 18px;
+  .footer-panel {
+    padding: 22px 18px;
   }
 
   .footer-nav {
