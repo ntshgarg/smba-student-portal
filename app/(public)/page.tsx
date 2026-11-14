@@ -279,18 +279,23 @@ const trialSteps = [
   ["Train once, then choose", "Attend the free trial and discuss the right program and schedule."],
 ] as const
 
-// Each link is named by its visible words (so voice control can say them), with `hint` added for screen
-// readers only.
+// Each link is named by its visible words (label, value, action), so voice control can say them
 const reachLinks = [
-  { icon: MessageCircle, label: "WhatsApp", value: contact.phoneDisplay, href: contact.whatsapp, hint: "" },
-  { icon: Phone, label: "Call", value: contact.phoneDisplay, href: `tel:${contact.phone}`, hint: "" },
-  { icon: MapPin, label: "Visit", value: contact.venue, href: contact.maps, hint: " on Google Maps" },
+  {
+    icon: MessageCircle,
+    label: "WhatsApp",
+    value: contact.phoneDisplay,
+    action: "Message",
+    href: contact.whatsapp,
+  },
+  { icon: Phone, label: "Call", value: contact.phoneDisplay, action: "Call now", href: `tel:${contact.phone}` },
+  { icon: MapPin, label: "Visit", value: contact.venue, action: "Open in Maps", href: contact.maps },
   {
     icon: Camera,
     label: "Instagram",
     value: contact.academyInstagram.handle,
+    action: "Follow",
     href: contact.academyInstagram.url,
-    hint: "",
   },
 ] as const
 
@@ -322,20 +327,19 @@ function Footer() {
       <div className="footer-panel">
         <h2 id="contact-title" className="public-eyebrow">Talk to the academy</h2>
         <ul className="footer-reach">
-          {reachLinks.map(({ icon: Icon, label, value, href, hint }) => {
+          {reachLinks.map(({ icon: Icon, label, value, action, href }) => {
             const external = href.startsWith("http")
             return (
               <li key={label}>
+                <span className="footer-reach-mark" aria-hidden="true"><Icon /></span>
                 <a href={href} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
-                  <span className="footer-reach-icon"><Icon aria-hidden="true" /></span>
-                  <span>
-                    <small>{label}</small>
-                    <strong>{value}</strong>
-                    {hint || external ? (
-                      <span className="sr-only">{hint}{external ? " (opens in a new tab)" : ""}</span>
-                    ) : null}
+                  <small>{label}</small>
+                  <strong>{value}</strong>
+                  <span className="footer-reach-go">
+                    {action}
+                    <ArrowUpRight aria-hidden="true" />
                   </span>
-                  <ArrowUpRight aria-hidden="true" />
+                  {external ? <span className="sr-only"> (opens in a new tab)</span> : null}
                 </a>
               </li>
             )
