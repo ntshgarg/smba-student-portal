@@ -69,6 +69,10 @@ const FIRST_RADIUS = 95
 const RING_STEP = 10.9
 const LAST_RADIUS = 780
 const INK_ALPHA = 0.16
+// the ink fades with the distance from the centre: full strength to this share of the way to a corner,
+// gone by the next
+const FADE_FROM = 0.42
+const FADE_TO = 0.82
 // letters drawn between yields: a slice stays well inside one frame even on a slow laptop
 const LETTERS_PER_SLICE = 60
 
@@ -101,10 +105,10 @@ export function tournamentRings(): Ring[] {
 
 /**
  * Draw the rings for a `width` x `height` slot at `pixelRatio`, a slice at a time: the generator yields
- * every few hundred letters so the caller can spread the work over frames and never block the page. The
+ * every few dozen letters so the caller can spread the work over frames and never block the page. The
  * drawing is built on its own canvas and copied to `target` only when complete, so a redraw after a
  * resize never shows a half-drawn or blank watermark. Each ring's letters are spaced to close its circle
- * exactly. The ink fades out from the centre (full to 38% of the way to a corner, gone by 74%) and over
+ * exactly. The ink fades out from the centre (FADE_FROM to FADE_TO of the way to a corner) and over
  * the slot's left 18%, so it melts into the page before the text column; the faded-out rings aren't drawn.
  */
 export function* drawTournamentRings(
@@ -151,7 +155,7 @@ export function* drawTournamentRings(
   let sinceYield = 0
   for (const ring of tournamentRings()) {
     const r = ring.r * unit
-    const fade = 1 - Math.min(1, Math.max(0, (r / corner - 0.38) / 0.36))
+    const fade = 1 - Math.min(1, Math.max(0, (r / corner - FADE_FROM) / (FADE_TO - FADE_FROM)))
     // the rings only grow from here
     if (fade <= 0) break
     const chars = [...ring.text]
