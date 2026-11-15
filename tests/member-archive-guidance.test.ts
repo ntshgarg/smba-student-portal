@@ -11,4 +11,10 @@ describe("the archive note on a member record", () => {
     expect(note).toContain("Training ends after November 2026. Archiving opens from 1 December 2026")
     expect(note).toContain("They have left already")
   })
+
+  it("still names it when the place has already closed", () => {
+    expect(archiveBlockedNote(false, { effectiveOn: "2026-12-01", kind: "end" }))
+      .toContain("Archiving opens from 1 December 2026")
+    expect(archiveBlockedNote(false, null)).toBeNull()
+  })
 })

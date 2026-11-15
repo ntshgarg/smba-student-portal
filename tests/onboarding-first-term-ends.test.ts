@@ -492,6 +492,24 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
     })).toMatchObject({ ok: false, message: expect.stringContaining("booked to start on 1 December 2026") })
   })
 
+  it("keeps Archive refused while an End training is booked, even once the place has closed", () => {
+    const pia = onboardedPlayer("Pia Booked End", autumn, 9407)
+    changes.scheduleEndOfTraining({ playerId: pia, stopFees: true }, context())
+    // The place closes some other way before the booked end's day.
+    database.update(schema.sessionAssignments)
+      .set({ effectiveTo: "2026-11-12" })
+      .where(eq(schema.sessionAssignments.accountId, pia))
+      .run()
+    const revision = database.select().from(schema.playerEnrollments)
+      .where(eq(schema.playerEnrollments.accountId, pia)).get()!.recordRevision
+    expect(members.archiveMemberRecord({
+      coachId,
+      database,
+      input: { expectedRevision: revision, memberId: pia },
+      now,
+    })).toMatchObject({ ok: false, message: expect.stringContaining("An End training is booked for 1 December 2026") })
+  })
+
   it("leaves a holiday out of an ended first term's last month, and counts it once removed", async () => {
     const holidays = await import("@/lib/sessions/holidays")
     const closing = series("11:00", "2026-10-01", "2027-03-31")

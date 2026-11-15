@@ -13,10 +13,12 @@ export function archiveBlockedNote(
   hasActiveAssignments: boolean,
   scheduled: { effectiveOn: string; kind: "change" | "end" } | null,
 ) {
-  if (!hasActiveAssignments) return null
+  // A booked end blocks Archive until it happens, with or without a place
+  // still open (the server refuses it too, lib/coach/member-service.ts).
   if (scheduled?.kind === "end") {
     return `Training ends after ${monthBefore(scheduled.effectiveOn)}. Archiving opens from ${formatTermDate(scheduled.effectiveOn)}, once fees have stopped and none are owed. If they have left already, use End training again and tick “They have left already”.`
   }
+  if (!hasActiveAssignments) return null
   return "Use End training on the Training tab before archiving this member."
 }
 

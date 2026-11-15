@@ -482,20 +482,23 @@ export function archiveMemberRecord({
         message: "End the player’s active sessions before archiving their membership.",
       }
     }
-    // A booked start of training would put an archived player back on a schedule.
-    const bookedStart = tx.select({ effectiveOn: trainingChanges.effectiveOn })
+    // Nothing booked may be left behind on an archived player: a booked start
+    // would put them back on a schedule, and a booked end (left behind when
+    // their place closed some other way) would fail on its day.
+    const booked = tx.select({ effectiveOn: trainingChanges.effectiveOn, kind: trainingChanges.kind })
       .from(trainingChanges)
       .where(and(
         eq(trainingChanges.playerAccountId, input.memberId),
         eq(trainingChanges.status, "scheduled"),
-        eq(trainingChanges.kind, "change"),
       ))
       .get()
-    if (bookedStart) {
+    if (booked) {
       return {
         ok: false,
         code: "ACTIVE_ASSIGNMENTS",
-        message: `Training is booked to start on ${formatTermDate(bookedStart.effectiveOn)}. Cancel that booked change in Members before archiving this member.`,
+        message: booked.kind === "change"
+          ? `Training is booked to start on ${formatTermDate(booked.effectiveOn)}. Cancel that booked change in Members before archiving this member.`
+          : `An End training is booked for ${formatTermDate(booked.effectiveOn)}. Cancel it in Members, or wait until that day, before archiving this member.`,
       }
     }
 
