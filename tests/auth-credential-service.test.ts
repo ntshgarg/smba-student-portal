@@ -298,11 +298,18 @@ describe("production credential lifecycle", () => {
       .resolves.toMatchObject({ twoFactorEnabled: false })
     expect(flag()).toBe(false)
 
-    // Confirmed, but switched off: the code for that authenticator is asked for.
+    // Confirmed, but switched off: the code for that authenticator is asked for,
+    // and a sign-in made while it was off (no code passed) is ended.
     database.update(schema.authTwoFactors).set({ verified: true }).where(eq(schema.authTwoFactors.id, "drift-factor")).run()
+    database.insert(schema.authRuntimeSessions).values({
+      createdAt: NOW, expiresAt: new Date(NOW.getTime() + 86_400_000), id: "drift-session",
+      token: "drift-token", updatedAt: NOW, userId: playerId,
+    }).run()
     await expect(verifyPinLogin({ academyId, pin: "618203" }, { database }))
       .resolves.toMatchObject({ twoFactorEnabled: true })
     expect(flag()).toBe(true)
+    expect(database.select().from(schema.authRuntimeSessions)
+      .where(eq(schema.authRuntimeSessions.userId, playerId)).all()).toHaveLength(0)
   })
 
   it("allows coach PINs and preserves the authenticator challenge requirement", async () => {

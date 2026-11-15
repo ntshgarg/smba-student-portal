@@ -2,6 +2,7 @@ import "server-only"
 
 import { and, eq, sql } from "drizzle-orm"
 
+import { endSessionsStartedBefore } from "@/lib/auth/second-factor-reset"
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import { authTwoFactors, authUsers } from "@/lib/db/schema"
 
@@ -21,12 +22,17 @@ import { authTwoFactors, authUsers } from "@/lib/db/schema"
  */
 export function alignTwoFactorFlag(accountId: string, {
   database = initializeDatabase(),
+  now = new Date(),
 }: {
   database?: SmbaDatabaseExecutor
+  now?: Date
 } = {}) {
   const connected = sql<boolean>`EXISTS (SELECT 1 FROM ${authTwoFactors}
     WHERE ${authTwoFactors.userId} = ${authUsers.id} AND ${authTwoFactors.verified} = 1)`
-  database.update(authUsers).set({ twoFactorEnabled: connected })
+  const turnedOn = database.update(authUsers).set({ twoFactorEnabled: connected })
     .where(and(eq(authUsers.id, accountId), sql`${authUsers.twoFactorEnabled} <> ${connected}`))
-    .run()
+    .returning({ enabled: authUsers.twoFactorEnabled }).get()?.enabled === true
+  // Sessions opened while the flag was off never passed a code; with it back on
+  // they would become full sessions, as confirmTotpSetup also guards against.
+  if (turnedOn) endSessionsStartedBefore(accountId, now, { database })
 }
