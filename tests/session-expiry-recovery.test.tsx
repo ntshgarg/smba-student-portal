@@ -26,7 +26,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 const captured = vi.hoisted(() => ({
   elements: [] as Array<{ props: Record<string, unknown>; type: unknown }>,
   feedback: null as unknown,
-  guardMessages: [] as string[],
+  guardMessages: [] as Array<{ message: string; scope: string }>,
   marksOnDevice: [] as unknown[],
   saveResult: null as unknown,
   stateUpdates: [] as unknown[],
@@ -81,8 +81,8 @@ vi.mock("next/navigation", () => ({
  * is how the confirmation the coach actually meets is read.
  */
 vi.mock("@/components/unsaved-work-guard", () => ({
-  useUnsavedWorkGuard: ({ message }: { message: string }) => {
-    captured.guardMessages.push(message)
+  useUnsavedWorkGuard: ({ message, scope }: { message: string; scope: string }) => {
+    captured.guardMessages.push({ message, scope })
     return {
       confirmDiscard: vi.fn(() => true),
       confirmNavigation: vi.fn(() => true),
@@ -196,23 +196,28 @@ const oneUnsavedPlayerMark = [{
 const staffDiscardPrompt = "Leave this date and discard the unsaved staff attendance changes?"
 const playerDiscardPrompt = "Leave this session and discard the unsaved attendance changes?"
 
+const ishaan = {
+  accountId: "coach-1",
+  fullName: "Ishaan Rao",
+  initials: "IR",
+  joinedOn: "2026-01-05",
+}
+
 function rollCall(): ReactElement {
   return (
     <StaffRollCall
       closedFor={null}
-      initialDate="2026-08-21"
+      dateKey="2026-08-21"
       initialRecords={[{ choice: "cleared", coachAccountId: "coach-1" }]}
-      juniorCoaches={[{
-        accountId: "coach-1",
-        fullName: "Ishaan Rao",
-        initials: "IR",
-        joinedOn: "2026-01-05",
-      }]}
+      juniorCoaches={[ishaan]}
+      open
       referenceDate="2026-08-23"
+      onToggle={() => {}}
     />
   )
 }
 
+// The staff card sits closed above the session, as it does on the Mark tab.
 function playerRegister(): ReactElement {
   return (
     <PlayerAttendanceRecorder
@@ -220,8 +225,25 @@ function playerRegister(): ReactElement {
       initialFromCalendar={false}
       initialOccurrenceId="occurrence-1"
       initialReferenceInstant={Date.parse("2026-08-21T11:00:00.000Z")}
+      initialStaffOpen={false}
+      staff={{
+        closedFor: null,
+        juniorCoaches: [ishaan],
+        records: [{ choice: "present", coachAccountId: "coach-1" }],
+        referenceDate: "2026-08-23",
+      }}
     />
   )
+}
+
+/** Each register's own guard: the Mark tab holds one for the staff card and one for the session. */
+const guardScope = new Map<() => ReactElement, string>([
+  [rollCall, "staff-roll-call"],
+  [playerRegister, "record-player-attendance"],
+])
+
+function guardMessage(register: () => ReactElement) {
+  return captured.guardMessages.findLast(({ scope }) => scope === guardScope.get(register))?.message
 }
 
 function render(register: () => ReactElement) {
@@ -233,7 +255,7 @@ function render(register: () => ReactElement) {
 /** The sentence the guard is holding for this register right now. */
 function leaveConfirmation(register: () => ReactElement) {
   render(register)
-  return captured.guardMessages.at(-1)
+  return guardMessage(register)
 }
 
 /**
@@ -274,7 +296,7 @@ async function saveAndRedraw(
   const markup = render(register)
   captured.feedback = null
 
-  return { feedback, guardMessage: captured.guardMessages.at(-1), markup }
+  return { feedback, guardMessage: guardMessage(register), markup }
 }
 
 describe("an expired session gives the courtside register somewhere to go", () => {

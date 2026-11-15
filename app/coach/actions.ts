@@ -118,7 +118,6 @@ function revalidateAcademyData() {
   revalidatePath("/coach/attendance/players/register")
   revalidatePath("/coach/attendance/players/record")
   revalidatePath("/coach/attendance/staff/register")
-  revalidatePath("/coach/attendance/staff/record")
   revalidatePath("/coach/attendance/adjustments")
   revalidatePath("/coach/calendar")
   revalidatePath("/coach/schedules")
@@ -300,7 +299,8 @@ export async function saveStaffAttendanceAction(input: {
     })
     revalidatePath("/coach")
     revalidatePath("/coach/attendance/staff/register")
-    revalidatePath("/coach/attendance/staff/record")
+    // The staff roll call is the first card on the Mark tab.
+    revalidatePath("/coach/attendance/players/record")
     return result
   }))
 }

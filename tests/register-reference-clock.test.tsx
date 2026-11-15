@@ -83,6 +83,9 @@ vi.mock("@/components/unsaved-work-guard", () => ({
   }),
 }))
 
+// The recorder's staff card saves through a server action this render never calls.
+vi.mock("@/app/coach/actions", () => ({ saveStaffAttendanceAction: vi.fn() }))
+
 vi.mock("@/components/coach/coach-portal-provider", () => ({
   useAttendancePortal: () => ({
     attendanceAdjustments: [],
@@ -184,6 +187,8 @@ describe("the coach registers' 30-second reference clock", () => {
           initialFromCalendar={false}
           initialOccurrenceId="occurrence-1"
           initialReferenceInstant={PINNED_SERVER_INSTANT}
+          initialStaffOpen={false}
+          staff={{ closedFor: null, juniorCoaches: [], records: [], referenceDate: "2026-08-20" }}
         />,
       )
     }],

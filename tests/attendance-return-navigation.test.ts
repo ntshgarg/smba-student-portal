@@ -11,7 +11,6 @@ describe("attendance return navigation", () => {
   it.each([
     "components/coach/player-attendance-register.tsx",
     "components/coach/staff-attendance-register.tsx",
-    "components/coach/attendance/staff-roll-call.tsx",
     "app/coach/attendance/adjustments/page.tsx",
   ])("returns %s to the Attendance dashboard section", (relativePath) => {
     const component = source(relativePath)
@@ -21,12 +20,15 @@ describe("attendance return navigation", () => {
     expect(component).not.toContain("Back to dashboard")
   })
 
-  it("keeps the player recorder contextual only when opened from Calendar", () => {
-    const recorder = source("components/coach/attendance/player-attendance-recorder.tsx")
+  // The Mark tab's back link is the Attendance shell's; the page only swaps it
+  // for the calendar's when the calendar opened it.
+  it("keeps the Mark tab contextual only when opened from Calendar", () => {
+    const shell = source("components/coach/attendance/attendance-shell.tsx")
+    const page = source("app/coach/attendance/players/record/page.tsx")
 
-    expect(recorder).toContain(': "/coach#attendance"')
-    expect(recorder).toContain('initialFromCalendar ? "Back to calendar" : "Back to Attendance"')
-    expect(recorder).toContain("`/coach/calendar?date=${encodeURIComponent(selectedDate)}`")
-    expect(recorder).not.toContain('"Back to dashboard"')
+    expect(shell).toContain('backHref = "/coach#attendance"')
+    expect(page).toContain("backHref={selection.fromCalendar")
+    expect(page).toContain("`/coach/calendar?date=${encodeURIComponent(selection.dateKey)}`")
+    expect(page).toContain('backLabel={selection.fromCalendar ? "Back to calendar" : undefined}')
   })
 })

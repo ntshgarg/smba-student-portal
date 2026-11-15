@@ -41,6 +41,7 @@ describe("focused attendance recording selection", () => {
       fromCalendar: false,
       occurrenceId: null,
       requiresCanonicalRedirect: true,
+      staffOpen: false,
     })
 
     const selected = resolvePlayerAttendanceSelection({
@@ -57,6 +58,7 @@ describe("focused attendance recording selection", () => {
       fromCalendar: true,
       occurrenceId: "evening",
       requiresCanonicalRedirect: false,
+      staffOpen: false,
     })
     expect(playerAttendanceRecordHref(selected)).toBe(
       "/coach/attendance/players/record?date=2026-08-10&occurrence=evening&from=calendar",
@@ -71,6 +73,31 @@ describe("focused attendance recording selection", () => {
       occurrenceId: null,
       requiresCanonicalRedirect: true,
     })
+  })
+
+  // The staff roll call is the Mark tab's first card; `staff=open` opens it, and
+  // only one card is open at a time, so an occurrence beside it wins.
+  it("opens the staff card from the query, never beside an occurrence", () => {
+    const staff = resolvePlayerAttendanceSelection({
+      occurrences: [morning, evening],
+      query: { date: "2026-08-10", staff: "open" },
+      today: "2026-08-09",
+    })
+    expect(staff).toMatchObject({ requiresCanonicalRedirect: false, staffOpen: true })
+    expect(playerAttendanceRecordHref(staff))
+      .toBe("/coach/attendance/players/record?date=2026-08-10&staff=open")
+
+    expect(resolvePlayerAttendanceSelection({
+      occurrences: [morning, evening],
+      query: { date: "2026-08-10", occurrence: "evening", staff: "open" },
+      today: "2026-08-09",
+    })).toMatchObject({ occurrenceId: "evening", requiresCanonicalRedirect: true, staffOpen: false })
+
+    expect(resolvePlayerAttendanceSelection({
+      occurrences: [morning, evening],
+      query: { date: "2026-08-10", staff: "yes" },
+      today: "2026-08-09",
+    })).toMatchObject({ requiresCanonicalRedirect: true, staffOpen: false })
   })
 
   it("orders the day by start time and derives its roster from effective assignment days", () => {

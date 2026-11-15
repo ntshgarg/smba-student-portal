@@ -372,10 +372,10 @@ export const accessibilityStates: readonly AccessibilityState[] = [
   {
     actor: "head-coach",
     compact: true,
-    description: "Staff roll call",
+    description: "Staff roll call, the Mark tab's staff card open",
     id: "coach-staff-roll-call",
     profile: "stress",
-    route: "/coach/attendance/staff/record?date=2026-08-03",
+    route: "/coach/attendance/players/record?date=2026-08-03&staff=open",
   },
   {
     actor: "head-coach",

@@ -275,9 +275,9 @@ export const captureDefinitions: CaptureDefinition[] = [
   {
     actor: "coach",
     critical: true,
-    description: "Daily staff roll-call workspace",
+    description: "Daily staff roll call, the Mark tab's staff card open",
     id: "coach-staff-roll-call",
-    route: "/coach/attendance/staff/record?date={referenceDate}",
+    route: "/coach/attendance/players/record?date={referenceDate}&staff=open",
     scenarios: populatedScenarios,
   },
   {

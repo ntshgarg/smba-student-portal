@@ -373,7 +373,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     case "attendance-session-selected":
       await clickRequired(
-        page.locator(".attendance-occurrence-list > button.is-available"),
+        page.locator('button[aria-controls="attendance-roster-panel"]:not([disabled])'),
         action,
       )
       break

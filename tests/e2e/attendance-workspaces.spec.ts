@@ -90,6 +90,9 @@ async function expectDiscardPrompt(
   expect(message).toMatch(/discard|unsaved/i)
 }
 
+// A session card on the Mark tab that can be opened.
+const sessionHead = 'button[aria-controls="attendance-roster-panel"]:not([disabled])'
+
 test.beforeEach(async ({ page }) => {
   await loginAsCoach(page)
 })
@@ -125,8 +128,9 @@ test("Attendance card launches the focused player and staff workspaces", async (
 
   await players.getByRole("link", { name: "Record attendance" }).click()
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/players/record")
-  await expect(page.getByRole("heading", { name: "Record attendance" })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "Choose one session" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Attendance" })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "Attendance sections" })
+    .getByRole("link", { name: "Mark" })).toHaveAttribute("aria-current", "page")
   await expect(page.locator("#attendance-register")).toHaveCount(0)
 
   await page.goto("/coach#attendance", { waitUntil: "domcontentloaded" })
@@ -145,12 +149,12 @@ test("Record Attendance protects unsaved session-roster changes", async ({ page 
     waitUntil: "networkidle",
   })
   const firstAvailableSession = page
-    .locator(".attendance-occurrence-list > button.is-available")
+    .locator(sessionHead)
     .first()
   await expect(firstAvailableSession).toBeVisible()
   await firstAvailableSession.click()
   const firstRosterPlayer = page
-    .locator(".attendance-record-roster-list [role=\"group\"]")
+    .locator("#attendance-roster-panel [role=\"group\"]")
     .first()
   const presentChoice = firstRosterPlayer.getByRole("button", { name: "Present" })
   const absentChoice = firstRosterPlayer.getByRole("button", { name: "Absent" })
@@ -161,30 +165,28 @@ test("Record Attendance protects unsaved session-roster changes", async ({ page 
   if (!await page.getByRole("button", { name: "Save attendance" }).isEnabled()) {
     await absentChoice.click()
   }
-  const playerChoicePresentation = await firstRosterPlayer.evaluate((group) => {
-    const buttons = Array.from(group.querySelectorAll("button"))
-    const boxes = buttons.map((button) => {
+  // One Present | Absent switch: both halves on one line, the same size, and
+  // only the chosen half filled.
+  const playerChoicePresentation = await firstRosterPlayer.evaluate((group) => (
+    Array.from(group.querySelectorAll("button")).map((button) => {
       const box = button.getBoundingClientRect()
       return {
-        boxShadow: getComputedStyle(button).boxShadow,
-        left: box.left,
-        right: box.right,
+        backgroundColor: getComputedStyle(button).backgroundColor,
+        height: box.height,
+        pressed: button.getAttribute("aria-pressed") === "true",
+        top: box.top,
       }
     })
-    const style = getComputedStyle(group)
-    return {
-      borderTopWidth: style.borderTopWidth,
-      boxes,
-    }
-  })
-  expect(playerChoicePresentation.borderTopWidth).toBe("1px")
-  expect(Math.abs(
-    playerChoicePresentation.boxes[1].left - playerChoicePresentation.boxes[0].right,
-  )).toBeLessThanOrEqual(1)
-  expect(playerChoicePresentation.boxes.map((box) => box.boxShadow)).toEqual(["none", "none"])
+  ))
+  expect(Math.abs(playerChoicePresentation[0].top - playerChoicePresentation[1].top))
+    .toBeLessThanOrEqual(1)
+  expect(playerChoicePresentation[0].height).toBe(playerChoicePresentation[1].height)
+  expect(playerChoicePresentation.filter((choice) => choice.pressed)).toHaveLength(1)
+  expect(playerChoicePresentation.find((choice) => !choice.pressed)?.backgroundColor)
+    .toBe("rgba(0, 0, 0, 0)")
   await expect(page.getByRole("button", { name: "Save attendance" })).toBeEnabled()
 
-  const backLink = page.getByRole("link", { name: "Back to Attendance" })
+  const backLink = page.getByRole("link", { name: "Back to dashboard" })
   await expectDiscardPrompt(page, () => backLink.click(), "dismiss")
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/players/record")
 
@@ -196,11 +198,11 @@ test("stale player roll-call tabs cannot overwrite a newer save", async ({ conte
   await page.goto("/coach/attendance/players/record?date=2026-07-31", {
     waitUntil: "networkidle",
   })
-  await page.locator(".attendance-occurrence-list > button.is-available").first().click()
+  await page.locator(sessionHead).first().click()
   await page.waitForLoadState("networkidle")
 
   const firstTabGroup = page
-    .locator(".attendance-record-roster-list [role=\"group\"]")
+    .locator("#attendance-roster-panel [role=\"group\"]")
     .filter({ has: page.locator('button[aria-pressed="true"]') })
     .first()
   await expect(firstTabGroup).toBeVisible()
@@ -237,50 +239,49 @@ test("stale player roll-call tabs cannot overwrite a newer save", async ({ conte
   await stalePage.close({ runBeforeUnload: false })
 })
 
-test("Record Attendance keeps the selected roster attached on tablet and split on web", async ({ page }) => {
+test("Record Attendance opens the selected session in place on tablet and web", async ({ page }) => {
   await page.setViewportSize({ height: 1024, width: 820 })
   await page.goto("/coach/attendance/players/record?date=2026-08-03", {
     waitUntil: "networkidle",
   })
   const firstAvailableSession = page
-    .locator(".attendance-occurrence-list > button.is-available")
+    .locator(sessionHead)
     .first()
   await firstAvailableSession.click()
   await expect(page).toHaveURL((url) => Boolean(url.searchParams.get("occurrence")))
   await page.waitForLoadState("networkidle")
 
+  // The session's head becomes the band over its register, at both widths.
   const roster = page.locator("#attendance-roster-panel")
   await expect(roster).toBeVisible()
-  const selectedSession = page.locator(".attendance-occurrence-list button.is-selected")
+  const selectedSession = page.locator(`${sessionHead}[aria-expanded="true"]`)
   await expect(selectedSession).toBeVisible()
-  const selectedBox = await selectedSession.boundingBox()
-  const rosterBox = await roster.boundingBox()
-  expect(selectedBox).not.toBeNull()
-  expect(rosterBox).not.toBeNull()
-  expect(Math.abs((selectedBox?.y ?? 0) + (selectedBox?.height ?? 0) - (rosterBox?.y ?? 0)))
-    .toBeLessThanOrEqual(2)
-  await expect(roster.locator(".attendance-roster-folio").first()).toHaveText("01")
-  await expect(roster.locator(".attendance-record-roster-list")).not.toContainText(/\bAB\b/)
-
-  await page.setViewportSize({ height: 900, width: 1440 })
-  await expect.poll(async () => {
-    const sessionBox = await selectedSession.boundingBox()
-    const desktopRosterBox = await roster.boundingBox()
-    if (!sessionBox || !desktopRosterBox) return false
-    return desktopRosterBox.x > sessionBox.x + sessionBox.width
-  }).toBe(true)
+  for (const viewport of [{ height: 1024, width: 820 }, { height: 900, width: 1440 }]) {
+    await page.setViewportSize(viewport)
+    const selectedBox = await selectedSession.boundingBox()
+    const rosterBox = await roster.boundingBox()
+    expect(selectedBox).not.toBeNull()
+    expect(rosterBox).not.toBeNull()
+    expect(Math.abs((selectedBox?.y ?? 0) + (selectedBox?.height ?? 0) - (rosterBox?.y ?? 0)))
+      .toBeLessThanOrEqual(2)
+    expect(Math.abs((selectedBox?.x ?? 0) - (rosterBox?.x ?? 0))).toBeLessThanOrEqual(2)
+  }
 })
 
 test("Staff Roll Call matches the player roster choice controls across responsive views", async ({ page }) => {
+  // The old address opens the Mark tab's staff card on the same date.
   await page.goto("/coach/attendance/staff/record?date=2026-08-03", {
     waitUntil: "networkidle",
   })
+  await expect(page).toHaveURL((url) => (
+    url.pathname === "/coach/attendance/players/record"
+    && url.searchParams.get("date") === "2026-08-03"
+    && url.searchParams.get("staff") === "open"
+  ))
 
-  const ledger = page.locator(".staff-roll-call-ledger")
-  const rows = ledger.locator(".staff-roll-call-list > article")
+  const ledger = page.locator("#staff-roll-call-panel")
+  const rows = ledger.getByRole("listitem")
   await expect(rows).toHaveCount(2)
-  await expect(ledger.locator(".staff-roll-call-folio")).toHaveText(["01", "02"])
-  await expect(ledger.locator(".staff-roll-call-person > span")).toHaveCount(0)
 
   const arunChoices = ledger.getByRole("group", { name: "Attendance for Arun Kumar" })
   const meeraChoices = ledger.getByRole("group", { name: "Attendance for Meera Nair" })
@@ -324,13 +325,6 @@ test("Staff Roll Call matches the player roster choice controls across responsiv
     )
 
     const controls = arunChoices.getByRole("button")
-    const groupPresentation = await arunChoices.evaluate((group) => {
-      const style = getComputedStyle(group)
-      return {
-        borderTopWidth: style.borderTopWidth,
-        columnGap: style.columnGap,
-      }
-    })
     const boxes = await controls.evaluateAll((buttons) => buttons.map((button) => {
       const box = button.getBoundingClientRect()
       return {
@@ -342,12 +336,11 @@ test("Staff Roll Call matches the player roster choice controls across responsiv
         top: box.top,
       }
     }))
-    expect(groupPresentation.borderTopWidth).toBe("1px")
-    expect(groupPresentation.columnGap).toBe("0px")
     expect(Math.max(...boxes.map((box) => box.top)) - Math.min(...boxes.map((box) => box.top)))
       .toBeLessThanOrEqual(1)
-    expect(Math.abs(boxes[1].left - boxes[0].right)).toBeLessThanOrEqual(1)
-    expect(boxes[0].boxShadow).toBe("none")
+    expect(boxes[1].left).toBeGreaterThan(boxes[0].right - 1)
+    // Arun is marked present, so only that half is filled.
+    expect(boxes[1].boxShadow).toBe("none")
     /*
      * Both halves, not just the first. This assertion only ever read boxes[0],
      * which is why it sat green while the pair rendered at 11px and 8px on every
@@ -357,7 +350,7 @@ test("Staff Roll Call matches the player roster choice controls across responsiv
      * this line; pinned here so it cannot come back unseen.
      */
     expect(boxes[1].fontSize).toBe(boxes[0].fontSize)
-    expect(boxes[0].fontSize).toBe("12px")
+    expect(boxes[0].fontSize).toBe("14px")
     if (viewport.width <= 760) {
       expect(Math.min(...boxes.map((box) => box.height))).toBeGreaterThanOrEqual(44)
     }

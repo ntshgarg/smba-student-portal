@@ -52,7 +52,8 @@ describe("CI reliability controls", () => {
     expect(interactions).toContain("await expect.poll(() => {")
     expect(interactions).not.toContain("await page.waitForURL((url) => url.href !== initialUrl")
     expect(interactions).toContain('toHaveAttribute("aria-expanded", "true")')
-    expect(interactions).toContain('toHaveClass(/has-selection/u)')
+    // The register panel exists only while its session is open on the Mark tab.
+    expect(interactions).toContain('expect(page.locator("#attendance-roster-panel")).toBeVisible()')
     expect(regression).toContain([
       "await page.waitForFunction(() => document.title.trim().length > 0, undefined, {",
       "    timeout: 5_000,",
