@@ -1,0 +1,71 @@
+.shell {
+  padding-block: var(--space-block) var(--space-content);
+}
+
+.back a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.title {
+  margin-top: var(--space-tight);
+  color: var(--navy);
+  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-block: 18px var(--space-copy);
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--white) 45%, transparent);
+  box-shadow: inset 0 1px 0 var(--white), 0 24px 48px -36px color-mix(in srgb, var(--navy) 45%, transparent);
+}
+
+.tabs a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 20px;
+  border-radius: 12px;
+  color: var(--steel-dark);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.tabs a.active {
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.tabs a:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .tabs {
+    display: flex;
+  }
+
+  .tabs a {
+    flex: 1;
+    justify-content: center;
+    padding: 0 10px;
+  }
+}
