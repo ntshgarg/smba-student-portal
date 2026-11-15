@@ -29,10 +29,13 @@ export function alignTwoFactorFlag(accountId: string, {
 } = {}) {
   const connected = sql<boolean>`EXISTS (SELECT 1 FROM ${authTwoFactors}
     WHERE ${authTwoFactors.userId} = ${authUsers.id} AND ${authTwoFactors.verified} = 1)`
-  const turnedOn = database.update(authUsers).set({ twoFactorEnabled: connected })
-    .where(and(eq(authUsers.id, accountId), sql`${authUsers.twoFactorEnabled} <> ${connected}`))
-    .returning({ enabled: authUsers.twoFactorEnabled }).get()?.enabled === true
-  // Sessions opened while the flag was off never passed a code; with it back on
-  // they would become full sessions, as confirmTotpSetup also guards against.
-  if (turnedOn) endSessionsStartedBefore(accountId, now, { database })
+  // One step: a flag turned on with the purge lost would never purge again.
+  database.transaction((tx) => {
+    const turnedOn = tx.update(authUsers).set({ twoFactorEnabled: connected })
+      .where(and(eq(authUsers.id, accountId), sql`${authUsers.twoFactorEnabled} <> ${connected}`))
+      .returning({ enabled: authUsers.twoFactorEnabled }).get()?.enabled === true
+    // Sessions opened while the flag was off never passed a code; with it back on
+    // they would become full sessions, as confirmTotpSetup also guards against.
+    if (turnedOn) endSessionsStartedBefore(accountId, now, { database: tx })
+  })
 }
