@@ -281,6 +281,37 @@ describe("production credential lifecycle", () => {
       .resolves.toBe(true)
   })
 
+  it("asks for a code exactly when a confirmed authenticator exists, whatever the flag says", async () => {
+    const playerId = "pin-two-factor-drift"
+    const { academyId, activationToken } = createApprovedPlayer(playerId, "Drift Player")
+    await completeAccountActivation({ token: activationToken, password: PASSWORD }, { database, now: NOW })
+    await setPinCredential({ accountId: playerId, pin: "618203" }, { database, now: NOW })
+    const flag = () => database.select({ on: schema.authUsers.twoFactorEnabled }).from(schema.authUsers)
+      .where(eq(schema.authUsers.id, playerId)).get()?.on
+
+    // Switched on, but the authenticator was never confirmed: no code can be checked.
+    database.update(schema.authUsers).set({ twoFactorEnabled: true }).where(eq(schema.authUsers.id, playerId)).run()
+    database.insert(schema.authTwoFactors).values({
+      backupCodes: "[]", id: "drift-factor", secret: "secret", userId: playerId, verified: false,
+    }).run()
+    await expect(verifyPinLogin({ academyId, pin: "618203" }, { database }))
+      .resolves.toMatchObject({ twoFactorEnabled: false })
+    expect(flag()).toBe(false)
+
+    // Confirmed, but switched off: the code for that authenticator is asked for,
+    // and a sign-in made while it was off (no code passed) is ended.
+    database.update(schema.authTwoFactors).set({ verified: true }).where(eq(schema.authTwoFactors.id, "drift-factor")).run()
+    database.insert(schema.authRuntimeSessions).values({
+      createdAt: NOW, expiresAt: new Date(NOW.getTime() + 86_400_000), id: "drift-session",
+      token: "drift-token", updatedAt: NOW, userId: playerId,
+    }).run()
+    await expect(verifyPinLogin({ academyId, pin: "618203" }, { database }))
+      .resolves.toMatchObject({ twoFactorEnabled: true })
+    expect(flag()).toBe(true)
+    expect(database.select().from(schema.authRuntimeSessions)
+      .where(eq(schema.authRuntimeSessions.userId, playerId)).all()).toHaveLength(0)
+  })
+
   it("allows coach PINs and preserves the authenticator challenge requirement", async () => {
     const coachId = "junior-pin-coach"
     const { academyId, activationToken } = createApprovedPlayer(coachId, "Junior Coach")
@@ -306,6 +337,9 @@ describe("production credential lifecycle", () => {
       .resolves.toEqual({ created: true })
     database.update(schema.authUsers).set({ twoFactorEnabled: true })
       .where(eq(schema.authUsers.id, coachId)).run()
+    database.insert(schema.authTwoFactors).values({
+      backupCodes: "[]", id: "junior-pin-factor", secret: "secret", userId: coachId, verified: true,
+    }).run()
     await expect(verifyPinLogin({ academyId, pin: "305817" }, { database })).resolves.toEqual({
       accountId: coachId,
       role: "coach",

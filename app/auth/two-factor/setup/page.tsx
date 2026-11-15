@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Image from "next/image"
 import Link from "next/link"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { redirect } from "next/navigation"
 
 import { InterstitialSignOut } from "@/components/interstitial-sign-out"
@@ -12,6 +12,7 @@ import { publicSiteUrl } from "@/lib/config"
 import { initializeDatabase } from "@/lib/db/client"
 import { accounts } from "@/lib/db/schema"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 export const metadata: Metadata = {
   title: "Secure your account",
@@ -30,8 +31,7 @@ export default async function TwoFactorSetupPage({
     .from(accounts)
     .where(and(
       eq(accounts.id, rawSession.user.id),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
   if (account?.role !== "coach" && account?.role !== "platform_admin") redirect("/player")

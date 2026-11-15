@@ -21,6 +21,7 @@ import {
   academyPlansFor,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 export function MemberEditForm({
   draft,
@@ -54,8 +55,11 @@ export function MemberEditForm({
   const classificationLockId = `member-${memberId}-classification-lock`
   // Once onboarding is finished, the training actions own the classification.
   // Until then an ended place locks it too, as the onboarding screens do.
-  const onboarded = Boolean(player.member.onboardingCompletedAt)
+  const onboarded = onboardingFinished(player.member)
   const classificationLocked = hasActiveAssignments || holdsPlace || onboarded
+  // A stored level, batch or plan the form refuses (a "Needs review" plan, say)
+  // keeps its locked control on screen, so the reason the save stopped shows.
+  const classificationError = Boolean(errors.level || errors.batch || errors.academyPlan)
 
   return (
     <form
@@ -136,29 +140,29 @@ export function MemberEditForm({
 
       <fieldset disabled={isSaving}>
         <legend>Training</legend>
+        {/* Locked, the three choices cannot change here, so the form says where
+            they do instead of showing them greyed out. */}
         {classificationLocked ? (
           <p
             id={classificationLockId}
             className="coach-member-classification-lock"
           >
             {onboarded
-              ? "Level, batch and plan change with Change schedule or Start training on the member record."
+              ? "Level, batch and plan change with Change schedule or Start training on the Training tab."
               : "Level, batch and plan are fixed until onboarding is finished."}
           </p>
         ) : null}
+        {!classificationLocked || classificationError ? (
         <div className="coach-member-form-grid">
           <label>
             <span>Level</span>
             <select
               id={`member-${memberId}-level`}
               name="level"
-              value={draft.level}
               disabled={classificationLocked}
+              value={draft.level}
               aria-invalid={Boolean(errors.level)}
-              aria-describedby={[
-                errors.level ? `member-${memberId}-level-error` : null,
-                classificationLocked ? classificationLockId : null,
-              ].filter(Boolean).join(" ") || undefined}
+              aria-describedby={errors.level ? `member-${memberId}-level-error` : undefined}
               onChange={(event) => onSelectLevel(event.target.value as MemberDraft["level"])}
             >
               <option>Assessment pending</option>
@@ -171,13 +175,10 @@ export function MemberEditForm({
             <select
               id={`member-${memberId}-batch`}
               name="batch"
-              value={draft.batch}
               disabled={classificationLocked}
+              value={draft.batch}
               aria-invalid={Boolean(errors.batch)}
-              aria-describedby={[
-                errors.batch ? `member-${memberId}-batch-error` : null,
-                classificationLocked ? classificationLockId : null,
-              ].filter(Boolean).join(" ") || undefined}
+              aria-describedby={errors.batch ? `member-${memberId}-batch-error` : undefined}
               onChange={(event) => onSelectBatch(event.target.value as MemberDraft["batch"])}
             >
               <option>Assessment pending</option>
@@ -195,10 +196,7 @@ export function MemberEditForm({
                 || draft.level === "Assessment pending"
                 || draft.batch === "Assessment pending"}
               aria-invalid={Boolean(errors.academyPlan)}
-              aria-describedby={[
-                errors.academyPlan ? `member-${memberId}-academy-plan-error` : null,
-                classificationLocked ? classificationLockId : null,
-              ].filter(Boolean).join(" ") || undefined}
+              aria-describedby={errors.academyPlan ? `member-${memberId}-academy-plan-error` : undefined}
               onChange={(event) => {
                 onUpdateField(
                   "academyPlan",
@@ -223,12 +221,12 @@ export function MemberEditForm({
               : "Managed by active session assignments."}</small>
           </div>
         </div>
+        ) : null}
       </fieldset>
 
       <div className="coach-member-form-actions">
         <InlineNotice
           action={feedback?.action}
-          className="coach-member-editor-notice"
           message={feedback
             ? feedback.message
             : isDirty ? "Unsaved changes" : null}

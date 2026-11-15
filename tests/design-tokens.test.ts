@@ -231,8 +231,6 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["app/portal.css", "@media (max-width: 760px)", ".security-form input", "16px"],
   ["app/portal.css", "@media (max-width: 430px)", ".admin-directory-search-field input", "16px"],
   ["app/portal.css", "@media (max-width: 760px)", ".attendance-record-date-row input", "16px"],
-  ["app/portal.css", "@media (max-width: 720px)", ".coach-member-search input", "16px"],
-  ["app/portal.css", "@media (max-width: 720px)", ".coach-member-form-grid input", "16px"],
   ["app/portal.css", "@media (max-width: 720px), (pointer: coarse)", '.attendance-record-date-row input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])', "16px"],
   ["app/public-home.css", "@media (max-width: 900px)", ".form-field input", "16px"],
   ["components/coach/announcements/announcements.module.css", "", ".slipField input", "16px"],

@@ -1,33 +1,48 @@
 /*
- * The training and fee actions under a player's record in Members. Square
- * corners and hairlines like the rest of the record, so it reads as part of
- * the same page.
+ * The training and fee actions on a player's record in Members, and the
+ * confirm-before-saving forms they open (also End schedule in Schedules &
+ * rosters). Rounded white option cards on the record's paper; the chosen one
+ * takes a navy outline.
  */
 
 .section {
-  margin-top: var(--space-copy);
+  display: grid;
+  gap: 14px;
 }
 
 .columns {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  border: 1px solid var(--line);
-  background: var(--line);
+  gap: 18px;
 }
 
 .column {
-  padding: 20px var(--space-group);
-  background: var(--white);
+  display: grid;
+  align-content: start;
+  gap: 12px;
 }
 
-.column h4,
+/* Hidden halves and forms stay mounted (see `view` in the component). */
+.section [hidden] {
+  display: none;
+}
+
+/* The tab already says Training or Fees, so the column's own heading is for
+   screen readers only. */
+.column > .eyebrow,
+.column > h4 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .formHead h4 {
-  margin-top: 4px;
-  color: var(--navy);
-  font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
 .eyebrow {
@@ -40,17 +55,16 @@
 
 .label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-tight);
   padding: 0;
   color: var(--steel);
-  font-size: var(--type-operational-floor);
+  font-size: var(--type-utility-label);
   font-weight: var(--weight-label);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .help {
-  margin-top: 6px;
   color: var(--steel);
   font-size: 0.8125rem;
   line-height: 1.5;
@@ -66,9 +80,9 @@
 .scheduled {
   display: grid;
   gap: 2px;
-  margin-top: 12px;
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--green) 45%, var(--white));
+  border: 1px solid color-mix(in srgb, var(--green) 35%, var(--white));
+  border-radius: 14px;
   background: var(--green-soft);
   color: var(--green);
   font-size: 0.8125rem;
@@ -80,49 +94,46 @@
 
 .facts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px var(--space-copy);
-  margin: 12px 0 0;
+  margin: 0;
 }
 
 .facts dt {
   color: var(--steel);
-  font-size: var(--type-operational-floor);
+  font-size: var(--type-utility-label);
   font-weight: var(--weight-label);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .facts dd {
   margin: 2px 0 0;
-  color: var(--navy);
-  font-size: 0.875rem;
+  color: var(--ink);
+  font-size: 1rem;
   font-weight: 700;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-tight);
-  margin-top: var(--space-copy);
+  gap: 10px;
 }
 
 .button {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 46px;
   align-items: center;
   justify-content: center;
-  padding: 0 var(--space-copy);
-  border: 1px solid var(--line-control);
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
   background: var(--white);
-  color: var(--navy);
-  font-size: 0.8125rem;
-  font-weight: var(--weight-control);
+  color: var(--ink);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+  text-align: center;
   cursor: pointer;
-}
-
-.button:hover:not(:disabled) {
-  border-color: var(--navy);
 }
 
 .button:disabled {
@@ -133,11 +144,17 @@
 .primary {
   border-color: var(--navy);
   background: var(--navy);
+  box-shadow: var(--sweep-rest);
   color: var(--white);
+  transition: var(--sweep-transition);
+}
+
+.primary:is(:hover, :active):not(:disabled) {
+  box-shadow: var(--sweep-full);
 }
 
 .danger {
-  border-color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
   color: var(--red);
 }
 
@@ -147,7 +164,18 @@
   color: var(--white);
 }
 
+@media (hover: hover) {
+  .button:not(.primary, .dangerSolid):hover:not(:disabled) {
+    border-color: var(--navy);
+  }
+
+  .danger:hover:not(:disabled) {
+    border-color: var(--red);
+  }
+}
+
 .button:focus-visible,
+.back:focus-visible,
 .option input:focus-visible,
 .day input:focus-visible,
 .check input:focus-visible,
@@ -158,53 +186,74 @@
   outline-offset: 2px;
 }
 
-.notice {
-  margin-top: 12px;
+.form {
+  display: grid;
+  gap: 18px;
 }
 
-.form {
-  margin-top: var(--space-copy);
+/* Outside a player's record (End schedule in Schedules & rosters, which has no
+   back pill) the form is its own white card; on the record it sits on the
+   tab's paper. */
+.form:not(:has(.back)) {
+  padding: 20px var(--space-group);
   border: 1px solid var(--line);
-  border-top: 3px solid var(--red);
+  border-radius: 18px;
   background: var(--white);
 }
 
 .formHead {
-  padding: 14px var(--space-group);
-  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.back {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .formBody {
   display: grid;
-  gap: 20px;
-  padding: 20px var(--space-group);
+  gap: 18px;
 }
 
 .formFoot {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: var(--space-tight);
-  padding: 14px var(--space-group);
-  border-top: 1px solid var(--line);
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
 }
 
 .field {
+  min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
-  min-width: 0;
 }
 
 .fixed {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 46px;
   align-items: center;
   padding: 0 14px;
   border: 1px solid var(--line);
-  background: var(--mist);
-  color: var(--navy);
-  font-weight: 800;
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .selects {
@@ -215,19 +264,18 @@
 
 .selects select {
   min-width: 160px;
-  min-height: 44px;
+  min-height: 46px;
   padding: 0 12px;
-  border: 1px solid var(--line-control);
-  border-radius: 0;
-  background: var(--white);
-  color: var(--navy);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background-color: var(--white);
+  color: var(--ink);
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .selects select:disabled {
-  border-color: var(--line);
-  background: var(--mist);
+  background-color: var(--mist);
   color: var(--steel);
   cursor: not-allowed;
 }
@@ -235,10 +283,12 @@
 .option {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-top: 6px;
-  padding: 12px;
-  border: 1px solid var(--line);
+  gap: 12px;
+  margin-top: var(--space-tight);
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: 14px;
+  background: var(--white);
   cursor: pointer;
 }
 
@@ -249,30 +299,43 @@
 
 .option strong {
   display: block;
-  color: var(--navy);
+  color: var(--ink);
   font-size: 0.875rem;
 }
 
 .option small {
   display: block;
   color: var(--steel);
-  font-size: 0.75rem;
+  font-size: var(--type-utility-meta);
 }
 
 .optionOn {
   border-color: var(--navy);
   background: color-mix(in srgb, var(--navy) 4%, var(--white));
+  box-shadow: 0 0 0 1px var(--navy);
 }
 
+/* Two short choices side by side read as a pill switch. */
 .inline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-tight);
-  margin-bottom: var(--space-tight);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 4px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--navy) 6%, transparent);
 }
 
 .inline .option {
   margin-top: 0;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.inline .optionOn {
+  background: var(--white);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--navy) 15%, transparent);
 }
 
 .days {
@@ -283,12 +346,14 @@
 
 .day {
   display: inline-flex;
-  min-height: 40px;
+  min-height: 44px;
   align-items: center;
   gap: 6px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  color: var(--navy);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  color: var(--ink);
   font-size: 0.8125rem;
   font-weight: 700;
   cursor: pointer;
@@ -305,11 +370,12 @@
 
 .money {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 48px;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
-  border: 1px solid var(--line-control);
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   background: var(--white);
   color: var(--steel);
 }
@@ -318,7 +384,7 @@
   width: 140px;
   border: 0;
   background: transparent;
-  color: var(--navy);
+  color: var(--ink);
   font-size: 1rem;
   font-weight: 700;
   outline: none;
@@ -327,8 +393,12 @@
 .check {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: var(--space-tight);
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: 14px;
+  background: var(--white);
   color: var(--ink);
   font-size: 0.875rem;
   cursor: pointer;
@@ -341,6 +411,8 @@
 
 .inlineField {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 10px;
   margin-top: 10px;
@@ -351,26 +423,30 @@
 
 .inlineField input {
   width: 72px;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 10px;
-  border: 1px solid var(--line-control);
-  border-radius: 0;
-  color: var(--navy);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
   font-size: 1rem;
   font-weight: 700;
 }
 
 .inlineField input[type="date"] {
   width: auto;
-  min-width: 11rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .marks {
   margin: 0;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--red) 30%, var(--white));
+  border: 1px solid color-mix(in srgb, var(--red) 25%, var(--white));
+  border-radius: 14px;
   background: var(--red-soft);
   list-style: none;
+  overflow: hidden;
 }
 
 .marks li {
@@ -389,39 +465,65 @@
   color: var(--red-dark);
 }
 
+/* "You are about to": a light red card with ticks, not a second navy block
+   under the record's navy band. */
 .summary {
   padding: 14px var(--space-copy);
-  background: var(--navy);
-  color: var(--white);
+  border: 1px solid color-mix(in srgb, var(--red) 22%, transparent);
+  border-radius: var(--space-copy);
+  background: color-mix(in srgb, var(--red) 4%, var(--white));
+  color: var(--ink);
   font-size: 0.875rem;
 }
 
 .summary span {
-  color: color-mix(in srgb, var(--white) 75%, var(--navy));
-  font-size: var(--type-operational-floor);
+  color: var(--red);
+  font-size: var(--type-utility-label);
   font-weight: var(--weight-label);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .summary ul {
-  margin: 6px 0 0;
-  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  margin: var(--space-tight) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.summary li {
+  position: relative;
+  padding-left: 22px;
+  font-weight: 600;
+}
+
+.summary li::before {
+  position: absolute;
+  top: 0.45em;
+  left: 2px;
+  width: 9px;
+  height: 5px;
+  border-bottom: 2px solid var(--red);
+  border-left: 2px solid var(--red);
+  content: "";
+  rotate: -45deg;
+}
+
+/* A change that did not happen, and the button that dismisses its notice. */
+.trainingNotice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-tight);
+}
+
+.trainingNotice > :first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
 }
 
 @media (max-width: 720px) {
-  .columns {
-    grid-template-columns: 1fr;
-  }
-
-  .column,
-  .formHead,
-  .formBody,
-  .formFoot {
-    padding-right: var(--space-copy);
-    padding-left: var(--space-copy);
-  }
-
   .actions .button,
   .formFoot .button {
     flex: 1 1 auto;
@@ -431,18 +533,4 @@
     flex: 1 1 140px;
     min-width: 0;
   }
-}
-
-/* A change that did not happen, and the button that dismisses its notice. */
-.trainingNotice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--space-tight);
-  margin-top: 12px;
-}
-
-.trainingNotice > :first-child {
-  flex: 1 1 16rem;
-  min-width: 0;
 }

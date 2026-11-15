@@ -436,18 +436,20 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       await pageAlert(page).waitFor({ state: "visible", timeout: 12_000 })
       break
     case "member-contact-reveal":
-      await clickRequired(page.locator(".coach-member-row-action button"), action)
+      await clickRequired(page.locator(".coach-member-card-head"), action)
+      await clickRequired(page.getByRole("tab", { name: "Profile" }), action)
       await clickRequired(
         page.getByRole("button", { name: /^Reveal primary contact for /i }),
         action,
       )
       break
     case "member-details-open":
-      await clickRequired(page.locator(".coach-member-row-action button"), action)
+      await clickRequired(page.locator(".coach-member-card-head"), action)
       break
     case "member-edit-open":
-      await clickRequired(page.locator(".coach-member-row-action button"), action)
-      await clickRequired(page.getByRole("button", { name: "Edit member" }), action)
+      await clickRequired(page.locator(".coach-member-card-head"), action)
+      await clickRequired(page.getByRole("tab", { name: "Profile" }), action)
+      await clickRequired(page.getByRole("button", { name: "Edit details" }), action)
       await page.locator("form.coach-member-edit-form").waitFor({ state: "visible", timeout: 12_000 })
       break
     case "member-filter-applied":

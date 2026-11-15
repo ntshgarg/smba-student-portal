@@ -48,6 +48,7 @@ import {
   authUsers,
   coachProfiles,
 } from "@/lib/db/schema"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 export const RECOVERY_SESSION_COOKIE = "smba_password_recovery"
 export const AUTHENTICATOR_RECOVERY_COOKIE = "smba_authenticator_recovery"
@@ -842,13 +843,21 @@ export function confirmRegistrationVerification<T>(input: {
    * fail together.
    */
   const result = database.transaction((tx) => {
-    tx.update(authEmailChallenges).set({
+    // Only a code still unused is burned: two confirms of the same code at the
+    // same moment both pass the read above, and the second must not also run
+    // onVerified (it would mint a second activation claim).
+    const burned = tx.update(authEmailChallenges).set({
       consumedAt: now,
       verifiedAt: now,
       updatedAt: now,
-    }).where(eq(authEmailChallenges.id, challenge.id)).run()
+    }).where(and(
+      eq(authEmailChallenges.id, challenge.id),
+      isNull(authEmailChallenges.consumedAt),
+    )).run()
+    if (burned.changes !== 1) return null
     return input.onVerified(tx, challenge.email)
   }, { behavior: "immediate" })
+  if (result === null) return null
   recordLoginSuccess(attempt.subjectHash, { database })
   return result
 }
@@ -967,8 +976,7 @@ export async function requestPasswordRecovery(input: {
       eq(authMethods.identifier, academyId),
       eq(authMethods.method, "academy_id"),
       isNull(authMethods.revokedAt),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     )).get()
   const validAuthenticatorRecovery = intent !== "authenticator"
     || (account?.role === "coach"
@@ -1115,8 +1123,7 @@ function recoveryChallenge(
       eq(authEmailChallenges.purpose, "password_reset"),
       isNull(authEmailChallenges.consumedAt),
       gt(authEmailChallenges.expiresAt, now),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     )).all()
   for (const row of rows) {
     const hashedSubject = subjectHash(recoverySubjectKeyForAccount(row.accountId!))
@@ -1576,6 +1583,11 @@ export async function completePasswordRecovery(input: {
         gt(authEmailChallenges.expiresAt, now),
       )).get()
     if (!current) return false
+    // Hashing the password above takes a moment; an Archive in that gap must
+    // win, not be undone by marking the sign-in active again.
+    const live = tx.select({ id: accounts.id }).from(accounts)
+      .where(and(eq(accounts.id, challenge.accountId!), accountIsLive())).get()
+    if (!live) return false
     const updatedPassword = tx.update(authProviderAccounts)
       .set({ password: passwordHash, updatedAt: now })
       .where(and(

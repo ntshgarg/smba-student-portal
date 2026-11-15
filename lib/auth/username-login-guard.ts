@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { createAuthMiddleware, isAPIError } from "better-auth/api"
 
 import { findApprovedAccountByAcademyId } from "@/lib/auth/account-service"
+import { alignTwoFactorFlag } from "@/lib/auth/two-factor-state"
 import { isAcademyId, normalizeAcademyId } from "@/lib/auth/identity"
 import {
   recordLoginFailure,
@@ -181,7 +182,12 @@ export const usernameLoginHooks = {
     // Reading the block here and counting the failure in `after` left the
     // verify as a window in which a burst of simultaneous guesses each read
     // "not blocked"; the PIN door was fixed the same way (pin-plugin.ts).
-    if (reserveLoginAttempt({ ipHash: security.ipHash, subjectHash })) return
+    if (reserveLoginAttempt({ ipHash: security.ipHash, subjectHash })) {
+      // The handler decides whether to ask for a code from this flag.
+      const accountId = findApprovedAccountByAcademyId(academyId)?.accountId
+      if (accountId) alignTwoFactorFlag(accountId)
+      return
+    }
     writeAuthSecurityEvent({
       eventType: "login_rate_limited",
       ipHash: security.ipHash,

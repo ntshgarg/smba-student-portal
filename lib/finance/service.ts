@@ -7,6 +7,7 @@ import {
 } from "drizzle-orm"
 
 import { isValidDateKey, isValidMonthKey } from "@/lib/attendance/domain"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { academyNow } from "@/lib/clock"
 import type { SmbaDatabase, SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -150,6 +151,7 @@ import {
   IMPLAUSIBLE_TRAINING_START_MESSAGE,
   trainingStartIsImplausiblyEarly,
 } from "@/lib/training/training-start"
+import { feePlanCoversCondition } from "@/lib/finance/plan-in-force"
 
 const MAX_MONEY_PAISE = 1_000_000_000
 const MAX_NOTE_LENGTH = 500
@@ -722,7 +724,14 @@ function monthlyPreparationCandidates(
   now: Date,
   // Only the "ready to issue" previews read nothingToBill; issuing works out
   // each month's amount itself, so it skips this extra work.
-  { withNothingToBill = false }: { withNothingToBill?: boolean } = {},
+  {
+    waiting,
+    withNothingToBill = false,
+  }: {
+    /** Filled with the players held back for a training change, when given. */
+    waiting?: Set<string>
+    withNothingToBill?: boolean
+  } = {},
 ) {
   const candidatesByPlayer = new Map<
     string,
@@ -741,7 +750,10 @@ function monthlyPreparationCandidates(
     .all()
     .map((row) => row.playerId))
   listMonthlyPreparationCandidates(database, period).forEach((candidate) => {
-    if (waitingForChange.has(candidate.agreement.playerAccountId)) return
+    if (waitingForChange.has(candidate.agreement.playerAccountId)) {
+      waiting?.add(candidate.agreement.playerAccountId)
+      return
+    }
     const matchesCurrentEnrollment = candidate.agreement.academyPlan
         === candidate.enrollment.academyPlan
       && candidate.agreement.level === candidate.enrollment.level
@@ -796,7 +808,8 @@ function monthlyPreparationPreview(
   period: string,
   now: Date,
 ): MonthlyPreparationPreview {
-  const candidates = monthlyPreparationCandidates(database, period, now, { withNothingToBill: true })
+  const waiting = new Set<string>()
+  const candidates = monthlyPreparationCandidates(database, period, now, { waiting, withNothingToBill: true })
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
@@ -813,7 +826,10 @@ function monthlyPreparationPreview(
     )).length,
     setupRequired: beforeCutover
       ? 0
-      : listApprovedPlayerIds(database).length - candidates.length,
+      : listApprovedPlayerIds(database).length - candidates.length - waiting.size,
+    // Held back until a booked training change happens (it is applied when a
+    // page is opened on or after its day, retried for two days if it errs).
+    waitingForChange: beforeCutover ? 0 : waiting.size,
   }
 }
 
@@ -1140,7 +1156,7 @@ function buildOnboardingFinancePreview(
   if (trainingStartIsImplausiblyEarly(enrollment.trainingStartOn, academyDateKey)) {
     blockers.push(IMPLAUSIBLE_TRAINING_START_MESSAGE)
   }
-  if (enrollment.onboardingCompletedAt) blockers.push("This player’s onboarding is already complete.")
+  if (onboardingFinished(enrollment)) blockers.push("This player’s onboarding is already complete.")
   /*
    * A future training start is a warning, not a blocker. It used to be both: this
    * refused completion outright until the day arrived, on top of the
@@ -1960,7 +1976,7 @@ export function redateConfirmedTrainingStart(
     }).from(playerEnrollments)
       .where(eq(playerEnrollments.accountId, input.playerId)).get()
     if (!enrollment) financeError("NOT_FOUND", "Choose an approved active player.", "playerId")
-    if (!enrollment.onboardingCompletedAt) {
+    if (!onboardingFinished(enrollment)) {
       financeError(
         "SETUP_REQUIRED",
         "Correct the training start date on the Session step while onboarding is unfinished.",
@@ -2315,13 +2331,15 @@ export function prepareMonthlyCharges(
       if (replay.eventType !== "monthly_fees_prepared") {
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was already used.")
       }
+      // Requests recorded before these counts existed carry neither.
       const result = parseAuditMetadata<
-        Omit<PrepareMonthlyChargesResult, "deferred"> & { deferred?: number }
+        Omit<PrepareMonthlyChargesResult, "deferred" | "waitingForChange">
+          & { deferred?: number; waitingForChange?: number }
       >(replay.metadata)
       if (result.period !== input.period) {
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was used for another month.")
       }
-      return { ...result, deferred: result.deferred ?? 0, reused: true }
+      return { ...result, deferred: result.deferred ?? 0, reused: true, waitingForChange: result.waitingForChange ?? 0 }
     }
     /*
      * A month's fees are issued once that month has begun, never ahead of it.
@@ -2339,7 +2357,8 @@ export function prepareMonthlyCharges(
       )
     }
 
-    const candidates = monthlyPreparationCandidates(tx, input.period, now)
+    const waiting = new Set<string>()
+    const candidates = monthlyPreparationCandidates(tx, input.period, now, { waiting })
     const approvedPlayerIds = listApprovedPlayerIds(tx)
     const candidateIds = new Set(candidates.map(({ agreement }) => agreement.playerAccountId))
     const result: PrepareMonthlyChargesResult = {
@@ -2348,7 +2367,8 @@ export function prepareMonthlyCharges(
       alreadyPrepared: 0,
       awaitingAssignment: 0,
       deferred: 0,
-      setupRequired: approvedPlayerIds.filter((id) => !candidateIds.has(id)).length,
+      setupRequired: approvedPlayerIds.filter((id) => !candidateIds.has(id) && !waiting.has(id)).length,
+      waitingForChange: waiting.size,
       createdChargeIds: [],
       reused: false,
     }
@@ -3441,14 +3461,9 @@ export function recordRefund(
       .where(and(
         eq(feeAgreements.playerAccountId, item.agreement.playerAccountId),
         ne(feeAgreements.id, item.agreement.id),
-        // A paused plan never bills, so it overlaps nothing
-        // (pauseUnstartedFeeAgreementInTransaction).
-        ne(feeAgreements.status, "paused"),
-        lte(feeAgreements.effectiveFrom, withdrawalEffectiveOn),
-        or(
-          isNull(feeAgreements.effectiveTo),
-          gte(feeAgreements.effectiveTo, withdrawalEffectiveOn),
-        ),
+        // Another plan in force on that day (a paused plan never bills, so it
+        // overlaps nothing: pauseUnstartedFeeAgreementInTransaction).
+        feePlanCoversCondition(withdrawalEffectiveOn),
       )).get()
     if (overlappingAgreement) {
       financeError(
@@ -4974,7 +4989,8 @@ export function getCoachFinanceDashboardSummary(
   if (!isValidMonthKey(period)) {
     financeError("INVALID_INPUT", "Choose a valid fee month.", "period")
   }
-  const candidates = monthlyPreparationCandidates(database, period, now, { withNothingToBill: true })
+  const waiting = new Set<string>()
+  const candidates = monthlyPreparationCandidates(database, period, now, { waiting, withNothingToBill: true })
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
@@ -5000,6 +5016,7 @@ export function getCoachFinanceDashboardSummary(
     setupRequiredCount: listPlayersTrainingWithoutFeePlan(database, period).size,
     outstandingPaise: players.reduce((total, player) => total + player.outstandingPaise, 0),
     preparation: {
+      waitingForChange: beforeCutover ? 0 : waiting.size,
       ready: ready.length,
       alreadyPrepared: beforeCutover ? 0 : candidates.filter(({ agreement }) => (
         preparedIds.has(agreement.playerAccountId)

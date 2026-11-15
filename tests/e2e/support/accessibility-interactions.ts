@@ -121,7 +121,7 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "member-details-open": {
-      await clickFirstVisible(page.getByRole("button", { name: "Details", exact: true }))
+      await clickFirstVisible(page.locator(".coach-member-card-head"))
       break
     }
     case "member-filters-open": {

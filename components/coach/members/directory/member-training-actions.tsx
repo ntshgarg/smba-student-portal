@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import {
   cancelFeeChangeAction,
@@ -21,6 +21,7 @@ import { useMemberDirectoryPortal } from "@/components/coach/coach-portal-provid
 import { FormShell } from "@/components/coach/members/directory/form-shell"
 import styles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
+import { dayName, thisMonthFeeLabel } from "@/components/coach/members/directory/this-month-fee-label"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
@@ -40,6 +41,7 @@ import {
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
 import { planThisMonthFeeCorrection } from "@/lib/training/this-month-fee-plan"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 const LEVELS: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 const DAYS = [
@@ -66,10 +68,6 @@ export function monthBefore(firstOfMonth: string) {
   return monthName(new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10))
 }
 
-function dayName(dateKey: string) {
-  return formatDateKey(dateKey, { day: "numeric", month: "short", weekday: "short", year: undefined })
-}
-
 function dayList(weekdays: number[]) {
   return DAYS.filter((day) => weekdays.includes(day.value)).map((day) => day.label).join(", ")
 }
@@ -91,8 +89,19 @@ function newKey() {
 /**
  * The training and fee actions on a player's record. Each opens one form in
  * place, asks once, and refreshes the directory when it is done.
+ *
+ * `view` is the record tab showing: Training or Fees. Both halves stay mounted
+ * so an open form keeps its state across tabs; the other half is hidden, and
+ * an open form takes the place of its own half. Without `view` (the screen
+ * tests) both show.
  */
-export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }) {
+export function MemberTrainingActions({
+  player,
+  view,
+}: {
+  player: PlayerMemberRecord
+  view?: "training" | "fees"
+}) {
   const data = useMemberTraining()
   const { sessionAssignments, sessionSeries } = useMemberDirectoryPortal()
   const router = useRouter()
@@ -115,16 +124,28 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
     () => new Map(sessionSeries.map((series) => [series.id, series])),
     [sessionSeries],
   )
+  // On the record a form takes the place of the button that opened it, so focus
+  // goes into the form, and back to that button when the form closes.
+  const sectionRef = useRef<HTMLElement>(null)
+  const openerRef = useRef<HTMLElement | null>(null)
+  const wasOpenRef = useRef<OpenForm>(null)
+  // Only opening or closing a form moves focus; switching tabs leaves it on the tab.
+  const onRecord = view !== undefined
+  useEffect(() => {
+    if (!onRecord || open === wasOpenRef.current) return
+    if (open) {
+      sectionRef.current?.querySelector<HTMLElement>('[role="group"] button')?.focus()
+    } else {
+      const opener = openerRef.current
+      if (opener?.isConnected && !opener.closest("[hidden]")) opener.focus()
+    }
+    wasOpenRef.current = open
+  }, [onRecord, open])
   if (!data || !summary) return null
 
   // Starting or changing training waits for Player onboarding to finish (the
-  // server refuses it too, lib/training/changes.ts). A level, batch and plan
-  // are set part-way through onboarding, so they are not the signal.
-  const onboarded = player.member.onboardingCompletedAt !== undefined
-    ? Boolean(player.member.onboardingCompletedAt)
-    : player.training.level !== "Assessment pending"
-      && player.training.batch !== "Assessment pending"
-      && Boolean(player.training.academyPlan)
+  // server refuses it too, lib/training/changes.ts).
+  const onboarded = onboardingFinished(player.member)
   const scheduled = summary.scheduled
   const fee = summary.fee
   // "active" means at least one running place (lib/sessions/term.ts). A
@@ -184,21 +205,26 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
 
   function toggle(form: OpenForm) {
     if (!confirmDiscard()) return
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setNotice(null)
     setStarted(false)
     setOpen((value) => (value === form ? null : form))
   }
 
   const scheduledSeries = scheduled?.seriesId ? seriesById.get(scheduled.seriesId) : null
+  const trainingFormOpen = open === "change" || open === "start" || open === "end"
+  const feeFormOpen = open === "fee" || open === "stop-fees" || open === "concession"
 
   return (
     <section
+      ref={sectionRef}
       className={styles.section}
       aria-labelledby={`training-actions-${memberId}`}
+      data-open-form={trainingFormOpen ? "training" : feeFormOpen ? "fees" : undefined}
       onChange={() => setStarted(true)}
     >
       <div className={styles.columns}>
-        <div className={styles.column}>
+        <div className={styles.column} hidden={view === "fees" || (view !== undefined && trainingFormOpen)}>
           <span className={styles.eyebrow}>Training</span>
           <h4 id={`training-actions-${memberId}`}>Change or end</h4>
 
@@ -220,6 +246,14 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                     scheduled.monthlyFeePaise !== null ? `${formatInr(scheduled.monthlyFeePaise)} a month` : null,
                   ].filter(Boolean).join(" · ")}
               </span>
+              {/* A booked change applies on its day when a coach or player page
+                  opens, and an error is retried for two days. Until then this
+                  month's fee is held back, so the record says so. */}
+              {scheduled.effectiveOn <= data.today ? (
+                <span>
+                  {`Due ${dayName(scheduled.effectiveOn)} and not applied yet; it is retried automatically.${data.financeActive && fee?.activeAgreementId ? ` ${thisMonth}’s fee waits until it is.` : ""}`}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
@@ -293,7 +327,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
         </div>
 
         {data.financeActive ? (
-          <div className={styles.column}>
+          <div className={styles.column} hidden={view === "training" || (view !== undefined && feeFormOpen)}>
             <span className={styles.eyebrow}>Fees</span>
             <h4>Monthly fee</h4>
             {fee ? (
@@ -301,13 +335,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
                 <div><dt>Monthly fee</dt><dd>{fee.monthlyFeePaise !== null ? formatInr(fee.monthlyFeePaise) : "None"}</dd></div>
                 <div>
                   <dt>{thisMonth} fee</dt>
-                  <dd>{fee.thisMonth
-                    ? `${formatInr(fee.thisMonth.amountPaise)} · ${fee.thisMonth.receivedPaise >= fee.thisMonth.amountPaise
-                      ? "paid"
-                      : fee.thisMonth.receivedPaise > 0
-                        ? `${formatInr(fee.thisMonth.receivedPaise)} paid`
-                        : `${fee.thisMonth.dueDate < data.today ? "overdue, was due" : "due"} ${dayName(fee.thisMonth.dueDate)}`}`
-                    : "Not issued yet"}</dd>
+                  <dd>{fee.thisMonth ? thisMonthFeeLabel(fee.thisMonth) : "Not issued yet"}</dd>
                 </div>
                 <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthNoFee === "term-finished"
                   ? "No fee: term finished"
@@ -427,12 +455,12 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
 
       <InlineNotice
         action={notice?.action}
-        className={styles.notice}
         message={notice?.message}
         reserveSpace={false}
         tone={notice?.tone}
       />
 
+      <div hidden={view === "fees"}>
       {open === "change" || open === "start" ? (
         <TrainingForm
           busy={busy}
@@ -466,6 +494,8 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           thisMonth={thisMonth}
         />
       ) : null}
+      </div>
+      <div hidden={view === "training"}>
       {open === "fee" && fee && hasRunningPlace ? (
         <FeeForm
           busy={busy}
@@ -503,6 +533,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           playerId={memberId}
         />
       ) : null}
+      </div>
     </section>
   )
 }
@@ -683,6 +714,7 @@ function TrainingForm({
       busy={busy}
       confirmLabel={when === "next" ? (editing ? "Save scheduled change" : "Schedule the change") : "Change schedule"}
       disabled={!chosen || !daysOk || !feeOk || !dateOk || (when === "this" && (marks === null || marksFailed))}
+      backLabel="Training"
       eyebrow={mode === "start" ? "Start training" : "Change schedule"}
       onCancel={onCancel}
       onConfirm={() => {
@@ -914,6 +946,7 @@ function EndForm({
       busy={busy}
       confirmLabel="End training"
       danger
+      backLabel="Training"
       eyebrow="End training"
       onCancel={onCancel}
       onConfirm={() => {
@@ -996,6 +1029,7 @@ function StopFeesForm({
       busy={busy}
       confirmLabel="Stop fees"
       danger
+      backLabel="Fees"
       eyebrow="Stop fees"
       onCancel={onCancel}
       onConfirm={() => {
@@ -1051,6 +1085,7 @@ function FeeForm({
       busy={busy}
       confirmLabel="Save new fee"
       disabled={amount === null || amount <= 0 || amount === currentFee}
+      backLabel="Fees"
       eyebrow="Change fee"
       onCancel={onCancel}
       onConfirm={() => {
@@ -1118,6 +1153,7 @@ function ConcessionForm({
       busy={busy}
       confirmLabel="Give concession"
       disabled={!valid || (duration === "months" && !(Number(months) >= 1 && Number(months) <= 24))}
+      backLabel="Fees"
       eyebrow="Give concession"
       onCancel={onCancel}
       onConfirm={() => {

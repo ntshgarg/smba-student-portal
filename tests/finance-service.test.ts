@@ -484,6 +484,7 @@ describe("Financials V1 service", () => {
     expect(dashboardBeforePreparation.preparation).toEqual({
       ready: 1,
       alreadyPrepared: 1,
+      waitingForChange: 0,
     })
 
     const prepared = finance.prepareMonthlyCharges({

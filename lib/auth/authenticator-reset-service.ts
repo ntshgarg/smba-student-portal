@@ -21,13 +21,13 @@ import {
   authUsers,
   coachProfiles,
 } from "@/lib/db/schema"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 function platformAdminActive(accountId: string, database: SmbaDatabaseExecutor) {
   return Boolean(database.select({ id: accounts.id }).from(accounts).where(and(
     eq(accounts.id, accountId),
     eq(accounts.role, "platform_admin"),
-    eq(accounts.approvalStatus, "approved"),
-    isNull(accounts.archivedAt),
+    accountIsLive(),
   )).get())
 }
 
@@ -66,8 +66,7 @@ export function listPendingAuthenticatorResetRequests({
     .where(and(
       eq(authAuthenticatorResetRequests.status, "pending"),
       gt(authAuthenticatorResetRequests.expiresAt, now),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .orderBy(asc(authAuthenticatorResetRequests.requestedAt))
     .all()
@@ -200,8 +199,7 @@ export function approveAuthenticatorResetRequest(input: {
       .innerJoin(accounts, and(
         eq(accounts.id, authAuthenticatorResetRequests.accountId),
         eq(accounts.role, "coach"),
-        eq(accounts.approvalStatus, "approved"),
-        isNull(accounts.archivedAt),
+        accountIsLive(),
       ))
       .innerJoin(coachProfiles, and(
         eq(coachProfiles.accountId, accounts.id),

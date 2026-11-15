@@ -14,6 +14,7 @@ import {
   authMethods,
   coachProfiles,
 } from "@/lib/db/schema"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 const LEGACY_SESSION_COOKIE = "smba_session"
 const LEGACY_PROTOTYPE_SESSION_COOKIE = "smba_prototype_student"
@@ -40,8 +41,7 @@ export async function sessionOwesAuthenticatorSetup() {
     .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
     .where(and(
       eq(accounts.id, rawSession.user.id),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
       eq(authCredentialStates.status, "active"),
     ))
     .get()
@@ -83,8 +83,7 @@ export class DatabaseSessionProvider implements SessionProvider {
       .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
       .where(and(
         eq(accounts.id, rawSession.user.id),
-        eq(accounts.approvalStatus, "approved"),
-        isNull(accounts.archivedAt),
+        accountIsLive(),
         eq(authCredentialStates.status, "active"),
       ))
       .get()
@@ -111,8 +110,7 @@ export class DatabaseSessionProvider implements SessionProvider {
           .innerJoin(authCredentialStates, eq(authCredentialStates.accountId, accounts.id))
           .where(and(
             eq(accounts.id, claim.targetAccountId),
-            eq(accounts.approvalStatus, "approved"),
-            isNull(accounts.archivedAt),
+            accountIsLive(),
             eq(authCredentialStates.status, "active"),
           ))
           .get()

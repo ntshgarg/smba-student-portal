@@ -12,7 +12,7 @@ import { getAcademyDateKey } from "@/lib/format"
 import { listMemberTrainingSummaries } from "@/lib/training/member-summaries"
 
 export const metadata = {
-  title: "Member Directory",
+  title: "Members",
 }
 
 export default async function CoachMembersPage() {

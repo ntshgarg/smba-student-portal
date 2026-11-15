@@ -448,7 +448,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     actions: ["member-contact-reveal"],
     actor: "coach",
     description: "Member record with primary contact revealed",
-    focusSelector: ".coach-member-detail-panel",
+    focusSelector: ".coach-member-record",
     id: "coach-member-contact-revealed",
     route: "/coach/members",
     scenarios: populatedScenarios,
@@ -459,7 +459,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     actor: "coach",
     critical: true,
     description: "Member profile and training edit form",
-    focusSelector: ".coach-member-detail-panel",
+    focusSelector: ".coach-member-record",
     id: "coach-member-edit-form",
     route: "/coach/members",
     scenarios: populatedScenarios,
@@ -566,7 +566,7 @@ export const captureDefinitions: CaptureDefinition[] = [
 /* The widest window at which every `narrowOnly` control still exists. The public
  * navigation collapses to its toggle under `@media (max-width: 900px)` in
  * app/public-home.css, and the Member Directory filter toggle lives under
- * `@media (max-width: 980px)` at app/portal.css:11528. 900 satisfies both, and it
+ * `@media (max-width: 980px)` in app/portal.css. 900 satisfies both, and it
  * sits between tablet-820 and web-1440 so it splits the responsive set exactly
  * where the observed failures split it. */
 const NARROW_CONTROL_CEILING = 900

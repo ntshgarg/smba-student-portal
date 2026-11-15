@@ -1,6 +1,6 @@
 "use server"
 
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
@@ -20,6 +20,7 @@ import {
 } from "@/lib/auth/authenticator-reset-service"
 import { initializeDatabase } from "@/lib/db/client"
 import { accounts, authCredentialStates, authUsers } from "@/lib/db/schema"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 async function requirePlatformOwner() {
   const rawSession = await getRawAuthSession()
@@ -30,8 +31,7 @@ async function requirePlatformOwner() {
     .where(and(
       eq(accounts.id, rawSession.user.id),
       eq(accounts.role, "platform_admin"),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
   if (!owner) redirect("/login")
@@ -49,8 +49,7 @@ export async function startAdminPreviewAction(formData: FormData) {
     ))
     .where(and(
       eq(accounts.id, targetAccountId),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
   if (target?.role !== "coach" && target?.role !== "player") redirect("/admin")

@@ -22,6 +22,7 @@ import {
   recoveryEmailEnrollmentRequired,
 } from "@/lib/auth/recovery-service"
 import { listPendingAuthenticatorResetRequests } from "@/lib/auth/authenticator-reset-service"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 export const metadata: Metadata = {
   title: "Platform owner",
@@ -56,8 +57,7 @@ export default async function AdminPage() {
     .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
     .where(and(
       ne(accounts.role, "platform_admin"),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .orderBy(asc(accounts.role), asc(accounts.fullName))
     .all()

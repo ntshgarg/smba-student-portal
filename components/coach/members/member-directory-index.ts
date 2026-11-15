@@ -1,5 +1,5 @@
 import type { PlayerMemberRecord } from "@/lib/coach/types"
-import { formatSessionLabel } from "@/lib/format"
+import { formatSessionTimeRange } from "@/lib/format"
 import { formatTermDate, scheduleTermFinished } from "@/lib/sessions/term"
 import type {
   SessionAssignment,
@@ -36,28 +36,25 @@ export function buildMemberDirectoryIndex(
     }
   })
 
-  const sessionLabelsByPlayer = new Map<string, string[]>()
+  // Each open place as its time and days (the record already shows the level
+  // and batch), noting a place whose schedule's term has finished.
+  const sessionTimesByPlayer = new Map<string, string[]>()
   activeByPlayer.forEach((playerAssignments, playerId) => {
-    sessionLabelsByPlayer.set(playerId, playerAssignments.flatMap((assignment) => {
+    sessionTimesByPlayer.set(playerId, playerAssignments.flatMap((assignment) => {
       const series = seriesById.get(assignment.seriesId)
       if (!series) return []
-      const dayLabel = assignment.weekdays
-        .map((weekday) => weekdayLabels[weekday])
-        .join(", ")
       const slot = series.slots[0]
-      // A place on a schedule that has run out is still an open place, but
-      // the label says so rather than listing it like a running one.
       const finished = today && scheduleTermFinished(series, today) && series.endsOn
         ? ` (term finished ${formatTermDate(series.endsOn)})`
         : ""
-      return `${formatSessionLabel({
-        programme: series.programme,
-        batch: series.batch,
+      const range = formatSessionTimeRange({
         startTime: slot?.startTime ?? "",
         durationMinutes: slot?.durationMinutes ?? 0,
-      })} · ${dayLabel}${finished}`
+      })
+      const days = assignment.weekdays.map((weekday) => weekdayLabels[weekday]).join(", ")
+      return [[range, days].filter(Boolean).join(" · ") + finished]
     }))
   })
 
-  return { earliestByPlayer, playerById, sessionLabelsByPlayer }
+  return { earliestByPlayer, playerById, sessionTimesByPlayer }
 }

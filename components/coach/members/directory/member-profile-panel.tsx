@@ -13,8 +13,7 @@ const timelineInstantFormat = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
 })
 
-function formatTimelineInstant(value: string | null | undefined) {
-  if (!value) return "Not completed"
+function formatTimelineInstant(value: string) {
   return timelineInstantFormat.format(new Date(value))
 }
 
@@ -30,68 +29,64 @@ export function MemberProfilePanel({
   setContactLinkRef: (memberId: string, node: HTMLAnchorElement | null) => void
 }) {
   const memberId = player.member.id
+  const contact = player.member.primaryContact
+  // The one-time steps of joining the academy, in the order they happen.
+  // None of them changes when training pauses, ends or restarts.
+  const steps = [
+    { label: "Registered", value: player.member.requestedAt ? formatTimelineInstant(player.member.requestedAt) : null },
+    { label: "Approved", value: player.member.approvedAt ? formatTimelineInstant(player.member.approvedAt) : null },
+    { label: "Account set up", value: player.member.activatedAt ? formatTimelineInstant(player.member.activatedAt) : null },
+    { label: "Onboarded", value: player.member.onboardingCompletedAt ? formatTimelineInstant(player.member.onboardingCompletedAt) : null },
+    { label: "Training from", value: shownTrainingStart(player.member) ? formatJoinedDate(player.member.trainingStartOn) : null },
+  ]
 
   return (
-    <section aria-labelledby={`profile-${memberId}`}>
-      <span>Profile</span>
-      <h4 id={`profile-${memberId}`}>Member details</h4>
-      <dl>
+    <section className="coach-member-profile" aria-labelledby={`profile-${memberId}`}>
+      <h4 id={`profile-${memberId}`} className="sr-only">Member details</h4>
+      <div className="coach-member-contact-box">
         <div>
-          <dt>Registration requested</dt>
-          <dd>{formatTimelineInstant(player.member.requestedAt)}</dd>
-        </div>
-        <div>
-          <dt>Coach approved</dt>
-          <dd>{formatTimelineInstant(player.member.approvedAt)}</dd>
-        </div>
-        <div>
-          <dt>Training from</dt>
-          <dd>{shownTrainingStart(player.member) ? formatJoinedDate(player.member.trainingStartOn) : "Not set yet"}</dd>
-        </div>
-        <div>
-          <dt>Account activated</dt>
-          <dd>{formatTimelineInstant(player.member.activatedAt)}</dd>
-        </div>
-        <div>
-          <dt>Onboarding completed</dt>
-          <dd>{formatTimelineInstant(player.member.onboardingCompletedAt)}</dd>
-        </div>
-        <div>
-          <dt>Academy ID</dt>
-          <dd>{player.member.academyId}</dd>
-        </div>
-        <div>
-          <dt>Primary contact</dt>
-          <dd>
-            {!player.member.primaryContact.phone ? (
-              <span>Not added</span>
-            ) : contactRevealed ? (
-              <span
-                id={`member-${memberId}-primary-contact`}
-                className="coach-member-contact"
+          <span>Primary contact</span>
+          {!contact.phone ? (
+            <p>Not added</p>
+          ) : contactRevealed ? (
+            <p id={`member-${memberId}-primary-contact`} className="coach-member-contact">
+              <strong>{contact.name}</strong>
+              <small>{contact.relationship}</small>
+              <a
+                ref={(node) => setContactLinkRef(memberId, node)}
+                href={`tel:${contact.phone.replace(/\s/gu, "")}`}
               >
-                <strong>{player.member.primaryContact.name}</strong>
-                <small>{player.member.primaryContact.relationship}</small>
-                <a
-                  ref={(node) => setContactLinkRef(memberId, node)}
-                  href={`tel:${player.member.primaryContact.phone.replace(/\s/gu, "")}`}
-                >
-                  <Phone aria-hidden="true" /> {player.member.primaryContact.phone}
-                </a>
-              </span>
-            ) : (
-              <button
-                className="coach-member-contact-reveal"
-                type="button"
-                aria-label={`Reveal primary contact for ${player.member.fullName}`}
-                onClick={() => onRevealContact(memberId)}
-              >
-                <Eye aria-hidden="true" /> Tap to reveal
-              </button>
-            )}
-          </dd>
+                <Phone aria-hidden="true" /> {contact.phone}
+              </a>
+            </p>
+          ) : (
+            <p>Phone and relationship</p>
+          )}
         </div>
-      </dl>
+        {contact.phone && !contactRevealed ? (
+          <button
+            className="coach-member-contact-reveal"
+            type="button"
+            aria-label={`Reveal primary contact for ${player.member.fullName}`}
+            onClick={() => onRevealContact(memberId)}
+          >
+            <Eye aria-hidden="true" /> Show contact
+          </button>
+        ) : null}
+      </div>
+
+      <div className="coach-member-joining">
+        <span>Joining</span>
+        <ol>
+          {steps.map((step) => (
+            <li key={step.label} className={step.value ? undefined : "is-pending"}>
+                <span className="coach-member-joining-mark" aria-hidden="true" />
+              <strong>{step.label}</strong>
+              <small>{step.value ?? (step.label === "Training from" ? "Not set yet" : "Not yet")}</small>
+            </li>
+          ))}
+        </ol>
+      </div>
     </section>
   )
 }

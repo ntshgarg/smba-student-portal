@@ -144,4 +144,19 @@ describe("fee changes and concessions from the player's record", () => {
     expect(result.summaries[otherId].scheduled).toMatchObject({ effectiveOn: "2026-11-01", kind: "change" })
     expect(result.summaries[otherId].fee?.nextMonthFeePaise).toBe(300_000)
   })
+
+  it("shows the concession fee issuing uses next, not one booked for later", () => {
+    const row = (id: string, startsPeriod: string, endsPeriod: string, createdAt: Date) => ({
+      createdAt, createdByAccountId: coachId, endsPeriod, id, idempotencyKey: id, mode: "recurring" as const,
+      payloadFingerprint: id, playerAccountId: otherId, reason: "Concession from the head coach",
+      startsPeriod, value: 20_000, valueKind: "fixed" as const,
+    })
+    // The later one was recorded first, so insertion order would pick it.
+    database.insert(schema.concessions).values([
+      row("concession-later", "2027-03", "2027-04", new Date("2026-09-01T05:00:00.000Z")),
+      row("concession-next", "2026-11", "2026-12", new Date("2026-10-01T05:00:00.000Z")),
+    ]).run()
+    const result = summaries.listMemberTrainingSummaries([otherId], { database, now })
+    expect(result.summaries[otherId].fee?.concession).toMatchObject({ id: "concession-next", startsPeriod: "2026-11" })
+  })
 })

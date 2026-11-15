@@ -22,6 +22,7 @@ import {
   academyPlanIsValid,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 // What is recorded against players in onboarding, which stops their first schedule being cleared.
 const RECORD_KINDS = [
@@ -129,7 +130,7 @@ export function saveOnboardingAssessment({
     if (!player || player.approvalStatus !== "approved" || player.archivedAt) {
       operationalActionError("NOT_FOUND", "Approved player was not found.", "playerId")
     }
-    if (player.onboardingCompletedAt) {
+    if (onboardingFinished(player)) {
       operationalActionError(
         "BUSINESS_RULE",
         "The training start date is permanent after onboarding is completed.",
@@ -224,7 +225,7 @@ export function resetOnboardingSessionAssignment({
     if (!enrollment) {
       operationalActionError("NOT_FOUND", "Player account was not found.", "playerId")
     }
-    if (enrollment.onboardingCompletedAt) {
+    if (onboardingFinished(enrollment)) {
       operationalActionError(
         "BUSINESS_RULE",
         "Completed onboarding assignments cannot be reset.",

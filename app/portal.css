@@ -3953,742 +3953,6 @@
   font-size: 0.875rem;
 }
 
-/* Member Directory, first copy — what the Court Roster Register override does
-   not restate.
-
-   The coach-members decision replaced this composition with Concept 01 Court
-   Roster Register and shipped the replacement as an override layer rather than
-   as an edit: 40 of the 106 rules this block held are re-declared verbatim by the
-   "Selected Member Directory direction" section further down the cascade,
-   unlayered and at identical specificity, so the override's value is the one that
-   paints. 77 of its 422 declarations — 18.2% — therefore never reached a page,
-   and they are gone; 8 rules lost every declaration they had and went with
-   them. Six of the seven `font-size: 9px` the directory was carrying
-   were among the 77. The seventh survives below on `.coach-member-form-grid
-   label > span, .coach-member-batch-field > span`, where the live half is
-   overridden to var(--type-utility-label) and the dead half has no markup
-   consumer at all.
-
-   The other 32 twinned rules still hold live declarations, and those cannot
-   follow their inert siblings down into the override. The first copy's own
-   responsive layer sits between the two: the (max-width: 900px) and
-   (max-width: 720px) half of THIS composition is declared after this block and
-   before the override section, so 9 live declarations across 8 rules would start
-   beating it if they moved. Moving `.coach-member-table tbody th
-   { grid-template-columns: 36px minmax(0, 1fr) }` past its (max-width: 900px)
-   twin, for one, would narrow the folio column from 40px to 36px at every width
-   below 900px, on a surface mobile-member-directory-freeze holds still. Deleting
-   a declaration that can never win is inside that freeze; moving one that can is
-   not. */
-.coach-members-back-row a {
-  display: inline-flex;
-  min-height: 38px;
-  align-items: center;
-  gap: 9px;
-  color: var(--steel);
-  font-size: 0.6875rem;
-  font-weight: 750;
-}
-
-.coach-members-back-row svg {
-  width: 15px;
-  height: 15px;
-}
-
-.coach-members-directory-header {
-  display: grid;
-  align-items: end;
-}
-
-/* `color` and `font-weight` are all the override does not restate, so they are
-   all that is left. The var(--type-page-title) that used to sit here was a
-   byte-identical substitution into a declaration the override already won —
-   F-33 kept it so the literal would not survive as the tree's last copy, and
-   deleting the declaration takes the literal with it. */
-.coach-members-directory-header h1 {
-  color: var(--navy);
-  font-weight: 545;
-}
-
-.coach-members-directory-header > p {
-  color: var(--steel);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-style: italic;
-}
-
-/* Two adjacent blocks for one prelude, the second overriding the first's
-   `color` — the same override-instead-of-edit habit as the Court Roster Register
-   layer, at a range of five lines. The dead `color: var(--steel)` is gone and
-   the remainder is one rule; nothing sat between the two positions, so the
-   surviving `color` and `font-weight` resolve exactly where they did. */
-.coach-directory-notice {
-  color: var(--red);
-  font-size: 0.6875rem;
-  font-weight: 650;
-}
-
-.coach-member-directory-controls {
-  display: grid;
-}
-
-.coach-member-filter select:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.coach-member-filter:has(select:disabled) > span {
-  opacity: 0.45;
-}
-
-.coach-member-filter-note {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--navy);
-  font-size: 0.8125rem;
-  line-height: 1.45;
-  opacity: 0.78;
-}
-
-.coach-member-filters {
-  display: grid;
-  min-width: 0;
-  /* Four filters in three columns put Batch alone on a second row and left the
-     two dividers between Role, Level and Status only 52px tall against a 104px
-     panel -- 322.37px by 52px of empty panel beside them. `auto-fit` seats all
-     four on one row wherever they fit, which is every width this grid is shown
-     at, and still wraps rather than overflowing if a fifth is ever added. */
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-}
-
-.coach-member-filter-toggle {
-  display: none;
-}
-
-.coach-member-search,
-.coach-member-filter {
-  display: flex;
-  align-items: center;
-}
-
-.coach-member-search {
-  gap: 12px;
-  padding: 0 22px;
-}
-
-.coach-member-search svg {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
-  color: var(--steel);
-}
-
-.coach-member-search input {
-  width: 100%;
-  /* 2.5.8 asks 24x24 of the target itself. This input carried a 24px floor only
-     inside (max-width: 820px), so the desktop register -- where a head coach
-     actually works -- got a 22px one. The floor belongs here, unconditionally. */
-  min-height: 24px;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--navy);
-}
-
-.coach-member-search input::placeholder {
-  color: var(--steel);
-}
-
-.coach-member-filter {
-  position: relative;
-  display: grid;
-  align-content: center;
-  padding: 0 18px;
-  border-left: 1px solid var(--line);
-}
-
-/* This used to read "the Member Directory rules below stay at 9px", deferring
-   the raise to its own milestone under mobile-member-directory-freeze. The
-   premise was wrong: `.coach-member-filter > span` and `.coach-member-table
-   thead th` were both re-declared in the override layer, so the directory has
-   been painting them at var(--type-utility-label) — 11px — and the header row
-   at 44px rather than the 54px this file claimed. The 9px declarations were
-   never the rendered size and are gone; the raise the note deferred had
-   already happened. */
-.coach-member-filter > span {
-  color: var(--steel);
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.coach-member-filter select {
-  width: 100%;
-  /* The narrow breakpoint already floors this at 24px; without the same floor
-     here the pointer width fell back to the 19px intrinsic height, giving the
-     mouse the smaller target of the two. */
-  min-height: 24px;
-  margin-top: 4px;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--navy);
-  font-weight: 720;
-}
-
-.coach-member-directory-summary {
-  align-items: center;
-  justify-content: space-between;
-}
-
-.coach-member-directory-summary h2 {
-  color: var(--navy);
-  font-weight: 750;
-}
-
-.coach-member-directory-summary p {
-  color: var(--steel);
-}
-
-.coach-member-table-wrap {
-  border: 1px solid var(--line);
-}
-
-.coach-member-show-more {
-  display: flex;
-  width: 100%;
-  min-height: 52px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 18px;
-  border: 0;
-  border-top: 1px solid var(--line);
-  background: transparent;
-  font-size: 0.6875rem;
-  font-weight: 720;
-  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
-}
-
-.coach-member-show-more:hover {
-  background: var(--ivory);
-  color: var(--navy);
-}
-
-.coach-member-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.coach-member-table thead {
-  background: var(--navy);
-  color: var(--white);
-}
-
-.coach-member-table thead th {
-  padding: 0 14px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-align: left;
-  text-transform: uppercase;
-}
-
-.coach-member-table tbody > tr:not(.coach-member-detail-row) {
-  border-bottom: 1px solid var(--line);
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.coach-member-table tbody > tr.is-expanded {
-  background: var(--ivory);
-}
-
-.coach-member-table tbody > tr:not(.coach-member-detail-row):hover {
-  background: color-mix(in srgb, var(--ivory) 72%, transparent);
-}
-
-.coach-member-table tbody th,
-.coach-member-table tbody td {
-  min-width: 0;
-  color: var(--steel);
-  font-weight: 560;
-  text-align: left;
-  vertical-align: middle;
-}
-
-.coach-member-table tbody th {
-  grid-template-columns: 36px minmax(0, 1fr);
-  align-items: center;
-  gap: 11px;
-}
-
-.coach-member-table tbody th strong {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font-weight: 750;
-  overflow-wrap: anywhere;
-  text-overflow: ellipsis;
-  white-space: normal;
-}
-
-.coach-member-name {
-  display: grid;
-  min-width: 0;
-}
-
-.coach-member-name small {
-  color: var(--steel);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-
-.coach-member-table tbody td:nth-child(3) > span {
-  display: block;
-  line-height: 1.5;
-}
-
-.coach-member-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--steel);
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.coach-member-status::before {
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-circle);
-  background: currentColor;
-  content: "";
-}
-
-.coach-member-status.is-active {
-  color: var(--green);
-}
-
-.coach-member-status.is-paused,
-.coach-member-status.is-finished {
-  color: var(--red);
-}
-
-.coach-member-status.is-unassigned {
-  color: var(--steel);
-}
-
-.coach-member-row-action button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 7px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--navy);
-  font-weight: 760;
-}
-
-.coach-member-row-action button svg {
-  width: 14px;
-  height: 14px;
-  transition: transform var(--duration-base) var(--ease-standard);
-}
-
-tr.is-expanded .coach-member-row-action button svg {
-  transform: rotate(180deg);
-}
-
-.coach-member-detail-row > td {
-  height: auto;
-  padding: 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.coach-member-detail-panel {
-  background: var(--ivory);
-}
-
-.coach-member-detail-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 30px;
-}
-
-.coach-member-detail-heading > div > span,
-.coach-member-detail-domains section > span {
-  color: var(--red);
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.coach-member-detail-heading h3 {
-  color: var(--navy);
-  font-weight: 570;
-  letter-spacing: -0.055em;
-  line-height: 1;
-  overflow-wrap: anywhere;
-}
-
-.coach-member-detail-heading p {
-  color: var(--steel);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-style: italic;
-}
-
-.coach-member-detail-heading > button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--space-tight);
-  padding: 0 var(--space-copy);
-  border: 1px solid var(--navy);
-  background: transparent;
-  color: var(--navy);
-  font-weight: 760;
-}
-
-.coach-member-detail-heading > button svg {
-  width: 15px;
-  height: 15px;
-}
-
-.coach-member-detail-domains {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  border: 1px solid var(--line);
-  background: var(--line);
-}
-
-.coach-member-detail-domains section {
-  background: var(--white);
-}
-
-.coach-member-detail-domains h4 {
-  color: var(--navy);
-  font-weight: 610;
-  letter-spacing: -0.04em;
-}
-
-.coach-member-detail-domains dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  /* A label row and a value row the pairs can share. Without them "Registration
-     requested" wrapping to two lines pushed its own value 16.80px below the
-     one-line label's value beside it, at 390 and 320. */
-  grid-auto-rows: auto auto;
-}
-
-.coach-member-detail-domains dl > div {
-  display: grid;
-  grid-row: span 2;
-  grid-template-rows: subgrid;
-}
-
-.coach-member-detail-domains dl > div.is-wide {
-  grid-column: 1 / -1;
-}
-
-.coach-member-detail-domains dt {
-  color: var(--steel);
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.coach-member-detail-domains dd {
-  margin-top: 6px;
-  color: var(--navy);
-  font-weight: 690;
-  overflow-wrap: anywhere;
-  /* No `capitalize`. These values arrive already cased, and capitalising them
-     rewrote what they say: "6-7 am" painted as "6-7 Am", and "3-day plan" as
-     "3-Day Plan" directly under a row that renders the same string correctly. */
-}
-
-.coach-member-contact-reveal {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--space-tight);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--red);
-  font-weight: 760;
-}
-
-.coach-member-contact-reveal svg,
-.coach-member-contact a svg {
-  width: 14px;
-  height: 14px;
-}
-
-.coach-member-contact,
-.coach-member-contact strong,
-.coach-member-contact small,
-.coach-member-contact a {
-  display: block;
-}
-
-.coach-member-contact small {
-  margin-top: 3px;
-  color: var(--steel);
-  font-weight: 560;
-}
-
-.coach-member-contact a {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 7px;
-  margin-top: 9px;
-  color: var(--red);
-}
-
-.coach-member-contact strong {
-  overflow-wrap: anywhere;
-}
-
-.coach-member-edit-form fieldset {
-  margin: 0;
-  border: 1px solid var(--line);
-  background: var(--white);
-}
-
-.coach-member-edit-form fieldset + fieldset {
-  margin-top: 18px;
-}
-
-.coach-member-edit-form legend {
-  padding: 0 10px;
-  color: var(--red);
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.coach-member-classification-lock {
-  margin: 0 0 18px;
-  color: var(--steel);
-  line-height: 1.55;
-}
-
-.coach-member-classification-lock a {
-  color: var(--red);
-  font-weight: 750;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-.coach-member-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-group);
-}
-
-.coach-member-form-grid label,
-.coach-member-batch-field {
-  display: grid;
-  align-content: start;
-  gap: var(--space-tight);
-}
-
-.coach-member-form-grid label.is-wide {
-  grid-column: 1 / -1;
-}
-
-.coach-member-form-grid label > span,
-.coach-member-batch-field > span {
-  color: var(--steel);
-  font-size: 0.5625rem;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.coach-member-form-grid input,
-.coach-member-form-grid select {
-  width: 100%;
-  min-height: 50px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--ivory);
-  color: var(--navy);
-}
-
-.coach-member-form-grid input[aria-invalid="true"],
-.coach-member-form-grid select[aria-invalid="true"] {
-  border-color: var(--red);
-}
-
-.coach-member-form-grid select:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.coach-member-form-grid small,
-.coach-member-batch-field > small {
-  color: var(--red);
-  font-size: 0.625rem;
-}
-
-.coach-member-form-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-group);
-  margin-top: var(--space-group);
-}
-
-.coach-member-editor-notice {
-  color: var(--steel);
-}
-
-.coach-member-editor-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.coach-member-form-actions button {
-  display: inline-flex;
-  min-height: 46px;
-  align-items: center;
-  gap: var(--space-tight);
-  padding: 0 17px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--navy);
-  font-weight: 760;
-}
-
-.coach-member-form-actions button.is-primary {
-  border-color: var(--navy);
-  background: var(--navy);
-  color: var(--white);
-}
-
-.coach-member-form-actions svg {
-  width: 14px;
-  height: 14px;
-}
-
-.coach-member-save-notice {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-tight);
-  margin-top: 18px;
-  color: var(--green);
-  font-weight: 730;
-}
-
-.coach-member-save-notice svg {
-  width: 16px;
-  height: 16px;
-}
-
-.coach-member-access-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-group);
-  margin-top: var(--space-group);
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
-}
-
-.coach-member-access-actions > div {
-  min-width: 0;
-}
-
-.coach-member-access-actions span {
-  color: var(--steel);
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.coach-member-access-actions p {
-  max-width: 520px;
-  margin-top: 6px;
-  color: var(--steel);
-  line-height: 1.55;
-}
-
-.coach-member-access-actions > a,
-.coach-member-access-actions > button {
-  display: inline-flex;
-  min-height: 44px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-tight);
-  padding: 0 15px;
-  border: 1px solid rgba(186, 22, 34, 0.28);
-  background: transparent;
-  color: var(--red);
-  font-weight: 760;
-}
-
-.coach-member-access-actions > button:disabled {
-  cursor: wait;
-  opacity: 0.55;
-}
-
-.coach-member-access-actions svg {
-  width: 14px;
-  height: 14px;
-}
-
-.coach-member-empty-state {
-  display: grid;
-  min-height: 360px;
-  place-items: center;
-  margin-top: 18px;
-  padding: 52px;
-  border: 1px solid var(--line);
-  text-align: center;
-}
-
-.coach-member-empty-state > svg {
-  width: 28px;
-  height: 28px;
-  color: var(--red);
-  stroke-width: 1.5;
-}
-
-.coach-member-empty-state h3 {
-  margin-top: 20px;
-  color: var(--navy);
-  font-size: 1.6875rem;
-  font-weight: 610;
-  letter-spacing: -0.04em;
-}
-
-.coach-member-empty-state p {
-  margin-top: 10px;
-  color: var(--steel);
-  font-size: 0.8125rem;
-}
-
-.coach-member-empty-state button {
-  min-height: 44px;
-  margin-top: 22px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--red);
-  font-size: 0.6875rem;
-  font-weight: 760;
-}
-
 /* One term off --type-page-title: 8vw against the token's 7.5vw. The two agree
    below 725px and above 1360px and differ only in between, by up to 6.375px at
    a 1275px viewport — so folding this in is a visible change, not a rename. */
@@ -5116,102 +4380,7 @@ tr.is-expanded .coach-member-row-action button svg {
 
 }
 
-@media (max-width: 900px) {
-  .coach-member-table,
-  .coach-member-table tbody {
-    display: block;
-  }
-
-  .coach-member-table thead {
-    display: none;
-  }
-
-  .coach-member-table tbody > tr:not(.coach-member-detail-row) {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 22px 26px;
-    padding: var(--space-group);
-  }
-
-  .coach-member-table tbody th,
-  .coach-member-table tbody td {
-    display: block;
-    height: auto;
-    padding: 0;
-  }
-
-  .coach-member-table tbody th {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: 40px minmax(0, 1fr);
-  }
-
-  .coach-member-table tbody td::before {
-    display: block;
-    margin-bottom: 5px;
-    color: var(--steel);
-    content: attr(data-label);
-    font-size: var(--type-operational-floor);
-    font-weight: 800;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-  }
-
-  .coach-member-table .coach-member-row-action {
-    grid-column: 1 / -1;
-    padding-top: 4px;
-  }
-
-  .coach-member-table .coach-member-row-action::before {
-    content: none;
-  }
-
-  .coach-member-row-action button {
-    width: 100%;
-    justify-content: space-between;
-    padding: 0 14px;
-    border: 1px solid var(--line);
-  }
-
-  .coach-member-detail-row {
-    display: block;
-  }
-
-  .coach-member-detail-row > td {
-    display: block;
-  }
-
-  .coach-member-detail-domains {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-member-batch-field > div {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 720px) {
-  .coach-members-directory {
-    padding-top: var(--space-copy);
-  }
-
-  .coach-members-directory-header {
-    grid-template-columns: 1fr;
-    gap: 28px;
-    margin-top: 38px;
-  }
-
-  .coach-members-directory-header h1 {
-    font-size: clamp(52px, 17vw, 76px);
-  }
-
-  .coach-members-directory-header > p {
-    font-size: 1.1875rem;
-  }
-
-  .coach-member-directory-panel {
-    margin-top: 38px;
-  }
 
   .coach-registration-approved{
     align-items: flex-start;
@@ -5225,152 +4394,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
   .coach-registration-approved button {
     justify-content: center;
-  }
-
-  .coach-member-directory-controls {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-member-filter-toggle {
-    display: flex;
-    min-height: 52px;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-copy);
-    padding: 0 18px;
-    border: 0;
-    border-top: 1px solid var(--line);
-    background: transparent;
-    color: var(--navy);
-    text-align: left;
-  }
-
-  .coach-member-filter-toggle > span {
-    display: grid;
-    gap: 1px;
-  }
-
-  .coach-member-filter-toggle strong {
-    font-size: 0.75rem;
-    font-weight: 750;
-  }
-
-  .coach-member-filter-toggle small {
-    color: var(--steel);
-    font-size: 0.5625rem;
-  }
-
-  .coach-member-filter-toggle svg {
-    width: 15px;
-    height: 15px;
-    transition: transform var(--duration-fast) var(--ease-standard);
-  }
-
-  .coach-member-directory-controls.is-filters-open .coach-member-filter-toggle svg {
-    transform: rotate(180deg);
-  }
-
-  .coach-member-filters {
-    display: none;
-    grid-template-columns: 1fr;
-  }
-
-  .coach-member-directory-controls.is-filters-open .coach-member-filters {
-    display: grid;
-  }
-
-  .coach-member-filter {
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
-
-  .coach-member-directory-summary {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .coach-member-table-wrap {
-    margin-inline: -16px;
-  }
-
-  .coach-member-table tbody > tr:not(.coach-member-detail-row) {
-    grid-template-columns: 1fr;
-    gap: 14px;
-    padding: 20px var(--space-copy);
-  }
-
-  .coach-member-table tbody > tr:not(.coach-member-detail-row) > th {
-    grid-template-columns: 36px minmax(0, 1fr);
-  }
-
-  .coach-member-table .coach-member-row-action {
-    padding-top: 0;
-  }
-
-  .coach-member-detail-panel {
-    padding: 34px 22px;
-  }
-
-  .coach-member-detail-heading {
-    display: grid;
-    align-items: start;
-  }
-
-  .coach-member-detail-heading > button {
-    width: fit-content;
-  }
-
-  .coach-member-detail-domains section {
-    padding: 28px 22px;
-  }
-
-  /* `.coach-member-detail-domains dl` and its `.is-wide` child are deliberately
-     absent here. A second `@media (max-width: 720px)` block further down this
-     file sets both to opposite values -- two columns, and `grid-column: 1 / -1`
-     -- and being later it is the one that renders. Restating them here only
-     looked like the rule and never was it. */
-  .coach-member-form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-member-form-grid label.is-wide {
-    grid-column: 1;
-  }
-
-  .coach-member-batch-field > div {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-member-form-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .coach-member-editor-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .coach-member-form-actions button {
-    justify-content: center;
-  }
-
-  .coach-member-access-actions {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .coach-member-access-actions > a,
-  .coach-member-access-actions > button {
-    width: 100%;
-  }
-
-  .coach-member-empty-state {
-    min-height: 320px;
-    margin-inline: -16px;
-    padding: 42px var(--space-group);
   }
 }
 
@@ -6455,27 +5478,6 @@ tr.is-expanded .coach-member-row-action button svg {
   opacity: 0.55;
 }
 
-.coach-member-form-status {
-  display: grid;
-  align-content: center;
-  gap: 4px;
-  min-height: 76px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-}
-
-.coach-member-form-status > span,
-.coach-member-form-status small {
-  color: var(--steel);
-  font-size: 0.5625rem;
-}
-
-.coach-member-form-status strong {
-  color: var(--navy);
-  font-size: 0.8125rem;
-  text-transform: capitalize;
-}
-
 @media (max-width: 760px) {
   .coach-calendar {
     padding-top: var(--space-copy);
@@ -7462,16 +6464,7 @@ tr.is-expanded .coach-member-row-action button svg {
     font-size: 0.5625rem;
   }
 
-  .coach-members-back-row a {
-    min-height: 44px;
-  }
-
-  .coach-member-filter-toggle small,
-  .coach-member-name small,
-  .coach-day-view-heading > strong,
-  .coach-day-session > button small,
-  .coach-schedule-programme-toggle-heading small,
-  .coach-roster-list small {
+  .coach-day-view-heading > strong, .coach-day-session > button small, .coach-schedule-programme-toggle-heading small, .coach-roster-list small {
     font-size: 0.6875rem;
   }
 
@@ -9122,566 +8115,7 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 }
 
-/* Selected Member Directory direction: Concept 01 — Court Roster Register. */
-.coach-members-directory {
-  padding: var(--space-group) 0 clamp(88px, 9vw, 124px);
-}
-
-.coach-members-directory .coach-members-back-row a {
-  font-size: 0.75rem;
-}
-
-.coach-members-directory-header {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  margin-top: clamp(var(--space-group), 3.5vw, 42px);
-  padding-bottom: clamp(20px, 2.4vw, 30px);
-  border-bottom: 1px solid var(--line);
-}
-
-.coach-members-directory-header h1 {
-  margin-top: 10px;
-  font-size: clamp(42px, 5.2vw, 68px);
-  letter-spacing: -0.065em;
-  line-height: 0.96;
-}
-
-.coach-members-directory-header .eyebrow {
-  font-size: 0.625rem;
-}
-
-.coach-members-directory-header > p {
-  max-width: 390px;
-  font-size: clamp(16px, 1.5vw, 20px);
-  line-height: 1.42;
-}
-
-.coach-member-directory-panel {
-  margin-top: clamp(var(--space-group), 3vw, 38px);
-}
-
-.coach-directory-notice {
-  margin: -4px 0 14px;
-}
-
-.coach-member-register-tools {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 62%, transparent);
-}
-
-.coach-member-directory-controls {
-  grid-template-columns: minmax(230px, 1.05fr) minmax(420px, 0.95fr);
-  border: 0;
-  background: transparent;
-}
-
-.coach-member-search,
-.coach-member-filter {
-  min-height: 52px;
-}
-
-.coach-member-search {
-  padding-inline: 17px;
-}
-
-.coach-member-search:focus-within {
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--navy) 18%, transparent);
-}
-
-.coach-member-search input {
-  font-size: 0.875rem;
-}
-
-.coach-member-filter > span {
-  font-size: 0.625rem;
-}
-
-.coach-member-filter {
-  padding-inline: 14px;
-}
-
-.coach-member-filter select {
-  font-size: var(--type-utility-label);
-}
-
-.coach-member-directory-summary {
-  display: grid;
-  min-width: 220px;
-  align-content: center;
-  justify-items: end;
-  gap: 3px;
-  margin-top: 0;
-  padding: 10px var(--space-copy);
-  border-left: 1px solid var(--line);
-  text-align: right;
-}
-
-.coach-member-directory-summary h2 {
-  font-size: 0.8125rem;
-}
-
-.coach-member-directory-summary p {
-  font-size: 0.6875rem;
-}
-
-.coach-member-table-wrap {
-  margin-top: var(--space-copy);
-  border-top: 4px solid var(--navy);
-  background: color-mix(in srgb, var(--white) 72%, transparent);
-}
-
-.coach-member-table thead th {
-  height: 44px;
-  padding-inline: 12px;
-  font-size: 0.625rem;
-}
-
-.coach-member-table thead th:first-child {
-  width: 54px;
-  padding-left: var(--space-copy);
-}
-
-.coach-member-table thead th:nth-child(2) {
-  width: 22%;
-  padding-left: 14px;
-}
-
-.coach-member-table thead th:nth-child(3) {
-  width: 24%;
-}
-
-.coach-member-table thead th:nth-child(4) {
-  width: 13%;
-}
-
-.coach-member-table thead th:nth-child(5) {
-  width: 15%;
-}
-
-.coach-member-table thead th:nth-child(6) {
-  width: 12%;
-}
-
-.coach-member-table thead th:last-child {
-  width: 84px;
-}
-
-.coach-member-table tbody th,
-.coach-member-table tbody td {
-  height: 72px;
-  padding: 10px 12px;
-  font-size: 0.75rem;
-  line-height: 1.4;
-}
-
-.coach-member-table tbody th {
-  display: table-cell;
-  padding-left: 14px;
-  color: var(--navy);
-}
-
-.coach-member-table tbody th strong {
-  font-size: 0.9375rem;
-  line-height: 1.3;
-}
-
-.coach-member-folio {
-  padding-left: var(--space-copy) !important;
-  border-right: 1px solid var(--line);
-  color: var(--red) !important;
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.125rem !important;
-  font-style: italic;
-  line-height: 1;
-}
-
-.coach-member-name {
-  gap: 3px;
-}
-
-.coach-member-name small {
-  font-size: 0.625rem;
-  line-height: 1.35;
-}
-
-.coach-member-training > span,
-.coach-member-training strong,
-.coach-member-training small {
-  display: block;
-}
-
-.coach-member-training strong {
-  color: var(--navy);
-  font-size: 0.75rem;
-  font-weight: 690;
-  line-height: 1.35;
-}
-
-.coach-member-training small {
-  margin-top: 3px;
-  color: var(--steel);
-  font-size: 0.625rem;
-  line-height: 1.35;
-}
-
-.coach-member-status {
-  font-size: 0.625rem;
-}
-
-.coach-member-row-action button {
-  width: 100%;
-  justify-content: space-between;
-  font-size: 0.6875rem;
-}
-
-.coach-member-detail-panel {
-  padding: clamp(22px, 3vw, 34px);
-}
-
-.coach-member-detail-heading {
-  align-items: center;
-}
-
-.coach-member-detail-heading h3 {
-  margin-top: 5px;
-  font-size: clamp(26px, 3vw, 36px);
-}
-
-.coach-member-detail-heading p {
-  margin-top: 6px;
-  font-size: 0.9375rem;
-}
-
-.coach-member-detail-domains,
-.coach-member-edit-form {
-  margin-top: clamp(20px, 2.5vw, 28px);
-}
-
-.coach-member-detail-domains section,
-.coach-member-edit-form fieldset {
-  padding: clamp(18px, 2.2vw, 26px);
-}
-
-.coach-member-detail-domains h4 {
-  margin-top: 5px;
-  font-size: 1.1875rem;
-}
-
-.coach-member-detail-domains dl {
-  gap: 15px 22px;
-  margin-top: 18px;
-}
-
-.coach-member-detail-heading > div > span,
-.coach-member-detail-domains section > span,
-.coach-member-detail-domains dt,
-.coach-member-edit-form legend,
-.coach-member-form-grid label > span,
-.coach-member-form-status > span,
-.coach-member-access-actions span {
-  font-size: 0.625rem;
-}
-
-.coach-member-detail-domains dd {
-  font-size: 0.8125rem;
-  line-height: 1.45;
-}
-
-.coach-member-contact-reveal,
-.coach-member-contact a,
-.coach-member-detail-heading > button,
-.coach-member-form-actions button,
-.coach-member-access-actions > a,
-.coach-member-access-actions > button {
-  font-size: 0.75rem;
-}
-
-/* Held at 12px, and the only place in this sweep that was held rather than raised.
-   `.coach-member-contact small` sits beside `.coach-member-contact a` and
-   `.coach-member-access-actions p` beside its `> a` / `> button`; both links are on
-   var(--type-operational-action) at :13678, so #152 split these two exactly as it
-   split the other 25. Raising them means raising all five selectors, because the
-   other three are the same family of editor notices and moving two out relocates
-   the mismatch rather than removing it.
-
-   All five at 13px re-wraps `.coach-member-editor-notice` from two lines to three
-   at 390px. That is a mobile layout change inside mobile-member-directory-freeze,
-   whose changes are limited to functional defects and accessibility regressions --
-   a 1px legibility gain is neither -- and three of the five have no split to repair
-   at all, so they would be carried for symmetry alone. Verified in the 390px
-   before/after capture rather than argued from the stylesheet.
-
-   The token is still written out, and that is not cosmetic: 0.75rem is what
-   `.coach-member-access-actions span` renders at through var(--type-utility-label)
-   at :13662. A bare literal there is the same twinning that produced this whole
-   commit, so it is spelled as the token it equals -- byte-identical today, and it
-   moves with the scale instead of being left behind by it. The deferred raise is a
-   decision about 13px, not about the spelling of 12. */
-.coach-member-contact small,
-.coach-member-classification-lock,
-.coach-member-editor-notice,
-.coach-member-save-notice,
-.coach-member-access-actions p {
-  font-size: var(--type-utility-label);
-}
-
-.coach-member-form-grid input,
-.coach-member-form-grid select {
-  font-size: 0.875rem;
-}
-
-.coach-member-form-grid small {
-  font-size: var(--type-utility-label);
-}
-
-.coach-member-form-status {
-  min-height: 58px;
-}
-
-.coach-member-form-status small {
-  font-size: var(--type-utility-label);
-  line-height: 1.4;
-}
-
-.coach-member-form-status strong {
-  font-size: 0.875rem;
-}
-
-.coach-member-show-more {
-  color: var(--red);
-}
-
-@media (max-width: 1100px) {
-  .coach-member-register-tools {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .coach-member-directory-summary {
-    min-height: 42px;
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    justify-items: start;
-    gap: 18px;
-    border-top: 1px solid var(--line);
-    border-left: 0;
-    text-align: left;
-  }
-}
-
-@media (max-width: 980px) {
-  .coach-members-directory-header {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .coach-member-directory-controls {
-    grid-template-columns: minmax(0, 1fr) 148px;
-  }
-
-  .coach-member-filter-toggle {
-    display: flex;
-    min-height: 52px;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 0 var(--space-copy);
-    border: 0;
-    border-left: 1px solid var(--line);
-    background: transparent;
-    color: var(--navy);
-    text-align: left;
-  }
-
-  .coach-member-filter-toggle > span {
-    display: grid;
-    gap: 1px;
-  }
-
-  .coach-member-filter-toggle strong {
-    font-size: 0.75rem;
-    font-weight: 760;
-  }
-
-  .coach-member-filter-toggle small {
-    color: var(--steel);
-    font-size: 0.625rem;
-  }
-
-  .coach-member-filter-toggle svg {
-    width: 14px;
-    height: 14px;
-    transition: transform var(--duration-fast) var(--ease-standard);
-  }
-
-  .coach-member-directory-controls.is-filters-open .coach-member-filter-toggle svg {
-    transform: rotate(180deg);
-  }
-
-  .coach-member-filters {
-    display: none;
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border-top: 1px solid var(--line);
-  }
-
-  .coach-member-directory-controls.is-filters-open .coach-member-filters {
-    display: grid;
-  }
-
-  .coach-member-filter:first-child {
-    border-left: 0;
-  }
-
-  .coach-member-table,
-  .coach-member-table tbody {
-    display: block;
-  }
-
-  .coach-member-table thead {
-    display: none;
-  }
-
-  .coach-member-table tbody > tr:not(.coach-member-detail-row) {
-    display: grid;
-    grid-template-columns: 54px minmax(0, 1.25fr) minmax(0, 0.9fr) minmax(88px, 0.55fr) auto auto;
-    grid-template-areas:
-      "folio member member member status action"
-      "folio training training sessions joined joined";
-    gap: 0;
-    padding: 0;
-  }
-
-  .coach-member-table tbody th,
-  .coach-member-table tbody td {
-    display: block;
-    width: auto;
-    height: auto;
-    padding: 10px 12px;
-  }
-
-  .coach-member-table tbody td::before {
-    display: none;
-    content: none;
-  }
-
-  /* Two of the six columns cannot be read without their header, and below 980px
-     there is no header: `thead` is `display: none` and the rule above turns off
-     the `data-label` fallback the markup ships. That leaves a bare "1 Jul 2026"
-     and a bare "1 active" -- verified in the browser at 900px, where
-     `getComputedStyle(td, "::before").content` is `none` on a cell still
-     carrying `data-label="Training from"`.
-     The other four say what they are: the name, "Beginner · Weekday", the status
-     pill, and the action. So the label comes back for these two only, and inline
-     rather than as its own line, because the composition here is a fixed
-     two-row named-area grid and a stacked label would move every row. */
-  /* Stacked, not inline, and the comment above explains why inline was chosen --
-     a stacked label "would move every row". It moves them by one line, and the
-     inline version was costing more than that: the sessions cell is 106.59px at
-     820 with 82.59px inside its padding, and the label eats 64.72px of that plus
-     a 5px margin, leaving the value 12.87px. So "1 active" split into "1" over
-     "active" in 12 rows of 12 at 980, 960, 900, 860, 820, 760 and 730, and "Not
-     assigned" ran 11.30px past the cell's padding at 820 and 17.63px into the
-     TRAINING FROM cell at 730.
-     A block label gives the value the whole 82.59px, which holds both. Confined
-     to this band: below 721 the rows lay out differently and nothing wrapped,
-     and at 1440 the track is wide enough for the inline form. */
-  .coach-member-table tbody td.coach-member-sessions::before,
-  .coach-member-table tbody td.coach-member-joined::before {
-    display: block;
-    margin-right: 0;
-    color: var(--steel);
-    content: attr(data-label);
-    font-size: var(--type-operational-floor);
-    font-weight: 800;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-  }
-
-  .coach-member-folio {
-    display: flex !important;
-    grid-area: folio;
-    align-items: center;
-    padding-left: var(--space-copy) !important;
-  }
-
-  .coach-member-table tbody th {
-    display: block;
-    grid-area: member;
-    padding-left: 14px;
-  }
-
-  .coach-member-training {
-    grid-area: training;
-    padding-left: 14px !important;
-    border-top: 1px solid var(--line);
-  }
-
-  .coach-member-sessions {
-    grid-area: sessions;
-    border-top: 1px solid var(--line);
-    border-left: 1px solid var(--line);
-  }
-
-  .coach-member-joined {
-    grid-area: joined;
-    border-top: 1px solid var(--line);
-    border-left: 1px solid var(--line);
-  }
-
-  .coach-member-status-cell {
-    grid-area: status;
-    align-self: center;
-    justify-self: end;
-  }
-
-  .coach-member-table .coach-member-row-action {
-    grid-area: action;
-    align-self: center;
-    padding: 6px 12px 6px 4px;
-  }
-
-  .coach-member-row-action button {
-    min-height: 44px;
-    gap: 5px;
-    padding-inline: 10px;
-    border: 0;
-  }
-
-  .coach-member-detail-row,
-  .coach-member-detail-row > td {
-    display: block;
-  }
-
-  .coach-member-detail-domains {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 720px) {
-  .coach-members-directory {
-    padding-top: 14px;
-  }
-
-  .coach-members-directory-header {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-    margin-top: 22px;
-    padding-bottom: 18px;
-  }
-
-  .coach-members-directory-header h1 {
-    font-size: clamp(38px, 12.5vw, 52px);
-  }
-
-  .coach-members-directory-header > p {
-    max-width: 330px;
-    font-size: 0.9375rem;
-  }
-
-  .coach-member-directory-panel {
-    margin-top: 20px;
-  }
 
   .coach-registration-approved{
     gap: 10px;
@@ -9689,156 +8123,6 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .coach-registration-approved button{
-    width: 100%;
-  }
-
-  .coach-member-register-tools,
-  .coach-member-table-wrap {
-    margin-inline: -16px;
-  }
-
-  .coach-member-directory-controls {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .coach-member-search input,
-  .coach-member-filter select {
-    font-size: 16px;
-  }
-
-  .coach-member-filter-toggle {
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
-
-  .coach-member-filters {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .coach-member-filter,
-  .coach-member-filter:first-child {
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
-
-  .coach-member-directory-summary {
-    min-height: 48px;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
-    padding-inline: var(--space-copy);
-  }
-
-  .coach-member-directory-summary p {
-    display: none;
-  }
-
-  .coach-member-table-wrap {
-    margin-top: 12px;
-    border-top-width: 3px;
-  }
-
-  .coach-member-table tbody > tr:not(.coach-member-detail-row) {
-    grid-template-columns: 48px minmax(0, 1fr) auto;
-    grid-template-areas:
-      "folio member status"
-      "folio training training"
-      "folio sessions joined"
-      "action action action";
-  }
-
-  .coach-member-folio {
-    padding-left: 13px !important;
-    font-size: 1.0625rem !important;
-  }
-
-  .coach-member-table tbody th {
-    padding: 12px 10px;
-  }
-
-  .coach-member-status-cell {
-    padding: 12px 12px 12px 4px !important;
-  }
-
-  .coach-member-training {
-    padding: 9px 10px !important;
-  }
-
-  .coach-member-sessions,
-  .coach-member-joined {
-    min-height: 40px;
-    padding: 9px 10px !important;
-    font-size: 0.6875rem !important;
-  }
-
-  .coach-member-sessions {
-    border-left: 0;
-  }
-
-  .coach-member-table .coach-member-row-action {
-    padding: 0;
-    border-top: 1px solid var(--line);
-  }
-
-  .coach-member-row-action button {
-    min-height: 44px;
-    padding-inline: var(--space-copy);
-    font-size: 0.75rem;
-  }
-
-  .coach-member-detail-panel {
-    padding: 20px var(--space-copy) var(--space-group);
-  }
-
-  .coach-member-detail-heading {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .coach-member-detail-heading h3 {
-    font-size: 1.5625rem;
-  }
-
-  .coach-member-detail-heading > button {
-    width: auto;
-    padding-inline: 12px;
-  }
-
-  .coach-member-detail-domains {
-    grid-template-columns: minmax(0, 1fr);
-    margin-top: 18px;
-  }
-
-  .coach-member-detail-domains section {
-    padding: 18px var(--space-copy);
-  }
-
-  .coach-member-detail-domains dl {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-    margin-top: 15px;
-  }
-
-  .coach-member-detail-domains dd {
-    font-size: 0.875rem;
-  }
-
-  .coach-member-form-grid input,
-  .coach-member-form-grid select {
-    font-size: 16px;
-  }
-
-  .coach-member-detail-domains dl > div.is-wide {
-    grid-column: 1 / -1;
-  }
-
-  .coach-member-access-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .coach-member-access-actions > a,
-  .coach-member-access-actions > button {
     width: 100%;
   }
 }
@@ -11599,39 +9883,9 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 @media (max-width: 820px) {
-  .coach-member-search input,
-  .coach-member-filter select {
-    min-height: 24px;
-  }
 
   .coach-slot-day {
     min-height: 24px;
-  }
-}
-
-@media (min-width: 721px) and (max-width: 1100px) {
-  .coach-members-directory-header {
-    padding-bottom: 20px;
-  }
-
-  .coach-member-directory-panel {
-    margin-top: 20px;
-  }
-
-  .coach-member-register-tools {
-    /* The summary panel carries min-width: 220px, so a 210px track floor left it
-       overflowing the bordered bar by up to 9px and hiding the right border. */
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.38fr);
-  }
-
-  .coach-member-directory-summary {
-    min-height: 52px;
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: end;
-    gap: 2px;
-    border-top: 0;
-    border-left: 1px solid var(--line);
-    text-align: right;
   }
 }
 
@@ -11666,40 +9920,6 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 }
 
-/* Internal operations typography floor: keep registers compact without miniature copy. */
-.coach-members-directory-header .eyebrow,
-.coach-member-filter > span,
-.coach-member-table thead th,
-.coach-member-name small,
-.coach-member-training small,
-.coach-member-status,
-.coach-member-detail-heading > div > span,
-.coach-member-detail-domains section > span,
-.coach-member-detail-domains dt,
-.coach-member-edit-form legend,
-.coach-member-form-grid label > span,
-.coach-member-form-status > span,
-.coach-member-access-actions span{
-  font-size: var(--type-utility-label);
-}
-
-.coach-member-table tbody th,
-.coach-member-table tbody td,
-.coach-member-training strong,
-.coach-member-detail-domains dd {
-  font-size: var(--type-operational-body);
-}
-
-.coach-member-row-action button,
-.coach-member-contact-reveal,
-.coach-member-contact a,
-.coach-member-detail-heading > button,
-.coach-member-form-actions button,
-.coach-member-access-actions > a,
-.coach-member-access-actions > button {
-  font-size: var(--type-operational-action);
-}
-
 .player-attendance-recorder .attendance-roster-heading > strong,
 .staff-roll-call-ledger .staff-roll-call-heading > strong,
 .staff-roll-call-register-head {
@@ -11730,98 +9950,6 @@ tr.is-expanded .coach-member-row-action button svg {
   > .staff-roll-call-choice-box button + button {
   font-size: var(--type-utility-label);
   letter-spacing: 0.02em;
-}
-
-/* Expanded workspaces share one compact alignment rhythm. */
-.coach-member-detail-heading {
-  /* Re-asserted here, after the rule above set it, because this later
-     declaration is the one that actually won -- the earlier `baseline` never
-     reached the element. */
-  align-items: baseline;
-}
-
-.coach-member-detail-domains section {
-  min-width: 0;
-}
-
-@media (min-width: 721px) and (max-width: 900px) {
-  .coach-member-detail-panel {
-    padding: 30px;
-  }
-
-  .coach-member-detail-domains {
-    margin-top: 28px;
-  }
-
-  .coach-member-detail-domains section {
-    padding: 26px;
-  }
-
-  .coach-member-detail-domains dl {
-    gap: 18px;
-    margin-top: var(--space-group);
-  }
-
-}
-
-@media (max-width: 720px) {
-  .coach-member-search,
-  .coach-member-filter,
-  .coach-member-filter-toggle {
-    min-height: 56px;
-  }
-
-  .coach-member-search {
-    padding-inline: var(--space-copy);
-  }
-
-  .coach-member-detail-panel {
-    padding: var(--space-group) var(--space-copy) 28px;
-  }
-
-  .coach-member-detail-heading {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 14px;
-  }
-
-  .coach-member-detail-heading h3 {
-    font-size: clamp(28px, 9vw, 34px);
-  }
-
-  .coach-member-detail-heading > button {
-    padding-inline: 12px;
-  }
-
-  .coach-member-detail-domains {
-    margin-top: var(--space-group);
-  }
-
-  .coach-member-detail-domains section {
-    padding: 20px var(--space-copy);
-  }
-
-  .coach-member-detail-domains dl {
-    gap: var(--space-copy);
-    margin-top: 20px;
-  }
-
-  .coach-member-access-actions {
-    margin-top: 20px;
-    padding-top: 18px;
-  }
-
-}
-
-@media (max-width: 360px) {
-  .coach-member-detail-heading {
-    grid-template-columns: 1fr;
-  }
-
-  .coach-member-detail-heading > button {
-    width: 100%;
-    justify-content: center;
-  }
-
 }
 
 /* The 16px focus-zoom floor, repeated for touch at any width -- see the matching
@@ -12223,202 +10351,35 @@ tr.is-expanded .coach-member-row-action button svg {
   background: var(--mist);
 }
 
-/* Member Directory, record beside the list.
-   The record's four actions sat below roughly 800px of read-only detail. The detail
-   row now opens with them, and on a wide screen the open record moves to a panel
-   beside a compact list, so the next player is one click away without scrolling past
-   it. Below 1100px the record still opens inline, under its own row. The row stays
-   a <tr> in the table either way, so its ids, focus handling and the staff rows do
-   not change; only where the grid puts it does. */
-.coach-member-detail-heading-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-tight);
-}
-
-.coach-member-detail-heading-actions > button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: var(--space-tight);
-  padding: 0 var(--space-copy);
-  border: 1px solid var(--navy);
-  background: transparent;
-  color: var(--navy);
-  font-weight: 760;
-}
-
-.coach-member-detail-heading-actions > button.is-quiet {
-  border-color: var(--line-control);
-  color: var(--steel);
-}
-
-.coach-member-detail-heading-actions > button svg {
-  width: 15px;
-  height: 15px;
-}
-
-@media (max-width: 900px) {
-  .coach-member-detail-heading {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .coach-member-detail-heading-actions {
-    width: 100%;
-  }
-
-  .coach-member-detail-heading-actions > button {
-    flex: 1 1 0;
-    justify-content: center;
-  }
-}
-
-@media (min-width: 901px) {
-  .coach-member-folio,
-  .coach-member-table thead th:first-child {
-    display: none;
-  }
-}
-
-@media (min-width: 1100px) {
-  .coach-member-table:has(.coach-member-detail-row) {
-    display: block;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) thead {
-    display: none;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) tbody {
-    display: grid;
-    grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
-    column-gap: var(--space-group);
-    align-items: start;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) tbody > tr:not(.coach-member-detail-row) {
-    display: grid;
-    grid-column: 1;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "name status"
-      "training action";
-    align-items: center;
-    column-gap: var(--space-tight);
-    padding: 6px 4px 6px 0;
-    border-bottom: 1px solid var(--line);
-    background: var(--white);
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) tbody > tr.is-expanded {
-    background: var(--paper);
-    box-shadow: inset 3px 0 0 var(--red);
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) tbody > tr:not(.coach-member-detail-row) > th,
-  .coach-member-table:has(.coach-member-detail-row) tbody > tr:not(.coach-member-detail-row) > td {
-    height: auto;
-    padding: 6px 12px;
-    border: 0;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) tbody > tr:not(.coach-member-detail-row) > th {
-    grid-area: name;
-    padding-top: 10px;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) .coach-member-training {
-    grid-area: training;
-    padding-top: 0;
-    padding-bottom: 10px;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) .coach-member-status-cell {
-    grid-area: status;
-    padding-top: 10px;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) .coach-member-row-action {
-    grid-area: action;
-    padding-bottom: 10px;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) .coach-member-sessions,
-  .coach-member-table:has(.coach-member-detail-row) .coach-member-joined {
-    display: none;
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) tbody > tr.coach-member-detail-row {
-    position: sticky;
-    top: var(--space-copy);
-    display: block;
-    grid-column: 2;
-    grid-row: 1 / span 60;
-    max-height: calc(100dvh - 2 * var(--space-copy));
-    overflow-y: auto;
-    border: 1px solid var(--line);
-    background: var(--ivory);
-  }
-
-  .coach-member-table:has(.coach-member-detail-row) tbody > tr.coach-member-detail-row > td {
-    display: block;
-    height: auto;
-    padding: 0;
-    border-bottom: 0;
-  }
-}
-
-/* Settling detail. When a coach opens a row, a disclosure or a record, what it
-   reveals does not land as one slab: each block rises 4px and fades in, one
-   --stagger-step (30ms) after the block above it, on the entrance curve. The
-   same rhythm staggers the rows of a list that opens on demand. Only the
-   first eight steps wait; anything further arrives with the eighth, so a long
-   panel is never still assembling after a quarter of a second.
-
-   `translate`, not `transform`, so a block that positions itself with a
-   transform keeps it. The animation sits on the open state only, so closing
-   and reopening plays it again. */
-.coach-member-detail-panel > *,
-.coach-occurrence-detail > *,
-.coach-adjustment-history-details > *,
-.coach-adjustment-history-list > *,
-.player-attendance-register > *,
-details[open] > :not(summary) {
+.coach-occurrence-detail > *, .coach-adjustment-history-details > *, .coach-adjustment-history-list > *, .player-attendance-register > *, details[open] > :not(summary) {
   animation: detail-settle var(--duration-enter) var(--ease-out) backwards;
 }
 
-:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(2),
-details[open] > :not(summary):nth-child(3) {
+:is(.coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(2), details[open] > :not(summary):nth-child(3) {
   animation-delay: var(--stagger-step);
 }
 
-:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(3),
-details[open] > :not(summary):nth-child(4) {
+:is(.coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(3), details[open] > :not(summary):nth-child(4) {
   animation-delay: calc(2 * var(--stagger-step));
 }
 
-:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(4),
-details[open] > :not(summary):nth-child(5) {
+:is(.coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(4), details[open] > :not(summary):nth-child(5) {
   animation-delay: calc(3 * var(--stagger-step));
 }
 
-:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(5),
-details[open] > :not(summary):nth-child(6) {
+:is(.coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(5), details[open] > :not(summary):nth-child(6) {
   animation-delay: calc(4 * var(--stagger-step));
 }
 
-:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(6),
-details[open] > :not(summary):nth-child(7) {
+:is(.coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(6), details[open] > :not(summary):nth-child(7) {
   animation-delay: calc(5 * var(--stagger-step));
 }
 
-:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(7),
-details[open] > :not(summary):nth-child(8) {
+:is(.coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(7), details[open] > :not(summary):nth-child(8) {
   animation-delay: calc(6 * var(--stagger-step));
 }
 
-:is(.coach-member-detail-panel, .coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(n + 8),
-details[open] > :not(summary):nth-child(n + 9) {
+:is(.coach-occurrence-detail, .coach-adjustment-history-details, .coach-adjustment-history-list, .player-attendance-register) > :nth-child(n + 8), details[open] > :not(summary):nth-child(n + 9) {
   animation-delay: calc(7 * var(--stagger-step));
 }
 
@@ -12429,17 +10390,7 @@ details[open] > :not(summary):nth-child(n + 9) {
   }
 }
 
-/* Wide row-style buttons keep still under the finger: a 3% shrink of a
-   full-width disclosure row is a visible jolt, not feedback. Their chevron
-   turn and the panel settling below already answer the press. */
-:is(
-  .coach-day-session > button,
-  .coach-adjustment-history-item > button,
-  .coach-adjustment-history-disclosure,
-  .player-attendance-toggle,
-  .coach-schedule-programme-toggle-heading button,
-  .coach-series-roster-card > button
-):active {
+:is(.coach-day-session > button, .coach-adjustment-history-item > button, .coach-adjustment-history-disclosure, .player-attendance-toggle, .coach-schedule-programme-toggle-heading button, .coach-series-roster-card > button):active {
   scale: none;
 }
 
@@ -12452,13 +10403,1077 @@ details[open] > :not(summary):nth-child(n + 9) {
    staggered block held back by `backwards` would sit invisible through its
    delay. With reduced motion the detail simply is there. */
 @media (prefers-reduced-motion: reduce) {
-  .coach-member-detail-panel > *,
-  .coach-occurrence-detail > *,
-  .coach-adjustment-history-details > *,
-  .coach-adjustment-history-list > *,
-  .player-attendance-register > *,
-  details[open] > :not(summary),
-  .inline-notice.is-success svg {
+  .coach-occurrence-detail > *, .coach-adjustment-history-details > *, .coach-adjustment-history-list > *, .player-attendance-register > *, details[open] > :not(summary), .inline-notice.is-success svg {
     animation: none;
+  }
+}
+
+/* Members (app/coach/members). The page, its glass cards, and a player's record
+   opening in place of their card: the card's button becomes the top of a navy
+   band, the record's tabs sit on the band, and the tab's content sits below on
+   paper. Coaches use the same card and record without the tabs. */
+.coach-members-directory {
+  padding-block: var(--space-block) var(--space-content);
+}
+
+.coach-members-back-row a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.coach-members-back-row svg {
+  width: 16px;
+  height: 16px;
+}
+
+.coach-members-directory-header h1 {
+  margin-top: var(--space-tight);
+  color: var(--navy);
+  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.coach-member-directory-panel {
+  display: grid;
+  gap: var(--space-copy);
+  margin-top: var(--space-copy);
+}
+
+/* An empty notice keeps its live region but takes no room in the layout. */
+:is(.coach-member-directory-panel, .coach-member-record) .inline-notice-slot[data-empty="true"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.coach-member-register-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-tight) var(--space-copy);
+}
+
+.coach-member-directory-controls {
+  display: flex;
+  flex: 1 1 640px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-tight);
+}
+
+.coach-member-search {
+  display: flex;
+  min-width: min(100%, 280px);
+  min-height: 48px;
+  flex: 1 1 280px;
+  align-items: center;
+  gap: 10px;
+  padding-inline: 14px;
+  border: var(--frost-border);
+  border-radius: 14px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+  color: var(--steel);
+}
+
+.coach-member-search:focus-within {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.coach-member-search svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.coach-member-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  outline: none;
+}
+
+.coach-member-filter-toggle {
+  display: none;
+}
+
+.coach-member-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-tight);
+}
+
+.coach-member-filter > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.coach-member-filter select {
+  width: auto;
+  min-height: 44px;
+  padding: 0 34px 0 14px;
+  border: var(--frost-border);
+  border-radius: var(--radius-pill);
+  background-color: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.coach-member-filter select:disabled {
+  color: var(--steel);
+  cursor: not-allowed;
+}
+
+.coach-member-filter-note {
+  flex-basis: 100%;
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+}
+
+.coach-member-directory-summary {
+  margin-left: auto;
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.coach-member-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-member-item {
+  border: var(--frost-border);
+  border-radius: 22px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.coach-member-card-head {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 46px minmax(0, 0.8fr) minmax(0, 2.4fr) auto 20px;
+  align-items: center;
+  gap: var(--space-copy);
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.coach-member-card-head:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.coach-member-badge {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: var(--frost-border);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--white) 60%, transparent);
+  box-shadow: inset 0 1px 0 var(--white), 0 6px 14px -10px color-mix(in srgb, var(--navy) 50%, transparent);
+  color: var(--navy);
+  font-size: var(--type-operational-body);
+  font-weight: 800;
+}
+
+.coach-member-name {
+  display: grid;
+  min-width: 0;
+}
+
+.coach-member-name strong {
+  overflow-wrap: anywhere;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.coach-member-name em {
+  font-style: normal;
+}
+
+.coach-member-open-id {
+  display: none;
+}
+
+.coach-member-box {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px var(--space-copy);
+  padding: 9px 14px;
+  border: 1px solid color-mix(in srgb, var(--white) 80%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--white) 55%, transparent);
+  box-shadow: inset 0 1px 0 var(--white);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.coach-member-fact {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.coach-member-fact svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--red);
+}
+
+.coach-member-fact.is-none {
+  color: var(--steel);
+  font-weight: 500;
+}
+
+.coach-member-id {
+  margin-left: auto;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.coach-member-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--green) 11%, transparent);
+  color: var(--green);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.coach-member-status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-circle);
+  background: currentColor;
+  content: "";
+}
+
+.coach-member-status.is-paused {
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  color: var(--red);
+}
+
+.coach-member-status.is-finished,
+.coach-member-status.is-unassigned {
+  background: color-mix(in srgb, var(--navy) 7%, transparent);
+  color: var(--steel-dark);
+}
+
+.coach-member-toggle-mark {
+  display: grid;
+  place-items: center;
+  color: var(--steel-dark);
+}
+
+.coach-member-toggle-mark svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Open: the card's button is the top of the navy band. */
+.coach-member-item.is-open {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--navy) 60%, transparent);
+}
+
+.coach-member-item.is-open .coach-member-card-head {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  row-gap: var(--space-tight);
+  padding: 22px var(--space-group) 0;
+  border-radius: 22px 22px 0 0;
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.coach-member-item.is-open .coach-member-card-head:focus-visible {
+  outline-color: var(--ivory);
+  outline-offset: -4px;
+}
+
+.coach-member-item.is-open :is(.coach-member-badge, .coach-member-box) {
+  display: none;
+}
+
+.coach-member-item.is-open .coach-member-name strong {
+  font-size: clamp(1.625rem, 3vw, 1.875rem);
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.coach-member-item.is-open .coach-member-name em {
+  color: color-mix(in srgb, var(--red) 45%, var(--ivory));
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.coach-member-item.is-open .coach-member-name {
+  grid-column: 1 / 4;
+  grid-row: 1;
+}
+
+.coach-member-item.is-open .coach-member-open-id {
+  display: block;
+  grid-column: 1;
+  grid-row: 2;
+  color: color-mix(in srgb, var(--ivory) 70%, transparent);
+  font-size: var(--type-utility-meta);
+}
+
+/* The status sits beside the ID, under the name. */
+.coach-member-item.is-open .coach-member-status {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: start;
+  background: color-mix(in srgb, var(--green) 30%, var(--navy));
+  color: color-mix(in srgb, var(--green) 30%, var(--ivory));
+}
+
+.coach-member-item.is-open .coach-member-status:is(.is-finished, .is-unassigned) {
+  background: color-mix(in srgb, var(--ivory) 14%, transparent);
+  color: var(--ivory);
+}
+
+.coach-member-item.is-open .coach-member-status.is-paused {
+  background: color-mix(in srgb, var(--red) 35%, var(--navy));
+  color: color-mix(in srgb, var(--red) 30%, var(--ivory));
+}
+
+.coach-member-item.is-open .coach-member-toggle-mark {
+  grid-column: 4;
+  grid-row: 1 / 3;
+  align-self: start;
+  width: 42px;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, var(--ivory) 25%, transparent);
+  border-radius: 13px;
+  color: var(--ivory);
+}
+
+.coach-member-record {
+  border-radius: 0 0 22px 22px;
+  overflow: hidden;
+}
+
+.coach-member-tabs {
+  display: flex;
+  /* Enlarged text wraps the tabs instead of widening the page. */
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 18px var(--space-group) 0;
+  background: var(--navy);
+}
+
+.coach-member-tabs [role="tab"] {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 13px 13px 0 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--ivory) 72%, transparent);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.coach-member-tabs [role="tab"][aria-selected="true"] {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.coach-member-tabs [role="tab"]:focus-visible {
+  outline: 2px solid var(--ivory);
+  outline-offset: -4px;
+}
+
+.coach-member-record-body {
+  display: grid;
+  gap: 18px;
+  padding: 22px var(--space-group) var(--space-group);
+  background: var(--paper);
+}
+
+.coach-member-record-body [hidden] {
+  display: none;
+}
+
+/* A coach's record has no tabs: the band ends at the card. */
+.coach-member-record:not(:has(.coach-member-tabs)) .coach-member-record-body {
+  padding-top: var(--space-group);
+}
+
+/* The Training tab's facts give way to an open training form. */
+.coach-member-record-body:has([data-open-form="training"]) .coach-member-training-facts {
+  display: none;
+}
+
+.coach-member-editing-note {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--navy) 4%, transparent);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+}
+
+.coach-member-plan-line {
+  color: var(--ink);
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.coach-member-when {
+  margin-top: 2px;
+  color: var(--steel-dark);
+}
+
+.coach-member-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin-top: 14px;
+}
+
+.coach-member-pills:empty {
+  display: none;
+}
+
+.coach-member-pills span {
+  padding: 7px 13px;
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--white) 60%, transparent);
+  font-size: var(--type-utility-meta);
+}
+
+.coach-member-profile {
+  display: grid;
+  gap: 18px;
+}
+
+.coach-member-contact-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px var(--space-copy);
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: var(--space-copy);
+  background: var(--white);
+}
+
+.coach-member-contact-box > div > span,
+.coach-member-joining > span,
+.coach-member-access-actions > div > span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.coach-member-contact {
+  display: grid;
+  gap: 2px;
+}
+
+.coach-member-contact small {
+  color: var(--steel);
+}
+
+.coach-member-contact a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  color: var(--navy);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.coach-member-contact a svg,
+.coach-member-contact-reveal svg,
+.coach-member-profile-actions svg,
+.coach-member-access-actions svg {
+  width: 16px;
+  height: 16px;
+}
+
+:is(.coach-member-contact-reveal, .coach-member-profile-actions button, .coach-member-access-actions :is(a, button), .coach-member-empty-state button) {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-tight);
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+  text-align: center;
+}
+
+.coach-member-joining ol {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-auto-flow: column;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The dots and the line through them are real elements, not pseudo-elements, so
+   a contrast check can still read the text's background. */
+.coach-member-joining li {
+  position: relative;
+  display: grid;
+  padding: 22px var(--space-tight) 0 0;
+}
+
+.coach-member-joining-mark {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 14px;
+  background: linear-gradient(color-mix(in srgb, var(--navy) 12%, transparent), color-mix(in srgb, var(--navy) 12%, transparent)) 0 6px / 100% 2px no-repeat;
+}
+
+.coach-member-joining li:last-child .coach-member-joining-mark {
+  background: none;
+}
+
+.coach-member-joining-mark::after {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: var(--radius-circle);
+  background: var(--red);
+  box-shadow: 0 0 0 3px var(--paper);
+  content: "";
+}
+
+.coach-member-joining li.is-pending .coach-member-joining-mark::after {
+  border: 2px solid color-mix(in srgb, var(--navy) 25%, transparent);
+  background: var(--paper);
+}
+
+.coach-member-joining strong {
+  font-size: var(--type-utility-meta);
+}
+
+.coach-member-joining li.is-pending strong,
+.coach-member-joining small {
+  color: var(--steel);
+}
+
+.coach-member-joining small {
+  font-size: var(--type-utility-label);
+}
+
+.coach-member-access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: var(--space-copy);
+  border-top: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+}
+
+.coach-member-access-actions p {
+  max-width: 60ch;
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+}
+
+.coach-member-access-actions button {
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+  color: var(--red);
+}
+
+.coach-member-access-actions button:disabled {
+  opacity: 0.6;
+}
+
+/* Edit details, inside the Profile tab. */
+.coach-member-edit-form {
+  display: grid;
+  gap: 18px;
+}
+
+.coach-member-edit-form fieldset {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.coach-member-edit-form legend {
+  margin-bottom: 10px;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.coach-member-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.coach-member-form-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.coach-member-form-grid label > span,
+.coach-member-form-status > span {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.coach-member-form-grid :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background-color: var(--white);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.coach-member-form-grid [aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+.coach-member-form-grid label > small {
+  color: var(--red);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.coach-member-form-status {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+
+.coach-member-form-status small,
+.coach-member-classification-lock {
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+}
+
+.coach-member-classification-lock {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--navy) 4%, transparent);
+}
+
+.coach-member-form-actions {
+  display: grid;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+}
+
+.coach-member-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.coach-member-editor-actions button {
+  min-height: 46px;
+  padding: 0 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.coach-member-editor-actions .is-primary {
+  border-color: var(--navy);
+  background: var(--navy);
+  box-shadow: var(--sweep-rest);
+  color: var(--white);
+  transition: var(--sweep-transition);
+}
+
+.coach-member-editor-actions .is-primary:is(:hover, :active):not(:disabled) {
+  box-shadow: var(--sweep-full);
+}
+
+.coach-member-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: var(--frost-border);
+  border-radius: 18px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.coach-member-pager ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-member-pager button {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--steel-dark);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.coach-member-pager > button {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--white) 60%, transparent);
+  color: var(--ink);
+}
+
+.coach-member-pager button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.coach-member-pager button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.coach-member-pager button[aria-current="page"] {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.coach-member-pager button:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.coach-member-pager li > span {
+  padding-inline: 6px;
+  color: var(--steel);
+}
+
+.coach-member-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-tight);
+  padding: var(--space-content) var(--space-group);
+  border: var(--frost-border);
+  border-radius: 22px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+  text-align: center;
+}
+
+.coach-member-empty-state svg {
+  width: 28px;
+  height: 28px;
+  color: var(--steel);
+}
+
+.coach-member-empty-state h3 {
+  font-size: 1.125rem;
+}
+
+.coach-member-empty-state p {
+  color: var(--steel);
+}
+
+/* Phones keep these controls at 16px (the list near the top of this file), or
+   iOS zooms in on focus; elsewhere they take the page's smaller sizes. */
+@media (min-width: 721px) and (pointer: fine) {
+  .coach-member-search input,
+  .coach-member-form-grid :is(input, select) {
+    font-size: 0.9375rem;
+  }
+
+  .coach-member-filter select {
+    font-size: var(--type-utility-meta);
+  }
+}
+
+@media (hover: hover) {
+  .coach-member-item:not(.is-open):hover {
+    background: color-mix(in srgb, var(--white) 70%, transparent);
+  }
+
+  :is(.coach-member-contact-reveal, .coach-member-profile-actions button, .coach-member-pager button:not(:disabled, [aria-current]), .coach-member-empty-state button, .coach-member-editor-actions button:not(.is-primary)):hover {
+    border-color: var(--navy);
+  }
+}
+
+/* The filters fold behind one button on tablets and phones. */
+@media (max-width: 980px) {
+  .coach-member-filter-toggle {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    gap: var(--space-tight);
+    padding: 0 14px;
+    border: var(--frost-border);
+    border-radius: var(--radius-pill);
+    background: var(--frost-fill);
+    box-shadow: var(--frost-shadow);
+    color: var(--ink);
+    font-size: var(--type-utility-meta);
+    font-weight: 700;
+  }
+
+  .coach-member-filter-toggle span {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .coach-member-filter-toggle small {
+    color: var(--steel);
+    font-weight: 600;
+  }
+
+  .coach-member-filter-toggle svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .coach-member-filters {
+    display: none;
+    width: 100%;
+  }
+
+  .is-filters-open .coach-member-filters {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: var(--frost-border);
+    border-radius: 18px;
+    background: var(--frost-fill);
+    box-shadow: var(--frost-shadow);
+  }
+
+  .is-filters-open .coach-member-filter {
+    display: grid;
+    gap: 4px;
+  }
+
+  .is-filters-open .coach-member-filter > span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    color: var(--steel);
+    font-size: var(--type-utility-label);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .is-filters-open .coach-member-filter select {
+    width: 100%;
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .coach-member-card-head {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    padding: 14px;
+  }
+
+  .coach-member-badge {
+    width: 42px;
+    height: 42px;
+  }
+
+  .coach-member-status {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .coach-member-box {
+    flex-direction: column;
+    align-items: flex-start;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    gap: 4px;
+  }
+
+  .coach-member-id {
+    margin-left: 0;
+  }
+
+  .coach-member-toggle-mark {
+    display: none;
+  }
+
+  .coach-member-item.is-open .coach-member-card-head {
+    padding: 18px var(--space-copy) 0;
+  }
+
+  .coach-member-item.is-open .coach-member-toggle-mark {
+    display: grid;
+  }
+
+  .coach-member-item.is-open .coach-member-status {
+    grid-column: 2;
+  }
+
+  .coach-member-tabs {
+    padding-inline: var(--space-copy);
+  }
+
+  .coach-member-tabs [role="tab"] {
+    padding: 0 14px;
+  }
+
+  .coach-member-record-body {
+    padding: 18px var(--space-copy);
+  }
+
+  .coach-member-contact-box,
+  .coach-member-access-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .coach-member-joining ol {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row;
+    gap: 12px;
+  }
+
+  .coach-member-joining-mark {
+    right: auto;
+    bottom: -12px;
+    width: 14px;
+    height: auto;
+    background: linear-gradient(color-mix(in srgb, var(--navy) 12%, transparent), color-mix(in srgb, var(--navy) 12%, transparent)) 6px 0 / 2px 100% no-repeat;
+  }
+
+  .coach-member-joining li {
+    padding: 0 0 0 28px;
+  }
+
+  .coach-member-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coach-member-editor-actions button {
+    flex: 1;
+  }
+
+  .coach-member-pager {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .coach-member-pager ol {
+    order: -1;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .coach-member-pager > button {
+    flex: 1 1 40%;
+  }
+
+  .coach-member-pager ol button {
+    min-width: 40px;
+    padding: 0 var(--space-tight);
+  }
+}
+
+@media (forced-colors: active) {
+  .coach-member-item.is-open .coach-member-card-head,
+  .coach-member-tabs {
+    border: 1px solid CanvasText;
+  }
+
+  .coach-member-tabs [role="tab"][aria-selected="true"] {
+    outline: 2px solid Highlight;
   }
 }

@@ -51,6 +51,8 @@ import {
   academyPlanRequiredWeekdayCount,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
+import { onboardingFinished } from "@/lib/coach/onboarding"
+import { feePlanCoversCondition } from "@/lib/finance/plan-in-force"
 
 /*
  * Training changes made from a player's record in Members (head coach, 5 Oct
@@ -152,7 +154,7 @@ function requirePlayer(database: Executor, playerId: string) {
  * sometimes the only way to take them off a schedule.
  */
 function requireOnboarded(player: { onboardingCompletedAt: Date | null }) {
-  if (!player.onboardingCompletedAt) {
+  if (!onboardingFinished(player)) {
     operationalActionError(
       "BUSINESS_RULE",
       "Finish Player onboarding first. It sets this player's first schedule and fee plan.",
@@ -370,9 +372,7 @@ function nextMonthFeeRefusal(tx: Executor, playerId: string, today: string, then
 function agreementsAround(database: Executor, playerId: string, dateKey: string) {
   const covering = database.select().from(feeAgreements).where(and(
     eq(feeAgreements.playerAccountId, playerId),
-    ne(feeAgreements.status, "paused"),
-    lte(feeAgreements.effectiveFrom, dateKey),
-    or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, dateKey)),
+    feePlanCoversCondition(dateKey),
   )).get()
   const active = database.select().from(feeAgreements).where(and(
     eq(feeAgreements.playerAccountId, playerId),

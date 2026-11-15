@@ -114,6 +114,12 @@ export function PrepareFees({
         <div><dt>Already issued</dt><dd>{preparation.alreadyPrepared}</dd></div>
       </dl>
 
+      {preparation.waitingForChange > 0 && !notYet ? (
+        <p className={styles.preparationNote}>
+          {preparation.waitingForChange} {preparation.waitingForChange === 1 ? "player’s fee waits" : "players’ fees wait"} for a training change booked in Members; it is issued once the change happens.
+        </p>
+      ) : null}
+
       {notYet ? (
         <p className={styles.preparationNote}>
           {periodLabel(period)} fees can be issued from 1 {monthOnly(period)}, so every change made before then still reaches them.

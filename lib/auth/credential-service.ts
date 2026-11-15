@@ -32,6 +32,9 @@ import {
   authSubjectHash,
   writeAuthSecurityEvent,
 } from "@/lib/auth/security-context"
+import { onboardingFinished } from "@/lib/coach/onboarding"
+import { accountIsLive } from "@/lib/auth/account-live"
+import { alignTwoFactorFlag } from "@/lib/auth/two-factor-state"
 
 const MIN_PASSWORD_LENGTH = 12
 const MAX_PASSWORD_LENGTH = 128
@@ -260,7 +263,7 @@ export function getActivationClaimStatus(token: string | null | undefined, {
    * "approved". An assistant coach has no enrollment row and no onboarding to
    * finish, so approval is the whole gate for them.
    */
-  if (row.enrolledAccountId && !row.onboardingCompletedAt) {
+  if (row.enrolledAccountId && !onboardingFinished(row)) {
     return { accountId: row.accountId, fullName: row.fullName, state: "onboarding" }
   }
   if (!row.academyId || (row.role !== "coach" && row.role !== "player")) {
@@ -504,8 +507,7 @@ function pinEligibleAccount(accountId: string, database: SmbaDatabaseExecutor) {
     .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
     .where(and(
       eq(accounts.id, accountId),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
 }
@@ -679,7 +681,6 @@ export async function verifyPinLogin(input: {
     accountId: accounts.id,
     pinHash: authPinCredentials.pinHash,
     role: accounts.role,
-    twoFactorEnabled: authUsers.twoFactorEnabled,
   }).from(authMethods)
     .innerJoin(accounts, eq(accounts.id, authMethods.accountId))
     .innerJoin(authCredentialStates, and(
@@ -693,8 +694,7 @@ export async function verifyPinLogin(input: {
       eq(authMethods.identifier, academyId),
       eq(authMethods.method, "academy_id"),
       isNull(authMethods.revokedAt),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
 
@@ -705,13 +705,15 @@ export async function verifyPinLogin(input: {
     await hashPassword(input.pin)
     return null
   }
-  return await verifyPassword({ hash: row.pinHash, password: input.pin })
-    ? {
-      accountId: row.accountId,
-      role: row.role,
-      twoFactorEnabled: row.twoFactorEnabled,
-    }
-    : null
+  if (!await verifyPassword({ hash: row.pinHash, password: input.pin })) return null
+  // Whether to ask for a code is read from the flag, so line it up first.
+  alignTwoFactorFlag(row.accountId, { database })
+  return {
+    accountId: row.accountId,
+    role: row.role,
+    twoFactorEnabled: database.select({ enabled: authUsers.twoFactorEnabled }).from(authUsers)
+      .where(eq(authUsers.id, row.accountId)).get()?.enabled === true,
+  }
 }
 
 

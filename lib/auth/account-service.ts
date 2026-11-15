@@ -52,6 +52,8 @@ import {
 } from "@/lib/auth/registration-form"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { getAcademyDateKey } from "@/lib/format"
+import { onboardingFinished } from "@/lib/coach/onboarding"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 /** Fixtures and tests only; real requests come from `confirmRegistration`. */
 export function registerAccount(fullName: string, requestedRole: AccountRole) {
@@ -193,7 +195,7 @@ function onboardingCompletedFor(
   const enrollment = database.select({
     onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
   }).from(playerEnrollments).where(eq(playerEnrollments.accountId, accountId)).get()
-  return enrollment ? Boolean(enrollment.onboardingCompletedAt) : standing === "approved"
+  return enrollment ? onboardingFinished(enrollment) : standing === "approved"
 }
 
 /**
@@ -564,8 +566,7 @@ export function findApprovedAccountByAcademyId(value: string) {
       eq(authMethods.identifier, normalizeAcademyId(value)),
       eq(authMethods.method, "academy_id"),
       isNull(authMethods.revokedAt),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
 }

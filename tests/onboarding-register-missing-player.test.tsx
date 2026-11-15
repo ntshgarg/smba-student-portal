@@ -41,6 +41,7 @@ const workspace: PlayerOnboardingWorkspace = {
     assignedSession: null,
     batch: null,
     feePlanRecorded: false,
+    onboardingCompletedAt: null,
     fullName: "Rohan Kulkarni",
     id: "assessment-player",
     trainingStartOn: "2026-08-11",

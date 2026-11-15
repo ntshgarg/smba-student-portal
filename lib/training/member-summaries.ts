@@ -1,8 +1,9 @@
 import "server-only"
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm"
 
 import type { PlayerTrainingProfile } from "@/lib/coach/types"
+import type { FinanceStatus } from "@/lib/finance/types"
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   concessions,
@@ -25,6 +26,7 @@ import { nextMonthStartOf, waitingFeeChangeOf } from "@/lib/training/changes"
 import { feeChangeStartsOn } from "@/lib/training/fees"
 import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
 import type { ThisMonthFeeBasis } from "@/lib/training/this-month-fee-plan"
+import { feePlanInForce } from "@/lib/finance/plan-in-force"
 
 /*
  * What the Members directory shows on each player's record about their
@@ -92,6 +94,8 @@ export type MemberFeeSummary = {
     basis: ThisMonthFeeBasis | null
     dueDate: string
     receivedPaise: number
+    /** The fee's status by the same rule Financials uses (deriveFinanceStatus). */
+    status: FinanceStatus
   } | null
 }
 
@@ -151,13 +155,6 @@ export function listTermFinishedPlayersToMove(
     booked.has(playerId),
     inOnboarding.has(playerId),
   ))
-}
-
-function covers(
-  agreement: { effectiveFrom: string; effectiveTo: string | null },
-  dateKey: string,
-) {
-  return agreement.effectiveFrom <= dateKey && (!agreement.effectiveTo || agreement.effectiveTo >= dateKey)
 }
 
 export function listMemberTrainingSummaries(
@@ -237,12 +234,14 @@ export function listMemberTrainingSummaries(
   // Whether this month's fee has any payment decides what a schedule change
   // this month may alter (lib/training/changes.ts), so the form needs it.
   const chargeViews = loadChargeViews(database, charges.map((charge) => charge.id), now)
+  // Concessions never overlap (createConcession refuses it), so the earliest
+  // start is the one fee issuing uses next; a later one is only booked.
   const activeConcessions = database.select().from(concessions).where(and(
     inArray(concessions.playerAccountId, playerIds),
     eq(concessions.lifecycle, "active"),
     eq(concessions.mode, "recurring"),
     or(isNull(concessions.endsPeriod), gte(concessions.endsPeriod, nextPeriod)),
-  )).all()
+  )).orderBy(asc(concessions.startsPeriod), asc(concessions.createdAt), asc(concessions.id)).all()
 
   const monthStart = `${thisPeriod}-01`
   const monthAgreements = !charges.length ? [] : database.select({
@@ -250,6 +249,7 @@ export function listMemberTrainingSummaries(
     effectiveFrom: feeAgreements.effectiveFrom,
     effectiveTo: feeAgreements.effectiveTo,
     playerAccountId: feeAgreements.playerAccountId,
+    status: feeAgreements.status,
   }).from(feeAgreements).where(and(
     inArray(feeAgreements.playerAccountId, charges.map((charge) => charge.playerId)),
     ne(feeAgreements.status, "paused"),
@@ -257,9 +257,10 @@ export function listMemberTrainingSummaries(
   // The plan covering the 1st is the one a change this month corrects
   // (agreementsAround in lib/training/changes.ts).
   const feeBases = loadThisMonthFeeBases(database, charges.flatMap((charge) => {
-    const covering = monthAgreements.find((agreement) => (
-      agreement.playerAccountId === charge.playerId && covers(agreement, monthStart)
-    ))
+    const covering = feePlanInForce(
+      monthAgreements.filter((agreement) => agreement.playerAccountId === charge.playerId),
+      monthStart,
+    )
     return covering
       ? [{ feePaise: covering.agreedMonthlyFeePaise, id: charge.id, originalAmountPaise: charge.amountPaise }]
       : []
@@ -273,8 +274,8 @@ export function listMemberTrainingSummaries(
 
   for (const playerId of playerIds) {
     const own = agreements.filter((agreement) => agreement.playerAccountId === playerId)
-    const current = own.find((agreement) => covers(agreement, today)) ?? null
-    const next = own.find((agreement) => covers(agreement, nextMonthStart)) ?? null
+    const current = feePlanInForce(own, today)
+    const next = feePlanInForce(own, nextMonthStart)
     const active = own.find((agreement) => agreement.status === "active") ?? null
     const charge = charges.find((item) => item.playerId === playerId)
     const concession = activeConcessions.find((item) => item.playerAccountId === playerId)
@@ -330,6 +331,7 @@ export function listMemberTrainingSummaries(
           basis: feeBases.get(charge.id) ?? null,
           dueDate: charge.dueDate,
           receivedPaise: chargeViews.get(charge.id)?.receivedPaise ?? 0,
+          status: chargeViews.get(charge.id)?.status ?? "pending",
         }
         : null,
     }

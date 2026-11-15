@@ -128,6 +128,9 @@ describe("the shared term rule", () => {
     // A closed place ends on its own dates, as before.
     expect(placeReachesWindow({ effectiveFrom: "2026-04-01", effectiveTo: "2027-01-01" }, null, "2027-01-01", "2028-01-01"))
       .toBe(false)
+    // A place cut back to its own first day never covered one.
+    expect(placeReachesWindow({ effectiveFrom: "2026-11-10", effectiveTo: "2026-11-10" }, null, "2026-01-01", "2027-01-01"))
+      .toBe(false)
   })
 
   it("writes the date and the family message in plain words", () => {
@@ -194,6 +197,7 @@ describe("Members directory", () => {
       primaryContact: { name: "", phone: "", relationship: "" },
       role: "player",
       trainingStartOn: "2026-04-01",
+      onboardingCompletedAt: "2026-01-02T04:30:00.000Z",
     },
     training: {
       academyPlan: "weekday-3-day",
@@ -213,14 +217,14 @@ describe("Members directory", () => {
     const assignments = [place("player-one", "finished"), place("player-one", "running")]
 
     const labels = buildMemberDirectoryIndex([player], assignments, records, today)
-      .sessionLabelsByPlayer.get("player-one")
+      .sessionTimesByPlayer.get("player-one")
     expect(labels).toHaveLength(2)
     expect(labels?.[0]).toMatch(/ \(term finished 31 October 2026\)$/u)
     expect(labels?.[1]).not.toContain("term finished")
 
     // Without the academy's today nothing is guessed from the device clock.
     expect(buildMemberDirectoryIndex([player], assignments, records)
-      .sessionLabelsByPlayer.get("player-one")?.join(" ")).not.toContain("term finished")
+      .sessionTimesByPlayer.get("player-one")?.join(" ")).not.toContain("term finished")
   })
 
   it("filters to term-finished players from the dashboard link", () => {

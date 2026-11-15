@@ -45,6 +45,7 @@ import {
   type AcademyPlan,
   academyPlanIsValid,
 } from "@/lib/training/academy-plans"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 const TRAINING_LEVELS = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"] as const
 const TRAINING_BATCHES = ["Weekday", "Weekend"] as const
@@ -358,10 +359,10 @@ export function updateMemberRecord({
     const classificationChanges = validated.value.level !== current.level
       || validated.value.batch !== current.batch
       || validated.value.academyPlan !== current.academyPlan
-    if (classificationChanges && current.onboardingCompletedAt) {
+    if (classificationChanges && onboardingFinished(current)) {
       return memberFailure(
         "ACTIVE_ASSIGNMENTS",
-        "Change the level, batch or plan with Change schedule or Start training on the member record.",
+        "Change the level, batch or plan with Change schedule or Start training on the Training tab.",
       )
     }
     if (activeAssignments.length && classificationChanges) {
@@ -373,7 +374,7 @@ export function updateMemberRecord({
     // Until onboarding is finished a place that has ended still counts, as it
     // does on the onboarding screens: changing the classification under it
     // leaves onboarding with no way forward.
-    if (classificationChanges && !current.onboardingCompletedAt && tx.select({
+    if (classificationChanges && !onboardingFinished(current) && tx.select({
       id: sessionAssignments.id,
     }).from(sessionAssignments)
       .where(eq(sessionAssignments.accountId, input.memberId))
@@ -481,20 +482,26 @@ export function archiveMemberRecord({
         message: "End the player’s active sessions before archiving their membership.",
       }
     }
-    // A booked start of training would put an archived player back on a schedule.
-    const bookedStart = tx.select({ effectiveOn: trainingChanges.effectiveOn })
+    // Nothing booked may be left behind on an archived player: a booked start
+    // would put them back on a schedule, and a booked end (left behind when
+    // their place closed some other way) would fail on its day.
+    const booked = tx.select({ effectiveOn: trainingChanges.effectiveOn, kind: trainingChanges.kind })
       .from(trainingChanges)
       .where(and(
         eq(trainingChanges.playerAccountId, input.memberId),
         eq(trainingChanges.status, "scheduled"),
-        eq(trainingChanges.kind, "change"),
       ))
       .get()
-    if (bookedStart) {
+    if (booked) {
       return {
         ok: false,
         code: "ACTIVE_ASSIGNMENTS",
-        message: `Training is booked to start on ${formatTermDate(bookedStart.effectiveOn)}. Cancel that booked change in Members before archiving this member.`,
+        message: booked.kind === "change"
+          ? `Training is booked to start on ${formatTermDate(booked.effectiveOn)}. Cancel that booked change in Members before archiving this member.`
+          : booked.effectiveOn <= getAcademyDateKey(now)
+            // Its day has come; it applies when a page next opens (and is retried).
+            ? `An End training booked for ${formatTermDate(booked.effectiveOn)} has not been applied yet. Reload in a moment, or cancel it in Members, before archiving this member.`
+            : `An End training is booked for ${formatTermDate(booked.effectiveOn)}. Cancel it in Members, or wait until that day, before archiving this member.`,
       }
     }
 

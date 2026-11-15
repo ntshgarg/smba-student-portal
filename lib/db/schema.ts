@@ -688,6 +688,12 @@ export const sessionAssignments = sqliteTable("session_assignments", {
   accountId: text("account_id").notNull().references(() => accounts.id),
   seriesId: text("series_id").notNull().references(() => sessionSeries.id),
   effectiveFrom: text("effective_from").notNull(),
+  /**
+   * The FIRST day the player is no longer on the schedule (exclusive); null
+   * while the place is open. Equal to effective_from, the place covered no
+   * day at all. Not the same convention as fee_agreements.effective_to, which
+   * is the last day a plan covers (inclusive).
+   */
   effectiveTo: text("effective_to"),
   assignedByAccountId: text("assigned_by_account_id").notNull().references(() => accounts.id),
   assignedAt: integer("assigned_at", { mode: "timestamp_ms" }).notNull(),
@@ -892,6 +898,12 @@ export const feeAgreements = sqliteTable("fee_agreements", {
   currency: text("currency").notNull().default("INR"),
   monthlyDueDay: integer("monthly_due_day").notNull().default(5),
   effectiveFrom: text("effective_from").notNull(),
+  /**
+   * The LAST day the plan covers (inclusive); null while open-ended. Not the
+   * same convention as session_assignments.effective_to, which is the first
+   * day off a schedule (exclusive). Which plan applies on a date:
+   * lib/finance/plan-in-force.ts.
+   */
   effectiveTo: text("effective_to"),
   status: text("status", { enum: ["active", "paused", "ended"] }).notNull().default("active"),
   recordRevision: integer("record_revision").notNull().default(0),

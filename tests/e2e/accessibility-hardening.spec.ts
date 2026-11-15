@@ -229,64 +229,44 @@ test("replacement validation stays inline in the production Server Action path",
 })
 
 /*
- * Un-quarantined from G-27, with a second wrong number found beside the recorded
- * one.
- *
- * The recorded one: the last step searched "SMBA#" and expected the window to
- * fall back to twelve rows. d9d8dbf moved every approved account onto a
- * role-prefixed Academy ID -- SMBA-HC-0001, SMBA-JC-000N, SMBA-PL-NNNN -- and
- * scripts/regression/fixture.ts:2176-2190 fails the fixture build if any
- * approved ID departs from that sequence, so nothing in a member's ID, name or
- * primary contact contains "SMBA#": the search matched nobody, the directory
- * rendered .coach-member-empty-state in place of .coach-member-table and the row
- * count was 0. "SMBA-PL-" is the term that carries the original intent, because
- * it still matches every player in the register and so proves the window reset
- * rather than a filter that happened to leave twelve behind.
- *
- * The second: the register holds 99 members, not 100, and always has. The stress
- * profile approves 100 players (profiles.ts:80) and archives one of them
- * (profiles.ts:122), fixture.ts:2254-2269 fails the build unless exactly one is
- * archived, and lib/coach/database.ts:204-208 excludes archived accounts from
- * the directory. So the summary reads "Showing 12 of 99 members" and the case
- * failed on its second assertion -- three steps before it ever reached the
- * search term the quarantine note was about. Naming 99 rather than reading the
- * total back off the heading is deliberate: if archived members ever reach the
- * directory this is the assertion that says so.
- *
- * The third: the directory now also lists coaching staff, so the stress profile
- * totals 102 -- 99 players plus its three coaches. The reveal window covers both
- * halves, which is the part worth guarding: staff render after the players, and
- * when they were windowed separately this page opened on fifteen rows rather
- * than twelve. Searching "SMBA-PL-" matches players only, so the last step still
- * reads 99 and keeps that number under test.
+ * The stress profile's register: 99 players (100 approved, one archived, which
+ * the directory excludes) plus its three coaches, so 102. Pages count straight
+ * through both halves, five cards at a time, and the page number is part of the
+ * link. Naming 99 and 102 rather than reading them back off the heading is
+ * deliberate: if archived members ever reach the directory, this says so.
+ * "SMBA-PL-" matches every player and no coach, so it proves a search goes back
+ * to page one rather than a filter that happened to leave five behind.
  */
-test("Member Directory reveals results in one-way groups of twelve", async ({ page }) => {
+test("Member Directory shows five members a page, across players and coaches", async ({ page }) => {
   await loginAsCoach(page)
   await page.setViewportSize({ height: 844, width: 390 })
   await page.goto("/coach/members", { waitUntil: "domcontentloaded" })
 
-  const rows = page.locator(".coach-member-table tbody > tr")
-  await expect(rows).toHaveCount(12)
-  await expect(page.getByRole("heading", { name: "Showing 12 of 102 members" })).toBeVisible()
+  const cards = page.locator(".coach-member-card-head")
+  const pages = page.getByRole("navigation", { name: "Member pages" })
+  await expect(cards).toHaveCount(5)
+  await expect(page.getByRole("heading", { name: "1–5 of 102 members" })).toBeVisible()
 
-  await page.getByRole("button", { name: "Show more members" }).click()
-  await expect(rows).toHaveCount(24)
-  await expect(page.getByRole("heading", { name: "Showing 24 of 102 members" })).toBeVisible()
+  await pages.getByRole("button", { name: "Next", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "6–10 of 102 members" })).toBeVisible()
+  await expect(page).toHaveURL((url) => url.searchParams.get("page") === "2")
 
-  // Staff sit past the 99 players, so they are only reachable once the window
-  // has been opened all the way -- which is exactly what "one window over both
-  // halves" has to mean for the count above to hold.
+  // Coaches have no training status, so a status filter leaves them out.
   await page.getByRole("button", { name: /^Filters/u }).click()
   await page.getByRole("combobox", { name: "Role" }).selectOption("staff")
-  await expect(rows).toHaveCount(3)
+  await expect(cards).toHaveCount(3)
   await expect(page.getByRole("heading", { name: "3 members" })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Show more members" })).toHaveCount(0)
+  await expect(pages).toHaveCount(0)
   await page.getByRole("combobox", { name: "Role" }).selectOption("everyone")
+  await page.getByRole("combobox", { name: "Status" }).selectOption("active")
+  await expect(page.locator(".coach-member-card-head", { hasText: "SMBA-JC-" })).toHaveCount(0)
+  await page.getByRole("combobox", { name: "Status" }).selectOption("all")
   await page.getByRole("button", { name: /^Filters/u }).click()
 
   await page.getByPlaceholder("Search members").fill("SMBA-PL-")
-  await expect(rows).toHaveCount(12)
-  await expect(page.getByRole("heading", { name: "Showing 12 of 99 members" })).toBeVisible()
+  await expect(cards).toHaveCount(5)
+  await expect(page.getByRole("heading", { name: "1–5 of 99 members" })).toBeVisible()
+  await expect(page).toHaveURL((url) => !url.searchParams.has("page"))
 })
 
 test("Member Directory filters restore from the URL and browser history", async ({ page }) => {
