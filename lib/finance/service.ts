@@ -60,6 +60,7 @@ import {
   FINANCE_ACADEMY_ENTITY_ID,
   listApprovedPlayerIds,
   listFinancePlayers,
+  listPlayersTrainingWithoutFeePlan,
   listMonthlyPreparationCandidates,
   listPreparedPlayerIds,
   loadChargeView,
@@ -90,6 +91,7 @@ import {
   type CoachFinanceDashboardSummary,
   type CoachFinanceRapidDesk,
   type CompleteOnboardingFinanceResult,
+  type FinancePlayerListItem,
   type CommitOnboardingFinanceInput,
   type CreateFeeAgreementInput,
   type CreateConcessionInput,
@@ -4836,7 +4838,7 @@ export function getCoachFinanceRapidDesk(
     financeError("INVALID_INPUT", "Choose a valid fee month.", "period")
   }
   const scope = input.scope ?? "outstanding"
-  if (!(["outstanding", "all"] satisfies FinanceRapidScope[]).includes(scope)) {
+  if (!(["outstanding", "overdue", "all"] satisfies FinanceRapidScope[]).includes(scope)) {
     financeError("INVALID_INPUT", "Choose a valid payment scope.")
   }
   const awaitingFeePlayerIds = playersAwaitingMonthlyFee(database, input.period, now)
@@ -4847,9 +4849,10 @@ export function getCoachFinanceRapidDesk(
     query: input.query,
   }).filter((player) => !player.archived)
   const players = lookupPlayers
-    .filter((player) => scope === "all" || player.paymentEligible)
+    .filter((player) => scope === "all"
+      || (scope === "overdue" ? isOverdueForPayment(player) : player.paymentEligible))
     .sort((left, right) => (
-      (scope === "outstanding"
+      (scope !== "all"
         ? (left.dueDate ?? "9999-12-31").localeCompare(right.dueDate ?? "9999-12-31")
         : 0)
       || left.fullName.localeCompare(right.fullName, "en-IN")
@@ -4951,6 +4954,14 @@ export function getCoachFinanceWorkspace(
   }
 }
 
+/**
+ * A late payer the coach can collect from: one shared test, so the dashboard's red count and the Record
+ * payment page's Overdue list always hold the same players.
+ */
+function isOverdueForPayment(player: FinancePlayerListItem) {
+  return !player.archived && player.paymentEligible && player.status === "overdue"
+}
+
 export function getCoachFinanceDashboardSummary(
   period: string,
   {
@@ -4981,6 +4992,12 @@ export function getCoachFinanceDashboardSummary(
     attentionCount: players.filter((player) => [
       "overdue", "not_prepared", "partially_paid", "pending", "setup_required",
     ].includes(player.status)).length,
+    // The attention count above also holds fees not yet due and fees not yet issued, so the
+    // dashboard shows red only for these, and the issuing and fee-plan work as plain counts.
+    overdueCount: players.filter(isOverdueForPayment).length,
+    // Counted directly, not by status: a player with no fee plan who still owes an old fee reads as
+    // overdue in the list, and Fee records' "Setup required" filter still lists them.
+    setupRequiredCount: listPlayersTrainingWithoutFeePlan(database, period).size,
     outstandingPaise: players.reduce((total, player) => total + player.outstandingPaise, 0),
     preparation: {
       ready: ready.length,

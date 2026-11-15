@@ -1,11 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useId, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react"
 
 import {
   announcementDate,
+  announcementDay,
   sortAnnouncements,
 } from "@/components/announcements/announcement-presentation"
 import type { AnnouncementSummary } from "@/components/announcements/types"
@@ -52,6 +53,7 @@ export function PublicAnnouncements() {
   const [announcements, setAnnouncements] = useState<AnnouncementSummary[] | null>(null)
   const [expanded, setExpanded] = useState(false)
   const listId = useId()
+  const sectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -75,55 +77,76 @@ export function PublicAnnouncements() {
     return () => controller.abort()
   }, [])
 
+  // The notices arrive after the page has loaded, above the footer. If the visitor has already jumped to a
+  // link below them (the footer's #contact), keep that target in view instead of letting them push it down.
+  useEffect(() => {
+    const section = sectionRef.current
+    let id = ""
+    try {
+      id = decodeURIComponent(window.location.hash.slice(1))
+    } catch {
+      return // a malformed address such as /#% has no target to keep in view
+    }
+    const target = id ? document.getElementById(id) : null
+    if (section && target && section.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      target.scrollIntoView()
+    }
+  }, [announcements])
+
   const ordered = useMemo(
     () => announcements ? sortAnnouncements(announcements) : [],
     [announcements],
   )
   if (ordered.length === 0) return null
 
-  const visible = expanded ? ordered : ordered.slice(0, 3)
-  const hasMore = ordered.length > 3
+  // Pinned notices sort first, then the newest; two show, and the rest open in place
+  const shown = expanded ? ordered : ordered.slice(0, 2)
+  const waiting = ordered.length - 2
 
   return (
-    <section className={`section-shell ${styles.publicSection}`} aria-labelledby="public-announcements-title">
-      <header className={styles.publicHeading}>
-        <div>
-          <p className="public-eyebrow">Announcements</p>
-          <h2 id="public-announcements-title">From the academy.</h2>
-        </div>
-        <p>Current notices from SMBA, kept clear and easy to find.</p>
-      </header>
-
-      <div id={listId} className={styles.publicList}>
-        {visible.map((announcement) => (
-          <article className={styles.publicItem} key={announcement.id}>
-            <div className={styles.publicMeta}>
-              {announcement.pinned ? <span>Pinned</span> : null}
-              <time dateTime={announcement.publishedAt}>
-                {announcementDate(announcement.publishedAt)}
-              </time>
-            </div>
-            <div className={styles.publicCopy}>
-              <h3>
-                <Link href={`/announcements/${announcement.id}`}>
-                  {announcement.title}
-                </Link>
-              </h3>
-              <p>{announcement.preview}</p>
-            </div>
-            <Link
-              className={styles.publicOpen}
-              href={`/announcements/${announcement.id}`}
-              aria-label={`Read announcement: ${announcement.title}`}
-            >
-              Read
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </article>
-        ))}
+    <section
+      ref={sectionRef}
+      className={`section-shell ${styles.publicSection}`}
+      aria-labelledby="public-announcements-title"
+    >
+      <div className="section-intro">
+        <p className="public-eyebrow">Announcements</p>
+        <h2 id="public-announcements-title">From the academy.</h2>
+        <p className="body-muted">Current notices from SMBA, kept clear and easy to find.</p>
       </div>
 
-      {hasMore ? (
+      <div id={listId} className={styles.publicNotices}>
+        {shown.map((announcement) => {
+          const { day, month } = announcementDay(announcement.publishedAt)
+          return (
+            <article className={`${styles.publicNotice} glass-pane`} key={announcement.id}>
+              <span className={`${styles.publicDay} glass-pane-mark`} aria-hidden="true">
+                <span>{month}</span>
+                <span>{day}</span>
+              </span>
+              {/* the rising date is drawn for the eye; this one is read aloud */}
+              <time className="sr-only" dateTime={announcement.publishedAt}>
+                {announcementDate(announcement.publishedAt)}
+              </time>
+              {announcement.pinned ? <span className={styles.publicPinned}>Pinned</span> : null}
+              <h3>
+                <Link href={`/announcements/${announcement.id}`}>{announcement.title}</Link>
+              </h3>
+              <p>{announcement.preview}</p>
+              <Link
+                className={styles.publicOpen}
+                href={`/announcements/${announcement.id}`}
+                aria-label={`Read announcement: ${announcement.title}`}
+              >
+                Read
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </article>
+          )
+        })}
+      </div>
+
+      {waiting > 0 ? (
         <button
           className={styles.publicDisclosure}
           type="button"
@@ -131,7 +154,7 @@ export function PublicAnnouncements() {
           aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
         >
-          {expanded ? "Show fewer announcements" : "Show all current announcements"}
+          {expanded ? "See fewer" : `See more (${waiting})`}
           {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
         </button>
       ) : null}

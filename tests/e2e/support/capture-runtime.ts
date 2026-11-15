@@ -479,39 +479,35 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     case "public-fee-weekday-advanced":
       await clickRequired(
-        page.locator(".fee-explorer .fee-field").filter({ hasText: "Program" })
-          .getByRole("button", { name: "Advanced", exact: true }),
+        page.getByRole("group", { name: "Program level" }).getByRole("button", { name: /^Advanced/ }),
         action,
       )
       break
     case "public-fee-weekday-standard":
       await clickRequired(
-        page.locator(".fee-explorer .fee-field").filter({ hasText: "Program" })
-          .getByRole("button", { name: "Intermediate", exact: true }),
+        page.getByRole("group", { name: "Program level" }).getByRole("button", { name: /^Intermediate/ }),
         action,
       )
       await clickRequired(
-        page.locator(".fee-explorer .fee-field").filter({ hasText: "Frequency" })
-          .getByRole("button", { name: "4 days", exact: true }),
+        page.getByRole("group", { name: "Days a week" }).getByRole("button", { name: "4 days", exact: true }),
         action,
       )
       break
     case "public-fee-weekend":
       await clickRequired(
-        page.locator(".fee-explorer").getByRole("button", { name: /Weekend/i }).first(),
+        page.getByRole("group", { name: "Program level" }).getByRole("button", { name: /^Adult/ }),
         action,
       )
       await clickRequired(
-        page.locator(".fee-explorer .fee-field").filter({ hasText: "Program" })
-          .getByRole("button", { name: "Adult", exact: true }),
+        page.getByRole("group", { name: "Training schedule" }).getByRole("button", { name: /^Weekend/ }),
         action,
       )
       break
     case "public-mobile-menu-open":
       await openPublicNavigation(page, action)
       break
-    case "public-nav-academy":
-      await choosePublicNavigationItem(page, action, "Academy")
+    case "public-nav-coach":
+      await choosePublicNavigationItem(page, action, "Coach")
       break
     case "public-nav-contact":
       await choosePublicNavigationItem(page, action, "Contact")
@@ -527,8 +523,8 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
         action,
       )
       break
-    case "public-nav-why":
-      await choosePublicNavigationItem(page, action, "Why SMBA")
+    case "public-nav-training":
+      await choosePublicNavigationItem(page, action, "Training")
       break
     case "public-trial-filled":
       await fillTrialForm(page)

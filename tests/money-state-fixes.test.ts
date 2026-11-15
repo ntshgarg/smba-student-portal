@@ -464,6 +464,20 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
       .toBe("overdue")
   })
 
+  it("counts only late payers in the dashboard's red count, and players with no fee plan apart", () => {
+    pay(players.partial, 100_000, "2026-10-02")
+    const lateOctober = new Date("2026-10-20T05:00:00.000Z")
+    const workspace = finance.getCoachFinanceWorkspace({ period: "2026-10", view: "all" }, context(lateOctober))
+    const dashboard = finance.getCoachFinanceDashboardSummary("2026-10", context(lateOctober))
+    const withStatus = (status: string) => workspace.players.filter((player) => player.status === status).length
+
+    expect(dashboard.overdueCount).toBe(withStatus("overdue"))
+    expect(dashboard.overdueCount).toBeGreaterThan(0)
+    expect(dashboard.setupRequiredCount).toBe(withStatus("setup_required"))
+    // not-yet-due and not-yet-issued fees still need attention, but are not late
+    expect(dashboard.attentionCount).toBeGreaterThanOrEqual(dashboard.overdueCount + dashboard.setupRequiredCount)
+  })
+
   it("says a fee is not issued only for a player Issue fees would issue one for", () => {
     pay(players.changer, 400_000, "2026-10-02")
     // On a break with the fee plan kept: fee issuing passes them over.

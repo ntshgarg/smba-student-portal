@@ -289,30 +289,33 @@ test("Coach dashboard tickets keep the selected responsive composition", async (
       expect(Math.abs(cards[first].top - cards[second].top)).toBeLessThanOrEqual(2)
     }
 
+    // coach-dashboard-glass-cards (.21st/DESIGN.md): what needs the coach comes first, so Financials
+    // sits beside Sessions straight after Onboarding
     if (viewport.mode === "web") {
       expect(Math.abs(cards.onboarding.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
       expect(Math.abs(cards.attendance.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
-      expectSameRow("sessions", "reports")
-      expectSameRow("financials", "announcements")
+      expectSameRow("financials", "sessions")
+      expectSameRow("reports", "announcements")
       expectSameRow("announcements", "members")
-      expect(cards.sessions.left).toBeLessThan(cards.reports.left)
-      expect(cards.financials.left).toBeLessThan(cards.announcements.left)
+      expect(cards.financials.left).toBeLessThan(cards.sessions.left)
+      expect(cards.reports.left).toBeLessThan(cards.announcements.left)
       expect(cards.announcements.left).toBeLessThan(cards.members.left)
+      expect(cards.sessions.top).toBeLessThan(cards.reports.top)
     } else if (viewport.mode === "tablet") {
       expect(Math.abs(cards.onboarding.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
       expect(Math.abs(cards.attendance.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
-      expect(Math.abs(cards.sessions.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
-      expectSameRow("reports", "financials")
-      expectSameRow("announcements", "members")
-      expect(cards.reports.left).toBeLessThan(cards.financials.left)
-      expect(cards.announcements.left).toBeLessThan(cards.members.left)
+      expect(Math.abs(cards.members.width - (gridBounds?.width ?? 0))).toBeLessThanOrEqual(2)
+      expectSameRow("financials", "sessions")
+      expectSameRow("reports", "announcements")
+      expect(cards.financials.left).toBeLessThan(cards.sessions.left)
+      expect(cards.reports.left).toBeLessThan(cards.announcements.left)
     } else {
       const order = [
         "attendance",
         "onboarding",
+        "financials",
         "sessions",
         "reports",
-        "financials",
         "announcements",
         "members",
       ]

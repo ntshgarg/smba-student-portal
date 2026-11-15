@@ -22,15 +22,17 @@ function renderDashboard() {
         session: 1,
         total: 7,
       }} />
-      <SessionsCard nextSessionLabel="Beginner · Weekday · 6–7 am" todaySessionCount={8} />
-      <AssessmentsCard assessedCount={1} draftCount={0} playerCount={2} />
       <FinancialsCard
         active
         attentionCount={14}
         outstandingPaise={4_750_000}
+        overdueCount={4}
         period="2026-08"
         preparation={{ alreadyPrepared: 8, ready: 0 }}
+        setupRequiredCount={0}
       />
+      <SessionsCard nextSessionLabel="Beginner · Weekday · 6–7 am" todaySessionCount={8} />
+      <AssessmentsCard assessedCount={1} draftCount={0} playerCount={2} />
       <AnnouncementCard activeCount={0} />
       <MembersCard memberCount={39} />
     </CoachDashboardStack>,
@@ -43,9 +45,9 @@ describe("coach dashboard Court Operations Board", () => {
     const orderedAreas = [
       "attendance",
       "onboarding",
+      "financials",
       "sessions",
       "reports",
-      "financials",
       "announcements",
       "members",
     ]
@@ -58,7 +60,9 @@ describe("coach dashboard Court Operations Board", () => {
       previousIndex = index
     }
 
-    expect(html.match(/<a /g)).toHaveLength(15)
+    // 15 action buttons, plus the overdue stamp, which opens the late payers
+    expect(html.match(/<a class="[^"]*_action_/g)).toHaveLength(15)
+    expect(html.match(/<a /g)).toHaveLength(16)
     expect(html).toContain('id="onboarding"')
     expect(html).toContain('id="attendance"')
     expect(html).toContain('role="group" aria-label="Players"')
@@ -70,7 +74,9 @@ describe("coach dashboard Court Operations Board", () => {
 
     expect(html).toContain("Player &amp; staff registers")
     expect(html).toContain("7 people need a next step")
-    expect(html).toContain("7 in progress")
+    // the 2 new requests are waiting on the head coach, so they lead the stamp
+    expect(html).toContain("2 waiting")
+    expect(html).not.toContain("7 in progress")
     expect(html).toContain("New requests")
     expect(html).toContain("Assessment")
     expect(html).toContain("Session")
@@ -83,7 +89,8 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain("1 of 2 assessed")
     expect(html).toContain("Assess a player whenever you choose.")
     expect(html).toContain("₹47,500 outstanding")
-    expect(html).toContain("14 attention")
+    expect(html).toContain("4 overdue")
+    expect(html).not.toContain("14 attention")
     expect(html).toContain("Notice board is clear")
     expect(html).toContain("39 enrolled players")
     expect(html).toContain("Approved players and staff, with their training and contact records.")
@@ -96,7 +103,8 @@ describe("coach dashboard Court Operations Board", () => {
     const populated = renderToStaticMarkup(<MembersCard memberCount={39} />)
     const empty = renderToStaticMarkup(<MembersCard memberCount={0} />)
 
-    expect(populated).toContain("Clear")
+    // nothing can be outstanding in a directory, so a populated one has no stamp
+    expect(populated).not.toContain("Clear")
     expect(populated).toContain("39 enrolled players")
     expect(empty).toContain("Setup")
     expect(empty).toContain("0 enrolled players")
@@ -106,7 +114,7 @@ describe("coach dashboard Court Operations Board", () => {
 
   it.each([
     [4, "Beginner · Weekday · 6–7 am", "4 today", "4 sessions today"],
-    [0, "Beginner · Weekday · 6–7 am", "Clear", "Next · Beginner · Weekday · 6–7 am"],
+    [0, "Beginner · Weekday · 6–7 am", null, "Next · Beginner · Weekday · 6–7 am"],
     [0, null, "Setup", "No training scheduled."],
   ] as const)(
     "preserves the Sessions priority branches",
@@ -118,7 +126,8 @@ describe("coach dashboard Court Operations Board", () => {
         />,
       )
 
-      expect(html).toContain(status)
+      if (status) expect(html).toContain(status)
+      else expect(html).not.toMatch(/status/)
       expect(html).toContain(detail)
       expect(html).toContain('href="/coach/calendar"')
       expect(html).toContain('href="/coach/schedules/new"')
@@ -135,13 +144,59 @@ describe("coach dashboard Court Operations Board", () => {
         active
         attentionCount={1}
         outstandingPaise={123_456}
+        overdueCount={1}
         period="2026-08"
         preparation={{ alreadyPrepared: 1, ready: 0 }}
+        setupRequiredCount={0}
       />,
     )
 
     expect(html).toContain("₹1,234.56 outstanding")
     expect(html).not.toContain("₹1,235")
+  })
+
+  it("fills only the actions for something waiting on the coach", () => {
+    const html = renderDashboard()
+    const primary = [...html.matchAll(/<a class="[^"]*primaryAction[^"]*" href="([^"]+)"/g)].map((match) => match[1])
+
+    expect(primary).toEqual(["/coach/onboarding", "/coach/financials/record"])
+  })
+
+  it("sums up the fee month: fees to issue in grey, late payers in red", () => {
+    const html = renderToStaticMarkup(
+      <FinancialsCard
+        active
+        attentionCount={31}
+        outstandingPaise={6_450_000}
+        overdueCount={4}
+        period="2026-11"
+        preparation={{ alreadyPrepared: 20, ready: 12 }}
+        setupRequiredCount={2}
+      />,
+    )
+    const stamps = [...html.matchAll(/<(?:span|a) class="[^"]*status[^"]*"( data-tone="attention")?[^>]*>([^<]+)</g)]
+      .map((match) => `${match[2]}${match[1] ? " (red)" : ""}`)
+
+    expect(stamps).toEqual(["12 to issue", "4 overdue (red)"])
+    // each stamp opens the list behind its count
+    expect(html).toContain('href="/coach/financials/records?view=fees&amp;mode=monthly&amp;period=2026-11&amp;status=not_prepared"')
+    // the spoken name starts with the visible words, so voice control can say "click 12 to issue"
+    expect(html).toContain('aria-label="12 to issue: show the November fees not yet issued"')
+    expect(html).toContain('href="/coach/financials/record?scope=overdue"')
+    expect(html).toContain('aria-label="4 overdue: show these players"')
+    expect(html).toContain("November fees ready to issue · 2 players without a fee plan")
+    expect(html).not.toContain("31")
+  })
+
+  it("leaves the stamp off a card with nothing outstanding", () => {
+    const quiet = [
+      <AssessmentsCard key="a" assessedCount={0} draftCount={0} playerCount={32} />,
+      <AnnouncementCard key="b" activeCount={0} />,
+      <MembersCard key="c" memberCount={39} />,
+      <FinancialsCard key="d" active attentionCount={0} outstandingPaise={0} overdueCount={0} period="2026-08" preparation={{ alreadyPrepared: 8, ready: 0 }} setupRequiredCount={0} />,
+    ]
+    for (const card of quiet) expect(renderToStaticMarkup(card)).not.toMatch(/class="[^"]*status/)
+    expect(renderToStaticMarkup(<AssessmentsCard assessedCount={0} draftCount={2} playerCount={32} />)).toContain("2 drafts")
   })
 
   it("keeps the Financials inactive state single-purpose", () => {
@@ -150,8 +205,10 @@ describe("coach dashboard Court Operations Board", () => {
         active={false}
         attentionCount={0}
         outstandingPaise={0}
+        overdueCount={0}
         period="2026-08"
         preparation={{ alreadyPrepared: 0, ready: 0 }}
+        setupRequiredCount={0}
       />,
     )
 

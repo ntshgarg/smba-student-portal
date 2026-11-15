@@ -91,6 +91,8 @@
   --makeup-dark: #694500;
   --mist: #e7eaed;
   --steel: #596673;
+  /* field labels on sign-in and Account security: one step darker than helper text */
+  --steel-dark: #39434d;
   --text-placeholder: #6b7480;
   --line: #d7dbde;
   --border: var(--line);
@@ -265,6 +267,20 @@
      knob being dragged stretches 12% along its track. */
   --press-scale: 0.97;
   --press-transition: scale var(--duration-press) var(--ease-out);
+  /* One frosted pane (sign-in card, Account security panels, head-coach cards): a flat white tint,
+     white edges and a soft navy shadow. */
+  --frost-border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
+  --frost-fill: color-mix(in srgb, var(--white) 45%, transparent);
+  --frost-shadow:
+    inset 0 1px 0 var(--white),
+    inset 1px 0 0 var(--white),
+    inset 0 -1px 0 color-mix(in srgb, var(--navy) 6%, transparent),
+    0 40px 80px -48px color-mix(in srgb, var(--navy) 50%, transparent);
+  /* The navy main button's red sweep: an inset shadow that grows from the left on hover and press,
+     reaching 60rem so the widest (full-width tablet) button fills. */
+  --sweep-rest: inset 0 0 0 0 var(--red);
+  --sweep-full: inset 60rem 0 0 0 var(--red);
+  --sweep-transition: box-shadow 480ms var(--ease-in-out);
   --popover-scale-from: 0.95;
   --knob-stretch: 1.12;
   --z-overlay: 40;

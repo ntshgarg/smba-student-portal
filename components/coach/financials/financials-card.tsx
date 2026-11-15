@@ -16,21 +16,31 @@ function formatPeriod(period: string) {
   return periodFormat.format(new Date(Date.UTC(year, month - 1, 1)))
 }
 
+/**
+ * The heading sums up the month (head coach, 15 Nov 2026): a grey count of fees still to issue and a red
+ * count of late payers. The broader attention count also held fees not yet due and fees not yet issued, so
+ * 31 of 39 players looked late; red is now for overdue only, and players with no fee plan are named in the
+ * detail line.
+ */
 export function FinancialsCard({
   active,
   attentionCount,
   outstandingPaise,
+  overdueCount,
   period,
   preparation,
+  setupRequiredCount,
 }: {
   active: boolean
   attentionCount: number
   outstandingPaise: number
+  overdueCount: number
   period: string
   preparation: {
     ready: number
     alreadyPrepared: number
   }
+  setupRequiredCount: number
 }) {
   const summary = attentionCount === 0
     ? "Fee records are ready to review"
@@ -43,25 +53,41 @@ export function FinancialsCard({
     : preparation.alreadyPrepared > 0
       ? `${month} fees issued`
       : "No monthly fees to issue"
+  const detail = setupRequiredCount > 0
+    ? `${preparationState} · ${setupRequiredCount} ${setupRequiredCount === 1 ? "player" : "players"} without a fee plan`
+    : preparationState
+  // Each stamp opens the list behind its count: the month's fees not yet issued (where Issue fees sits),
+  // and the Record payment list narrowed to late payers.
+  const stamps = [
+    ...preparation.ready > 0 ? [{
+      count: preparation.ready,
+      unit: "to issue",
+      href: `/coach/financials/records?view=fees&mode=monthly&period=${period}&status=not_prepared`,
+      linkLabel: `${preparation.ready} to issue: show the ${month} fees not yet issued`,
+    }] : [],
+    ...overdueCount > 0 ? [{
+      count: overdueCount,
+      unit: "overdue",
+      tone: "attention" as const,
+      href: "/coach/financials/record?scope=overdue",
+      linkLabel: `${overdueCount} overdue: show ${overdueCount === 1 ? "this player" : "these players"}`,
+    }] : [],
+  ]
 
   return (
     <CoachDashboardCard
       area="financials"
-      status={active
-        ? attentionCount > 0
-          ? { count: attentionCount, unit: "attention", tone: "attention" }
-          : { state: "Clear" }
-        : { state: "Setup" }}
+      status={active ? stamps : { state: "Setup" }}
       title="Financials"
       titleId="coach-financials-card-title"
     >
       {active ? (
         <>
-          <CoachDashboardSummary detail={preparationState}>
+          <CoachDashboardSummary detail={detail}>
             {summary}
           </CoachDashboardSummary>
           <CoachDashboardActions ariaLabel="Financial actions">
-            <CoachDashboardAction href="/coach/financials/record">
+            <CoachDashboardAction href="/coach/financials/record" primary={overdueCount > 0}>
               Record payment
             </CoachDashboardAction>
             <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>

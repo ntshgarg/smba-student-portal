@@ -58,7 +58,7 @@ describe("assistant coach dashboard", () => {
     expect(html).toContain('<rect x="20" y="20" width="1300" height="570"></rect>')
     expect(html).toContain("Good morning")
     expect(html).toContain("Arun.")
-    expect(html).toContain("Your attendance record stays quietly in view.")
+    expect(html).toContain("Here’s your month so far.")
     expect(html).not.toContain("coach-scoreboard-ribbon")
   })
 

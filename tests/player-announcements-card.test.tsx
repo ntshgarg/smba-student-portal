@@ -76,7 +76,8 @@ describe("PlayerAnnouncementsCard", () => {
     )
 
     expect(html).toContain('data-announcement-state="empty"')
-    expect(html).toContain("Clear")
+    // nothing outstanding, so no stamp (Clear is retired, as on the coach dashboard)
+    expect(html).not.toContain("player-ticket-context")
     expect(html).toContain("The notice board is clear.")
     expect(html).toContain("New notices from your coach will appear here when they are published.")
     expect(html).not.toContain("Academy notice board")

@@ -127,7 +127,7 @@ export function JuniorCoachAttendanceCard({
       className={`dashboard-section page-shell junior-coach-attendance-section ${styles.attendanceSection}`}
     >
       <Reveal
-        className={`dashboard-card junior-coach-attendance-card ${styles.ledgerTicket}${isOpen ? ` ${styles.ledgerTicketOpen}` : ""}`}
+        className={`dashboard-card junior-coach-attendance-card ${styles.ledgerTicket}`}
       >
         <header className={styles.ledgerMasthead}>
           <h2>Personal roll-call ledger</h2>

@@ -53,7 +53,7 @@ export default async function ActivatePage() {
           <span>Player <em>Journal</em></span>
         </Link>
 
-        <div className="login-copy activation-copy">
+        <div className="login-copy">
           <p className="eyebrow">Private account setup</p>
           <h1 id="activation-title">
             {approved ? emailVerified ? "Create your password." : "Verify your recovery email."

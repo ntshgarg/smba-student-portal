@@ -1,9 +1,9 @@
 "use client"
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
+import { FormEvent, useState } from "react"
 import {
+  ArrowDown,
   ArrowUpRight,
-  CalendarCheck,
   Check,
   MessageCircle,
 } from "lucide-react"
@@ -12,208 +12,151 @@ import { formatInr } from "@/lib/format"
 import {
   createTrialMessage,
   enrollmentTerms,
-  weekdayPrograms,
+  programPlan,
+  type Schedule,
+  trainingPrograms,
   weekendPrograms,
 } from "@/lib/public/academy"
 
-export function PrinciplesReveal({ items }: { items: readonly string[] }) {
-  const listRef = useRef<HTMLOListElement>(null)
+const included = [
+  "Courts at Just Play",
+  // "a welcome kit" reads as a list item "Welcome kit"
+  ...enrollmentTerms.registrationIncludes.map((item) => {
+    const bare = item.replace(/^an? /u, "")
+    return bare[0].toUpperCase() + bare.slice(1)
+  }),
+]
 
-  useEffect(() => {
-    const element = listRef.current
-    if (!element || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return
-    }
-
-    const bounds = element.getBoundingClientRect()
-    if (bounds.top <= window.innerHeight * 0.72) {
-      element.classList.add("is-visible")
-      return
-    }
-
-    if (!("IntersectionObserver" in window)) {
-      element.classList.add("is-visible")
-      return
-    }
-
-    element.classList.add("is-reveal-ready")
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return
-        element.classList.add("is-visible")
-        observer.disconnect()
-      },
-      { threshold: 0.35 },
-    )
-
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-
-  return (
-    <ol
-      ref={listRef}
-      className="about-principles"
-    >
-      {items.map((item, index) => (
-        <li key={item}>
-          <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-          <p>{item}</p>
-        </li>
-      ))}
-    </ol>
-  )
-}
-
-export function FeeExplorer() {
-  const [schedule, setSchedule] = useState<"weekday" | "weekend">("weekday")
-  const programs = schedule === "weekday" ? weekdayPrograms : weekendPrograms
-  const [programName, setProgramName] = useState<string>("Beginner")
-  const selected = programs.find((program) => program.name === programName) ?? programs[0]
-
-  const frequencies = useMemo(() => {
-    if (schedule === "weekend" || !("fees" in selected)) {
-      return [] as number[]
-    }
-    return Object.keys(selected.fees).map(Number)
-  }, [schedule, selected])
-
+/**
+ * The programs and their monthly guide fees in one place: a tab per level, then, for the chosen level, what
+ * the player works on and their plan (schedule, days a week, and the fee those give). What every program
+ * includes runs along the foot. Advanced trains on weekdays only, so it has no weekend plan.
+ */
+export function ProgramPlanner() {
+  const [levelIndex, setLevelIndex] = useState(0)
+  const [schedule, setSchedule] = useState<Schedule>("weekday")
   const [days, setDays] = useState(3)
-  const effectiveDays =
-    frequencies.includes(days) && frequencies.length > 0 ? days : frequencies[0]
 
-  const price =
-    schedule === "weekend"
-      ? "fee" in selected
-        ? selected.fee
-        : 0
-      : "fees" in selected
-        ? selected.fees[effectiveDays as 3 | 4 | 5] ?? 0
-        : 0
+  const level = trainingPrograms[levelIndex]
+  const plan = programPlan(level.title, schedule, days)
 
-  const scheduleLabel = schedule === "weekday" ? "Weekday" : "Weekend"
-  const sessionsPerWeek = schedule === "weekday" ? effectiveDays : 2
-
-  function chooseSchedule(next: "weekday" | "weekend") {
-    setSchedule(next)
-    setProgramName("Beginner")
-    setDays(next === "weekday" ? 3 : 2)
+  function chooseLevel(index: number) {
+    setLevelIndex(index)
+    // a level without weekends resets the schedule, so it doesn't jump back to weekend on the next level
+    const title = trainingPrograms[index].title
+    if (!weekendPrograms.some((program) => program.name === title)) setSchedule("weekday")
   }
 
   return (
-    <div className="fee-explorer">
-      <div className="fee-copy">
-        <p className="public-eyebrow public-eyebrow-light">Monthly fee guide</p>
-        <h3 id="fee-guide-title">Choose your training rhythm.</h3>
-        <p>
-          These standard guide prices are based on programme and schedule. Your coach
-          confirms each member’s final monthly fee directly.
-        </p>
+    <div className="program-planner">
+      <div className="program-tabs" role="group" aria-label="Program level">
+        {trainingPrograms.map((program, index) => (
+          <button
+            key={program.title}
+            type="button"
+            aria-pressed={index === levelIndex}
+            onClick={() => chooseLevel(index)}
+          >
+            <strong>{program.title}</strong>
+            <span>{program.level}</span>
+          </button>
+        ))}
       </div>
 
-      <section className="fee-panel" aria-labelledby="fee-guide-title" aria-describedby="fee-helper">
-        <p id="fee-helper" className="fee-helper">
-          Select your schedule and program to view the standard monthly fee guide.
-        </p>
-
-        <div className="segmented" role="group" aria-label="Training schedule">
-          <button
-            type="button"
-            aria-pressed={schedule === "weekday"}
-            onClick={() => chooseSchedule("weekday")}
-          >
-            <span>
-              Weekday
-              <small>Mon–Fri</small>
-            </span>
-            {schedule === "weekday" ? <Check aria-hidden="true" /> : null}
-          </button>
-          <button
-            type="button"
-            aria-pressed={schedule === "weekend"}
-            onClick={() => chooseSchedule("weekend")}
-          >
-            <span>
-              Weekend
-              <small>Sat–Sun</small>
-            </span>
-            {schedule === "weekend" ? <Check aria-hidden="true" /> : null}
-          </button>
+      <div className="program-band">
+        <div className="program-work">
+          <p className="public-eyebrow public-eyebrow-light">You’ll work on</p>
+          <ul>
+            {level.outcomes.map((outcome) => (
+              <li key={outcome}>
+                <Check aria-hidden="true" />
+                {outcome}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <fieldset className="fee-field">
-          <legend className="fee-label">Program</legend>
-          <div className="choice-row">
-            {programs.map((program) => (
+        <div className="program-plan">
+          <h3 className="public-eyebrow public-eyebrow-light">Your plan</h3>
+
+          <div className="program-schedule" role="group" aria-label="Training schedule">
+            <button
+              type="button"
+              aria-label="Weekday, Monday to Friday"
+              aria-pressed={!plan.onWeekend}
+              onClick={() => setSchedule("weekday")}
+            >
+              Weekday
+              <small>Mon–Fri</small>
+            </button>
+            <button
+              type="button"
+              aria-label={plan.hasWeekend ? "Weekend, Saturday and Sunday" : "Weekend, not offered at this level"}
+              aria-pressed={plan.onWeekend}
+              disabled={!plan.hasWeekend}
+              onClick={() => setSchedule("weekend")}
+            >
+              Weekend
+              <small>{plan.hasWeekend ? "Sat–Sun" : "Weekdays only"}</small>
+            </button>
+          </div>
+
+          {/* kept in place (unseen) on weekends, so switching schedule doesn't shift the price */}
+          <div className="program-days" role="group" aria-label="Days a week" data-off={plan.onWeekend || undefined}>
+            {plan.frequencies.map((frequency) => (
               <button
-                key={program.name}
+                key={frequency}
                 type="button"
-                aria-pressed={program.name === selected.name}
-                onClick={() => {
-                  setProgramName(program.name)
-                  if ("fees" in program) {
-                    setDays(Number(Object.keys(program.fees)[0]))
-                  }
-                }}
+                aria-pressed={frequency === plan.daysAWeek}
+                // a level with one option (Advanced) keeps the days picked for the others
+                onClick={() => plan.frequencies.length > 1 && setDays(frequency)}
               >
-                {program.name === selected.name ? <Check aria-hidden="true" /> : null}
-                {program.name}
+                {frequency} days
               </button>
             ))}
           </div>
-        </fieldset>
 
-        {schedule === "weekday" ? (
-          <fieldset className="fee-field">
-            <legend className="fee-label">Frequency</legend>
-            <div className="choice-row">
-              {frequencies.map((frequency) => (
-                <button
-                  key={frequency}
-                  type="button"
-                  aria-pressed={frequency === effectiveDays}
-                  onClick={() => setDays(frequency)}
-                >
-                  {frequency === effectiveDays ? <Check aria-hidden="true" /> : null}
-                  {frequency} days
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        ) : null}
-
-        <div className="price-result-shell" aria-live="polite">
-          <div
-            className="price-result"
-            key={`${schedule}-${selected.name}-${sessionsPerWeek}`}
-          >
-            <div>
-              <span>Standard guide · {scheduleLabel} {selected.name}</span>
-              <small>
-                {sessionsPerWeek} sessions/week · {selected.duration} each
-              </small>
-            </div>
-            <strong>
+          <div className="program-result" aria-live="polite" aria-atomic="true">
+            <span className="sr-only">
+              {level.title}, {plan.onWeekend ? "weekends" : `weekdays, ${plan.daysAWeek} days`}:
+            </span>
+            <p className="program-fee">
               {/* The published guide is in whole rupees; `formatInr` takes paise. */}
-              {formatInr(price * 100)}
-              <small>/month</small>
-            </strong>
+              <strong>{formatInr(plan.fee * 100)}</strong>
+              <span>a month</span>
+            </p>
+            <div className="program-facts">
+              <p>
+                <strong>{plan.sessions}</strong> <span>sessions a week</span>
+              </p>
+              <p>
+                <strong>{plan.duration.replace(/ hours?$/u, " hr")}</strong> <span>each session</span>
+              </p>
+            </div>
           </div>
+
+          <p className="program-fine">
+            Standard guide price. Your coach confirms each member’s final monthly fee, and any special
+            concession is agreed directly with the coach.
+          </p>
         </div>
 
-        <div className="term-savings">
-          <p className="term-savings-label">Coach-agreed fee</p>
-          <span>
-            Any special concession is agreed directly with the coach for the individual member.
-          </span>
+        <div className="program-included">
+          <p className="public-eyebrow public-eyebrow-light">Included</p>
+          <ul>
+            {included.map((item) => (
+              <li key={item}>
+                <Check aria-hidden="true" />
+                {item}
+              </li>
+            ))}
+          </ul>
+          <p className="program-registration">
+            {formatInr(enrollmentTerms.registrationFee * 100)} one-time registration, payable when you
+            register{enrollmentTerms.registrationIsNonRefundable ? " and non-refundable" : ""}
+          </p>
         </div>
-
-        <p className="fee-note">
-          One-time academy registration fee: {formatInr(enrollmentTerms.registrationFee * 100)}, payable
-          when you register{enrollmentTerms.registrationIsNonRefundable ? " and non-refundable." : "."}{" "}
-          Includes {enrollmentTerms.registrationIncludes.join(" and ")}.
-        </p>
-      </section>
+      </div>
     </div>
   )
 }
@@ -326,12 +269,6 @@ export function TrialForm() {
           <span>Ask the academy to call me back</span>
         </label>
 
-        <p className="form-reassurance">
-          <CalendarCheck aria-hidden="true" />
-          A coach will reply on WhatsApp to confirm availability and a suitable session
-          time.
-        </p>
-
         <button
           className="submit-button"
           type="submit"
@@ -344,6 +281,11 @@ export function TrialForm() {
           This opens WhatsApp in a new tab with your details. The website does not
           store your information or collect payment.
         </p>
+        {/* the direct lines live in the footer */}
+        <a className="trial-contact-link" href="#contact">
+          Or contact us
+          <ArrowDown aria-hidden="true" />
+        </a>
         <div className="whatsapp-status-slot" aria-live="polite" aria-atomic="true">
           {whatsappStatus.state === "opened" ? (
             <p className="whatsapp-status">

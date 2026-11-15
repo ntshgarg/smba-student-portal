@@ -16,6 +16,16 @@ export function announcementDate(value: string) {
   })
 }
 
+// Always three letters: the academy's en-IN format would write September as "Sept"
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
+
+/** The day a notice went out on the academy's calendar: the day of the month as two digits, and the month
+ * in three letters. */
+export function announcementDay(value: string) {
+  const key = getAcademyDateKey(value)
+  return { day: key.slice(8), month: MONTHS[Number(key.slice(5, 7)) - 1] }
+}
+
 export function announcementIsNew(publishedAt: string, referenceDate = new Date()) {
   const publishedDate = dateKeyMilliseconds(getAcademyDateKey(publishedAt))
   const currentDate = dateKeyMilliseconds(getAcademyDateKey(referenceDate))

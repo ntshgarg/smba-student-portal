@@ -196,6 +196,25 @@ describe("Financials Rapid Desk focused reads", () => {
     })
   })
 
+  it("narrows the list to late payers, matching the dashboard's red count", () => {
+    // well past August's due dates, so the August fee still owed is late
+    const later = new Date("2026-09-30T05:00:00.000Z")
+    const outstanding = finance.getCoachFinanceRapidDesk({ period: "2026-08" }, { coachId, database, now: later })
+    const overdue = finance.getCoachFinanceRapidDesk({
+      period: "2026-08",
+      scope: "overdue",
+    }, { coachId, database, now: later })
+
+    expect(overdue.scope).toBe("overdue")
+    expect(overdue.players.length).toBeGreaterThan(0)
+    expect(overdue.players.every((player) => player.status === "overdue" && player.paymentEligible)).toBe(true)
+    expect(overdue.players.map((player) => player.playerId)).toEqual(
+      outstanding.players.filter((player) => player.status === "overdue").map((player) => player.playerId),
+    )
+    expect(finance.getCoachFinanceDashboardSummary("2026-08", { coachId, database, now: later }).overdueCount)
+      .toBe(overdue.players.length)
+  })
+
   it("opens a selected ledger only for a current-horizon payment-eligible player", () => {
     const due = finance.getCoachFinanceRapidDesk({
       period: "2026-08",

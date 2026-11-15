@@ -30,7 +30,7 @@ export function TermFinishedCard({ playerCount }: { playerCount: number }) {
         {`Term finished: ${players} to move`}
       </CoachDashboardSummary>
       <CoachDashboardActions ariaLabel="Term finished actions">
-        <CoachDashboardAction href={termFinishedMembersHref}>
+        <CoachDashboardAction href={termFinishedMembersHref} primary>
           Show {playerCount === 1 ? "this player" : "these players"}
         </CoachDashboardAction>
       </CoachDashboardActions>

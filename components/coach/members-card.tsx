@@ -15,7 +15,7 @@ export function MembersCard({
   return (
     <CoachDashboardCard
       area="members"
-      status={memberCount > 0 ? { state: "Clear" } : { state: "Setup" }}
+      status={memberCount > 0 ? undefined : { state: "Setup" }}
       title="Members"
       titleId="coach-members-card-title"
     >

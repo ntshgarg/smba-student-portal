@@ -65,7 +65,6 @@ export function PlayerAnnouncementsCard({
       >
         <header className="player-ticket-masthead">
           <h3 className="player-ticket-title">Announcements</h3>
-          <span className="player-ticket-context">Clear</span>
         </header>
         <div className={styles.dashboardEmpty} data-announcement-state="empty">
           <strong className={styles.dashboardEmptyTitle}>The notice board is clear.</strong>

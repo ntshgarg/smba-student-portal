@@ -310,10 +310,14 @@ export type CoachFinanceDashboardSummary = Pick<
   CoachFinanceSummary,
   "attentionCount" | "outstandingPaise"
 > & {
+  /** players with a balance still owed after its due date: the dashboard's only red count */
+  overdueCount: number
+  /** players training with no fee plan, shown beside the fees still to issue */
+  setupRequiredCount: number
   preparation: Pick<MonthlyPreparationPreview, "ready" | "alreadyPrepared">
 }
 
-export type FinanceRapidScope = "outstanding" | "all"
+export type FinanceRapidScope = "outstanding" | "overdue" | "all"
 
 export type MonthlyPreparationPreview = {
   ready: number

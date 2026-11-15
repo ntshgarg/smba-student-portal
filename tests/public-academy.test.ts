@@ -54,24 +54,25 @@ describe("public academy facts", () => {
       registrationIncludes: ["a welcome kit", "assessment reports"],
     })
     expect(contact.phone).toBe("+917010928404")
-    expect(contact.location).toBe("Just Play, Mahadevapura, Bengaluru")
+    expect(contact.venue).toBe("Just Play, Mahadevapura")
+    expect(contact.maps).toContain("query=Just+Play+Mahadevapura+Bengaluru")
     expect(contact.academyInstagram.handle).toBe("@smbaacademy")
     expect(contact.coachInstagram.handle).toBe("@badmintoncoach_sathiya")
   })
 
   it("describes monthly prices as a coach-agreed guide without automatic discounts", () => {
-    const feeExplorer = readFileSync(
+    const planner = readFileSync(
       path.join(process.cwd(), "components/public/home-interactions.tsx"),
       "utf8",
     )
-    const normalizedFeeExplorer = feeExplorer.replace(/\s+/gu, " ")
+    const normalizedPlanner = planner.replace(/\s+/gu, " ")
 
-    expect(normalizedFeeExplorer).toContain("These standard guide prices are based on programme and schedule.")
-    expect(normalizedFeeExplorer).toContain("Standard guide · {scheduleLabel} {selected.name}")
-    expect(normalizedFeeExplorer).toContain("Any special concession is agreed directly with the coach")
-    expect(normalizedFeeExplorer).toContain("payable when you register")
-    expect(feeExplorer).not.toContain("verified monthly fee")
-    expect(feeExplorer).not.toContain("Save with a longer plan")
+    expect(normalizedPlanner).toContain("Standard guide price.")
+    expect(normalizedPlanner).toContain("Your coach confirms each member’s final monthly fee")
+    expect(normalizedPlanner).toContain("any special concession is agreed directly with the coach")
+    expect(normalizedPlanner).toContain("payable when you register")
+    expect(planner).not.toContain("verified monthly fee")
+    expect(planner).not.toContain("Save with a longer plan")
   })
 
   it("prepares the free-trial WhatsApp handoff without storing form data", () => {

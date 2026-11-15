@@ -15,16 +15,24 @@ export type CoachDashboardArea =
   | "members"
 
 /**
- * The status stamp has exactly two shapes so a coach can scan the column of
- * cards instead of reading each one: a number with the lowercase qualifier
- * that says what it counts, or one of two capitalised state words used when no
- * number would say anything — `Clear` for nothing outstanding and `Setup` for
- * an area that is not configured yet. The attention tone belongs to the count
- * shape only, because it marks a backlog.
+ * The status stamp appears only when it has something to say, so a stamp always
+ * means "look here": a number with the lowercase qualifier that says what it
+ * counts, or `Setup` for an area that is not configured yet. A card with nothing
+ * outstanding has no stamp (there used to be a `Clear`, which sat beside
+ * "0 of 32 assessed" and read as all fine). The attention tone belongs to the
+ * count shape only, because it marks a backlog.
  */
 export type CoachDashboardStatus =
-  | { count: number; unit: string; tone?: "attention" }
-  | { state: "Clear" | "Setup" }
+  | {
+    count: number
+    unit: string
+    tone?: "attention"
+    /** the list behind the count, so tapping the stamp shows exactly those records */
+    href?: string
+    /** what the link opens, for screen readers; starts with the visible words ("14 overdue: show these players") */
+    linkLabel?: string
+  }
+  | { state: "Setup" }
 
 function statusStamp(status: CoachDashboardStatus) {
   return "state" in status ? status.state : `${status.count} ${status.unit}`
@@ -55,10 +63,13 @@ export function CoachDashboardCard({
   area: CoachDashboardArea
   children: ReactNode
   id?: string
-  status?: CoachDashboardStatus
+  /** one stamp, or several side by side (Financials: fees to issue, then overdue) */
+  status?: CoachDashboardStatus | CoachDashboardStatus[]
   title: string
   titleId: string
 }) {
+  const stamps = status ? [status].flat() : []
+
   return (
     <section
       id={id}
@@ -69,12 +80,26 @@ export function CoachDashboardCard({
       <article className={styles.card}>
         <header className={styles.masthead}>
           <h2 id={titleId}>{title}</h2>
-          {status ? (
-            <span
-              className={styles.status}
-              data-tone={"state" in status ? undefined : status.tone}
-            >
-              {statusStamp(status)}
+          {stamps.length ? (
+            <span className={styles.statuses}>
+              {stamps.map((stamp) => "href" in stamp && stamp.href ? (
+                <Link
+                  key={statusStamp(stamp)}
+                  className={styles.statusLink}
+                  href={stamp.href}
+                  aria-label={stamp.linkLabel}
+                >
+                  <span className={styles.status} data-tone={stamp.tone}>{statusStamp(stamp)}</span>
+                </Link>
+              ) : (
+                <span
+                  key={statusStamp(stamp)}
+                  className={styles.status}
+                  data-tone={"state" in stamp ? undefined : stamp.tone}
+                >
+                  {statusStamp(stamp)}
+                </span>
+              ))}
             </span>
           ) : null}
         </header>
@@ -118,15 +143,18 @@ export function CoachDashboardActions({
   )
 }
 
+/** `primary` marks the one action for something waiting on the coach (the card has a red stamp): a filled navy button. */
 export function CoachDashboardAction({
   children,
   href,
+  primary = false,
 }: {
   children: ReactNode
   href: string
+  primary?: boolean
 }) {
   return (
-    <Link className={styles.action} href={href}>
+    <Link className={primary ? `${styles.action} ${styles.primaryAction}` : styles.action} href={href}>
       {children}
       <ArrowUpRight aria-hidden="true" />
     </Link>

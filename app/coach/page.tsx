@@ -191,7 +191,9 @@ export default async function CoachDashboardPage({
     : {
         attentionCount: 0,
         outstandingPaise: 0,
+        overdueCount: 0,
         preparation: { alreadyPrepared: 0, ready: 0 },
+        setupRequiredCount: 0,
       }
   const activeAnnouncementCount = countActiveCoachAnnouncements({
     coachId: identity.subjectId,
@@ -235,6 +237,15 @@ export default async function CoachDashboardPage({
         <TermFinishedCard playerCount={termFinishedCount} />
         <AttendanceCard scheduleCount={runningScheduleCount} />
         <PlayerOnboardingCard summary={onboardingSummary} />
+        <FinancialsCard
+          active={financeActive}
+          attentionCount={finance.attentionCount}
+          outstandingPaise={finance.outstandingPaise}
+          overdueCount={finance.overdueCount}
+          period={financePeriod}
+          preparation={finance.preparation}
+          setupRequiredCount={finance.setupRequiredCount}
+        />
         <SessionsCard
           nextSessionLabel={nextSessionLabel}
           todaySessionCount={todaySessions.length}
@@ -243,13 +254,6 @@ export default async function CoachDashboardPage({
           assessedCount={assessedCount}
           draftCount={assessablePlayers.filter((player) => player.draft).length}
           playerCount={assessablePlayers.length}
-        />
-        <FinancialsCard
-          active={financeActive}
-          attentionCount={finance.attentionCount}
-          outstandingPaise={finance.outstandingPaise}
-          period={financePeriod}
-          preparation={finance.preparation}
         />
         <AnnouncementCard activeCount={activeAnnouncementCount} />
         <MembersCard memberCount={playerRecords.members.length} />
