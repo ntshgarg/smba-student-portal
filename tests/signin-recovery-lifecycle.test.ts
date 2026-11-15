@@ -287,6 +287,30 @@ describe("emailed code throttles", () => {
     }, { database, now: NOW })
     expect(verified).toBe("family19@example.com")
   })
+
+  it("verifies a code once even when two confirms of it race", async () => {
+    const mailer = new CapturingMailer()
+    await sendRegistrationCode("race family", "race@example.com", undefined, mailer)
+    const subjectKey = registrationSubjectKey("race@example.com", "race family")
+    const onVerified = vi.fn((_tx: unknown, email: string) => email)
+    // The other confirm wins between this one's read and its write: by the time
+    // this one burns the code, the code is already spent.
+    const racing = new Proxy(database, {
+      get(target, property, receiver) {
+        if (property !== "transaction") return Reflect.get(target, property, receiver)
+        return (...args: Parameters<SmbaDatabase["transaction"]>) => {
+          target.update(schema.authEmailChallenges).set({ consumedAt: NOW }).run()
+          return target.transaction(...args)
+        }
+      },
+    })
+    expect(confirmRegistrationVerification({
+      code: mailer.registration[0]!.code,
+      onVerified,
+      subjectKey,
+    }, { database: racing, now: NOW })).toBeNull()
+    expect(onVerified).not.toHaveBeenCalled()
+  })
 })
 
 describe("protected accounts and their authenticator", () => {

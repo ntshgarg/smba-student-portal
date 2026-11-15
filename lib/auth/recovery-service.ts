@@ -843,13 +843,21 @@ export function confirmRegistrationVerification<T>(input: {
    * fail together.
    */
   const result = database.transaction((tx) => {
-    tx.update(authEmailChallenges).set({
+    // Only a code still unused is burned: two confirms of the same code at the
+    // same moment both pass the read above, and the second must not also run
+    // onVerified (it would mint a second activation claim).
+    const burned = tx.update(authEmailChallenges).set({
       consumedAt: now,
       verifiedAt: now,
       updatedAt: now,
-    }).where(eq(authEmailChallenges.id, challenge.id)).run()
+    }).where(and(
+      eq(authEmailChallenges.id, challenge.id),
+      isNull(authEmailChallenges.consumedAt),
+    )).run()
+    if (burned.changes !== 1) return null
     return input.onVerified(tx, challenge.email)
   }, { behavior: "immediate" })
+  if (result === null) return null
   recordLoginSuccess(attempt.subjectHash, { database })
   return result
 }
