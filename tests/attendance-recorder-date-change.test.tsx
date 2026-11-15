@@ -193,7 +193,8 @@ describe("player attendance recorder date change", () => {
 
     expect(markup).not.toContain("No sessions on this date.")
     expect(markup).not.toContain("Loading sessions…")
-    expect(markup).toContain("<p>1 session, 0 fully marked</p>")
+    // Nobody is rostered on it, so it has nothing left to mark (`daySessionsMarked`).
+    expect(markup).toContain("<p>1 session, 1 fully marked</p>")
   })
 
   // What raises the pending flag above is the date change putting its navigation

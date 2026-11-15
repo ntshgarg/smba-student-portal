@@ -23,7 +23,10 @@ import {
 import { countActiveCoachAnnouncements } from "@/lib/announcements/queries"
 import { listAssessmentHome } from "@/lib/assessments/queries"
 import { countAttendanceAdjustmentsRequiringReview } from "@/lib/attendance/adjustments"
-import { rosterProgressForOccurrences } from "@/lib/attendance/recording-workspace"
+import {
+  daySessionsMarked,
+  rosterProgressForOccurrences,
+} from "@/lib/attendance/recording-workspace"
 import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
@@ -200,10 +203,8 @@ export default async function CoachDashboardPage({
     now,
   })
   const playerRecords = listOperationalPlayerRecords(undefined, today)
-  // Today's registers, counted the way the Mark tab's session picker counts
-  // them: a session is marked once every player on its roster has a saved mark
-  // (one with nobody to mark has nothing left to do).
-  const todayProgress = rosterProgressForOccurrences({
+  // Today's registers, counted by the rule the Mark tab's day line uses.
+  const todaySessionsMarked = daySessionsMarked(todaySessions, rosterProgressForOccurrences({
     assignments: sessionSnapshot.sessionAssignments,
     occurrences: todaySessions,
     players: playerRecords.members.map((member) => ({
@@ -211,9 +212,7 @@ export default async function CoachDashboardPage({
       joinedOn: member.trainingStartOn,
     })),
     records: listSessionAttendanceRecordsForOccurrences(todaySessions.map((occurrence) => occurrence.id)),
-  })
-  const markedSessionCount = [...todayProgress.values()]
-    .filter((progress) => progress.marked === progress.eligible).length
+  }))
   // Staff roll call as the Staff tab draws it: assistant coaches who had joined
   // by today, and nobody to mark on a day the academy is closed.
   const closedToday = listAcademyHolidaysInWindow(today, today).length > 0
@@ -263,7 +262,7 @@ export default async function CoachDashboardPage({
         <AttendanceCard
           dateLabel={dateLabel}
           makeupsToReview={countAttendanceAdjustmentsRequiringReview()}
-          sessions={{ marked: markedSessionCount, total: todaySessions.length }}
+          sessions={todaySessionsMarked}
           staff={{ marked: staffMarkedCount, total: staffOnRoll.length }}
         />
         <PlayerOnboardingCard summary={onboardingSummary} />

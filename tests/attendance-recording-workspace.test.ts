@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   chronologicalOccurrencesForDate,
+  daySessionsMarked,
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
   resolvePlayerAttendanceSelection,
@@ -185,5 +186,31 @@ describe("focused attendance recording selection", () => {
     })
 
     expect(progress.get("morning")).toEqual({ eligible: 0, marked: 0 })
+  })
+})
+
+// The dashboard's Attendance card and the Mark tab's day line both count with
+// this, so they agree on the two cases they used to disagree on.
+describe("a day's marked sessions", () => {
+  const afternoon: TrainingSessionOccurrence = { ...morning, id: "afternoon" }
+  const cancelled: TrainingSessionOccurrence = { ...morning, id: "cancelled", status: "cancelled" }
+
+  it("leaves a cancelled session out of both counts", () => {
+    expect(daySessionsMarked([morning, cancelled], new Map([
+      ["morning", { eligible: 2, marked: 2 }],
+      ["cancelled", { eligible: 2, marked: 0 }],
+    ]))).toEqual({ marked: 1, total: 1 })
+  })
+
+  it("counts a session with nobody to mark as marked", () => {
+    expect(daySessionsMarked([morning, evening, afternoon], new Map([
+      ["morning", { eligible: 0, marked: 0 }],
+      ["evening", { eligible: 3, marked: 3 }],
+      ["afternoon", { eligible: 3, marked: 2 }],
+    ]))).toEqual({ marked: 2, total: 3 })
+  })
+
+  it("has nothing to count on a day whose sessions were all cancelled", () => {
+    expect(daySessionsMarked([cancelled], new Map())).toEqual({ marked: 0, total: 0 })
   })
 })

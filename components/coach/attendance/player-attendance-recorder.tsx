@@ -25,6 +25,7 @@ import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { memberInitials } from "@/lib/coach/member-utils"
 import {
   chronologicalOccurrencesForDate,
+  daySessionsMarked,
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
   rosterProgressForOccurrences,
@@ -542,18 +543,14 @@ export function PlayerAttendanceRecorder({
     juniorCoaches: staff.juniorCoaches,
     records: staff.records,
   })
-  const fullyMarked = dayOccurrences.filter((occurrence) => {
-    const progress = rosterProgressByOccurrence.get(occurrence.id)
-    return occurrence.status === "scheduled"
-      && !!progress?.eligible
-      && progress.marked === progress.eligible
-  }).length
+  // Counted by the dashboard card's rule: cancelled sessions are left out.
+  const sessionsMarked = daySessionsMarked(dayOccurrences, rosterProgressByOccurrence)
   const daySummary = [
     staff.closedFor
       ? "Academy closed"
       : staffProgress.total ? `Staff ${staffProgress.marked}/${staffProgress.total}` : null,
-    dayOccurrences.length
-      ? `${dayOccurrences.length} ${dayOccurrences.length === 1 ? "session" : "sessions"}, ${fullyMarked} fully marked`
+    sessionsMarked.total
+      ? `${sessionsMarked.total} ${sessionsMarked.total === 1 ? "session" : "sessions"}, ${sessionsMarked.marked} fully marked`
       : "No sessions",
   ].filter(Boolean).join(" · ")
 
