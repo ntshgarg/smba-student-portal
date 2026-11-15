@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { cache } from "react"
 
 import { formatAcademyId, identityNameParts } from "@/lib/auth/identity"
@@ -13,6 +13,7 @@ import {
   accounts,
   coachProfiles,
 } from "@/lib/db/schema"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 export type CoachAccessLevel = "head_admin" | "junior_coach"
 
@@ -75,8 +76,7 @@ function selectCoachAccessRow(database: SmbaDatabaseExecutor, accountId: string)
     .where(and(
       eq(accounts.id, accountId),
       eq(accounts.role, "coach"),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
 }

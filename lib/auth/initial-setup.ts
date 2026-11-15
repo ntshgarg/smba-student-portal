@@ -34,6 +34,7 @@ import {
   coachProfiles,
 } from "@/lib/db/schema"
 import { getAcademyDateKey } from "@/lib/format"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 export const HEAD_COACH_SETUP_COOKIE = "smba_head_coach_setup"
 /** The coach's typed name, carried from the email step to the account step. */
@@ -60,8 +61,7 @@ export function createHeadCoachSetupClaim(input: {
     const owner = tx.select({ id: accounts.id }).from(accounts).where(and(
       eq(accounts.id, input.createdByAccountId),
       eq(accounts.role, "platform_admin"),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     )).get()
     if (!owner) throw new Error("Platform-owner access is required.")
     if (!headCoachSetupAvailable({ database: tx })) {

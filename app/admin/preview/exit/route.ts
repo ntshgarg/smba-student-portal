@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
@@ -8,6 +8,7 @@ import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { publicSiteUrl } from "@/lib/config"
 import { initializeDatabase } from "@/lib/db/client"
 import { accounts } from "@/lib/db/schema"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 // The one form a preview allows, so Log out during a preview comes here with signOut=1.
 export async function POST(request: Request) {
@@ -20,8 +21,7 @@ export async function POST(request: Request) {
     ? initializeDatabase().select({ id: accounts.id }).from(accounts).where(and(
       eq(accounts.id, actorAccountId),
       eq(accounts.role, "platform_admin"),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     )).get()
     : null
   if (owner && actorAccountId) {

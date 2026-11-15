@@ -38,6 +38,7 @@ import { resolveNextAssignedOccurrence } from "@/lib/sessions/domain"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
 import { termFinishedOn } from "@/lib/sessions/term"
 import { academyPlanSummary } from "@/lib/training/academy-plans"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 function indiaMonthKey() {
   return academyCurrentMonth()
@@ -115,8 +116,7 @@ function findPlayer(accountId: string) {
     .where(and(
       eq(accounts.id, accountId),
       eq(accounts.role, "player"),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     )).get()
 }
 

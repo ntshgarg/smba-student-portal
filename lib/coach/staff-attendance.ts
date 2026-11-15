@@ -26,6 +26,7 @@ import {
 } from "@/lib/db/schema"
 import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
 import { academyHolidaysOnDates } from "@/lib/sessions/holidays"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 export type StaffAttendanceChoice = "present" | "absent" | "cleared"
 
@@ -330,8 +331,7 @@ function loadJuniorCoachSaveProfiles(
       inArray(accounts.id, ids),
       eq(coachProfiles.accessLevel, "junior_coach"),
       eq(accounts.role, "coach"),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .all()
     .forEach((row) => profiles.set(row.accountId, row))

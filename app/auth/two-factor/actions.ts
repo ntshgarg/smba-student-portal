@@ -30,6 +30,7 @@ import {
 import { initializeDatabase } from "@/lib/db/client"
 import { accounts, authMethods, authTwoFactors } from "@/lib/db/schema"
 import { postAuthenticationDestination } from "@/lib/auth/post-auth-destination"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 export type TotpSetupState = {
   error: string | null
@@ -135,8 +136,7 @@ function destinationForUser(userId: string, twoFactorEnabled = true) {
     .from(accounts)
     .where(and(
       eq(accounts.id, userId),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
   if (!account?.role) return "/login"
@@ -154,8 +154,7 @@ async function requireProtectedSetupSession() {
     .from(accounts)
     .where(and(
       eq(accounts.id, rawSession.user.id),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
   if (account?.role === "coach"

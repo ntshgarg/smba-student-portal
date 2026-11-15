@@ -48,6 +48,7 @@ import {
   authUsers,
   coachProfiles,
 } from "@/lib/db/schema"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 export const RECOVERY_SESSION_COOKIE = "smba_password_recovery"
 export const AUTHENTICATOR_RECOVERY_COOKIE = "smba_authenticator_recovery"
@@ -967,8 +968,7 @@ export async function requestPasswordRecovery(input: {
       eq(authMethods.identifier, academyId),
       eq(authMethods.method, "academy_id"),
       isNull(authMethods.revokedAt),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     )).get()
   const validAuthenticatorRecovery = intent !== "authenticator"
     || (account?.role === "coach"
@@ -1115,8 +1115,7 @@ function recoveryChallenge(
       eq(authEmailChallenges.purpose, "password_reset"),
       isNull(authEmailChallenges.consumedAt),
       gt(authEmailChallenges.expiresAt, now),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     )).all()
   for (const row of rows) {
     const hashedSubject = subjectHash(recoverySubjectKeyForAccount(row.accountId!))

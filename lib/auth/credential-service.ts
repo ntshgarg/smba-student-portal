@@ -33,6 +33,7 @@ import {
   writeAuthSecurityEvent,
 } from "@/lib/auth/security-context"
 import { onboardingFinished } from "@/lib/coach/onboarding"
+import { accountIsLive } from "@/lib/auth/account-live"
 
 const MIN_PASSWORD_LENGTH = 12
 const MAX_PASSWORD_LENGTH = 128
@@ -505,8 +506,7 @@ function pinEligibleAccount(accountId: string, database: SmbaDatabaseExecutor) {
     .leftJoin(coachProfiles, eq(coachProfiles.accountId, accounts.id))
     .where(and(
       eq(accounts.id, accountId),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
 }
@@ -694,8 +694,7 @@ export async function verifyPinLogin(input: {
       eq(authMethods.identifier, academyId),
       eq(authMethods.method, "academy_id"),
       isNull(authMethods.revokedAt),
-      eq(accounts.approvalStatus, "approved"),
-      isNull(accounts.archivedAt),
+      accountIsLive(),
     ))
     .get()
 
