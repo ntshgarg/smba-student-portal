@@ -34,7 +34,7 @@ export function JuniorCoachWelcomeHero({
             <em>{coachName}.</em>
           </h1>
           <p className="welcome-line coach-welcome-line">
-            Your attendance record stays quietly in view.
+            Here’s your month so far.
           </p>
         </div>
 
