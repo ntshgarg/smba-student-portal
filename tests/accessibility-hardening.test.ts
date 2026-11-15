@@ -147,14 +147,26 @@ describe("operational mobile controls", () => {
     expect(antiZoomRule).toContain(".coach-member-search input:not(")
     expect(antiZoomRule).toContain(".coach-member-filter select")
     expect(antiZoomRule).toContain(".coach-member-form-grid input:not(")
-    expect(antiZoomRule).toContain(".coach-adjustment-field select")
-    expect(antiZoomRule).not.toContain(".coach-adjustment-missed-calendar-toolbar select")
-    expect(antiZoomRule).toContain(".coach-adjustment-reason input:not(")
     expect(antiZoomRule).toContain(".coach-calendar-controls input:not(")
     expect(antiZoomRule).toContain(".coach-occurrence-actions input:not(")
     expect(antiZoomRule).toContain(':not([type="checkbox"]):not([type="radio"]):not([type="hidden"])')
     expect(antiZoomRule).toContain("font-size: 16px")
     expect(antiZoomRule).not.toContain(".coach-member-batch-field input")
+  })
+
+  it("keeps the Make-ups player select and reason input at 16px on phones and tablets", () => {
+    const makeups = readFileSync(
+      path.join(process.cwd(), "components/coach/attendance-adjustments-workspace.module.css"),
+      "utf8",
+    )
+    const query = "@media (max-width: 720px), (pointer: coarse) {"
+    const rule = makeups.slice(makeups.indexOf(query), makeups.indexOf("\n}\n", makeups.indexOf(query)))
+
+    expect(makeups.indexOf(query)).toBeGreaterThan(-1)
+    expect(rule).toContain(".playerField select")
+    expect(rule).toContain(".change select")
+    expect(rule).toContain(".reason input")
+    expect(rule).toContain("font-size: 16px")
   })
 
   it("gives register jump controls a real 44px target without changing their visual treatment", () => {

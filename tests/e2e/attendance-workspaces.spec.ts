@@ -28,7 +28,7 @@ async function loginAsCoach(page: Page) {
 }
 
 async function chooseAPlayerWithAnAbsence(page: Page) {
-  const playerSelect = page.locator(".coach-adjustment-field select").first()
+  const playerSelect = page.getByRole("combobox", { name: /player/i })
   await expect(playerSelect).toBeVisible()
 
   const playerIds = await playerSelect.locator("option").evaluateAll((options) => (
@@ -43,9 +43,9 @@ async function chooseAPlayerWithAnAbsence(page: Page) {
     await playerSelect.selectOption(playerId)
     await expect(page).toHaveURL((url) => url.searchParams.get("player") === playerId)
     await page.waitForLoadState("networkidle")
-    await expect(page.locator(".coach-adjustment-choice-group").first()).toBeVisible()
-    const calendar = page.locator(".coach-adjustment-missed-calendar")
-    if (await calendar.isVisible()) return
+    const missedSessions = page.getByRole("group", { name: "Missed session" })
+    await expect(missedSessions).toBeVisible()
+    if (await missedSessions.getByRole("button").first().isVisible()) return
   }
 
   throw new Error("The loaded fixture contains no player with an unreconciled absence")
@@ -54,25 +54,24 @@ async function chooseAPlayerWithAnAbsence(page: Page) {
 async function makeRescheduleDraftDirty(page: Page) {
   await chooseAPlayerWithAnAbsence(page)
 
-  await page
-    .locator(".coach-adjustment-missed-calendar-grid")
-    .getByRole("button", { name: /^Select .*missed session/i })
-    .first()
-    .click()
+  const missedSessions = page.getByRole("group", { name: "Missed session" })
+  await missedSessions.getByRole("button").first().click()
 
-  const sourceChoice = page
-    .locator(".coach-adjustment-choice-list.is-source-slots")
+  // A date with two missed sessions asks for the exact one before the next step opens.
+  const exactSession = missedSessions
+    .getByText("Choose the exact missed session")
+    .locator("xpath=ancestor::div[1]")
     .getByRole("button")
     .first()
-  const completionStep = page.getByRole("group", { name: /Completed on/i })
+  const lockedCompletion = page.getByText("Choose the missed session first")
 
   await expect.poll(async () => (
-    Number(await sourceChoice.isVisible().catch(() => false))
-    + Number(await completionStep.isVisible().catch(() => false))
+    Number(await exactSession.isVisible().catch(() => false))
+    + Number(!(await lockedCompletion.isVisible().catch(() => true)))
   )).toBeGreaterThan(0)
 
-  if (await sourceChoice.isVisible()) await sourceChoice.click()
-  await expect(completionStep).toBeVisible()
+  if (await exactSession.isVisible()) await exactSession.click()
+  await expect(lockedCompletion).toHaveCount(0)
 }
 
 async function expectDiscardPrompt(
@@ -138,10 +137,11 @@ test("Attendance card launches the focused player and staff workspaces", async (
     .getByRole("link", { name: "Reschedule attendance" })
     .click()
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/adjustments")
-  await expect(page.getByRole("heading", { name: "Reschedule attendance" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Attendance" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Make-ups" })).toHaveAttribute("aria-current", "page")
   await expect(page.locator("#attendance-adjustments-workspace")).toBeVisible()
 
-  await expect(page.locator(".coach-adjustment-field select").first()).toBeVisible()
+  await expect(page.getByRole("combobox", { name: /player/i })).toBeVisible()
 })
 
 test("Record Attendance protects unsaved session-roster changes", async ({ page }) => {
@@ -361,7 +361,7 @@ test("Reschedule Attendance protects its dirty draft", async ({ page }) => {
   await page.goto("/coach/attendance/adjustments", { waitUntil: "domcontentloaded" })
   await makeRescheduleDraftDirty(page)
 
-  const backLink = page.getByRole("link", { name: "Back to Attendance" })
+  const backLink = page.getByRole("link", { name: "Back to dashboard" })
   await expectDiscardPrompt(page, () => backLink.click(), "dismiss")
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/adjustments")
 
@@ -381,7 +381,7 @@ test("Legacy dashboard deep links preserve standalone adjustment parameters", as
     && url.searchParams.get("player") === "missing-player"
   ))
   await expect(page.locator("#attendance-adjustments-workspace")).toBeVisible()
-  await expect(page.locator(".coach-adjustment-field select").first()).toHaveValue("")
+  await expect(page.getByRole("combobox", { name: /player/i })).toHaveValue("")
   await expect(page.getByText(/not found|invalid adjustment|invalid player/i)).toHaveCount(0)
 
   await page.goto("/coach?attendance=register#attendance", {
@@ -395,10 +395,10 @@ test("A valid adjustment deep link expands and focuses its published record", as
   await page.goto("/coach/attendance/adjustments", { waitUntil: "domcontentloaded" })
 
   const historyDisclosure = page.getByRole("button", {
-    name: /Previous reschedules \(\d+\)/i,
+    name: /Past make-ups \(\d+\)/i,
   })
   await historyDisclosure.click()
-  const firstHistoryItem = page.locator(".coach-adjustment-history-item > button").first()
+  const firstHistoryItem = page.locator("#attendance-adjustment-history article > button").first()
   await expect(firstHistoryItem).toBeVisible()
   await firstHistoryItem.click()
   await expect(firstHistoryItem).toHaveAttribute("aria-expanded", "true")
@@ -413,25 +413,24 @@ test("A valid adjustment deep link expands and focuses its published record", as
   )
 
   await expect(page.getByRole("button", {
-    name: /Previous reschedules \(\d+\)/i,
+    name: /Past make-ups \(\d+\)/i,
   })).toHaveAttribute("aria-expanded", "true")
   const requestedHistoryItem = page.locator(`[aria-controls="${detailsId}"]`)
   await expect(requestedHistoryItem).toHaveAttribute("aria-expanded", "true")
   await expect(requestedHistoryItem).toBeFocused()
 })
 
-test("Collapsed reschedule rows tint the bar while keeping status boxes white", async ({ page }) => {
+test("Collapsed make-up rows tint the bar while keeping status pills steady", async ({ page }) => {
   await page.goto("/coach/attendance/adjustments", { waitUntil: "domcontentloaded" })
 
   await page.getByRole("button", {
-    name: /Previous reschedules \(\d+\)/i,
+    name: /Past make-ups \(\d+\)/i,
   }).click()
 
   const collapsedRow = page.locator(
-    '.coach-adjustment-history-item:has(> button[aria-expanded="false"]):has(.coach-adjustment-history-status.is-published), '
-      + '.coach-adjustment-history-item:has(> button[aria-expanded="false"]):has(.coach-adjustment-history-status.is-voided)',
+    '#attendance-adjustment-history article:is([data-status="published"], [data-status="voided"]):has(> button[aria-expanded="false"])',
   ).first()
-  const status = collapsedRow.locator(".coach-adjustment-history-status")
+  const status = collapsedRow.getByText(/^(Published|Voided)$/)
   await expect(status).toBeVisible()
 
   const restingRowBackground = await collapsedRow.evaluate((element) => (
@@ -440,7 +439,6 @@ test("Collapsed reschedule rows tint the bar while keeping status boxes white", 
   const restingStatusBackground = await status.evaluate((element) => (
     getComputedStyle(element).backgroundColor
   ))
-  expect(restingStatusBackground).toBe("rgb(255, 255, 255)")
 
   await collapsedRow.locator(":scope > button").hover()
   await expect.poll(() => collapsedRow.evaluate((element) => (
@@ -452,15 +450,15 @@ test("Collapsed reschedule rows tint the bar while keeping status boxes white", 
 test("A player without missed sessions gets a compact empty step", async ({ page }) => {
   await page.goto("/coach/attendance/adjustments", { waitUntil: "domcontentloaded" })
 
-  const playerSelect = page.locator(".coach-adjustment-field select").first()
+  const playerSelect = page.getByRole("combobox", { name: /player/i })
   const playerIds = await playerSelect.locator("option").evaluateAll((options) => (
     options
       .map((option) => (option as HTMLOptionElement).value)
       .filter(Boolean)
   ))
-  const missedSessionStep = page.locator(".coach-adjustment-choice-group").first()
-  const compactEmptyStep = missedSessionStep.locator(".coach-adjustment-empty-step.is-compact")
-  const missedCalendar = missedSessionStep.locator(".coach-adjustment-missed-calendar")
+  const missedSessionStep = page.getByRole("group", { name: "Missed session" })
+  const compactEmptyStep = missedSessionStep.getByText("has no unreconciled absences")
+  const missedCalendar = missedSessionStep.getByRole("button").first()
   let compactEmptyStepFound = false
 
   for (const playerId of playerIds) {
@@ -472,12 +470,10 @@ test("A player without missed sessions gets a compact empty step", async ({ page
     await expect(playerSelect).toHaveValue(playerId)
     await expect(compactEmptyStep.or(missedCalendar)).toBeVisible()
 
-    const emptyStep = await missedSessionStep.evaluate((fieldset) => {
-      const step = fieldset.querySelector(".coach-adjustment-empty-step.is-compact")
-      if (!step) return null
-      return { height: step.getBoundingClientRect().height, text: step.textContent ?? "" }
-    })
-    if (!emptyStep) continue
+    if (!(await compactEmptyStep.isVisible())) continue
+    const emptyStep = await compactEmptyStep.evaluate((step) => (
+      { height: step.getBoundingClientRect().height, text: step.textContent ?? "" }
+    ))
 
     compactEmptyStepFound = true
     expect(emptyStep.text).toContain("has no unreconciled absences")
