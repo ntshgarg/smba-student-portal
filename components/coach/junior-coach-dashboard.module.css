@@ -134,13 +134,13 @@
   line-height: var(--leading-body);
 }
 
-/* the label sits centred with its icon beside it, like the other main buttons */
+/* the label stays on the left, on one line; the icon sits at the right */
 .ledgerActionButton {
   display: flex;
   width: 100%;
   min-height: 52px;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 0 17px;
   border: 1px solid var(--navy);
@@ -150,7 +150,8 @@
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 700;
-  text-align: center;
+  text-align: left;
+  white-space: nowrap;
   transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard), var(--press-transition);
 }
 
