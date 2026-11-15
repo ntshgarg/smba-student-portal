@@ -28,7 +28,7 @@ export function AssessmentsCard({
       area="reports"
       status={draftCount > 0
         ? { count: draftCount, unit: draftCount === 1 ? "draft" : "drafts" }
-        : { state: "Clear" }}
+        : undefined}
       title="Assessments"
       titleId="coach-reports-card-title"
     >

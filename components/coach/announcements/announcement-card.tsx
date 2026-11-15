@@ -15,7 +15,7 @@ export function AnnouncementCard({ activeCount = 0 }: { activeCount?: number }) 
       area="announcements"
       status={activeCount > 0
         ? { count: activeCount, unit: "active" }
-        : { state: "Clear" }}
+        : undefined}
       title="Announcements"
       titleId="coach-announcements-card-title"
     >

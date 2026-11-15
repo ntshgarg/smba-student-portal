@@ -22,8 +22,6 @@ function renderDashboard() {
         session: 1,
         total: 7,
       }} />
-      <SessionsCard nextSessionLabel="Beginner · Weekday · 6–7 am" todaySessionCount={8} />
-      <AssessmentsCard assessedCount={1} draftCount={0} playerCount={2} />
       <FinancialsCard
         active
         attentionCount={14}
@@ -31,6 +29,8 @@ function renderDashboard() {
         period="2026-08"
         preparation={{ alreadyPrepared: 8, ready: 0 }}
       />
+      <SessionsCard nextSessionLabel="Beginner · Weekday · 6–7 am" todaySessionCount={8} />
+      <AssessmentsCard assessedCount={1} draftCount={0} playerCount={2} />
       <AnnouncementCard activeCount={0} />
       <MembersCard memberCount={39} />
     </CoachDashboardStack>,
@@ -43,9 +43,9 @@ describe("coach dashboard Court Operations Board", () => {
     const orderedAreas = [
       "attendance",
       "onboarding",
+      "financials",
       "sessions",
       "reports",
-      "financials",
       "announcements",
       "members",
     ]
@@ -70,7 +70,9 @@ describe("coach dashboard Court Operations Board", () => {
 
     expect(html).toContain("Player &amp; staff registers")
     expect(html).toContain("7 people need a next step")
-    expect(html).toContain("7 in progress")
+    // the 2 new requests are waiting on the head coach, so they lead the stamp
+    expect(html).toContain("2 waiting")
+    expect(html).not.toContain("7 in progress")
     expect(html).toContain("New requests")
     expect(html).toContain("Assessment")
     expect(html).toContain("Session")
@@ -96,7 +98,8 @@ describe("coach dashboard Court Operations Board", () => {
     const populated = renderToStaticMarkup(<MembersCard memberCount={39} />)
     const empty = renderToStaticMarkup(<MembersCard memberCount={0} />)
 
-    expect(populated).toContain("Clear")
+    // nothing can be outstanding in a directory, so a populated one has no stamp
+    expect(populated).not.toContain("Clear")
     expect(populated).toContain("39 enrolled players")
     expect(empty).toContain("Setup")
     expect(empty).toContain("0 enrolled players")
@@ -106,7 +109,7 @@ describe("coach dashboard Court Operations Board", () => {
 
   it.each([
     [4, "Beginner · Weekday · 6–7 am", "4 today", "4 sessions today"],
-    [0, "Beginner · Weekday · 6–7 am", "Clear", "Next · Beginner · Weekday · 6–7 am"],
+    [0, "Beginner · Weekday · 6–7 am", null, "Next · Beginner · Weekday · 6–7 am"],
     [0, null, "Setup", "No training scheduled."],
   ] as const)(
     "preserves the Sessions priority branches",
@@ -118,7 +121,8 @@ describe("coach dashboard Court Operations Board", () => {
         />,
       )
 
-      expect(html).toContain(status)
+      if (status) expect(html).toContain(status)
+      else expect(html).not.toMatch(/status/)
       expect(html).toContain(detail)
       expect(html).toContain('href="/coach/calendar"')
       expect(html).toContain('href="/coach/schedules/new"')
@@ -142,6 +146,24 @@ describe("coach dashboard Court Operations Board", () => {
 
     expect(html).toContain("₹1,234.56 outstanding")
     expect(html).not.toContain("₹1,235")
+  })
+
+  it("fills only the actions for something waiting on the coach", () => {
+    const html = renderDashboard()
+    const primary = [...html.matchAll(/<a class="[^"]*primaryAction[^"]*" href="([^"]+)"/g)].map((match) => match[1])
+
+    expect(primary).toEqual(["/coach/onboarding", "/coach/financials/record"])
+  })
+
+  it("leaves the stamp off a card with nothing outstanding", () => {
+    const quiet = [
+      <AssessmentsCard key="a" assessedCount={0} draftCount={0} playerCount={32} />,
+      <AnnouncementCard key="b" activeCount={0} />,
+      <MembersCard key="c" memberCount={39} />,
+      <FinancialsCard key="d" active attentionCount={0} outstandingPaise={0} period="2026-08" preparation={{ alreadyPrepared: 8, ready: 0 }} />,
+    ]
+    for (const card of quiet) expect(renderToStaticMarkup(card)).not.toMatch(/class="[^"]*status/)
+    expect(renderToStaticMarkup(<AssessmentsCard assessedCount={0} draftCount={2} playerCount={32} />)).toContain("2 drafts")
   })
 
   it("keeps the Financials inactive state single-purpose", () => {

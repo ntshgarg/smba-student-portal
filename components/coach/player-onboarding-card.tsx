@@ -43,9 +43,12 @@ export function PlayerOnboardingCard({
     <CoachDashboardCard
       area="onboarding"
       id="onboarding"
-      status={summary.total
-        ? { count: summary.total, unit: "in progress" }
-        : notStarted ? { state: "Setup" } : { state: "Clear" }}
+      // New requests are people waiting on the head coach, so they lead the stamp in the alert tone
+      status={summary.newRequests
+        ? { count: summary.newRequests, unit: "waiting", tone: "attention" }
+        : summary.total
+          ? { count: summary.total, unit: "in progress" }
+          : notStarted ? { state: "Setup" } : undefined}
       title="Academy onboarding"
       titleId="player-onboarding-card-title"
     >
@@ -72,7 +75,7 @@ export function PlayerOnboardingCard({
         </dl>
 
         <CoachDashboardActions ariaLabel="Academy onboarding actions">
-          <CoachDashboardAction href="/coach/onboarding">Open onboarding</CoachDashboardAction>
+          <CoachDashboardAction href="/coach/onboarding" primary>Open onboarding</CoachDashboardAction>
         </CoachDashboardActions>
       </div>
     </CoachDashboardCard>

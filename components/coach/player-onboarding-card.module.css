@@ -80,7 +80,9 @@
 
   .stages {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
     border: 1px solid var(--line);
+    border-radius: 16px;
   }
 
   .stage {

@@ -15,16 +15,16 @@ export type CoachDashboardArea =
   | "members"
 
 /**
- * The status stamp has exactly two shapes so a coach can scan the column of
- * cards instead of reading each one: a number with the lowercase qualifier
- * that says what it counts, or one of two capitalised state words used when no
- * number would say anything — `Clear` for nothing outstanding and `Setup` for
- * an area that is not configured yet. The attention tone belongs to the count
- * shape only, because it marks a backlog.
+ * The status stamp appears only when it has something to say, so a stamp always
+ * means "look here": a number with the lowercase qualifier that says what it
+ * counts, or `Setup` for an area that is not configured yet. A card with nothing
+ * outstanding has no stamp (there used to be a `Clear`, which sat beside
+ * "0 of 32 assessed" and read as all fine). The attention tone belongs to the
+ * count shape only, because it marks a backlog.
  */
 export type CoachDashboardStatus =
   | { count: number; unit: string; tone?: "attention" }
-  | { state: "Clear" | "Setup" }
+  | { state: "Setup" }
 
 function statusStamp(status: CoachDashboardStatus) {
   return "state" in status ? status.state : `${status.count} ${status.unit}`
@@ -118,15 +118,18 @@ export function CoachDashboardActions({
   )
 }
 
+/** `primary` marks the one action for something waiting on the coach: a filled navy button. */
 export function CoachDashboardAction({
   children,
   href,
+  primary = false,
 }: {
   children: ReactNode
   href: string
+  primary?: boolean
 }) {
   return (
-    <Link className={styles.action} href={href}>
+    <Link className={primary ? `${styles.action} ${styles.primaryAction}` : styles.action} href={href}>
       {children}
       <ArrowUpRight aria-hidden="true" />
     </Link>

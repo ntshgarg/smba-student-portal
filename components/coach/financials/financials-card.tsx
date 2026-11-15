@@ -50,7 +50,7 @@ export function FinancialsCard({
       status={active
         ? attentionCount > 0
           ? { count: attentionCount, unit: "attention", tone: "attention" }
-          : { state: "Clear" }
+          : undefined
         : { state: "Setup" }}
       title="Financials"
       titleId="coach-financials-card-title"
@@ -61,7 +61,7 @@ export function FinancialsCard({
             {summary}
           </CoachDashboardSummary>
           <CoachDashboardActions ariaLabel="Financial actions">
-            <CoachDashboardAction href="/coach/financials/record">
+            <CoachDashboardAction href="/coach/financials/record" primary>
               Record payment
             </CoachDashboardAction>
             <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>
