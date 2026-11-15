@@ -177,13 +177,14 @@ export type OnboardingFeePlan = {
 
 type OnboardingSummaryInput = {
   assignments: OnboardingAssignment[]
-  feePlans: OnboardingFeePlan[]
   newRequestCount: number
   players: OnboardingPlayer[]
   referenceDate: string
 }
 
 type OnboardingWorkspaceInput = Omit<OnboardingSummaryInput, "newRequestCount" | "players"> & {
+  /** Only to say whether a Fee Plan is recorded; completion reads the stamp alone. */
+  feePlans: OnboardingFeePlan[]
   formerRecords?: OnboardingFormerRecord[]
   pendingRequests: OnboardingPendingRequest[]
   players: OnboardingWorkspacePlayer[]
@@ -306,7 +307,6 @@ function onboardingPlace(
 
 function onboardingStage(
   assignments: OnboardingAssignment[],
-  feePlans: OnboardingFeePlan[],
   player: OnboardingPlayer,
 ): Exclude<PlayerOnboardingStage, "request"> | null {
   if (onboardingFinished(player)) return null
@@ -325,7 +325,6 @@ function onboardingStage(
 
 export function derivePlayerOnboardingSummary({
   assignments,
-  feePlans,
   newRequestCount,
   players,
 }: OnboardingSummaryInput): PlayerOnboardingSummary {
@@ -338,16 +337,9 @@ export function derivePlayerOnboardingSummary({
     total: newRequestCount,
   }
   const assignmentsByPlayer = groupByPlayer(assignments)
-  const feePlansByPlayer = groupByPlayer(feePlans)
 
   players.forEach((player) => {
-    const playerAssignments = assignmentsByPlayer.get(player.id) ?? []
-    const playerFeePlans = feePlansByPlayer.get(player.id) ?? []
-    const stage = onboardingStage(
-      playerAssignments,
-      playerFeePlans,
-      player,
-    )
+    const stage = onboardingStage(assignmentsByPlayer.get(player.id) ?? [], player)
     if (!stage) {
       summary.onboarded += 1
       return
@@ -487,11 +479,7 @@ export function derivePlayerOnboardingWorkspace({
   const playerCases = players.flatMap<PlayerOnboardingCase>((player) => {
     const playerAssignments = assignmentsByPlayer.get(player.id) ?? []
     const playerFeePlans = feePlansByPlayer.get(player.id) ?? []
-    const stage = onboardingStage(
-      playerAssignments,
-      playerFeePlans,
-      player,
-    )
+    const stage = onboardingStage(playerAssignments, player)
     if (!stage) return []
 
     return [{
@@ -537,7 +525,6 @@ export function derivePlayerOnboardingWorkspace({
     // reaches this reduce and has to be counted from the source list.
     onboarded: players.filter((player) => !onboardingStage(
       assignmentsByPlayer.get(player.id) ?? [],
-      feePlansByPlayer.get(player.id) ?? [],
       player,
     )).length,
     session: 0,

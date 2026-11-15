@@ -7,6 +7,7 @@ import {
 } from "drizzle-orm"
 
 import { isValidDateKey, isValidMonthKey } from "@/lib/attendance/domain"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { academyNow } from "@/lib/clock"
 import type { SmbaDatabase, SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -1155,7 +1156,7 @@ function buildOnboardingFinancePreview(
   if (trainingStartIsImplausiblyEarly(enrollment.trainingStartOn, academyDateKey)) {
     blockers.push(IMPLAUSIBLE_TRAINING_START_MESSAGE)
   }
-  if (enrollment.onboardingCompletedAt) blockers.push("This player’s onboarding is already complete.")
+  if (onboardingFinished(enrollment)) blockers.push("This player’s onboarding is already complete.")
   /*
    * A future training start is a warning, not a blocker. It used to be both: this
    * refused completion outright until the day arrived, on top of the
@@ -1975,7 +1976,7 @@ export function redateConfirmedTrainingStart(
     }).from(playerEnrollments)
       .where(eq(playerEnrollments.accountId, input.playerId)).get()
     if (!enrollment) financeError("NOT_FOUND", "Choose an approved active player.", "playerId")
-    if (!enrollment.onboardingCompletedAt) {
+    if (!onboardingFinished(enrollment)) {
       financeError(
         "SETUP_REQUIRED",
         "Correct the training start date on the Session step while onboarding is unfinished.",

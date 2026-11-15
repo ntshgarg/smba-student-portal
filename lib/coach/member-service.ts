@@ -362,7 +362,7 @@ export function updateMemberRecord({
     if (classificationChanges && onboardingFinished(current)) {
       return memberFailure(
         "ACTIVE_ASSIGNMENTS",
-        "Change the level, batch or plan with Change schedule or Start training on the member record.",
+        "Change the level, batch or plan with Change schedule or Start training on the Training tab.",
       )
     }
     if (activeAssignments.length && classificationChanges) {

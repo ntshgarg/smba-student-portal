@@ -296,7 +296,7 @@ export function assignSessionRecords({
     operationalActionError("NOT_FOUND", "Approved player was not found.", "playerId")
   }
   // The Session step only sets a first schedule; later changes are made in Members.
-  if (confirmTrainingStart && player.onboardingCompletedAt) {
+  if (confirmTrainingStart && onboardingFinished(player)) {
     operationalActionError(
       "CONFLICT",
       "This player’s onboarding is already complete. Change their schedule in Members.",

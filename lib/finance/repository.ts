@@ -3,6 +3,7 @@ import "server-only"
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm"
 
 import { weekdayForDateKey } from "@/lib/date-keys"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 import { academyIdSerial, formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
@@ -50,6 +51,7 @@ import {
   type PlayerReceiptView,
 } from "@/lib/finance/types"
 import { getAcademyDateKey } from "@/lib/format"
+import { feePlanInForce } from "@/lib/finance/plan-in-force"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
@@ -1215,9 +1217,7 @@ function loadFeePlanStanding(database: Executor, playerId: string, todayKey: str
     eq(feeAgreements.playerAccountId, playerId),
     ne(feeAgreements.status, "paused"),
   )).orderBy(asc(feeAgreements.effectiveFrom), asc(feeAgreements.createdAt)).all()
-  const current = plans.find((plan) => (
-    plan.effectiveFrom <= todayKey && (plan.effectiveTo === null || plan.effectiveTo >= todayKey)
-  )) ?? null
+  const current = feePlanInForce(plans, todayKey)
   const upcoming = plans.find((plan) => plan.effectiveFrom > todayKey) ?? null
   const last = plans.at(-1) ?? null
   const runsOn = plans.some((plan) => plan.status === "active")
@@ -1319,7 +1319,7 @@ export function loadPlayerFeeRecord(
     feePlanSetupReady,
     feeAgreement: agreement ? toFeeAgreementView(agreement) : null,
     feePlans: loadFeePlanStanding(database, playerId, todayKey),
-    onboardingComplete: player.onboardingCompletedAt !== null,
+    onboardingComplete: onboardingFinished(player),
     enrollmentDefaults,
     setupDefaults: agreement ? null : enrollmentDefaults,
     registrationCharge,
