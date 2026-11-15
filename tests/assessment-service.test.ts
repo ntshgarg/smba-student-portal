@@ -15,6 +15,7 @@ describe("player assessments", () => {
   let schema: typeof import("@/lib/db/schema")
   let service: typeof import("@/lib/assessments/service")
   let queries: typeof import("@/lib/assessments/queries")
+  let createSessionSeriesRecords: typeof import("@/lib/sessions/service")["createSessionSeriesRecords"]
 
   const coachId = "00000000-0000-4000-8000-000000000001"
   const playerId = "10000000-0000-4000-8000-0000000000a1"
@@ -22,6 +23,7 @@ describe("player assessments", () => {
   const pausedPlayerId = "10000000-0000-4000-8000-0000000000a3"
   const newPlayerId = "10000000-0000-4000-8000-0000000000a4"
   const archivedPlayerId = "10000000-0000-4000-8000-0000000000a5"
+  const termFinishedPlayerId = "10000000-0000-4000-8000-0000000000a6"
   const now = new Date("2026-10-04T10:00:00+05:30")
 
   function addPlayer(id: string, name: string, status: "active" | "paused" | "unassigned") {
@@ -47,6 +49,37 @@ describe("player assessments", () => {
     }).run()
   }
 
+  // An open place on a schedule, as a player training now (or whose term finished) has.
+  function place(id: string, seriesId: string) {
+    database.insert(schema.sessionAssignments).values({
+      accountId: id,
+      assignedAt: now,
+      assignedByAccountId: coachId,
+      effectiveFrom: "2026-07-01",
+      effectiveTo: null,
+      id: `place-${id}`,
+      seriesId,
+    }).run()
+  }
+
+  function schedule(endsOn: string, startTime: string) {
+    return createSessionSeriesRecords({
+      coachId,
+      database,
+      now,
+      input: {
+        batch: "Weekday",
+        durationMinutes: 60,
+        endsOn,
+        programme: "Intermediate",
+        startTime,
+        startsOn: "2026-07-01",
+        venue: "SMBA Court",
+        weekdays: [1, 3, 5],
+      },
+    })
+  }
+
   function input(overrides: Partial<import("@/lib/assessments/contracts").SaveAssessmentInput> = {}) {
     return {
       assessedOn: "2026-10-04",
@@ -63,10 +96,14 @@ describe("player assessments", () => {
     schema = await import("@/lib/db/schema")
     service = await import("@/lib/assessments/service")
     queries = await import("@/lib/assessments/queries")
+    createSessionSeriesRecords = (await import("@/lib/sessions/service")).createSessionSeriesRecords
     const { prepareDatabase } = await import("@/lib/db/setup")
     database = prepareDatabase({ seed: true })
+    const running = schedule("2027-03-31", "17:00")
     addPlayer(playerId, "Aarav Nair", "active")
     addPlayer(secondPlayerId, "Meera Iyer", "active")
+    place(playerId, running)
+    place(secondPlayerId, running)
     addPlayer(pausedPlayerId, "Paused Player", "paused")
     addPlayer(newPlayerId, "New Player", "unassigned")
     addPlayer(archivedPlayerId, "Archived Player", "paused")
@@ -182,7 +219,7 @@ describe("player assessments", () => {
 
   it("lists never-assessed players first, then whoever has waited longest", () => {
     service.publishAssessment(input({ assessedOn: "2026-08-01", playerId: secondPlayerId }), { coachId, database, now })
-    const home = queries.listAssessmentHome(coachId, { database })
+    const home = queries.listAssessmentHome(coachId, { database, now })
     // The paused player is listed too, marked as off a schedule.
     expect(home.players.map((player) => [player.name, player.offSchedule])).toEqual([
       ["Meera Iyer", false],
@@ -190,9 +227,20 @@ describe("player assessments", () => {
       ["Paused Player", true],
     ])
     service.saveAssessmentDraft(input({ playerId: secondPlayerId, ratings: { footwork: 2 } }), { coachId, database, now })
-    const withDraft = queries.listAssessmentHome(coachId, { database })
+    const withDraft = queries.listAssessmentHome(coachId, { database, now })
     expect(withDraft.drafts).toBe(1)
     expect(withDraft.players[0].draft).toMatchObject({ rated: 1 })
+  })
+
+  it("does not count a player whose term has finished as training now", () => {
+    // Still stored "active", with an open place on a schedule that ran out in September.
+    addPlayer(termFinishedPlayerId, "Term Finished", "active")
+    place(termFinishedPlayerId, schedule("2026-09-30", "18:00"))
+    const home = queries.listAssessmentHome(coachId, { database, now })
+    expect(home.players.find((player) => player.playerId === termFinishedPlayerId)?.offSchedule).toBe(true)
+    expect(home.players.find((player) => player.playerId === playerId)?.offSchedule).toBe(false)
+    expect(queries.getAssessmentStart(termFinishedPlayerId, coachId, { database, now })?.player.offSchedule)
+      .toBe(true)
   })
 
   it("shows the player only their own published assessments, with the one before for comparison", () => {

@@ -15,18 +15,22 @@ import {
   type SmbaDatabaseExecutor,
 } from "@/lib/db/client"
 import { accounts, playerAssessments, playerEnrollments } from "@/lib/db/schema"
+import { getAcademyDateKey } from "@/lib/format"
+import { loadOpenPlaces, type OpenPlace } from "@/lib/sessions/open-places"
+import { playerTrainingStatus } from "@/lib/sessions/term"
 
 type AssessmentRow = typeof playerAssessments.$inferSelect
 
 type QueryContext = {
   database?: SmbaDatabaseExecutor
+  now?: Date
 }
 
 export type AssessmentPlayer = {
   group: string | null
   initials: string
   name: string
-  /** Off every schedule (training ended or paused), but not archived. */
+  /** Not training now (paused, or their term has finished), but not archived. */
   offSchedule: boolean
   playerId: string
 }
@@ -96,12 +100,23 @@ function activePlayerRows(database: SmbaDatabaseExecutor) {
     .all()
 }
 
-function toPlayer(row: ReturnType<typeof activePlayerRows>[number]): AssessmentPlayer {
+// Training now as Members shows it (playerTrainingStatus), not as stored: a
+// term-finished player keeps the stored "active".
+function toPlayer(
+  row: ReturnType<typeof activePlayerRows>[number],
+  openPlaces: Map<string, OpenPlace[]>,
+  today: string,
+): AssessmentPlayer {
+  const { status } = playerTrainingStatus({
+    enrollmentStatus: row.status,
+    openPlaces: openPlaces.get(row.playerId) ?? [],
+    today,
+  })
   return {
     group: groupLabel(row.level, row.batch),
     initials: identityNameParts(row.fullName).initials,
     name: row.fullName,
-    offSchedule: row.status === "paused",
+    offSchedule: status !== "active",
     playerId: row.playerId,
   }
 }
@@ -114,11 +129,13 @@ function toPlayer(row: ReturnType<typeof activePlayerRows>[number]): AssessmentP
  */
 export function listAssessmentHome(
   coachId: string,
-  { database = initializeDatabase() }: QueryContext = {},
+  { database = initializeDatabase(), now = new Date() }: QueryContext = {},
 ) {
   requireHeadAdminAccess(coachId, { database })
   const players = activePlayerRows(database)
   if (players.length === 0) return { drafts: 0, players: [] as AssessmentHomePlayer[] }
+  const openPlaces = loadOpenPlaces(database, players.map((player) => player.playerId))
+  const today = getAcademyDateKey(now)
 
   const rows = database.select().from(playerAssessments)
     .where(inArray(playerAssessments.playerAccountId, players.map((player) => player.playerId)))
@@ -130,7 +147,7 @@ export function listAssessmentHome(
     const latest = own.find((row) => row.status === "published")
     const draft = own.find((row) => row.status === "draft")
     return {
-      ...toPlayer(player),
+      ...toPlayer(player, openPlaces, today),
       draft: draft
         ? {
           id: draft.id,
@@ -174,7 +191,7 @@ function previousPublished(published: AssessmentRow[], self: AssessmentRow) {
 export function getAssessmentStart(
   playerId: string,
   coachId: string,
-  { database = initializeDatabase() }: QueryContext = {},
+  { database = initializeDatabase(), now = new Date() }: QueryContext = {},
 ) {
   requireHeadAdminAccess(coachId, { database })
   const row = activePlayerRows(database).find((player) => player.playerId === playerId)
@@ -188,7 +205,7 @@ export function getAssessmentStart(
   const published = publishedNewestFirst(database, playerId)
   return {
     draftId: draft?.id ?? null,
-    player: toPlayer(row),
+    player: toPlayer(row, loadOpenPlaces(database, [playerId]), getAcademyDateKey(now)),
     previous: published[0] ? toPrevious(published[0]) : null,
     publishedCount: published.length,
   }
