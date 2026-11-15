@@ -410,6 +410,8 @@ export function scheduleTrainingChange(
       academyPlan: input.academyPlan,
       batch: input.batch,
       effectiveOn,
+      failedAttempts: 0,
+      lastFailedAt: null,
       level: input.level,
       monthlyFeePaise: fee,
       seriesId: input.seriesId,
@@ -453,7 +455,9 @@ export function scheduleEndOfTraining(
       academyPlan: null,
       batch: null,
       effectiveOn,
+      failedAttempts: 0,
       kind: "end" as const,
+      lastFailedAt: null,
       level: null,
       monthlyFeePaise: null,
       seriesId: null,
@@ -643,8 +647,11 @@ export function scheduleLabel(
   })
 }
 
-// Days after its date that a change hit by an unexpected fault is tried again.
-const TRAINING_CHANGE_RETRY_DAYS = 2
+// A change hit by an unexpected fault is tried again at most once an hour and
+// marked failed only after this many tries. Tries are counted, not days, so a
+// quiet spell with no page opened does not use up the retries.
+const TRAINING_CHANGE_ATTEMPTS = 3
+const TRAINING_CHANGE_RETRY_GAP_MS = 60 * 60 * 1000
 
 /**
  * Applies every scheduled change whose date has come. Each change is its own
@@ -665,6 +672,10 @@ export function applyDueTrainingChanges({
   let applied = 0
   let retry = 0
   for (const change of due) {
+    if (change.lastFailedAt && now.getTime() - change.lastFailedAt.getTime() < TRAINING_CHANGE_RETRY_GAP_MS) {
+      retry += 1
+      continue
+    }
     let cancelled = false
     try {
       database.transaction((tx) => {
@@ -694,10 +705,18 @@ export function applyDueTrainingChanges({
       }, { behavior: "immediate" })
       if (!cancelled) applied += 1
     } catch (error) {
-      // A refused change is final; any other fault is retried for a few days.
+      // A refused change is final; any other fault is retried a few times.
       const refused = error instanceof OperationalActionError || error instanceof FinanceServiceError
-      if (!refused && today <= addCalendarDays(change.effectiveOn, TRAINING_CHANGE_RETRY_DAYS)) {
+      if (!refused && change.failedAttempts + 1 < TRAINING_CHANGE_ATTEMPTS) {
         console.error("A scheduled training change could not be applied; it will be tried again.", error)
+        database.update(trainingChanges).set({
+          failedAttempts: change.failedAttempts + 1,
+          lastFailedAt: now,
+        }).where(and(
+          eq(trainingChanges.id, change.id),
+          eq(trainingChanges.status, "scheduled"),
+          lte(trainingChanges.effectiveOn, today),
+        )).run()
         retry += 1
         continue
       }

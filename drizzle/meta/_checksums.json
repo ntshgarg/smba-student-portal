@@ -191,6 +191,11 @@
       "tag": "0037_training_change_notices",
       "when": 1794506060556,
       "sha256": "81b412a51e0f7a79c5806b4975d55da7c0c523997d3bf61708e09b5df78dacaf"
+    },
+    {
+      "tag": "0038_training_change_attempts",
+      "when": 1794784383953,
+      "sha256": "2d30ecc1f450c95ebf6dd64d0b7541ad63fbd60eeac4bb11ee5a3d60ab5ca44f"
     }
   ]
 }
