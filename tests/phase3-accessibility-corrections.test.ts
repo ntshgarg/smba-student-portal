@@ -53,40 +53,40 @@ describe("Phase 3 accessibility corrections", () => {
     expect(register).not.toContain("<h3>{selectedProgramme} · {selectedBatch}</h3>")
   })
 
-  it("gives the annual registers a glyph per attendance state, not colour alone", () => {
+  it("gives the register tiles a mark per attendance state, not colour alone", () => {
     const playerRegister = source("components/coach/player-attendance-register.tsx")
     const staffRegister = source("components/coach/staff-attendance-register.tsx")
+    const chrome = source("components/coach/attendance-register-chrome.tsx")
+    const tiles = source("components/coach/attendance-register.module.css")
     const styles = portalStyles()
     const green = styles.match(/--green:\s*(#[0-9a-f]{6})/iu)?.[1]
     const red = styles.match(/--red:\s*(#[0-9a-f]{6})/iu)?.[1]
 
-    // The two fills the cells used to rely on are all but identical in
-    // greyscale, which is what a phone in courtside glare renders.
+    // The two fills the tiles rely on are all but identical in greyscale,
+    // which is what a phone in courtside glare renders.
     expect(contrastRatio(green ?? "#000000", red ?? "#ffffff")).toBeLessThan(1.5)
 
+    // Absent carries a corner cross and a make-up a corner arrow; present is
+    // the only solid tile with no mark, and "not recorded" is hatched.
+    expect(chrome).toContain('if (kind === "absent") return <X aria-hidden="true" className={styles.corner} />')
+    expect(chrome).toContain('if (kind === "makeup") return <RefreshCw aria-hidden="true" className={styles.corner} />')
+    expect(chrome).toContain('if (kind === "holiday") return <CalendarOff aria-hidden="true" />')
+    expect(tiles).toMatch(/\.unmarked \{[^}]*repeating-linear-gradient/u)
     for (const register of [playerRegister, staffRegister]) {
-      expect(register).toContain('choice === "present" ? <Check aria-hidden="true" />')
-      expect(register).toContain('choice === "absent" ? <CircleMinus aria-hidden="true" />')
-      // X is already the "not available" mark in the same cell, so absent must
-      // not be a second cross.
-      expect(register).not.toContain('choice === "absent" ? <X aria-hidden="true" />')
-      expect(register).toContain('<i className="is-present" aria-hidden="true"><Check /></i>')
-      expect(register).toContain('<i className="is-absent" aria-hidden="true"><CircleMinus /></i>')
+      expect(register).toContain("<TileMark kind=")
+      expect(register).toContain('role="img"')
     }
-
-    expect(styles).toContain(".staff-attendance-legend i > svg")
+    // The key draws the same marks the grid does.
+    expect(chrome).toContain("<TileMark kind={item} />")
   })
 
   it("keeps unavailable register labels muted while meeting text contrast", () => {
     const background = "#f0efec"
     const styles = portalStyles()
+    const tiles = source("components/coach/attendance-register.module.css")
     const steel = styles.match(/--steel:\s*(#[0-9a-f]{6})/iu)?.[1]
-    const unavailableRule = styles.match(
-      /\.coach-register-table \.coach-register-date-row th\.is-unavailable \{([^}]*)\}/u,
-    )?.[1]
-    const dateRule = styles.match(
-      /\.coach-register-table \.coach-register-date-row th\.is-unavailable > strong \{([^}]*)\}/u,
-    )?.[1]
+    const unavailableRule = tiles.match(/\.table thead th \{([^}]*)\}/u)?.[1]
+    const dateRule = tiles.match(/\.table thead th\[data-unavailable\] > strong \{([^}]*)\}/u)?.[1]
 
     expect(steel).toBeDefined()
     expect(contrastRatio(steel ?? "#000000", background)).toBeGreaterThanOrEqual(4.5)

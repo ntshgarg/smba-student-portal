@@ -109,13 +109,15 @@ test("player reports page remains screen-reader navigable", async ({ page }) => 
 test("attendance date labels meet contrast and the register stays viewport-contained", async ({ page }) => {
   await login(page, COACH_ACADEMY_ID, "/coach")
   await page.goto(
-    "/coach/attendance/players/register?year=2026&batch=Weekday&level=Beginner",
+    // August 2026 for the Weekend batch: 15 Aug is a holiday, so the month
+    // carries a muted (no session) column header to measure.
+    "/coach/attendance/players/register?year=2026&batch=Weekend&level=Beginner&month=08",
     { waitUntil: "networkidle" },
   )
-  await expect(page.locator(".coach-register-table")).toBeVisible()
+  await expect(page.getByRole("table", { name: /attendance register/ })).toBeVisible()
 
   const contrastRatios = await page.locator(
-    ".coach-register-date-row th.is-unavailable",
+    "thead th[data-unavailable]",
   ).evaluateAll((headers) => {
     const rgb = (value: string) => {
       const channels = value.match(/[\d.]+/gu)?.slice(0, 3).map(Number) ?? [0, 0, 0]

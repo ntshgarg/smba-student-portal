@@ -1,23 +1,35 @@
 "use client"
 
-import { ArrowLeft, CalendarOff, Check, CircleAlert, CircleMinus, RefreshCw, X } from "lucide-react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { CSSProperties } from "react"
 
 import {
-  buildAttendanceRegisterDates,
-  groupAttendanceDatesByMonth,
+  RegisterBand,
+  RegisterFilterPill,
+  RegisterLegend,
+  RegisterMonthBar,
+  RegisterPercent,
+  RegisterToolbar,
+  TileMark,
+  registerStyles as styles,
+  scrollRegisterToday,
+  useRegisterHref,
+} from "@/components/coach/attendance-register-chrome"
+import {
+  attendanceRegisterPercent,
+  buildAttendanceRegisterMonthDates,
+  formatAttendanceRegisterMonth,
 } from "@/components/coach/attendance-register-utils"
 import {
   useAttendancePortal,
   useMemberPortal,
   useSessionPortal,
 } from "@/components/coach/coach-portal-provider"
-import { useAttendanceRegisterWindow } from "@/components/coach/use-attendance-register-window"
 import {
   attendanceRegisterBatches,
+  attendanceRegisterMonthParam,
   attendanceRegisterProgrammes,
   type AttendanceRegisterSelection,
 } from "@/lib/attendance/register-workspace"
@@ -31,11 +43,14 @@ import { placeReachesWindow } from "@/lib/sessions/term"
 const weekdayShortLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 export function PlayerAttendanceRegister({
+  month: activeMonth,
   referenceDate,
   referenceInstant: initialReferenceInstant,
   selection,
   yearOptions,
 }: {
+  /** 1-12: the register shows one month of `selection.year` at a time. */
+  month: number
   referenceDate: string
   referenceInstant: number
   selection: AttendanceRegisterSelection
@@ -53,42 +68,21 @@ export function PlayerAttendanceRegister({
     sessionSeries,
   } = useSessionPortal()
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const hrefFor = useRegisterHref()
+  const gridRef = useRef<HTMLDivElement>(null)
   const todayKey = referenceDate
   const currentYear = Number(todayKey.slice(0, 4))
+  const currentMonth = Number(todayKey.slice(5, 7))
   const activeYear = selection.year
   const selectedProgramme = selection.programme
   const selectedBatch = selection.batch
   const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
 
-  const dates = useMemo(() => buildAttendanceRegisterDates(activeYear), [activeYear])
-  const scrollTargetIndex = dates.reduce(
-    (latest, date, index) => date.key <= todayKey ? index : latest,
-    0,
+  const monthDates = useMemo(
+    () => buildAttendanceRegisterMonthDates(activeYear, activeMonth),
+    [activeMonth, activeYear],
   )
-  const initialWindowIndex = activeYear === currentYear ? scrollTargetIndex : 0
-  const {
-    containerRef: registerScrollRef,
-    onScroll: handleRegisterScroll,
-    scrollToIndex,
-    visibleWindow,
-  } = useAttendanceRegisterWindow({
-    dateCount: dates.length,
-    initialIndex: initialWindowIndex,
-    resetKey: `${activeYear}:${selectedBatch}:${selectedProgramme}`,
-    scrollOnReset: activeYear === currentYear,
-  })
-  const visibleDates = useMemo(
-    () => dates.slice(visibleWindow.start, visibleWindow.end),
-    [dates, visibleWindow.end, visibleWindow.start],
-  )
-  const visibleMonthGroups = useMemo(
-    () => groupAttendanceDatesByMonth(visibleDates),
-    [visibleDates],
-  )
-  const leadingDateCount = visibleWindow.start
-  const trailingDateCount = dates.length - visibleWindow.end
+  const monthLabel = formatAttendanceRegisterMonth(activeYear, activeMonth, "long")
   const categorySeries = sessionSeries.filter((series) => (
     series.programme === selectedProgramme && series.batch === selectedBatch
   ))
@@ -146,10 +140,117 @@ export function PlayerAttendanceRegister({
     },
     new Map(),
   )
-  const tableStyle = {
-    "--register-width": `${250 + dates.length * 58}px`,
-    "--register-mobile-width": `${148 + dates.length * 54}px`,
-  } as CSSProperties
+
+  /*
+   * Columns are the days this level and batch trains: the weekdays its
+   * schedules run on, plus any other date carrying one of its sessions or a
+   * completed make-up. A Weekday batch's Saturdays held nothing but "no session"
+   * cells, so leaving them out loses no mark and gives every column room for a
+   * full tile. A category with no weekly slots at all falls back to every day.
+   */
+  const trainingWeekdays = new Set(categorySeries.flatMap((series) => series.slots.map((slot) => slot.weekday)))
+  const datesWithActivity = new Set([
+    ...categoryOccurrences.map((occurrence) => occurrence.occurrenceDate),
+    ...[...categoryAdjustmentsByPlayer.values()].flat().map((adjustment) => adjustment.completedOn),
+  ])
+  const dates = monthDates.filter((date) => (
+    trainingWeekdays.has(date.weekday) || datesWithActivity.has(date.key)
+  ))
+  const visibleDates = dates.length ? dates : monthDates
+
+  const rowCells = registerRows.map((row) => {
+    const playerAdjustments = categoryAdjustmentsByPlayer.get(row.player.member.id) ?? []
+    const rowAdjustments = playerAdjustments.filter((adjustment) => {
+      const source = occurrenceById.get(adjustment.sourceOccurrenceId)
+      return Boolean(source
+        && source.seriesId === row.series.id
+        && playerWasEnrolledForOccurrence(row.player.member.trainingStartOn, source)
+        && assignmentCoversOccurrence(row.assignment, source))
+    })
+    const completionAdjustmentsByDate = rowAdjustments.reduce<Map<string, typeof rowAdjustments>>(
+      (map, adjustment) => {
+        const current = map.get(adjustment.completedOn) ?? []
+        current.push(adjustment)
+        map.set(adjustment.completedOn, current)
+        return map
+      },
+      new Map(),
+    )
+    const slot = row.series.slots[0]
+    const sessionLabel = formatSessionLabel({
+      programme: row.series.programme,
+      batch: row.series.batch,
+      startTime: slot?.startTime ?? "",
+      durationMinutes: slot?.durationMinutes ?? 0,
+    })
+
+    return {
+      row,
+      sessionLabel,
+      cells: visibleDates.map((date) => {
+        const occurrence = occurrenceBySeriesDate.get(`${row.series.id}:${date.key}`)
+        const unavailable = !occurrence
+          || occurrence.status !== "scheduled"
+          || !playerWasEnrolledForOccurrence(row.player.member.trainingStartOn, occurrence)
+          || !assignmentCoversOccurrence(row.assignment, occurrence)
+        const future = occurrence ? occurrenceIsUpcoming(occurrence, referenceInstant) : false
+        const choice = occurrence ? attendanceRecords[occurrence.id]?.[row.player.member.id] : undefined
+        const adjustment = occurrence
+          ? sourceAdjustmentByCell.get(`${row.player.member.id}:${occurrence.id}`)
+          : undefined
+        const completionAdjustments = completionAdjustmentsByDate.get(date.key) ?? []
+        const completionRequiresReview = completionAdjustments.some((item) => item.reviewRequiredAt)
+        const holiday = holidayByDate.get(date.key)
+        // An upcoming session and a past one nobody has marked must not look
+        // alike: the single distinction this register exists to draw.
+        const upcoming = future && !choice && !unavailable && !holiday
+        const ordinaryState = holiday
+          ? `academy closed for ${holiday.label}`
+          : unavailable
+            ? "not eligible for a scheduled session"
+            : future ? "future session" : choice ?? "not recorded"
+        const adjustmentState = adjustment?.reviewRequiredAt
+          ? "missed session reconciled, requires review"
+          : adjustment ? "missed session reconciled" : null
+        const completionCount = completionAdjustments.length
+        const completionState = completionCount
+          ? `${completionCount} completed rescheduled ${completionCount === 1 ? "session" : "sessions"}${completionRequiresReview ? ", requires review" : ""}`
+          : null
+        const state = [adjustmentState ?? ordinaryState, completionState]
+          .filter(Boolean)
+          .join("; ")
+        return {
+          adjustment,
+          choice,
+          completionAdjustment: completionAdjustments[0],
+          completionCount,
+          completionRequiresReview,
+          date,
+          holiday,
+          // Counted toward the month's %: a stored present/absent on a session
+          // the player could attend, closed days excluded.
+          marked: Boolean(choice && !unavailable && !holiday),
+          state,
+          unavailable,
+          upcoming,
+        }
+      }),
+    }
+  })
+  const playerTotals = rowCells.reduce<Map<string, { marked: number; present: number }>>(
+    (map, { cells, row }) => {
+      const total = map.get(row.player.member.id) ?? { marked: 0, present: 0 }
+      cells.forEach((cell) => {
+        if (!cell.marked) return
+        total.marked += 1
+        if (cell.choice === "present") total.present += 1
+      })
+      map.set(row.player.member.id, total)
+      return map
+    },
+    new Map(),
+  )
+  const tableStyle = { "--register-columns": visibleDates.length } as CSSProperties
 
   // Advanced from the instant the server rendered with, by however much real
   // time has passed, rather than reset to the device's own clock. The register
@@ -174,197 +275,98 @@ export function PlayerAttendanceRegister({
     return () => window.clearInterval(timer)
   }, [initialReferenceInstant])
 
-  function replaceFilters(changes: Record<string, string>) {
-    const next = new URLSearchParams(searchParams.toString())
-    Object.entries(changes).forEach(([key, value]) => next.set(key, value))
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+  function replaceFilters(changes: Record<string, string | null>) {
+    router.replace(hrefFor(changes), { scroll: false })
   }
 
   function jumpToToday() {
-    if (activeYear !== currentYear) {
-      replaceFilters({ year: String(currentYear) })
+    if (activeYear !== currentYear || activeMonth !== currentMonth) {
+      replaceFilters({ month: attendanceRegisterMonthParam(currentMonth), year: String(currentYear) })
       return
     }
-    scrollToIndex(scrollTargetIndex, "smooth")
+    scrollRegisterToday(gridRef.current)
   }
 
   return (
-    <div className="coach-calendar coach-attendance-workspace page-shell">
-      <nav className="coach-calendar-back-row coach-route-nav" aria-label="Player attendance navigation">
-        <Link href="/coach#attendance"><ArrowLeft aria-hidden="true" /> Back to Attendance</Link>
-      </nav>
+    <div className={styles.register} id="attendance-register">
+      <RegisterToolbar people="players" onJumpToToday={jumpToToday}>
+        {sessionSeries.length ? (
+          <>
+            <RegisterFilterPill
+              label="Year"
+              options={yearOptions}
+              value={activeYear}
+              onChange={(year) => replaceFilters({ month: null, year })}
+            />
+            <RegisterFilterPill
+              label="Batch"
+              options={attendanceRegisterBatches}
+              value={selectedBatch}
+              onChange={(batch) => replaceFilters({ batch })}
+            />
+            <RegisterFilterPill
+              label="Level"
+              options={attendanceRegisterProgrammes}
+              value={selectedProgramme}
+              onChange={(level) => replaceFilters({ level })}
+            />
+          </>
+        ) : null}
+      </RegisterToolbar>
 
-      <header className="coach-calendar-header">
-        <div>
-          <span className="eyebrow">Attendance register</span>
-          <h1 id="player-attendance-register-title">Player attendance</h1>
+      {!sessionSeries.length ? (
+        <div className="coach-register-empty-schedule">
+          <h2>No sessions scheduled.</h2>
+          <p>Create a recurring schedule and assign players before attendance can be recorded.</p>
+          <Link href="/coach/schedules/new">Create schedule</Link>
         </div>
-      </header>
+      ) : (
+        <>
+          <RegisterMonthBar month={activeMonth} year={activeYear} />
 
-      <article className="coach-attendance-card is-workspace">
-        <div className="coach-attendance-register" id="attendance-register">
-          {!sessionSeries.length ? (
-            <div className="coach-register-empty-schedule">
-              <h2>No sessions scheduled.</h2>
-              <p>Create a recurring schedule and assign players before attendance can be recorded.</p>
-              <Link href="/coach/schedules/new">Create schedule</Link>
-            </div>
-          ) : (
-            <>
-              <div className="coach-register-controls">
-                <div className="coach-year-selector" role="group" aria-label="Choose attendance year">
-                  {yearOptions.map((year) => (
-                    <button
-                      key={year}
-                      type="button"
-                      className={year === activeYear ? "is-active" : undefined}
-                      aria-pressed={year === activeYear}
-                      onClick={() => replaceFilters({ year: String(year) })}
-                    >
-                      {year}
-                    </button>
-                  ))}
-                </div>
+          <div className={styles.card}>
+            <RegisterBand
+              heading={<h2>{selectedProgramme} · {selectedBatch}</h2>}
+              month={activeMonth}
+              subtitle={`${monthLabel} · ${playerTotals.size} ${playerTotals.size === 1 ? "player" : "players"}`}
+              year={activeYear}
+              yearOptions={yearOptions}
+            />
+
+            {!categorySeries.length ? (
+              <div className={styles.empty}>
+                <h3>No {selectedProgramme} · {selectedBatch} sessions.</h3>
+                <p>Create a matching recurring schedule before recording attendance.</p>
+                <Link href="/coach/schedules/new">Create schedule</Link>
               </div>
-
-              <div className="coach-register-category-picker">
-                <div className="coach-session-picker" role="group" aria-label="Choose attendance batch">
-                  {attendanceRegisterBatches.map((batch) => (
-                    <button
-                      key={batch}
-                      type="button"
-                      aria-pressed={batch === selectedBatch}
-                      className={batch === selectedBatch ? "is-active" : undefined}
-                      onClick={() => replaceFilters({ batch })}
-                    >
-                      <strong>{batch}</strong>
-                    </button>
-                  ))}
-                </div>
-                <div className="coach-session-picker" role="group" aria-label="Choose attendance level">
-                  {attendanceRegisterProgrammes.map((programme) => (
-                    <button
-                      key={programme}
-                      type="button"
-                      aria-pressed={programme === selectedProgramme}
-                      className={programme === selectedProgramme ? "is-active" : undefined}
-                      onClick={() => replaceFilters({ level: programme })}
-                    >
-                      <strong>{programme}</strong>
-                    </button>
-                  ))}
-                </div>
+            ) : !registerRows.length ? (
+              <div className={styles.empty}>
+                <h3>No players assigned yet.</h3>
+                <p>Matching players appear here after they are added to a roster.</p>
+                <Link href="/coach/schedules">Open Schedules &amp; Rosters</Link>
               </div>
-
-              <div className="coach-register-heading">
-                <div>
-                  <span>Level &amp; batch</span>
-                  <h2>{selectedProgramme} · {selectedBatch}</h2>
-                </div>
-                <div className="coach-register-period">
-                  <span>Annual register</span>
-                  <button type="button" onClick={jumpToToday}>Jump to today</button>
-                </div>
-              </div>
-
-              {/*
-                * "Rescheduled" and "Needs review" were rendered by the grid and
-                * missing from the key, so an amber cell and a red-ringed one had
-                * to be guessed at -- on the register that feeds fee decisions.
-                *
-                * Neither the wording nor the swatch is invented here. The
-                * player's own attendance card already labels this exact state
-                * "Rescheduled" (components/dashboard/player-attendance-card.tsx),
-                * and `.player-attendance-legend i.is-makeup` has been styled in
-                * app/portal.css all along with nothing rendering it: the row was
-                * intended and got dropped, which is why the coach saw a state the
-                * player it describes has always had explained to them.
-                *
-                * The two states the grid can also produce -- a `+N` completion
-                * chip and a solid-green completion cell -- are deliberately not
-                * listed. Publish validation makes them unreachable on the normal
-                * path, and a key to something nobody can see is worse than no key.
-                */}
-              <div className="player-attendance-legend staff-attendance-legend" role="group" aria-label="Attendance status legend">
-                <span><i className="is-present" aria-hidden="true"><Check /></i>Present</span>
-                <span><i className="is-absent" aria-hidden="true"><CircleMinus /></i>Absent</span>
-                <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
-                <span><i className="is-future" aria-hidden="true" />Upcoming</span>
-                <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
-                <span><i className="is-holiday" aria-hidden="true"><CalendarOff /></i>Holiday</span>
-                <span><i className="is-makeup" aria-hidden="true"><RefreshCw /></i>Rescheduled</span>
-                <span><i className="is-review" aria-hidden="true"><CircleAlert /></i>Needs review</span>
-              </div>
-
-              {!categorySeries.length ? (
-                <div className="coach-register-empty-category">
-                  <h2>No {selectedProgramme} · {selectedBatch} sessions.</h2>
-                  <p>Create a matching recurring schedule before recording attendance.</p>
-                  <Link href="/coach/schedules/new">Create schedule</Link>
-                </div>
-              ) : !registerRows.length ? (
-                <div className="coach-register-empty-category">
-                  <h2>No players assigned yet.</h2>
-                  <p>Matching players appear here after they are added to a roster.</p>
-                  <Link href="/coach/schedules">Open Schedules &amp; Rosters</Link>
-                </div>
-              ) : (
+            ) : (
+              <>
+                {/* "Made up" and "Needs review" are listed because the grid
+                    renders them; the rare `+N` completion count is not, since
+                    publish validation keeps it off the normal path. */}
+                <RegisterLegend items={["present", "absent", "makeup", "holiday", "unmarked", "upcoming", "review"]} />
                 <div
-                  className="coach-register-scroll"
-                  ref={registerScrollRef}
-                  onScroll={handleRegisterScroll}
+                  className={styles.grid}
+                  ref={gridRef}
                   tabIndex={0}
                   role="region"
-                  aria-label="Scrollable annual player attendance register"
+                  aria-label={`${selectedProgramme} ${selectedBatch} attendance, ${monthLabel}`}
                 >
                   <table
-                    className="coach-register-table"
+                    className={styles.table}
                     style={tableStyle}
-                    aria-label={`${selectedProgramme} ${selectedBatch} attendance register for ${activeYear}`}
-                    aria-colcount={dates.length + 1}
+                    aria-label={`${selectedProgramme} ${selectedBatch} attendance register for ${monthLabel}`}
                   >
-                    <colgroup>
-                      <col className="coach-register-name-col" />
-                      {leadingDateCount ? (
-                        <col className="coach-register-date-col" span={leadingDateCount} />
-                      ) : null}
-                      {visibleDates.map((date) => (
-                        <col key={date.key} className="coach-register-date-col" />
-                      ))}
-                      {trailingDateCount ? (
-                        <col className="coach-register-date-col" span={trailingDateCount} />
-                      ) : null}
-                    </colgroup>
                     <thead>
-                      <tr className="coach-register-month-row">
-                        <th className="coach-register-name-column" scope="col" rowSpan={2} aria-colindex={1}>Player name</th>
-                        {leadingDateCount ? (
-                          <th
-                            className="coach-register-spacer-cell"
-                            colSpan={leadingDateCount}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                        {visibleMonthGroups.map((month) => (
-                          <th key={month.label} scope="colgroup" colSpan={month.count}><span>{month.label}</span></th>
-                        ))}
-                        {trailingDateCount ? (
-                          <th
-                            className="coach-register-spacer-cell"
-                            colSpan={trailingDateCount}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                      </tr>
-                      <tr className="coach-register-date-row">
-                        {leadingDateCount ? (
-                          <th
-                            className="coach-register-spacer-cell"
-                            colSpan={leadingDateCount}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                        {visibleDates.map((date, visibleIndex) => {
+                      <tr>
+                        <th className={styles.name} scope="col">Player</th>
+                        {visibleDates.map((date) => {
                           const available = categorySeries.some((series) => (
                             occurrenceBySeriesDate.get(`${series.id}:${date.key}`)?.status === "scheduled"
                           ))
@@ -374,72 +376,29 @@ export function PlayerAttendanceRegister({
                               key={date.key}
                               scope="col"
                               data-register-date={date.key}
-                              aria-colindex={visibleWindow.start + visibleIndex + 2}
-                              className={[
-                                date.key === todayKey ? "is-today" : "",
-                                !available ? "is-unavailable" : "",
-                                holiday ? "is-holiday" : "",
-                              ].filter(Boolean).join(" ") || undefined}
-                              /*
-                               * The struck-out column already existed; what it
-                               * could not do is say why. Without this the header
-                               * announces a bare date and reads exactly like a
-                               * Sunday, a weekday this batch does not train, and
-                               * a date before the player joined.
-                               */
+                              data-register-today={date.key === todayKey || undefined}
+                              data-unavailable={!available || undefined}
+                              // A struck-out column has to say why, or a holiday
+                              // reads exactly like a day this batch does not train.
                               title={holiday ? `${date.label}: closed for ${holiday.label}` : undefined}
                             >
                               <span>{date.day}</span>
                               <strong>{date.date}</strong>
-                              {holiday ? (
-                                <small className="coach-register-holiday-mark">
-                                  <span className="sr-only">Closed for {holiday.label}</span>
-                                  <CalendarOff aria-hidden="true" />
-                                </small>
-                              ) : null}
+                              {holiday ? <span className="sr-only">Closed for {holiday.label}</span> : null}
                             </th>
                           )
                         })}
-                        {trailingDateCount ? (
-                          <th
-                            className="coach-register-spacer-cell"
-                            colSpan={trailingDateCount}
-                            aria-hidden="true"
-                          />
-                        ) : null}
                       </tr>
                     </thead>
                     <tbody>
-                      {registerRows.map((row, rowIndex) => {
+                      {rowCells.map(({ cells, row, sessionLabel }, rowIndex) => {
                         const firstPlayerRow = rowIndex === 0
                           || registerRows[rowIndex - 1]?.player.member.id !== row.player.member.id
-                        const playerAdjustments = categoryAdjustmentsByPlayer.get(row.player.member.id) ?? []
-                        const rowAdjustments = playerAdjustments.filter((adjustment) => {
-                          const source = occurrenceById.get(adjustment.sourceOccurrenceId)
-                          return Boolean(source
-                            && source.seriesId === row.series.id
-                            && playerWasEnrolledForOccurrence(row.player.member.trainingStartOn, source)
-                            && assignmentCoversOccurrence(row.assignment, source))
-                        })
-                        const rowYearAdjustments = rowAdjustments.filter((adjustment) => (
-                          adjustment.completedOn >= yearStart && adjustment.completedOn < nextYearStart
-                        ))
-                        const completionAdjustmentsByDate = rowYearAdjustments.reduce<Map<string, typeof rowYearAdjustments>>(
-                          (map, adjustment) => {
-                            const current = map.get(adjustment.completedOn) ?? []
-                            current.push(adjustment)
-                            map.set(adjustment.completedOn, current)
-                            return map
-                          },
-                          new Map(),
-                        )
+                        const totals = playerTotals.get(row.player.member.id)
+                        const percent = firstPlayerRow && totals
+                          ? attendanceRegisterPercent(totals.present, totals.marked)
+                          : null
                         const slot = row.series.slots[0]
-                        const sessionLabel = formatSessionLabel({
-                          programme: row.series.programme,
-                          batch: row.series.batch,
-                          startTime: slot?.startTime ?? "",
-                          durationMinutes: slot?.durationMinutes ?? 0,
-                        })
                         const sessionTimeLabel = formatSessionTimeRange({
                           startTime: slot?.startTime ?? "",
                           durationMinutes: slot?.durationMinutes ?? 0,
@@ -449,132 +408,80 @@ export function PlayerAttendanceRegister({
                           .join(", ")
 
                         return (
-                          <tr key={row.assignment.id} className={firstPlayerRow ? undefined : "is-session-continuation"}>
+                          <tr key={row.assignment.id} className={firstPlayerRow ? undefined : styles.continuation}>
                             <th
-                              className="coach-register-name-column"
+                              className={styles.name}
                               scope="row"
-                              aria-colindex={1}
-                              aria-label={`${row.player.member.fullName}, ${sessionLabel}, assigned ${assignedDaysLabel}`}
+                              aria-label={`${row.player.member.fullName}, ${sessionLabel}, assigned ${assignedDaysLabel}${percent === null ? "" : `, ${percent}% attended in ${monthLabel}`}`}
                             >
-                              {firstPlayerRow ? <strong>{row.player.member.fullName}</strong> : null}
+                              {firstPlayerRow ? (
+                                <span className={styles.who}>
+                                  <strong>{row.player.member.fullName}</strong>
+                                  <RegisterPercent value={percent} />
+                                </span>
+                              ) : null}
                               <small>{[sessionTimeLabel, assignedDaysLabel].filter(Boolean).join(" · ")}</small>
                             </th>
-                            {leadingDateCount ? (
-                              <td
-                                className="coach-register-spacer-cell"
-                                colSpan={leadingDateCount}
-                                aria-hidden="true"
-                              />
-                            ) : null}
-                            {visibleDates.map((date, visibleIndex) => {
-                              const occurrence = occurrenceBySeriesDate.get(`${row.series.id}:${date.key}`)
-                              const unavailable = !occurrence
-                                || occurrence.status !== "scheduled"
-                                || !playerWasEnrolledForOccurrence(row.player.member.trainingStartOn, occurrence)
-                                || !assignmentCoversOccurrence(row.assignment, occurrence)
-                              const future = occurrence ? occurrenceIsUpcoming(occurrence, referenceInstant) : false
-                              const choice = occurrence ? attendanceRecords[occurrence.id]?.[row.player.member.id] : undefined
-                              const adjustment = occurrence
-                                ? sourceAdjustmentByCell.get(`${row.player.member.id}:${occurrence.id}`)
-                                : undefined
-                              const completionAdjustments = completionAdjustmentsByDate.get(date.key) ?? []
-                              const completionAdjustment = completionAdjustments[0]
-                              const completionCount = completionAdjustments.length
-                              const completionRequiresReview = completionAdjustments.some((item) => item.reviewRequiredAt)
-                              const holiday = holidayByDate.get(date.key)
-                              // The one cell state with no mark of its own. `future` reached the
-                              // accessible name and stopped there, so an upcoming session and a
-                              // past one nobody has marked both painted the same grey em dash --
-                              // the single distinction this register exists to draw. Conditions
-                              // match the glyph branch below exactly, so this is true only where
-                              // the dash would otherwise have been.
-                              const upcoming = future && !choice && !unavailable && !holiday
-                              const ordinaryState = holiday
-                                ? `academy closed for ${holiday.label}`
-                                : unavailable
-                                  ? "not eligible for a scheduled session"
-                                  : future ? "future session" : choice ?? "not recorded"
-                              const adjustmentState = adjustment?.reviewRequiredAt
-                                ? "missed session reconciled, requires review"
-                                : adjustment ? "missed session reconciled" : null
-                              const completionState = completionCount
-                                ? `${completionCount} completed rescheduled ${completionCount === 1 ? "session" : "sessions"}${completionRequiresReview ? ", requires review" : ""}`
+                            {cells.map((cell) => {
+                              const cellLabel = `${row.player.member.fullName}, ${sessionLabel}, ${cell.date.label}: ${cell.state}.`
+                              const title = `${sessionLabel} · ${cell.date.label}: ${cell.state}`
+                              const count = cell.completionCount
+                                ? <span className={styles.count} aria-hidden="true">+{cell.completionCount}</span>
                                 : null
-                              const state = [adjustmentState ?? ordinaryState, completionState]
-                                .filter(Boolean)
-                                .join("; ")
-                              const cellLabel = `${row.player.member.fullName}, ${sessionLabel}, ${date.label}: ${state}.`
 
                               return (
-                                <td
-                                  key={date.key}
-                                  aria-colindex={visibleWindow.start + visibleIndex + 2}
-                                  className={[
-                                    date.key === todayKey ? "is-today" : "",
-                                    unavailable ? "is-unavailable" : "",
-                                    holiday ? "is-holiday" : "",
-                                  ].filter(Boolean).join(" ") || undefined}
-                                >
-                                  {adjustment ? (
+                                <td key={cell.date.key}>
+                                  {cell.adjustment ? (
                                     <Link
-                                      className={`coach-register-cell-control is-makeup${adjustment.reviewRequiredAt ? " requires-review" : ""}`}
-                                      href={`/coach/attendance/adjustments?adjustment=${encodeURIComponent(adjustment.id)}&player=${encodeURIComponent(row.player.member.id)}`}
+                                      className={`${styles.tile} ${styles.makeup}${cell.adjustment.reviewRequiredAt ? ` ${styles.review}` : ""}`}
+                                      href={`/coach/attendance/adjustments?adjustment=${encodeURIComponent(cell.adjustment.id)}&player=${encodeURIComponent(row.player.member.id)}`}
                                       aria-label={`${cellLabel} Open adjustment details.`}
-                                      title={`${sessionLabel} · ${date.label}: ${state}`}
+                                      title={title}
                                     >
-                                      {completionCount ? <span className="coach-register-makeup-count" aria-hidden="true">+{completionCount}</span> : null}
-                                      {adjustment.reviewRequiredAt
-                                        ? <CircleAlert aria-hidden="true" />
-                                        : completionCount ? null : <RefreshCw aria-hidden="true" />}
+                                      {count}
+                                      <TileMark kind="makeup" />
+                                      {cell.adjustment.reviewRequiredAt ? <TileMark kind="review" /> : null}
                                     </Link>
-                                  ) : completionAdjustment && unavailable ? (
+                                  ) : cell.completionAdjustment && cell.unavailable ? (
                                     <Link
-                                      className={`coach-register-cell-control is-makeup-completion${completionRequiresReview ? " requires-review" : ""}`}
-                                      href={`/coach/attendance/adjustments?adjustment=${encodeURIComponent(completionAdjustment.id)}&player=${encodeURIComponent(row.player.member.id)}`}
+                                      className={`${styles.tile} ${styles.completion}${cell.completionRequiresReview ? ` ${styles.review}` : ""}`}
+                                      href={`/coach/attendance/adjustments?adjustment=${encodeURIComponent(cell.completionAdjustment.id)}&player=${encodeURIComponent(row.player.member.id)}`}
                                       aria-label={`${cellLabel} Open adjustment details.`}
-                                      title={`${sessionLabel} · ${date.label}: ${state}`}
+                                      title={title}
                                     >
-                                      +{completionCount}
-                                      {completionRequiresReview ? <CircleAlert aria-hidden="true" /> : null}
+                                      {count}
+                                      {cell.completionRequiresReview ? <TileMark kind="review" /> : null}
                                     </Link>
                                   ) : (
                                     <span
-                                      className={`coach-register-cell-status${choice ? ` is-${choice}` : ""}${upcoming && !completionCount ? " is-future" : ""}${completionCount ? " has-makeup-completion" : ""}${completionRequiresReview ? " requires-review" : ""}`}
+                                      className={`${styles.tile} ${styles[
+                                        cell.holiday ? "holiday"
+                                          : cell.unavailable ? "none"
+                                            : cell.choice ?? (cell.upcoming ? "upcoming" : cell.completionCount ? "none" : "unmarked")
+                                      ]}${cell.completionRequiresReview ? ` ${styles.review}` : ""}`}
                                       role="img"
                                       aria-label={cellLabel}
-                                      title={`${sessionLabel} · ${date.label}: ${state}`}
+                                      title={title}
                                     >
-                                      {/* --green and --red measure 1.047:1 against each other, so a set
-                                          choice used to be colour alone (WCAG 1.4.1). X is already the
-                                          "not available" mark in this cell and — is "not recorded", so
-                                          absent takes the ring of CircleMinus rather than a second cross
-                                          or a bare Minus. aria-label stays the accessible name. */}
-                                      {holiday ? <CalendarOff aria-hidden="true" /> : unavailable ? <X aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : completionCount ? null : upcoming ? <span aria-hidden="true">·</span> : <span aria-hidden="true">—</span>}
-                                      {completionCount ? <span className="coach-register-makeup-count" aria-hidden="true">+{completionCount}</span> : null}
-                                      {completionRequiresReview ? <CircleAlert aria-hidden="true" /> : null}
+                                      {count}
+                                      <TileMark kind={cell.holiday ? "holiday" : cell.unavailable ? "none" : cell.choice ?? "none"} />
+                                      {cell.completionRequiresReview ? <TileMark kind="review" /> : null}
                                     </span>
                                   )}
                                 </td>
                               )
                             })}
-                            {trailingDateCount ? (
-                              <td
-                                className="coach-register-spacer-cell"
-                                colSpan={trailingDateCount}
-                                aria-hidden="true"
-                              />
-                            ) : null}
                           </tr>
                         )
                       })}
                     </tbody>
                   </table>
                 </div>
-              )}
-            </>
-          )}
-        </div>
-      </article>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }

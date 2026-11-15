@@ -173,6 +173,7 @@ describe("the coach registers' 30-second reference clock", () => {
     ["the player attendance register", () => {
       renderToStaticMarkup(
         <PlayerAttendanceRegister
+          month={8}
           referenceDate="2026-08-17"
           referenceInstant={PINNED_SERVER_INSTANT}
           selection={{ batch: "Weekday", programme: "Beginner", year: 2026 }}

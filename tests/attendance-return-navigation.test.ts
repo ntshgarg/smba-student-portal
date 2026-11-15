@@ -9,15 +9,13 @@ function source(relativePath: string) {
 
 describe("attendance return navigation", () => {
   it.each([
-    "components/coach/player-attendance-register.tsx",
-    "components/coach/staff-attendance-register.tsx",
-    "app/coach/attendance/adjustments/page.tsx",
-  ])("returns %s to the Attendance dashboard section", (relativePath) => {
-    const component = source(relativePath)
-
-    expect(component).toContain('href="/coach#attendance"')
-    expect(component).toContain("Back to Attendance")
-    expect(component).not.toContain("Back to dashboard")
+    ["app/coach/attendance/players/register/page.tsx", "register"],
+    ["app/coach/attendance/staff/register/page.tsx", "register"],
+    ["app/coach/attendance/adjustments/page.tsx", "makeups"],
+  ])("puts %s under the Attendance shell, whose back link returns to the dashboard section", (relativePath, tab) => {
+    expect(source(relativePath)).toContain(`<AttendanceShell activeTab="${tab}">`)
+    expect(source("components/coach/attendance/attendance-shell.tsx"))
+      .toContain('backHref = "/coach#attendance"')
   })
 
   // The Mark tab's back link is the Attendance shell's; the page only swaps it

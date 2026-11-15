@@ -368,8 +368,10 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     case "attendance-weekend-adult":
       await openAttendance(page)
-      await clickRequired(page.getByRole("button", { name: "Weekend", exact: true }), action)
-      await clickRequired(page.getByRole("button", { name: "Adult", exact: true }), action)
+      await page.getByLabel("Batch", { exact: true }).selectOption("Weekend")
+      await page.waitForURL((url) => url.searchParams.get("batch") === "Weekend")
+      await page.getByLabel("Level", { exact: true }).selectOption("Adult")
+      await page.waitForURL((url) => url.searchParams.get("level") === "Adult")
       break
     case "attendance-session-selected":
       await clickRequired(
@@ -379,14 +381,17 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       break
     case "attendance-year-start":
       await openAttendance(page)
-      await clickRequired(
-        page.locator('[aria-label="Choose attendance year"] button').first(),
-        action,
-      )
-      if (await page.locator(".coach-register-scroll").count()) {
-        await page.locator(".coach-register-scroll").evaluate((element) => {
-          element.scrollLeft = 0
-        })
+      {
+        const year = page.getByLabel("Year", { exact: true })
+        const firstYear = await year.locator("option").first().textContent() ?? ""
+        await year.selectOption(firstYear)
+        await page.waitForURL((url) => url.searchParams.get("year") === firstYear)
+        await clickRequired(
+          page.getByRole("navigation", { name: "Choose month" })
+            .getByRole("link", { name: `January ${firstYear}` }),
+          action,
+        )
+        await page.waitForURL((url) => url.searchParams.get("month") === "01")
       }
       break
     case "calendar-month":
