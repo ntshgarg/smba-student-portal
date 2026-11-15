@@ -132,8 +132,8 @@
   color: var(--ink);
   font-size: var(--type-operational-body);
   font-weight: 700;
+  text-align: center;
   cursor: pointer;
-  white-space: nowrap;
 }
 
 .button:disabled {
@@ -411,6 +411,8 @@
 
 .inlineField {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 10px;
   margin-top: 10px;
@@ -433,7 +435,8 @@
 
 .inlineField input[type="date"] {
   width: auto;
-  min-width: 11rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .marks {

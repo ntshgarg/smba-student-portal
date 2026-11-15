@@ -10798,6 +10798,8 @@
 
 .coach-member-tabs {
   display: flex;
+  /* Enlarged text wraps the tabs instead of widening the page. */
+  flex-wrap: wrap;
   gap: 4px;
   padding: 18px var(--space-group) 0;
   background: var(--navy);
@@ -10953,7 +10955,7 @@
   color: var(--ink);
   font-size: var(--type-operational-body);
   font-weight: 700;
-  white-space: nowrap;
+  text-align: center;
 }
 
 .coach-member-joining ol {
@@ -11088,6 +11090,8 @@
 }
 
 .coach-member-form-grid :is(input, select) {
+  width: 100%;
+  min-width: 0;
   min-height: 48px;
   padding: 0 14px;
   border: 1px solid var(--line);
@@ -11134,6 +11138,7 @@
 
 .coach-member-editor-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
 }
@@ -11416,7 +11421,7 @@
   }
 
   .coach-member-joining ol {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-auto-flow: row;
     gap: 12px;
   }
@@ -11434,7 +11439,7 @@
   }
 
   .coach-member-form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .coach-member-editor-actions button {
