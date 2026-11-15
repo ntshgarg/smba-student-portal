@@ -2330,13 +2330,15 @@ export function prepareMonthlyCharges(
       if (replay.eventType !== "monthly_fees_prepared") {
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was already used.")
       }
+      // Requests recorded before these counts existed carry neither.
       const result = parseAuditMetadata<
-        Omit<PrepareMonthlyChargesResult, "deferred"> & { deferred?: number }
+        Omit<PrepareMonthlyChargesResult, "deferred" | "waitingForChange">
+          & { deferred?: number; waitingForChange?: number }
       >(replay.metadata)
       if (result.period !== input.period) {
         financeError("IDEMPOTENCY_CONFLICT", "This request identifier was used for another month.")
       }
-      return { ...result, deferred: result.deferred ?? 0, reused: true }
+      return { ...result, deferred: result.deferred ?? 0, reused: true, waitingForChange: result.waitingForChange ?? 0 }
     }
     /*
      * A month's fees are issued once that month has begun, never ahead of it.

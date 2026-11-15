@@ -498,7 +498,10 @@ export function archiveMemberRecord({
         code: "ACTIVE_ASSIGNMENTS",
         message: booked.kind === "change"
           ? `Training is booked to start on ${formatTermDate(booked.effectiveOn)}. Cancel that booked change in Members before archiving this member.`
-          : `An End training is booked for ${formatTermDate(booked.effectiveOn)}. Cancel it in Members, or wait until that day, before archiving this member.`,
+          : booked.effectiveOn <= getAcademyDateKey(now)
+            // Its day has come; it applies when a page next opens (and is retried).
+            ? `An End training booked for ${formatTermDate(booked.effectiveOn)} has not been applied yet. Reload in a moment, or cancel it in Members, before archiving this member.`
+            : `An End training is booked for ${formatTermDate(booked.effectiveOn)}. Cancel it in Members, or wait until that day, before archiving this member.`,
       }
     }
 
