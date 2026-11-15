@@ -3,6 +3,7 @@ import "server-only"
 import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm"
 
 import type { PlayerTrainingProfile } from "@/lib/coach/types"
+import type { FinanceStatus } from "@/lib/finance/types"
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
 import {
   concessions,
@@ -92,6 +93,8 @@ export type MemberFeeSummary = {
     basis: ThisMonthFeeBasis | null
     dueDate: string
     receivedPaise: number
+    /** The fee's status by the same rule Financials uses (deriveFinanceStatus). */
+    status: FinanceStatus
   } | null
 }
 
@@ -330,6 +333,7 @@ export function listMemberTrainingSummaries(
           basis: feeBases.get(charge.id) ?? null,
           dueDate: charge.dueDate,
           receivedPaise: chargeViews.get(charge.id)?.receivedPaise ?? 0,
+          status: chargeViews.get(charge.id)?.status ?? "pending",
         }
         : null,
     }

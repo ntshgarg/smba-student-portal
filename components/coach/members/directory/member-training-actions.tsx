@@ -21,6 +21,7 @@ import { useMemberDirectoryPortal } from "@/components/coach/coach-portal-provid
 import { FormShell } from "@/components/coach/members/directory/form-shell"
 import styles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
+import { thisMonthFeeLabel } from "@/components/coach/members/directory/this-month-fee-label"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
@@ -315,13 +316,7 @@ export function MemberTrainingActions({
                 <div><dt>Monthly fee</dt><dd>{fee.monthlyFeePaise !== null ? formatInr(fee.monthlyFeePaise) : "None"}</dd></div>
                 <div>
                   <dt>{thisMonth} fee</dt>
-                  <dd>{fee.thisMonth
-                    ? `${formatInr(fee.thisMonth.amountPaise)} · ${fee.thisMonth.receivedPaise >= fee.thisMonth.amountPaise
-                      ? "paid"
-                      : fee.thisMonth.receivedPaise > 0
-                        ? `${formatInr(fee.thisMonth.receivedPaise)} paid`
-                        : `${fee.thisMonth.dueDate < data.today ? "overdue, was due" : "due"} ${dayName(fee.thisMonth.dueDate)}`}`
-                    : "Not issued yet"}</dd>
+                  <dd>{fee.thisMonth ? thisMonthFeeLabel(fee.thisMonth) : "Not issued yet"}</dd>
                 </div>
                 <div><dt>From {nextMonth}</dt><dd>{fee.nextMonthNoFee === "term-finished"
                   ? "No fee: term finished"
