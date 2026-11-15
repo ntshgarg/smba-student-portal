@@ -134,13 +134,14 @@
   line-height: var(--leading-body);
 }
 
+/* the label sits centred with its icon beside it, like the other main buttons */
 .ledgerActionButton {
   display: flex;
   width: 100%;
   min-height: 52px;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-group);
+  justify-content: center;
+  gap: 10px;
   padding: 0 17px;
   border: 1px solid var(--navy);
   border-radius: 14px;
@@ -149,13 +150,16 @@
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 700;
-  text-align: left;
+  text-align: center;
   transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard), var(--press-transition);
 }
 
-.ledgerActionButton:hover {
-  background: var(--navy);
-  color: var(--ivory);
+/* only a real pointer hover fills it: a tap on a phone would otherwise leave it navy */
+@media (hover: hover) {
+  .ledgerActionButton:hover {
+    background: var(--navy);
+    color: var(--ivory);
+  }
 }
 
 .ledgerActionButton:focus-visible {
