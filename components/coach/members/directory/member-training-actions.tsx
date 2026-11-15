@@ -253,7 +253,7 @@ export function MemberTrainingActions({
                   month's fee is held back, so the record says so. */}
               {scheduled.effectiveOn <= data.today ? (
                 <span>
-                  {`Due ${dayName(scheduled.effectiveOn)} and not applied yet; it is retried automatically. ${thisMonth}’s fee waits until it is.`}
+                  {`Due ${dayName(scheduled.effectiveOn)} and not applied yet; it is retried automatically.${data.financeActive && fee?.activeAgreementId ? ` ${thisMonth}’s fee waits until it is.` : ""}`}
                 </span>
               ) : null}
             </div>

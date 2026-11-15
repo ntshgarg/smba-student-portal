@@ -235,7 +235,8 @@ function assignmentRange(assignment: OnboardingAssignment) {
  * reads this and they cannot disagree.
  */
 export function onboardingFinished(record: { onboardingCompletedAt: string | Date | null }) {
-  return record.onboardingCompletedAt !== null
+  // A missing stamp (undefined) reads as not finished, the safe side.
+  return record.onboardingCompletedAt != null
 }
 
 /*
