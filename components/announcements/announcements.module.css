@@ -42,14 +42,8 @@
   white-space: nowrap;
 }
 
-.publicMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-tight) 10px;
-}
-
-.publicMeta span {
+.publicPinned {
+  align-self: flex-start;
   padding: 4px 10px;
   border-radius: var(--radius-pill);
   background: var(--red);
@@ -58,12 +52,6 @@
   font-weight: var(--weight-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-}
-
-.publicMeta time {
-  color: var(--steel);
-  font-size: 0.8125rem;
-  font-weight: 650;
 }
 
 .publicNotice h3 {

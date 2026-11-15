@@ -119,7 +119,11 @@ export function PublicAnnouncements() {
                 <span>{month}</span>
                 <span>{day}</span>
               </span>
-              <NoticeMeta announcement={announcement} />
+              {/* the rising date is drawn for the eye; this one is read aloud */}
+              <time className="sr-only" dateTime={announcement.publishedAt}>
+                {announcementDate(announcement.publishedAt)}
+              </time>
+              {announcement.pinned ? <span className={styles.publicPinned}>Pinned</span> : null}
               <h3>
                 <Link href={`/announcements/${announcement.id}`}>{announcement.title}</Link>
               </h3>
@@ -150,14 +154,5 @@ export function PublicAnnouncements() {
         </button>
       ) : null}
     </section>
-  )
-}
-
-function NoticeMeta({ announcement }: { announcement: AnnouncementSummary }) {
-  return (
-    <div className={styles.publicMeta}>
-      {announcement.pinned ? <span>Pinned</span> : null}
-      <time dateTime={announcement.publishedAt}>{announcementDate(announcement.publishedAt)}</time>
-    </div>
   )
 }
