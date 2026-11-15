@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  alignTwoFactorFlag: vi.fn(),
   findApprovedAccountByAcademyId: vi.fn(() => ({ accountId: "player-7" })),
   recordLoginFailure: vi.fn(),
   recordLoginSuccess: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("better-auth/api", () => ({
 vi.mock("@/lib/auth/account-service", () => ({
   findApprovedAccountByAcademyId: mocks.findApprovedAccountByAcademyId,
 }))
+vi.mock("@/lib/auth/two-factor-state", () => ({ alignTwoFactorFlag: mocks.alignTwoFactorFlag }))
 vi.mock("@/lib/auth/credential-service", () => ({
   recordLoginFailure: mocks.recordLoginFailure,
   recordLoginSuccess: mocks.recordLoginSuccess,
@@ -66,6 +68,8 @@ describe("password sign-in reserves each guess before the password is checked", 
   it("spends the guess in `before`, as one check-and-count step", async () => {
     await expect(before(hookContext())).resolves.toBeUndefined()
     expect(mocks.reserveLoginAttempt).toHaveBeenCalledWith(attempt)
+    // Whether the handler then asks for a code is read from the lined-up flag.
+    expect(mocks.alignTwoFactorFlag).toHaveBeenCalledWith("player-7")
   })
 
   it("refuses in `before` when the reservation is refused", async () => {
