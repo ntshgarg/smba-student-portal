@@ -2749,39 +2749,65 @@
   margin-top: var(--space-content);
 }
 
-.player-profile-ledger {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.6fr) minmax(0, 1.3fr);
+/* The player's name, level and plan close the page as one slim frosted bar, like the homepage footer bar:
+   the name in italic, then a pill each for level and plan. */
+.player-profile-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
   margin: 0;
-  padding: 0;
-  border-block: 1px solid var(--line);
+  padding: 14px 18px;
+  border: var(--frost-border);
+  border-radius: 20px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
 }
 
-.player-profile-ledger > div {
+.player-profile-bar > div {
   min-width: 0;
-  padding: 19px 22px;
 }
 
-.player-profile-ledger > div + div {
-  border-left: 1px solid var(--line);
-}
-
-.player-profile-ledger dt{
+.player-profile-bar dd {
   margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.player-profile-name {
+  margin-right: auto;
+}
+
+.player-profile-name dd {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.5rem;
+  font-style: italic;
+  font-weight: 450;
+  line-height: 1.2;
+}
+
+.player-profile-pill {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: var(--space-tight);
+  padding: 4px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+}
+
+.player-profile-pill dt {
   color: var(--steel);
   font-size: 0.6875rem;
   font-weight: var(--weight-label);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.player-profile-ledger dd {
-  margin-top: var(--space-tight);
-  margin-inline-start: 0;
-  overflow-wrap: anywhere;
+.player-profile-pill dd {
   color: var(--navy);
-  font-size: 0.875rem;
-  font-weight: 720;
+  font-size: 0.8125rem;
+  font-weight: 700;
   line-height: 1.45;
 }
 
@@ -4819,25 +4845,19 @@ tr.is-expanded .coach-member-row-action button svg {
     margin-top: var(--space-group);
   }
 
-  .player-profile-ledger {
-    grid-template-columns: 1fr;
-  }
-
-  .player-profile-ledger > div {
+  /* phones: the name on its own line, then each pill a full-width row with its label left, value right */
+  .player-profile-bar {
     display: grid;
-    grid-template-columns: minmax(102px, 0.48fr) minmax(0, 1fr);
-    align-items: baseline;
-    gap: var(--space-copy);
-    padding: 14px 2px;
+    gap: 10px;
+    padding: var(--space-copy);
   }
 
-  .player-profile-ledger > div + div {
-    border-top: 1px solid var(--line);
-    border-left: 0;
+  .player-profile-pill {
+    justify-content: space-between;
   }
 
-  .player-profile-ledger dd {
-    margin-top: 0;
+  .player-profile-pill dd {
+    text-align: right;
   }
 
   .dashboard-grid {
@@ -7467,15 +7487,15 @@ tr.is-expanded .coach-member-row-action button svg {
   min-height: calc(100svh - 82px);
 }
 
-/* Head and assistant coach: the band is only as tall as its greeting (and the head coach's strip), so the
-   day's work starts on the first screen. Two classes, so the full-height rules above and in the phone
-   block below don't win back. */
-.coach-welcome-scoreboard:is(.head-coach-welcome-hero, .junior-coach-welcome-hero) {
+/* Head coach, assistant coach and player: the band is only as tall as its greeting and strip, so the day's
+   work starts on the first screen. Two classes, so the full-height rules above and in the phone block
+   below don't win back. */
+.coach-welcome-scoreboard:is(.head-coach-welcome-hero, .junior-coach-welcome-hero, .player-welcome-scoreboard) {
   min-height: 0;
 }
 
-/* the head coach's strip has the homepage cards' rounded corners */
-.head-coach-welcome-hero .coach-scoreboard-ribbon {
+/* the head coach's facts strip and the player's coach-note strip have the homepage cards' rounded corners */
+:is(.head-coach-welcome-hero, .player-welcome-scoreboard) .coach-scoreboard-ribbon {
   overflow: hidden;
   border-radius: 24px;
   box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--ink) 80%, transparent);
@@ -7901,9 +7921,9 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 }
 
-/* Selected player dashboard cards: 04A.1 compact Match Tickets with boxed actions. */
+/* Player dashboard cards: the coaches' look (player-dashboard-glass in .21st/DESIGN.md), rounded frosted
+   panes with pill stamps and rounded actions, in the 04A.1 composition. */
 .player-ticket-dashboard {
-  --player-ticket-paper: color-mix(in srgb, var(--white) 88%, var(--ivory));
   --player-ticket-pad-x: 24px;
   --player-ticket-pad-y: 22px;
   min-height: calc(100svh - 82px);
@@ -7917,41 +7937,20 @@ tr.is-expanded .coach-member-row-action button svg {
   margin-top: 0;
 }
 
+/* overflow hidden keeps the parts that bleed to the edge (the session's arrival note, the open attendance
+   record) inside the rounded corners */
 .player-ticket-dashboard .player-ticket-card {
   position: relative;
   display: flex;
   min-width: 0;
   min-height: 210px;
   flex-direction: column;
-  overflow: visible;
+  overflow: hidden;
   padding: var(--player-ticket-pad-y) var(--player-ticket-pad-x);
-  border: 1px solid var(--line);
-  background: var(--player-ticket-paper);
-}
-
-.player-ticket-dashboard .player-ticket-card::before,
-.player-ticket-dashboard .player-ticket-card::after {
-  position: absolute;
-  top: calc(50% - 9px);
-  z-index: 2;
-  width: 10px;
-  height: 18px;
-  border: 1px solid var(--line);
-  background: var(--ivory);
-  content: "";
-  pointer-events: none;
-}
-
-.player-ticket-dashboard .player-ticket-card::before {
-  left: -1px;
-  border-left: 0;
-  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
-}
-
-.player-ticket-dashboard .player-ticket-card::after {
-  right: -1px;
-  border-right: 0;
-  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+  border: var(--frost-border);
+  border-radius: 24px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
 }
 
 .player-ticket-dashboard .player-ticket-masthead {
@@ -7961,7 +7960,14 @@ tr.is-expanded .coach-member-row-action button svg {
   justify-content: space-between;
   gap: var(--space-copy);
   padding-bottom: 12px;
-  border-bottom: 1px dashed var(--line);
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
+}
+
+.player-ticket-dashboard .player-ticket-masthead .player-ticket-title,
+.player-ticket-dashboard .player-ticket-record-value,
+.player-ticket-dashboard .player-ticket-announcement-state {
+  /* a long word wraps rather than being cut by the card's rounded, clipped edge (320px at 200% text) */
+  overflow-wrap: anywhere;
 }
 
 .player-ticket-dashboard .player-ticket-masthead .player-ticket-title {
@@ -7981,8 +7987,9 @@ tr.is-expanded .coach-member-row-action button svg {
    also survives greyscale. */
 .player-ticket-dashboard .player-ticket-context {
   flex: 0 0 auto;
-  padding: 6px 9px;
+  padding: 6px 11px;
   border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
   color: var(--steel);
   line-height: var(--leading-display-light);
 }
@@ -8004,19 +8011,32 @@ tr.is-expanded .coach-member-row-action button svg {
   margin-top: auto;
   padding: 0 15px;
   border: 1px solid var(--navy);
+  border-radius: 14px;
   background: transparent;
   color: var(--navy);
   cursor: pointer;
-  font-size: 0.8125rem;
-  font-weight: 780;
+  font-size: 0.875rem;
+  font-weight: 700;
   line-height: 1.3;
   text-align: left;
   transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
 }
 
-.player-ticket-dashboard .player-ticket-action:hover {
-  background: var(--navy);
-  color: var(--white);
+/* only a real pointer hover fills it: a tap on a phone would otherwise leave it navy */
+@media (hover: hover) {
+  .player-ticket-dashboard .player-ticket-action:hover {
+    background: var(--navy);
+    color: var(--white);
+  }
+
+  .player-ticket-dashboard .player-ticket-action:hover svg {
+    transform: translateX(3px);
+  }
+
+  /* the open record's chevron stays pointing up instead of flipping back on hover */
+  .player-ticket-dashboard .player-attendance-card.is-open .player-attendance-toggle:hover svg {
+    transform: rotate(180deg);
+  }
 }
 
 .player-ticket-dashboard .player-ticket-action:focus-visible {
@@ -8030,10 +8050,6 @@ tr.is-expanded .coach-member-row-action button svg {
   flex: 0 0 auto;
   color: currentColor;
   transition: transform var(--duration-fast) var(--ease-standard);
-}
-
-.player-ticket-dashboard .player-ticket-action:hover svg {
-  transform: translateX(3px);
 }
 
 .player-ticket-dashboard .player-ticket-session {
@@ -8106,7 +8122,7 @@ tr.is-expanded .coach-member-row-action button svg {
     calc(0px - var(--player-ticket-pad-y)) 0;
   padding: 34px;
   border-top: 0;
-  border-left: 1px dashed var(--line);
+  border-left: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
   background: color-mix(in srgb, var(--ivory) 72%, var(--white));
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
@@ -8206,11 +8222,6 @@ tr.is-expanded .coach-member-row-action button svg {
 .player-ticket-dashboard .player-ticket-attendance.is-open {
   min-height: 0;
   grid-column: 1 / -1;
-}
-
-.player-ticket-dashboard .player-ticket-attendance.is-open::before,
-.player-ticket-dashboard .player-ticket-attendance.is-open::after {
-  display: none;
 }
 
 .player-ticket-dashboard .player-ticket-attendance.is-open .player-attendance-toggle {
@@ -8781,7 +8792,7 @@ tr.is-expanded .coach-member-row-action button svg {
     justify-content: center;
     gap: var(--space-tight);
     padding: 0 20px 0 0;
-    border-right: 1px dashed var(--line);
+    border-right: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
     border-bottom: 0;
   }
 
@@ -8858,7 +8869,7 @@ tr.is-expanded .coach-member-row-action button svg {
     display: block;
     margin: auto 0 0;
     padding: 20px 0 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
     border-left: 0;
     background: transparent;
     color: var(--steel);

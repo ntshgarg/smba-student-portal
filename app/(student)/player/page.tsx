@@ -197,17 +197,17 @@ export default async function DashboardPage() {
         </div>
 
         <Reveal className="player-profile-reveal" order={5}>
-          <dl className="player-profile-ledger" aria-label="Player profile">
-            <div>
-              <dt>Player</dt>
+          <dl className="player-profile-bar" aria-label="Player profile">
+            <div className="player-profile-name">
+              <dt className="sr-only">Player</dt>
               <dd>{student.identity.fullName}</dd>
             </div>
-            <div>
+            <div className="player-profile-pill">
               <dt>Level</dt>
               <dd>{dashboard.player.level}</dd>
             </div>
-            <div>
-              <dt>Academy plan</dt>
+            <div className="player-profile-pill">
+              <dt>Plan</dt>
               <dd>{dashboard.player.academyPlan}</dd>
             </div>
           </dl>
