@@ -377,6 +377,9 @@ export function PlayerAttendanceRecorder({
   // so the save that just emptied `draftChanges` still hands the next Tab to
   // the control after this one.
   const saveOutOfReach = cannotSave && !isSaving
+  // On a phone the footer sticks to the foot of the screen only while there is
+  // something to save or to report, so an untouched register has no bar over it.
+  const footerPinned = Boolean(draftChanges.length || isSaving || feedback)
 
   function resolvedChoice(playerId: string) {
     if (!selectedOccurrence) return undefined
@@ -599,7 +602,8 @@ export function PlayerAttendanceRecorder({
           type="button"
           className={styles.head}
           aria-expanded={unavailable ? undefined : isSelected}
-          aria-controls={unavailable ? undefined : "attendance-roster-panel"}
+          // Only an open card's register is on the page to point at.
+          aria-controls={!unavailable && isSelected ? "attendance-roster-panel" : undefined}
           disabled={unavailable}
           onClick={() => chooseOccurrence(occurrence)}
         >
@@ -708,7 +712,7 @@ export function PlayerAttendanceRecorder({
         </ol>
       )}
 
-      <div className={styles.footer}>
+      <div className={`${styles.footer}${footerPinned ? ` ${styles.pinned}` : ""}`}>
         <InlineNotice
           action={feedback?.signIn}
           reserveSpace={false}

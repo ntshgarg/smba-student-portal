@@ -24,6 +24,8 @@
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 1;
+  /* at 200% text the one word is wider than a 320px phone */
+  overflow-wrap: anywhere;
 }
 
 .tabs {
@@ -59,8 +61,10 @@
 }
 
 @media (max-width: 720px) {
+  /* at large text sizes the three tabs wrap rather than push the page sideways */
   .tabs {
     display: flex;
+    flex-wrap: wrap;
   }
 
   .tabs a {

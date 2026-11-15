@@ -275,8 +275,9 @@ describe("a player register save in flight", () => {
 
     const otherSession = captured.elements.find((element) => (
       element.type === "button"
-      && element.props["aria-controls"] === "attendance-roster-panel"
       && element.props["aria-expanded"] === false
+      // a session's head; the staff card's carries no `disabled` at all
+      && element.props.disabled === false
     ))
     expect(otherSession, "the register rendered no other session to pick").toBeTruthy()
     ;(otherSession?.props.onClick as () => void)()
@@ -294,6 +295,17 @@ describe("a player register save in flight", () => {
 
     expect(captured.discarded).toEqual(["occurrence-1"])
     expect(captured.replaced).toHaveLength(1)
+  })
+})
+
+describe("the Mark tab's cards", () => {
+  // A closed card's panel is not on the page, so only the open card points at one.
+  it("point screen readers only at the open card's register", () => {
+    render(playerRegister)
+
+    expect(captured.elements
+      .filter((element) => element.type === "button" && element.props["aria-controls"])
+      .map((element) => element.props["aria-controls"])).toEqual(["attendance-roster-panel"])
   })
 })
 

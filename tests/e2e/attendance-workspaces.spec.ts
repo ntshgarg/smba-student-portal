@@ -89,8 +89,9 @@ async function expectDiscardPrompt(
   expect(message).toMatch(/discard|unsaved/i)
 }
 
-// A session card on the Mark tab that can be opened.
-const sessionHead = 'button[aria-controls="attendance-roster-panel"]:not([disabled])'
+// A session card on the Mark tab that can be opened: only a session's head
+// leads with its time, and only an openable one says whether it is expanded.
+const sessionHead = "button[aria-expanded]:has(> time)"
 
 test.beforeEach(async ({ page }) => {
   await loginAsCoach(page)

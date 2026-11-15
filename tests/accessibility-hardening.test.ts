@@ -71,7 +71,7 @@ describe("courtside save focus", () => {
   // do not move focus to a button on click and so leave the coach standing
   // there while the save disables the roster.
   const footerButton = (contents: string) => contents
-    .slice(contents.indexOf("className={styles.footer}"))
+    .slice(contents.indexOf("className={`${styles.footer}"))
     .match(/<button[\s\S]*?<\/button>/u)?.[0] ?? ""
   // Both registers are cards on the Mark tab and share its stylesheet.
   const styles = source("components/coach/attendance/mark.module.css")

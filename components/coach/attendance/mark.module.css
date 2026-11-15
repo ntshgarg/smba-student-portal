@@ -517,10 +517,6 @@
     padding: var(--space-tight);
   }
 
-  .stripArrow {
-    width: 34px;
-  }
-
   .days {
     gap: 2px;
   }
@@ -614,6 +610,12 @@
     flex: 1;
   }
 
+  /* a focused row scrolls clear of the sticky footer below */
+  .choice,
+  .adjustment {
+    scroll-margin-bottom: 9rem;
+  }
+
   .adjustment {
     justify-content: center;
   }
@@ -623,10 +625,7 @@
     border-bottom: 0;
   }
 
-  /* Save stays in reach at the foot of the screen while the register scrolls under it */
   .footer {
-    position: sticky;
-    bottom: 0;
     flex-direction: column;
     align-items: stretch;
     gap: var(--space-tight);
@@ -637,6 +636,12 @@
     background: color-mix(in srgb, var(--white) 85%, var(--ivory));
   }
 
+  /* With marks to save, Save stays in reach at the foot of the screen while the register scrolls under it */
+  .pinned {
+    position: sticky;
+    bottom: 0;
+  }
+
   /* an empty notice keeps its live region but no line of its own */
   .footer > [data-empty="true"] {
     display: contents;
@@ -645,6 +650,33 @@
   .save {
     width: 100%;
     margin-left: 0;
+  }
+}
+
+/* The narrowest phones: seven days of at least 24px between the week arrows need the strip's full width, so
+   "Pick a date" takes a line of its own below them. */
+@media (max-width: 400px) {
+  .strip {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .days {
+    gap: 0;
+  }
+
+  .pick {
+    flex-basis: 100%;
+    padding: 0 14px;
+  }
+
+  .pick span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
   }
 }
 

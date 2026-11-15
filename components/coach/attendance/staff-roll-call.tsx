@@ -188,6 +188,8 @@ export function StaffRollCall({
   // not blur an element that already holds focus, so the save that just emptied
   // `drafts` still hands the next Tab to the control after this one.
   const saveOutOfReach = cannotSave && !isSaving
+  // Sticky on a phone only while there is something to save or to report, as on a session.
+  const footerPinned = Boolean(drafts.length || isSaving || feedback)
   const progress = staffRollCallProgress({ dateKey, juniorCoaches, records })
 
   // The roll call is one day of marks, so the stored copy is keyed by date and
@@ -377,7 +379,7 @@ export function StaffRollCall({
       <button
         type="button"
         className={styles.head}
-        aria-controls="staff-roll-call-panel"
+        aria-controls={open ? "staff-roll-call-panel" : undefined}
         aria-expanded={open}
         onClick={onToggle}
       >
@@ -473,7 +475,7 @@ export function StaffRollCall({
             </ol>
           )}
 
-          <div className={styles.footer}>
+          <div className={`${styles.footer}${footerPinned ? ` ${styles.pinned}` : ""}`}>
             <InlineNotice
               action={feedback?.signIn}
               message={feedback?.message ?? (drafts.length
