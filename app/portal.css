@@ -1462,19 +1462,21 @@
   background: var(--ivory);
 }
 
-.login-card {
-  width: min(100%, 560px);
-  padding: clamp(var(--space-group), 5vw, 52px);
+.login-card,
+.security-panel {
   border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
-  border-radius: 28px;
   background: color-mix(in srgb, var(--white) 45%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  backdrop-filter: blur(18px) saturate(1.2);
   box-shadow:
     inset 0 1px 0 var(--white),
     inset 1px 0 0 var(--white),
     inset 0 -1px 0 color-mix(in srgb, var(--navy) 6%, transparent),
     0 40px 80px -48px color-mix(in srgb, var(--navy) 50%, transparent);
+}
+
+.login-card {
+  width: min(100%, 560px);
+  padding: clamp(var(--space-group), 5vw, 52px);
+  border-radius: 28px;
 }
 
 .login-brand {
@@ -1562,18 +1564,18 @@
   font-weight: 700;
 }
 
-/* #eee8dc on the --ivory card was 1.12:1 — the whole selected state, on the one
-   screen every session starts from. Of the two idioms available, .segmented
-   button[aria-pressed="true"] inverts against the navy hero it sits on (ivory
-   fill, navy ink, --shadow-keyline-bottom under it); transposed onto an ivory
-   card the fill becomes a no-op and only that 3px keyline would be left to carry
-   the state. .player-attendance-year-selector button.is-active is already this
-   control on a light surface and makes the same editorial move — ink fills the
-   chosen segment — so the navy frame the switch already wears now closes around
-   the active half: 15.90:1 against --ivory, white ink at 17.33:1. */
+/* ink fills the chosen side, as on the fee planner: white on navy is 17.33:1 */
 .login-method-switch button[aria-pressed="true"] {
   background: var(--navy);
   color: var(--white);
+}
+
+@media (forced-colors: active) {
+  .login-method-switch button[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
 }
 
 .login-method-switch + .login-form {
@@ -1582,11 +1584,16 @@
 
 .login-field label {
   display: block;
-  color: #39434d;
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+/* the field labels of sign-in and Account security: one darker steel than helper text */
+.login-field label,
+.security-form label {
+  color: #39434d;
 }
 
 .login-field input,
@@ -1656,23 +1663,17 @@
   align-items: center;
 }
 
+/* the first-visit links sit apart from each other instead of running together */
 .login-register-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 14px;
   color: var(--steel);
   font-size: 0.8125rem;
   line-height: 1.6;
   text-align: center;
-}
-
-/* the first-visit links sit apart from each other instead of running together */
-.login-page .login-register-link {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 2px 14px;
-}
-
-.login-page .login-register-separator {
-  display: none;
 }
 
 .login-register-link a {
@@ -1695,17 +1696,25 @@
   max-width: 470px;
 }
 
-.registration-confirmation {
-  display: grid;
-  gap: var(--space-copy);
-  margin-top: clamp(38px, 6vw, 54px);
-  padding: 30px;
+/* the boxes inside a sign-in card: confirmations, notices, the QR code and the backup codes */
+.registration-confirmation,
+.login-empty-state,
+.recovery-email-sent,
+.totp-backup-codes,
+.totp-qr {
   border: 1px solid color-mix(in srgb, var(--white) 90%, transparent);
   border-radius: 20px;
   background: color-mix(in srgb, var(--white) 50%, transparent);
   box-shadow:
     inset 0 1px 0 var(--white),
     0 10px 24px -18px color-mix(in srgb, var(--navy) 35%, transparent);
+}
+
+.registration-confirmation {
+  display: grid;
+  gap: var(--space-copy);
+  margin-top: clamp(38px, 6vw, 54px);
+  padding: 30px;
 }
 
 .registration-confirmation > span {
@@ -1772,28 +1781,37 @@
   letter-spacing: 0.02em;
 }
 
-/* red and rounded, like the homepage's "Continue on WhatsApp" */
-.login-submit {
-  display: flex;
-  min-height: 54px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 14px;
-  background: var(--red);
-  color: var(--white);
-  font-size: 1rem;
-  font-weight: 700;
-  transition: background var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), var(--press-transition);
+/* The main button of each sign-in step, and of each Account security form: navy with an ivory label,
+   centred. On hover and on press, red sweeps in from the left. The sweep is an inset shadow rather than a
+   background, so the accessibility check still reads the navy behind the label (ivory on red is 5.3:1
+   as well). Reduced motion turns the sweep into an instant change (globals.css). */
+.login-submit,
+.security-form button {
+  box-shadow: inset 0 0 0 0 var(--red);
+  transition: box-shadow 480ms var(--ease-in-out), var(--press-transition);
 }
 
 /* [aria-disabled] as well as :disabled: the authenticator submit is held open
-   in the tab order by aria-disabled while it refuses to act, and a hover lift
+   in the tab order by aria-disabled while it refuses to act, and a sweep
    would promise a press that the click handler cancels. */
-.login-submit:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: var(--red-dark);
-  transform: translateY(-1px);
+.login-submit:is(:hover, :active):not(:disabled, [aria-disabled="true"]),
+.security-form button:not(.security-secondary-action):is(:hover, :active):not(:disabled) {
+  box-shadow: inset 40rem 0 0 0 var(--red);
+}
+
+.login-submit {
+  display: flex;
+  min-height: 54px;
+  background: var(--navy);
+  color: var(--ivory);
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .login-submit:disabled {
@@ -1837,12 +1855,8 @@
   gap: 9px;
   margin-top: 34px;
   color: var(--steel);
-  font-size: 0.6875rem;
-  font-weight: 750;
-}
-
-.login-page .login-back {
   font-size: 0.8125rem;
+  font-weight: 750;
 }
 
 .login-page .login-secondary,
@@ -1854,11 +1868,6 @@
 
 .login-back:hover {
   color: var(--red);
-}
-
-.activation-copy h1,
-.totp-card .login-copy h1 {
-  font-size: clamp(44px, 7vw, 64px);
 }
 
 .totp-card {
@@ -1877,7 +1886,7 @@
   width: 210px;
   height: 210px;
   place-items: center;
-  border: 1px solid var(--line);
+  /* the code scans best on solid white */
   background: var(--white);
 }
 
@@ -1927,8 +1936,6 @@
 .totp-backup-codes {
   grid-column: 1 / -1;
   padding: 18px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 62%, transparent);
 }
 
 .totp-backup-codes ul {
@@ -2098,14 +2105,7 @@
 /* Account security wears the sign-in pages' look: each panel a pane of frosted glass on the cream page */
 .security-panel {
   padding: clamp(20px, 3vw, var(--space-block));
-  border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
   border-radius: 24px;
-  background: color-mix(in srgb, var(--white) 45%, transparent);
-  box-shadow:
-    inset 0 1px 0 var(--white),
-    inset 1px 0 0 var(--white),
-    inset 0 -1px 0 color-mix(in srgb, var(--navy) 6%, transparent),
-    0 30px 60px -40px color-mix(in srgb, var(--navy) 40%, transparent);
 }
 
 .security-panel > header {
@@ -2140,7 +2140,6 @@
 .security-form label {
   display: grid;
   gap: 7px;
-  color: #39434d;
   font-size: 0.75rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.12em;
@@ -2201,22 +2200,21 @@
   font-weight: 700;
 }
 
-/* the main action of each form is red, like the sign-in pages' Continue */
+/* the main action of each form is the sign-in pages' navy button (its sweep is set with .login-submit;
+   the colours repeat here because the shared outlined rule above would otherwise win) */
 .security-form button {
   width: 100%;
   min-height: 48px;
-  border-color: var(--red);
-  background: var(--red);
-  color: var(--white);
+  background: var(--navy);
+  color: var(--ivory);
   font-size: 1rem;
 }
 
-/* the other buttons in a form stay outlined, so the red one is the clear next step */
-.security-form .security-secondary-action,
-.security-form .login-secondary {
-  border-color: var(--navy);
+/* the other buttons in a form stay outlined, so the filled one is the clear next step */
+.security-form .security-secondary-action {
   background: transparent;
   color: var(--navy);
+  box-shadow: none;
   font-size: 0.875rem;
 }
 
@@ -2259,6 +2257,7 @@
   padding: 0 11px;
   border: 0;
   border-left: 1px solid var(--line);
+  border-radius: 0 11px 11px 0;
   background: transparent;
   color: var(--steel);
   font-family: inherit;
@@ -2272,11 +2271,6 @@
 .security-form .password-input-shell .password-visibility-toggle:hover {
   background: #eee8dc;
   color: var(--navy);
-}
-
-/* inside the rounded login fields, the Show button follows the field's corners */
-.login-page .password-input-shell .password-visibility-toggle {
-  border-radius: 0 11px 11px 0;
 }
 
 .password-visibility-toggle svg {
@@ -2503,6 +2497,7 @@
 .totp-reconnect-note {
   padding: 13px 14px;
   border-inline-start: 3px solid var(--red);
+  border-radius: 0 12px 12px 0;
   background: color-mix(in srgb, var(--red-soft) 52%, var(--white));
   color: var(--steel);
   font-size: 0.75rem;
@@ -2515,11 +2510,6 @@
   }
 
   .login-register-link {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    column-gap: 14px;
     line-height: 1.35;
   }
 
@@ -2533,9 +2523,6 @@
     align-items: center;
   }
 
-  .login-register-separator {
-    display: none;
-  }
 
   .pin-setup-actions,
   .security-pin-form,
@@ -4752,7 +4739,7 @@ tr.is-expanded .coach-member-row-action button svg {
   }
 
   .login-copy h1 {
-    font-size: clamp(42px, 13vw, 58px);
+    font-size: clamp(40px, 13vw, 58px);
   }
 
   .login-form {
@@ -10865,7 +10852,7 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 /* Platform-owner oversight and first-run academy setup */
 .head-coach-setup-card {
-  width: min(720px, calc(100% - 32px));
+  width: min(100%, 720px);
 }
 
 .head-coach-setup-form,
@@ -10881,12 +10868,6 @@ tr.is-expanded .coach-member-row-action button svg {
 
 .login-empty-state {
   padding: 20px;
-  border: 1px solid color-mix(in srgb, var(--white) 90%, transparent);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--white) 50%, transparent);
-  box-shadow:
-    inset 0 1px 0 var(--white),
-    0 10px 24px -18px color-mix(in srgb, var(--navy) 35%, transparent);
 }
 
 .login-empty-state a {
@@ -10902,8 +10883,6 @@ tr.is-expanded .coach-member-row-action button svg {
   align-items: flex-start;
   gap: 12px;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--navy) 18%, transparent);
-  background: color-mix(in srgb, var(--white) 58%, transparent);
 }
 
 .recovery-email-sent svg {

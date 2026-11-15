@@ -207,9 +207,7 @@ export function LoginForm() {
       <nav className="login-register-link" aria-label="Account access">
         <span className="login-register-prompt">First visit?</span>
         <Link href="/activate">Check status or activate</Link>
-        <span className="login-register-separator" aria-hidden="true"> · </span>
         <Link href="/register">Request registration</Link>
-        <span className="login-register-separator" aria-hidden="true"> · </span>
         <Link href="/recover">Forgot password?</Link>
       </nav>
     </>
