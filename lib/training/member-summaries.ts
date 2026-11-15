@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, or } from "drizzle-orm"
 
 import type { PlayerTrainingProfile } from "@/lib/coach/types"
 import type { FinanceStatus } from "@/lib/finance/types"
@@ -234,12 +234,14 @@ export function listMemberTrainingSummaries(
   // Whether this month's fee has any payment decides what a schedule change
   // this month may alter (lib/training/changes.ts), so the form needs it.
   const chargeViews = loadChargeViews(database, charges.map((charge) => charge.id), now)
+  // Concessions never overlap (createConcession refuses it), so the earliest
+  // start is the one fee issuing uses next; a later one is only booked.
   const activeConcessions = database.select().from(concessions).where(and(
     inArray(concessions.playerAccountId, playerIds),
     eq(concessions.lifecycle, "active"),
     eq(concessions.mode, "recurring"),
     or(isNull(concessions.endsPeriod), gte(concessions.endsPeriod, nextPeriod)),
-  )).all()
+  )).orderBy(asc(concessions.startsPeriod), asc(concessions.createdAt), asc(concessions.id)).all()
 
   const monthStart = `${thisPeriod}-01`
   const monthAgreements = !charges.length ? [] : database.select({
