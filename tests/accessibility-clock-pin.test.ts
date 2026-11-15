@@ -97,7 +97,7 @@ describe("the accessibility gate's frozen fixture against a moving clock", () =>
     atWallClock("2026-08-26T04:00:00.000Z")
     const onTheTwentySixth = tally(auditedAugustLedger())
 
-    expect(onTheTwentyFifth.unavailable - onTheTwentySixth.unavailable).toBe(1)
+    expect(onTheTwentyFifth.upcoming - onTheTwentySixth.upcoming).toBe(1)
     expect(onTheTwentySixth.unmarked - onTheTwentyFifth.unmarked).toBe(1)
   })
 
@@ -124,7 +124,7 @@ describe("the accessibility gate's frozen fixture against a moving clock", () =>
     stubGateEnvironment()
     atWallClock("2026-08-25T04:00:00.000Z")
     expect(Object.keys(tally(auditedAugustLedger())).sort()).toEqual([
-      "absent", "present", "unavailable", "unmarked",
+      "absent", "present", "unmarked", "upcoming",
     ])
 
     stubGateEnvironment("2026-08-03T09:30:00+05:30")

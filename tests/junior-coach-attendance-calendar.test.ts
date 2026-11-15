@@ -25,7 +25,8 @@ describe("Assistant coach attendance month calendar", () => {
     expect(calendar.days.find((day) => day.key === "2026-08-06")?.state).toBe("unmarked")
     expect(calendar.days.find((day) => day.key === "2026-08-11")?.isToday).toBe(true)
     expect(calendar.days.find((day) => day.key === "2026-07-31")?.state).toBe("unavailable")
-    expect(calendar.days.find((day) => day.key === "2026-08-12")?.state).toBe("unavailable")
+    expect(calendar.days.find((day) => day.key === "2026-08-12")?.state).toBe("upcoming")
+    expect(calendar.days.find((day) => day.key === "2026-09-06")?.state).toBe("upcoming")
   })
 
   it("shows a closed day as closed, not as not recorded or absent", () => {
@@ -33,6 +34,7 @@ describe("Assistant coach attendance month calendar", () => {
       holidays: [
         { dateKey: "2026-08-04", label: "Bandh" },
         { dateKey: "2026-08-05", label: "Bandh" },
+        { dateKey: "2026-08-15", label: "Independence Day" },
       ],
       joinedOn: "2026-08-01",
       referenceDate: "2026-08-11",
@@ -44,5 +46,7 @@ describe("Assistant coach attendance month calendar", () => {
     expect(day("2026-08-04")).toMatchObject({ state: "closed", stateLabel: "academy closed for Bandh" })
     expect(day("2026-08-05")?.state).toBe("closed")
     expect(day("2026-08-06")?.state).toBe("unmarked")
+    // a closure already booked for a later day shows as closed, not upcoming
+    expect(day("2026-08-15")?.state).toBe("closed")
   })
 })

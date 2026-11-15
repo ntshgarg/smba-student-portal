@@ -19,8 +19,10 @@ export type CoachDashboardArea =
  * means "look here": a number with the lowercase qualifier that says what it
  * counts, or `Setup` for an area that is not configured yet. A card with nothing
  * outstanding has no stamp (there used to be a `Clear`, which sat beside
- * "0 of 32 assessed" and read as all fine). The attention tone belongs to the
- * count shape only, because it marks a backlog.
+ * "0 of 32 assessed" and read as all fine). The one exception is Attendance's
+ * `All marked`, agreed for the day's registers (15 Nov 2026): it sits beside
+ * "N of N sessions marked", which it agrees with. The attention tone belongs to
+ * the count shape only, because it marks a backlog.
  */
 export type CoachDashboardStatus =
   | {
@@ -32,7 +34,7 @@ export type CoachDashboardStatus =
     /** what the link opens, for screen readers; starts with the visible words ("14 overdue: show these players") */
     linkLabel?: string
   }
-  | { state: "Setup" }
+  | { state: "Setup" | "All marked" }
 
 function statusStamp(status: CoachDashboardStatus) {
   return "state" in status ? status.state : `${status.count} ${status.unit}`
@@ -158,39 +160,5 @@ export function CoachDashboardAction({
       {children}
       <ArrowUpRight aria-hidden="true" />
     </Link>
-  )
-}
-
-export function CoachDashboardSecondaryAction({
-  children,
-  href,
-}: {
-  children: ReactNode
-  href: string
-}) {
-  return (
-    <Link className={`${styles.action} ${styles.secondaryAction}`} href={href}>
-      {children}
-      <ArrowUpRight aria-hidden="true" />
-    </Link>
-  )
-}
-
-export function CoachDashboardGroups({ children }: { children: ReactNode }) {
-  return <div className={styles.groups}>{children}</div>
-}
-
-export function CoachDashboardGroup({
-  children,
-  label,
-}: {
-  children: ReactNode
-  label: string
-}) {
-  return (
-    <div className={styles.group} role="group" aria-label={label}>
-      <p>{label}</p>
-      {children}
-    </div>
   )
 }

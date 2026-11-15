@@ -100,32 +100,28 @@ test("Attendance card launches the focused player and staff workspaces", async (
   await page.goto("/coach#attendance", { waitUntil: "domcontentloaded" })
   const card = page.locator("#attendance [data-area=\"attendance\"]")
 
-  const players = card.getByRole("group", { name: "Players" })
-  const staff = card.getByRole("group", { name: "Staff" })
-  await expect(players.getByRole("link", { name: "Attendance register" })).toHaveAttribute(
-    "href",
-    "/coach/attendance/players/register",
-  )
-  await expect(players.getByRole("link", { name: "Record attendance" })).toHaveAttribute(
+  // Mark, Register and Make-ups are the tabs of the one Attendance page; staff
+  // roll call and the staff register are reached from inside it.
+  const actions = card.getByRole("navigation", { name: "Attendance actions" })
+  await expect(actions.getByRole("link")).toHaveCount(3)
+  await expect(actions.getByRole("link", { name: "Mark today's attendance" })).toHaveAttribute(
     "href",
     "/coach/attendance/players/record",
   )
-  await expect(players.getByRole("link", { name: "Reschedule attendance" })).toHaveAttribute(
+  await expect(actions.getByRole("link", { name: "Register" })).toHaveAttribute(
+    "href",
+    "/coach/attendance/players/register",
+  )
+  await expect(actions.getByRole("link", { name: "Make-ups" })).toHaveAttribute(
     "href",
     "/coach/attendance/adjustments",
   )
-  await expect(staff.getByRole("link", { name: "Attendance register" })).toHaveAttribute(
-    "href",
-    "/coach/attendance/staff/register",
-  )
-  await expect(staff.getByRole("link", { name: "Staff roll call" })).toHaveAttribute(
-    "href",
-    "/coach/attendance/staff/record",
-  )
+  await expect(card.getByText(/^(No sessions today|\d+ of \d+ sessions marked)$/u)).toBeVisible()
+  await expect(card.getByRole("term")).toHaveText(["Sessions", "Staff", /^Make-ups? to review$/u])
   await expect(card.locator("#attendance-register")).toHaveCount(0)
   await expect(card.locator("#attendance-adjustments-workspace")).toHaveCount(0)
 
-  await players.getByRole("link", { name: "Record attendance" }).click()
+  await actions.getByRole("link", { name: "Mark today's attendance" }).click()
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/players/record")
   await expect(page.getByRole("heading", { level: 1, name: "Attendance" })).toBeVisible()
   await expect(page.getByRole("navigation", { name: "Attendance sections" })
@@ -134,7 +130,7 @@ test("Attendance card launches the focused player and staff workspaces", async (
 
   await page.goto("/coach#attendance", { waitUntil: "domcontentloaded" })
   await page.locator("#attendance [data-area=\"attendance\"]")
-    .getByRole("link", { name: "Reschedule attendance" })
+    .getByRole("link", { name: "Make-ups" })
     .click()
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/adjustments")
   await expect(page.getByRole("heading", { level: 1, name: "Attendance" })).toBeVisible()

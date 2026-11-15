@@ -1,0 +1,75 @@
+/* Today's numbers on the left, the three ways in on the right; stacked below 980px. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(240px, 1fr);
+  align-items: end;
+  gap: clamp(var(--space-group), 4vw, var(--space-section-sm));
+}
+
+.today {
+  min-width: 0;
+}
+
+.bar {
+  height: 8px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+}
+
+.counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: var(--space-copy) 0 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
+  border-radius: 14px;
+}
+
+.counts > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px var(--space-tight);
+  text-align: center;
+}
+
+.counts > div + div {
+  border-left: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
+}
+
+.counts dd {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.625rem;
+  font-style: italic;
+  font-weight: 470;
+  line-height: 1.1;
+}
+
+.counts dt {
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
