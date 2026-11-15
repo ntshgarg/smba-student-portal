@@ -13,7 +13,12 @@ import { SessionsCard } from "@/components/coach/sessions-card"
 function renderDashboard() {
   return renderToStaticMarkup(
     <CoachDashboardStack id="attendance">
-      <AttendanceCard scheduleCount={12} />
+      <AttendanceCard
+        dateLabel="Monday, 16 November"
+        makeupsToReview={1}
+        sessions={{ marked: 3, total: 10 }}
+        staff={{ marked: 2, total: 2 }}
+      />
       <PlayerOnboardingCard summary={{
         assessment: 3,
         feePlan: 1,
@@ -60,19 +65,20 @@ describe("coach dashboard Court Operations Board", () => {
       previousIndex = index
     }
 
-    // 15 action buttons, plus the overdue stamp, which opens the late payers
-    expect(html.match(/<a class="[^"]*_action_/g)).toHaveLength(15)
-    expect(html.match(/<a /g)).toHaveLength(16)
+    // 13 action buttons, plus the overdue stamp, which opens the late payers
+    expect(html.match(/<a class="[^"]*_action_/g)).toHaveLength(13)
+    expect(html.match(/<a /g)).toHaveLength(14)
     expect(html).toContain('id="onboarding"')
     expect(html).toContain('id="attendance"')
-    expect(html).toContain('role="group" aria-label="Players"')
-    expect(html).toContain('role="group" aria-label="Staff"')
+    expect(html).toContain('aria-label="Attendance actions"')
   })
 
   it("renders the selected ticket hierarchy with real operational states", () => {
     const html = renderDashboard()
 
-    expect(html).toContain("Player &amp; staff registers")
+    expect(html).toContain("3 of 10 sessions marked")
+    expect(html).toContain("Monday, 16 November · staff roll call done")
+    expect(html).toContain("7 sessions left today")
     expect(html).toContain("7 people need a next step")
     // the 2 new requests are waiting on the head coach, so they lead the stamp
     expect(html).toContain("2 waiting")
@@ -83,7 +89,6 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain("Fee Plan")
     expect(html).toContain("Academy onboarding")
     expect(html).toContain('href="/coach/onboarding">Open onboarding')
-    expect(html).toContain("12 schedules")
     expect(html).toContain("Training calendar")
     expect(html).toContain("8 today")
     expect(html).toContain("1 of 2 assessed")
@@ -97,6 +102,62 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).not.toContain("Roster current")
     expect(html).not.toContain("The academy directory is up to date.")
     expect(html).not.toContain("registrations await approval")
+  })
+
+  it("opens the three Attendance tabs and counts today's registers", () => {
+    const html = renderToStaticMarkup(
+      <AttendanceCard
+        dateLabel="Monday, 16 November"
+        makeupsToReview={2}
+        sessions={{ marked: 4, total: 10 }}
+        staff={{ marked: 1, total: 2 }}
+      />,
+    )
+    const links = [...html.matchAll(/<a class="[^"]*" href="([^"]+)">([^<]+)</g)]
+      .map((match) => [match[1], match[2].replace("&#x27;", "'")])
+
+    expect(links).toEqual([
+      ["/coach/attendance/players/record", "Mark today's attendance"],
+      ["/coach/attendance/players/register", "Register"],
+      ["/coach/attendance/adjustments", "Make-ups"],
+    ])
+    expect(html).toContain('id="attendance-card-title"')
+    expect(html).toContain("4 of 10 sessions marked")
+    expect(html).toContain("Monday, 16 November · staff not marked yet")
+    expect(html).toContain("6 sessions left today")
+    expect(html).toContain('data-tone="attention"')
+    expect(html).toContain("width:40%")
+    expect(html).toContain("<dt>Sessions</dt><dd>4/10</dd>")
+    expect(html).toContain("<dt>Staff</dt><dd>1/2</dd>")
+    expect(html).toContain("<dt>Make-ups to review</dt><dd>2</dd>")
+  })
+
+  it("says All marked once today's registers are done, and stays quiet with no sessions", () => {
+    const done = renderToStaticMarkup(
+      <AttendanceCard
+        dateLabel="Monday, 16 November"
+        makeupsToReview={1}
+        sessions={{ marked: 5, total: 5 }}
+        staff={{ marked: 2, total: 2 }}
+      />,
+    )
+    const empty = renderToStaticMarkup(
+      <AttendanceCard
+        dateLabel="Sunday, 15 November"
+        makeupsToReview={0}
+        sessions={{ marked: 0, total: 0 }}
+        staff={{ marked: 0, total: 0 }}
+      />,
+    )
+
+    expect(done).toContain("5 of 5 sessions marked")
+    expect(done).toContain("All marked")
+    expect(done).not.toContain("left today")
+    expect(done).not.toContain("primaryAction")
+    expect(done).toContain("<dt>Make-up to review</dt><dd>1</dd>")
+    expect(empty).toContain("No sessions today")
+    expect(empty).not.toMatch(/class="[^"]*status/)
+    expect(empty).toContain(">Sunday, 15 November<")
   })
 
   it("derives the Members status and detail from the enrolled member count", () => {
@@ -159,7 +220,11 @@ describe("coach dashboard Court Operations Board", () => {
     const html = renderDashboard()
     const primary = [...html.matchAll(/<a class="[^"]*primaryAction[^"]*" href="([^"]+)"/g)].map((match) => match[1])
 
-    expect(primary).toEqual(["/coach/onboarding", "/coach/financials/record"])
+    expect(primary).toEqual([
+      "/coach/attendance/players/record",
+      "/coach/onboarding",
+      "/coach/financials/record",
+    ])
   })
 
   it("sums up the fee month: fees to issue in grey, late payers in red", () => {

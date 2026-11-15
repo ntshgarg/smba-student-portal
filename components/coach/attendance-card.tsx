@@ -2,59 +2,91 @@ import {
   CoachDashboardAction,
   CoachDashboardActions,
   CoachDashboardCard,
-  CoachDashboardGroup,
-  CoachDashboardGroups,
-  CoachDashboardSecondaryAction,
   CoachDashboardSummary,
 } from "@/components/coach/dashboard-card"
 
-const playerAttendanceLinks = [
-  { href: "/coach/attendance/players/register", label: "Attendance register" },
-  { href: "/coach/attendance/players/record", label: "Record attendance" },
-  { href: "/coach/attendance/adjustments", label: "Reschedule attendance" },
-]
+import styles from "./attendance-card.module.css"
 
-const staffAttendanceLinks = [
-  { href: "/coach/attendance/staff/register", label: "Attendance register" },
-  { href: "/coach/attendance/staff/record", label: "Staff roll call" },
-]
+type Tally = { marked: number; total: number }
 
-export function AttendanceCard({ scheduleCount }: { scheduleCount: number }) {
+/**
+ * Today at a glance. Mark, Register and Make-ups are the tabs of the one
+ * Attendance page, so the card opens each of them rather than listing the old
+ * player and staff screens one by one.
+ */
+export function AttendanceCard({
+  dateLabel,
+  makeupsToReview,
+  sessions,
+  staff,
+}: {
+  /** today, as the dashboard hero writes it ("Monday, 16 November") */
+  dateLabel: string
+  makeupsToReview: number
+  sessions: Tally
+  /** assistant coaches on today's roll call; none on a day the academy is closed */
+  staff: Tally
+}) {
+  const sessionsLeft = sessions.total - sessions.marked
+  const staffState = staff.total === 0
+    ? null
+    : staff.marked === staff.total ? "staff roll call done" : "staff not marked yet"
+
   return (
     <CoachDashboardCard
       area="attendance"
-      status={{
-        count: scheduleCount,
-        unit: scheduleCount === 1 ? "schedule" : "schedules",
-      }}
+      status={sessions.total === 0
+        ? undefined
+        : sessionsLeft > 0
+          ? {
+            count: sessionsLeft,
+            unit: sessionsLeft === 1 ? "session left today" : "sessions left today",
+            tone: "attention",
+          }
+          : { state: "All marked" }}
       title="Attendance"
       titleId="attendance-card-title"
     >
-      <CoachDashboardSummary detail="Current truth for every scheduled session and academy day.">
-        Player &amp; staff registers
-      </CoachDashboardSummary>
+      <div className={styles.layout}>
+        <div className={styles.today}>
+          <CoachDashboardSummary
+            detail={staffState ? `${dateLabel} · ${staffState}` : dateLabel}
+          >
+            {sessions.total === 0
+              ? "No sessions today"
+              : `${sessions.marked} of ${sessions.total} sessions marked`}
+          </CoachDashboardSummary>
 
-      <CoachDashboardGroups>
-        <CoachDashboardGroup label="Players">
-          <CoachDashboardActions ariaLabel="Player attendance actions">
-            {playerAttendanceLinks.map((link) => (
-              <CoachDashboardAction key={link.href} href={link.href}>
-                {link.label}
-              </CoachDashboardAction>
-            ))}
-          </CoachDashboardActions>
-        </CoachDashboardGroup>
+          {sessions.total ? (
+            <div className={styles.bar} aria-hidden="true">
+              <i style={{ width: `${(sessions.marked / sessions.total) * 100}%` }} />
+            </div>
+          ) : null}
 
-        <CoachDashboardGroup label="Staff">
-          <CoachDashboardActions ariaLabel="Staff attendance actions">
-            {staffAttendanceLinks.map((link) => (
-              <CoachDashboardSecondaryAction key={link.href} href={link.href}>
-                {link.label}
-              </CoachDashboardSecondaryAction>
-            ))}
-          </CoachDashboardActions>
-        </CoachDashboardGroup>
-      </CoachDashboardGroups>
+          <dl className={styles.counts} aria-label="Today's attendance">
+            <div>
+              <dt>Sessions</dt>
+              <dd>{sessions.marked}/{sessions.total}</dd>
+            </div>
+            <div>
+              <dt>Staff</dt>
+              <dd>{staff.marked}/{staff.total}</dd>
+            </div>
+            <div>
+              <dt>{makeupsToReview === 1 ? "Make-up to review" : "Make-ups to review"}</dt>
+              <dd>{makeupsToReview}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <CoachDashboardActions ariaLabel="Attendance actions">
+          <CoachDashboardAction href="/coach/attendance/players/record" primary={sessionsLeft > 0}>
+            Mark today&apos;s attendance
+          </CoachDashboardAction>
+          <CoachDashboardAction href="/coach/attendance/players/register">Register</CoachDashboardAction>
+          <CoachDashboardAction href="/coach/attendance/adjustments">Make-ups</CoachDashboardAction>
+        </CoachDashboardActions>
+      </div>
     </CoachDashboardCard>
   )
 }

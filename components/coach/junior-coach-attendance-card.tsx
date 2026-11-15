@@ -1,15 +1,13 @@
 "use client"
 
-import {
-  ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-} from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useMemo } from "react"
 
-import { buildJuniorCoachAttendanceCalendar } from "@/components/coach/junior-coach-attendance-calendar"
+import {
+  buildJuniorCoachAttendanceCalendar,
+  type JuniorCoachAttendanceCalendarState,
+} from "@/components/coach/junior-coach-attendance-calendar"
 import {
   playerAttendanceMonthLabels,
   playerAttendanceWeekdayLabels,
@@ -20,7 +18,6 @@ import {
   shiftPlayerAttendanceMonth,
 } from "@/components/dashboard/player-attendance-query"
 import { Reveal } from "@/components/reveal"
-import { formatDateKey } from "@/lib/format"
 
 import styles from "./junior-coach-dashboard.module.css"
 
@@ -33,9 +30,9 @@ export type JuniorCoachAttendanceView = {
   /** Days the academy was closed; they are shown as closed, not "not recorded". */
   holidays: Array<{ dateKey: string; label: string }>
   joinedOn: string
-  monthLabel: string
   referenceDate: string
   records: PersonalStaffAttendanceRecord[]
+  /** this month's totals from the attendance service */
   summary: {
     absent: number
     percentage: number | null
@@ -44,6 +41,15 @@ export type JuniorCoachAttendanceView = {
   }
   years: number[]
 }
+
+const legend: Array<{ label: string; state: JuniorCoachAttendanceCalendarState }> = [
+  { label: "Present", state: "present" },
+  { label: "Absent", state: "absent" },
+  { label: "Holiday", state: "closed" },
+  { label: "Not recorded", state: "unmarked" },
+  { label: "Upcoming", state: "upcoming" },
+  { label: "Not available", state: "unavailable" },
+]
 
 function monthNavigationLabel(year: number, month: number) {
   return `${playerAttendanceMonthLabels[month - 1]} ${year}`
@@ -65,18 +71,35 @@ export function JuniorCoachAttendanceCard({
     currentYear,
     currentMonth,
   ), [attendance.years, currentMonth, currentYear, searchParams])
-  const { activeMonth, activeYear, isOpen } = navigation
+  const { activeMonth, activeYear } = navigation
+  const isCurrentMonth = activeYear === currentYear && activeMonth === currentMonth
   const calendar = useMemo(() => buildJuniorCoachAttendanceCalendar(
     attendance,
     activeYear,
     activeMonth,
   ), [activeMonth, activeYear, attendance])
+  const monthDays = calendar.days.filter((day) => day.inSelectedMonth)
+  // This month's totals are the service's; an earlier month is counted from its
+  // tiles by the same rule (a closed day leaves the count).
+  const summary = isCurrentMonth ? attendance.summary : (() => {
+    const present = monthDays.filter((day) => day.state === "present").length
+    const absent = monthDays.filter((day) => day.state === "absent").length
+    const recorded = present + absent
+    return {
+      absent,
+      percentage: recorded ? Math.round((present / recorded) * 100) : null,
+      present,
+      recorded,
+    }
+  })()
+  const shownStates = new Set(monthDays.map((day) => day.state))
+  const activeLabel = monthNavigationLabel(activeYear, activeMonth)
   const previousMonth = shiftPlayerAttendanceMonth(navigation, -1, attendance.years)
   const nextMonth = shiftPlayerAttendanceMonth(navigation, 1, attendance.years)
   const canMovePrevious = previousMonth.activeYear !== activeYear
     || previousMonth.activeMonth !== activeMonth
-  const canMoveNext = nextMonth.activeYear !== activeYear
-    || nextMonth.activeMonth !== activeMonth
+  // Later months hold nothing yet, so the arrows stop at this month.
+  const beforeCurrentMonth = activeYear * 12 + activeMonth < currentYear * 12 + currentMonth
 
   useEffect(() => {
     const canonicalSearch = playerAttendanceSearch(
@@ -99,27 +122,16 @@ export function JuniorCoachAttendanceCard({
     searchParams,
   ])
 
-  function updateNavigation(next: typeof navigation) {
+  function showMonth(next: typeof navigation) {
+    const backToToday = next.activeYear === currentYear && next.activeMonth === currentMonth
     const nextSearch = playerAttendanceSearch(
       searchParams.toString(),
-      next,
+      { ...next, isOpen: !backToToday },
       currentYear,
       currentMonth,
     )
     router.push(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false })
   }
-
-  function jumpToToday() {
-    updateNavigation({
-      isOpen: true,
-      activeYear: currentYear,
-      activeMonth: currentMonth,
-    })
-  }
-
-  const recordedValue = String(attendance.summary.recorded).padStart(2, "0")
-  const presentValue = String(attendance.summary.present).padStart(2, "0")
-  const absentValue = String(attendance.summary.absent).padStart(2, "0")
 
   return (
     <section
@@ -130,227 +142,112 @@ export function JuniorCoachAttendanceCard({
         className={`dashboard-card junior-coach-attendance-card ${styles.ledgerTicket}`}
       >
         <header className={styles.ledgerMasthead}>
-          <h2>Personal roll-call ledger</h2>
-          <span>{attendance.monthLabel}</span>
+          <h2>My attendance</h2>
+          <span aria-live="polite" aria-atomic="true">{activeLabel}</span>
         </header>
 
         <div className={styles.ledgerBody}>
           <div className={styles.primaryMetric}>
-            <strong>
-              {attendance.summary.percentage === null
-                ? "—"
-                : `${attendance.summary.percentage}%`}
+            <strong data-empty={summary.percentage === null ? "" : undefined}>
+              {summary.percentage === null ? "—" : `${summary.percentage}%`}
             </strong>
-            <span>Attendance</span>
-          </div>
-
-          <dl className={styles.ledgerRows} aria-label={`${attendance.monthLabel} attendance totals`}>
-            <div>
-              <dt>Recorded days</dt>
-              <dd>{recordedValue}</dd>
-            </div>
-            <div>
-              <dt>Present</dt>
-              <dd>{presentValue}</dd>
-            </div>
-            <div>
-              <dt>Absent</dt>
-              <dd>{absentValue}</dd>
-            </div>
-          </dl>
-
-          <div className={styles.ledgerAction}>
             <p>
-              {attendance.summary.recorded
-                ? "Review your read-only attendance calendar whenever you need it."
+              {summary.recorded
+                ? `Present on ${summary.present} of ${summary.recorded} marked ${summary.recorded === 1 ? "day" : "days"}`
                 : "Your record will appear after the head coach saves an attendance day."}
             </p>
-            <button
-              className={styles.ledgerActionButton}
-              type="button"
-              aria-expanded={isOpen}
-              aria-controls={isOpen ? "junior-coach-attendance-register" : undefined}
-              onClick={() => updateNavigation({
-                ...navigation,
-                isOpen: !isOpen,
-              })}
+            <dl className={styles.counts} aria-label={`${activeLabel} attendance totals`}>
+              <div data-state="present">
+                <dt>Present</dt>
+                <dd>{summary.present}</dd>
+              </div>
+              <div data-state="absent">
+                <dt>Absent</dt>
+                <dd>{summary.absent}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className={styles.month}>
+            <div
+              className={styles.calendar}
+              role="grid"
+              aria-label={`Your attendance calendar for ${activeLabel}`}
+              aria-colcount={7}
+              aria-rowcount={7}
             >
-              <span>{isOpen ? "Close attendance record" : "Open attendance record"}</span>
-              {isOpen ? <ChevronUp aria-hidden="true" /> : <ArrowUpRight aria-hidden="true" />}
-            </button>
+              <div className={styles.calendarRow} role="row">
+                {playerAttendanceWeekdayLabels.map((weekday) => (
+                  <div className={styles.weekday} role="columnheader" key={weekday}>
+                    <abbr title={weekday}>{weekday.slice(0, 3)}</abbr>
+                  </div>
+                ))}
+              </div>
+              {Array.from({ length: 6 }, (_, weekIndex) => (
+                <div
+                  className={styles.calendarRow}
+                  role="row"
+                  key={calendar.days[weekIndex * 7].key}
+                >
+                  {calendar.days.slice(weekIndex * 7, weekIndex * 7 + 7).map((day) => (
+                    day.inSelectedMonth ? (
+                      <div
+                        className={styles.tile}
+                        data-state={day.state}
+                        role="gridcell"
+                        key={day.key}
+                        aria-current={day.isToday ? "date" : undefined}
+                        aria-label={`${day.label}: ${day.stateLabel}`}
+                        title={`${day.label}: ${day.stateLabel}`}
+                      >
+                        <span aria-hidden="true">{day.dayNumber}</span>
+                      </div>
+                    ) : (
+                      <div className={styles.tile} role="gridcell" key={day.key} />
+                    )
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            <div className={styles.legend} role="group" aria-label="Attendance status legend">
+              {legend
+                .filter((item) => item.state !== "unavailable" || shownStates.has(item.state))
+                .map((item) => (
+                  <span key={item.state}>
+                    <i className={styles.tile} data-state={item.state} aria-hidden="true" />
+                    {item.label}
+                  </span>
+                ))}
+            </div>
           </div>
         </div>
 
-        {isOpen ? (
-          <div
-            className={`player-attendance-register personal-attendance-register ${styles.attendanceRegister}`}
-            id="junior-coach-attendance-register"
+        <nav className={styles.monthNav} aria-label="Choose attendance month">
+          <button
+            className={styles.ledgerActionButton}
+            type="button"
+            disabled={!canMovePrevious}
+            aria-label={canMovePrevious
+              ? `Earlier months: view ${monthNavigationLabel(previousMonth.activeYear, previousMonth.activeMonth)}`
+              : "No earlier attendance month available"}
+            onClick={() => showMonth(previousMonth)}
           >
-            <div className="player-attendance-register-heading">
-              <div className="player-attendance-register-title">
-                <span>Your record</span>
-                <h3>Annual attendance</h3>
-              </div>
-              <div className="player-attendance-register-actions">
-                <div className="player-attendance-year-selector" role="group" aria-label="Choose attendance year">
-                  {attendance.years.map((year) => (
-                    <button
-                      key={year}
-                      type="button"
-                      className={year === activeYear ? "is-active" : undefined}
-                      aria-pressed={year === activeYear}
-                      onClick={() => updateNavigation({
-                        ...navigation,
-                        isOpen: true,
-                        activeYear: year,
-                      })}
-                    >
-                      {year}
-                    </button>
-                  ))}
-                </div>
-                <button className="player-attendance-today" type="button" onClick={jumpToToday}>
-                  Jump to today
-                </button>
-              </div>
-            </div>
-
-            <section
-              className="player-attendance-month-sheet personal-attendance-calendar"
-              aria-label={`${monthNavigationLabel(activeYear, activeMonth)} attendance calendar`}
+            <ChevronLeft aria-hidden="true" />
+            <span>Earlier months</span>
+          </button>
+          {beforeCurrentMonth ? (
+            <button
+              className={styles.ledgerActionButton}
+              type="button"
+              aria-label={`Later month: view ${monthNavigationLabel(nextMonth.activeYear, nextMonth.activeMonth)}`}
+              onClick={() => showMonth(nextMonth)}
             >
-              <header className="player-attendance-month-toolbar">
-                <button
-                  className="player-attendance-month-nav is-previous"
-                  type="button"
-                  disabled={!canMovePrevious}
-                  aria-label={canMovePrevious
-                    ? `View ${monthNavigationLabel(previousMonth.activeYear, previousMonth.activeMonth)}`
-                    : "No previous attendance month available"}
-                  onClick={() => updateNavigation({ ...previousMonth, isOpen: true })}
-                >
-                  <ChevronLeft aria-hidden="true" />
-                  <span>{canMovePrevious
-                    ? monthNavigationLabel(previousMonth.activeYear, previousMonth.activeMonth)
-                    : "Previous"}</span>
-                </button>
-
-                <div
-                  className="player-attendance-month-current"
-                  aria-live="polite"
-                  aria-atomic="true"
-                >
-                  <span>Attendance month</span>
-                  <strong>{monthNavigationLabel(activeYear, activeMonth)}</strong>
-                </div>
-
-                <button
-                  className="player-attendance-month-nav is-next"
-                  type="button"
-                  disabled={!canMoveNext}
-                  aria-label={canMoveNext
-                    ? `View ${monthNavigationLabel(nextMonth.activeYear, nextMonth.activeMonth)}`
-                    : "No next attendance month available"}
-                  onClick={() => updateNavigation({ ...nextMonth, isOpen: true })}
-                >
-                  <span>{canMoveNext
-                    ? monthNavigationLabel(nextMonth.activeYear, nextMonth.activeMonth)
-                    : "Next"}</span>
-                  <ChevronRight aria-hidden="true" />
-                </button>
-              </header>
-
-              <div className="player-attendance-month-tools">
-                <div
-                  className="player-attendance-legend"
-                  role="group"
-                  aria-label="Attendance status legend"
-                >
-                  <span><i className="is-present" aria-hidden="true" />Present</span>
-                  <span><i className="is-absent" aria-hidden="true" />Absent</span>
-                  <span><i className="is-pending" aria-hidden="true" />Not recorded</span>
-                  <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
-                  <span><i className="is-holiday" aria-hidden="true" />Holiday</span>
-                </div>
-                <p>Use the arrows to review each month.</p>
-              </div>
-
-              <div className="player-attendance-calendar-frame">
-                <div
-                  className="player-attendance-calendar"
-                  role="grid"
-                  aria-label={`Your attendance calendar for ${monthNavigationLabel(activeYear, activeMonth)}`}
-                  aria-colcount={7}
-                  aria-rowcount={7}
-                >
-                  <div className="player-attendance-calendar-weekdays" role="row">
-                    {playerAttendanceWeekdayLabels.map((weekday) => (
-                      <div
-                        className="player-attendance-calendar-weekday"
-                        role="columnheader"
-                        key={weekday}
-                      >
-                        <span className="player-attendance-weekday-long">{weekday}</span>
-                        <span className="player-attendance-weekday-short">{weekday.slice(0, 3)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="player-attendance-calendar-weeks" role="rowgroup">
-                    {Array.from({ length: 6 }, (_, weekIndex) => (
-                      <div
-                        className="player-attendance-calendar-week"
-                        role="row"
-                        key={calendar.days[weekIndex * 7].key}
-                      >
-                        {calendar.days.slice(weekIndex * 7, weekIndex * 7 + 7).map((day) => {
-                          const stateClass = day.state === "unmarked"
-                            ? "is-pending"
-                            : day.state === "unavailable"
-                              ? "is-not-scheduled"
-                              : day.state === "closed"
-                                ? "is-not-scheduled is-holiday"
-                                : `is-${day.state}`
-                          const className = [
-                            "player-attendance-calendar-day",
-                            styles.staffCalendarDay,
-                            stateClass,
-                            day.inSelectedMonth ? "" : "is-outside-month",
-                            day.isToday ? "is-today" : "",
-                          ].filter(Boolean).join(" ")
-
-                          return (
-                            <div
-                              className={className}
-                              role="gridcell"
-                              key={day.key}
-                              aria-current={day.isToday ? "date" : undefined}
-                              aria-label={`${day.label}: ${day.stateLabel}`}
-                              title={`${day.label}: ${day.stateLabel}`}
-                            >
-                              <div aria-hidden="true">
-                                <div className="player-attendance-calendar-date">
-                                  <strong>{day.dayNumber}</strong>
-                                  <span>{day.monthShort}</span>
-                                </div>
-                                {day.isToday ? (
-                                  <span className="player-attendance-calendar-today">Today</span>
-                                ) : null}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="player-attendance-calendar-note">
-                  <span>Today · {formatDateKey(attendance.referenceDate, { year: "numeric" })}</span>
-                  <span>Attendance is recorded by the head coach.</span>
-                </div>
-              </div>
-            </section>
-          </div>
-        ) : null}
+              <span>Later month</span>
+              <ChevronRight aria-hidden="true" />
+            </button>
+          ) : null}
+        </nav>
       </Reveal>
     </section>
   )

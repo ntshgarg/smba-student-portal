@@ -285,68 +285,6 @@
   transform: none;
 }
 
-.secondaryAction {
-  border-color: color-mix(in srgb, var(--navy) 36%, var(--line));
-}
-
-.secondaryAction:hover {
-  border-color: var(--navy);
-}
-
-.groups {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-editorial);
-}
-
-.group {
-  display: grid;
-  min-width: 0;
-  align-content: start;
-}
-
-.group + .group {
-  position: relative;
-}
-
-.group + .group::before {
-  position: absolute;
-  inset-block: 0;
-  left: -20px;
-  border-left: 1px solid var(--line);
-  content: "";
-  pointer-events: none;
-}
-
-/* Held below the floor: .group > p is rendered only by attendance-card.tsx, as
-   the Players and Staff group labels of the Attendance dashboard card.
-   mobile-calendar-attendance-freeze names that card and freezes its
-   "typography ... and desktop presentation", and coach-dashboard-attendance-entry
-   repeats "Preserve the established card typography". Raising it needs its own
-   milestone. */
-.group > p {
-  color: var(--steel);
-  font-size: 0.5625rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.group .actions {
-  margin-top: 0;
-  padding-top: 10px;
-}
-
-.section[data-area="attendance"] .meta {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.78fr) minmax(0, 2.22fr);
-  align-items: start;
-  gap: clamp(var(--space-block), 4vw, var(--space-section-sm));
-}
-
 @media (min-width: 761px) and (max-width: 980px) {
   .stack {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -367,11 +305,6 @@
       "financials sessions"
       "reports announcements"
       "members members";
-  }
-
-  .section[data-area="attendance"] .meta {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
   }
 
   .summary > p {
@@ -427,31 +360,9 @@
     font-size: clamp(28px, 8.2vw, 34px);
   }
 
-  .section[data-area="attendance"] .meta {
-    display: flex;
-    align-items: stretch;
-    gap: 0;
-  }
-
-  .groups {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 18px;
-    margin-top: 22px;
-  }
-
-  .group + .group {
-    padding-top: 18px;
-    border-top: 1px solid var(--line);
-  }
-
-  .group + .group::before {
-    display: none;
-  }
-
   .actions {
     padding-top: 18px;
   }
-
 }
 
 @media (max-width: 340px) {

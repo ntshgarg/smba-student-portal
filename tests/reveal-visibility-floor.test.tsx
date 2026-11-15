@@ -26,7 +26,6 @@ import { Reveal } from "@/components/reveal"
 const attendance: JuniorCoachAttendanceView = {
   holidays: [],
   joinedOn: "2026-08-01",
-  monthLabel: "August 2026",
   referenceDate: "2026-08-11",
   records: [{ choice: "present", dateKey: "2026-08-01" }],
   summary: {
@@ -68,8 +67,8 @@ describe("reveal visibility floor", () => {
       <JuniorCoachAttendanceCard attendance={attendance} />,
     )
 
-    expect(html).toContain("Personal roll-call ledger")
-    expect(html).toContain("Open attendance record")
+    expect(html).toContain("My attendance")
+    expect(html).toContain("Earlier months")
     expect(html).not.toMatch(opacityGate)
   })
 
