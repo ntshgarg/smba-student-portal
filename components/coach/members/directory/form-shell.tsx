@@ -11,6 +11,7 @@ import styles from "@/components/coach/members/directory/member-training-actions
  * that does it.
  */
 export function FormShell({
+  backLabel,
   busy,
   children,
   confirmLabel,
@@ -22,6 +23,8 @@ export function FormShell({
   summary,
   title,
 }: {
+  /** On a player's record, the tab the form came from: a pill back to it, which cancels. */
+  backLabel?: string
   busy: boolean
   children: ReactNode
   confirmLabel: string
@@ -36,7 +39,13 @@ export function FormShell({
   return (
     <div className={styles.form} role="group" aria-label={title}>
       <div className={styles.formHead}>
-        <span className={styles.eyebrow}>{eyebrow}</span>
+        {backLabel ? (
+          <button className={styles.back} aria-label={`Back to ${backLabel}`} disabled={busy} onClick={onCancel} type="button">
+            <span aria-hidden="true">‹</span> {backLabel}
+          </button>
+        ) : (
+          <span className={styles.eyebrow}>{eyebrow}</span>
+        )}
         <h4>{title}</h4>
       </div>
       <div className={styles.formBody}>

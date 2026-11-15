@@ -13,10 +13,9 @@ import type { AcademyStaffMember } from "@/lib/coach/types"
 
 /*
  * The Member Directory listed players only, so an approved assistant coach existed
- * nowhere a head coach could look them up -- the staff roll call held their name
- * and nothing else. These rows put them in the directory. Four of its six
- * columns describe training, which a coach has none of, so what those cells say
- * is the part worth pinning.
+ * nowhere a head coach could look them up. These cards put them in the directory:
+ * the player's card and record, with their role in place of training and no
+ * tabs, since a coach has no training or fees here.
  */
 const junior: AcademyStaffMember = {
   academyId: "SMBA-JC-6442",
@@ -30,37 +29,29 @@ const junior: AcademyStaffMember = {
   role: "coach",
 }
 
+// A card sets the surname apart (Kavya <em>Iyer</em>), so names are read as text.
 function summary(staff: AcademyStaffMember, isExpanded = false) {
   return renderToStaticMarkup(
-    <table><tbody>
-      <StaffSummaryRow index={0} isExpanded={isExpanded} onOpen={() => {}} staff={staff} />
-    </tbody></table>,
-  )
+    <StaffSummaryRow isExpanded={isExpanded} onOpen={() => {}} staff={staff} />,
+  ).replace(/<\/?em>/gu, "")
+}
+
+function detail(staff: AcademyStaffMember) {
+  return renderToStaticMarkup(<StaffDetailRow onArchived={() => {}} staff={staff} />)
 }
 
 describe("coaching staff in the Member Directory", () => {
-  it("names the access level rather than leaving the training column blank", () => {
+  it("names the role and when they joined in place of training", () => {
     const html = summary(junior)
     expect(html).toContain("Kavya Iyer")
     expect(html).toContain("SMBA-JC-6442")
     expect(html).toContain("Assistant coach")
-    expect(html).toContain("Coaching staff")
-  })
-
-  it("says why the training columns are empty instead of rendering a silent gap", () => {
-    const html = summary(junior)
-    expect(html).toContain("Sessions are not assigned to coaching staff")
-    expect(html).toContain("Coaching staff do not train")
-    // The dash is decoration; the reason is what a screen reader gets.
-    expect(html).toContain('aria-hidden="true">—<')
-    // The stacked responsive layout labels each cell, so staff rows keep them.
-    expect(html).toContain('data-label="Sessions"')
-    expect(html).toContain('data-label="Training from"')
+    expect(html).toContain("Joined 27 Aug 2026")
   })
 
   it("reports an unactivated account as such rather than as a training status", () => {
-    expect(summary(junior)).toContain(">active<")
-    expect(summary({ ...junior, activatedAt: null })).toContain(">not activated<")
+    expect(summary(junior)).toContain(">Active<")
+    expect(summary({ ...junior, activatedAt: null })).toContain(">Not activated<")
   })
 
   it("keeps the disclosure wired to the panel it opens", () => {
@@ -70,28 +61,19 @@ describe("coaching staff in the Member Directory", () => {
     expect(open).toContain('aria-controls="member-details-staff-1"')
   })
 
-  it("shows the dates the directory has for a coach, and names the ones it lacks", () => {
-    const html = renderToStaticMarkup(
-      <table><tbody><StaffDetailRow onArchived={() => {}} staff={junior} /></tbody></table>,
-    )
-    expect(html).toContain("Joined")
-    expect(html).toContain("27 Aug 2026")
-    expect(html).toContain("Coach approved")
-    expect(html).toContain("Account activated")
+  it("shows the dates the directory has for a coach, and marks the ones still to come", () => {
+    const html = detail(junior)
+    expect(html).toContain("Coaching staff · joined 27 Aug 2026")
+    expect(html).toContain("Approved")
+    expect(html).toContain("Account set up")
+    expect(html).not.toContain("is-pending")
 
-    const pending = renderToStaticMarkup(
-      <table><tbody>
-        <StaffDetailRow onArchived={() => {}} staff={{ ...junior, activatedAt: null, approvedAt: null }} />
-      </tbody></table>,
-    )
-    expect(pending).toContain("Not recorded")
-    expect(pending).toContain("Not yet activated")
+    const pending = detail({ ...junior, activatedAt: null, approvedAt: null })
+    expect(pending.match(/class="is-pending"/gu)).toHaveLength(2)
+    expect(pending).toContain("Not yet")
   })
 
   it("offers to archive an assistant coach, never the head coach", () => {
-    const detail = (staff: AcademyStaffMember) => renderToStaticMarkup(
-      <table><tbody><StaffDetailRow onArchived={() => {}} staff={staff} /></tbody></table>,
-    )
     expect(detail(junior)).toContain("Archive coach")
     expect(detail(junior)).toContain("Archiving switches off their sign-in")
     expect(detail({ ...junior, accessLevel: "head_admin" })).not.toContain("Archive coach")

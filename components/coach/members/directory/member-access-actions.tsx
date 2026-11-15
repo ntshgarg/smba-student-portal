@@ -17,7 +17,7 @@ export function archiveBlockedNote(
   if (scheduled?.kind === "end") {
     return `Training ends after ${monthBefore(scheduled.effectiveOn)}. Archiving opens from ${formatTermDate(scheduled.effectiveOn)}, once fees have stopped and none are owed. If they have left already, use End training again and tick “They have left already”.`
   }
-  return "Use End training above before archiving this member."
+  return "Use End training on the Training tab before archiving this member."
 }
 
 export function MemberAccessActions({

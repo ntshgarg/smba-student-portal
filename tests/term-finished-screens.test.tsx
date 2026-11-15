@@ -147,25 +147,21 @@ function bookedChange(kind: "change" | "end"): MemberScheduledChange {
 describe("Members shows a finished term", () => {
   it("marks the row and the training panel with the date", () => {
     const row = renderToStaticMarkup(
-      <table><tbody>
-        <MemberSummaryRow
-          activeSessionLabels={["Beginner · Weekday · Mon (term finished 31 October 2026)"]}
-          index={0}
-          isExpanded={false}
-          onOpen={() => undefined}
-          player={finishedPlayer}
-        />
-      </tbody></table>,
+      <MemberSummaryRow
+        isExpanded={false}
+        onOpen={() => undefined}
+        player={finishedPlayer}
+        sessionTimes={["Mon (term finished 31 October 2026)"]}
+      />,
     )
     expect(row).toContain('class="coach-member-status is-finished"')
     expect(row).toContain(">Term finished<")
-    expect(row).toContain("1 finished")
-    expect(row).not.toContain("1 active")
+    expect(row).toContain("Mon (term finished 31 October 2026)")
 
     const panel = renderToStaticMarkup(
       <MemberTrainingPanel
-        activeSessionLabels={["Beginner · Weekday · Mon (term finished 31 October 2026)"]}
         player={finishedPlayer}
+        sessionTimes={["Mon (term finished 31 October 2026)"]}
       />,
     )
     expect(panel).toContain("Term finished on 31 October 2026")
@@ -182,21 +178,18 @@ describe("Members shows a finished term", () => {
       }
       return renderToStaticMarkup(
         <MemberTrainingProvider value={value}>
-          <table><tbody>
-            <MemberSummaryRow
-              activeSessionLabels={["Beginner · Weekday · Mon (term finished 31 October 2026)"]}
-              index={0}
-              isExpanded={false}
-              onOpen={() => undefined}
-              player={finishedPlayer}
-            />
-          </tbody></table>
+          <MemberSummaryRow
+            isExpanded={false}
+            onOpen={() => undefined}
+            player={finishedPlayer}
+            sessionTimes={["Mon (term finished 31 October 2026)"]}
+          />
         </MemberTrainingProvider>,
       )
     }
 
-    expect(row(bookedChange("change"))).toContain("1 finished · change scheduled")
-    expect(row(bookedChange("end"))).toContain("1 finished · change scheduled")
+    expect(row(bookedChange("change"))).toContain("Mon (term finished 31 October 2026) · change scheduled")
+    expect(row(bookedChange("end"))).toContain("Mon (term finished 31 October 2026) · change scheduled")
     // Still "Term finished" until the change happens on its day.
     expect(row(bookedChange("change"))).toContain(">Term finished<")
     expect(row(null)).not.toContain("change scheduled")

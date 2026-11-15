@@ -319,6 +319,6 @@ describe("Archive's fee plan refusal", () => {
       .toBe("Before archiving, wait for the End training booked for 1 Dec 2026, which ends the player’s Fee Plan")
     // Stop fees is hidden while they still have a place: End training it is.
     expect(message(feePlanEndRoute(null, true)))
-      .toBe("Before archiving, end the player’s Fee Plan with End training above (Stop fees after this month)")
+      .toBe("Before archiving, end the player’s Fee Plan with End training on the Training tab (Stop fees after this month)")
   })
 })

@@ -92,7 +92,18 @@ function newKey() {
  * The training and fee actions on a player's record. Each opens one form in
  * place, asks once, and refreshes the directory when it is done.
  */
-export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }) {
+/**
+ * `view` is the record tab showing: Training or Fees. Both halves stay mounted
+ * so an open form keeps its state across tabs; the other half is hidden, and
+ * an open form takes the place of its own half. Without `view` both show.
+ */
+export function MemberTrainingActions({
+  player,
+  view,
+}: {
+  player: PlayerMemberRecord
+  view?: "training" | "fees"
+}) {
   const data = useMemberTraining()
   const { sessionAssignments, sessionSeries } = useMemberDirectoryPortal()
   const router = useRouter()
@@ -190,15 +201,18 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
   }
 
   const scheduledSeries = scheduled?.seriesId ? seriesById.get(scheduled.seriesId) : null
+  const trainingFormOpen = open === "change" || open === "start" || open === "end"
+  const feeFormOpen = open === "fee" || open === "stop-fees" || open === "concession"
 
   return (
     <section
       className={styles.section}
       aria-labelledby={`training-actions-${memberId}`}
+      data-open-form={trainingFormOpen ? "training" : feeFormOpen ? "fees" : undefined}
       onChange={() => setStarted(true)}
     >
       <div className={styles.columns}>
-        <div className={styles.column}>
+        <div className={styles.column} hidden={view === "fees" || (view !== undefined && trainingFormOpen)}>
           <span className={styles.eyebrow}>Training</span>
           <h4 id={`training-actions-${memberId}`}>Change or end</h4>
 
@@ -293,7 +307,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
         </div>
 
         {data.financeActive ? (
-          <div className={styles.column}>
+          <div className={styles.column} hidden={view === "training" || (view !== undefined && feeFormOpen)}>
             <span className={styles.eyebrow}>Fees</span>
             <h4>Monthly fee</h4>
             {fee ? (
@@ -433,6 +447,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
         tone={notice?.tone}
       />
 
+      <div hidden={view === "fees"}>
       {open === "change" || open === "start" ? (
         <TrainingForm
           busy={busy}
@@ -466,6 +481,8 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           thisMonth={thisMonth}
         />
       ) : null}
+      </div>
+      <div hidden={view === "training"}>
       {open === "fee" && fee && hasRunningPlace ? (
         <FeeForm
           busy={busy}
@@ -503,6 +520,7 @@ export function MemberTrainingActions({ player }: { player: PlayerMemberRecord }
           playerId={memberId}
         />
       ) : null}
+      </div>
     </section>
   )
 }
@@ -683,6 +701,7 @@ function TrainingForm({
       busy={busy}
       confirmLabel={when === "next" ? (editing ? "Save scheduled change" : "Schedule the change") : "Change schedule"}
       disabled={!chosen || !daysOk || !feeOk || !dateOk || (when === "this" && (marks === null || marksFailed))}
+      backLabel="Training"
       eyebrow={mode === "start" ? "Start training" : "Change schedule"}
       onCancel={onCancel}
       onConfirm={() => {
@@ -914,6 +933,7 @@ function EndForm({
       busy={busy}
       confirmLabel="End training"
       danger
+      backLabel="Training"
       eyebrow="End training"
       onCancel={onCancel}
       onConfirm={() => {
@@ -996,6 +1016,7 @@ function StopFeesForm({
       busy={busy}
       confirmLabel="Stop fees"
       danger
+      backLabel="Fees"
       eyebrow="Stop fees"
       onCancel={onCancel}
       onConfirm={() => {
@@ -1051,6 +1072,7 @@ function FeeForm({
       busy={busy}
       confirmLabel="Save new fee"
       disabled={amount === null || amount <= 0 || amount === currentFee}
+      backLabel="Fees"
       eyebrow="Change fee"
       onCancel={onCancel}
       onConfirm={() => {
@@ -1118,6 +1140,7 @@ function ConcessionForm({
       busy={busy}
       confirmLabel="Give concession"
       disabled={!valid || (duration === "months" && !(Number(months) >= 1 && Number(months) <= 24))}
+      backLabel="Fees"
       eyebrow="Give concession"
       onCancel={onCancel}
       onConfirm={() => {

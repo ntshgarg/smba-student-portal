@@ -136,16 +136,18 @@ export function MemberEditForm({
 
       <fieldset disabled={isSaving}>
         <legend>Training</legend>
+        {/* Locked, the three choices cannot change here, so the form says where
+            they do instead of showing them greyed out. */}
         {classificationLocked ? (
           <p
             id={classificationLockId}
             className="coach-member-classification-lock"
           >
             {onboarded
-              ? "Level, batch and plan change with Change schedule or Start training on the member record."
+              ? "Level, batch and plan change with Change schedule or Start training on the Training tab."
               : "Level, batch and plan are fixed until onboarding is finished."}
           </p>
-        ) : null}
+        ) : (
         <div className="coach-member-form-grid">
           <label>
             <span>Level</span>
@@ -153,12 +155,8 @@ export function MemberEditForm({
               id={`member-${memberId}-level`}
               name="level"
               value={draft.level}
-              disabled={classificationLocked}
               aria-invalid={Boolean(errors.level)}
-              aria-describedby={[
-                errors.level ? `member-${memberId}-level-error` : null,
-                classificationLocked ? classificationLockId : null,
-              ].filter(Boolean).join(" ") || undefined}
+              aria-describedby={errors.level ? `member-${memberId}-level-error` : undefined}
               onChange={(event) => onSelectLevel(event.target.value as MemberDraft["level"])}
             >
               <option>Assessment pending</option>
@@ -172,12 +170,8 @@ export function MemberEditForm({
               id={`member-${memberId}-batch`}
               name="batch"
               value={draft.batch}
-              disabled={classificationLocked}
               aria-invalid={Boolean(errors.batch)}
-              aria-describedby={[
-                errors.batch ? `member-${memberId}-batch-error` : null,
-                classificationLocked ? classificationLockId : null,
-              ].filter(Boolean).join(" ") || undefined}
+              aria-describedby={errors.batch ? `member-${memberId}-batch-error` : undefined}
               onChange={(event) => onSelectBatch(event.target.value as MemberDraft["batch"])}
             >
               <option>Assessment pending</option>
@@ -191,14 +185,10 @@ export function MemberEditForm({
               id={`member-${memberId}-academy-plan`}
               name="academyPlan"
               value={draft.academyPlan ?? ""}
-              disabled={classificationLocked
-                || draft.level === "Assessment pending"
+              disabled={draft.level === "Assessment pending"
                 || draft.batch === "Assessment pending"}
               aria-invalid={Boolean(errors.academyPlan)}
-              aria-describedby={[
-                errors.academyPlan ? `member-${memberId}-academy-plan-error` : null,
-                classificationLocked ? classificationLockId : null,
-              ].filter(Boolean).join(" ") || undefined}
+              aria-describedby={errors.academyPlan ? `member-${memberId}-academy-plan-error` : undefined}
               onChange={(event) => {
                 onUpdateField(
                   "academyPlan",
@@ -223,6 +213,7 @@ export function MemberEditForm({
               : "Managed by active session assignments."}</small>
           </div>
         </div>
+        )}
       </fieldset>
 
       <div className="coach-member-form-actions">

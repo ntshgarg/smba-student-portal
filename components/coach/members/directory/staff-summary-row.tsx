@@ -1,11 +1,11 @@
 "use client"
 
-import { Archive, ChevronDown } from "lucide-react"
+import { Archive, CalendarDays, ChevronDown, UserRound, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 import { archiveCoachAction } from "@/app/coach/actions"
-import { formatJoinedDate } from "@/components/coach/members/directory/shared"
+import { formatJoinedDate, initials, nameParts } from "@/components/coach/members/directory/shared"
 import { InlineNotice, type InlineNoticeAction } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { AcademyStaffMember } from "@/lib/coach/types"
@@ -15,75 +15,51 @@ export function staffAccessLabel(accessLevel: AcademyStaffMember["accessLevel"])
   return accessLevel === "head_admin" ? "Head coach" : "Assistant coach"
 }
 
-/*
- * Four of this table's six columns describe training, and a coach has none of
- * it. They are written as an explicit em dash with a screen-reader reason
- * rather than left blank: blank in a table reads as data that failed to load,
- * and the responsive layout stacks every cell under its own `data-label`, so a
- * silent gap would be announced as "Sessions" followed by nothing at all.
- */
-function NotApplicable({ reason }: { reason: string }) {
-  return (
-    <>
-      <span aria-hidden="true">—</span>
-      <span className="sr-only">{reason}</span>
-    </>
-  )
-}
-
+/** A coach's card in the directory: the same card a player has, with their role in place of training. */
 export function StaffSummaryRow({
-  index,
   isExpanded,
   onOpen,
   staff,
 }: {
-  index: number
   isExpanded: boolean
   onOpen: (memberId: string) => void
   staff: AcademyStaffMember
 }) {
   const activated = Boolean(staff.activatedAt)
+  const name = nameParts(staff.fullName)
 
   return (
-    <tr className={isExpanded ? "is-expanded" : undefined}>
-      <td className="coach-member-folio" aria-hidden="true">
-        {String(index + 1).padStart(2, "0")}
-      </td>
-      <th scope="row" data-label="Member">
-        <span className="coach-member-name">
-          <strong>{staff.fullName}</strong>
-          <small>{staff.academyId}</small>
+    <button
+      className="coach-member-card-head"
+      type="button"
+      aria-expanded={isExpanded}
+      aria-controls={isExpanded ? `member-details-${staff.id}` : undefined}
+      onClick={() => onOpen(staff.id)}
+    >
+      <span className="coach-member-badge" aria-hidden="true">{initials(staff.fullName)}</span>
+      <span className="coach-member-name">
+        <strong>{name.first}{name.rest ? <> <em>{name.rest}</em></> : null}</strong>
+      </span>
+      <span className="coach-member-box">
+        <span className="coach-member-fact">
+          <UserRound aria-hidden="true" />
+          {staffAccessLabel(staff.accessLevel)}
         </span>
-      </th>
-      <td className="coach-member-training" data-label="Training">
-        <span>
-          <strong>{staffAccessLabel(staff.accessLevel)}</strong>
-          <small>Coaching staff</small>
+        <span className="coach-member-fact">
+          <CalendarDays aria-hidden="true" />
+          Joined {formatJoinedDate(staff.joinedOn)}
         </span>
-      </td>
-      <td className="coach-member-sessions" data-label="Sessions">
-        <span><NotApplicable reason="Sessions are not assigned to coaching staff" /></span>
-      </td>
-      <td className="coach-member-joined" data-label="Training from">
-        <NotApplicable reason="Coaching staff do not train; joined date is in the details" />
-      </td>
-      <td className="coach-member-status-cell" data-label="Status">
-        <span className={`coach-member-status is-${activated ? "active" : "unassigned"}`}>
-          {activated ? "active" : "not activated"}
-        </span>
-      </td>
-      <td className="coach-member-row-action">
-        <button
-          type="button"
-          aria-expanded={isExpanded}
-          aria-controls={isExpanded ? `member-details-${staff.id}` : undefined}
-          onClick={() => onOpen(staff.id)}
-        >
-          <span>{isExpanded ? "Close" : "Details"}</span>
-          <ChevronDown aria-hidden="true" />
-        </button>
-      </td>
-    </tr>
+        <span className="coach-member-id">{staff.academyId}</span>
+      </span>
+      <span className={`coach-member-status is-${activated ? "active" : "unassigned"}`}>
+        {activated ? "Active" : "Not activated"}
+      </span>
+      <span className="coach-member-open-id">{staff.academyId}</span>
+      <span className="coach-member-toggle-mark" aria-hidden="true">
+        {isExpanded ? <X /> : <ChevronDown />}
+      </span>
+      <span className="sr-only">{isExpanded ? "Close record" : "Open record"}</span>
+    </button>
   )
 }
 
@@ -164,62 +140,36 @@ export function StaffDetailRow({
   onArchived: (staff: AcademyStaffMember) => void
   staff: AcademyStaffMember
 }) {
+  // Coaches have no training or fees here, so their record has no tabs.
+  const steps = [
+    { label: "Approved", value: staff.approvedAt ? formatJoinedDate(getAcademyDateKey(staff.approvedAt)) : null },
+    { label: "Account set up", value: staff.activatedAt ? formatJoinedDate(getAcademyDateKey(staff.activatedAt)) : null },
+  ]
+
   return (
-    <tr className="coach-member-detail-row">
-      <td colSpan={6}>
-        {/* The same panel a player's record uses, so a coach's record reads as
-            one: it had no styles of its own and rendered as bare stacked text. */}
-        <div id={`member-details-${staff.id}`} className="coach-member-detail-panel">
-          <div className="coach-member-detail-heading">
-            <div>
-              <span>Staff record</span>
-              <h3>{staff.fullName}</h3>
-              <p>{staff.academyId} · {staffAccessLabel(staff.accessLevel)}</p>
-            </div>
-          </div>
-          <div className="coach-member-detail-domains">
-            <section aria-labelledby={`staff-profile-${staff.id}`}>
-              <span>Profile</span>
-              <h4 id={`staff-profile-${staff.id}`}>Staff details</h4>
-              <dl>
-                <div>
-                  <dt>Academy ID</dt>
-                  <dd>{staff.academyId}</dd>
-                </div>
-                <div>
-                  <dt>Access</dt>
-                  <dd>{staffAccessLabel(staff.accessLevel)}</dd>
-                </div>
-                <div>
-                  <dt>Joined</dt>
-                  <dd>{formatJoinedDate(staff.joinedOn)}</dd>
-                </div>
-              </dl>
-            </section>
-            <section aria-labelledby={`staff-account-${staff.id}`}>
-              <span>Account</span>
-              <h4 id={`staff-account-${staff.id}`}>Portal account</h4>
-              <dl>
-                <div>
-                  <dt>Coach approved</dt>
-                  <dd>{staff.approvedAt
-                    ? formatJoinedDate(getAcademyDateKey(staff.approvedAt))
-                    : "Not recorded"}</dd>
-                </div>
-                <div>
-                  <dt>Account activated</dt>
-                  <dd>{staff.activatedAt
-                    ? formatJoinedDate(getAcademyDateKey(staff.activatedAt))
-                    : "Not yet activated"}</dd>
-                </div>
-              </dl>
-            </section>
-          </div>
-          {staff.accessLevel === "junior_coach"
-            ? <StaffAccessActions onArchived={onArchived} staff={staff} />
-            : null}
+    <div id={`member-details-${staff.id}`} className="coach-member-record">
+      <div className="coach-member-record-body">
+        <h3 className="sr-only">{staff.fullName}</h3>
+        <section className="coach-member-training-facts" aria-label="Staff details">
+          <p className="coach-member-plan-line">{staffAccessLabel(staff.accessLevel)}</p>
+          <p className="coach-member-when">Coaching staff · joined {formatJoinedDate(staff.joinedOn)}</p>
+        </section>
+        <div className="coach-member-joining">
+          <span>Joining</span>
+          <ol>
+            {steps.map((step) => (
+              <li key={step.label} className={step.value ? undefined : "is-pending"}>
+                <span className="coach-member-joining-mark" aria-hidden="true" />
+                <strong>{step.label}</strong>
+                <small>{step.value ?? "Not yet"}</small>
+              </li>
+            ))}
+          </ol>
         </div>
-      </td>
-    </tr>
+        {staff.accessLevel === "junior_coach"
+          ? <StaffAccessActions onArchived={onArchived} staff={staff} />
+          : null}
+      </div>
+    </div>
   )
 }

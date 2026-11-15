@@ -1,5 +1,5 @@
 import type { PlayerMemberRecord } from "@/lib/coach/types"
-import { formatSessionLabel } from "@/lib/format"
+import { formatSessionLabel, formatSessionTimeRange } from "@/lib/format"
 import { formatTermDate, scheduleTermFinished } from "@/lib/sessions/term"
 import type {
   SessionAssignment,
@@ -37,7 +37,24 @@ export function buildMemberDirectoryIndex(
   })
 
   const sessionLabelsByPlayer = new Map<string, string[]>()
+  // The same places without the level and batch the row already shows: the
+  // time and days only, for the directory's compact rows.
+  const sessionTimesByPlayer = new Map<string, string[]>()
   activeByPlayer.forEach((playerAssignments, playerId) => {
+    sessionTimesByPlayer.set(playerId, playerAssignments.flatMap((assignment) => {
+      const series = seriesById.get(assignment.seriesId)
+      if (!series) return []
+      const slot = series.slots[0]
+      const finished = today && scheduleTermFinished(series, today) && series.endsOn
+        ? ` (term finished ${formatTermDate(series.endsOn)})`
+        : ""
+      const range = formatSessionTimeRange({
+        startTime: slot?.startTime ?? "",
+        durationMinutes: slot?.durationMinutes ?? 0,
+      })
+      const days = assignment.weekdays.map((weekday) => weekdayLabels[weekday]).join(", ")
+      return [[range, days].filter(Boolean).join(" · ") + finished]
+    }))
     sessionLabelsByPlayer.set(playerId, playerAssignments.flatMap((assignment) => {
       const series = seriesById.get(assignment.seriesId)
       if (!series) return []
@@ -59,5 +76,5 @@ export function buildMemberDirectoryIndex(
     }))
   })
 
-  return { earliestByPlayer, playerById, sessionLabelsByPlayer }
+  return { earliestByPlayer, playerById, sessionLabelsByPlayer, sessionTimesByPlayer }
 }

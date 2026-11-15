@@ -1,58 +1,56 @@
-export const MEMBERS_INCREMENT = 12
+/** The directory shows members five to a page. */
+export const MEMBERS_PER_PAGE = 5
 
-export type MemberWindowState = {
+export type MemberPageState = {
+  page: number
+  /** A search or filter change made while editing waits until the edit ends. */
   resetAfterEditing: boolean
-  visibleLimit: number
 }
 
-export function initialMemberWindow(): MemberWindowState {
-  return {
-    resetAfterEditing: false,
-    visibleLimit: MEMBERS_INCREMENT,
-  }
+export function initialMemberPage(page = 1): MemberPageState {
+  return { page: Math.max(1, Math.floor(page) || 1), resetAfterEditing: false }
 }
 
-export function memberWindowAfterCriteriaChange(
-  current: MemberWindowState,
+export function memberPageAfterCriteriaChange(
+  current: MemberPageState,
   isEditing: boolean,
-): MemberWindowState {
+): MemberPageState {
   return isEditing
     ? { ...current, resetAfterEditing: true }
-    : initialMemberWindow()
+    : initialMemberPage()
 }
 
-export function memberWindowAfterEditingEnds(
-  current: MemberWindowState,
-): MemberWindowState {
-  return current.resetAfterEditing ? initialMemberWindow() : current
+export function memberPageAfterEditingEnds(current: MemberPageState): MemberPageState {
+  return current.resetAfterEditing ? initialMemberPage() : current
 }
 
-export function visibleMemberCount(
-  totalCount: number,
-  current: MemberWindowState,
-  editingIndex: number,
-) {
-  const editingLimit = editingIndex >= 0 ? editingIndex + 1 : 0
-  return Math.min(totalCount, Math.max(current.visibleLimit, editingLimit))
+export function memberPageCount(totalCount: number) {
+  return Math.max(1, Math.ceil(totalCount / MEMBERS_PER_PAGE))
 }
 
-export function memberWindowAfterReveal(
-  current: MemberWindowState,
-  currentlyVisible: number,
-  totalCount: number,
-): MemberWindowState {
-  return {
-    ...current,
-    visibleLimit: Math.min(
-      totalCount,
-      Math.max(current.visibleLimit, currentlyVisible) + MEMBERS_INCREMENT,
-    ),
-  }
+/**
+ * The page on screen: the one holding the open or edited member when there is
+ * one (a deep link, or a filter change while a record is open), otherwise the
+ * chosen page, kept within range as the list shrinks.
+ */
+export function shownMemberPage(totalCount: number, current: MemberPageState, pinnedIndex: number) {
+  if (pinnedIndex >= 0) return Math.floor(pinnedIndex / MEMBERS_PER_PAGE) + 1
+  return Math.min(current.page, memberPageCount(totalCount))
 }
 
-export function memberWindowSummary(visibleCount: number, totalCount: number) {
+/** The page numbers to offer: the first, the last, and the current one with its neighbours. */
+export function memberPageNumbers(page: number, pageCount: number): Array<number | "gap"> {
+  const wanted = new Set([1, pageCount, page - 1, page, page + 1].filter((item) => item >= 1 && item <= pageCount))
+  const sorted = [...wanted].sort((a, b) => a - b)
+  return sorted.flatMap((item, index) => (
+    index && item - sorted[index - 1] > 1 ? ["gap" as const, item] : [item]
+  ))
+}
+
+export function memberWindowSummary(page: number, totalCount: number) {
   const memberLabel = totalCount === 1 ? "member" : "members"
-  return visibleCount < totalCount
-    ? `Showing ${visibleCount} of ${totalCount} ${memberLabel}`
-    : `${totalCount} ${memberLabel}`
+  if (totalCount <= MEMBERS_PER_PAGE) return `${totalCount} ${memberLabel}`
+  const first = (page - 1) * MEMBERS_PER_PAGE + 1
+  const last = Math.min(totalCount, page * MEMBERS_PER_PAGE)
+  return `${first}–${last} of ${totalCount} ${memberLabel}`
 }

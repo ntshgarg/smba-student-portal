@@ -1,8 +1,7 @@
 "use client"
 
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
-import { Fragment } from "react"
 
 import { MemberDetailRow } from "@/components/coach/members/directory/member-detail-row"
 import { MemberDirectoryEmptyState } from "@/components/coach/members/directory/member-directory-empty-state"
@@ -13,7 +12,7 @@ import {
 } from "@/components/coach/members/directory/staff-summary-row"
 import { useMemberDirectory } from "@/components/coach/members/directory/use-member-directory"
 import { MemberDirectoryFilters } from "@/components/coach/members/member-directory-filters"
-import { memberWindowSummary } from "@/components/coach/members/member-window"
+import { memberPageNumbers, memberWindowSummary } from "@/components/coach/members/member-window"
 import { InlineNotice } from "@/components/inline-notice"
 import type { AcademyStaffMember } from "@/lib/coach/types"
 
@@ -36,18 +35,20 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
     editor,
     expandedMemberId,
     filtersOpen,
+    goToPage,
+    page,
+    pageCount,
     handleArchive,
     hasDirectoryCriteria,
-    hasMoreMembers,
     memberFeedback,
     noteStaffArchived,
     openMember,
     players,
     resetFilters,
     revealContact,
-    revealMoreMembers,
     revealedContacts,
     sessionLabelsByPlayer,
+    sessionTimesByPlayer,
     setContactLinkRef,
     setEditButtonRef,
     setFiltersOpen,
@@ -58,8 +59,6 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
     visibleStaff,
   } = useMemberDirectory(staff)
 
-  const visibleCount = visiblePlayers.length + visibleStaff.length
-
   return (
     <div className="coach-members-directory page-shell">
       <div className="coach-members-back-row">
@@ -69,10 +68,7 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
       </div>
 
       <header className="coach-members-directory-header">
-        <div>
-          <span className="eyebrow">Court roster register</span>
-          <h1>Member Directory</h1>
-        </div>
+        <h1>Members</h1>
       </header>
 
       <section className="coach-member-directory-panel" aria-labelledby="member-directory-title">
@@ -91,104 +87,106 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
             open={filtersOpen}
           />
 
-          <div className="coach-member-directory-summary">
-            <h2
-              ref={directorySummaryRef}
-              id="member-directory-title"
-              aria-live="polite"
-              aria-atomic="true"
-              tabIndex={-1}
-            >
-              {memberWindowSummary(visibleCount, directoryCount)}
-            </h2>
-            <p>Private contacts remain concealed.</p>
-          </div>
+          <h2
+            ref={directorySummaryRef}
+            id="member-directory-title"
+            className="coach-member-directory-summary"
+            aria-live="polite"
+            aria-atomic="true"
+            tabIndex={-1}
+          >
+            {memberWindowSummary(page, directoryCount)}
+          </h2>
         </div>
 
         {directoryCount ? (
-          <div className="coach-member-table-wrap">
-            <table className="coach-member-table">
-              <thead>
-                <tr>
-                  <th scope="col"><span className="sr-only">Roster number</span></th>
-                  <th scope="col">Member</th>
-                  <th scope="col">Training</th>
-                  <th scope="col">Sessions</th>
-                  <th scope="col">Training from</th>
-                  <th scope="col">Status</th>
-                  <th scope="col"><span className="sr-only">Details</span></th>
-                </tr>
-              </thead>
-              <tbody id="coach-member-results">
-                {visiblePlayers.map((player, index) => {
-                  const memberId = player.member.id
-                  const isExpanded = expandedMemberId === memberId
-                  const activeSessionLabels = sessionLabelsByPlayer.get(memberId) ?? []
-                  const currentMemberFeedback = memberFeedback?.memberId === memberId
-                    ? memberFeedback
-                    : null
+          <>
+            <ul className="coach-member-list" id="coach-member-results">
+              {visiblePlayers.map((player) => {
+                const memberId = player.member.id
+                const isExpanded = expandedMemberId === memberId
+                const sessionTimes = sessionTimesByPlayer.get(memberId) ?? []
 
-                  return (
-                    <Fragment key={memberId}>
-                      <MemberSummaryRow
-                        activeSessionLabels={activeSessionLabels}
-                        index={index}
-                        isExpanded={isExpanded}
-                        onOpen={openMember}
+                return (
+                  <li key={memberId} className={`coach-member-item${isExpanded ? " is-open" : ""}`}>
+                    <MemberSummaryRow
+                      isExpanded={isExpanded}
+                      onOpen={openMember}
+                      player={player}
+                      sessionTimes={sessionTimes}
+                    />
+
+                    {isExpanded ? (
+                      <MemberDetailRow
+                        activeSessionLabels={sessionLabelsByPlayer.get(memberId) ?? []}
+                        contactRevealed={revealedContacts.has(memberId)}
+                        draft={draft}
+                        editor={editor}
+                        feedback={memberFeedback?.memberId === memberId ? memberFeedback : null}
+                        holdsPlace={earliestByPlayer.has(memberId)}
+                        isArchiving={archivingMemberId === memberId}
+                        isEditing={editingMemberId === memberId}
+                        onArchive={handleArchive}
+                        onBeginEdit={beginEditing}
+                        onRevealContact={revealContact}
                         player={player}
+                        sessionTimes={sessionTimes}
+                        setContactLinkRef={setContactLinkRef}
+                        setEditButtonRef={setEditButtonRef}
                       />
+                    ) : null}
+                  </li>
+                )
+              })}
 
-                      {isExpanded ? (
-                        <MemberDetailRow
-                          activeSessionLabels={activeSessionLabels}
-                          contactRevealed={revealedContacts.has(memberId)}
-                          draft={draft}
-                          editor={editor}
-                          feedback={currentMemberFeedback}
-                          holdsPlace={earliestByPlayer.has(memberId)}
-                          isArchiving={archivingMemberId === memberId}
-                          isEditing={editingMemberId === memberId}
-                          onArchive={handleArchive}
-                          onBeginEdit={beginEditing}
-                          onClose={openMember}
-                          onRevealContact={revealContact}
-                          player={player}
-                          setContactLinkRef={setContactLinkRef}
-                          setEditButtonRef={setEditButtonRef}
-                        />
-                      ) : null}
-                    </Fragment>
-                  )
-                })}
+              {visibleStaff.map((member) => {
+                const isExpanded = expandedMemberId === member.id
 
-                {visibleStaff.map((member, index) => {
-                  const isExpanded = expandedMemberId === member.id
-
-                  return (
-                    <Fragment key={member.id}>
-                      <StaffSummaryRow
-                        index={visiblePlayers.length + index}
-                        isExpanded={isExpanded}
-                        onOpen={openMember}
-                        staff={member}
-                      />
-                      {isExpanded ? <StaffDetailRow onArchived={noteStaffArchived} staff={member} /> : null}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-            {hasMoreMembers ? (
-              <button
-                className="coach-member-show-more"
-                type="button"
-                aria-controls="coach-member-results"
-                onClick={revealMoreMembers}
-              >
-                Show more members
-              </button>
+                return (
+                  <li key={member.id} className={`coach-member-item${isExpanded ? " is-open" : ""}`}>
+                    <StaffSummaryRow isExpanded={isExpanded} onOpen={openMember} staff={member} />
+                    {isExpanded ? <StaffDetailRow onArchived={noteStaffArchived} staff={member} /> : null}
+                  </li>
+                )
+              })}
+            </ul>
+            {pageCount > 1 ? (
+              <nav className="coach-member-pager" aria-label="Member pages">
+                <button
+                  type="button"
+                  disabled={page === 1}
+                  onClick={() => goToPage(page - 1)}
+                >
+                  <ChevronLeft aria-hidden="true" /> Previous
+                </button>
+                <ol>
+                  {memberPageNumbers(page, pageCount).map((item, index) => (
+                    <li key={item === "gap" ? `gap-${index}` : item}>
+                      {item === "gap" ? (
+                        <span aria-hidden="true">…</span>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-current={item === page ? "page" : undefined}
+                          aria-label={`Page ${item}`}
+                          onClick={() => goToPage(item)}
+                        >
+                          {item}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+                <button
+                  type="button"
+                  disabled={page === pageCount}
+                  onClick={() => goToPage(page + 1)}
+                >
+                  Next <ChevronRight aria-hidden="true" />
+                </button>
+              </nav>
             ) : null}
-          </div>
+          </>
         ) : (
           <MemberDirectoryEmptyState
             hasDirectoryCriteria={hasDirectoryCriteria}

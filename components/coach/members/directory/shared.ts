@@ -49,3 +49,14 @@ export function formatJoinedDate(value: string) {
     weekday: undefined,
   })
 }
+
+/** A name split for the record's band: the first word upright, the rest in italic. */
+export function nameParts(fullName: string) {
+  const [first = "", ...rest] = fullName.trim().split(/\s+/u)
+  return { first, rest: rest.join(" ") }
+}
+
+/** Up to two initials for a row's badge. */
+export function initials(fullName: string) {
+  return fullName.trim().split(/\s+/u).slice(0, 2).map((word) => word[0] ?? "").join("").toLocaleUpperCase()
+}

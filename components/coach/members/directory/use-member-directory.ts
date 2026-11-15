@@ -24,11 +24,12 @@ import {
   type MemberDirectoryCriteria,
 } from "@/components/coach/members/member-directory-query"
 import {
-  initialMemberWindow,
-  memberWindowAfterCriteriaChange,
-  memberWindowAfterEditingEnds,
-  memberWindowAfterReveal,
-  visibleMemberCount,
+  initialMemberPage,
+  MEMBERS_PER_PAGE,
+  memberPageAfterCriteriaChange,
+  memberPageAfterEditingEnds,
+  memberPageCount,
+  shownMemberPage,
 } from "@/components/coach/members/member-window"
 import type { ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
@@ -62,7 +63,7 @@ export function feePlanEndRoute(
     return `wait for the End training booked for ${formatDateKey(scheduled.effectiveOn, { day: "numeric", month: "short", weekday: undefined, year: "numeric" })}, which ends the player’s Fee Plan`
   }
   if (scheduled) return "cancel the booked change above, then end the player’s Fee Plan with Stop fees"
-  if (hasPlace) return "end the player’s Fee Plan with End training above (Stop fees after this month)"
+  if (hasPlace) return "end the player’s Fee Plan with End training on the Training tab (Stop fees after this month)"
   return "end the player’s Fee Plan with Stop fees above"
 }
 
@@ -117,7 +118,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     () => buildMemberDirectoryIndex(players, sessionAssignments, sessionSeries, today),
     [players, sessionAssignments, sessionSeries, today],
   )
-  const { earliestByPlayer, playerById, sessionLabelsByPlayer } = memberIndex
+  const { earliestByPlayer, playerById, sessionLabelsByPlayer, sessionTimesByPlayer } = memberIndex
   const urlCriteria = useMemo(
     () => parseMemberDirectoryCriteria(searchParams),
     [searchParams],
@@ -129,7 +130,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     ? requestedMemberId
     : null
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [memberWindow, setMemberWindow] = useState(initialMemberWindow)
+  const [memberPage, setMemberPage] = useState(() => initialMemberPage(Number(searchParams.get("page"))))
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(deepLinkedMemberId)
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
   const [editingRevision, setEditingRevision] = useState<number | null>(null)
@@ -184,28 +185,30 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
   }, [batch, editingMemberId, expandedMemberId, level, memberTraining, players, query, role, status])
 
   /*
-   * Staff answer to the role filter and the search box only. Level, batch and
-   * status describe training, so applying them to a coach would empty the staff
-   * half the moment anyone filtered by batch -- the same silent exclusion the
-   * directory just stopped doing.
+   * Coaches have no level, batch or training status. Under Everyone they are
+   * listed only while none of those filters is set: a coach marked "Active"
+   * under Paused or Term finished read as a mistake. Coaching staff lists them
+   * whatever the search, as that role disables the three filters.
    */
+  const trainingFilterSet = level !== "All levels" || batch !== "All batches" || status !== "all"
   const filteredStaff = useMemo(() => {
     if (role === "players") return []
     const normalizedQuery = query.trim().toLocaleLowerCase()
 
     return [...staff]
-      .filter((member) => !normalizedQuery
-        || member.fullName.toLocaleLowerCase().includes(normalizedQuery)
-        || member.academyId.toLocaleLowerCase().includes(normalizedQuery))
+      .filter((member) => member.id === expandedMemberId || (
+        (role === "staff" || !trainingFilterSet)
+        && (!normalizedQuery
+          || member.fullName.toLocaleLowerCase().includes(normalizedQuery)
+          || member.academyId.toLocaleLowerCase().includes(normalizedQuery))
+      ))
       .sort((a, b) => a.fullName.localeCompare(b.fullName))
-  }, [query, role, staff])
+  }, [expandedMemberId, query, role, staff, trainingFilterSet])
 
   /*
-   * One window over both halves, not one each. Staff render after the players,
-   * so the reveal counts straight through the boundary: twelve members is
-   * twelve rows whether they are twelve players, or nine players and three
-   * coaches. Windowing them separately would have let a directory with 99
-   * players open on fifteen rows, which is what it did before this.
+   * One set of pages over both halves, not one each. Staff come after the
+   * players, so a page counts straight through the boundary: five members is
+   * five cards whether they are five players, or two players and three coaches.
    */
   const directoryCount = filteredPlayers.length + filteredStaff.length
   const editingMemberIndex = editingMemberId
@@ -220,17 +223,19 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
   const expandedMemberIndex = expandedStaffIndex >= 0
     ? filteredPlayers.length + expandedStaffIndex
     : expandedPlayerIndex
-  const visibleCount = visibleMemberCount(
+  const page = shownMemberPage(
     directoryCount,
-    memberWindow,
+    memberPage,
     Math.max(editingMemberIndex, expandedMemberIndex),
   )
-  const visiblePlayers = filteredPlayers.slice(0, visibleCount)
+  const pageCount = memberPageCount(directoryCount)
+  const pageStart = (page - 1) * MEMBERS_PER_PAGE
+  const pageEnd = pageStart + MEMBERS_PER_PAGE
+  const visiblePlayers = filteredPlayers.slice(pageStart, pageEnd)
   const visibleStaff = filteredStaff.slice(
-    0,
-    Math.max(0, visibleCount - filteredPlayers.length),
+    Math.max(0, pageStart - filteredPlayers.length),
+    Math.max(0, pageEnd - filteredPlayers.length),
   )
-  const hasMoreMembers = visiblePlayers.length + visibleStaff.length < directoryCount
 
   const editingPlayer = editingMemberId
     ? playerById.get(editingMemberId) ?? null
@@ -282,7 +287,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
   useEffect(() => {
     if (criteriaKey === previousCriteriaKeyRef.current) return
     previousCriteriaKeyRef.current = criteriaKey
-    setMemberWindow((current) => memberWindowAfterCriteriaChange(
+    setMemberPage((current) => memberPageAfterCriteriaChange(
       current,
       Boolean(editingMemberId),
     ))
@@ -332,7 +337,10 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     criteria: MemberDirectoryCriteria,
     historyMode: "push" | "replace",
   ) {
-    const nextSearch = memberDirectorySearch(searchParams.toString(), criteria)
+    // A new search or filter starts again at the first page.
+    const current = new URLSearchParams(searchParams.toString())
+    current.delete("page")
+    const nextSearch = memberDirectorySearch(current, criteria)
     const href = memberDirectoryHref(pathname, nextSearch)
     if (historyMode === "push" && !editingMemberId) {
       window.history.pushState(null, "", href)
@@ -341,17 +349,29 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     }
   }
 
-  function revealMoreMembers() {
-    setMemberWindow((current) => memberWindowAfterReveal(
-      current,
-      visiblePlayers.length + visibleStaff.length,
-      directoryCount,
-    ))
+  /** Another page closes the open record first, asking about unsaved work. */
+  function goToPage(nextPage: number) {
+    if (expandedMemberId) {
+      if (!canDiscardChanges()) return
+      setExpandedMemberId(null)
+      endEditing()
+      setEditingRevision(null)
+      setDraft(null)
+      setErrors({})
+      setRevealedContacts(new Set())
+    }
+    setMemberPage(initialMemberPage(nextPage))
+    const parameters = new URLSearchParams(window.location.search)
+    parameters.delete("player")
+    if (nextPage > 1) parameters.set("page", String(nextPage))
+    else parameters.delete("page")
+    window.history.replaceState(null, "", memberDirectoryHref(pathname, parameters.toString()))
+    focusAfterRender(() => directorySummaryRef.current)
   }
 
   function endEditing() {
     setEditingMemberId(null)
-    setMemberWindow(memberWindowAfterEditingEnds)
+    setMemberPage(memberPageAfterEditingEnds)
   }
 
   // Asks about any unfinished work on the record: the edit form or a training or fee form.
@@ -655,16 +675,18 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     filtersOpen,
     handleArchive,
     hasDirectoryCriteria,
-    hasMoreMembers,
     memberFeedback,
     noteStaffArchived,
     openMember,
     players,
     resetFilters,
     revealContact,
-    revealMoreMembers,
+    goToPage,
+    page,
+    pageCount,
     revealedContacts,
     sessionLabelsByPlayer,
+    sessionTimesByPlayer,
     setContactLinkRef,
     setEditButtonRef,
     setFiltersOpen,

@@ -48,13 +48,14 @@ import { MemberTrainingProvider } from "@/components/coach/members/directory/mem
 import { MemberDirectory } from "@/components/coach/members/member-directory"
 import { termFinishedMembersHref } from "@/components/coach/members/member-directory-query"
 import {
-  MEMBERS_INCREMENT,
-  initialMemberWindow,
-  memberWindowAfterCriteriaChange,
-  memberWindowAfterEditingEnds,
-  memberWindowAfterReveal,
+  MEMBERS_PER_PAGE,
+  initialMemberPage,
+  memberPageAfterCriteriaChange,
+  memberPageAfterEditingEnds,
+  memberPageCount,
+  memberPageNumbers,
   memberWindowSummary,
-  visibleMemberCount,
+  shownMemberPage,
 } from "@/components/coach/members/member-window"
 
 function players(count: number): PlayerMemberRecord[] {
@@ -86,92 +87,91 @@ function players(count: number): PlayerMemberRecord[] {
   })
 }
 
-describe("Member Directory reveal window", () => {
+/** The page as text-ish markup: a card sets the surname apart (Member <em>05</em>). */
+function directoryHtml() {
+  return renderToStaticMarkup(<MemberDirectory />).replace(/<\/?em>/gu, "")
+}
+
+describe("Member Directory pages", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.players = []
     mocks.search = ""
   })
 
-  it("renders the first 12 filtered members and a quiet one-way reveal", () => {
+  it("renders the first five filtered members and the page bar", () => {
     mocks.players = players(13)
 
-    const html = renderToStaticMarkup(<MemberDirectory />)
+    const html = directoryHtml()
 
-    expect(html).toContain("Showing 12 of 13 members")
-    expect(html).toContain("Member 12")
-    expect(html).not.toContain("Member 13")
-    expect(html).toContain("Show more members")
-    expect(html).toContain('aria-controls="coach-member-results"')
+    expect(MEMBERS_PER_PAGE).toBe(5)
+    expect(html).toContain("1–5 of 13 members")
+    expect(html).toContain("Member 05")
+    expect(html).not.toContain("Member 06")
+    expect(html.match(/class="coach-member-card-head"/g)).toHaveLength(5)
+    expect(html).toContain('aria-label="Member pages"')
+    expect(html).toContain('aria-current="page"')
   })
 
-  it("uses the Court Register folio order for every visible roster row", () => {
+  it("opens on the page in the link", () => {
     mocks.players = players(13)
+    mocks.search = "page=3"
 
-    const html = renderToStaticMarkup(<MemberDirectory />)
+    const html = directoryHtml()
 
-    expect(html).toContain("Court roster register")
-    expect(html.match(/coach-member-folio/g)).toHaveLength(12)
-    expect(html).toMatch(/coach-member-folio[^>]*>01</u)
-    expect(html).toMatch(/coach-member-folio[^>]*>12</u)
-    expect(html).not.toMatch(/coach-member-folio[^>]*>13</u)
-    expect(html).toContain('<th scope="col">Training</th>')
+    expect(html).toContain("11–13 of 13 members")
+    expect(html).toContain("Member 11")
+    expect(html).not.toContain("Member 10")
   })
 
-  it("removes Show more when every filtered member is visible", () => {
-    mocks.players = players(MEMBERS_INCREMENT)
+  it("has no page bar when everyone fits on one page", () => {
+    mocks.players = players(MEMBERS_PER_PAGE)
 
-    const html = renderToStaticMarkup(<MemberDirectory />)
+    const html = directoryHtml()
 
-    expect(html).toContain("12 members")
-    expect(html).not.toContain("Show more members")
+    expect(html).toContain("5 members")
+    expect(html).not.toContain('aria-label="Member pages"')
   })
 
-  it("opens and reveals a player linked from onboarding beyond the initial window", () => {
+  it("opens the page holding a player linked from onboarding", () => {
     mocks.players = players(13)
     mocks.search = "player=player-13"
 
-    const html = renderToStaticMarkup(<MemberDirectory />)
+    const html = directoryHtml()
 
-    expect(html).toContain("13 members")
+    expect(html).toContain("11–13 of 13 members")
     expect(html).toContain('id="member-details-player-13"')
     expect(html).toContain('id="member-details-title-player-13" tabindex="-1"')
     expect(html).toContain('aria-expanded="true"')
-    expect(html).not.toContain("Show more members")
   })
 
-  it("reveals the next 12 without reducing the existing window", () => {
-    const initial = initialMemberWindow()
-    const secondWindow = memberWindowAfterReveal(initial, 12, 40)
-    const thirdWindow = memberWindowAfterReveal(secondWindow, 24, 40)
-
-    expect(MEMBERS_INCREMENT).toBe(12)
-    expect(secondWindow.visibleLimit).toBe(24)
-    expect(thirdWindow.visibleLimit).toBe(36)
+  it("keeps the open or edited member's page, and stays in range", () => {
+    expect(shownMemberPage(40, initialMemberPage(1), 30)).toBe(7)
+    expect(shownMemberPage(40, initialMemberPage(3), -1)).toBe(3)
+    expect(shownMemberPage(12, initialMemberPage(9), -1)).toBe(3)
+    expect(memberPageCount(0)).toBe(1)
+    expect(memberPageCount(41)).toBe(9)
   })
 
-  it("defers criteria resets while editing and keeps the active editor visible", () => {
-    const revealed = memberWindowAfterReveal(initialMemberWindow(), 12, 40)
-    const criteriaChanged = memberWindowAfterCriteriaChange(revealed, true)
+  it("defers a search or filter's return to page 1 while editing", () => {
+    const third = initialMemberPage(3)
+    const criteriaChanged = memberPageAfterCriteriaChange(third, true)
 
-    expect(criteriaChanged).toEqual({
-      resetAfterEditing: true,
-      visibleLimit: 24,
-    })
-    expect(visibleMemberCount(40, criteriaChanged, 30)).toBe(31)
-    expect(memberWindowAfterEditingEnds(criteriaChanged)).toEqual(initialMemberWindow())
+    expect(criteriaChanged).toEqual({ page: 3, resetAfterEditing: true })
+    expect(memberPageAfterEditingEnds(criteriaChanged)).toEqual(initialMemberPage())
+    expect(memberPageAfterEditingEnds(third)).toEqual(third)
+    expect(memberPageAfterCriteriaChange(third, false)).toEqual(initialMemberPage())
   })
 
-  it("does not collapse a revealed window when editing ends without a criteria change", () => {
-    const revealed = memberWindowAfterReveal(initialMemberWindow(), 12, 40)
-
-    expect(memberWindowAfterEditingEnds(revealed)).toEqual(revealed)
-    expect(memberWindowAfterCriteriaChange(revealed, false)).toEqual(initialMemberWindow())
+  it("offers the first, last and neighbouring page numbers", () => {
+    expect(memberPageNumbers(1, 9)).toEqual([1, 2, "gap", 9])
+    expect(memberPageNumbers(5, 9)).toEqual([1, "gap", 4, 5, 6, "gap", 9])
+    expect(memberPageNumbers(2, 3)).toEqual([1, 2, 3])
   })
 
-  it("announces visible and total results only while the list is truncated", () => {
-    expect(memberWindowSummary(12, 30)).toBe("Showing 12 of 30 members")
-    expect(memberWindowSummary(12, 12)).toBe("12 members")
+  it("names the range shown, or just the count on one page", () => {
+    expect(memberWindowSummary(2, 13)).toBe("6–10 of 13 members")
+    expect(memberWindowSummary(1, 5)).toBe("5 members")
     expect(memberWindowSummary(1, 1)).toBe("1 member")
   })
 })
@@ -242,11 +242,12 @@ describe("Member Directory from the dashboard's term-finished to-do", () => {
       },
       today: "2026-11-12",
     }
+    // A card sets the surname apart (Asha <em>Iyer</em>), so names are read as text.
     return renderToStaticMarkup(
       <MemberTrainingProvider value={training}>
         <MemberDirectory staff={[coach]} />
       </MemberTrainingProvider>,
-    )
+    ).replace(/<\/?em>/gu, "")
   }
 
   beforeEach(() => {
