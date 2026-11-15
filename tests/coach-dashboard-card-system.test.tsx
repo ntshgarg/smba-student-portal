@@ -89,6 +89,7 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain("Fee Plan")
     expect(html).toContain("Academy onboarding")
     expect(html).toContain('href="/coach/onboarding">Open onboarding')
+    expect(html).not.toContain("will be removed")
     expect(html).toContain("Training calendar")
     expect(html).toContain("8 today")
     expect(html).toContain("1 of 2 assessed")
@@ -282,5 +283,14 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain('href="/coach/financials?period=2026-08"')
     expect(html).not.toContain("Record payment")
     expect(html).not.toContain("Fee records are ready to review")
+  })
+
+  it("warns the head coach about join requests about to be removed, and points to onboarding", () => {
+    const summary = { assessment: 0, feePlan: 0, newRequests: 0, onboarded: 4, session: 0, total: 0 }
+    const html = renderToStaticMarkup(<PlayerOnboardingCard expiringRequests={3} summary={summary} />)
+    expect(html).toContain("3 join requests will be removed in 7 days.")
+    expect(html).toMatch(/class="[^"]*primaryAction[^"]*" href="\/coach\/onboarding">Open onboarding/u)
+    expect(renderToStaticMarkup(<PlayerOnboardingCard expiringRequests={1} summary={summary} />))
+      .toContain("1 join request will be removed in 7 days. Open onboarding to decide it, or to undo a rejection.")
   })
 })
