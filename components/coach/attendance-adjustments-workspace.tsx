@@ -118,7 +118,8 @@ function DateCard({
         <small>{formatDateKey(dateKey, { day: undefined, month: "short", weekday: undefined })}</small>
       </span>
       <span>
-        <strong>{shortDate(dateKey)}</strong>
+        {/* "Wed, 15 Jul 2026": the year tells 15 Jul 2025 from 15 Jul 2026. */}
+        <strong>{shortDate(dateKey)} {dateKey.slice(0, 4)}</strong>
         <small>{detail}</small>
       </span>
       <span className={styles.tick} aria-hidden="true">{pressed ? <Check /> : null}</span>
@@ -315,9 +316,9 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
     )))
     return grouped
   }, [sourceOptions])
-  // Oldest first, one card per date; a date with two missed sessions asks for
+  // Newest first, one card per date; a date with two missed sessions asks for
   // the exact one under the list.
-  const sourceDates = [...sourceOptionsByDate.keys()].sort()
+  const sourceDates = [...sourceOptionsByDate.keys()].sort().reverse()
   const activeSourceDate = selectedSourceDate || sourceOccurrence?.occurrenceDate || ""
   const selectedSourceDateOptions = activeSourceDate
     ? sourceOptionsByDate.get(activeSourceDate) ?? []

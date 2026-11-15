@@ -42,7 +42,7 @@ export function formatAttendanceRegisterMonth(year: number, month: number, style
   })
 }
 
-/** Present over marked (present + absent), rounded; null when nothing is marked. */
+/** Staff register %: present over marked (present + absent), rounded; null when nothing is marked. */
 export function attendanceRegisterPercent(present: number, marked: number) {
   return marked ? Math.round((present / marked) * 100) : null
 }

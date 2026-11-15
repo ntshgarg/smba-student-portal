@@ -15,6 +15,7 @@ import {
   registerStyles as styles,
   scrollRegisterToday,
   useRegisterHref,
+  useScrollRegisterTodayOnOpen,
 } from "@/components/coach/attendance-register-chrome"
 import {
   attendanceRegisterPercent,
@@ -96,6 +97,8 @@ export function StaffAttendanceRegister({
           : choice ?? "not recorded"
       return { choice, date, holiday, state, unavailable }
     })
+    // Staff have no make-ups, so their % stays present ÷ (present + absent);
+    // players' % comes from `calculateMonthlyAttendance` instead.
     const marked = cells.filter((cell) => !cell.unavailable && !cell.holiday && cell.choice)
     return {
       cells,
@@ -107,8 +110,11 @@ export function StaffAttendanceRegister({
     }
   })
 
+  const showsToday = activeYear === currentYear && activeMonth === currentMonth
+  useScrollRegisterTodayOnOpen(gridRef, showsToday)
+
   function jumpToToday() {
-    if (activeYear !== currentYear || activeMonth !== currentMonth) {
+    if (!showsToday) {
       router.replace(
         hrefFor({ month: attendanceRegisterMonthParam(currentMonth), year: String(currentYear) }),
         { scroll: false },

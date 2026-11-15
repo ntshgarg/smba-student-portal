@@ -472,12 +472,10 @@ a.tile:focus-visible {
     line-height: 1.2;
   }
 
-  /* 1rem (16px) keeps iOS from zooming the page when a select opens. */
   .pill select {
     width: 100%;
     min-height: 24px;
     padding-right: 28px;
-    font-size: 1rem;
     text-overflow: ellipsis;
   }
 
@@ -517,5 +515,12 @@ a.tile:focus-visible {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+/* iOS zooms on focus below 16px: phones, and tablets through (pointer: coarse), as on Mark and Make-ups. */
+@media (max-width: 720px), (pointer: coarse) {
+  .pill select {
+    font-size: 16px;
   }
 }

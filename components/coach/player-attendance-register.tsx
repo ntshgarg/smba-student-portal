@@ -16,9 +16,9 @@ import {
   registerStyles as styles,
   scrollRegisterToday,
   useRegisterHref,
+  useScrollRegisterTodayOnOpen,
 } from "@/components/coach/attendance-register-chrome"
 import {
-  attendanceRegisterPercent,
   buildAttendanceRegisterMonthDates,
   formatAttendanceRegisterMonth,
 } from "@/components/coach/attendance-register-utils"
@@ -27,6 +27,7 @@ import {
   useMemberPortal,
   useSessionPortal,
 } from "@/components/coach/coach-portal-provider"
+import { calculateMonthlyAttendance } from "@/lib/attendance/domain"
 import {
   attendanceRegisterBatches,
   attendanceRegisterMonthParam,
@@ -227,9 +228,6 @@ export function PlayerAttendanceRegister({
           completionRequiresReview,
           date,
           holiday,
-          // Counted toward the month's %: a stored present/absent on a session
-          // the player could attend, closed days excluded.
-          marked: Boolean(choice && !unavailable && !holiday),
           state,
           unavailable,
           upcoming,
@@ -237,19 +235,32 @@ export function PlayerAttendanceRegister({
       }),
     }
   })
-  const playerTotals = rowCells.reduce<Map<string, { marked: number; present: number }>>(
-    (map, { cells, row }) => {
-      const total = map.get(row.player.member.id) ?? { marked: 0, present: 0 }
-      cells.forEach((cell) => {
-        if (!cell.marked) return
-        total.marked += 1
-        if (cell.choice === "present") total.present += 1
-      })
-      map.set(row.player.member.id, total)
-      return map
-    },
-    new Map(),
-  )
+  // The month's % uses the family page's own rule (`calculateMonthlyAttendance`),
+  // so a missed session that was made up counts as attended on both screens.
+  const monthKey = `${activeYear}-${attendanceRegisterMonthParam(activeMonth)}`
+  const monthOccurrences = categoryOccurrences.filter((occurrence) => (
+    occurrence.occurrenceDate.startsWith(`${monthKey}-`)
+  ))
+  const playerPercents = new Map<string, number | null>()
+  registerRows.forEach(({ player }) => {
+    const playerId = player.member.id
+    if (playerPercents.has(playerId)) return
+    playerPercents.set(playerId, calculateMonthlyAttendance({
+      month: monthKey,
+      referenceDate: todayKey,
+      referenceInstant: new Date(referenceInstant).toISOString(),
+      joinedOn: player.member.trainingStartOn,
+      assignments: registerRows
+        .filter((row) => row.player.member.id === playerId)
+        .map((row) => row.assignment),
+      occurrences: monthOccurrences,
+      records: monthOccurrences.flatMap((occurrence) => {
+        const choice = attendanceRecords[occurrence.id]?.[playerId]
+        return choice ? [{ occurrenceId: occurrence.id, choice }] : []
+      }),
+      adjustments: categoryAdjustmentsByPlayer.get(playerId) ?? [],
+    }).percentage)
+  })
   const tableStyle = { "--register-columns": visibleDates.length } as CSSProperties
 
   // Advanced from the instant the server rendered with, by however much real
@@ -275,12 +286,15 @@ export function PlayerAttendanceRegister({
     return () => window.clearInterval(timer)
   }, [initialReferenceInstant])
 
+  const showsToday = activeYear === currentYear && activeMonth === currentMonth
+  useScrollRegisterTodayOnOpen(gridRef, showsToday)
+
   function replaceFilters(changes: Record<string, string | null>) {
     router.replace(hrefFor(changes), { scroll: false })
   }
 
   function jumpToToday() {
-    if (activeYear !== currentYear || activeMonth !== currentMonth) {
+    if (!showsToday) {
       replaceFilters({ month: attendanceRegisterMonthParam(currentMonth), year: String(currentYear) })
       return
     }
@@ -328,7 +342,7 @@ export function PlayerAttendanceRegister({
             <RegisterBand
               heading={<h2>{selectedProgramme} · {selectedBatch}</h2>}
               month={activeMonth}
-              subtitle={`${monthLabel} · ${playerTotals.size} ${playerTotals.size === 1 ? "player" : "players"}`}
+              subtitle={`${monthLabel} · ${playerPercents.size} ${playerPercents.size === 1 ? "player" : "players"}`}
               year={activeYear}
               yearOptions={yearOptions}
             />
@@ -394,9 +408,8 @@ export function PlayerAttendanceRegister({
                       {rowCells.map(({ cells, row, sessionLabel }, rowIndex) => {
                         const firstPlayerRow = rowIndex === 0
                           || registerRows[rowIndex - 1]?.player.member.id !== row.player.member.id
-                        const totals = playerTotals.get(row.player.member.id)
-                        const percent = firstPlayerRow && totals
-                          ? attendanceRegisterPercent(totals.present, totals.marked)
+                        const percent = firstPlayerRow
+                          ? playerPercents.get(row.player.member.id) ?? null
                           : null
                         const slot = row.series.slots[0]
                         const sessionTimeLabel = formatSessionTimeRange({
