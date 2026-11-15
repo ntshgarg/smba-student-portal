@@ -126,21 +126,27 @@
   white-space: nowrap;
 }
 
-/* a stamp that opens its list: on hover the grey one darkens its edge and text, the red one fills navy */
-a.status {
+/* A stamp that opens its list. The link is a 44px-tall touch target around the unchanged stamp; on hover
+   the grey stamp darkens its edge and text, the red one fills navy. */
+.statusLink {
   display: inline-flex;
-  min-height: 24px;
+  min-height: 44px;
   align-items: center;
+  /* the extra height reaches into the heading's padding, so the heading keeps its height */
+  margin-block: -10px;
   text-decoration: none;
+}
+
+.statusLink .status {
   transition: background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
 
-a.status:hover {
+.statusLink:hover .status {
   border-color: var(--navy);
   color: var(--navy);
 }
 
-a.status[data-tone="attention"]:hover {
+.statusLink:hover .status[data-tone="attention"] {
   border-color: var(--navy);
   background: var(--navy);
   color: var(--white);

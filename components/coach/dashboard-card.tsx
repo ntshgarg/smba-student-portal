@@ -85,12 +85,11 @@ export function CoachDashboardCard({
               {stamps.map((stamp) => "href" in stamp && stamp.href ? (
                 <Link
                   key={statusStamp(stamp)}
-                  className={styles.status}
-                  data-tone={stamp.tone}
+                  className={styles.statusLink}
                   href={stamp.href}
                   aria-label={stamp.linkLabel}
                 >
-                  {statusStamp(stamp)}
+                  <span className={styles.status} data-tone={stamp.tone}>{statusStamp(stamp)}</span>
                 </Link>
               ) : (
                 <span
