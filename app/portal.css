@@ -1464,13 +1464,9 @@
 
 .login-card,
 .security-panel {
-  border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
-  background: color-mix(in srgb, var(--white) 45%, transparent);
-  box-shadow:
-    inset 0 1px 0 var(--white),
-    inset 1px 0 0 var(--white),
-    inset 0 -1px 0 color-mix(in srgb, var(--navy) 6%, transparent),
-    0 40px 80px -48px color-mix(in srgb, var(--navy) 50%, transparent);
+  border: var(--frost-border);
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
 }
 
 .login-card {
@@ -1593,7 +1589,7 @@
 /* the field labels of sign-in and Account security: one darker steel than helper text */
 .login-field label,
 .security-form label {
-  color: #39434d;
+  color: var(--steel-dark);
 }
 
 .login-field input,
@@ -1784,20 +1780,19 @@
 /* The main button of each sign-in step, and of each Account security form: navy with an ivory label,
    centred. On hover and on press, red sweeps in from the left. The sweep is an inset shadow rather than a
    background, so the accessibility check still reads the navy behind the label (ivory on red is 5.3:1
-   as well). The shadow's 60rem reach covers the widest button (a full-width one on a tablet). Reduced
-   motion turns the sweep into an instant change (globals.css). */
+   as well). Reduced motion turns the sweep into an instant change (globals.css). */
 .login-submit,
 .security-form button {
-  box-shadow: inset 0 0 0 0 var(--red);
-  transition: box-shadow 480ms var(--ease-in-out), var(--press-transition);
+  box-shadow: var(--sweep-rest);
+  transition: var(--sweep-transition), var(--press-transition);
 }
 
 /* [aria-disabled] as well as :disabled: the authenticator submit is held open
    in the tab order by aria-disabled while it refuses to act, and a sweep
    would promise a press that the click handler cancels. */
 .login-submit:is(:hover, :active):not(:disabled, [aria-disabled="true"]),
-.security-form button:not(.security-secondary-action):is(:hover, :active):not(:disabled) {
-  box-shadow: inset 60rem 0 0 0 var(--red);
+.security-form button:not(.security-secondary-action, .password-visibility-toggle):is(:hover, :active):not(:disabled) {
+  box-shadow: var(--sweep-full);
 }
 
 .login-submit {
@@ -2523,7 +2518,6 @@
     min-height: 40px;
     align-items: center;
   }
-
 
   .pin-setup-actions,
   .security-pin-form,
@@ -7478,8 +7472,8 @@ tr.is-expanded .coach-member-row-action button svg {
 }
 
 /* Head coach: the band is only as tall as its greeting and strip, so the day's work starts on the first
-   screen, and the strip has the homepage cards' rounded corners. Two classes, so the phone rule's full
-   height above doesn't win back. */
+   screen, and the strip has the homepage cards' rounded corners. Two classes, so the full-height rules
+   above and in the phone block below don't win back. */
 .coach-welcome-scoreboard.head-coach-welcome-hero {
   min-height: 0;
 }
@@ -7487,7 +7481,7 @@ tr.is-expanded .coach-member-row-action button svg {
 .head-coach-welcome-hero .coach-scoreboard-ribbon {
   overflow: hidden;
   border-radius: 24px;
-  box-shadow: 0 30px 60px -36px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--ink) 80%, transparent);
 }
 
 .coach-welcome-scoreboard .welcome-inner {

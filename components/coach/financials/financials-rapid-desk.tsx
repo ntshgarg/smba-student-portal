@@ -49,7 +49,7 @@ function rapidDeskHref({
   scope: FinanceRapidScope
 }) {
   const params = new URLSearchParams()
-  if (scope === "all") params.set("scope", scope)
+  if (scope !== "outstanding") params.set("scope", scope)
   const normalizedQuery = query.trim().slice(0, 120)
   if (normalizedQuery) params.set("query", normalizedQuery)
   if (playerId) params.set("player", playerId)
@@ -506,7 +506,8 @@ export function FinancialsRapidDesk({
     setAddressQuery(initialQuery)
     setQuery(initialQuery.slice(0, 120))
   }
-  const [resultsExpanded, setResultsExpanded] = useState(Boolean(initialQuery))
+  // The dashboard's overdue stamp opens this list, so it opens showing those players
+  const [resultsExpanded, setResultsExpanded] = useState(Boolean(initialQuery) || workspace.scope === "overdue")
   const [completionFeedback, setCompletionFeedback] = useState<ActionFeedback | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectedPlayerId = workspace.selectedLedger?.playerId ?? null
@@ -604,6 +605,7 @@ export function FinancialsRapidDesk({
                 <div className={styles.rapidScope} role="group" aria-label="Choose payment list">
                   {([
                     ["outstanding", "Outstanding"],
+                    ["overdue", "Overdue"],
                     ["all", "All players"],
                   ] as const).map(([value, label]) => (
                     <button
@@ -647,7 +649,9 @@ export function FinancialsRapidDesk({
                         {workspace.players.length} {workspace.players.length === 1 ? "player" : "players"}
                       </strong>
                       <small>
-                        {workspace.scope === "outstanding" ? "With payment due" : "Current directory"}
+                        {workspace.scope === "outstanding"
+                          ? "With payment due"
+                          : workspace.scope === "overdue" ? "Past their due date" : "Current directory"}
                       </small>
                     </span>
                     <span>
@@ -719,7 +723,9 @@ export function FinancialsRapidDesk({
                 <p role="status">
                   {workspace.scope === "outstanding"
                     ? "No outstanding payments match this search."
-                    : "No matching players. Check the name or Academy ID and try again."}
+                    : workspace.scope === "overdue"
+                      ? "No overdue payments match this search."
+                      : "No matching players. Check the name or Academy ID and try again."}
                 </p>
               )}
             </div>

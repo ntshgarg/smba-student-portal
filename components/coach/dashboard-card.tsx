@@ -23,7 +23,15 @@ export type CoachDashboardArea =
  * count shape only, because it marks a backlog.
  */
 export type CoachDashboardStatus =
-  | { count: number; unit: string; tone?: "attention" }
+  | {
+    count: number
+    unit: string
+    tone?: "attention"
+    /** the list behind the count, so tapping the stamp shows exactly those records */
+    href?: string
+    /** what the link opens, for screen readers; starts with the visible words ("14 overdue: show these players") */
+    linkLabel?: string
+  }
   | { state: "Setup" }
 
 function statusStamp(status: CoachDashboardStatus) {
@@ -74,7 +82,17 @@ export function CoachDashboardCard({
           <h2 id={titleId}>{title}</h2>
           {stamps.length ? (
             <span className={styles.statuses}>
-              {stamps.map((stamp) => (
+              {stamps.map((stamp) => "href" in stamp && stamp.href ? (
+                <Link
+                  key={statusStamp(stamp)}
+                  className={styles.status}
+                  data-tone={stamp.tone}
+                  href={stamp.href}
+                  aria-label={stamp.linkLabel}
+                >
+                  {statusStamp(stamp)}
+                </Link>
+              ) : (
                 <span
                   key={statusStamp(stamp)}
                   className={styles.status}
@@ -126,7 +144,7 @@ export function CoachDashboardActions({
   )
 }
 
-/** `primary` marks the one action for something waiting on the coach: a filled navy button. */
+/** `primary` marks the one action for something waiting on the coach (the card has a red stamp): a filled navy button. */
 export function CoachDashboardAction({
   children,
   href,

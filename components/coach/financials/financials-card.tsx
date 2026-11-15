@@ -56,9 +56,22 @@ export function FinancialsCard({
   const detail = setupRequiredCount > 0
     ? `${preparationState} · ${setupRequiredCount} ${setupRequiredCount === 1 ? "player" : "players"} without a fee plan`
     : preparationState
+  // Each stamp opens the list behind its count: the month's fees not yet issued (where Issue fees sits),
+  // and the Record payment list narrowed to late payers.
   const stamps = [
-    ...preparation.ready > 0 ? [{ count: preparation.ready, unit: "to issue" }] : [],
-    ...overdueCount > 0 ? [{ count: overdueCount, unit: "overdue", tone: "attention" as const }] : [],
+    ...preparation.ready > 0 ? [{
+      count: preparation.ready,
+      unit: "to issue",
+      href: `/coach/financials/records?view=fees&mode=monthly&period=${period}&status=not_prepared`,
+      linkLabel: `${preparation.ready} to issue: show the ${month} fees not yet issued`,
+    }] : [],
+    ...overdueCount > 0 ? [{
+      count: overdueCount,
+      unit: "overdue",
+      tone: "attention" as const,
+      href: "/coach/financials/record?scope=overdue",
+      linkLabel: `${overdueCount} overdue: show ${overdueCount === 1 ? "this player" : "these players"}`,
+    }] : [],
   ]
 
   return (
@@ -74,7 +87,7 @@ export function FinancialsCard({
             {summary}
           </CoachDashboardSummary>
           <CoachDashboardActions ariaLabel="Financial actions">
-            <CoachDashboardAction href="/coach/financials/record" primary>
+            <CoachDashboardAction href="/coach/financials/record" primary={overdueCount > 0}>
               Record payment
             </CoachDashboardAction>
             <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>

@@ -75,7 +75,9 @@ export function PlayerOnboardingCard({
         </dl>
 
         <CoachDashboardActions ariaLabel="Academy onboarding actions">
-          <CoachDashboardAction href="/coach/onboarding" primary>Open onboarding</CoachDashboardAction>
+          <CoachDashboardAction href="/coach/onboarding" primary={summary.newRequests > 0}>
+            Open onboarding
+          </CoachDashboardAction>
         </CoachDashboardActions>
       </div>
     </CoachDashboardCard>

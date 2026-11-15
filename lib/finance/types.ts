@@ -317,7 +317,7 @@ export type CoachFinanceDashboardSummary = Pick<
   preparation: Pick<MonthlyPreparationPreview, "ready" | "alreadyPrepared">
 }
 
-export type FinanceRapidScope = "outstanding" | "all"
+export type FinanceRapidScope = "outstanding" | "overdue" | "all"
 
 export type MonthlyPreparationPreview = {
   ready: number

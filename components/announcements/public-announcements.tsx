@@ -81,7 +81,12 @@ export function PublicAnnouncements() {
   // link below them (the footer's #contact), keep that target in view instead of letting them push it down.
   useEffect(() => {
     const section = sectionRef.current
-    const id = decodeURIComponent(window.location.hash.slice(1))
+    let id = ""
+    try {
+      id = decodeURIComponent(window.location.hash.slice(1))
+    } catch {
+      return // a malformed address such as /#% has no target to keep in view
+    }
     const target = id ? document.getElementById(id) : null
     if (section && target && section.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING) {
       target.scrollIntoView()

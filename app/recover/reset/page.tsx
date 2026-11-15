@@ -29,7 +29,7 @@ export default async function RecoveryResetPage() {
           <Image src="/images/smba-logo.png" alt="Sathiya Moorthy Badminton Academy" width={720} height={488} priority />
           <span>SMBA <em>Secure access</em></span>
         </Link>
-        <div className="login-copy activation-copy">
+        <div className="login-copy">
           <p className="eyebrow">Account recovery</p>
           <h1 id="recovery-reset-title">
             {status.state === "missing"

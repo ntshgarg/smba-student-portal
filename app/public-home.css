@@ -1969,17 +1969,11 @@
 
   .section-intro h2 {
     margin-top: var(--space-copy);
-  }
-
-  .section-intro > p:last-child {
-    margin-top: var(--space-group);
-  }
-
-  .section-intro h2 {
     font-size: clamp(42px, 13vw, 58px);
   }
 
   .section-intro > p:last-child {
+    margin-top: var(--space-group);
     font-size: 0.9375rem;
   }
 

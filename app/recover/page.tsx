@@ -34,7 +34,7 @@ export default async function RecoverPage({
           <Image src="/images/smba-logo.png" alt="Sathiya Moorthy Badminton Academy" width={720} height={488} priority />
           <span>SMBA <em>Portal</em></span>
         </Link>
-        <div className="login-copy activation-copy">
+        <div className="login-copy">
           <p className="eyebrow">Account recovery</p>
           <h1 id="recovery-title">Reset your password.</h1>
           <p>Enter the Academy ID and its verified recovery email. Protected accounts will also verify their authenticator.</p>

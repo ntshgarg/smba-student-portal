@@ -43,7 +43,6 @@ export const metadata: Metadata = {
 
 export const dynamic = "error"
 
-
 const structuredData = {
   "@context": "https://schema.org",
   "@graph": [

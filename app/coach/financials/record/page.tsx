@@ -30,7 +30,7 @@ function neutralRapidDeskHref({
   requestedScope: string | undefined
 }) {
   const search = new URLSearchParams()
-  if (requestedScope === "all") search.set("scope", requestedScope)
+  if (requestedScope === "all" || requestedScope === "overdue") search.set("scope", requestedScope)
   if (query) search.set("query", query)
   const serialized = search.toString()
   return `/coach/financials/record${serialized ? `?${serialized}` : ""}`
@@ -51,7 +51,9 @@ export default async function FinancialsRapidDeskPage({
   const requestedPlayer = firstValue(params.player)
   const playerId = requestedPlayer?.trim() || undefined
   const requestedScope = firstValue(params.scope)
-  const scope: FinanceRapidScope = requestedScope === "all" ? "all" : "outstanding"
+  const scope: FinanceRapidScope = requestedScope === "all" || requestedScope === "overdue"
+    ? requestedScope
+    : "outstanding"
   const workspace = getCoachFinanceRapidDesk({
     period: academyCurrentMonth(),
     playerId,

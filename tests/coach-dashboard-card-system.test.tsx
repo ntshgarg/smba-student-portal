@@ -60,7 +60,9 @@ describe("coach dashboard Court Operations Board", () => {
       previousIndex = index
     }
 
-    expect(html.match(/<a /g)).toHaveLength(15)
+    // 15 action buttons, plus the overdue stamp, which opens the late payers
+    expect(html.match(/<a class="[^"]*_action_/g)).toHaveLength(15)
+    expect(html.match(/<a /g)).toHaveLength(16)
     expect(html).toContain('id="onboarding"')
     expect(html).toContain('id="attendance"')
     expect(html).toContain('role="group" aria-label="Players"')
@@ -172,10 +174,16 @@ describe("coach dashboard Court Operations Board", () => {
         setupRequiredCount={2}
       />,
     )
-    const stamps = [...html.matchAll(/<span class="[^"]*status[^"]*"( data-tone="attention")?>([^<]+)</g)]
+    const stamps = [...html.matchAll(/<(?:span|a) class="[^"]*status[^"]*"( data-tone="attention")?[^>]*>([^<]+)</g)]
       .map((match) => `${match[2]}${match[1] ? " (red)" : ""}`)
 
     expect(stamps).toEqual(["12 to issue", "4 overdue (red)"])
+    // each stamp opens the list behind its count
+    expect(html).toContain('href="/coach/financials/records?view=fees&amp;mode=monthly&amp;period=2026-11&amp;status=not_prepared"')
+    // the spoken name starts with the visible words, so voice control can say "click 12 to issue"
+    expect(html).toContain('aria-label="12 to issue: show the November fees not yet issued"')
+    expect(html).toContain('href="/coach/financials/record?scope=overdue"')
+    expect(html).toContain('aria-label="4 overdue: show these players"')
     expect(html).toContain("November fees ready to issue · 2 players without a fee plan")
     expect(html).not.toContain("31")
   })
