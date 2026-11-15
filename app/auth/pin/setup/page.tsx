@@ -45,7 +45,7 @@ export default async function PinSetupPage() {
         </Link>
         <div className="login-copy">
           <p className="eyebrow">Quick login</p>
-          <h1 id="pin-setup-title">Set up a 6-digit PIN.</h1>
+          <h1 id="pin-setup-title">Set up a <span className="login-no-break">6-digit</span> PIN.</h1>
           <p>{mandatory
             ? "This account should have a PIN. You will be reminded at each sign-in until one is set. Your password will always continue to work."
             : "Use it for faster sign-in. Your password will always continue to work."}</p>
