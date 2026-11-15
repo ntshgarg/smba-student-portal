@@ -15,6 +15,7 @@ import {
   registerStyles as styles,
   scrollRegisterToday,
   useRegisterHref,
+  useScrollRegisterTodayOnOpen,
 } from "@/components/coach/attendance-register-chrome"
 import {
   attendanceRegisterPercent,
@@ -109,8 +110,11 @@ export function StaffAttendanceRegister({
     }
   })
 
+  const showsToday = activeYear === currentYear && activeMonth === currentMonth
+  useScrollRegisterTodayOnOpen(gridRef, showsToday)
+
   function jumpToToday() {
-    if (activeYear !== currentYear || activeMonth !== currentMonth) {
+    if (!showsToday) {
       router.replace(
         hrefFor({ month: attendanceRegisterMonthParam(currentMonth), year: String(currentYear) }),
         { scroll: false },

@@ -16,6 +16,7 @@ import {
   registerStyles as styles,
   scrollRegisterToday,
   useRegisterHref,
+  useScrollRegisterTodayOnOpen,
 } from "@/components/coach/attendance-register-chrome"
 import {
   buildAttendanceRegisterMonthDates,
@@ -285,12 +286,15 @@ export function PlayerAttendanceRegister({
     return () => window.clearInterval(timer)
   }, [initialReferenceInstant])
 
+  const showsToday = activeYear === currentYear && activeMonth === currentMonth
+  useScrollRegisterTodayOnOpen(gridRef, showsToday)
+
   function replaceFilters(changes: Record<string, string | null>) {
     router.replace(hrefFor(changes), { scroll: false })
   }
 
   function jumpToToday() {
-    if (activeYear !== currentYear || activeMonth !== currentMonth) {
+    if (!showsToday) {
       replaceFilters({ month: attendanceRegisterMonthParam(currentMonth), year: String(currentYear) })
       return
     }

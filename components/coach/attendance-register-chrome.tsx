@@ -4,7 +4,7 @@ import { CalendarOff, ChevronDown, CircleAlert, RefreshCw, X } from "lucide-reac
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useRef } from "react"
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 
 import {
   ATTENDANCE_REGISTER_LOW_PERCENT,
@@ -212,8 +212,24 @@ export function RegisterPercent({ value }: { value: number | null }) {
   )
 }
 
-/** Brings today's column into view inside the sideways-scrolling grid (phones). */
-export function scrollRegisterToday(grid: HTMLElement | null) {
-  grid?.querySelector<HTMLElement>("[data-register-today]")
-    ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })
+/**
+ * Centres today's column inside the sideways-scrolling grid (phones). Only the
+ * grid scrolls, never the page; a grid that fits has nothing to scroll.
+ */
+export function scrollRegisterToday(grid: HTMLElement | null, behavior: ScrollBehavior = "smooth") {
+  const today = grid?.querySelector<HTMLElement>("[data-register-today]")
+  if (!grid || !today) return
+  const gridBox = grid.getBoundingClientRect()
+  const todayBox = today.getBoundingClientRect()
+  grid.scrollTo({
+    behavior,
+    left: grid.scrollLeft + todayBox.left - gridBox.left - (grid.clientWidth - todayBox.width) / 2,
+  })
+}
+
+/** Opening the register on the current month starts the grid at today, as main's year strip did. */
+export function useScrollRegisterTodayOnOpen(grid: RefObject<HTMLElement | null>, showsToday: boolean) {
+  useEffect(() => {
+    if (showsToday) scrollRegisterToday(grid.current, "instant")
+  }, [grid, showsToday])
 }
