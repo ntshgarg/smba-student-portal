@@ -104,9 +104,18 @@
 /* Every card used to wear the same red chip, so "39 ATTENTION" was the same
    colour as "ROSTER CURRENT" and "2 ACTIVE". The chip is now quiet by default
    and the alert tone is a filled swatch, which also survives greyscale. */
+/* the stamps sit together at the heading's end, and wrap under each other on the narrowest phones */
+.statuses {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .status {
   flex: 0 0 auto;
-  max-width: 58%;
+  max-width: 100%;
   padding: 6px 11px 5px;
   overflow: hidden;
   border: 1px solid var(--line);

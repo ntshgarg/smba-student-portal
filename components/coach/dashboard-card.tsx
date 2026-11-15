@@ -55,10 +55,13 @@ export function CoachDashboardCard({
   area: CoachDashboardArea
   children: ReactNode
   id?: string
-  status?: CoachDashboardStatus
+  /** one stamp, or several side by side (Financials: fees to issue, then overdue) */
+  status?: CoachDashboardStatus | CoachDashboardStatus[]
   title: string
   titleId: string
 }) {
+  const stamps = status ? [status].flat() : []
+
   return (
     <section
       id={id}
@@ -69,12 +72,17 @@ export function CoachDashboardCard({
       <article className={styles.card}>
         <header className={styles.masthead}>
           <h2 id={titleId}>{title}</h2>
-          {status ? (
-            <span
-              className={styles.status}
-              data-tone={"state" in status ? undefined : status.tone}
-            >
-              {statusStamp(status)}
+          {stamps.length ? (
+            <span className={styles.statuses}>
+              {stamps.map((stamp) => (
+                <span
+                  key={statusStamp(stamp)}
+                  className={styles.status}
+                  data-tone={"state" in stamp ? undefined : stamp.tone}
+                >
+                  {statusStamp(stamp)}
+                </span>
+              ))}
             </span>
           ) : null}
         </header>

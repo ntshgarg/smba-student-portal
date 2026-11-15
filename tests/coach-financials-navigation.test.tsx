@@ -78,8 +78,10 @@ describe("coach Financials entry points", () => {
         active={false}
         attentionCount={0}
         outstandingPaise={0}
+        overdueCount={0}
         period="2026-08"
         preparation={{ alreadyPrepared: 0, ready: 0 }}
+        setupRequiredCount={0}
       />,
     )
 
@@ -100,13 +102,15 @@ describe("coach Financials entry points", () => {
         active
         attentionCount={2}
         outstandingPaise={700_000}
+        overdueCount={2}
         period="2026-08"
         preparation={preparation}
+        setupRequiredCount={0}
       />,
     )
 
     expect(html).toContain(label)
-    expect(html).toContain("2 attention")
+    expect(html).toContain("2 overdue")
     expect(html).toContain("₹7,000 outstanding")
     expect(html).toContain('href="/coach/financials/record"')
     expect(html).toContain("/coach/financials/records?view=fees&amp;mode=monthly&amp;period=2026-08")
@@ -118,12 +122,16 @@ describe("coach Financials entry points", () => {
         active
         attentionCount={3}
         outstandingPaise={0}
+        overdueCount={0}
         period="2026-08"
         preparation={{ alreadyPrepared: 0, ready: 3 }}
+        setupRequiredCount={0}
       />,
     )
 
-    expect(html).toContain("3 attention")
+    // fees still to issue are work, not lateness: a grey stamp, and no red one
+    expect(html).toContain("3 to issue")
+    expect(html).not.toContain("overdue")
     expect(html).toContain("Some players need a fee plan or this month’s fee")
     expect(html).not.toContain("outstanding")
   })

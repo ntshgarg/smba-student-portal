@@ -4981,6 +4981,10 @@ export function getCoachFinanceDashboardSummary(
     attentionCount: players.filter((player) => [
       "overdue", "not_prepared", "partially_paid", "pending", "setup_required",
     ].includes(player.status)).length,
+    // The attention count above also holds fees not yet due and fees not yet issued, so the
+    // dashboard shows red only for these, and the issuing and fee-plan work as plain counts.
+    overdueCount: players.filter((player) => player.status === "overdue").length,
+    setupRequiredCount: players.filter((player) => player.status === "setup_required").length,
     outstandingPaise: players.reduce((total, player) => total + player.outstandingPaise, 0),
     preparation: {
       ready: ready.length,
