@@ -128,6 +128,9 @@ describe("the shared term rule", () => {
     // A closed place ends on its own dates, as before.
     expect(placeReachesWindow({ effectiveFrom: "2026-04-01", effectiveTo: "2027-01-01" }, null, "2027-01-01", "2028-01-01"))
       .toBe(false)
+    // A place cut back to its own first day never covered one.
+    expect(placeReachesWindow({ effectiveFrom: "2026-11-10", effectiveTo: "2026-11-10" }, null, "2026-01-01", "2027-01-01"))
+      .toBe(false)
   })
 
   it("writes the date and the family message in plain words", () => {

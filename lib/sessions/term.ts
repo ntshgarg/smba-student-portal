@@ -123,7 +123,9 @@ export function placeReachesWindow(
   toExclusive: string,
 ) {
   return place.effectiveFrom < toExclusive
-    && (!place.effectiveTo || place.effectiveTo > from)
+    // A place cut back to its own first day never covered one (coversADay in
+    // lib/finance/repository.ts skips it for fees the same way).
+    && (!place.effectiveTo || (place.effectiveTo > from && place.effectiveTo > place.effectiveFrom))
     && (!schedule?.startsOn || schedule.startsOn < toExclusive)
     && (!schedule?.endsOn || schedule.endsOn >= from)
 }
