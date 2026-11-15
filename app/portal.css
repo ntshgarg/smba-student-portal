@@ -7484,6 +7484,19 @@ tr.is-expanded .coach-member-row-action button svg {
   min-height: calc(100svh - 82px);
 }
 
+/* Head coach: the band is only as tall as its greeting and strip, so the day's work starts on the first
+   screen, and the strip has the homepage cards' rounded corners. Two classes, so the phone rule's full
+   height above doesn't win back. */
+.coach-welcome-scoreboard.head-coach-welcome-hero {
+  min-height: 0;
+}
+
+.head-coach-welcome-hero .coach-scoreboard-ribbon {
+  overflow: hidden;
+  border-radius: 24px;
+  box-shadow: 0 30px 60px -36px rgba(0, 0, 0, 0.8);
+}
+
 .coach-welcome-scoreboard .welcome-inner {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(300px, 1fr) auto auto;

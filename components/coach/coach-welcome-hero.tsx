@@ -33,7 +33,7 @@ export function CoachWelcomeHero({
 
   return (
     <section
-      className="welcome-hero welcome-scoreboard coach-welcome-hero coach-welcome-scoreboard"
+      className="welcome-hero welcome-scoreboard coach-welcome-hero coach-welcome-scoreboard head-coach-welcome-hero"
       aria-labelledby="coach-welcome-title"
     >
       <svg
