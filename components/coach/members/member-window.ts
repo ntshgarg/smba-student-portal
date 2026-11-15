@@ -11,13 +11,18 @@ export function initialMemberPage(page = 1): MemberPageState {
   return { page: Math.max(1, Math.floor(page) || 1), resetAfterEditing: false }
 }
 
+/**
+ * A new search or filter starts at the page its link names: page 1 for a fresh
+ * change (the link drops `page`), the remembered page when Back returns to it.
+ */
 export function memberPageAfterCriteriaChange(
   current: MemberPageState,
   isEditing: boolean,
+  linkedPage = 1,
 ): MemberPageState {
   return isEditing
     ? { ...current, resetAfterEditing: true }
-    : initialMemberPage()
+    : initialMemberPage(linkedPage)
 }
 
 export function memberPageAfterEditingEnds(current: MemberPageState): MemberPageState {

@@ -162,6 +162,8 @@ describe("Member Directory pages", () => {
     expect(memberPageAfterEditingEnds(criteriaChanged)).toEqual(initialMemberPage())
     expect(memberPageAfterEditingEnds(third)).toEqual(third)
     expect(memberPageAfterCriteriaChange(third, false)).toEqual(initialMemberPage())
+    // Back to a link that named its page keeps that page.
+    expect(memberPageAfterCriteriaChange(initialMemberPage(), false, 3)).toEqual(initialMemberPage(3))
   })
 
   it("offers the first, last and neighbouring page numbers", () => {

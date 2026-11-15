@@ -291,8 +291,9 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     setMemberPage((current) => memberPageAfterCriteriaChange(
       current,
       Boolean(editingMemberId),
+      Number(searchParams.get("page")),
     ))
-  }, [criteriaKey, editingMemberId])
+  }, [criteriaKey, editingMemberId, searchParams])
 
   // Back and Forward bring the page number with them: the page follows the
   // link whenever the link's page changes (set during render, not an effect).

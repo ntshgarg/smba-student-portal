@@ -132,17 +132,19 @@ export function MemberTrainingActions({
   // goes into the form, and back to that button when the form closes.
   const sectionRef = useRef<HTMLElement>(null)
   const openerRef = useRef<HTMLElement | null>(null)
-  const wasOpenRef = useRef(false)
+  const wasOpenRef = useRef<OpenForm>(null)
+  // Only opening or closing a form moves focus; switching tabs leaves it on the tab.
+  const onRecord = view !== undefined
   useEffect(() => {
-    if (view === undefined) return
+    if (!onRecord || open === wasOpenRef.current) return
     if (open) {
       sectionRef.current?.querySelector<HTMLElement>('[role="group"] button')?.focus()
-    } else if (wasOpenRef.current) {
+    } else {
       const opener = openerRef.current
       if (opener?.isConnected && !opener.closest("[hidden]")) opener.focus()
     }
-    wasOpenRef.current = open !== null
-  }, [open, view])
+    wasOpenRef.current = open
+  }, [onRecord, open])
   if (!data || !summary) return null
 
   // Starting or changing training waits for Player onboarding to finish (the
