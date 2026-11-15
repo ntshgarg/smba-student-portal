@@ -115,6 +115,7 @@ const staffCard = "staff"
  * can be, and leaving it asks first.
  */
 export function PlayerAttendanceRecorder({
+  accountId,
   initialDate,
   initialFromCalendar,
   initialOccurrenceId,
@@ -122,6 +123,8 @@ export function PlayerAttendanceRecorder({
   initialStaffOpen,
   staff,
 }: {
+  /** The signed-in coach; unsaved marks kept on the device are theirs alone. */
+  accountId: string
   initialDate: string
   initialFromCalendar: boolean
   initialOccurrenceId: string | null
@@ -306,7 +309,7 @@ export function PlayerAttendanceRecorder({
     const timer = window.setTimeout(() => {
       if (restoredOccurrenceIdRef.current === selectedOccurrenceId) return
       restoredOccurrenceIdRef.current = selectedOccurrenceId
-      const stored = readPlayerAttendanceDraft(selectedOccurrenceId)
+      const stored = readPlayerAttendanceDraft(accountId, selectedOccurrenceId)
       if (!stored.length) return
       // A session cancelled since cannot be saved; the marks stay on the device.
       if (selectedOccurrence.status !== "scheduled") {
@@ -330,7 +333,7 @@ export function PlayerAttendanceRecorder({
       )
       if (!rebased.changes.length) {
         if (leftOut) {
-          discardPlayerAttendanceDraft(selectedOccurrenceId)
+          discardPlayerAttendanceDraft(accountId, selectedOccurrenceId)
           setFeedback({ message: leftOutAttendanceDraftNotice(leftOut), tone: "info" })
         }
         return
@@ -350,6 +353,7 @@ export function PlayerAttendanceRecorder({
 
     return () => window.clearTimeout(timer)
   }, [
+    accountId,
     activeSourceAdjustmentByPlayer,
     attendanceRecords,
     eligiblePlayerIds,
@@ -401,7 +405,7 @@ export function PlayerAttendanceRecorder({
   function discardDraftForSelectionChange() {
     if (!draftChanges.length) return true
     if (!confirmDiscard(discardMarksPrompt)) return false
-    if (selectedOccurrenceId) discardPlayerAttendanceDraft(selectedOccurrenceId)
+    if (selectedOccurrenceId) discardPlayerAttendanceDraft(accountId, selectedOccurrenceId)
     setDraftChanges([])
     setFeedback(null)
     return true
@@ -489,7 +493,7 @@ export function PlayerAttendanceRecorder({
         playerId,
       }]
     setDraftChanges(nextChanges)
-    setDraftKeptOnDevice(persistPlayerAttendanceDraft(selectedOccurrence.id, nextChanges))
+    setDraftKeptOnDevice(persistPlayerAttendanceDraft(accountId, selectedOccurrence.id, nextChanges))
     setFeedback(feedbackAfterMark)
   }
 
@@ -509,7 +513,7 @@ export function PlayerAttendanceRecorder({
             // every mark, but a device that refused the write leaves the coach
             // holding marks that only exist on this screen.
             marksOnDevice: () => (
-              readPlayerAttendanceDraft(selectedOccurrence.id).length > 0
+              readPlayerAttendanceDraft(accountId, selectedOccurrence.id).length > 0
             ),
             place: "session",
             subject: "Attendance",
@@ -518,7 +522,7 @@ export function PlayerAttendanceRecorder({
         })
         return
       }
-      discardPlayerAttendanceDraft(selectedOccurrence.id)
+      discardPlayerAttendanceDraft(accountId, selectedOccurrence.id)
       setDraftChanges([])
       setFeedback({ message: "Attendance saved", tone: "success" })
     } catch (error) {
@@ -777,6 +781,7 @@ export function PlayerAttendanceRecorder({
           <>
             <StaffRollCall
               ref={staffRef}
+              accountId={accountId}
               closedFor={staff.closedFor}
               dateKey={initialDate}
               initialRecords={staff.records}

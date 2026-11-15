@@ -141,6 +141,7 @@ function renderRecorder(selectedDate: string, referenceInstant = Date.parse("202
   recorderFixture.renderedProps.length = 0
   return renderToStaticMarkup(
     <PlayerAttendanceRecorder
+      accountId="head-coach"
       initialDate={selectedDate}
       initialFromCalendar={false}
       initialOccurrenceId={null}

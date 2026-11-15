@@ -97,10 +97,10 @@ vi.mock("@/lib/client/attendance-draft-storage", async () => {
   >("@/lib/client/attendance-draft-storage")
   return {
     ...actual,
-    discardPlayerAttendanceDraft: (occurrenceId: string) => {
+    discardPlayerAttendanceDraft: (_accountId: string, occurrenceId: string) => {
       captured.discarded.push(occurrenceId)
     },
-    discardStaffAttendanceDraft: (dateKey: string) => {
+    discardStaffAttendanceDraft: (_accountId: string, dateKey: string) => {
       captured.discarded.push(dateKey)
     },
     persistPlayerAttendanceDraft: () => captured.persistReturns,
@@ -193,6 +193,7 @@ const ishaan = {
 function playerRegister(): ReactElement {
   return (
     <PlayerAttendanceRecorder
+      accountId="head-coach"
       initialDate="2026-08-21"
       initialFromCalendar={false}
       initialOccurrenceId="occurrence-1"
@@ -214,6 +215,7 @@ function rollCall(): ReactElement {
   return (
     <StaffRollCall
       ref={rollCallHandle as Ref<StaffRollCallHandle>}
+      accountId="head-coach"
       closedFor={null}
       dateKey="2026-08-20"
       initialRecords={[{ choice: "absent", coachAccountId: "coach-1" }]}

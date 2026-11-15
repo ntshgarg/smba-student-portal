@@ -1,6 +1,9 @@
+"use client"
+
 import { LogOut } from "lucide-react"
 
 import { clearSession } from "@/app/login/actions"
+import { clearAttendanceDrafts } from "@/lib/client/attendance-draft-storage"
 
 /**
  * The way off a forced-enrollment interstitial.
@@ -32,7 +35,7 @@ import { clearSession } from "@/app/login/actions"
  */
 export function InterstitialSignOut() {
   return (
-    <form action={clearSession}>
+    <form action={clearSession} onSubmit={() => clearAttendanceDrafts()}>
       <button className="login-back" type="submit">
         <LogOut aria-hidden="true" />
         Sign out

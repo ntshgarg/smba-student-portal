@@ -125,6 +125,7 @@ export function staffRollCallProgress({
  * `release` its marks before it opens another or changes the date.
  */
 export function StaffRollCall({
+  accountId,
   closedFor,
   dateKey,
   initialRecords,
@@ -134,6 +135,8 @@ export function StaffRollCall({
   ref,
   referenceDate,
 }: {
+  /** The signed-in head coach; unsaved marks kept on the device are theirs alone. */
+  accountId: string
   /** The holiday's name when the academy was closed on this date. */
   closedFor: string | null
   dateKey: string
@@ -217,7 +220,7 @@ export function StaffRollCall({
   useEffect(() => {
     if (!open || closedDay) return
     const timer = window.setTimeout(() => {
-      const stored = readStaffAttendanceDraft(dateKey)
+      const stored = readStaffAttendanceDraft(accountId, dateKey)
       if (!stored.length) return
       // Only marks for coaches this roll call can mark come back; others are named.
       const markable = new Set(juniorCoaches
@@ -231,7 +234,7 @@ export function StaffRollCall({
       )
       if (!rebased.changes.length) {
         if (leftOut) {
-          discardStaffAttendanceDraft(dateKey)
+          discardStaffAttendanceDraft(accountId, dateKey)
           setFeedback({
             message: leftOutAttendanceDraftNotice(leftOut),
             tone: "info",
@@ -253,7 +256,7 @@ export function StaffRollCall({
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [closedDay, dateKey, juniorCoaches, open, referenceDate, storedByCoach])
+  }, [accountId, closedDay, dateKey, juniorCoaches, open, referenceDate, storedByCoach])
 
   // A save in flight holds the card open, so its outcome can be shown.
   useImperativeHandle(ref, () => ({
@@ -264,7 +267,7 @@ export function StaffRollCall({
       }
       setSelectionNotice(null)
       if (drafts.length && !confirmDiscard(discardMarksPrompt)) return false
-      if (drafts.length) discardStaffAttendanceDraft(dateKey)
+      if (drafts.length) discardStaffAttendanceDraft(accountId, dateKey)
       setDrafts([])
       setFeedback(null)
       // Through the guard, so stepping back its history entry cannot cancel the navigation.
@@ -301,7 +304,7 @@ export function StaffRollCall({
         expectedChoice: base,
       }]
     setDrafts(nextDrafts)
-    setDraftKeptOnDevice(persistStaffAttendanceDraft(dateKey, nextDrafts))
+    setDraftKeptOnDevice(persistStaffAttendanceDraft(accountId, dateKey, nextDrafts))
     setFeedback(feedbackAfterMark)
   }
 
@@ -320,7 +323,7 @@ export function StaffRollCall({
             // Read back rather than assumed: `chooseAttendance` persists on
             // every mark, but a device that refused the write leaves the coach
             // holding marks that only exist on this screen.
-            marksOnDevice: () => readStaffAttendanceDraft(dateKey).length > 0,
+            marksOnDevice: () => readStaffAttendanceDraft(accountId, dateKey).length > 0,
             place: "date",
             subject: "Staff attendance",
           }),
@@ -338,7 +341,7 @@ export function StaffRollCall({
           })),
         ]
       })
-      discardStaffAttendanceDraft(dateKey)
+      discardStaffAttendanceDraft(accountId, dateKey)
       setDrafts([])
       setFeedback({ message: "Staff attendance saved", tone: "success" })
     } catch (error) {

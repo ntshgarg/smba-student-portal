@@ -206,6 +206,7 @@ const ishaan = {
 function rollCall(): ReactElement {
   return (
     <StaffRollCall
+      accountId="head-coach"
       closedFor={null}
       dateKey="2026-08-21"
       initialRecords={[{ choice: "cleared", coachAccountId: "coach-1" }]}
@@ -221,6 +222,7 @@ function rollCall(): ReactElement {
 function playerRegister(): ReactElement {
   return (
     <PlayerAttendanceRecorder
+      accountId="head-coach"
       initialDate="2026-08-21"
       initialFromCalendar={false}
       initialOccurrenceId="occurrence-1"

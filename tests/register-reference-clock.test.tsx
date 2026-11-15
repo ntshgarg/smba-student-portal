@@ -184,6 +184,7 @@ describe("the coach registers' 30-second reference clock", () => {
     ["the player attendance recorder", () => {
       renderToStaticMarkup(
         <PlayerAttendanceRecorder
+          accountId="head-coach"
           initialDate="2026-08-20"
           initialFromCalendar={false}
           initialOccurrenceId="occurrence-1"
