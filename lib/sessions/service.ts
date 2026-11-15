@@ -61,6 +61,7 @@ import {
   academyPlanRequiredWeekdayCount,
 } from "@/lib/training/academy-plans"
 import { clearTrainingNotices, scheduleLabel, stopFeesAfterMonth } from "@/lib/training/changes"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 function addCalendarDays(dateKey: string, days: number) {
   const date = new Date(`${dateKey}T00:00:00.000Z`)
@@ -1388,7 +1389,10 @@ function readEndScheduleRoster(
         : null,
       fullName: nameOf(playerId),
       hasFeePlan: withPlans.has(playerId),
-      inOnboarding: !people.get(playerId)?.onboardingCompletedAt,
+      inOnboarding: (() => {
+        const person = people.get(playerId)
+        return !person || !onboardingFinished(person)
+      })(),
       onAnotherSchedule: otherPlaces.some((place) => (
         place.accountId === playerId && scheduleIsRunning(place, today)
       )),
