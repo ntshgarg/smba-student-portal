@@ -39,6 +39,8 @@ export function FinancialsCard({
   preparation: {
     ready: number
     alreadyPrepared: number
+    /** Fees held back until a booked training change happens. */
+    waitingForChange: number
   }
   setupRequiredCount: number
 }) {
@@ -53,9 +55,17 @@ export function FinancialsCard({
     : preparation.alreadyPrepared > 0
       ? `${month} fees issued`
       : "No monthly fees to issue"
-  const detail = setupRequiredCount > 0
-    ? `${preparationState} · ${setupRequiredCount} ${setupRequiredCount === 1 ? "player" : "players"} without a fee plan`
-    : preparationState
+  const detail = [
+    preparationState,
+    setupRequiredCount > 0
+      ? `${setupRequiredCount} ${setupRequiredCount === 1 ? "player" : "players"} without a fee plan`
+      : null,
+    // A fee waiting on a booked training change is not issued until the change
+    // happens, so it is named instead of silently missing from "to issue".
+    preparation.waitingForChange > 0
+      ? `${preparation.waitingForChange} waiting for a training change`
+      : null,
+  ].filter(Boolean).join(" · ")
   // Each stamp opens the list behind its count: the month's fees not yet issued (where Issue fees sits),
   // and the Record payment list narrowed to late payers.
   const stamps = [

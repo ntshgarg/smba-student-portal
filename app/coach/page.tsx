@@ -192,7 +192,7 @@ export default async function CoachDashboardPage({
         attentionCount: 0,
         outstandingPaise: 0,
         overdueCount: 0,
-        preparation: { alreadyPrepared: 0, ready: 0 },
+        preparation: { alreadyPrepared: 0, ready: 0, waitingForChange: 0 },
         setupRequiredCount: 0,
       }
   const activeAnnouncementCount = countActiveCoachAnnouncements({

@@ -314,7 +314,7 @@ export type CoachFinanceDashboardSummary = Pick<
   overdueCount: number
   /** players training with no fee plan, shown beside the fees still to issue */
   setupRequiredCount: number
-  preparation: Pick<MonthlyPreparationPreview, "ready" | "alreadyPrepared">
+  preparation: Pick<MonthlyPreparationPreview, "ready" | "alreadyPrepared" | "waitingForChange">
 }
 
 export type FinanceRapidScope = "outstanding" | "overdue" | "all"
@@ -324,6 +324,8 @@ export type MonthlyPreparationPreview = {
   alreadyPrepared: number
   awaitingAssignment: number
   setupRequired: number
+  /** Players whose fee waits for a booked training change that has not happened yet. */
+  waitingForChange: number
 }
 
 export type CoachFinanceWorkspace = {

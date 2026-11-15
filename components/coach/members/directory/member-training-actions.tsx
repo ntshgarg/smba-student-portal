@@ -248,6 +248,14 @@ export function MemberTrainingActions({
                     scheduled.monthlyFeePaise !== null ? `${formatInr(scheduled.monthlyFeePaise)} a month` : null,
                   ].filter(Boolean).join(" · ")}
               </span>
+              {/* A booked change applies on its day when a coach or player page
+                  opens, and an error is retried for two days. Until then this
+                  month's fee is held back, so the record says so. */}
+              {scheduled.effectiveOn <= data.today ? (
+                <span>
+                  {`Due ${dayName(scheduled.effectiveOn)} and not applied yet; it is retried automatically. ${thisMonth}’s fee waits until it is.`}
+                </span>
+              ) : null}
             </div>
           ) : null}
 

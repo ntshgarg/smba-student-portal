@@ -723,7 +723,14 @@ function monthlyPreparationCandidates(
   now: Date,
   // Only the "ready to issue" previews read nothingToBill; issuing works out
   // each month's amount itself, so it skips this extra work.
-  { withNothingToBill = false }: { withNothingToBill?: boolean } = {},
+  {
+    waiting,
+    withNothingToBill = false,
+  }: {
+    /** Filled with the players held back for a training change, when given. */
+    waiting?: Set<string>
+    withNothingToBill?: boolean
+  } = {},
 ) {
   const candidatesByPlayer = new Map<
     string,
@@ -742,7 +749,10 @@ function monthlyPreparationCandidates(
     .all()
     .map((row) => row.playerId))
   listMonthlyPreparationCandidates(database, period).forEach((candidate) => {
-    if (waitingForChange.has(candidate.agreement.playerAccountId)) return
+    if (waitingForChange.has(candidate.agreement.playerAccountId)) {
+      waiting?.add(candidate.agreement.playerAccountId)
+      return
+    }
     const matchesCurrentEnrollment = candidate.agreement.academyPlan
         === candidate.enrollment.academyPlan
       && candidate.agreement.level === candidate.enrollment.level
@@ -797,7 +807,8 @@ function monthlyPreparationPreview(
   period: string,
   now: Date,
 ): MonthlyPreparationPreview {
-  const candidates = monthlyPreparationCandidates(database, period, now, { withNothingToBill: true })
+  const waiting = new Set<string>()
+  const candidates = monthlyPreparationCandidates(database, period, now, { waiting, withNothingToBill: true })
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
@@ -814,7 +825,10 @@ function monthlyPreparationPreview(
     )).length,
     setupRequired: beforeCutover
       ? 0
-      : listApprovedPlayerIds(database).length - candidates.length,
+      : listApprovedPlayerIds(database).length - candidates.length - waiting.size,
+    // Held back until a booked training change happens (it is applied when a
+    // page is opened on or after its day, retried for two days if it errs).
+    waitingForChange: beforeCutover ? 0 : waiting.size,
   }
 }
 
@@ -2340,7 +2354,8 @@ export function prepareMonthlyCharges(
       )
     }
 
-    const candidates = monthlyPreparationCandidates(tx, input.period, now)
+    const waiting = new Set<string>()
+    const candidates = monthlyPreparationCandidates(tx, input.period, now, { waiting })
     const approvedPlayerIds = listApprovedPlayerIds(tx)
     const candidateIds = new Set(candidates.map(({ agreement }) => agreement.playerAccountId))
     const result: PrepareMonthlyChargesResult = {
@@ -2349,7 +2364,8 @@ export function prepareMonthlyCharges(
       alreadyPrepared: 0,
       awaitingAssignment: 0,
       deferred: 0,
-      setupRequired: approvedPlayerIds.filter((id) => !candidateIds.has(id)).length,
+      setupRequired: approvedPlayerIds.filter((id) => !candidateIds.has(id) && !waiting.has(id)).length,
+      waitingForChange: waiting.size,
       createdChargeIds: [],
       reused: false,
     }
@@ -4970,7 +4986,8 @@ export function getCoachFinanceDashboardSummary(
   if (!isValidMonthKey(period)) {
     financeError("INVALID_INPUT", "Choose a valid fee month.", "period")
   }
-  const candidates = monthlyPreparationCandidates(database, period, now, { withNothingToBill: true })
+  const waiting = new Set<string>()
+  const candidates = monthlyPreparationCandidates(database, period, now, { waiting, withNothingToBill: true })
   const preparedIds = new Set(listPreparedPlayerIds(database, period))
   const activation = readFinanceActivation(database)
   const beforeCutover = !activation || period < activation.trackingMonth
@@ -4996,6 +5013,7 @@ export function getCoachFinanceDashboardSummary(
     setupRequiredCount: listPlayersTrainingWithoutFeePlan(database, period).size,
     outstandingPaise: players.reduce((total, player) => total + player.outstandingPaise, 0),
     preparation: {
+      waitingForChange: beforeCutover ? 0 : waiting.size,
       ready: ready.length,
       alreadyPrepared: beforeCutover ? 0 : candidates.filter(({ agreement }) => (
         preparedIds.has(agreement.playerAccountId)

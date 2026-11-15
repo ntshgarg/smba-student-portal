@@ -28,7 +28,7 @@ function renderDashboard() {
         outstandingPaise={4_750_000}
         overdueCount={4}
         period="2026-08"
-        preparation={{ alreadyPrepared: 8, ready: 0 }}
+        preparation={{ alreadyPrepared: 8, ready: 0, waitingForChange: 0 }}
         setupRequiredCount={0}
       />
       <SessionsCard nextSessionLabel="Beginner · Weekday · 6–7 am" todaySessionCount={8} />
@@ -146,7 +146,7 @@ describe("coach dashboard Court Operations Board", () => {
         outstandingPaise={123_456}
         overdueCount={1}
         period="2026-08"
-        preparation={{ alreadyPrepared: 1, ready: 0 }}
+        preparation={{ alreadyPrepared: 1, ready: 0, waitingForChange: 0 }}
         setupRequiredCount={0}
       />,
     )
@@ -170,7 +170,7 @@ describe("coach dashboard Court Operations Board", () => {
         outstandingPaise={6_450_000}
         overdueCount={4}
         period="2026-11"
-        preparation={{ alreadyPrepared: 20, ready: 12 }}
+        preparation={{ alreadyPrepared: 20, ready: 12, waitingForChange: 0 }}
         setupRequiredCount={2}
       />,
     )
@@ -193,7 +193,7 @@ describe("coach dashboard Court Operations Board", () => {
       <AssessmentsCard key="a" assessedCount={0} draftCount={0} playerCount={32} />,
       <AnnouncementCard key="b" activeCount={0} />,
       <MembersCard key="c" memberCount={39} />,
-      <FinancialsCard key="d" active attentionCount={0} outstandingPaise={0} overdueCount={0} period="2026-08" preparation={{ alreadyPrepared: 8, ready: 0 }} setupRequiredCount={0} />,
+      <FinancialsCard key="d" active attentionCount={0} outstandingPaise={0} overdueCount={0} period="2026-08" preparation={{ alreadyPrepared: 8, ready: 0, waitingForChange: 0 }} setupRequiredCount={0} />,
     ]
     for (const card of quiet) expect(renderToStaticMarkup(card)).not.toMatch(/class="[^"]*status/)
     expect(renderToStaticMarkup(<AssessmentsCard assessedCount={0} draftCount={2} playerCount={32} />)).toContain("2 drafts")
@@ -207,7 +207,7 @@ describe("coach dashboard Court Operations Board", () => {
         outstandingPaise={0}
         overdueCount={0}
         period="2026-08"
-        preparation={{ alreadyPrepared: 0, ready: 0 }}
+        preparation={{ alreadyPrepared: 0, ready: 0, waitingForChange: 0 }}
         setupRequiredCount={0}
       />,
     )

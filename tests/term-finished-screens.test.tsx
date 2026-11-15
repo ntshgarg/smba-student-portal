@@ -248,6 +248,13 @@ describe("Members shows a finished term", () => {
     expect(html).toContain(">End training<")
   })
 
+  it("says when a booked change is past its day and holds this month's fee", () => {
+    const overdue = { ...bookedChange("change"), effectiveOn: "2026-11-01" }
+    expect(renderActions(finishedPlayer, fee(), overdue))
+      .toContain("Due Sun 1 Nov and not applied yet; it is retried automatically. November 2026’s fee waits until it is.")
+    expect(renderActions(finishedPlayer, fee(), bookedChange("change"))).not.toContain("not applied yet")
+  })
+
   it("points a booked move's fee to the scheduled change, not to moving them first", () => {
     const html = renderActions(
       finishedPlayer,

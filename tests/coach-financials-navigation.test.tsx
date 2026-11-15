@@ -80,7 +80,7 @@ describe("coach Financials entry points", () => {
         outstandingPaise={0}
         overdueCount={0}
         period="2026-08"
-        preparation={{ alreadyPrepared: 0, ready: 0 }}
+        preparation={{ alreadyPrepared: 0, ready: 0, waitingForChange: 0 }}
         setupRequiredCount={0}
       />,
     )
@@ -92,10 +92,25 @@ describe("coach Financials entry points", () => {
     expect(html).not.toContain("Monthly fees")
   })
 
+  it("names fees held back for a booked training change instead of dropping them", () => {
+    const html = renderToStaticMarkup(
+      <FinancialsCard
+        active
+        attentionCount={1}
+        outstandingPaise={0}
+        overdueCount={0}
+        period="2026-12"
+        preparation={{ alreadyPrepared: 0, ready: 3, waitingForChange: 1 }}
+        setupRequiredCount={0}
+      />,
+    )
+    expect(html).toContain("December fees ready to issue · 1 waiting for a training change")
+  })
+
   it.each([
-    [{ ready: 4, alreadyPrepared: 1 }, "August fees ready to issue"],
-    [{ ready: 0, alreadyPrepared: 5 }, "August fees issued"],
-    [{ ready: 0, alreadyPrepared: 0 }, "No monthly fees to issue"],
+    [{ ready: 4, alreadyPrepared: 1, waitingForChange: 0 }, "August fees ready to issue"],
+    [{ ready: 0, alreadyPrepared: 5, waitingForChange: 0 }, "August fees issued"],
+    [{ ready: 0, alreadyPrepared: 0, waitingForChange: 0 }, "No monthly fees to issue"],
   ])("shows the active preparation state and equal operational destinations", (preparation, label) => {
     const html = renderToStaticMarkup(
       <FinancialsCard
@@ -124,7 +139,7 @@ describe("coach Financials entry points", () => {
         outstandingPaise={0}
         overdueCount={0}
         period="2026-08"
-        preparation={{ alreadyPrepared: 0, ready: 3 }}
+        preparation={{ alreadyPrepared: 0, ready: 3, waitingForChange: 0 }}
         setupRequiredCount={0}
       />,
     )
