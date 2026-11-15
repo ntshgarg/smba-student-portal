@@ -84,7 +84,7 @@ export async function executeAccessibilityInteraction(
       const initialUrl = page.url()
       const selectedSession = await firstVisible(
         page.locator(
-          '.attendance-occurrence-list > button[aria-controls="attendance-roster-panel"]:not([disabled])',
+          'button[aria-controls="attendance-roster-panel"]:not([disabled])',
         ),
         async (candidate) => await candidate.getAttribute("aria-expanded") === "false",
       )
@@ -94,7 +94,7 @@ export async function executeAccessibilityInteraction(
         return url.href !== initialUrl && Boolean(url.searchParams.get("occurrence"))
       }, { timeout: 10_000 }).toBe(true)
       await expect(selectedSession).toHaveAttribute("aria-expanded", "true")
-      await expect(page.locator("#attendance-roster-panel")).toHaveClass(/has-selection/u)
+      await expect(page.locator("#attendance-roster-panel")).toBeVisible()
       break
     }
     case "authenticator-recovery-queue": {

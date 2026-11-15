@@ -439,6 +439,21 @@ const { PlayerAttendanceRecorder } = await import(
 )
 const { StaffRollCall } = await import("@/components/coach/attendance/staff-roll-call")
 
+const ishaan = {
+  accountId: "coach-1",
+  fullName: "Ishaan Rao",
+  initials: "IR",
+  joinedOn: "2026-01-05",
+}
+
+// The day's staff card, closed above the session as it sits on the Mark tab.
+const staffDay = {
+  closedFor: null,
+  juniorCoaches: [ishaan],
+  records: [{ choice: "present" as const, coachAccountId: "coach-1" }],
+  referenceDate: "2026-08-23",
+}
+
 /**
  * Both registers defer the read to a timer, as the report resume hint does, so
  * the stub collects timers and the test runs them where a browser would.
@@ -514,6 +529,8 @@ describe("attendance registers restore their own drafts", () => {
         initialFromCalendar={false}
         initialOccurrenceId="occurrence-1"
         initialReferenceInstant={Date.parse("2026-08-21T12:00:00.000Z")}
+        initialStaffOpen={false}
+        staff={staffDay}
       />,
     )
 
@@ -526,20 +543,38 @@ describe("attendance registers restore their own drafts", () => {
     stubBrowser(storage).mount(
       <StaffRollCall
         closedFor={null}
-        initialDate="2026-08-21"
+        dateKey="2026-08-21"
         initialRecords={[]}
-        juniorCoaches={[{
-          accountId: "coach-1",
-          fullName: "Ishaan Rao",
-          initials: "IR",
-          joinedOn: "2026-01-05",
-        }]}
+        juniorCoaches={[ishaan]}
+        open
         referenceDate="2026-08-23"
+        onToggle={() => {}}
       />,
     )
 
     expect(reads).toContain("smba-attendance-draft-v1:staff-date:2026-08-21")
     expect(reads).not.toContain("smba-attendance-draft-v1:staff-date:2026-08-23")
+  })
+
+  // The staff card sits closed at the top of the Mark tab; its marks come back
+  // when it is opened, as a session's do when it is chosen, never into a card
+  // the coach cannot see.
+  it("leaves the staff draft alone while the staff card is closed", () => {
+    const { reads, storage } = fakeStorage()
+
+    stubBrowser(storage).mount(
+      <StaffRollCall
+        closedFor={null}
+        dateKey="2026-08-21"
+        initialRecords={[]}
+        juniorCoaches={[ishaan]}
+        open={false}
+        referenceDate="2026-08-23"
+        onToggle={() => {}}
+      />,
+    )
+
+    expect(reads).not.toContain("smba-attendance-draft-v1:staff-date:2026-08-21")
   })
 
   // Four days is well inside the seven-day lifetime and long enough for the
@@ -571,6 +606,8 @@ describe("attendance registers restore their own drafts", () => {
         initialFromCalendar={false}
         initialOccurrenceId="occurrence-1"
         initialReferenceInstant={Date.parse("2026-08-21T12:00:00.000Z")}
+        initialStaffOpen={false}
+        staff={staffDay}
       />,
     )
   }
@@ -585,15 +622,12 @@ describe("attendance registers restore their own drafts", () => {
     return stubBrowser(storage).mount(
       <StaffRollCall
         closedFor={null}
-        initialDate="2026-08-21"
+        dateKey="2026-08-21"
         initialRecords={[{ choice: "present", coachAccountId: "coach-1" }]}
-        juniorCoaches={[{
-          accountId: "coach-1",
-          fullName: "Ishaan Rao",
-          initials: "IR",
-          joinedOn: "2026-01-05",
-        }]}
+        juniorCoaches={[ishaan]}
+        open
         referenceDate="2026-08-23"
+        onToggle={() => {}}
       />,
     )
   }

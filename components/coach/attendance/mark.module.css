@@ -1,0 +1,656 @@
+/* The Mark tab (head coach, 15 Nov 2026): a frosted week strip, a day line, then one list of frosted cards --
+   the staff roll call first, then every session. A tapped card opens in place as a navy band over its register,
+   like a Members record. */
+
+.mark {
+  display: grid;
+  gap: 12px;
+}
+
+/* the week strip */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: var(--frost-border);
+  border-radius: 20px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.stripArrow,
+.pick {
+  display: inline-flex;
+  min-height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--white) 60%, transparent);
+  color: var(--steel-dark);
+}
+
+.stripArrow {
+  width: 44px;
+}
+
+.stripArrow svg,
+.pick svg {
+  width: 18px;
+  height: 18px;
+}
+
+.days {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day {
+  display: grid;
+  width: 100%;
+  min-height: 56px;
+  place-items: center;
+  align-content: center;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+}
+
+.day strong {
+  color: var(--ink);
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.day[aria-current="date"] {
+  background: var(--navy);
+  color: color-mix(in srgb, var(--white) 70%, transparent);
+}
+
+.day[aria-current="date"] strong {
+  color: var(--white);
+}
+
+.pick {
+  position: relative;
+  gap: var(--space-tight);
+  padding: 0 14px;
+  color: var(--ink);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* The date field is the whole pill, drawn invisible over it, so a tap anywhere opens the calendar. */
+.pick input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.pick:focus-within,
+.stripArrow:focus-visible,
+.day:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* the day line */
+.dayLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px var(--space-copy);
+  margin: 4px 4px 0;
+}
+
+.dayLine h2 {
+  color: var(--ink);
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.dayLine p {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+/* the day's cards */
+.list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  border: var(--frost-border);
+  border-radius: 20px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.head {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 96px minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: var(--space-copy);
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 19px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.head:disabled {
+  cursor: default;
+}
+
+.head:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.time {
+  color: var(--red);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.375rem;
+  font-style: italic;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.kind {
+  justify-self: start;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
+  color: var(--navy);
+  font-size: var(--type-operational-floor);
+  font-weight: 800;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.copy {
+  display: grid;
+  min-width: 0;
+}
+
+.copy strong {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.copy small {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pill svg {
+  width: 14px;
+  height: 14px;
+}
+
+.done {
+  background: color-mix(in srgb, var(--green) 11%, transparent);
+  color: var(--green);
+}
+
+.part {
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  color: var(--red);
+}
+
+.todo,
+.muted {
+  background: color-mix(in srgb, var(--navy) 6%, transparent);
+  color: var(--steel-dark);
+}
+
+.upcoming {
+  border: 1px dashed color-mix(in srgb, var(--navy) 20%, transparent);
+  color: var(--steel);
+}
+
+.toggle {
+  display: grid;
+  place-items: center;
+  color: var(--steel-dark);
+}
+
+.toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* an open card: the head becomes a navy band over the register */
+.open {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--navy) 60%, transparent);
+}
+
+.open .head {
+  grid-template-columns: 96px minmax(0, 1fr) auto 44px;
+  padding: 18px 22px;
+  border-radius: 20px 20px 0 0;
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.open .head:focus-visible {
+  outline-color: var(--ivory);
+  outline-offset: -4px;
+}
+
+.open .time {
+  color: color-mix(in srgb, var(--red) 45%, var(--ivory));
+  font-size: 1.625rem;
+}
+
+.open .kind {
+  background: color-mix(in srgb, var(--white) 16%, transparent);
+  color: var(--white);
+}
+
+.open .copy strong {
+  font-size: 1.375rem;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.open .copy small {
+  color: color-mix(in srgb, var(--ivory) 70%, transparent);
+}
+
+.band {
+  background: color-mix(in srgb, var(--green) 30%, transparent);
+  color: var(--green-soft);
+}
+
+.open .toggle {
+  width: 44px;
+  height: 44px;
+  border: 1px solid color-mix(in srgb, var(--ivory) 25%, transparent);
+  border-radius: 13px;
+  color: var(--ivory);
+}
+
+.panel {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-tight) 22px 20px;
+  border: var(--frost-border);
+  border-top: 0;
+  border-radius: 0 0 20px 20px;
+  background: var(--paper);
+}
+
+/* a register row: initials, name and status, then the Present | Absent switch */
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
+}
+
+.badge {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: var(--frost-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--white) 60%, transparent);
+  box-shadow: inset 0 1px 0 var(--white), 0 6px 14px -10px color-mix(in srgb, var(--navy) 50%, transparent);
+  color: var(--navy);
+  font-size: var(--type-utility-meta);
+  font-weight: 800;
+}
+
+.person {
+  display: grid;
+  min-width: 0;
+}
+
+.person strong {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.person small {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 600;
+}
+
+.choices {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy) 6%, transparent);
+}
+
+.choice {
+  display: inline-flex;
+  min-width: 96px;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--steel-dark);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.choice svg {
+  width: 15px;
+  height: 15px;
+}
+
+.choice:focus-visible,
+.adjustment:focus-visible,
+.save:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.present[aria-pressed="true"] {
+  background: var(--green);
+  box-shadow: 0 6px 14px -8px var(--green);
+  color: var(--white);
+}
+
+.absent[aria-pressed="true"] {
+  background: var(--red);
+  box-shadow: 0 6px 14px -8px var(--red);
+  color: var(--white);
+}
+
+.choice:disabled {
+  color: var(--line-disabled);
+  cursor: not-allowed;
+}
+
+/* A save in flight dims the switch and the button without taking them out of reach. `opacity` would composite the
+   focus ring with them, so the ring is restored at full strength. */
+.choices button[aria-disabled="true"],
+.footer > button[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.choices button[aria-disabled="true"]:focus-visible,
+.footer > button[aria-disabled="true"]:focus-visible {
+  opacity: 1;
+}
+
+.adjustment {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--space-copy);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy) 6%, transparent);
+  color: var(--navy);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.footer > p {
+  min-width: 0;
+}
+
+.save {
+  display: inline-flex;
+  min-height: 48px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-tight);
+  margin-left: auto;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--navy);
+  color: var(--white);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.save svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* nothing to mark: loading, no sessions, no players, cancelled */
+.empty {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 18px 4px;
+}
+
+.list > .empty {
+  padding: 22px;
+  border: var(--frost-border);
+  border-radius: 20px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.empty svg {
+  width: 22px;
+  height: 22px;
+  color: var(--steel);
+}
+
+.empty h3 {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.empty p {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .strip {
+    gap: 6px;
+    padding: var(--space-tight);
+  }
+
+  .stripArrow {
+    width: 34px;
+  }
+
+  .days {
+    gap: 2px;
+  }
+
+  .day {
+    min-height: 52px;
+    padding: 0;
+  }
+
+  .day strong {
+    font-size: 1rem;
+  }
+
+  /* only the calendar mark shows; the words stay the field's name */
+  .pick {
+    width: 44px;
+    padding: 0;
+  }
+
+  .pick span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .head,
+  .open .head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    padding: 14px;
+  }
+
+  .head > .time,
+  .head > .kind {
+    grid-column: 1 / -1;
+  }
+
+  .time {
+    font-size: 1.125rem;
+  }
+
+  .head > .toggle {
+    display: none;
+  }
+
+  /* the open card's close mark sits top right, beside the time */
+  .open .head > .toggle {
+    display: grid;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .open .head > :is(.time, .kind) {
+    grid-column: 1;
+  }
+
+  .open .time {
+    font-size: 1.25rem;
+  }
+
+  .open .copy strong {
+    font-size: 1.1875rem;
+  }
+
+  .panel {
+    padding: 4px 14px 0;
+  }
+
+  .row {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: var(--space-tight) 12px;
+  }
+
+  .badge {
+    width: 40px;
+    height: 40px;
+  }
+
+  .choices,
+  .adjustment {
+    display: flex;
+    grid-column: 1 / -1;
+  }
+
+  .choice {
+    min-width: 0;
+    min-height: 46px;
+    flex: 1;
+  }
+
+  .adjustment {
+    justify-content: center;
+  }
+
+  /* the footer's own top rule takes over from the last row's */
+  .row:last-child {
+    border-bottom: 0;
+  }
+
+  /* Save stays in reach at the foot of the screen while the register scrolls under it */
+  .footer {
+    position: sticky;
+    bottom: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-tight);
+    margin: var(--space-tight) -14px 0;
+    padding: 12px 14px 14px;
+    border-top: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
+    border-radius: 0 0 20px 20px;
+    background: color-mix(in srgb, var(--white) 85%, var(--ivory));
+  }
+
+  /* an empty notice keeps its live region but no line of its own */
+  .footer > [data-empty="true"] {
+    display: contents;
+  }
+
+  .save {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+/* phones, tablets and touch screens: 16px keeps the browser from zooming into the date field on focus */
+@media (max-width: 720px), (pointer: coarse) {
+  .pick input {
+    font-size: 16px;
+  }
+}
