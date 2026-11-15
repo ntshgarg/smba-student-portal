@@ -538,6 +538,30 @@ describe("password recovery", () => {
       .resolves.toBe(false)
   })
 
+  it("refuses a reset when the account is archived while the password is being saved", async () => {
+    const accountId = "player-archived-mid-reset"
+    await createActiveAccount({ academyId: "SMBA-PL-3002", accountId, email: SHARED_EMAIL, role: "player" })
+    const mailer = new CapturingMailer()
+    await requestPasswordRecovery({ academyId: "SMBA-PL-3002", email: SHARED_EMAIL, mailer }, { database, now: NOW })
+    const token = claimLink(tokenFrom(mailer.passwordRecovery[0]))
+    // Archive lands after the link is checked, while the new password is hashed.
+    const archiving = new Proxy(database, {
+      get(target, property, receiver) {
+        if (property !== "transaction") return Reflect.get(target, property, receiver)
+        return (...args: Parameters<typeof database.transaction>) => {
+          target.update(schema.accounts).set({ archivedAt: NOW }).where(eq(schema.accounts.id, accountId)).run()
+          target.update(schema.authCredentialStates).set({ status: "revoked" })
+            .where(eq(schema.authCredentialStates.accountId, accountId)).run()
+          return target.transaction(...args)
+        }
+      },
+    })
+    await expect(completePasswordRecovery({ password: NEW_PASSWORD, token }, { database: archiving, now: NOW }))
+      .resolves.toBe(false)
+    expect(database.select({ status: schema.authCredentialStates.status }).from(schema.authCredentialStates)
+      .where(eq(schema.authCredentialStates.accountId, accountId)).get()?.status).toBe("revoked")
+  })
+
   it("requires and preserves the head coach authenticator, then requires PIN recreation", async () => {
     const accountId = "head-recovery"
     await createActiveAccount({

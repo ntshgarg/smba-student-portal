@@ -1583,6 +1583,11 @@ export async function completePasswordRecovery(input: {
         gt(authEmailChallenges.expiresAt, now),
       )).get()
     if (!current) return false
+    // Hashing the password above takes a moment; an Archive in that gap must
+    // win, not be undone by marking the sign-in active again.
+    const live = tx.select({ id: accounts.id }).from(accounts)
+      .where(and(eq(accounts.id, challenge.accountId!), accountIsLive())).get()
+    if (!live) return false
     const updatedPassword = tx.update(authProviderAccounts)
       .set({ password: passwordHash, updatedAt: now })
       .where(and(
