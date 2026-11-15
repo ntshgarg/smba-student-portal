@@ -150,6 +150,7 @@ import {
   IMPLAUSIBLE_TRAINING_START_MESSAGE,
   trainingStartIsImplausiblyEarly,
 } from "@/lib/training/training-start"
+import { feePlanCoversCondition } from "@/lib/finance/plan-in-force"
 
 const MAX_MONEY_PAISE = 1_000_000_000
 const MAX_NOTE_LENGTH = 500
@@ -3441,14 +3442,9 @@ export function recordRefund(
       .where(and(
         eq(feeAgreements.playerAccountId, item.agreement.playerAccountId),
         ne(feeAgreements.id, item.agreement.id),
-        // A paused plan never bills, so it overlaps nothing
-        // (pauseUnstartedFeeAgreementInTransaction).
-        ne(feeAgreements.status, "paused"),
-        lte(feeAgreements.effectiveFrom, withdrawalEffectiveOn),
-        or(
-          isNull(feeAgreements.effectiveTo),
-          gte(feeAgreements.effectiveTo, withdrawalEffectiveOn),
-        ),
+        // Another plan in force on that day (a paused plan never bills, so it
+        // overlaps nothing: pauseUnstartedFeeAgreementInTransaction).
+        feePlanCoversCondition(withdrawalEffectiveOn),
       )).get()
     if (overlappingAgreement) {
       financeError(

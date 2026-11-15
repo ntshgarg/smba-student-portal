@@ -26,6 +26,7 @@ import { nextMonthStartOf, waitingFeeChangeOf } from "@/lib/training/changes"
 import { feeChangeStartsOn } from "@/lib/training/fees"
 import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
 import type { ThisMonthFeeBasis } from "@/lib/training/this-month-fee-plan"
+import { feePlanInForce } from "@/lib/finance/plan-in-force"
 
 /*
  * What the Members directory shows on each player's record about their
@@ -156,13 +157,6 @@ export function listTermFinishedPlayersToMove(
   ))
 }
 
-function covers(
-  agreement: { effectiveFrom: string; effectiveTo: string | null },
-  dateKey: string,
-) {
-  return agreement.effectiveFrom <= dateKey && (!agreement.effectiveTo || agreement.effectiveTo >= dateKey)
-}
-
 export function listMemberTrainingSummaries(
   playerIds: string[],
   { database = initializeDatabase(), now = new Date() }: { database?: SmbaDatabaseExecutor; now?: Date } = {},
@@ -253,6 +247,7 @@ export function listMemberTrainingSummaries(
     effectiveFrom: feeAgreements.effectiveFrom,
     effectiveTo: feeAgreements.effectiveTo,
     playerAccountId: feeAgreements.playerAccountId,
+    status: feeAgreements.status,
   }).from(feeAgreements).where(and(
     inArray(feeAgreements.playerAccountId, charges.map((charge) => charge.playerId)),
     ne(feeAgreements.status, "paused"),
@@ -260,9 +255,10 @@ export function listMemberTrainingSummaries(
   // The plan covering the 1st is the one a change this month corrects
   // (agreementsAround in lib/training/changes.ts).
   const feeBases = loadThisMonthFeeBases(database, charges.flatMap((charge) => {
-    const covering = monthAgreements.find((agreement) => (
-      agreement.playerAccountId === charge.playerId && covers(agreement, monthStart)
-    ))
+    const covering = feePlanInForce(
+      monthAgreements.filter((agreement) => agreement.playerAccountId === charge.playerId),
+      monthStart,
+    )
     return covering
       ? [{ feePaise: covering.agreedMonthlyFeePaise, id: charge.id, originalAmountPaise: charge.amountPaise }]
       : []
@@ -276,8 +272,8 @@ export function listMemberTrainingSummaries(
 
   for (const playerId of playerIds) {
     const own = agreements.filter((agreement) => agreement.playerAccountId === playerId)
-    const current = own.find((agreement) => covers(agreement, today)) ?? null
-    const next = own.find((agreement) => covers(agreement, nextMonthStart)) ?? null
+    const current = feePlanInForce(own, today)
+    const next = feePlanInForce(own, nextMonthStart)
     const active = own.find((agreement) => agreement.status === "active") ?? null
     const charge = charges.find((item) => item.playerId === playerId)
     const concession = activeConcessions.find((item) => item.playerAccountId === playerId)

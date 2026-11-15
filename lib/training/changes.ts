@@ -52,6 +52,7 @@ import {
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
 import { onboardingFinished } from "@/lib/coach/onboarding"
+import { feePlanCoversCondition } from "@/lib/finance/plan-in-force"
 
 /*
  * Training changes made from a player's record in Members (head coach, 5 Oct
@@ -371,9 +372,7 @@ function nextMonthFeeRefusal(tx: Executor, playerId: string, today: string, then
 function agreementsAround(database: Executor, playerId: string, dateKey: string) {
   const covering = database.select().from(feeAgreements).where(and(
     eq(feeAgreements.playerAccountId, playerId),
-    ne(feeAgreements.status, "paused"),
-    lte(feeAgreements.effectiveFrom, dateKey),
-    or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, dateKey)),
+    feePlanCoversCondition(dateKey),
   )).get()
   const active = database.select().from(feeAgreements).where(and(
     eq(feeAgreements.playerAccountId, playerId),
