@@ -12,13 +12,17 @@ describe("attendance return navigation", () => {
     "components/coach/player-attendance-register.tsx",
     "components/coach/staff-attendance-register.tsx",
     "components/coach/attendance/staff-roll-call.tsx",
-    "app/coach/attendance/adjustments/page.tsx",
   ])("returns %s to the Attendance dashboard section", (relativePath) => {
     const component = source(relativePath)
 
     expect(component).toContain('href="/coach#attendance"')
     expect(component).toContain("Back to Attendance")
     expect(component).not.toContain("Back to dashboard")
+  })
+
+  it("returns Make-ups to the Attendance dashboard section through the shared shell", () => {
+    expect(source("app/coach/attendance/adjustments/page.tsx")).toContain('<AttendanceShell activeTab="makeups">')
+    expect(source("components/coach/attendance/attendance-shell.tsx")).toContain('backHref = "/coach#attendance"')
   })
 
   it("keeps the player recorder contextual only when opened from Calendar", () => {

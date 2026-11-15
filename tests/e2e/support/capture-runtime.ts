@@ -343,7 +343,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
   const startedAt = Date.now()
   switch (action) {
     case "adjustment-player-selected": {
-      const playerSelect = page.locator(".coach-adjustment-field select")
+      const playerSelect = page.getByRole("combobox", { name: /player/i })
       await playerSelect.waitFor({ state: "visible", timeout: 12_000 })
       const playerIds = await playerSelect.locator("option").evaluateAll((options) => (
         options.map((option) => (option as HTMLOptionElement).value).filter(Boolean)
@@ -351,7 +351,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       let selected = false
       for (const playerId of playerIds) {
         await playerSelect.selectOption(playerId)
-        if (await page.locator(".coach-adjustment-missed-calendar").count()) {
+        if (await page.getByRole("group", { name: "Missed session" }).getByRole("button").count()) {
           selected = true
           break
         }
@@ -361,8 +361,7 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
     }
     case "adjustment-source-selected":
       await clickRequired(
-        page.locator(".coach-adjustment-missed-calendar-grid")
-          .getByRole("button", { name: /^Select .*missed session/i }),
+        page.getByRole("group", { name: "Missed session" }).getByRole("button", { pressed: false }),
         action,
       )
       break
