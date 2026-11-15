@@ -96,6 +96,8 @@ export function StaffAttendanceRegister({
           : choice ?? "not recorded"
       return { choice, date, holiday, state, unavailable }
     })
+    // Staff have no make-ups, so their % stays present ÷ (present + absent);
+    // players' % comes from `calculateMonthlyAttendance` instead.
     const marked = cells.filter((cell) => !cell.unavailable && !cell.holiday && cell.choice)
     return {
       cells,
