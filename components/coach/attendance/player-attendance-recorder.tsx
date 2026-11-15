@@ -166,7 +166,7 @@ export function PlayerAttendanceRecorder({
   const [isChangingDate, startDateChange] = useTransition()
   // Whether the device holds the marks on screen, from the last write or a restore.
   const [draftKeptOnDevice, setDraftKeptOnDevice] = useState<boolean | undefined>(undefined)
-  const { confirmDiscard } = useUnsavedWorkGuard({
+  const { confirmDiscard, navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty: draftChanges.length > 0,
     // Leaving the *page* discards nothing while an expiry stands: the marks are
     // on the device, the notice has just said so, and this register is the one
@@ -413,20 +413,27 @@ export function PlayerAttendanceRecorder({
     return true
   }
 
-  // The open card's marks, before another card opens or the date changes.
-  function releaseOpenCard() {
-    if (staffOpen) return staffRef.current?.release() ?? true
-    return discardDraftForSelectionChange()
+  // The open card's marks, before another card opens or the date changes. The
+  // address change goes through the guard that held them: discarding the marks
+  // steps the guard's extra history entry back, and that step would otherwise
+  // cancel the navigation, leaving the address -- and a reload -- on the old
+  // card or date.
+  function releaseOpenCard(navigate: () => void) {
+    if (staffOpen && staffRef.current) return staffRef.current.release(navigate)
+    if (!discardDraftForSelectionChange()) return false
+    navigateAfterCommit(navigate)
+    return true
   }
 
   function chooseDate(dateKey: string) {
     if (!dateKey || dateKey === selectedDate || blockedBySave()) return
-    if (!releaseOpenCard()) return
-    // The chosen date is shown at once — it is the coach's own input, and the
-    // week strip must not lag behind the picker. Only the navigation that fetches
-    // it is deferred, so `isChangingDate` is raised for the round trip in which
-    // the occurrence list on screen still belongs to the date the coach has
-    // left. It does not cover the whole of that mismatch: the commit remounts
+    // The chosen date is shown as soon as the guard lets the navigation go --
+    // it is the coach's own input, and the week strip must not lag behind the
+    // picker -- and in the same callback, so the new date is never drawn over
+    // the old date's list before `isChangingDate` is raised. Only the
+    // navigation that fetches it is deferred, so `isChangingDate` is raised for
+    // the round trip in which the occurrence list on screen still belongs to the
+    // date the coach has left. It does not cover the whole of that mismatch: the commit remounts
     // this component (`app/coach/attendance/players/record/page.tsx` keys it on
     // the selection) with a fresh, unset transition, while the provider re-seeds
     // `sessionOccurrences` from props a tick later, so the previous date's list
@@ -435,34 +442,30 @@ export function PlayerAttendanceRecorder({
     // for the reason the save button below does not: it is the element the coach
     // is standing on, and disabling it here would hand focus to `<body>` on a
     // slow venue connection.
-    setSelectedDate(dateKey)
-    setOpenCard(null)
-    setFeedback(null)
-    startDateChange(() => replaceSelection(dateKey, null))
+    releaseOpenCard(() => {
+      setSelectedDate(dateKey)
+      setOpenCard(null)
+      setFeedback(null)
+      startDateChange(() => replaceSelection(dateKey, null))
+    })
   }
 
+  // Tapping the open session closes it.
   function chooseOccurrence(occurrence: TrainingSessionOccurrence) {
     if (occurrence.status !== "scheduled" || occurrenceIsUpcoming(occurrence, referenceInstant)) return
     if (blockedBySave()) return
-    if (occurrence.id === selectedOccurrenceId) {
-      if (!discardDraftForSelectionChange()) return
-      setOpenCard(null)
-      setFeedback(null)
-      replaceSelection(selectedDate, null)
-      return
-    }
-    if (!releaseOpenCard()) return
-    setOpenCard(occurrence.id)
+    const next = occurrence.id === selectedOccurrenceId ? null : occurrence.id
+    if (!releaseOpenCard(() => replaceSelection(selectedDate, next))) return
+    setOpenCard(next)
     setFeedback(null)
-    replaceSelection(selectedDate, occurrence.id)
   }
 
   function toggleStaff() {
-    if (blockedBySave() || !releaseOpenCard()) return
+    if (blockedBySave()) return
     const next = staffOpen ? null : staffCard
+    if (!releaseOpenCard(() => replaceSelection(selectedDate, next))) return
     setOpenCard(next)
     setFeedback(null)
-    replaceSelection(selectedDate, next)
   }
 
   function chooseAttendance(playerId: string, choice: SessionAttendanceChoice) {

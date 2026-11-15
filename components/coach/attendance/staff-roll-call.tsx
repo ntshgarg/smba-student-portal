@@ -92,10 +92,11 @@ const saveDeadlineMs = 15_000
 /**
  * What the Mark tab asks of the open staff card before it opens another card or
  * changes the date: `release` answers false while a save is running or when the
- * coach keeps the unsaved marks, and otherwise discards them and answers true.
+ * coach keeps the unsaved marks, and otherwise discards them, runs `navigate`
+ * through this card's unsaved-work guard and answers true.
  */
 export type StaffRollCallHandle = {
-  release: () => boolean
+  release: (navigate: () => void) => boolean
 }
 
 /** Saved marks out of the coaches who can be marked on the day. */
@@ -151,7 +152,7 @@ export function StaffRollCall({
   const [isSaving, setIsSaving] = useState(false)
   // Whether the device holds the marks on screen, from the last write or a restore.
   const [draftKeptOnDevice, setDraftKeptOnDevice] = useState<boolean | undefined>(undefined)
-  const { confirmDiscard } = useUnsavedWorkGuard({
+  const { confirmDiscard, navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty: drafts.length > 0,
     // Leaving the *page* discards nothing while an expiry stands: the marks are
     // on the device, the notice has just said so, and this register is the one
@@ -256,7 +257,7 @@ export function StaffRollCall({
 
   // A save in flight holds the card open, so its outcome can be shown.
   useImperativeHandle(ref, () => ({
-    release() {
+    release(navigate) {
       if (isSaving) {
         setSelectionNotice({ message: waitForSaveMessage, tone: "info" })
         return false
@@ -266,6 +267,8 @@ export function StaffRollCall({
       if (drafts.length) discardStaffAttendanceDraft(dateKey)
       setDrafts([])
       setFeedback(null)
+      // Through the guard, so stepping back its history entry cannot cancel the navigation.
+      navigateAfterCommit(navigate)
       return true
     },
   }))

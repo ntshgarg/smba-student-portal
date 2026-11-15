@@ -70,6 +70,12 @@ function stubBrowser() {
     flushMicrotasks() {
       while (microtasks.length) microtasks.shift()?.()
     },
+    runTimers() {
+      for (const [id, handler] of [...timers]) {
+        timers.delete(id)
+        handler()
+      }
+    },
     history,
   }
 }
@@ -138,6 +144,7 @@ describe("committed unsaved-work surfaces", () => {
     expect(browser.back).toHaveBeenCalledOnce()
 
     browser.dispatch("popstate")
+    browser.runTimers()
     browser.flushMicrotasks()
 
     expect(announceSuccess).toHaveBeenCalledOnce()
@@ -157,6 +164,14 @@ describe("committed unsaved-work surfaces", () => {
     expect(navigateAway).not.toHaveBeenCalled()
 
     browser.dispatch("popstate")
+    browser.flushMicrotasks()
+
+    // Not yet: the router's own popstate handler runs after this one and
+    // restores the entry the step landed on, discarding any navigation sent
+    // before it. The release waits a task for it.
+    expect(navigateAway).not.toHaveBeenCalled()
+
+    browser.runTimers()
     browser.flushMicrotasks()
 
     expect(navigateAway).toHaveBeenCalledOnce()
