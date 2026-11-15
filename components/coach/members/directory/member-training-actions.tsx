@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import {
   cancelFeeChangeAction,
@@ -93,11 +93,11 @@ function newKey() {
 /**
  * The training and fee actions on a player's record. Each opens one form in
  * place, asks once, and refreshes the directory when it is done.
- */
-/**
+ *
  * `view` is the record tab showing: Training or Fees. Both halves stay mounted
  * so an open form keeps its state across tabs; the other half is hidden, and
- * an open form takes the place of its own half. Without `view` both show.
+ * an open form takes the place of its own half. Without `view` (the screen
+ * tests) both show.
  */
 export function MemberTrainingActions({
   player,
@@ -128,6 +128,21 @@ export function MemberTrainingActions({
     () => new Map(sessionSeries.map((series) => [series.id, series])),
     [sessionSeries],
   )
+  // On the record a form takes the place of the button that opened it, so focus
+  // goes into the form, and back to that button when the form closes.
+  const sectionRef = useRef<HTMLElement>(null)
+  const openerRef = useRef<HTMLElement | null>(null)
+  const wasOpenRef = useRef(false)
+  useEffect(() => {
+    if (view === undefined) return
+    if (open) {
+      sectionRef.current?.querySelector<HTMLElement>('[role="group"] button')?.focus()
+    } else if (wasOpenRef.current) {
+      const opener = openerRef.current
+      if (opener?.isConnected && !opener.closest("[hidden]")) opener.focus()
+    }
+    wasOpenRef.current = open !== null
+  }, [open, view])
   if (!data || !summary) return null
 
   // Starting or changing training waits for Player onboarding to finish (the
@@ -192,6 +207,7 @@ export function MemberTrainingActions({
 
   function toggle(form: OpenForm) {
     if (!confirmDiscard()) return
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setNotice(null)
     setStarted(false)
     setOpen((value) => (value === form ? null : form))
@@ -203,6 +219,7 @@ export function MemberTrainingActions({
 
   return (
     <section
+      ref={sectionRef}
       className={styles.section}
       aria-labelledby={`training-actions-${memberId}`}
       data-open-form={trainingFormOpen ? "training" : feeFormOpen ? "fees" : undefined}
@@ -432,7 +449,6 @@ export function MemberTrainingActions({
 
       <InlineNotice
         action={notice?.action}
-        className={styles.notice}
         message={notice?.message}
         reserveSpace={false}
         tone={notice?.tone}

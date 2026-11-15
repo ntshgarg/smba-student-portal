@@ -117,9 +117,18 @@ export function MemberDetailRow({
       >
         {tab === "training" ? <MemberTrainingPanel player={player} sessionTimes={sessionTimes} /> : null}
 
-        <div hidden={tab === "profile"}>
-          <MemberTrainingActions player={player} view={tab === "fees" ? "fees" : "training"} />
-        </div>
+        {/* Not while the profile is being edited: a training or fee change bumps
+            the record's revision, which would turn the edit's save into a
+            conflict, so the two never run side by side. */}
+        {isEditing ? (
+          tab !== "profile" ? (
+            <p className="coach-member-editing-note">Finish or cancel Edit details on the Profile tab first.</p>
+          ) : null
+        ) : (
+          <div hidden={tab === "profile"}>
+            <MemberTrainingActions player={player} view={tab === "fees" ? "fees" : "training"} />
+          </div>
+        )}
 
         {tab === "profile" ? (
           isEditing && draft ? (
@@ -164,7 +173,6 @@ export function MemberDetailRow({
         {!isEditing ? (
           <InlineNotice
             action={feedback?.action}
-            className="coach-member-save-notice"
             message={feedback?.message ?? null}
             reserveSpace={false}
             tone={feedback?.tone ?? "info"}

@@ -12,7 +12,7 @@ import {
 } from "@/components/coach/members/directory/staff-summary-row"
 import { useMemberDirectory } from "@/components/coach/members/directory/use-member-directory"
 import { MemberDirectoryFilters } from "@/components/coach/members/member-directory-filters"
-import { memberPageNumbers, memberWindowSummary } from "@/components/coach/members/member-window"
+import { memberPageNumbers, memberPageSummary } from "@/components/coach/members/member-window"
 import { InlineNotice } from "@/components/inline-notice"
 import type { AcademyStaffMember } from "@/lib/coach/types"
 
@@ -73,7 +73,6 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
 
       <section className="coach-member-directory-panel" aria-labelledby="member-directory-title">
         <InlineNotice
-          className="coach-directory-notice"
           message={directoryFeedback?.message}
           tone={directoryFeedback?.tone}
         />
@@ -95,7 +94,7 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
             aria-atomic="true"
             tabIndex={-1}
           >
-            {memberWindowSummary(page, directoryCount)}
+            {memberPageSummary(page, directoryCount)}
           </h2>
         </div>
 

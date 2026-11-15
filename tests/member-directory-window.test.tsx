@@ -54,7 +54,7 @@ import {
   memberPageAfterEditingEnds,
   memberPageCount,
   memberPageNumbers,
-  memberWindowSummary,
+  memberPageSummary,
   shownMemberPage,
 } from "@/components/coach/members/member-window"
 
@@ -171,9 +171,9 @@ describe("Member Directory pages", () => {
   })
 
   it("names the range shown, or just the count on one page", () => {
-    expect(memberWindowSummary(2, 13)).toBe("6–10 of 13 members")
-    expect(memberWindowSummary(1, 5)).toBe("5 members")
-    expect(memberWindowSummary(1, 1)).toBe("1 member")
+    expect(memberPageSummary(2, 13)).toBe("6–10 of 13 members")
+    expect(memberPageSummary(1, 5)).toBe("5 members")
+    expect(memberPageSummary(1, 1)).toBe("1 member")
   })
 })
 

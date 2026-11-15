@@ -57,6 +57,9 @@ export function MemberEditForm({
   // Until then an ended place locks it too, as the onboarding screens do.
   const onboarded = onboardingFinished(player.member)
   const classificationLocked = hasActiveAssignments || holdsPlace || onboarded
+  // A stored level, batch or plan the form refuses (a "Needs review" plan, say)
+  // keeps its locked control on screen, so the reason the save stopped shows.
+  const classificationError = Boolean(errors.level || errors.batch || errors.academyPlan)
 
   return (
     <form
@@ -148,13 +151,15 @@ export function MemberEditForm({
               ? "Level, batch and plan change with Change schedule or Start training on the Training tab."
               : "Level, batch and plan are fixed until onboarding is finished."}
           </p>
-        ) : (
+        ) : null}
+        {!classificationLocked || classificationError ? (
         <div className="coach-member-form-grid">
           <label>
             <span>Level</span>
             <select
               id={`member-${memberId}-level`}
               name="level"
+              disabled={classificationLocked}
               value={draft.level}
               aria-invalid={Boolean(errors.level)}
               aria-describedby={errors.level ? `member-${memberId}-level-error` : undefined}
@@ -170,6 +175,7 @@ export function MemberEditForm({
             <select
               id={`member-${memberId}-batch`}
               name="batch"
+              disabled={classificationLocked}
               value={draft.batch}
               aria-invalid={Boolean(errors.batch)}
               aria-describedby={errors.batch ? `member-${memberId}-batch-error` : undefined}
@@ -186,7 +192,8 @@ export function MemberEditForm({
               id={`member-${memberId}-academy-plan`}
               name="academyPlan"
               value={draft.academyPlan ?? ""}
-              disabled={draft.level === "Assessment pending"
+              disabled={classificationLocked
+                || draft.level === "Assessment pending"
                 || draft.batch === "Assessment pending"}
               aria-invalid={Boolean(errors.academyPlan)}
               aria-describedby={errors.academyPlan ? `member-${memberId}-academy-plan-error` : undefined}
@@ -214,13 +221,12 @@ export function MemberEditForm({
               : "Managed by active session assignments."}</small>
           </div>
         </div>
-        )}
+        ) : null}
       </fieldset>
 
       <div className="coach-member-form-actions">
         <InlineNotice
           action={feedback?.action}
-          className="coach-member-editor-notice"
           message={feedback
             ? feedback.message
             : isDirty ? "Unsaved changes" : null}

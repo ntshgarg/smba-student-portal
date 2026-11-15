@@ -47,7 +47,7 @@ export function memberPageNumbers(page: number, pageCount: number): Array<number
   ))
 }
 
-export function memberWindowSummary(page: number, totalCount: number) {
+export function memberPageSummary(page: number, totalCount: number) {
   const memberLabel = totalCount === 1 ? "member" : "members"
   if (totalCount <= MEMBERS_PER_PAGE) return `${totalCount} ${memberLabel}`
   const first = (page - 1) * MEMBERS_PER_PAGE + 1

@@ -10846,6 +10846,14 @@
   display: none;
 }
 
+.coach-member-editing-note {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--navy) 4%, transparent);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+}
+
 .coach-member-plan-line {
   color: var(--ink);
   font-size: 1.375rem;
@@ -11167,6 +11175,7 @@
 
 .coach-member-pager ol {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin: 0;
@@ -11445,6 +11454,11 @@
 
   .coach-member-pager > button {
     flex: 1 1 40%;
+  }
+
+  .coach-member-pager ol button {
+    min-width: 40px;
+    padding: 0 var(--space-tight);
   }
 }
 

@@ -63,9 +63,9 @@ export function feePlanEndRoute(
   if (scheduled?.kind === "end" && scheduled.stopFees) {
     return `wait for the End training booked for ${formatDateKey(scheduled.effectiveOn, { day: "numeric", month: "short", weekday: undefined, year: "numeric" })}, which ends the player’s Fee Plan`
   }
-  if (scheduled) return "cancel the booked change above, then end the player’s Fee Plan with Stop fees"
+  if (scheduled) return "cancel the booked change on the Training tab, then end the player’s Fee Plan with Stop fees on the Fees tab"
   if (hasPlace) return "end the player’s Fee Plan with End training on the Training tab (Stop fees after this month)"
-  return "end the player’s Fee Plan with Stop fees above"
+  return "end the player’s Fee Plan with Stop fees on the Fees tab"
 }
 
 export function financialCloseoutMessage(
@@ -88,7 +88,7 @@ export function financialCloseoutMessage(
  * their own draft, so the root became pure composition. Here one register-wide
  * machine drives the rows: `openMember` closes an open editor, `handleArchive`
  * collapses the row it archived and writes the directory notice, `endEditing`
- * reaches back into the reveal window, and one `memberFeedback` is shared
+ * reaches back into the page state, and one `memberFeedback` is shared
  * between the save and archive controls. Pushing any of it into a row would
  * either duplicate it per row or reintroduce it as callbacks pointing the other
  * way, so the state stays in one named machine and the rows stay presentational.
@@ -175,7 +175,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
         const matchesBatch = batch === "All batches" || player.training.batch === batch
         // The role filter is the only one that can empty this list wholesale.
         // It is applied here rather than at the render so the count in the
-        // heading, the reveal window and "no results" all agree.
+        // heading, the pages and "no results" all agree.
         const matchesRole = role !== "staff"
 
         return player.member.id === editingMemberId
@@ -189,7 +189,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
    * Coaches have no level, batch or training status. Under Everyone they are
    * listed only while none of those filters is set: a coach marked "Active"
    * under Paused or Term finished read as a mistake. Coaching staff lists them
-   * whatever the search, as that role disables the three filters.
+   * whatever level, batch or status was chosen, as that role disables those three filters.
    */
   const trainingFilterSet = level !== "All levels" || batch !== "All batches" || status !== "all"
   const filteredStaff = useMemo(() => {
@@ -294,6 +294,16 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     ))
   }, [criteriaKey, editingMemberId])
 
+  // Back and Forward bring the page number with them: the page follows the
+  // link whenever the link's page changes (set during render, not an effect).
+  const linkedPage = searchParams.get("page")
+  const [seenLinkedPage, setSeenLinkedPage] = useState(linkedPage)
+  if (linkedPage !== seenLinkedPage) {
+    setSeenLinkedPage(linkedPage)
+    const requested = initialMemberPage(Number(linkedPage))
+    setMemberPage((current) => (current.page === requested.page ? current : requested))
+  }
+
   useEffect(() => {
     if (!editingMemberId) return
 
@@ -389,8 +399,13 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
       setDraft(null)
       setErrors({})
       setRevealedContacts(new Set())
+      // Stay on the page the record was open on (a deep link or a filter
+      // change may have brought the list there), with its card still in view.
+      setMemberPage(initialMemberPage(page))
       const parameters = new URLSearchParams(window.location.search)
       parameters.delete("player")
+      if (page > 1) parameters.set("page", String(page))
+      else parameters.delete("page")
       window.history.replaceState(null, "", memberDirectoryHref(pathname, parameters.toString()))
       return
     }

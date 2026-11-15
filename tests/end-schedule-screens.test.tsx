@@ -311,10 +311,10 @@ describe("Archive's fee plan refusal", () => {
   it("points to the action the record actually offers", () => {
     const message = (route: string) => financialCloseoutMessage(refusal as Parameters<typeof financialCloseoutMessage>[0], route)
     expect(message(feePlanEndRoute(null, false)))
-      .toBe("Before archiving, end the player’s Fee Plan with Stop fees above")
+      .toBe("Before archiving, end the player’s Fee Plan with Stop fees on the Fees tab")
     // Stop fees is hidden while a change is booked.
     expect(message(feePlanEndRoute(booked("end", false), false)))
-      .toBe("Before archiving, cancel the booked change above, then end the player’s Fee Plan with Stop fees")
+      .toBe("Before archiving, cancel the booked change on the Training tab, then end the player’s Fee Plan with Stop fees on the Fees tab")
     expect(message(feePlanEndRoute(booked("end", true), false)))
       .toBe("Before archiving, wait for the End training booked for 1 Dec 2026, which ends the player’s Fee Plan")
     // Stop fees is hidden while they still have a place: End training it is.

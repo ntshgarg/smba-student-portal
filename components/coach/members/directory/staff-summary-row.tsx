@@ -124,7 +124,6 @@ function StaffAccessActions({
       </div>
       <InlineNotice
         action={signIn}
-        className="coach-member-save-notice"
         message={message}
         reserveSpace={false}
         tone="error"

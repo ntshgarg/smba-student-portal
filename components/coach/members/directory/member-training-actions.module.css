@@ -191,6 +191,16 @@
   gap: 18px;
 }
 
+/* Outside a player's record (End schedule in Schedules & rosters, which has no
+   back pill) the form is its own white card; on the record it sits on the
+   tab's paper. */
+.form:not(:has(.back)) {
+  padding: 20px var(--space-group);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--white);
+}
+
 .formHead {
   display: flex;
   flex-wrap: wrap;
