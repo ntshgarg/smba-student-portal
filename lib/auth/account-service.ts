@@ -52,6 +52,7 @@ import {
 } from "@/lib/auth/registration-form"
 import { writeAuthSecurityEvent } from "@/lib/auth/security-context"
 import { getAcademyDateKey } from "@/lib/format"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 /** Fixtures and tests only; real requests come from `confirmRegistration`. */
 export function registerAccount(fullName: string, requestedRole: AccountRole) {
@@ -193,7 +194,7 @@ function onboardingCompletedFor(
   const enrollment = database.select({
     onboardingCompletedAt: playerEnrollments.onboardingCompletedAt,
   }).from(playerEnrollments).where(eq(playerEnrollments.accountId, accountId)).get()
-  return enrollment ? Boolean(enrollment.onboardingCompletedAt) : standing === "approved"
+  return enrollment ? onboardingFinished(enrollment) : standing === "approved"
 }
 
 /**

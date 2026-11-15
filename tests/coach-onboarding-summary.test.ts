@@ -14,6 +14,7 @@ const assessedPlayer: OnboardingPlayer = {
   batch: "Weekday",
   id: "player-1",
   level: "Beginner",
+  onboardingCompletedAt: null,
 }
 
 function assignment(
@@ -68,6 +69,7 @@ describe("coach player onboarding summary", () => {
         batch: null,
         id: "assessment-player",
         level: null,
+        onboardingCompletedAt: null,
       }, assessedPlayer],
     })).toEqual({
       assessment: 1,
@@ -90,12 +92,18 @@ describe("coach player onboarding summary", () => {
       .toMatchObject({ session: 1, feePlan: 0, total: 1 })
   })
 
-  it("removes a player after a matching assignment and Fee Plan overlap", () => {
-    expect(summary({ assignments: [assignment()], feePlans: [feePlan()] }))
+  // Finished means the enrolment's completion stamp and nothing else: a place
+  // and a fee plan that happen to overlap do not stand in for it.
+  it("removes a player once onboarding is stamped finished", () => {
+    const finished = { ...assessedPlayer, onboardingCompletedAt: "2026-08-03T10:00:00.000Z" }
+    expect(summary({ assignments: [assignment()], feePlans: [feePlan()], players: [finished] }))
       .toEqual({ assessment: 0, feePlan: 0, newRequests: 0, onboarded: 1, session: 0, total: 0 })
+    expect(summary({ assignments: [assignment()], feePlans: [feePlan()] }))
+      .toMatchObject({ feePlan: 1, onboarded: 0, total: 1 })
   })
 
-  it("keeps completion monotonic after the assignment and Fee Plan end", () => {
+  it("keeps completion after the assignment and Fee Plan end", () => {
+    const finished = { ...assessedPlayer, onboardingCompletedAt: "2025-01-03T10:00:00.000Z" }
     expect(summary({
       assignments: [assignment({
         effectiveFrom: "2025-01-01",
@@ -108,7 +116,8 @@ describe("coach player onboarding summary", () => {
         effectiveFrom: "2025-01-01",
         effectiveTo: "2025-12-31",
       })],
-    })).toMatchObject({ total: 0 })
+      players: [finished],
+    })).toMatchObject({ total: 0, onboarded: 1 })
   })
 
   it("does not complete mismatched or non-overlapping records", () => {
@@ -161,6 +170,7 @@ describe("coach player onboarding summary", () => {
           id: "assessment-player",
           trainingStartOn: "2026-08-10",
           level: null,
+          onboardingCompletedAt: null,
           primaryContact: { name: "", phone: "", relationship: "" },
           recordRevision: 0,
         },
@@ -211,7 +221,11 @@ describe("the two zeroes an onboarding summary can report", () => {
   })
 
   it("counts the finished player once the queue is cleared", () => {
-    const cleared = summary({ assignments: [assignment()], feePlans: [feePlan()] })
+    const cleared = summary({
+      assignments: [assignment()],
+      feePlans: [feePlan()],
+      players: [{ ...assessedPlayer, onboardingCompletedAt: "2026-08-03T10:00:00.000Z" }],
+    })
     expect(cleared.total).toBe(0)
     expect(cleared.onboarded).toBe(1)
   })
@@ -304,6 +318,7 @@ describe("what a coach sees before approving", () => {
         fullName: "Myra Shah",
         id: "player-approved",
         level: "Beginner",
+        onboardingCompletedAt: null,
         primaryContact: { name: "Rakesh Shah", phone: "+919000000001", relationship: "Parent" },
         recordRevision: 0,
         trainingStartOn: "2026-08-01",

@@ -21,6 +21,7 @@ import {
   academyPlansFor,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 export function MemberEditForm({
   draft,
@@ -54,7 +55,7 @@ export function MemberEditForm({
   const classificationLockId = `member-${memberId}-classification-lock`
   // Once onboarding is finished, the training actions own the classification.
   // Until then an ended place locks it too, as the onboarding screens do.
-  const onboarded = Boolean(player.member.onboardingCompletedAt)
+  const onboarded = onboardingFinished(player.member)
   const classificationLocked = hasActiveAssignments || holdsPlace || onboarded
 
   return (

@@ -68,7 +68,7 @@ export type OnboardingWorkspacePlayer = OnboardingPlayer & {
   activatedAt?: string | null
   approvedAt?: string | null
   fullName: string
-  onboardingCompletedAt?: string | null
+  onboardingCompletedAt: string | null
   requestedAt?: string
   trainingStartOn: string
   trainingStartConfirmedAt?: string | null
@@ -109,7 +109,7 @@ export type PlayerOnboardingCase = {
   hasRecords?: boolean
   fullName: string
   id: string
-  onboardingCompletedAt?: string | null
+  onboardingCompletedAt: string | null
   trainingStartOn: string | null
   trainingStartConfirmedAt?: string | null
   level: TrainingProgramme | null
@@ -151,7 +151,7 @@ export type OnboardingPlayer = {
   batch: TrainingBatch | null
   id: string
   level: TrainingProgramme | null
-  onboardingCompletedAt?: string | null
+  onboardingCompletedAt: string | null
   trainingStartConfirmedAt?: string | null
 }
 
@@ -227,32 +227,15 @@ function assignmentRange(assignment: OnboardingAssignment) {
   return end !== null && end < start ? null : { end, start }
 }
 
-function rangesOverlap(
-  left: { end: string | null; start: string },
-  right: { end: string | null; start: string },
-) {
-  return (left.end === null || right.start <= left.end)
-    && (right.end === null || left.start <= right.end)
-}
-
-function completedOnboarding(
-  assignments: OnboardingAssignment[],
-  feePlans: OnboardingFeePlan[],
-) {
-  return assignments.some((assignment) => {
-    const range = assignmentRange(assignment)
-    if (!range) return false
-
-    return feePlans.some((feePlan) => (
-      feePlan.level === assignment.programme
-      && feePlan.batch === assignment.batch
-      && academyPlanIsValid(feePlan.academyPlan, feePlan.level, feePlan.batch)
-      && rangesOverlap(range, {
-        end: feePlan.effectiveTo,
-        start: feePlan.effectiveFrom,
-      })
-    ))
-  })
+/**
+ * The one answer to "has this player finished Player onboarding?": the stamp
+ * Fee Plan completion sets on their enrolment (completeOnboardingFinance).
+ * Nothing else stands in for it -- not a place, a fee plan or a level, all of
+ * which exist part-way through onboarding -- so every screen and server check
+ * reads this and they cannot disagree.
+ */
+export function onboardingFinished(record: { onboardingCompletedAt: string | Date | null }) {
+  return record.onboardingCompletedAt !== null
 }
 
 /*
@@ -271,9 +254,9 @@ function classificationIsComplete(player: OnboardingPlayer) {
 }
 
 /*
- * Absent means "this caller did not ask", which is how `onboardingCompletedAt`
- * is read a few lines below and how every test fixture that predates the field
- * behaves. A present null is the real signal: a date nobody has confirmed.
+ * Absent means "this caller did not ask", which is how every test fixture that
+ * predates the field behaves. A present null is the real signal: a date nobody
+ * has confirmed.
  */
 function trainingStartIsConfirmed(player: OnboardingPlayer) {
   return player.trainingStartConfirmedAt === undefined
@@ -325,9 +308,7 @@ function onboardingStage(
   feePlans: OnboardingFeePlan[],
   player: OnboardingPlayer,
 ): Exclude<PlayerOnboardingStage, "request"> | null {
-  if (player.onboardingCompletedAt !== undefined
-    ? player.onboardingCompletedAt !== null
-    : completedOnboarding(assignments, feePlans)) return null
+  if (onboardingFinished(player)) return null
   if (!classificationIsComplete(player)) return "assessment"
   /*
    * The date is confirmed by the same action that makes the assignment, so in

@@ -194,6 +194,7 @@ describe("Members directory", () => {
       primaryContact: { name: "", phone: "", relationship: "" },
       role: "player",
       trainingStartOn: "2026-04-01",
+      onboardingCompletedAt: "2026-01-02T04:30:00.000Z",
     },
     training: {
       academyPlan: "weekday-3-day",

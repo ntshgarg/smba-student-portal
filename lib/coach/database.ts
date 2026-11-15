@@ -17,6 +17,7 @@ import {
 } from "@/lib/db/schema"
 import {
   derivePlayerOnboardingWorkspace,
+  onboardingFinished,
   type OnboardingFormerRecord,
   type PlayerOnboardingSummary,
   type PlayerOnboardingWorkspace,
@@ -402,7 +403,7 @@ export function getPlayerOnboardingWorkspace(
     .all()
 
   const unfinishedIds = players
-    .filter((player) => !player.onboardingCompletedAt)
+    .filter((player) => !onboardingFinished(player))
     .map(({ id }) => id)
 
   return derivePlayerOnboardingWorkspace({
@@ -456,5 +457,5 @@ export function playerIsInOnboarding(playerId: string) {
   }).from(playerEnrollments)
     .where(eq(playerEnrollments.accountId, playerId))
     .get()
-  return Boolean(row && !row.onboardingCompletedAt)
+  return Boolean(row && !onboardingFinished(row))
 }

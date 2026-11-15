@@ -45,6 +45,7 @@ import {
   type AcademyPlan,
   academyPlanIsValid,
 } from "@/lib/training/academy-plans"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 const TRAINING_LEVELS = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"] as const
 const TRAINING_BATCHES = ["Weekday", "Weekend"] as const
@@ -358,7 +359,7 @@ export function updateMemberRecord({
     const classificationChanges = validated.value.level !== current.level
       || validated.value.batch !== current.batch
       || validated.value.academyPlan !== current.academyPlan
-    if (classificationChanges && current.onboardingCompletedAt) {
+    if (classificationChanges && onboardingFinished(current)) {
       return memberFailure(
         "ACTIVE_ASSIGNMENTS",
         "Change the level, batch or plan with Change schedule or Start training on the member record.",
@@ -373,7 +374,7 @@ export function updateMemberRecord({
     // Until onboarding is finished a place that has ended still counts, as it
     // does on the onboarding screens: changing the classification under it
     // leaves onboarding with no way forward.
-    if (classificationChanges && !current.onboardingCompletedAt && tx.select({
+    if (classificationChanges && !onboardingFinished(current) && tx.select({
       id: sessionAssignments.id,
     }).from(sessionAssignments)
       .where(eq(sessionAssignments.accountId, input.memberId))

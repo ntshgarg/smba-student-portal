@@ -21,6 +21,7 @@ const player = {
     id: "player-one",
     initials: "AK",
     trainingStartOn: "2026-01-02",
+    onboardingCompletedAt: "2026-01-02T04:30:00.000Z",
     primaryContact: { name: "Ria", phone: "+91 99999 99999", relationship: "Parent" },
     role: "player",
   },

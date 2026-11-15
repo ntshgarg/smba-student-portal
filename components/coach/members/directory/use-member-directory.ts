@@ -48,6 +48,7 @@ import {
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
 import type { MemberScheduledChange } from "@/lib/training/member-summaries"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 /**
  * How to end the fee plan Archive refused over, naming the action the record
@@ -168,7 +169,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
           ? termFinishedToMove(
             player.training.status,
             Boolean(memberTraining?.summaries[player.member.id]?.scheduled),
-            player.member.onboardingCompletedAt === null,
+            !onboardingFinished(player.member),
           )
           : player.training.status === status)
         const matchesBatch = batch === "All batches" || player.training.batch === batch

@@ -32,6 +32,7 @@ import {
   authSubjectHash,
   writeAuthSecurityEvent,
 } from "@/lib/auth/security-context"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 const MIN_PASSWORD_LENGTH = 12
 const MAX_PASSWORD_LENGTH = 128
@@ -260,7 +261,7 @@ export function getActivationClaimStatus(token: string | null | undefined, {
    * "approved". An assistant coach has no enrollment row and no onboarding to
    * finish, so approval is the whole gate for them.
    */
-  if (row.enrolledAccountId && !row.onboardingCompletedAt) {
+  if (row.enrolledAccountId && !onboardingFinished(row)) {
     return { accountId: row.accountId, fullName: row.fullName, state: "onboarding" }
   }
   if (!row.academyId || (row.role !== "coach" && row.role !== "player")) {

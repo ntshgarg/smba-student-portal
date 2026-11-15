@@ -35,7 +35,7 @@ export type AcademyMember = OperationalAcademyMember & {
   approvedAt?: string | null
   trainingStartConfirmedAt?: string | null
   activatedAt?: string | null
-  onboardingCompletedAt?: string | null
+  onboardingCompletedAt: string | null
   primaryContact: {
     name: string
     relationship: string

@@ -69,6 +69,7 @@ function players(count: number): PlayerMemberRecord[] {
         id: memberId,
         initials: `M${serial}`,
         trainingStartOn: "2026-01-01",
+        onboardingCompletedAt: "2026-01-02T04:30:00.000Z",
         primaryContact: { name: "", phone: "", relationship: "" },
         role: "player",
       },

@@ -15,6 +15,7 @@ const member: AcademyMember = {
   fullName: "Aarav Kulkarni",
   initials: "AK",
   trainingStartOn: "2025-05-21",
+  onboardingCompletedAt: "2026-01-02T04:30:00.000Z",
   primaryContact: {
     name: "Shreya Kulkarni",
     relationship: "Parent",

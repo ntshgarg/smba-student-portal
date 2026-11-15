@@ -70,6 +70,7 @@ describe("the duplicate hint on a request", () => {
       standing: "archived",
     }],
     feePlanRecorded: false,
+    onboardingCompletedAt: null,
     fullName: "Kiran Rao",
     id: "request-1",
     level: null,

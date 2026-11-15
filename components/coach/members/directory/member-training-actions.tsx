@@ -41,6 +41,7 @@ import {
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
 import { planThisMonthFeeCorrection } from "@/lib/training/this-month-fee-plan"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 
 const LEVELS: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 const DAYS = [
@@ -130,13 +131,8 @@ export function MemberTrainingActions({
   if (!data || !summary) return null
 
   // Starting or changing training waits for Player onboarding to finish (the
-  // server refuses it too, lib/training/changes.ts). A level, batch and plan
-  // are set part-way through onboarding, so they are not the signal.
-  const onboarded = player.member.onboardingCompletedAt !== undefined
-    ? Boolean(player.member.onboardingCompletedAt)
-    : player.training.level !== "Assessment pending"
-      && player.training.batch !== "Assessment pending"
-      && Boolean(player.training.academyPlan)
+  // server refuses it too, lib/training/changes.ts).
+  const onboarded = onboardingFinished(player.member)
   const scheduled = summary.scheduled
   const fee = summary.fee
   // "active" means at least one running place (lib/sessions/term.ts). A
