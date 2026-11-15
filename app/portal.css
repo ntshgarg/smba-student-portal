@@ -1451,7 +1451,9 @@
 }
 
 /* Signing in, registering and recovering share one frame in the homepage's look: the plain cream page and
-   one pane of frosted glass (the gradient, the bright edges and the soft shadow the homepage cards wear). */
+   one pane of frosted glass (the bright edges and soft shadow the homepage cards wear). The pane is one flat
+   tint rather than the homepage's gradient: on a plain page they look the same, and a flat tint lets the
+   accessibility check measure every text's contrast instead of flagging it for review. */
 .login-page {
   display: grid;
   min-height: 100svh;
@@ -1465,18 +1467,7 @@
   padding: clamp(var(--space-group), 5vw, 52px);
   border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
   border-radius: 28px;
-  background:
-    linear-gradient(
-      115deg,
-      transparent 28%,
-      color-mix(in srgb, var(--white) 22%, transparent) 38%,
-      transparent 50%
-    ),
-    linear-gradient(
-      150deg,
-      color-mix(in srgb, var(--white) 62%, transparent),
-      color-mix(in srgb, var(--white) 22%, transparent) 70%
-    );
+  background: color-mix(in srgb, var(--white) 45%, transparent);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
   backdrop-filter: blur(18px) saturate(1.2);
   box-shadow:
@@ -2104,18 +2095,7 @@
   padding: clamp(20px, 3vw, var(--space-block));
   border: 1px solid color-mix(in srgb, var(--white) 95%, transparent);
   border-radius: 24px;
-  background:
-    linear-gradient(
-      115deg,
-      transparent 28%,
-      color-mix(in srgb, var(--white) 22%, transparent) 38%,
-      transparent 50%
-    ),
-    linear-gradient(
-      150deg,
-      color-mix(in srgb, var(--white) 62%, transparent),
-      color-mix(in srgb, var(--white) 22%, transparent) 70%
-    );
+  background: color-mix(in srgb, var(--white) 45%, transparent);
   box-shadow:
     inset 0 1px 0 var(--white),
     inset 1px 0 0 var(--white),
