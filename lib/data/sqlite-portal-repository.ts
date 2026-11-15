@@ -36,7 +36,7 @@ import {
 } from "@/lib/sessions/database"
 import { resolveNextAssignedOccurrence } from "@/lib/sessions/domain"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
-import { termFinishedOn } from "@/lib/sessions/term"
+import { playerTrainingStatus } from "@/lib/sessions/term"
 import { academyPlanSummary } from "@/lib/training/academy-plans"
 import { accountIsLive } from "@/lib/auth/account-live"
 
@@ -124,14 +124,20 @@ function toPlayerProfile(accountId: string): PlayerProfile | null {
   const player = findPlayer(accountId)
   if (!player) return null
   const names = identityNameParts(player.fullName)
-  // The stored status stays "active" when a schedule simply runs out, so the
-  // finished term is read from the places the player still holds.
+  // The same status Members shows, read from the places the player still holds
+  // (the stored one stays "active" when a schedule simply runs out).
   const database = initializeDatabase()
-  const openPlaces = loadOpenPlaces(database, [accountId]).get(accountId) ?? []
-  const finishedOn = termFinishedOn(openPlaces, academyToday())
+  const shown = playerTrainingStatus({
+    enrollmentStatus: player.status,
+    openPlaces: loadOpenPlaces(database, [accountId]).get(accountId) ?? [],
+    today: academyToday(),
+  })
+  const finishedOn = shown.termFinishedOn
+  // A finished term is told from termFinishedOn, so it keeps "active" here.
+  const status = shown.status === "finished" ? "active" : shown.status
   // Once the head coach has booked their move or end of training, the family
   // is told when it happens rather than to wait for or ask about it.
-  const booked = finishedOn || player.status === "paused"
+  const booked = finishedOn || status === "paused"
     ? database.select({ effectiveOn: trainingChanges.effectiveOn, kind: trainingChanges.kind })
       .from(trainingChanges).where(and(
         eq(trainingChanges.playerAccountId, accountId),
@@ -150,8 +156,8 @@ function toPlayerProfile(accountId: string): PlayerProfile | null {
       ? academyPlanSummary(player.batch, player.academyPlan)
       : "Assigned after assessment",
     memberSince: player.trainingStartOn,
-    currentFocus: player.status === "unassigned" ? "First assessment" : "Current training block",
-    status: player.status,
+    currentFocus: status === "unassigned" ? "First assessment" : "Current training block",
+    status,
     termFinishedOn: finishedOn,
     nextScheduleStartsOn: booked?.kind === "change" ? booked.effectiveOn : null,
     trainingEndsOn: booked?.kind === "end" ? booked.effectiveOn : null,
