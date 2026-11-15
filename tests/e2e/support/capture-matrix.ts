@@ -232,7 +232,7 @@ export const captureDefinitions: CaptureDefinition[] = [
   {
     actions: ["attendance-year-start"],
     actor: "coach",
-    description: "Occurrence attendance register scrolled to the start of the year",
+    description: "Attendance register on January of the first year offered",
     id: "coach-attendance-year-start",
     route: "/coach/attendance/players/register",
     scenarios: scheduledScenarios,

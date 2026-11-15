@@ -171,7 +171,8 @@ describe("operational mobile controls", () => {
   })
 
   it("gives register jump controls a real 44px target without changing their visual treatment", () => {
-    const registerButtonRule = styles.match(/\.coach-register-period button \{([^}]*)\}/)?.[1]
+    const registerButtonRule = source("components/coach/attendance-register.module.css")
+      .match(/\.today \{([^}]*)\}/)?.[1]
 
     expect(registerButtonRule).toContain("display: inline-flex")
     expect(registerButtonRule).toContain("min-height: 44px")

@@ -50,7 +50,7 @@ test("Stress Attendance and Calendar stay within their route payload budgets", a
     ATTENDANCE_BUDGET_BYTES,
   )
   expect(attendanceBytes).toBeLessThanOrEqual(ATTENDANCE_BUDGET_BYTES)
-  expect(await page.locator(".coach-register-table tbody tr").count()).toBeGreaterThan(0)
+  expect(await page.getByRole("table", { name: /attendance register/ }).locator("tbody tr").count()).toBeGreaterThan(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
 
   const calendarBytes = await measureBudgetedPayload(
