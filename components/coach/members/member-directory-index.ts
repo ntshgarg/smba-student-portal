@@ -1,5 +1,5 @@
 import type { PlayerMemberRecord } from "@/lib/coach/types"
-import { formatSessionLabel, formatSessionTimeRange } from "@/lib/format"
+import { formatSessionTimeRange } from "@/lib/format"
 import { formatTermDate, scheduleTermFinished } from "@/lib/sessions/term"
 import type {
   SessionAssignment,
@@ -36,9 +36,8 @@ export function buildMemberDirectoryIndex(
     }
   })
 
-  const sessionLabelsByPlayer = new Map<string, string[]>()
-  // The same places without the level and batch the row already shows: the
-  // time and days only, for the directory's compact rows.
+  // Each open place as its time and days (the record already shows the level
+  // and batch), noting a place whose schedule's term has finished.
   const sessionTimesByPlayer = new Map<string, string[]>()
   activeByPlayer.forEach((playerAssignments, playerId) => {
     sessionTimesByPlayer.set(playerId, playerAssignments.flatMap((assignment) => {
@@ -55,26 +54,7 @@ export function buildMemberDirectoryIndex(
       const days = assignment.weekdays.map((weekday) => weekdayLabels[weekday]).join(", ")
       return [[range, days].filter(Boolean).join(" · ") + finished]
     }))
-    sessionLabelsByPlayer.set(playerId, playerAssignments.flatMap((assignment) => {
-      const series = seriesById.get(assignment.seriesId)
-      if (!series) return []
-      const dayLabel = assignment.weekdays
-        .map((weekday) => weekdayLabels[weekday])
-        .join(", ")
-      const slot = series.slots[0]
-      // A place on a schedule that has run out is still an open place, but
-      // the label says so rather than listing it like a running one.
-      const finished = today && scheduleTermFinished(series, today) && series.endsOn
-        ? ` (term finished ${formatTermDate(series.endsOn)})`
-        : ""
-      return `${formatSessionLabel({
-        programme: series.programme,
-        batch: series.batch,
-        startTime: slot?.startTime ?? "",
-        durationMinutes: slot?.durationMinutes ?? 0,
-      })} · ${dayLabel}${finished}`
-    }))
   })
 
-  return { earliestByPlayer, playerById, sessionLabelsByPlayer, sessionTimesByPlayer }
+  return { earliestByPlayer, playerById, sessionTimesByPlayer }
 }

@@ -21,7 +21,7 @@ import { useMemberDirectoryPortal } from "@/components/coach/coach-portal-provid
 import { FormShell } from "@/components/coach/members/directory/form-shell"
 import styles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { useMemberTraining } from "@/components/coach/members/directory/member-training-context"
-import { thisMonthFeeLabel } from "@/components/coach/members/directory/this-month-fee-label"
+import { dayName, thisMonthFeeLabel } from "@/components/coach/members/directory/this-month-fee-label"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { OperationalActionResult } from "@/lib/actions/operational-result"
@@ -66,10 +66,6 @@ function monthName(dateKey: string) {
 export function monthBefore(firstOfMonth: string) {
   const [year, month] = firstOfMonth.split("-").map(Number)
   return monthName(new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10))
-}
-
-function dayName(dateKey: string) {
-  return formatDateKey(dateKey, { day: "numeric", month: "short", weekday: "short", year: undefined })
 }
 
 function dayList(weekdays: number[]) {

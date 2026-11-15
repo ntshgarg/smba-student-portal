@@ -81,7 +81,7 @@ describe("coach portal composition", () => {
 
     expect(memberIndex.playerById.get(player.member.id)).toBe(player)
     expect(memberIndex.earliestByPlayer.get(player.member.id)).toBe("2026-01-05")
-    expect(memberIndex.sessionLabelsByPlayer.get(player.member.id)?.[0]).toContain("Mon")
+    expect(memberIndex.sessionTimesByPlayer.get(player.member.id)?.[0]).toContain("Mon")
     expect(scheduleIndex.activeByPlayerSeries.size).toBe(1)
     expect(groups).toEqual([{ playerCount: 1, programme: "Beginner", series: [series] }])
   })

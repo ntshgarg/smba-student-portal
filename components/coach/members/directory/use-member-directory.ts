@@ -119,7 +119,7 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     () => buildMemberDirectoryIndex(players, sessionAssignments, sessionSeries, today),
     [players, sessionAssignments, sessionSeries, today],
   )
-  const { earliestByPlayer, playerById, sessionLabelsByPlayer, sessionTimesByPlayer } = memberIndex
+  const { earliestByPlayer, playerById, sessionTimesByPlayer } = memberIndex
   const urlCriteria = useMemo(
     () => parseMemberDirectoryCriteria(searchParams),
     [searchParams],
@@ -702,7 +702,6 @@ export function useMemberDirectory(staff: AcademyStaffMember[] = []) {
     page,
     pageCount,
     revealedContacts,
-    sessionLabelsByPlayer,
     sessionTimesByPlayer,
     setContactLinkRef,
     setEditButtonRef,

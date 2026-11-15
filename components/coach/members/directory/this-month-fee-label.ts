@@ -1,7 +1,8 @@
 import type { FinanceStatus } from "@/lib/finance/types"
 import { formatDateKey, formatInr } from "@/lib/format"
 
-function dayName(dateKey: string) {
+/** "Tue 10 Nov": how the record writes a day. */
+export function dayName(dateKey: string) {
   return formatDateKey(dateKey, { day: "numeric", month: "short", weekday: "short", year: undefined })
 }
 

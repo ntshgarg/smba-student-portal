@@ -217,14 +217,14 @@ describe("Members directory", () => {
     const assignments = [place("player-one", "finished"), place("player-one", "running")]
 
     const labels = buildMemberDirectoryIndex([player], assignments, records, today)
-      .sessionLabelsByPlayer.get("player-one")
+      .sessionTimesByPlayer.get("player-one")
     expect(labels).toHaveLength(2)
     expect(labels?.[0]).toMatch(/ \(term finished 31 October 2026\)$/u)
     expect(labels?.[1]).not.toContain("term finished")
 
     // Without the academy's today nothing is guessed from the device clock.
     expect(buildMemberDirectoryIndex([player], assignments, records)
-      .sessionLabelsByPlayer.get("player-one")?.join(" ")).not.toContain("term finished")
+      .sessionTimesByPlayer.get("player-one")?.join(" ")).not.toContain("term finished")
   })
 
   it("filters to term-finished players from the dashboard link", () => {

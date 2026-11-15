@@ -32,7 +32,6 @@ const tabLabels: Record<RecordTab, string> = {
  * elsewhere and comes back.
  */
 export function MemberDetailRow({
-  activeSessionLabels,
   contactRevealed,
   draft,
   editor,
@@ -48,7 +47,6 @@ export function MemberDetailRow({
   setContactLinkRef,
   setEditButtonRef,
 }: {
-  activeSessionLabels: string[]
   contactRevealed: boolean
   draft: MemberDraft | null
   editor: MemberEditor
@@ -69,7 +67,7 @@ export function MemberDetailRow({
   const financeActive = Boolean(useMemberTraining()?.financeActive)
   const tabs: RecordTab[] = financeActive ? ["training", "fees", "profile"] : ["training", "profile"]
   const [tab, setTab] = useState<RecordTab>(isEditing ? "profile" : "training")
-  const hasActiveAssignments = activeSessionLabels.length > 0
+  const hasActiveAssignments = sessionTimes.length > 0
   const retryAction = feedback?.offerRetry
     ? feedback.retryAction
     : undefined

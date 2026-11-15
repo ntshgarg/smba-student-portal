@@ -47,7 +47,6 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
     resetFilters,
     revealContact,
     revealedContacts,
-    sessionLabelsByPlayer,
     sessionTimesByPlayer,
     setContactLinkRef,
     setEditButtonRef,
@@ -117,7 +116,6 @@ export function MemberDirectory({ staff = [] }: { staff?: AcademyStaffMember[] }
 
                     {isExpanded ? (
                       <MemberDetailRow
-                        activeSessionLabels={sessionLabelsByPlayer.get(memberId) ?? []}
                         contactRevealed={revealedContacts.has(memberId)}
                         draft={draft}
                         editor={editor}

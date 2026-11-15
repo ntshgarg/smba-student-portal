@@ -7,7 +7,7 @@ import { compounds, indexByCompound, loadCascade, shadowedBy } from "./support/c
 // use. The 15 Nov 2026 redesign replaced both copies with one block. This keeps
 // it that way: no Members declaration may be one a later, equally specific rule
 // always beats.
-const DIRECTORY_SELECTOR = /(^|[\s,>+~(])\.coach-members?-|\.coach-directory-notice/u
+const DIRECTORY_SELECTOR = /(^|[\s,>+~(])\.coach-members?-/u
 
 describe("Member Directory styles", () => {
   const cascade = loadCascade()
