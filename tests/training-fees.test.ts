@@ -18,6 +18,8 @@ describe("fee changes and concessions from the player's record", () => {
   let summaries: typeof import("@/lib/training/member-summaries")
   let coachId: string
   let evening: string
+  let finance: typeof import("@/lib/finance/service")
+  let sessions: typeof import("@/lib/sessions/service")
 
   const now = new Date("2026-10-05T05:00:00.000Z")
   const playerId = "30000000-0000-4000-8000-0000000000b1"
@@ -41,9 +43,9 @@ describe("fee changes and concessions from the player's record", () => {
     fees = await import("@/lib/training/fees")
     changes = await import("@/lib/training/changes")
     summaries = await import("@/lib/training/member-summaries")
-    const finance = await import("@/lib/finance/service")
+    finance = await import("@/lib/finance/service")
     const accountService = await import("@/lib/auth/account-service")
-    const sessions = await import("@/lib/sessions/service")
+    sessions = await import("@/lib/sessions/service")
     const { prepareDatabase } = await import("@/lib/db/setup")
     database = prepareDatabase({ seed: true })
     coachId = accountService.findApprovedAccountByAcademyId("SMBA#0001")!.accountId
@@ -105,6 +107,37 @@ describe("fee changes and concessions from the player's record", () => {
     }, context())
     expect(() => fees.changeMonthlyFee({ idempotencyKey: "member-fee:blocked", monthlyFeePaise: 380_000, playerId: otherId }, context()))
       .toThrowError(/Edit that change instead/u)
+  })
+
+  it("refuses a fee change once the player's term has finished, even with a new fee already waiting", () => {
+    const termId = "30000000-0000-4000-8000-0000000000b3"
+    const autumn = sessions.createSessionSeriesRecords({
+      coachId, database, now,
+      input: {
+        programme: "Beginner", batch: "Weekday", venue: "SMBA Court", startsOn: "2026-07-01",
+        endsOn: "2027-03-31", weekdays: [1, 3, 5], startTime: "18:00", durationMinutes: 60,
+      },
+    })
+    addPlayer(termId, "Isha Term", 9103)
+    database.insert(schema.sessionAssignments).values({
+      id: `assignment-${termId}`, accountId: termId, seriesId: autumn, effectiveFrom: "2026-07-01",
+      effectiveTo: null, assignedByAccountId: coachId, assignedAt: now,
+    }).run()
+    finance.createOrReplaceFeeAgreement({
+      academyPlan: "weekday-3-day", agreedMonthlyFeePaise: 350_000, batch: "Weekday",
+      effectiveFrom: "2026-07-01", idempotencyKey: `plan-fee-${termId}`, level: "Beginner", playerId: termId,
+    }, context())
+    fees.changeMonthlyFee({ idempotencyKey: "member-fee:term-first", monthlyFeePaise: 400_000, playerId: termId }, context())
+
+    // The schedule's last day passes; nobody presses End schedule.
+    database.update(schema.sessionSeries).set({ endsOn: "2026-10-04" })
+      .where(eq(schema.sessionSeries.id, autumn)).run()
+    expect(() => fees.changeMonthlyFee({
+      idempotencyKey: "member-fee:term-second", monthlyFeePaise: 420_000, playerId: termId,
+    }, context())).toThrowError(/Move them to a schedule first/u)
+    expect(database.select().from(schema.feeAgreements)
+      .where(eq(schema.feeAgreements.playerAccountId, termId)).all()
+      .find((plan) => plan.status === "active")?.agreedMonthlyFeePaise).toBe(400_000)
   })
 
   it("gives a concession from next month, for one month or as a percentage, and stops it", () => {

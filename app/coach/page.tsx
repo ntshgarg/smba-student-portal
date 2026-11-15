@@ -55,6 +55,7 @@ import {
   listSessionAttendanceRecordsForOccurrences,
 } from "@/lib/sessions/database"
 import { resolveNextScheduledOccurrence } from "@/lib/sessions/domain"
+import { countRegistrationRequestsExpiringSoon } from "@/lib/telemetry/retention"
 import { listTermFinishedPlayersToMove } from "@/lib/training/member-summaries"
 
 export const metadata = {
@@ -266,7 +267,10 @@ export default async function CoachDashboardPage({
           sessions={{ marked: markedSessionCount, total: todaySessions.length }}
           staff={{ marked: staffMarkedCount, total: staffOnRoll.length }}
         />
-        <PlayerOnboardingCard summary={onboardingSummary} />
+        <PlayerOnboardingCard
+          expiringRequests={countRegistrationRequestsExpiringSoon()}
+          summary={onboardingSummary}
+        />
         <FinancialsCard
           active={financeActive}
           attentionCount={finance.attentionCount}

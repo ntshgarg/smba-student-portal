@@ -111,22 +111,22 @@ export function monthAfterFinishedTerm(
 
 /**
  * Whether a place reaches into the window from `from` up to (not including)
- * `toExclusive`. The place's own dates decide it (its `effectiveTo` is the
- * first day it no longer covers), cut off at its schedule's first and last
- * day: an open place on a schedule that ran out last year does not reach
- * into this one.
+ * `toExclusive`, or with no end when that is null. The place's own dates
+ * decide it (its `effectiveTo` is the first day it no longer covers), cut off
+ * at its schedule's first and last day: an open place on a schedule that ran
+ * out last year does not reach into this one. Its query form is
+ * placeReachesWindowCondition (lib/sessions/place-coverage.ts).
  */
 export function placeReachesWindow(
   place: { effectiveFrom: string; effectiveTo: string | null },
   schedule: { endsOn: string | null; startsOn?: string } | null | undefined,
   from: string,
-  toExclusive: string,
+  toExclusive: string | null,
 ) {
-  return place.effectiveFrom < toExclusive
-    // A place cut back to its own first day never covered one (coversADay in
-    // lib/finance/repository.ts skips it for fees the same way).
+  return (toExclusive === null || place.effectiveFrom < toExclusive)
+    // A place cut back to its own first day never covered one.
     && (!place.effectiveTo || (place.effectiveTo > from && place.effectiveTo > place.effectiveFrom))
-    && (!schedule?.startsOn || schedule.startsOn < toExclusive)
+    && (!schedule?.startsOn || toExclusive === null || schedule.startsOn < toExclusive)
     && (!schedule?.endsOn || schedule.endsOn >= from)
 }
 
