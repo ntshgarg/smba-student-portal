@@ -10,38 +10,17 @@
   padding-block: clamp(30px, 4vw, 52px) clamp(96px, 10vw, 136px);
 }
 
+/* the head coach's card look (coach-dashboard-glass-cards in .21st/DESIGN.md): a rounded frosted pane */
 .ledgerTicket {
-  position: relative;
   width: 100%;
   max-width: var(--shell-max);
   margin-inline: auto;
-  overflow: visible;
+  overflow: hidden;
   padding: 0;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 88%, var(--ivory));
-  box-shadow: 0 16px 38px color-mix(in srgb, var(--navy) 8%, transparent);
-}
-
-.ledgerTicket::before,
-.ledgerTicket::after {
-  position: absolute;
-  top: 132px;
-  z-index: 3;
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-circle);
-  background: var(--ivory);
-  content: "";
-  transform: translateY(-50%);
-}
-
-.ledgerTicket::before {
-  left: -11px;
-}
-
-.ledgerTicket::after {
-  right: -11px;
+  border: var(--frost-border);
+  border-radius: 24px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
 }
 
 .ledgerMasthead {
@@ -51,7 +30,7 @@
   justify-content: space-between;
   gap: var(--space-group);
   padding: 0 22px;
-  border-bottom: 1px dashed var(--line);
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
 }
 
 .ledgerMasthead h2 {
@@ -65,8 +44,9 @@
 
 .ledgerMasthead > span {
   flex: 0 0 auto;
-  padding: 6px 9px 5px;
+  padding: 6px 11px 5px;
   border: 1px solid color-mix(in srgb, var(--red) 55%, var(--line));
+  border-radius: var(--radius-pill);
   color: var(--red);
   font-size: var(--type-operational-floor);
   font-weight: var(--weight-label);
@@ -150,7 +130,7 @@
 .ledgerAction p {
   margin: 0;
   color: var(--steel);
-  font-size: 0.625rem;
+  font-size: 0.8125rem;
   line-height: var(--leading-body);
 }
 
@@ -163,11 +143,12 @@
   gap: var(--space-group);
   padding: 0 17px;
   border: 1px solid var(--navy);
+  border-radius: 14px;
   background: transparent;
   color: var(--navy);
   cursor: pointer;
-  font-size: 0.6875rem;
-  font-weight: 780;
+  font-size: 0.875rem;
+  font-weight: 700;
   text-align: left;
   transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard), var(--press-transition);
 }
@@ -215,11 +196,6 @@
     grid-column: 1 / -1;
     grid-template-columns: minmax(0, 1fr) minmax(260px, 310px);
     align-items: center;
-  }
-
-  .ledgerTicket::before,
-  .ledgerTicket::after {
-    top: 153px;
   }
 }
 
@@ -271,17 +247,9 @@
     min-height: 50px;
   }
 
-  .ledgerTicket::before,
-  .ledgerTicket::after,
-  .ledgerTicketOpen::before,
-  .ledgerTicketOpen::after {
-    top: 192px;
-  }
-
   .attendanceRegister {
     padding: var(--space-group) 20px;
   }
-
 }
 
 @media (max-width: 380px) {
@@ -290,13 +258,6 @@
     flex-direction: column;
     gap: var(--space-tight);
     padding-block: 14px;
-  }
-
-  .ledgerTicket::before,
-  .ledgerTicket::after,
-  .ledgerTicketOpen::before,
-  .ledgerTicketOpen::after {
-    top: 216px;
   }
 }
 

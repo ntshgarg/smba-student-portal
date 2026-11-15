@@ -3412,10 +3412,6 @@
   line-height: 1.25;
 }
 
-.junior-coach-welcome-hero {
-  min-height: min(76svh, 720px);
-}
-
 .junior-coach-welcome-hero .welcome-inner {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -7471,13 +7467,14 @@ tr.is-expanded .coach-member-row-action button svg {
   min-height: calc(100svh - 82px);
 }
 
-/* Head coach: the band is only as tall as its greeting and strip, so the day's work starts on the first
-   screen, and the strip has the homepage cards' rounded corners. Two classes, so the full-height rules
-   above and in the phone block below don't win back. */
-.coach-welcome-scoreboard.head-coach-welcome-hero {
+/* Head and assistant coach: the band is only as tall as its greeting (and the head coach's strip), so the
+   day's work starts on the first screen. Two classes, so the full-height rules above and in the phone
+   block below don't win back. */
+.coach-welcome-scoreboard:is(.head-coach-welcome-hero, .junior-coach-welcome-hero) {
   min-height: 0;
 }
 
+/* the head coach's strip has the homepage cards' rounded corners */
 .head-coach-welcome-hero .coach-scoreboard-ribbon {
   overflow: hidden;
   border-radius: 24px;
