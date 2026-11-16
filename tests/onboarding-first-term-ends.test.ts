@@ -528,6 +528,14 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       input: { expectedRevision: revision, memberId: pia },
       now,
     })).toMatchObject({ ok: false, message: expect.stringContaining("An End training is booked for 1 December 2026") })
+    // Its day has come but it is not applied yet: reloading may not help for
+    // up to an hour after a fault, so it says so instead of "Reload in a moment".
+    expect(members.archiveMemberRecord({
+      coachId,
+      database,
+      input: { expectedRevision: revision, memberId: pia },
+      now: new Date("2026-12-02T05:00:00.000Z"),
+    })).toMatchObject({ ok: false, message: expect.stringContaining("can take up to an hour") })
   })
 
   it("leaves a holiday out of an ended first term's last month, and counts it once removed", async () => {
