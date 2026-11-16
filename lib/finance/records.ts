@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, desc, eq, gte, inArray, lt, lte, or, type SQL } from "drizzle-orm"
+import { and, asc, count, desc, eq, gte, inArray, lt, lte, or, type SQL } from "drizzle-orm"
 
 import { formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -26,6 +26,7 @@ import {
   type FinanceActivityItem,
   type FinanceActivityResult,
   type FinanceActivityCoachOption,
+  type FinanceAuditEventType,
   type FinanceDayBookEvent,
   type FinanceDayBookInput,
   type FinanceDayBookResult,
@@ -194,18 +195,22 @@ export function loadFeeRegister(
   })
 
   const query = normalizeSearch(input.query)
-  const filtered = rows.filter((row) => {
+  const inView = rows.filter((row) => {
     if ((input.playerScope ?? "active") === "active" && row.archived) return false
     if (input.playerScope === "archived" && !row.archived) return false
-    if (input.statuses?.length && !input.statuses.includes(row.status)) return false
     if (!query) return true
     return [row.fullName, row.academyId, row.feeReference ?? ""]
       .some((value) => value.toLocaleLowerCase("en-IN").includes(query))
   })
+  // Counted before the status filter, so each status tile keeps its own count
+  // while another status is chosen.
   const statusCounts: Partial<Record<FinanceStatus, number>> = {}
-  filtered.forEach((row) => {
+  inView.forEach((row) => {
     statusCounts[row.status] = (statusCounts[row.status] ?? 0) + 1
   })
+  const filtered = input.statuses?.length
+    ? inView.filter((row) => input.statuses!.includes(row.status))
+    : inView
   const summary = filtered.reduce((value, row) => ({
     ...value,
     originalAmountPaise: value.originalAmountPaise + row.originalAmountPaise,
@@ -460,6 +465,34 @@ function activityCursorBound(
       lt(financialAuditEvents.id, anchor.id),
     ),
   )
+}
+
+/**
+ * How many events of each type the activity filters (apart from the type and
+ * the free-text search) hold, for the type chips.
+ */
+export function countFinancialActivityByType(
+  database: Executor,
+  input: Pick<FinanceActivityInput, "coachId" | "from" | "to">,
+): Partial<Record<FinanceAuditEventType, number>> {
+  const fromInstant = input.from ? new Date(`${input.from}T00:00:00+05:30`) : null
+  const toInstant = input.to ? new Date(`${input.to}T23:59:59.999+05:30`) : null
+  const counts: Partial<Record<FinanceAuditEventType, number>> = {}
+  database.select({
+    eventType: financialAuditEvents.eventType,
+    total: count(),
+  }).from(financialAuditEvents)
+    .where(and(
+      fromInstant ? gte(financialAuditEvents.occurredAt, fromInstant) : undefined,
+      toInstant ? lte(financialAuditEvents.occurredAt, toInstant) : undefined,
+      input.coachId ? eq(financialAuditEvents.actorAccountId, input.coachId) : undefined,
+    ))
+    .groupBy(financialAuditEvents.eventType)
+    .all()
+    .forEach((row) => {
+      counts[row.eventType as FinanceAuditEventType] = row.total
+    })
+  return counts
 }
 
 export function loadFinancialActivity(

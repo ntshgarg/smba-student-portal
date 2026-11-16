@@ -85,10 +85,10 @@ describe("coach Financials entry points", () => {
       />,
     )
 
-    expect(html).toContain("Set up Financials")
+    expect(html).toContain("Start tracking fees")
     expect(html).toContain("/coach/financials?period=2026-08")
     expect(html).not.toContain("Record payment")
-    expect(html).not.toContain("Fee records are ready")
+    expect(html).not.toContain("Nothing outstanding")
     expect(html).not.toContain("Monthly fees")
   })
 
@@ -104,7 +104,8 @@ describe("coach Financials entry points", () => {
         setupRequiredCount={0}
       />,
     )
-    expect(html).toContain("December fees ready to issue · 1 waiting for a training change")
+    expect(html).toContain("December fees ready to issue")
+    expect(html).toContain("1 fee waits for a booked training change.")
   })
 
   it.each([
@@ -146,7 +147,8 @@ describe("coach Financials entry points", () => {
 
     // fees still to issue are work, not lateness: a grey stamp, and no red one
     expect(html).toContain("3 to issue")
-    expect(html).not.toContain("overdue")
+    expect(html).not.toMatch(/\d+ overdue:/)
+    expect(html).not.toContain('data-tone="attention"')
     expect(html).toContain("Some players need a fee plan or this month’s fee")
     expect(html).not.toContain("outstanding")
   })

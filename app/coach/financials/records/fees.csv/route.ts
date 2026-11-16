@@ -2,11 +2,11 @@ import { isValidMonthKey } from "@/lib/attendance/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { sessionProvider } from "@/lib/data"
 import { createFeeRegisterCsvStream } from "@/lib/finance/records-csv"
+import { registerStatusesFor } from "@/lib/finance/records-filters"
 import { getFeeRegister } from "@/lib/finance/service"
 import type {
   FinancePlayerScope,
   FinanceRegisterInput,
-  FinanceStatus,
 } from "@/lib/finance/types"
 import {
   authorizeDownload,
@@ -21,16 +21,6 @@ import {
 } from "@/lib/http/finance-download-route"
 
 export const runtime = "nodejs"
-
-const STATUSES: FinanceStatus[] = [
-  "setup_required",
-  "pending",
-  "partially_paid",
-  "overdue",
-  "paid",
-  "not_prepared",
-  "void",
-]
 
 export async function GET(request: Request) {
   const access = authorizeDownload(
@@ -52,10 +42,7 @@ export async function GET(request: Request) {
   const playerScope: FinancePlayerScope = scopeValue === "archived" || scopeValue === "all"
     ? scopeValue
     : "active"
-  const statusValue = url.searchParams.get("status")
-  const statuses = STATUSES.includes(statusValue as FinanceStatus)
-    ? [statusValue as FinanceStatus]
-    : undefined
+  const statuses = registerStatusesFor(url.searchParams.get("status"))
 
   if (mode === "monthly" && (!period || !isValidMonthKey(period))) {
     return privateDownloadResponse("Choose a valid fee month.", 400)

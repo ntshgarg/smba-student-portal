@@ -11,7 +11,7 @@ import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 
 import { resultFeedback, useIdempotencyKey } from "./financials-client-utils"
-import styles from "./financials.module.css"
+import styles from "./fees.module.css"
 
 /**
  * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
@@ -62,30 +62,22 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
   }
 
   return (
-    <div className={`${styles.workspace} page-shell`}>
-      <div className={styles.backRow}>
+    <div className={`${styles.page} page-shell`}>
+      <div className={styles.back}>
         <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
       </div>
+      <h1 className={styles.title}>Fees</h1>
 
-      <header className={styles.activationHeader}>
-        <span className="eyebrow">Academy operations</span>
-        <h1>Financials</h1>
-        <p>Begin with one clear starting point for every player fee record.</p>
-      </header>
-
-      <section className={styles.activationPanel} aria-labelledby="finance-activation-title">
-        <div>
-          <span>One-time academy setup</span>
-          <h2 id="finance-activation-title">Start financial tracking</h2>
-          <p>
-            Choose the first month SMBA will track in the portal. Existing players can then be
-            reconciled individually without inventing historical payments.
-          </p>
-        </div>
+      <section className={styles.start} aria-labelledby="finance-activation-title">
+        <h2 id="finance-activation-title">Start tracking fees</h2>
+        <p>
+          One-time setup. Choose the first month the portal tracks; existing players can then be
+          reconciled individually without inventing historical payments.
+        </p>
 
         <form autoComplete="off" onSubmit={(event) => void activate(event)}>
-          <label className={styles.field}>
-            <span>Tracking starts</span>
+          <label className={styles.q}>
+            <span>First month</span>
             <input
               name="trackingMonth"
               type="month"
@@ -95,7 +87,7 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
             />
           </label>
 
-          <label className={styles.activationConfirmation}>
+          <label className={styles.tick}>
             <input
               name="confirmPermanentLedger"
               type="checkbox"
@@ -109,12 +101,14 @@ export function FinancialsActivation({ initialPeriod }: { initialPeriod: string 
             </span>
           </label>
 
-          <InlineNotice action={feedback?.action} className={styles.notice} message={feedback?.message} tone={feedback?.tone} />
-          <button className={styles.primaryButton} type="submit" disabled={!confirmed || pending}>
-            {pending
-              ? "Starting…"
-              : feedback?.offerRetry ? "Start financial tracking again" : "Start financial tracking"}
-          </button>
+          <InlineNotice action={feedback?.action} message={feedback?.message} reserveSpace={false} tone={feedback?.tone} />
+          <div className={styles.actions}>
+            <button className={styles.primary} type="submit" disabled={!confirmed || pending}>
+              {pending
+                ? "Starting…"
+                : feedback?.offerRetry ? "Start tracking fees again" : "Start tracking fees"}
+            </button>
+          </div>
         </form>
       </section>
     </div>

@@ -11,6 +11,7 @@ import {
   getFinanceActivation,
 } from "@/lib/finance/service"
 import { academyCurrentMonth } from "@/lib/clock"
+import { registerStatusesFor } from "@/lib/finance/records-filters"
 import { readRecordsTrail } from "@/lib/finance/records-trail"
 
 export const metadata = {
@@ -21,16 +22,6 @@ type SearchParams = Record<string, string | string[] | undefined>
 
 const REGISTER_MODES = ["monthly", "registration"] as const
 const PLAYER_SCOPES = ["active", "archived", "all"] as const
-const REGISTER_STATUSES = [
-  "all",
-  "setup_required",
-  "pending",
-  "partially_paid",
-  "overdue",
-  "paid",
-  "not_prepared",
-  "void",
-] as const
 
 function firstValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
@@ -64,7 +55,9 @@ export default async function FinancialPlayerRecordPage({
     : paymentPeriod
   const mode = allowedValue(firstValue(query.mode), REGISTER_MODES, "monthly")
   const scope = allowedValue(firstValue(query.scope), PLAYER_SCOPES, "active")
-  const status = allowedValue(firstValue(query.status), REGISTER_STATUSES, "all")
+  // The register's status filter: a tile's key or one status, as the records page reads it.
+  const statusValue = firstValue(query.status)
+  const status = registerStatusesFor(statusValue) ? statusValue! : "all"
   const registerQuery = (firstValue(query.q) ?? "").trim().slice(0, 120)
   // Read the same way as the records page, so Back returns to the same page.
   const cursors = readRecordsTrail(query.cursors).join(",")

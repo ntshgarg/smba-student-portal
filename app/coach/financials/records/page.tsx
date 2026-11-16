@@ -10,48 +10,32 @@ import { isValidDateKey, isValidMonthKey } from "@/lib/attendance/domain"
 import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { initializeDatabase } from "@/lib/db/client"
 import { monthEnd } from "@/lib/finance/domain"
+import { activityEventTypesFor, registerStatusesFor } from "@/lib/finance/records-filters"
 import {
+  countFinancialActivity,
   getCollectionsDayBook,
   getCoachMonthlyPreparationPreview,
   getFeeRegister,
+  getFeeRegisterRowExtras,
   getFinanceActivation,
   getFinancialActivity,
   isStaleRecordsCursor,
   listFinanceActivityCoaches,
 } from "@/lib/finance/service"
 import { readRecordsTrail, recordsTrailCanGrow } from "@/lib/finance/records-trail"
-import {
-  FINANCE_AUDIT_EVENT_TYPES,
-  FINANCE_AUDIT_EVENTS,
-  isFinanceAuditEventType,
-  type FinancePlayerScope,
-  type FinanceRegisterMode,
-  type FinanceStatus,
+import type {
+  FinancePlayerScope,
+  FinanceRegisterMode,
 } from "@/lib/finance/types"
 import { academyCurrentMonth } from "@/lib/clock"
 
 export const metadata = {
-  title: "Fee records",
+  title: "Fees",
 }
 
 const PAGE_SIZE = 10
 const COLLECTION_PAGE_SIZE = 10
 const ACTIVITY_PAGE_SIZE = 20
-
-const FINANCE_STATUSES: FinanceStatus[] = [
-  "pending",
-  "partially_paid",
-  "overdue",
-  "paid",
-  "not_prepared",
-  "setup_required",
-  "void",
-]
-
-const ACTIVITY_TYPES = FINANCE_AUDIT_EVENT_TYPES.map((value) => ({
-  label: FINANCE_AUDIT_EVENTS[value].filterLabel,
-  value,
-}))
 
 type SearchParams = Record<string, string | string[] | undefined>
 
@@ -176,9 +160,8 @@ export default async function FinancialRecordsPage({
     const mode = validMode(queryValue(params, "mode"))
     const scope = validScope(queryValue(params, "scope"))
     const statusValue = queryValue(params, "status")
-    const status = FINANCE_STATUSES.includes(statusValue as FinanceStatus)
-      ? statusValue as FinanceStatus
-      : "all"
+    const statuses = registerStatusesFor(statusValue)
+    const status = statuses ? statusValue : "all"
     const base = {
       mode,
       period: mode === "monthly" ? period : undefined,
@@ -193,8 +176,12 @@ export default async function FinancialRecordsPage({
       period: mode === "monthly" ? period : undefined,
       playerScope: scope,
       query,
-      statuses: status === "all" ? undefined : [status],
+      statuses,
     }, { coachId: identity.subjectId, database }))
+    const extras = getFeeRegisterRowExtras({
+      period: mode === "monthly" ? period : undefined,
+      rows: register.rows,
+    }, { coachId: identity.subjectId, database })
     const preparation = mode === "monthly"
       ? getCoachMonthlyPreparationPreview(period, {
         coachId: identity.subjectId,
@@ -224,9 +211,14 @@ export default async function FinancialRecordsPage({
             view,
           }),
           preparation: preparation
-            ? <PrepareFees compact currentPeriod={academyCurrentMonth()} period={period} preparation={preparation} />
+            ? <PrepareFees currentPeriod={academyCurrentMonth()} period={period} preparation={preparation} />
             : null,
-          rows: register.rows,
+          rows: register.rows.map((row) => ({
+            ...row,
+            comingFee: extras.comingFees.get(row.playerId) ?? null,
+            lastPayment: row.chargeId ? extras.lastPayments.get(row.chargeId) ?? null : null,
+            payable: extras.payablePlayerIds.has(row.playerId),
+          })),
           summary: register.summary,
         }}
       />
@@ -258,6 +250,7 @@ export default async function FinancialRecordsPage({
         <FinancialRecordsWorkspace
           activeView="collections"
           dayBook={{
+            currentPeriod: academyCurrentMonth(),
             events: dayBook.events.map((event) => ({
               ...event,
               paymentId: event.eventType === "payment" ? event.id : null,
@@ -284,7 +277,8 @@ export default async function FinancialRecordsPage({
   const to = isValidDateKey(toValue) ? toValue : ""
   const validDates = !from || !to || from <= to
   const eventValue = queryValue(params, "eventType")
-  const eventType = isFinanceAuditEventType(eventValue) ? eventValue : "all"
+  const eventTypes = activityEventTypesFor(eventValue)
+  const eventType = eventTypes ? eventValue : "all"
   const coachValue = queryValue(params, "coachId")
   const coachOptions = listFinanceActivityCoaches({
     coachId: identity.subjectId,
@@ -301,19 +295,28 @@ export default async function FinancialRecordsPage({
   const activity = readPage(trail, recordsUrl(view, base), (cursor) => getFinancialActivity({
     coachId: coachId === "all" ? undefined : coachId,
     cursor,
-    eventTypes: eventType === "all" ? undefined : [eventType],
+    eventTypes,
     from: validDates ? from || undefined : undefined,
     limit: ACTIVITY_PAGE_SIZE,
     query,
     to: validDates ? to || undefined : undefined,
   }, { coachId: identity.subjectId, database }))
 
+  // The free-text search is matched after the read, so counts are left out while one is typed.
+  const counts = query
+    ? null
+    : countFinancialActivity({
+      coachId: coachId === "all" ? undefined : coachId,
+      from: validDates ? from || undefined : undefined,
+      to: validDates ? to || undefined : undefined,
+    }, { coachId: identity.subjectId, database })
+
   return (
     <FinancialRecordsWorkspace
       activeView="activity"
       activity={{
         coachOptions,
-        eventTypeOptions: ACTIVITY_TYPES,
+        counts,
         exportHref: exportHref("/coach/financials/records/activity.csv", base),
         filters: {
           coachId,

@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { FormEvent } from "react"
 
 import {
@@ -21,7 +21,7 @@ import {
   resultFeedback,
   useIdempotencyKey,
 } from "../financials-client-utils"
-import styles from "../financials.module.css"
+import styles from "../fees.module.css"
 import type { PlayerFinancialLedgerView } from "../types"
 import type { SaveFeedback } from "./save-feedback"
 
@@ -36,7 +36,14 @@ type CorrectionFeedback = SaveFeedback & {
   field?: "amount" | "reason"
 }
 
-export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
+export function CorrectionsPanel({
+  ledger,
+  startCharge,
+}: {
+  ledger: PlayerFinancialLedgerView
+  /** "Correct this fee" on a fee card: start on that fee. A new object each press. */
+  startCharge?: { chargeId: string } | null
+}) {
   const router = useRouter()
   const activeCharges = ledger.charges.filter((charge) => charge.status !== "void")
   const receipts = ledger.management.receipts.filter((receipt) => (
@@ -67,6 +74,23 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
   const adjustmentId = adjustments.some(({ adjustment }) => adjustment.id === pickedAdjustmentId)
     ? pickedAdjustmentId
     : adjustments[0]?.adjustment.id ?? ""
+  const chargeRef = useRef<HTMLSelectElement>(null)
+  // A press of "Correct this fee" starts the form on that fee. The fee picker
+  // shows for these kinds only, and a void needs a fee that can be voided.
+  const [seenStart, setSeenStart] = useState<typeof startCharge>(null)
+  if (startCharge !== seenStart) {
+    setSeenStart(startCharge)
+    if (startCharge) {
+      const voidable = voidableCharges.some((charge) => charge.id === startCharge.chargeId)
+      if (!(mode === "manual_credit" || mode === "manual_debit" || (mode === "void_charge" && voidable))) {
+        setMode("manual_credit")
+      }
+      setChargeId(startCharge.chargeId)
+    }
+  }
+  useEffect(() => {
+    if (startCharge) window.requestAnimationFrame(() => chargeRef.current?.focus())
+  }, [startCharge])
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
@@ -201,91 +225,95 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
 
   if (!activeCharges.length) return null
 
+  const kinds: Array<{ disabled: boolean; label: string; value: CorrectionMode }> = [
+    { disabled: false, label: "Apply credit", value: "manual_credit" },
+    { disabled: false, label: "Apply additional charge", value: "manual_debit" },
+    { disabled: !receipts.length, label: "Reverse payment", value: "reverse_payment" },
+    { disabled: !adjustments.length, label: "Reverse adjustment", value: "reverse_adjustment" },
+    { disabled: !voidableCharges.length, label: "Void charge", value: "void_charge" },
+  ]
+
   return (
-    <details className={styles.corrections}>
-      <summary>Corrections</summary>
-      <div className={styles.correctionsBody}>
-        <p>Use corrections only when a recorded fee or payment needs to be reconciled. Nothing is deleted.</p>
-        <form autoComplete="off" onSubmit={(event) => void submit(event)}>
-          <label className={styles.field}>
-            <span>Correction</span>
-            <select
-              name="correctionType"
-              value={mode}
-              disabled={pending}
-              onChange={(event) => {
-                const nextMode = event.target.value as CorrectionMode
-                setMode(nextMode)
-                if (nextMode === "reverse_payment") setPaymentId(receipts[0]?.id ?? "")
-                if (nextMode === "reverse_adjustment") setAdjustmentId(adjustments[0]?.adjustment.id ?? "")
-                if (nextMode === "void_charge") setChargeId(voidableCharges[0]?.id ?? "")
-                markDirty()
-              }}
-            >
-              <option value="manual_credit">Apply credit</option>
-              <option value="manual_debit">Apply additional charge</option>
-              <option value="reverse_payment" disabled={!receipts.length}>Reverse payment</option>
-              <option value="reverse_adjustment" disabled={!adjustments.length}>Reverse adjustment</option>
-              <option value="void_charge" disabled={!voidableCharges.length}>Void charge</option>
+    <form autoComplete="off" onSubmit={(event) => void submit(event)}>
+      <fieldset className={styles.q}>
+        <legend>What needs correcting</legend>
+        <div className={styles.methods}>
+          {kinds.map((kind) => (
+            <label key={kind.value} data-disabled={kind.disabled || undefined}>
+              <input
+                checked={mode === kind.value}
+                disabled={pending || kind.disabled}
+                name="correctionType"
+                type="radio"
+                value={kind.value}
+                onChange={() => {
+                  setMode(kind.value)
+                  if (kind.value === "reverse_payment") setPaymentId(receipts[0]?.id ?? "")
+                  if (kind.value === "reverse_adjustment") setAdjustmentId(adjustments[0]?.adjustment.id ?? "")
+                  if (kind.value === "void_charge") setChargeId(voidableCharges[0]?.id ?? "")
+                  markDirty()
+                }}
+              />
+              {kind.label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <div className={`${styles.q} ${styles.two}`}>
+        {mode === "reverse_payment" ? (
+          <label className={styles.q}>
+            <span>Recorded payment</span>
+            <select name="paymentId" value={paymentId} disabled={pending} onChange={(event) => { setPaymentId(event.target.value); markDirty() }}>
+              {receipts.map((receipt) => (
+                <option key={receipt.id} value={receipt.id}>
+                  {formatInr(receipt.amountPaise)} · {receipt.receiptReference} · {formatDueDate(receipt.receivedOn)}
+                </option>
+              ))}
             </select>
           </label>
-
-          {mode === "reverse_payment" ? (
-            <label className={styles.field}>
-              <span>Recorded payment</span>
-              <select name="paymentId" value={paymentId} disabled={pending} onChange={(event) => { setPaymentId(event.target.value); markDirty() }}>
-                {receipts.map((receipt) => (
-                  <option key={receipt.id} value={receipt.id}>
-                    {formatInr(receipt.amountPaise)} · {receipt.receiptReference} · {formatDueDate(receipt.receivedOn)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : mode === "reverse_adjustment" ? (
-            <label className={styles.field}>
-              <span>Recorded adjustment</span>
-              <select name="adjustmentId" value={adjustmentId} disabled={pending} onChange={(event) => { setAdjustmentId(event.target.value); markDirty() }}>
-                {adjustments.map(({ adjustment, charge }) => (
-                  <option key={adjustment.id} value={adjustment.id}>
-                    {adjustment.kind.replaceAll("_", " ")} · {formatInr(adjustment.amountPaise)} · {charge.feeReference}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <label className={styles.field}>
-              <span>Charge</span>
-              <select name="chargeId" value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
-                {chargeChoices.map((charge) => (
-                  <option key={charge.id} value={charge.id}>{charge.description} · {charge.feeReference}</option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {mode === "manual_credit" || mode === "manual_debit" ? (
-            <label className={styles.field}>
-              <span>Amount</span>
-              <div className={styles.moneyInput}>
-                <span aria-hidden="true">₹</span>
-                <input name="amount" ref={amountRef} inputMode="decimal" value={amount} disabled={pending} aria-invalid={invalidField === "amount" || undefined} aria-describedby={invalidField === "amount" ? feedbackId : undefined} onChange={(event) => { setAmount(event.target.value); markDirty() }} />
-              </div>
-            </label>
-          ) : null}
-
-          <label className={styles.field}>
-            <span>Reason</span>
-            <textarea name="reason" ref={reasonRef} rows={3} value={reason} disabled={pending} aria-invalid={invalidField === "reason" || undefined} aria-describedby={invalidField === "reason" ? feedbackId : undefined} onChange={(event) => { setReason(event.target.value); markDirty() }} />
+        ) : mode === "reverse_adjustment" ? (
+          <label className={styles.q}>
+            <span>Recorded adjustment</span>
+            <select name="adjustmentId" value={adjustmentId} disabled={pending} onChange={(event) => { setAdjustmentId(event.target.value); markDirty() }}>
+              {adjustments.map(({ adjustment, charge }) => (
+                <option key={adjustment.id} value={adjustment.id}>
+                  {adjustment.kind.replaceAll("_", " ")} · {formatInr(adjustment.amountPaise)} · {charge.feeReference}
+                </option>
+              ))}
+            </select>
           </label>
+        ) : (
+          <label className={styles.q}>
+            <span>Charge</span>
+            <select ref={chargeRef} name="chargeId" value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
+              {chargeChoices.map((charge) => (
+                <option key={charge.id} value={charge.id}>{charge.description} · {charge.feeReference}</option>
+              ))}
+            </select>
+          </label>
+        )}
 
-          <div className={styles.paymentFooter}>
-            <InlineNotice action={feedback?.action} className={styles.notice} id={feedbackId} message={feedback?.message} tone={feedback?.tone} />
-            <button className={styles.correctionButton} type="submit" disabled={pending || (mode === "reverse_payment" && !paymentId) || (mode === "reverse_adjustment" && !adjustmentId) || (mode === "void_charge" && !chargeId)}>
-              {pending ? "Saving…" : feedback?.offerRetry ? "Apply correction again" : "Apply correction"}
-            </button>
-          </div>
-        </form>
+        {mode === "manual_credit" || mode === "manual_debit" ? (
+          <label className={styles.q}>
+            <span>Amount (₹)</span>
+            <input name="amount" ref={amountRef} inputMode="decimal" value={amount} disabled={pending} aria-invalid={invalidField === "amount" || undefined} aria-describedby={invalidField === "amount" ? feedbackId : undefined} onChange={(event) => { setAmount(event.target.value); markDirty() }} />
+          </label>
+        ) : null}
       </div>
-    </details>
+
+      <label className={styles.q}>
+        <span>Reason</span>
+        <textarea name="reason" ref={reasonRef} rows={3} value={reason} disabled={pending} aria-invalid={invalidField === "reason" || undefined} aria-describedby={invalidField === "reason" ? feedbackId : undefined} onChange={(event) => { setReason(event.target.value); markDirty() }} />
+      </label>
+      <p className={styles.note}>Use corrections only when a recorded fee or payment needs to be reconciled. Nothing is deleted.</p>
+
+      <InlineNotice action={feedback?.action} id={feedbackId} message={feedback?.message} reserveSpace={false} tone={feedback?.tone} />
+      <div className={styles.actions}>
+        <button className={styles.primary} type="submit" disabled={pending || (mode === "reverse_payment" && !paymentId) || (mode === "reverse_adjustment" && !adjustmentId) || (mode === "void_charge" && !chargeId)}>
+          {pending ? "Saving…" : feedback?.offerRetry ? "Apply correction again" : "Apply correction"}
+        </button>
+      </div>
+    </form>
   )
 }

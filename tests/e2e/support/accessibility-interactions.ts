@@ -108,7 +108,8 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "financial-player-open": {
-      await clickIntoRoute(page.getByRole("link", { name: /View fee record for/u }))
+      await clickFirstVisible(page.locator('ol button[aria-expanded="false"]'))
+      await clickIntoRoute(page.getByRole("link", { name: /Full fee record for/u }))
       break
     }
     case "login-error": {

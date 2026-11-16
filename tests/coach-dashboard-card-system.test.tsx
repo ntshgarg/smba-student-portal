@@ -251,7 +251,12 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain('aria-label="12 to issue: show the November fees not yet issued"')
     expect(html).toContain('href="/coach/financials/record?scope=overdue"')
     expect(html).toContain('aria-label="4 overdue: show these players"')
-    expect(html).toContain("November fees ready to issue · 2 players without a fee plan")
+    expect(html).toContain("November fees ready to issue")
+    // the three counts sit in tiles: fees to issue, late payers in red, players without a fee plan
+    // the label is the term, so the count needs no aria-label (one on a <dd> is prohibited)
+    expect(html).toContain("<dt>To issue</dt><dd>12</dd>")
+    expect(html).toMatch(/data-tone="attention"><dt>Overdue<\/dt><dd>4</)
+    expect(html).toContain("<dt>No fee plan</dt><dd>2</dd>")
     expect(html).not.toContain("31")
   })
 
@@ -279,11 +284,11 @@ describe("coach dashboard Court Operations Board", () => {
       />,
     )
 
-    expect(html).toContain("Financial records are not set up")
-    expect(html).toContain("Set up Financials")
+    expect(html).toContain("Fees aren’t tracked yet")
+    expect(html).toContain("Start tracking fees")
     expect(html).toContain('href="/coach/financials?period=2026-08"')
     expect(html).not.toContain("Record payment")
-    expect(html).not.toContain("Fee records are ready to review")
+    expect(html).not.toContain("Nothing outstanding")
   })
 
   it("warns the head coach about join requests about to be removed, and points to onboarding", () => {
