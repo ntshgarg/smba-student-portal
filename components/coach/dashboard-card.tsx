@@ -162,3 +162,46 @@ export function CoachDashboardAction({
     </Link>
   )
 }
+
+export type CoachDashboardTile = { attention?: boolean; count: number; label: string }
+
+/**
+ * A card's figures (Financials and Sessions, which share a row): the summary,
+ * three counts as tiles -- red when one needs the coach, quiet at zero -- and
+ * an optional note, with the card's ways in pinned to the bottom so the pair
+ * matches in height.
+ */
+export function CoachDashboardFigures({
+  actions,
+  label,
+  note,
+  summary,
+  tiles,
+}: {
+  actions: ReactNode
+  label: string
+  note?: ReactNode
+  summary: ReactNode
+  tiles: CoachDashboardTile[]
+}) {
+  return (
+    <div className={styles.figuresLayout}>
+      <div className={styles.figures}>
+        {summary}
+        <dl className={styles.tiles} aria-label={label}>
+          {tiles.map((tile) => (
+            <div
+              key={tile.label}
+              data-tone={tile.count === 0 ? "zero" : tile.attention ? "attention" : undefined}
+            >
+              <dt>{tile.label}</dt>
+              <dd>{tile.count}</dd>
+            </div>
+          ))}
+        </dl>
+        {note}
+      </div>
+      {actions}
+    </div>
+  )
+}

@@ -28,6 +28,7 @@ import {
   rosterProgressForOccurrences,
 } from "@/lib/attendance/recording-workspace"
 import { academyNow } from "@/lib/clock"
+import { shiftDateKey, weekdayForDateKey } from "@/lib/date-keys"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   getCoachSessionSnapshot,
@@ -53,6 +54,8 @@ import {
   formatSessionLabel,
 } from "@/lib/format"
 import { currentGreeting } from "@/lib/greeting"
+import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
+import { scheduleIsRunning } from "@/lib/sessions/term"
 import {
   listAcademyHolidaysInWindow,
   listSessionAttendanceRecordsForOccurrences,
@@ -153,20 +156,31 @@ export default async function CoachDashboardPage({
   const todaySessions = scheduledSessions.filter((occurrence) => (
     occurrence.occurrenceDate === today
   ))
-  const nextScheduledSession = scheduledSessions.find((occurrence) => (
-    occurrence.occurrenceDate >= today
-  ))
-  const nextScheduledSeries = nextScheduledSession
-    ? series.find((item) => item.id === nextScheduledSession.seriesId)
+  // The Sessions card: the next session to start, from now, with the schedule
+  // it belongs to -- named by its venue today, by its day otherwise.
+  const upcomingSession = scheduledSessions
+    .filter((occurrence) => occurrenceIsUpcoming(occurrence, now))
+    .reduce<typeof scheduledSessions[number] | null>((first, occurrence) => (
+      !first || occurrence.startsAt < first.startsAt ? occurrence : first
+    ), null)
+  const upcomingSeries = upcomingSession
+    ? series.find((item) => item.id === upcomingSession.seriesId)
     : null
-  const nextSessionLabel = nextScheduledSession && nextScheduledSeries
-    ? `${formatDateKey(nextScheduledSession.occurrenceDate)} · ${formatSessionLabel({
-        programme: nextScheduledSeries.programme,
-        batch: nextScheduledSeries.batch,
-        startTime: academyTimeInputValue(nextScheduledSession.startsAt),
-        durationMinutes: nextScheduledSession.durationMinutes,
-      })}`
+  const sessionsCardNext = upcomingSession && upcomingSeries
+    ? {
+        time: formatAcademyTime(upcomingSession.startsAt),
+        label: upcomingSession.occurrenceDate === today
+          ? `${upcomingSeries.programme} · ${upcomingSeries.batch} · ${upcomingSession.venue}`
+          : `${formatDateKey(upcomingSession.occurrenceDate, { month: "short", weekday: "short" })} · ${upcomingSeries.programme} · ${upcomingSeries.batch}`,
+      }
     : null
+  const weekStart = shiftDateKey(today, -((weekdayForDateKey(today) + 6) % 7))
+  const weekEnd = shiftDateKey(weekStart, 6)
+  const cancelledThisWeek = sessionSnapshot.sessionOccurrences.filter((occurrence) => (
+    occurrence.status === "cancelled"
+    && occurrence.occurrenceDate >= weekStart
+    && occurrence.occurrenceDate <= weekEnd
+  )).length
   const nextOccurrence = resolveNextScheduledOccurrence({
     occurrences: todaySessions,
     referenceInstant: now,
@@ -280,7 +294,10 @@ export default async function CoachDashboardPage({
           setupRequiredCount={finance.setupRequiredCount}
         />
         <SessionsCard
-          nextSessionLabel={nextSessionLabel}
+          cancelledThisWeek={cancelledThisWeek}
+          leftToday={todaySessions.filter((occurrence) => occurrenceIsUpcoming(occurrence, now)).length}
+          next={sessionsCardNext}
+          runningSchedules={series.filter((item) => scheduleIsRunning(item, today)).length}
           todaySessionCount={todaySessions.length}
         />
         <AssessmentsCard
