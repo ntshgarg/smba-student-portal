@@ -173,7 +173,8 @@ describe("the day list", () => {
     expect(markup).toContain(">Later today<")
     expect(markup).toMatch(/data-tone="off">Cancelled</u)
     // The month opens in place from the week strip rather than a native picker.
-    expect(markup).toMatch(/<button[^>]*aria-expanded="false"[^>]*>.*?Pick a date/u)
+    expect(markup).toMatch(/<button type="button" class="[^"]*">(?:(?!<\/button>).)*<span>Pick a date<\/span><\/button>/u)
+    expect(markup).not.toContain('name="attendanceDate"')
   })
 })
 

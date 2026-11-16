@@ -82,6 +82,16 @@
   color: var(--white);
 }
 
+/* today, when it is not the chosen day: its date in red, as in the month */
+.day[data-today]:not([aria-current]) strong {
+  color: var(--red);
+}
+
+.today:disabled {
+  color: var(--steel);
+  cursor: default;
+}
+
 .pick {
   position: relative;
   gap: var(--space-tight);
@@ -536,6 +546,23 @@
   .pick {
     width: 44px;
     padding: 0;
+  }
+
+  /* with a Today button there is no room for the days beside four controls:
+     the days take the first line, the controls share the second */
+  .strip:has(.today) {
+    flex-wrap: wrap;
+  }
+
+  .strip:has(.today) .days {
+    flex-basis: 100%;
+    order: -1;
+  }
+
+  .pick.today {
+    width: auto;
+    flex: 1;
+    padding: 0 10px;
   }
 
   .pick span {

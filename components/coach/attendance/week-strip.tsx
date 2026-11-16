@@ -19,17 +19,22 @@ import styles from "./mark.module.css"
  *
  * The Sessions calendar passes `onPick`: there "Pick a date" opens its own
  * month, which shows each day's sessions and holidays, in place of the browser's.
+ * It also passes `today`, which marks today in the strip and adds a "Today"
+ * button for getting back after moving weeks.
  */
 export function WeekStrip({
   onChoose,
   onPick,
-  pickOpen = false,
+  pickButtonRef,
   selectedDate,
+  today,
 }: {
   onChoose: (dateKey: string) => void
   onPick?: () => void
-  pickOpen?: boolean
+  /** Where the calendar returns focus when its month closes without a pick. */
+  pickButtonRef?: React.Ref<HTMLButtonElement>
   selectedDate: string
+  today?: string
 }) {
   // Weeks away from the selected day's own week.
   const [weekOffset, setWeekOffset] = useState(0)
@@ -61,7 +66,8 @@ export function WeekStrip({
               type="button"
               className={styles.day}
               aria-current={dateKey === selectedDate ? "date" : undefined}
-              aria-label={formatDateKey(dateKey, { year: "numeric" })}
+              aria-label={`${formatDateKey(dateKey, { year: "numeric" })}${dateKey === today ? ", today" : ""}`}
+              data-today={dateKey === today ? "" : undefined}
               onClick={() => choose(dateKey)}
             >
               <span>{formatDateKey(dateKey, { day: undefined, month: undefined, weekday: "short" })}</span>
@@ -78,8 +84,18 @@ export function WeekStrip({
       >
         <ChevronRight aria-hidden="true" />
       </button>
+      {today ? (
+        <button
+          type="button"
+          className={`${styles.pick} ${styles.today}`}
+          disabled={selectedDate === today && weekOffset === 0}
+          onClick={() => choose(today)}
+        >
+          Today
+        </button>
+      ) : null}
       {onPick ? (
-        <button type="button" className={styles.pick} aria-expanded={pickOpen} onClick={onPick}>
+        <button ref={pickButtonRef} type="button" className={styles.pick} onClick={onPick}>
           <CalendarDays aria-hidden="true" />
           <span>Pick a date</span>
         </button>

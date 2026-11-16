@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
@@ -27,7 +27,7 @@ import {
   playerWasEnrolledForOccurrence,
 } from "@/lib/sessions/domain"
 import { cancellationLabel } from "@/lib/sessions/cancellation"
-import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
+import { occurrenceHasEnded, occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
 import { isValidDateKey } from "@/lib/attendance/domain"
 import {
   academyTimeInputValue,
@@ -76,9 +76,10 @@ function shiftMonth(month: string, months: number) {
 /**
  * The one tag a day's row carries. A cancelled session says why, as the Mark
  * tab does; a running one says only where it stands against the clock -- the
- * calendar reads no attendance, so it never claims a register is done.
+ * calendar reads no attendance, so "Done" means the session is over, never
+ * that its register is.
  */
-function occurrenceTag(
+export function occurrenceTag(
   occurrence: TrainingSessionOccurrence,
   cancelledLabel: string | null,
   today: string,
@@ -87,7 +88,8 @@ function occurrenceTag(
   if (cancelledLabel) {
     return { label: cancelledLabel, tone: cancelledLabel === "Moved" ? "moved" : "off" }
   }
-  if (!occurrenceIsUpcoming(occurrence, referenceInstant)) return { label: "Done", tone: "done" }
+  if (occurrenceHasEnded(occurrence, referenceInstant)) return { label: "Done", tone: "done" }
+  if (!occurrenceIsUpcoming(occurrence, referenceInstant)) return { label: "In progress", tone: undefined }
   return { label: occurrence.occurrenceDate === today ? "Later today" : "Upcoming", tone: undefined }
 }
 
@@ -199,8 +201,14 @@ export function SessionCalendar({
   const holidayByDate = new Map(academyHolidays.map((holiday) => [holiday.dateKey, holiday]))
   const selectedHoliday = holidayByDate.get(selectedDate) ?? null
 
-  // Mark holiday opens in place, above the day, in place of a dialog.
+  // Mark holiday opens in place, above the day.
   const [holidayComposerOpen, setHolidayComposerOpen] = useState(false)
+  // Where focus goes once the holiday panel closes: back to "Mark holiday", or
+  // to the notice saying what a saved closure did. Its button is gone while the
+  // panel is open, so without this focus would fall to the top of the page.
+  const holidayFocusAfterClose = useRef<"button" | "notice" | null>(null)
+  const markHolidayRef = useRef<HTMLButtonElement>(null)
+  const holidayNoticeRef = useRef<HTMLDivElement>(null)
   // The dates being reopened, not a flag: the coach can move to another closed
   // day while a removal is in flight and remove that one too. Server actions
   // run one after another, so the second waits for the first.
@@ -226,6 +234,9 @@ export function SessionCalendar({
   const dayHeadingRef = useRef<HTMLHeadingElement>(null)
   const shouldFocusMonth = useRef(false)
   const monthHeadingRef = useRef<HTMLHeadingElement>(null)
+  // Closing the month without picking a day hands focus back to "Pick a date".
+  const shouldFocusPick = useRef(false)
+  const pickButtonRef = useRef<HTMLButtonElement>(null)
   const expandedOccurrence = expandedOccurrenceId
     ? dayOccurrences.find((occurrence) => occurrence.id === expandedOccurrenceId) ?? null
     : null
@@ -265,11 +276,24 @@ export function SessionCalendar({
     return () => window.clearInterval(timer)
   }, [initialReferenceInstant])
 
+  // On the day's change, or on the month closing over the day already shown.
   useEffect(() => {
-    if (!shouldFocusDay.current) return
-    shouldFocusDay.current = false
-    dayHeadingRef.current?.focus({ preventScroll: true })
-  }, [selectedDate])
+    if (monthOpen) return
+    if (shouldFocusDay.current) {
+      shouldFocusDay.current = false
+      dayHeadingRef.current?.focus({ preventScroll: true })
+    } else if (shouldFocusPick.current) {
+      shouldFocusPick.current = false
+      pickButtonRef.current?.focus({ preventScroll: true })
+    }
+  }, [selectedDate, monthOpen])
+
+  useEffect(() => {
+    if (holidayComposerOpen || !holidayFocusAfterClose.current) return
+    const target = holidayFocusAfterClose.current === "notice" ? holidayNoticeRef.current : markHolidayRef.current
+    holidayFocusAfterClose.current = null
+    target?.focus({ preventScroll: true })
+  }, [holidayComposerOpen])
 
   /*
    * Opening the month replaces the strip that held "Pick a date", so focus is
@@ -296,7 +320,10 @@ export function SessionCalendar({
   function selectDate(dateKey: string, openDay: boolean) {
     if (!isValidDateKey(dateKey)) return
     if (dateKey === selectedDate) {
-      if (openDay) setMonthOpen(false)
+      if (openDay) {
+        shouldFocusDay.current = true
+        setMonthOpen(false)
+      }
       return
     }
     // Stay on the day until a cancel or move has its answer, so its outcome is seen.
@@ -333,7 +360,15 @@ export function SessionCalendar({
   return (
     <SessionsShell activeTab="calendar">
       {monthOpen ? (
-        <section className={styles.month} aria-labelledby="coach-calendar-month-title">
+        <section
+          className={styles.month}
+          aria-labelledby="coach-calendar-month-title"
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return
+            shouldFocusPick.current = true
+            setMonthOpen(false)
+          }}
+        >
           <div className={styles.monthHead}>
             <h2 id="coach-calendar-month-title" ref={monthHeadingRef} tabIndex={-1}>{formatDateKey(monthWindow.from, {
               month: "long",
@@ -351,6 +386,10 @@ export function SessionCalendar({
                 const month = shiftMonth(selectedMonth, 1)
                 selectDate(month === today.slice(0, 7) ? today : `${month}-01`, false)
               }}><ChevronRight aria-hidden="true" /></button>
+              <button type="button" aria-label="Close the month" onClick={() => {
+                shouldFocusPick.current = true
+                setMonthOpen(false)
+              }}><X aria-hidden="true" /></button>
             </div>
           </div>
           <MonthGrid
@@ -369,22 +408,31 @@ export function SessionCalendar({
             shouldFocusMonth.current = true
             setMonthOpen(true)
           }}
-          pickOpen={monthOpen}
+          pickButtonRef={pickButtonRef}
           selectedDate={selectedDate}
+          today={today}
         />
       )}
 
-      <InlineNotice
-        action={holidayFeedback?.action}
-        message={holidayFeedback?.message}
-        tone={holidayFeedback?.tone}
-        reserveSpace={false}
-      />
+      <div ref={holidayNoticeRef} tabIndex={-1}>
+        <InlineNotice
+          action={holidayFeedback?.action}
+          message={holidayFeedback?.message}
+          tone={holidayFeedback?.tone}
+          reserveSpace={false}
+        />
+      </div>
 
       {holidayComposerOpen ? (
         <HolidayComposer
-          onClose={() => setHolidayComposerOpen(false)}
-          onNotice={setHolidayFeedback}
+          onClose={() => {
+            holidayFocusAfterClose.current ??= "button"
+            setHolidayComposerOpen(false)
+          }}
+          onNotice={(notice) => {
+            holidayFocusAfterClose.current = "notice"
+            setHolidayFeedback(notice)
+          }}
           selectedDate={selectedDate}
           today={today}
           viewMonth={selectedMonth}
@@ -399,7 +447,7 @@ export function SessionCalendar({
           <p>
             <span>{dayOccurrenceSummary(scheduledDayCount, cancelledDayCount)}</span>
             {holidayComposerOpen ? null : (
-              <button className={styles.link} type="button" onClick={() => setHolidayComposerOpen(true)}>
+              <button ref={markHolidayRef} className={styles.link} type="button" onClick={() => setHolidayComposerOpen(true)}>
                 Mark holiday
               </button>
             )}
@@ -474,7 +522,6 @@ export function SessionCalendar({
               if (!series) return null
               const roster = occurrenceRoster(occurrence)
               const isExpanded = expandedOccurrenceId === occurrence.id
-              const fullSessionLabel = occurrenceLabel(series, occurrence)
               const playerCountLabel = `${roster.length} ${roster.length === 1 ? "player" : "players"}`
               const cancelledLabel = occurrence.status !== "cancelled"
                 ? null
@@ -489,7 +536,6 @@ export function SessionCalendar({
                     className={styles.rowHead}
                     type="button"
                     aria-expanded={isExpanded}
-                    aria-label={`${fullSessionLabel}. ${tag.label}. ${playerCountLabel}.`}
                     onClick={() => openOccurrence(occurrence)}
                   >
                     <time className={styles.time} dateTime={occurrence.startsAt}>{formatAcademyTime(occurrence.startsAt)}</time>
