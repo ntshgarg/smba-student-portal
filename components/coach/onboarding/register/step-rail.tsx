@@ -1,6 +1,7 @@
 "use client"
 
 import { Check } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
 import type { PlayerOnboardingStage } from "@/lib/coach/onboarding"
 
@@ -22,22 +23,42 @@ import { STAGES } from "./shared"
  */
 export function StepRail({
   current,
+  currentId,
   onSelect,
   reachedStage,
   staff = false,
 }: {
   current: PlayerOnboardingStage
+  /** Where focus lands when the record opens or the step changes. */
+  currentId?: string
   onSelect?: (stage: PlayerOnboardingStage) => void
   reachedStage: PlayerOnboardingStage
   staff?: boolean
 }) {
   const currentIndex = STAGES.findIndex((stage) => stage.key === current)
   const reachedIndex = STAGES.findIndex((stage) => stage.key === reachedStage)
+  const railRef = useRef<HTMLOListElement>(null)
+  const [scrolls, setScrolls] = useState(false)
+
+  // Only a strip that scrolls sideways is a tab stop: a keyboard has to reach
+  // the tabs it hides, and anywhere wider it would be a stop with nothing in it.
+  useEffect(() => {
+    const rail = railRef.current
+    if (!rail) return
+    const measure = () => setScrolls(rail.scrollWidth > rail.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(rail)
+    return () => observer.disconnect()
+  }, [])
 
   return (
-    // Focusable because on a narrow phone the strip scrolls sideways, and a
-    // keyboard has to be able to reach the tabs it hides.
-    <ol className={styles.stepRail} aria-label="Academy onboarding progress" tabIndex={0}>
+    <ol
+      ref={railRef}
+      className={styles.stepRail}
+      aria-label="Academy onboarding progress"
+      tabIndex={scrolls ? 0 : undefined}
+    >
       {(staff ? STAGES.slice(0, 1) : STAGES).map((stage, index) => {
         const complete = index < reachedIndex
         const label = <>{complete ? <Check aria-hidden="true" /> : null}{stage.tabLabel}</>
@@ -60,6 +81,8 @@ export function StepRail({
               */
             className={index === currentIndex ? styles.currentStep : complete ? styles.completeStep : undefined}
             key={stage.key}
+            id={index === currentIndex ? currentId : undefined}
+            tabIndex={index === currentIndex && currentId ? -1 : undefined}
             aria-current={index === currentIndex ? "step" : undefined}
           >
             {navigable ? (

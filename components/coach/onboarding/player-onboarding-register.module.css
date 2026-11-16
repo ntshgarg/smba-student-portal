@@ -354,6 +354,12 @@
   outline-offset: -4px;
 }
 
+/* The current tab sits on the paper, so its ring is navy. */
+.stepRail li:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: -4px;
+}
+
 .editorBody {
   display: grid;
   gap: 18px;

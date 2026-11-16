@@ -14,9 +14,9 @@ import { SessionStep } from "./session-step"
 import { StepRail } from "./step-rail"
 
 /**
- * The record's name for screen readers and the focus target when it opens. The
- * band already shows who it is and the open tab shows the step, so nothing here
- * is painted.
+ * The record's name for screen readers. The band already shows who it is and
+ * the open tab shows the step, so nothing here is painted; focus goes to that
+ * tab instead, where a keyboard user can see it.
  */
 function editorTitle(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
   const firstName = item.fullName.split(/\s+/u)[0]
@@ -88,7 +88,7 @@ export function OnboardingEditor({
   function selectStage(stage: PlayerOnboardingStage) {
     if (stage === viewStage || !confirmNavigation()) return
     setViewStage(stage)
-    document.getElementById(`onboarding-editor-title-${item.id}`)?.focus({ preventScroll: false })
+    window.requestAnimationFrame(() => document.getElementById(`onboarding-current-step-${item.id}`)?.focus())
   }
 
   return (
@@ -98,11 +98,12 @@ export function OnboardingEditor({
       role="region"
       aria-labelledby={`onboarding-editor-title-${item.id}`}
     >
-      <h3 className="sr-only" id={`onboarding-editor-title-${item.id}`} tabIndex={-1}>
+      <h3 className="sr-only" id={`onboarding-editor-title-${item.id}`}>
         {editorTitle(item, viewStage)}
       </h3>
       <StepRail
         current={viewStage}
+        currentId={`onboarding-current-step-${item.id}`}
         onSelect={selectStage}
         reachedStage={item.stage}
         staff={item.requestedRole === "coach"}
