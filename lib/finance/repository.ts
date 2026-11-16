@@ -856,7 +856,7 @@ function loadLatestIssuedMonthlyPeriods(database: Executor, playerIds: string[])
   return periods
 }
 
-function loadRecordedWithdrawalChargeIds(database: Executor, chargeIds: string[]) {
+export function loadRecordedWithdrawalChargeIds(database: Executor, chargeIds: string[]) {
   const marked = new Set<string>()
   if (!chargeIds.length) return marked
   database.select({ chargeId: paymentAllocations.chargeId })

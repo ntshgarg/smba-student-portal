@@ -713,6 +713,97 @@ describe("Financials V2 service", () => {
     )).get()?.lastValue).toBe(2)
   })
 
+  it("keeps a fee's credits while a withdrawal refund stands on it", () => {
+    const playerId = createPlayer("Refunded Credits")
+    const chargeId = createCharge({
+      id: "phase2-refunded-credit-charge",
+      playerId,
+      amountPaise: 350_000,
+      dueDate: "2026-08-05",
+      billingPeriod: "2026-08",
+      feeReference: "SMBA-3H5K7M9P",
+    })
+    const concession = finance.createConcession({
+      playerId,
+      mode: "one_off",
+      valueKind: "fixed",
+      value: 50_000,
+      reason: "Approved one-time fee concession",
+      mutationId: mutationId(90),
+    }, { coachId, createId: ids, database, now })
+    const applied = finance.applyConcession({
+      concessionId: concession.concession.id,
+      chargeId,
+      expectedConcessionRevision: 0,
+      expectedChargeRevision: 0,
+      mutationId: mutationId(91),
+    }, { coachId, createId: ids, database, now })
+    finance.applyChargeAdjustment({
+      chargeId,
+      kind: "manual_credit",
+      amountPaise: 20_000,
+      reason: "Missed sessions credit",
+      idempotencyKey: "phase2-refunded-credit",
+    }, { coachId, createId: ids, database, now })
+    const credit = database.select().from(schema.chargeAdjustments).where(and(
+      eq(schema.chargeAdjustments.chargeId, chargeId),
+      eq(schema.chargeAdjustments.kind, "manual_credit"),
+    )).get()!
+    const payment = finance.recordAllocatedPayment({
+      playerId,
+      amountPaise: 280_000,
+      receivedOn: "2026-08-05",
+      method: "bank_transfer",
+      allocations: [{ chargeId, amountPaise: 280_000, expectedChargeRevision: 2 }],
+      mutationId: mutationId(92),
+    }, { coachId, createId: ids, database, now })
+    const preview = finance.previewRefundAllocations({
+      paymentId: payment.receipt.id,
+      expectedPaymentRevision: 0,
+      amountPaise: 50_000,
+      withdrawalEffectiveOn: "2026-08-15",
+    }, { coachId, database, now })
+    const refunded = finance.recordRefund({
+      paymentId: payment.receipt.id,
+      expectedPaymentRevision: 0,
+      expectedChargeRevision: preview.allocations[0]!.expectedChargeRevision,
+      expectedAgreementRevision: preview.allocations[0]!.expectedAgreementRevision,
+      amountPaise: 50_000,
+      withdrawalEffectiveOn: "2026-08-15",
+      refundedOn: "2026-08-16",
+      method: "bank_transfer",
+      allocations: preview.allocations.map(({ paymentAllocationId, amountPaise }) => ({
+        paymentAllocationId,
+        amountPaise,
+      })),
+      mutationId: mutationId(93),
+    }, { coachId, createId: ids, database, now })
+
+    // Undoing either credit would leave August owing on a month the player left.
+    expect(() => finance.reverseConcessionApplication({
+      applicationId: applied.applicationId,
+      reason: "Concession entered in error",
+      mutationId: mutationId(94),
+    }, { coachId, createId: ids, database, now })).toThrow("Reverse the withdrawal Refund")
+    expect(() => finance.reverseChargeAdjustment({
+      adjustmentId: credit.id,
+      reason: "Credit entered in error",
+      idempotencyKey: "phase2-refunded-credit-reversal",
+    }, { coachId, createId: ids, database, now })).toThrow("Reverse the withdrawal Refund")
+
+    finance.reverseRefund({
+      refundId: refunded.refund.id,
+      expectedRefundRevision: 0,
+      reason: "Refund was entered against the wrong receipt",
+      mutationId: mutationId(95),
+    }, { coachId, createId: ids, database, now })
+    expect(finance.reverseChargeAdjustment({
+      adjustmentId: credit.id,
+      reason: "Credit entered in error",
+      idempotencyKey: "phase2-refunded-credit-reversal",
+    }, { coachId, createId: ids, database, now })).toMatchObject({ id: chargeId })
+  })
+
   it("rejects refunds for registration, partially paid months, and non-final monthly fees", () => {
     const refundsBefore = database.select().from(schema.refunds).all().length
     const withdrawalCreditsBefore = database.select().from(schema.chargeAdjustments).where(eq(

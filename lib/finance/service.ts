@@ -68,6 +68,7 @@ import {
   loadChargeViews,
   loadPeriodAssignmentIndex,
   loadPlayerFeeRecord,
+  loadRecordedWithdrawalChargeIds,
   planRestoreAfterWithdrawalReversal,
   playerTrainingHasEnded,
   readActiveFeeAgreement,
@@ -3079,6 +3080,17 @@ function withdrawalRefundablePaymentAllocations(
 
 // Head coach, 13 Nov 2026: a withdrawal refund ends the fee plan, so it is
 // recorded only after the player's training has ended in Members.
+/**
+ * A withdrawal refund was capped on the fee as it stood, credits included.
+ * Taking a credit away underneath it would leave a balance due on a month the
+ * player has left, so the refund is reversed first -- as for a receipt.
+ */
+function requireNoWithdrawalRefund(database: SmbaDatabaseExecutor, chargeId: string) {
+  if (loadRecordedWithdrawalChargeIds(database, [chargeId]).size) {
+    financeError("CONFLICT", "Reverse the withdrawal Refund on this fee before removing its credit.")
+  }
+}
+
 function requireTrainingEnded(database: SmbaDatabaseExecutor, playerId: string, now: Date) {
   if (!playerTrainingHasEnded(database, playerId, getAcademyDateKey(now))) {
     financeError(
@@ -4176,6 +4188,7 @@ export function reverseConcessionApplication(
     if (!targetConcession) throw new Error("The Concession is unavailable.")
     requireActiveFinanceTarget(tx, targetConcession.playerId)
     if (application.reversedAt) financeError("CONFLICT", "Concession application is already reversed.")
+    requireNoWithdrawalRefund(tx, application.chargeId)
     const applicationUpdate = tx.update(concessionApplications).set({
       reversedByAccountId: coachId,
       reversedAt: now,
@@ -4481,6 +4494,7 @@ export function reverseChargeAdjustment(
     if (!targetCharge) throw new Error("The adjusted Charge is unavailable.")
     requireActiveFinanceTarget(tx, targetCharge.playerAccountId)
     if (adjustment.reversedAt) financeError("CONFLICT", "Adjustment is already reversed.")
+    if (adjustment.kind === "manual_credit") requireNoWithdrawalRefund(tx, adjustment.chargeId)
     if (adjustment.kind === "manual_debit") {
       const charge = loadChargeView(tx, adjustment.chargeId, now)
       if (!charge) throw new Error("The adjusted Charge is unavailable.")
