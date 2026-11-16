@@ -2,15 +2,12 @@ import type {
   AnnouncementChannel,
   AnnouncementStatus,
   CoachAnnouncement,
-  CoachAnnouncementArchiveItem,
 } from "@/lib/announcements/contracts"
 
 export type {
   AnnouncementChannel,
   AnnouncementStatus,
 }
-
-export type CoachAnnouncementSummary = CoachAnnouncementArchiveItem
 
 export type CoachAnnouncementDetail = CoachAnnouncement
 

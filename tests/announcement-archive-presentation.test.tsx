@@ -1,12 +1,17 @@
 import { renderToStaticMarkup } from "react-dom/server"
 
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+// Each row holds its Pin to top and Withdraw, mounted while closed; they call
+// these server actions and refresh through the router, neither of which runs here.
+vi.mock("@/app/coach/announcements/actions", () => ({}))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }))
 
 import {
   PublishedAnnouncementArchive,
   type AnnouncementArchiveQuery,
 } from "@/components/coach/announcements/announcement-archive"
-import type { CoachAnnouncementSummary } from "@/components/coach/announcements/contracts"
+import type { CoachAnnouncementDetail } from "@/components/coach/announcements/contracts"
 
 const query: AnnouncementArchiveQuery = {
   channel: "all",
@@ -15,14 +20,15 @@ const query: AnnouncementArchiveQuery = {
   status: "all",
 }
 
-const announcement: CoachAnnouncementSummary = {
+// The list opens a row in place to its whole message, so it is handed each notice in full.
+const announcement: CoachAnnouncementDetail = {
   audience: "everyone",
   channels: ["homepage"],
+  content: "The academy will be closed on Monday.",
   expiresOn: null,
   id: "announcement-1",
   pinned: false,
   presentationRevision: 1,
-  preview: "The academy will be closed on Monday.",
   publishedAt: "2026-08-09T04:30:00.000Z",
   publishedByAccountId: "coach-1",
   status: "active",
@@ -71,7 +77,7 @@ describe("Published Announcement archive presentation", () => {
 
     expect(populatedHtml).toContain('aria-label="Choose announcement month"')
     expect(populatedHtml).toContain('id="announcement-search"')
-    expect(populatedHtml).toContain("Notice board history")
+    expect(populatedHtml).toContain('<h2 id="announcement-archive-title">August 2026</h2>')
     expect(populatedHtml).toContain("Academy holiday")
     expect(filteredHtml).toContain("No matching announcements.")
     expect(filteredHtml).toContain("Clear search and filters")
@@ -79,7 +85,7 @@ describe("Published Announcement archive presentation", () => {
   })
 
   it("lists live notices from earlier months on the current month, so the dashboard count is all here", () => {
-    const standing: CoachAnnouncementSummary = {
+    const standing: CoachAnnouncementDetail = {
       ...announcement,
       id: "announcement-0",
       pinned: true,
@@ -117,15 +123,18 @@ describe("Published Announcement archive presentation", () => {
   })
 
   it("does not mark a withdrawn notice as pinned", () => {
-    const html = renderToStaticMarkup(
+    const render = (status: CoachAnnouncementDetail["status"]) => renderToStaticMarkup(
       <PublishedAnnouncementArchive
-        announcements={[{ ...announcement, pinned: true, status: "withdrawn" }]}
+        announcements={[{ ...announcement, pinned: true, status }]}
         currentMonth="2026-08"
         hasPublishedAnnouncements
         query={query}
       />,
     )
 
-    expect(html).not.toContain("Pinned announcement")
+    // The row's quiet state word: Pinned only while the notice is live.
+    expect(render("active")).toContain(">Pinned<")
+    expect(render("withdrawn")).not.toContain(">Pinned<")
+    expect(render("withdrawn")).toContain(">Withdrawn<")
   })
 })

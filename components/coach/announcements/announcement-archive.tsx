@@ -1,23 +1,19 @@
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  Megaphone,
-  Pin,
-  Search,
-} from "lucide-react"
+"use client"
+
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
-
-import { formatAcademyDate } from "@/lib/format"
+import { useEffect, useRef, useState } from "react"
 
 import {
-  announcementChannelLabel,
-  announcementStatusLabel,
-  type AnnouncementChannel,
-  type AnnouncementStatus,
-  type CoachAnnouncementSummary,
+  AnnouncementBody,
+  lastDayLabel,
+  shortDayLabel,
+  whereItShows,
+} from "./announcement-detail"
+import type {
+  AnnouncementChannel,
+  AnnouncementStatus,
+  CoachAnnouncementDetail,
 } from "./contracts"
 import styles from "./announcements.module.css"
 
@@ -57,12 +53,12 @@ function archiveHref(
   return `/coach/announcements?${parameters.toString()}`
 }
 
-function detailHref(id: string, query: AnnouncementArchiveQuery) {
-  const parameters = new URLSearchParams({ month: query.month })
-  if (query.query?.trim()) parameters.set("q", query.query.trim())
-  if (query.status && query.status !== "all") parameters.set("status", query.status)
-  if (query.channel && query.channel !== "all") parameters.set("channel", query.channel)
-  return `/coach/announcements/${encodeURIComponent(id)}?${parameters.toString()}`
+/** Pinned and Expired are quiet words; only a withdrawal is marked. */
+function rowState(announcement: CoachAnnouncementDetail) {
+  if (announcement.status === "withdrawn") return <span className={styles.tag}>Withdrawn</span>
+  if (announcement.status === "expired") return "Expired"
+  // Pinning only orders live notices.
+  return announcement.pinned ? "Pinned" : null
 }
 
 export function PublishedAnnouncementArchive({
@@ -73,197 +69,221 @@ export function PublishedAnnouncementArchive({
   query,
   stillShowing = [],
 }: {
-  announcements: CoachAnnouncementSummary[]
+  announcements: CoachAnnouncementDetail[]
   currentMonth: string
   /** The month of the first announcement ever published; nothing exists before it. */
   firstMonth?: string | null
   hasPublishedAnnouncements: boolean
   query: AnnouncementArchiveQuery
   /** Live notices published before this month, shown at the top of the current month. */
-  stillShowing?: CoachAnnouncementSummary[]
+  stillShowing?: CoachAnnouncementDetail[]
 }) {
   const monthLabel = formatMonth(query.month)
   const nextDisabled = query.month >= currentMonth
   const previousDisabled = firstMonth !== null && query.month <= firstMonth
   const filtersActive = query.status !== "all" || query.channel !== "all"
+  const [filtersOpen, setFiltersOpen] = useState(filtersActive)
+  // One announcement open at a time, in place.
+  const [openId, setOpenId] = useState<string | null>(null)
   // Live notices from earlier months lead the current month, as the dashboard counts them.
   const rows = [...stillShowing, ...announcements]
+  const panelRef = useRef<HTMLElement>(null)
+  // What the last pin or withdrawal did, said only once the refresh drops its row.
+  const [lastOutcome, setLastOutcome] = useState<{ id: string; message: string } | null>(null)
+  const listed = (id: string | null) => rows.some((row) => row.id === id)
+  const outcome = lastOutcome && !listed(lastOutcome.id) ? lastOutcome.message : ""
+  const openRowGone = openId !== null && !listed(openId)
+
+  // A status filter or the earlier-month list can drop the open row once it is
+  // withdrawn or unpinned; keep focus in the list rather than on the page.
+  useEffect(() => {
+    if (openRowGone) panelRef.current?.focus()
+  }, [openRowGone])
 
   return (
-    <div className={`${styles.workspace} page-shell`}>
-      <div className={styles.backRow}>
+    <div className={`${styles.page} page-shell`}>
+      <nav className={styles.back} aria-label="Announcements navigation">
         <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
+      </nav>
+
+      <div className={styles.titleRow}>
+        <h1 className={styles.title}>Announcements</h1>
+        {hasPublishedAnnouncements ? (
+          <Link className={styles.primary} href="/coach/announcements/new">New announcement</Link>
+        ) : null}
       </div>
 
-      <header className={styles.archiveHeader}>
-        <div>
-          <span className="eyebrow">Announcements</span>
-          <h1>Published announcements</h1>
-          <p>Review the notices already shared with the academy.</p>
-        </div>
-
-        {hasPublishedAnnouncements ? (
-          <div className={styles.monthControl} role="group" aria-label="Choose announcement month">
-            {previousDisabled ? (
-              <span className={styles.disabledMonthControl} aria-hidden="true"><ChevronLeft /></span>
-            ) : (
-              <Link
-                href={archiveHref(query, { month: shiftMonth(query.month, -1) })}
-                aria-label={`Show ${formatMonth(shiftMonth(query.month, -1))}`}
-              >
-                <ChevronLeft aria-hidden="true" />
-              </Link>
-            )}
-            <div>
-              <span>Publication month</span>
-              <strong>{monthLabel}</strong>
-            </div>
-            {nextDisabled ? (
-              <span className={styles.disabledMonthControl} aria-hidden="true"><ChevronRight /></span>
-            ) : (
-              <Link
-                href={archiveHref(query, { month: shiftMonth(query.month, 1) })}
-                aria-label={`Show ${formatMonth(shiftMonth(query.month, 1))}`}
-              >
-                <ChevronRight aria-hidden="true" />
-              </Link>
-            )}
-          </div>
-        ) : null}
-      </header>
-
       {!hasPublishedAnnouncements ? (
-        <section className={styles.archivePanel} aria-labelledby="announcement-empty-title">
-          <div className={styles.emptyState}>
-            <Megaphone aria-hidden="true" />
+        <section className={styles.panel} aria-labelledby="announcement-empty-title">
+          <div className={styles.empty}>
             <h2 id="announcement-empty-title">No announcements yet.</h2>
-            <p>Published notices will remain available here for review.</p>
-            <Link href="/coach/announcements/new">Write the first announcement</Link>
+            <p>Published notices stay here for you to look back on.</p>
+            <Link className={styles.link} href="/coach/announcements/new">Write the first announcement</Link>
           </div>
         </section>
       ) : (
-        <section className={styles.archivePanel} aria-labelledby="announcement-archive-title">
-          <div className={styles.archiveToolbar}>
-            <div>
-              <span>Notice board history</span>
+        <section
+          ref={panelRef}
+          className={styles.panel}
+          aria-labelledby="announcement-archive-title"
+          tabIndex={-1}
+        >
+          <div className={styles.toolbar}>
+            <div className={styles.monthNav} role="group" aria-label="Choose announcement month">
+              {previousDisabled ? (
+                <span aria-hidden="true"><ChevronLeft /></span>
+              ) : (
+                <Link
+                  href={archiveHref(query, { month: shiftMonth(query.month, -1) })}
+                  aria-label={`Show ${formatMonth(shiftMonth(query.month, -1))}`}
+                >
+                  <ChevronLeft aria-hidden="true" />
+                </Link>
+              )}
               <h2 id="announcement-archive-title">{monthLabel}</h2>
+              {nextDisabled ? (
+                <span aria-hidden="true"><ChevronRight /></span>
+              ) : (
+                <Link
+                  href={archiveHref(query, { month: shiftMonth(query.month, 1) })}
+                  aria-label={`Show ${formatMonth(shiftMonth(query.month, 1))}`}
+                >
+                  <ChevronRight aria-hidden="true" />
+                </Link>
+              )}
             </div>
-            <Link className={styles.newAnnouncementLink} href="/coach/announcements/new">
-              New announcement
-              <ArrowUpRight aria-hidden="true" />
-            </Link>
-          </div>
 
-          <form className={styles.archiveSearch} action="/coach/announcements" method="get" role="search">
-            <input name="month" type="hidden" value={query.month} />
-            <input name="status" type="hidden" value={query.status === "all" ? "" : query.status} />
-            <input name="channel" type="hidden" value={query.channel === "all" ? "" : query.channel} />
-            <label htmlFor="announcement-search">Find an announcement</label>
-            <div>
-              <Search aria-hidden="true" />
+            <form className={styles.search} action="/coach/announcements" method="get" role="search">
+              <input name="month" type="hidden" value={query.month} />
+              <input name="status" type="hidden" value={query.status === "all" ? "" : query.status} />
+              <input name="channel" type="hidden" value={query.channel === "all" ? "" : query.channel} />
+              <label className="sr-only" htmlFor="announcement-search">Find an announcement</label>
               <input
                 autoComplete="off"
                 defaultValue={query.query}
                 id="announcement-search"
                 maxLength={120}
                 name="q"
-                placeholder="Search title or message"
+                placeholder="Search"
                 type="search"
               />
-              <button type="submit">Search</button>
+            </form>
+
+            <button
+              className={styles.button}
+              type="button"
+              aria-controls="announcement-filters"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen(!filtersOpen)}
+            >
+              {filtersActive ? "Filter · on" : "Filter"}
+            </button>
+          </div>
+
+          <form
+            className={styles.filters}
+            id="announcement-filters"
+            action="/coach/announcements"
+            method="get"
+            hidden={!filtersOpen}
+          >
+            <input name="month" type="hidden" value={query.month} />
+            <input name="q" type="hidden" value={query.query} />
+            <label>
+              <span>Status</span>
+              <select defaultValue={query.status} name="status">
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="expired">Expired</option>
+                <option value="withdrawn">Withdrawn</option>
+              </select>
+            </label>
+            <label>
+              <span>Shows on</span>
+              <select defaultValue={query.channel} name="channel">
+                <option value="all">Anywhere</option>
+                <option value="homepage">Homepage</option>
+                <option value="player_dashboard">Player home</option>
+              </select>
+            </label>
+            <div className={styles.actions}>
+              <button className={styles.button} type="submit">Apply</button>
+              {filtersActive
+                ? <Link className={styles.link} href={archiveHref(query, { channel: "all", status: "all" })}>Clear</Link>
+                : null}
             </div>
           </form>
-
-          <details className={styles.archiveFilters} open={filtersActive || undefined}>
-            <summary><Filter aria-hidden="true" /> Filters{filtersActive ? " · Active" : ""}</summary>
-            <form action="/coach/announcements" method="get">
-              <input name="month" type="hidden" value={query.month} />
-              <input name="q" type="hidden" value={query.query} />
-              <label>
-                <span>Status</span>
-                <select defaultValue={query.status} name="status">
-                  <option value="all">All statuses</option>
-                  <option value="active">Active</option>
-                  <option value="expired">Expired</option>
-                  <option value="withdrawn">Withdrawn</option>
-                </select>
-              </label>
-              <label>
-                <span>Location</span>
-                <select defaultValue={query.channel} name="channel">
-                  <option value="all">All locations</option>
-                  <option value="homepage">Homepage</option>
-                  <option value="player_dashboard">Player Dashboard</option>
-                </select>
-              </label>
-              <button type="submit">Apply filters</button>
-              {filtersActive ? <Link href={archiveHref(query, { channel: "all", status: "all" })}>Clear</Link> : null}
-            </form>
-          </details>
 
           {query.query || filtersActive ? (
             <div className={styles.resultBar} aria-live="polite">
               <p>{rows.length} {rows.length === 1 ? "result" : "results"}</p>
-              {query.query ? <Link href={archiveHref(query, { query: "" })}>Clear search</Link> : null}
+              {query.query ? <Link className={styles.link} href={archiveHref(query, { query: "" })}>Clear search</Link> : null}
             </div>
           ) : null}
 
+          <p className={styles.outcome} aria-live="polite">{outcome}</p>
+
           {rows.length === 0 ? (
-            <div className={`${styles.emptyState} ${styles.compactEmptyState}`}>
-              <Megaphone aria-hidden="true" />
+            <div className={styles.empty}>
               <h3>No matching announcements.</h3>
               <p>Try another month, search, or filter.</p>
-              <Link href={archiveHref({ month: query.month, status: "all", channel: "all", query: "" })}>
+              <Link
+                className={styles.link}
+                href={archiveHref({ month: query.month, status: "all", channel: "all", query: "" })}
+              >
                 Clear search and filters
               </Link>
             </div>
           ) : (
-            <ol className={styles.announcementList} aria-label={`${monthLabel} announcements`}>
-              {rows.map((announcement) => (
-                <li key={announcement.id}>
-                  <article className={styles.announcementRow}>
-                    <div className={styles.announcementIdentity}>
-                      <div>
-                        {/* Pinning only orders live notices. */}
-                        {announcement.pinned && announcement.status === "active"
-                          ? <Pin aria-label="Pinned announcement" />
-                          : null}
-                        <h3>{announcement.title}</h3>
-                      </div>
-                      <p>{announcement.preview}</p>
-                      <div className={styles.channelPills}>
-                        {announcement.channels.map((channel) => (
-                          <span key={channel}>{announcementChannelLabel(channel)}</span>
-                        ))}
-                      </div>
+            <ol className={styles.rows} aria-label={`${monthLabel} announcements`}>
+              {rows.map((announcement) => {
+                const open = openId === announcement.id
+                const detailId = `announcement-${announcement.id}`
+                return (
+                  <li
+                    key={announcement.id}
+                    className={open ? styles.open : undefined}
+                    data-status={announcement.status}
+                  >
+                    <h3>
+                      <button
+                        className={styles.rowHead}
+                        type="button"
+                        aria-controls={detailId}
+                        aria-expanded={open}
+                        onClick={() => {
+                          setLastOutcome(null)
+                          setOpenId(open ? null : announcement.id)
+                        }}
+                      >
+                        <time className={styles.date} dateTime={announcement.publishedAt}>
+                          {shortDayLabel(announcement.publishedAt)}
+                        </time>
+                        <span className={styles.copy}>
+                          <strong>{announcement.title}</strong>
+                          <small>
+                            {whereItShows(announcement.channels)}
+                            {announcement.expiresOn ? ` · until ${lastDayLabel(announcement.expiresOn)}` : ""}
+                          </small>
+                        </span>
+                        <span className={styles.state}>{rowState(announcement)}</span>
+                        <ChevronRight className={styles.chevron} aria-hidden="true" />
+                      </button>
+                    </h3>
+                    {/* Kept mounted while closed, so a pin or withdrawal still
+                        in flight keeps its reason and has a notice to land on. */}
+                    <div className={styles.detail} id={detailId} hidden={!open}>
+                      <AnnouncementBody
+                        announcement={announcement}
+                        onDone={(verb) => setLastOutcome({
+                          id: announcement.id,
+                          message: `${announcement.title} was ${verb}.`,
+                        })}
+                      />
                     </div>
-
-                    <dl className={styles.rowMeta}>
-                      <div>
-                        <dt>Status</dt>
-                        <dd data-status={announcement.status}>{announcementStatusLabel(announcement.status)}</dd>
-                      </div>
-                      <div>
-                        <dt>Published</dt>
-                        <dd>
-                          <time dateTime={announcement.publishedAt}>
-                            {formatAcademyDate(announcement.publishedAt, {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </time>
-                        </dd>
-                      </div>
-                    </dl>
-
-                    <Link className={styles.rowAction} href={detailHref(announcement.id, query)}>
-                      Open
-                      <ArrowUpRight aria-hidden="true" />
-                    </Link>
-                  </article>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ol>
           )}
         </section>

@@ -175,8 +175,14 @@ function composer() {
   return AnnouncementComposer({ academyToday: "2026-08-24" })
 }
 
+/**
+ * The announcement page's body, rendered: Pin to top, Withdraw and the panel
+ * Withdraw opens in place live in the piece the page shares with the list's
+ * open row, so that is where the withdrawal is driven from.
+ */
 function detail() {
-  return PublishedAnnouncementDetail({ announcement, backHref: "/coach/announcements" })
+  const page = PublishedAnnouncementDetail({ announcement, backHref: "/coach/announcements" })
+  return openDialog(page, "initialFeedback").tree
 }
 
 function descendants(node: ReactNode): AnyElement[] {
@@ -361,22 +367,16 @@ describe("announcement dialogs during a stalled action", () => {
     expect(button(tree, "Back to edit").props.disabled ?? false).toBe(false)
   })
 
-  it("leaves every exit from the withdrawal dialog live while a withdrawal is in flight", () => {
+  it("leaves the way out of the withdrawal panel live while a withdrawal is in flight", () => {
     const { tree } = openDialog(detail(), "onWithdrawn")
-    const dialog = element(tree, (node) => node.type === "dialog")
-    const close = element(tree, (node) => (
-      node.props["aria-label"] === "Close withdrawal dialog"
-    ))
 
+    // Withdraw opens in place rather than as a modal, so nothing covers the
+    // page: Keep it is the panel's one exit, and it must not wait on the request.
+    expect(descendants(tree).some((node) => node.type === "dialog")).toBe(false)
     expect(button(tree, "Withdrawing…").props.disabled).toBe(true)
 
-    expect(pressEscape(dialog)).toEqual([false])
-    expect(pressBackdrop(dialog)).toEqual([false])
-    expect(press(close)).toEqual([false])
-    expect(press(button(tree, "Keep announcement"))).toEqual([false])
-
-    expect(close.props.disabled ?? false).toBe(false)
-    expect(button(tree, "Keep announcement").props.disabled ?? false).toBe(false)
+    expect(press(button(tree, "Keep it"))).toEqual([false])
+    expect(button(tree, "Keep it").props.disabled ?? false).toBe(false)
   })
 
   it("keeps the message and its publication key outside the review dialog", () => {
@@ -413,7 +413,7 @@ describe("announcement dialogs past their deadline", () => {
   it("answers a stalled publish with the unknown-outcome copy, not a failure", async () => {
     vi.useFakeTimers()
     const { tree } = openIdleDialog(composer(), "onPublished")
-    startAction(button(tree, "Publish announcement"))
+    startAction(button(tree, "Publish"))
 
     // Nothing is invented while the request could still answer for itself.
     await vi.advanceTimersByTimeAsync(deadlineMs - 1)
@@ -433,7 +433,7 @@ describe("announcement dialogs past their deadline", () => {
     const { tree } = openIdleDialog(detail(), "onWithdrawn")
 
     const answered = noticeIn(
-      await pressAndWait(button(tree, "Withdraw announcement"), deadlineMs),
+      await pressAndWait(button(tree, "Withdraw now"), deadlineMs),
     )
 
     expect(answered?.message)
@@ -447,7 +447,7 @@ describe("an announcement action that settles after its dialog is gone", () => {
   it("reports a stalled publish on the composer the coach went back to", async () => {
     vi.useFakeTimers()
     const { tree } = openIdleDialog(composer(), "onPublished")
-    const publish = button(tree, "Publish announcement")
+    const publish = button(tree, "Publish")
     retireDialog()
 
     // The dialog's own notice is unmounted by now, so an answer that lands here
@@ -467,7 +467,7 @@ describe("an announcement action that settles after its dialog is gone", () => {
       reusedPublication: false,
     })
     const { tree } = openIdleDialog(composer(), "onPublished")
-    const publish = button(tree, "Publish announcement")
+    const publish = button(tree, "Publish")
     retireDialog()
 
     const updates = await pressAndWait(publish, 0)
@@ -491,7 +491,7 @@ describe("an announcement action that settles after its dialog is gone", () => {
   it("reports a stalled withdrawal on the detail page the dialog closed over", async () => {
     vi.useFakeTimers()
     const { tree } = openIdleDialog(detail(), "onWithdrawn")
-    const withdraw = button(tree, "Withdraw announcement")
+    const withdraw = button(tree, "Withdraw now")
     retireDialog()
 
     const answered = noticeIn(await pressAndWait(withdraw, deadlineMs))
@@ -504,7 +504,7 @@ describe("an announcement action that settles after its dialog is gone", () => {
 
 describe("the publication key a retry reuses", () => {
   function reviewButton(surface: ReactNode) {
-    return button(surface, "Review announcement")
+    return button(surface, "Review")
   }
 
   it("survives an edit that leaves the announcement the server would fingerprint", () => {
@@ -582,7 +582,7 @@ describe("an earlier version that went live first", () => {
     })
     const { tree } = openIdleDialog(composer(), "onPublished")
 
-    const updates = await pressAndWait(button(tree, "Publish announcement"), 0)
+    const updates = await pressAndWait(button(tree, "Publish"), 0)
 
     // Which wording went live cannot be told from here.
     const [live] = liveVersionsIn(updates)
@@ -608,7 +608,7 @@ describe("an earlier version that went live first", () => {
     })
     const { tree } = openIdleDialog(composer(), "onPublished")
     const back = button(tree, "Back to edit")
-    const publish = button(tree, "Publish announcement")
+    const publish = button(tree, "Publish")
     const focus = { back: vi.fn(), publish: vi.fn() }
     // The refs are attached by React; here they are handed the two buttons.
     const refFor = (control: AnyElement) => control.props.ref as { current: unknown }
@@ -639,7 +639,7 @@ describe("an earlier version that went live first", () => {
     const plain = render({ ...host.props, otherLiveAnnouncementId: null })
     expect(descendants(plain)
       .some((node) => node.props.href === `/coach/announcements/${earlierId}`)).toBe(false)
-    expect(button(plain, "Publish announcement").props["aria-describedby"]).toBeUndefined()
+    expect(button(plain, "Publish").props["aria-describedby"]).toBeUndefined()
   })
 })
 
@@ -693,7 +693,7 @@ describe("a publish that answers after its deadline", () => {
     })
     const { tree } = openIdleDialog(composer(), "onPublished")
 
-    await pressAndWait(button(tree, "Publish announcement"), deadlineMs)
+    await pressAndWait(button(tree, "Publish"), deadlineMs)
     expect(guard.navigateAfterCommit).not.toHaveBeenCalled()
 
     // Before: the answer after the deadline went nowhere, so the coach was left
@@ -710,7 +710,7 @@ describe("a publish that answers after its deadline", () => {
       reusedPublication: false,
     })
     const { tree } = openIdleDialog(composer(), "onPublished")
-    const publish = button(tree, "Publish announcement")
+    const publish = button(tree, "Publish")
     retireDialog()
 
     await pressAndWait(publish, deadlineMs)

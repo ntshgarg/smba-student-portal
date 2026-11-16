@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowLeft, Pin } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 
 import {
   announcementDate,
@@ -8,45 +8,44 @@ import {
 import type { AnnouncementDetail } from "@/components/announcements/types"
 import styles from "@/components/announcements/announcements.module.css"
 
+/** The full message, a paragraph per blank line, keeping the single line breaks inside each. */
+export function AnnouncementMessage({ content }: { content: string }) {
+  return (
+    <div className={styles.message}>
+      {announcementParagraphs(content).map((paragraph, index) => (
+        <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
+      ))}
+    </div>
+  )
+}
+
 export function AnnouncementDetailView({
   announcement,
   backHref,
   backLabel,
-  publicView = false,
 }: {
   announcement: AnnouncementDetail
   backHref: string
   backLabel: string
-  publicView?: boolean
 }) {
   return (
-    <article className={publicView ? styles.publicDetail : styles.playerDetail}>
-      <Link className={publicView ? styles.publicBack : "back-link"} href={backHref}>
+    <div className={styles.page}>
+      <Link className="back-link" href={backHref}>
         <ArrowLeft aria-hidden="true" />
         {backLabel}
       </Link>
 
-      <header className={styles.detailHeading}>
-        <div className={styles.detailMeta}>
-          <p>Announcement</p>
-          {announcement.pinned ? (
-            <span>
-              <Pin aria-hidden="true" />
-              Pinned
-            </span>
-          ) : null}
+      <article className={styles.single}>
+        <header className={styles.band}>
+          <h1>{announcement.title}</h1>
+          <time dateTime={announcement.publishedAt}>
+            {announcementDate(announcement.publishedAt)}
+          </time>
+        </header>
+        <div className={styles.singleBody}>
+          <AnnouncementMessage content={announcement.content} />
         </div>
-        <h1>{announcement.title}</h1>
-        <time dateTime={announcement.publishedAt}>
-          Published {announcementDate(announcement.publishedAt)}
-        </time>
-      </header>
-
-      <div className={styles.detailMessage}>
-        {announcementParagraphs(announcement.content).map((paragraph, index) => (
-          <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
-        ))}
-      </div>
-    </article>
+      </article>
+    </div>
   )
 }

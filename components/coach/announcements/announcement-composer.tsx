@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, ArrowRight, Check, Send, X } from "lucide-react"
+import { ArrowLeft, X } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 
@@ -13,12 +13,11 @@ import {
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { AnnouncementActionResult } from "@/lib/announcements/contracts"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
-import { formatDateKey } from "@/lib/format"
 
+import { lastDayLabel, whereItShows } from "./announcement-detail"
 import {
   announcementChannelAudience,
   announcementChannelIsPublic,
-  announcementChannelLabel,
   type AnnouncementChannel,
 } from "./contracts"
 import styles from "./announcements.module.css"
@@ -128,6 +127,15 @@ export function publicationForReview(
   const keyLive = liveVersions.some((version) => version.key === current.key)
   if (keySent && !keyLive) return { key: current.key, payload }
   return { key: mint(), payload }
+}
+
+/** "the homepage and player home until 23 Nov, pinned". */
+function willShowOn({ channels, expiresOn, pinned }: ComposerValues) {
+  const places = whereItShows(channels)
+    .replace(/ only$/u, "")
+    .replace(/^Homepage/u, "the homepage")
+    .replace(/^Player/u, "player")
+  return `${places}${expiresOn ? ` until ${lastDayLabel(expiresOn)}` : ""}${pinned ? ", pinned" : ""}`
 }
 
 function firstInvalidField(values: ComposerValues, academyToday: string): FieldName | null {
@@ -302,7 +310,7 @@ function ReviewDialog({
   return (
     <dialog
       ref={dialogRef}
-      className={styles.dialogBackdrop}
+      className={styles.dialog}
       aria-labelledby="announcement-review-title"
       onCancel={(event) => {
         event.preventDefault()
@@ -312,100 +320,90 @@ function ReviewDialog({
         if (event.target === event.currentTarget) onBack()
       }}
     >
-      <section className={styles.reviewDialog} onMouseDown={(event) => event.stopPropagation()}>
-        <h2 id="announcement-review-title" className="sr-only">Review announcement</h2>
-        <button
-          ref={closeButtonRef}
-          className={styles.dialogClose}
-          type="button"
-          onClick={onBack}
-          aria-label="Back to announcement editor"
-        >
-          <X aria-hidden="true" />
-        </button>
+      <section onMouseDown={(event) => event.stopPropagation()}>
+        <header className={styles.band}>
+          <div>
+            <h2 id="announcement-review-title">Check before publishing</h2>
+            <h3>{values.title.trim()}</h3>
+          </div>
+          <button
+            ref={closeButtonRef}
+            className={styles.close}
+            type="button"
+            onClick={onBack}
+            aria-label="Back to announcement editor"
+          >
+            <X aria-hidden="true" />
+          </button>
+        </header>
 
-        <div className={styles.reviewCopy}>
-          <h3>{values.title.trim()}</h3>
-          <div className={styles.reviewMessage}>
+        <div className={styles.body}>
+          <div className={styles.message}>
             {announcementParagraphs(values.content).map((paragraph, index) => (
               <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
             ))}
           </div>
-        </div>
 
-        <div className={styles.reviewMeta}>
-          <div className={styles.channelPills} role="group" aria-label="Announcement locations">
-            {values.channels.map((channel) => (
-              <span key={channel}>
-                <Check aria-hidden="true" /> {announcementChannelLabel(channel)}
-                <small>{announcementChannelAudience(channel)}</small>
-              </span>
-            ))}
-          </div>
-          {values.expiresOn ? (
-            <p>
-              Available through {formatDateKey(values.expiresOn, {
-                day: "numeric",
-                month: "long",
-                weekday: undefined,
-                year: "numeric",
-              })}
+          <ul className={styles.facts} aria-label="Where and how long">
+            <li><span>Shows on</span>{whereItShows(values.channels)}</li>
+            {values.expiresOn ? <li><span>Until</span>{lastDayLabel(values.expiresOn)}</li> : null}
+            {values.pinned ? <li><span>Order</span>Pinned to top</li> : null}
+          </ul>
+
+          {values.channels.some(announcementChannelIsPublic) ? (
+            /*
+             * Shown only for the public channel, so it stays meaningful rather
+             * than becoming furniture. Two sentences: what happens, and what to do
+             * about it. The second clause is the part a coach cannot guess --
+             * withdrawing takes it off our page, but a search engine or an archive
+             * that already read it keeps its own copy, and nothing we publish
+             * reaches that.
+             */
+            <p className={styles.note} data-tone="red" role="note">
+              This will be public. Anyone on the internet can read it, and copies
+              may stay online even after you withdraw it. Check names and photos first.
             </p>
           ) : null}
-        </div>
 
-        {values.channels.some(announcementChannelIsPublic) ? (
-          /*
-           * Shown only for the public channel, so it stays meaningful rather
-           * than becoming furniture. Two sentences: what happens, and what to do
-           * about it. The second clause is the part a coach cannot guess --
-           * withdrawing takes it off our page, but a search engine or an archive
-           * that already read it keeps its own copy, and nothing we publish
-           * reaches that.
-           */
-          <p className={styles.publicWarning} role="note">
-            <strong>This will be public.</strong> Anyone on the internet can read it, and copies
-            may stay online even after you withdraw it. Check names and photos first.
-          </p>
-        ) : null}
+          {otherLiveAnnouncementId ? (
+            // In the dialog, because the modal covers the composer's own notice.
+            <p className={styles.note} data-tone="red" id="announcement-review-live-warning" role="note">
+              Another version is already live. Publishing this one adds a
+              second notice. Withdraw the other one if this replaces it.{" "}
+              <Link
+                href={announcementHref(otherLiveAnnouncementId)}
+                rel="noopener"
+                target="_blank"
+              >
+                Open the live notice<span className="sr-only"> (opens in a new tab)</span>
+              </Link>
+            </p>
+          ) : null}
 
-        {otherLiveAnnouncementId ? (
-          // In the dialog, because the modal covers the composer's own notice.
-          <p className={styles.publicWarning} id="announcement-review-live-warning" role="note">
-            <strong>Another version is already live.</strong> Publishing this one adds a
-            second notice. Withdraw the other one if this replaces it.{" "}
-            <Link
-              href={announcementHref(otherLiveAnnouncementId)}
-              rel="noopener"
-              target="_blank"
+          <InlineNotice
+            action={feedback?.action}
+            message={feedback?.message}
+            reserveSpace={false}
+            tone={feedback?.tone}
+          />
+
+          <div className={styles.pair}>
+            <button ref={backButtonRef} className={styles.button} type="button" onClick={onBack}>
+              Back to edit
+            </button>
+            <button
+              ref={publishButtonRef}
+              aria-describedby={otherLiveAnnouncementId ? "announcement-review-live-warning" : undefined}
+              className={styles.primary}
+              type="button"
+              onClick={publish}
+              disabled={pending}
             >
-              Open the live notice<span className="sr-only"> (opens in a new tab)</span>
-            </Link>
-          </p>
-        ) : null}
-
-        <InlineNotice
-          action={feedback?.action}
-          className={styles.dialogNotice}
-          message={feedback?.message}
-          tone={feedback?.tone}
-        />
-
-        <div className={styles.dialogActions}>
-          <button ref={backButtonRef} type="button" onClick={onBack}>Back to edit</button>
-          <button
-            ref={publishButtonRef}
-            aria-describedby={otherLiveAnnouncementId ? "announcement-review-live-warning" : undefined}
-            className={styles.primaryButton}
-            type="button"
-            onClick={publish}
-            disabled={pending}
-          >
-            <Send aria-hidden="true" />
-            {pending
-              ? "Publishing…"
-              : otherLiveAnnouncementId ? "Publish as a second notice" : "Publish announcement"}
-          </button>
+              {pending
+                ? "Publishing…"
+                : otherLiveAnnouncementId ? "Publish as a second notice" : "Publish"}
+            </button>
+          </div>
         </div>
       </section>
     </dialog>
@@ -496,11 +494,11 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
     const invalid = firstInvalidField(values, academyToday)
     if (invalid) {
       const nextErrors: Partial<Record<FieldName, string>> = {}
-      if (!values.title.trim()) nextErrors.title = "Enter an announcement title."
-      if (!values.content.trim()) nextErrors.content = "Enter an announcement message."
-      if (values.channels.length === 0) nextErrors.channels = "Choose where the announcement should appear."
+      if (!values.title.trim()) nextErrors.title = "Add a title."
+      if (!values.content.trim()) nextErrors.content = "Add the message."
+      if (values.channels.length === 0) nextErrors.channels = "Pick at least one place."
       if (values.expiresOn && values.expiresOn < academyToday) {
-        nextErrors.expiresOn = "Expiry cannot be before today."
+        nextErrors.expiresOn = "The last day cannot be before today."
       }
       setErrors(nextErrors)
       focusField(invalid)
@@ -557,17 +555,15 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
   }
 
   return (
-    <div className={`${styles.composerWorkspace} page-shell`}>
-      <div className={styles.composerBackRow}>
+    <div className={`${styles.page} page-shell`}>
+      <nav className={styles.back} aria-label="Announcement navigation">
         <Link href="/coach/announcements">
           <ArrowLeft aria-hidden="true" />
-          Back to announcements
+          Back to Announcements
         </Link>
-      </div>
+      </nav>
 
-      <header className={styles.composerHeader}>
-        <h1>New announcement</h1>
-      </header>
+      <h1 className={styles.title}>New announcement</h1>
 
       <InlineNotice
         action={notice?.action}
@@ -577,89 +573,71 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
         tone={notice?.tone}
       />
 
-      <section className={styles.noticeSlip} aria-labelledby="announcement-editor-title">
-        <div className={styles.slipMasthead}>
-          <h2 id="announcement-editor-title" className="sr-only">Write an announcement</h2>
-          <span>Notice 01</span>
+      <section className={styles.form} aria-labelledby="announcement-editor-title">
+        <h2 id="announcement-editor-title" className="sr-only">Write an announcement</h2>
+
+        <div className={styles.field}>
+          <div className={styles.fieldHead}>
+            <label className={styles.label} htmlFor="announcement-title">Title</label>
+            <small aria-hidden="true">{values.title.length} / 120</small>
+          </div>
+          <input
+            ref={titleRef}
+            aria-describedby={errors.title
+              ? "announcement-title-limit announcement-title-error"
+              : "announcement-title-limit"}
+            aria-invalid={Boolean(errors.title)}
+            autoComplete="off"
+            id="announcement-title"
+            maxLength={120}
+            name="title"
+            onChange={(event) => updateValues({ title: event.target.value })}
+            placeholder="Holiday training schedule"
+            type="text"
+            value={values.title}
+          />
+          {errors.title ? (
+            <small id="announcement-title-error" className={styles.error}>{errors.title}</small>
+          ) : null}
+          <small id="announcement-title-limit" className="sr-only">Maximum 120 characters.</small>
         </div>
 
-        <div className={styles.slipBody}>
-          <div className={styles.slipField}>
-            <span><label htmlFor="announcement-title">Title</label></span>
-            <input
-              ref={titleRef}
-              aria-describedby={errors.title
-                ? "announcement-title-limit announcement-title-error"
-                : "announcement-title-limit"}
-              aria-invalid={Boolean(errors.title)}
-              autoComplete="off"
-              id="announcement-title"
-              maxLength={120}
-              name="title"
-              onChange={(event) => updateValues({ title: event.target.value })}
-              placeholder="Holiday training schedule"
-              type="text"
-              value={values.title}
-            />
-            <span className={styles.slipFieldMeta}>
-              {errors.title ? (
-                <small id="announcement-title-error" className={styles.slipFieldError}>
-                  {errors.title}
-                </small>
-              ) : <span aria-hidden="true" />}
-              <small className={styles.slipCounter} aria-hidden="true">
-                {values.title.length} / 120
-              </small>
-              <small id="announcement-title-limit" className="sr-only">
-                Maximum 120 characters.
-              </small>
-            </span>
+        <div className={styles.field}>
+          <div className={styles.fieldHead}>
+            <label className={styles.label} htmlFor="announcement-content">Message</label>
+            <small aria-hidden="true">{values.content.length} / 5000</small>
           </div>
-
-          <div className={styles.slipField}>
-            <span><label htmlFor="announcement-content">Message</label></span>
-            <textarea
-              ref={contentRef}
-              aria-describedby={errors.content
-                ? "announcement-content-limit announcement-content-error"
-                : "announcement-content-limit"}
-              aria-invalid={Boolean(errors.content)}
-              autoComplete="off"
-              id="announcement-content"
-              maxLength={5000}
-              name="content"
-              onChange={(event) => updateValues({ content: event.target.value })}
-              placeholder="Share the important details with the academy."
-              rows={5}
-              value={values.content}
-            />
-            <span className={styles.slipFieldMeta}>
-              {errors.content ? (
-                <small id="announcement-content-error" className={styles.slipFieldError}>
-                  {errors.content}
-                </small>
-              ) : <span aria-hidden="true" />}
-              <small className={styles.slipCounter} aria-hidden="true">
-                {values.content.length} / 5000
-              </small>
-              <small id="announcement-content-limit" className="sr-only">
-                Maximum 5,000 characters.
-              </small>
-            </span>
-          </div>
+          <textarea
+            ref={contentRef}
+            aria-describedby={errors.content
+              ? "announcement-content-limit announcement-content-error"
+              : "announcement-content-limit"}
+            aria-invalid={Boolean(errors.content)}
+            autoComplete="off"
+            id="announcement-content"
+            maxLength={5000}
+            name="content"
+            onChange={(event) => updateValues({ content: event.target.value })}
+            placeholder="Share the important details with the academy."
+            rows={5}
+            value={values.content}
+          />
+          {errors.content ? (
+            <small id="announcement-content-error" className={styles.error}>{errors.content}</small>
+          ) : null}
+          <small id="announcement-content-limit" className="sr-only">Maximum 5,000 characters.</small>
         </div>
 
-        <div className={styles.slipDocket}>
+        <div className={styles.settings}>
           <fieldset
             ref={channelGroupRef}
-            className={styles.slipChannels}
+            className={styles.field}
             aria-describedby="announcement-channels-help"
             aria-invalid={Boolean(errors.channels)}
             tabIndex={errors.channels ? -1 : undefined}
           >
-            <legend className="sr-only">Send to destinations</legend>
-            <span className={styles.slipDocketLabel} aria-hidden="true">Send to</span>
-            <div className={styles.slipChannelChoices}>
+            <legend className={styles.label}>Show on</legend>
+            <div className={styles.chips}>
               {/*
                 * Each choice carries its audience, because the names do not.
                 * "Homepage" reads like the academy's own page -- somewhere
@@ -675,12 +653,8 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                   type="checkbox"
                   value="homepage"
                 />
-                <span>
-                  Homepage
-                  <small className={styles.slipChannelAudience}>
-                    {announcementChannelAudience("homepage")}
-                  </small>
-                </span>
+                Homepage
+                <small>{announcementChannelAudience("homepage")}</small>
               </label>
               <label>
                 <input
@@ -690,12 +664,8 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
                   type="checkbox"
                   value="player_dashboard"
                 />
-                <span>
-                  Player Dashboard
-                  <small className={styles.slipChannelAudience}>
-                    {announcementChannelAudience("player_dashboard")}
-                  </small>
-                </span>
+                Player home
+                <small>{announcementChannelAudience("player_dashboard")}</small>
               </label>
             </div>
             {/*
@@ -704,30 +674,16 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
               * itself, where the choice is actually made; saying it twice made
               * the group read as a warning rather than as two options.
               */}
-            <small id="announcement-channels-help" className={styles.slipChannelMessage}>
+            <small id="announcement-channels-help" className={styles.error}>
               {errors.channels ?? ""}
             </small>
           </fieldset>
 
-          <label className={styles.slipPinOption}>
-            <input
-              aria-describedby="announcement-pin-help"
-              checked={values.pinned}
-              name="pinned"
-              onChange={(event) => updateValues({ pinned: event.target.checked })}
-              type="checkbox"
-            />
-            <span>Pin announcement</span>
-          </label>
-          {/* Outside the label: nested description text leaks into the
-              checkbox's accessible name. `sr-only` is absolutely positioned,
-              so it takes no grid cell here. */}
-          <small id="announcement-pin-help" className="sr-only">
-            Keep it above ordinary notices while active.
-          </small>
-
-          <div className={styles.slipExpiryField}>
-            <span><label htmlFor="announcement-expires-on">Expiry date</label></span>
+          <div className={styles.field}>
+            <div className={styles.fieldHead}>
+              <label className={styles.label} htmlFor="announcement-expires-on">Last day</label>
+              <small>optional</small>
+            </div>
             <input
               ref={expiryRef}
               aria-describedby="announcement-expiry-help"
@@ -741,20 +697,46 @@ export function AnnouncementComposer({ academyToday }: { academyToday: string })
             />
             <small
               id="announcement-expiry-help"
-              className={errors.expiresOn ? styles.slipExpiryError : "sr-only"}
+              className={errors.expiresOn ? styles.error : "sr-only"}
             >
-              {errors.expiresOn ?? "The notice remains visible through this date."}
+              {errors.expiresOn ?? "The notice stays up through this day."}
             </small>
           </div>
 
-          <button
-            className={styles.slipReviewButton}
-            type="button"
-            onClick={reviewAnnouncement}
-          >
-            <span>Review announcement</span>
-            <ArrowRight aria-hidden="true" />
-          </button>
+          <fieldset className={styles.field} aria-describedby="announcement-pin-help">
+            <legend className={styles.label}>Pin to top</legend>
+            <div className={styles.switch}>
+              {[false, true].map((pinned) => (
+                <label key={String(pinned)}>
+                  <input
+                    checked={values.pinned === pinned}
+                    name="pinned"
+                    onChange={() => updateValues({ pinned })}
+                    type="radio"
+                    value={pinned ? "yes" : "no"}
+                  />
+                  {pinned ? "Yes" : "No"}
+                </label>
+              ))}
+            </div>
+            <small id="announcement-pin-help" className="sr-only">
+              Keeps it above other notices while it shows.
+            </small>
+          </fieldset>
+        </div>
+
+        <div className={styles.formFoot}>
+          <p className={styles.preview}>
+            {values.channels.length
+              ? <>Will show on <strong>{willShowOn(values)}</strong></>
+              : "Pick where it shows"}
+          </p>
+          <div className={styles.actions}>
+            <Link className={styles.button} href="/coach/announcements">Cancel</Link>
+            <button className={styles.primary} type="button" onClick={reviewAnnouncement}>
+              Review
+            </button>
+          </div>
         </div>
       </section>
 

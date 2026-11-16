@@ -407,13 +407,13 @@ test("Announcements remain contained at every supported portrait width", async (
     await settleResponsiveLayout(page)
 
     await expectHorizontallyContained(
-      page.getByRole("heading", { name: "Published announcements", exact: true }),
-      `${viewportLabel} published announcements heading`,
+      page.getByRole("heading", { name: "Announcements", exact: true }),
+      `${viewportLabel} announcements heading`,
     )
     await expectTextFragmentUnbroken(
-      page.getByRole("heading", { name: "Published announcements", exact: true }),
-      "announcements",
-      `${viewportLabel} published announcements heading`,
+      page.getByRole("heading", { name: "Announcements", exact: true }),
+      "Announcements",
+      `${viewportLabel} announcements heading`,
     )
     const monthControl = page.getByLabel("Choose announcement month")
     if (await monthControl.count()) {
