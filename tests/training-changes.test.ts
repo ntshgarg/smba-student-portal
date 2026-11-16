@@ -566,6 +566,40 @@ describe("training changes from the player's record", () => {
     expect(openAssignments(tara).map((item) => item.seriesId)).toEqual([morning])
   })
 
+  it("counts a fault against the booking as it stands, not as it was read", () => {
+    const veer = "20000000-0000-4000-8000-0000000000aa"
+    addPlayer(veer, "Veer Nair", 9011, "2026-07-01")
+    assign(veer, morning, "2026-07-01", [1, 2, 3, 4, 5])
+    const { changeId } = changes.scheduleTrainingChange({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: veer,
+      seriesId: evening,
+    }, context())
+    const row = () => database.select().from(schema.trainingChanges)
+      .where(eq(schema.trainingChanges.id, changeId)).get()
+    // One try left on the old booking...
+    database.update(schema.trainingChanges).set({ failedAttempts: 2 })
+      .where(eq(schema.trainingChanges.id, changeId)).run()
+    const spy = vi.spyOn(database, "transaction").mockImplementation(() => {
+      // ...when the coach books it again, which starts its tries afresh.
+      database.update(schema.trainingChanges).set({ failedAttempts: 0, lastFailedAt: null })
+        .where(eq(schema.trainingChanges.id, changeId)).run()
+      throw new Error("network blip")
+    })
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      changes.applyDueTrainingChanges({ database, now: new Date("2026-11-06T05:00:00.000Z") })
+    } finally {
+      spy.mockRestore()
+      error.mockRestore()
+    }
+    // The new booking used to be failed on its first fault.
+    expect(row()).toMatchObject({ failedAttempts: 1, status: "scheduled" })
+    database.update(schema.trainingChanges).set({ resolvedAt: new Date(), status: "cancelled" })
+      .where(eq(schema.trainingChanges.id, changeId)).run()
+  })
+
   it("applies a change once the fault has passed, even days after its date", () => {
     const uma = "20000000-0000-4000-8000-0000000000a8"
     addPlayer(uma, "Uma Das", 9008, "2026-07-01")

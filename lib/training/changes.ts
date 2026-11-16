@@ -709,10 +709,15 @@ export function applyDueTrainingChanges({
     } catch (error) {
       // A refused change is final; any other fault is retried a few times.
       const refused = error instanceof OperationalActionError || error instanceof FinanceServiceError
-      if (!refused && change.failedAttempts + 1 < TRAINING_CHANGE_ATTEMPTS) {
+      // Counted from the row as it stands: booking it again since `due` was
+      // read starts its tries afresh.
+      const attempts = (database.select({ failedAttempts: trainingChanges.failedAttempts })
+        .from(trainingChanges).where(eq(trainingChanges.id, change.id)).get()?.failedAttempts
+        ?? change.failedAttempts) + 1
+      if (!refused && attempts < TRAINING_CHANGE_ATTEMPTS) {
         console.error("A scheduled training change could not be applied; it will be tried again.", error)
         database.update(trainingChanges).set({
-          failedAttempts: change.failedAttempts + 1,
+          failedAttempts: attempts,
           lastFailedAt: now,
         }).where(and(
           eq(trainingChanges.id, change.id),
