@@ -104,7 +104,7 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "calendar-session-open": {
-      await clickFirstVisible(page.locator('.coach-day-session > button[aria-expanded="false"]'))
+      await clickFirstVisible(page.locator('[aria-labelledby="coach-day-view-title"] li > button[aria-expanded="false"]'))
       break
     }
     case "financial-player-open": {
