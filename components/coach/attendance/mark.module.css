@@ -5,6 +5,7 @@
 .mark {
   display: grid;
   gap: 12px;
+  container-type: inline-size;
 }
 
 /* the week strip */
@@ -581,9 +582,8 @@
     padding: 14px;
   }
 
-  .head > .time,
-  .head > .kind {
-    grid-column: 1 / -1;
+  .head > :is(.time, .kind) {
+    grid-column: 1;
   }
 
   .time {
@@ -594,15 +594,28 @@
     display: none;
   }
 
+  /* a closed card's status sits beside its time (or under it, when they don't both fit), so the session
+     name has the card's full width */
+  .card:not(.open) .head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .card:not(.open) .head > .pill {
+    order: 1;
+  }
+
+  .card:not(.open) .head > .copy {
+    flex-basis: 100%;
+    order: 2;
+  }
+
   /* the open card's close mark sits top right, beside the time */
   .open .head > .toggle {
     display: grid;
     grid-column: 2;
     grid-row: 1;
-  }
-
-  .open .head > :is(.time, .kind) {
-    grid-column: 1;
   }
 
   .open .time {
@@ -682,21 +695,36 @@
   }
 }
 
-/* The narrowest phones: seven days of at least 24px between the week arrows need the strip's full width, so
-   "Pick a date" takes a line of its own below them. */
-@media (max-width: 400px) {
+/* A narrow strip: the seven days take the whole first line, and the week arrows flank "Pick a date" below
+   them, so no day is squeezed between the arrows. */
+@container (max-width: 26em) {
   .strip {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-areas:
+      "days days days"
+      "prev pick next";
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
     gap: 4px;
     padding: 4px;
   }
 
   .days {
-    gap: 0;
+    grid-area: days;
+    grid-template-columns: repeat(auto-fit, minmax(2.25em, 1fr));
+    gap: 2px;
+  }
+
+  .stripArrow:first-child {
+    grid-area: prev;
+  }
+
+  .days + .stripArrow {
+    grid-area: next;
   }
 
   .pick {
-    flex-basis: 100%;
+    grid-area: pick;
+    width: auto;
     padding: 0 14px;
   }
 

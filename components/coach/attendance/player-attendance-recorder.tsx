@@ -623,7 +623,7 @@ export function PlayerAttendanceRecorder({
           </time>
           <span className={styles.copy}>
             <strong id={isSelected ? "attendance-roster-title" : undefined}>
-              {series.programme} · {series.batch}
+              {series.programme} ·&nbsp;{series.batch}
             </strong>
             <small>{isSelected
               ? `${occurrence.durationMinutes} min · ${occurrence.venue}`
