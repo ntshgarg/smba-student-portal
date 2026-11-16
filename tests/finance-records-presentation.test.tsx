@@ -289,7 +289,7 @@ describe("Financial Records presentation", () => {
     expect(html).toContain("Payments<b>2</b>")
     expect(html).toContain("Fees issued<b>3</b>")
     expect(html).toContain("Recorded payment SMBA-R-2026-00042")
-    expect(html).toContain("Aarav Bhat · SMBA#0042")
+    expect(html).toMatch(/Aarav Bhat ·\u00a0<span[^>]*>SMBA#0042</)
     expect(html).toContain("Sathiya Moorthy")
     expect(html).not.toContain(">payment_recorded<")
     expect(html).toContain("/coach/financials/records/activity.csv")

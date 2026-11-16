@@ -249,7 +249,7 @@
   position: relative;
   display: grid;
   min-width: 0;
-  min-height: 112px;
+  min-height: clamp(4rem, 9vw, 7rem);
   grid-column: var(--month-column-wide);
   grid-row: var(--month-row-wide);
   align-content: space-between;
@@ -647,7 +647,6 @@ a.monthCell:focus-visible {
   }
 
   .monthCell {
-    min-height: 104px;
     padding: 14px;
   }
 
@@ -744,7 +743,6 @@ a.monthCell:focus-visible {
   }
 
   .monthCell {
-    min-height: 104px;
     grid-column: var(--month-column-mobile);
     grid-row: var(--month-row-mobile);
   }
@@ -807,7 +805,6 @@ a.monthCell:focus-visible {
   }
 
   .monthCell {
-    min-height: 98px;
     padding: 12px;
   }
 

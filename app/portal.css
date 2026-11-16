@@ -4005,6 +4005,11 @@
   margin-top: var(--space-group);
 }
 
+/* the profile bar's content starts on the same line as the cards' above it */
+.player-ticket-dashboard .player-profile-bar {
+  padding-inline: var(--player-ticket-pad-x);
+}
+
 @media (min-width: 761px) and (max-width: 980px) {
   .player-ticket-dashboard .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

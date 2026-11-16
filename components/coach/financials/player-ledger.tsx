@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState, type ReactNode } from "react"
+import { Fragment, useState, type ReactNode } from "react"
 
 import { formatAcademyDate, formatDateKey, formatInr } from "@/lib/format"
 
@@ -24,6 +24,13 @@ function planDate(dateKey: string | null) {
   return dateKey
     ? formatDateKey(dateKey, { day: "numeric", month: "short", weekday: undefined, year: "numeric" })
     : ""
+}
+
+/** A "·"-separated line that breaks only between its parts, and never mid-ID or mid-period. */
+function KeptParts({ text }: { text: string }) {
+  return text.split(" · ").map((part, index) => (
+    <Fragment key={index}>{index ? " ·\u00a0" : null}<span className={styles.nowrap}>{part}</span></Fragment>
+  ))
 }
 
 function planStanding(plan: NonNullable<PlayerFinancialLedgerView["feePlan"]>) {
@@ -80,7 +87,7 @@ export function PlayerLedger({
         <div className={styles.bandHead}>
           <div>
             <h2 id="selected-ledger-title">{ledger.fullName}</h2>
-            <p>{meta}</p>
+            <p><KeptParts text={meta} /></p>
           </div>
           <div className={styles.owe}>
             <b>{formatInr(ledger.outstandingPaise)}</b>
@@ -152,9 +159,9 @@ export function PlayerLedger({
                 <details key={charge.id} className={styles.card}>
                   <summary>
                     <span className={styles.cardTitle}>
-                      <b>{charge.description}</b>
+                      <b><KeptParts text={charge.description} /></b>
                       <small>
-                        {charge.type === "registration" ? "Registration" : "Monthly training"} · {charge.feeReference} · due {formatDueDate(charge.dueDate)}
+                        {charge.type === "registration" ? "Registration" : "Monthly training"} ·&nbsp;<span className={styles.nowrap}>{charge.feeReference}</span> ·&nbsp;due {formatDueDate(charge.dueDate)}
                       </small>
                     </span>
                     <span className={styles.pill} data-status={charge.status}>{statusLabels[charge.status]}</span>
