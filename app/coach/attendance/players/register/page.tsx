@@ -1,7 +1,9 @@
 import { AttendanceShell } from "@/components/coach/attendance/attendance-shell"
 import { PlayerAttendanceRegister } from "@/components/coach/player-attendance-register"
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
+import { calculatePlayersAttendancePercentForMonth } from "@/lib/attendance/database"
 import {
+  attendanceRegisterMonthParam,
   buildAttendanceRegisterYearOptions,
   resolveAttendanceRegisterMonth,
   resolveAttendanceRegisterSelection,
@@ -50,6 +52,12 @@ export default async function PlayerAttendanceRegisterPage({
     year: selection.year,
   })
   const providerKey = `${selection.year}:${selection.programme}:${selection.batch}`
+  const monthlyPercents = calculatePlayersAttendancePercentForMonth(
+    snapshot.sessionAssignments.map((assignment) => assignment.playerId),
+    `${selection.year}-${attendanceRegisterMonthParam(month)}`,
+    today,
+    now.toISOString(),
+  )
 
   return (
     <AttendanceShell activeTab="register">
@@ -66,6 +74,7 @@ export default async function PlayerAttendanceRegisterPage({
       >
         <PlayerAttendanceRegister
           month={month}
+          monthlyPercents={monthlyPercents}
           referenceDate={today}
           referenceInstant={now.getTime()}
           selection={selection}

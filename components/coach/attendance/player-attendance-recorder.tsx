@@ -41,6 +41,7 @@ import {
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import { describeRefusedSave, feedbackAfterMark } from "@/lib/client/session-expiry"
 import { formatAcademyTime, formatDateKey } from "@/lib/format"
+import { cancellationLabel } from "@/lib/sessions/cancellation"
 import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
 import type {
   SessionAttendanceChoice,
@@ -145,10 +146,15 @@ export function PlayerAttendanceRecorder({
     saveAttendanceRegister,
   } = useAttendancePortal()
   const {
+    academyHolidays,
     sessionAssignments,
     sessionOccurrences,
     sessionSeries,
   } = useSessionPortal()
+  const holidayByDate = useMemo(
+    () => new Map(academyHolidays.map((holiday) => [holiday.dateKey, holiday])),
+    [academyHolidays],
+  )
   const router = useRouter()
   const [selectedDate, setSelectedDate] = useState(initialDate)
   // An occurrence id, `staffCard`, or null with every card closed.
@@ -586,7 +592,8 @@ export function PlayerAttendanceRecorder({
         ? `${selectedProgress.marked}/${roster.length} marked`
         : `${roster.length} ${roster.length === 1 ? "player" : "players"}`]
       : occurrence.status === "cancelled"
-        ? ["muted", "Cancelled"]
+        // Said as the calendar says it: moved, closed for a holiday, or cancelled.
+        ? ["muted", cancellationLabel(occurrence, sessionOccurrences, holidayByDate)]
         : upcoming
           ? ["upcoming", `Opens ${formatAcademyTime(occurrence.startsAt)}`]
           : !eligible

@@ -149,12 +149,13 @@ import {
   type FeeAgreementView,
 } from "@/lib/finance/types"
 import { formatDateKey, getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
+import { placeReachesWindow } from "@/lib/sessions/term"
 import { academyPlanIsValid, feePlanMatchesTraining } from "@/lib/training/academy-plans"
 import {
   IMPLAUSIBLE_TRAINING_START_MESSAGE,
   trainingStartIsImplausiblyEarly,
 } from "@/lib/training/training-start"
-import { feePlanCoversCondition } from "@/lib/finance/plan-in-force"
+import { feePlanCoversCondition, feePlanOverlapsCondition } from "@/lib/finance/plan-in-force"
 
 const MAX_MONEY_PAISE = 1_000_000_000
 const MAX_NOTE_LENGTH = 500
@@ -1020,13 +1021,9 @@ function createAgreement(
     .from(feeAgreements).where(and(
       eq(feeAgreements.playerAccountId, input.playerId),
       existing ? ne(feeAgreements.id, existing.id) : undefined,
-      // A paused plan never bills (pauseUnstartedFeeAgreementInTransaction),
-      // so it cannot overlap the new one.
-      ne(feeAgreements.status, "paused"),
-      or(
-        isNull(feeAgreements.effectiveTo),
-        gte(feeAgreements.effectiveTo, validated.effectiveFrom),
-      ),
+      // The new plan runs on with no end. A paused plan never bills
+      // (pauseUnstartedFeeAgreementInTransaction), so it cannot overlap it.
+      feePlanOverlapsCondition(validated.effectiveFrom, null),
     )).get()
   if (overlappingHistory) {
     financeError(
@@ -1197,16 +1194,15 @@ function buildOnboardingFinancePreview(
       eq(sessionSeries.programme, input.level),
       eq(sessionSeries.batch, input.batch),
     )).all()
-  // A place counts while it covers a day from the training start (`effectiveTo` is exclusive).
-  const usableAssignments = assignments.filter((assignment) => {
-    const start = [
-      enrollment.trainingStartOn,
-      assignment.effectiveFrom,
-      assignment.seriesStartsOn,
-    ].reduce((latest, value) => value > latest ? value : latest)
-    return (assignment.effectiveTo === null || assignment.effectiveTo > start)
-      && (assignment.seriesEndsOn === null || assignment.seriesEndsOn >= start)
-  })
+  // A place counts while it covers a day from the training start: the place rule, from the
+  // latest of the training start, the place's start and its schedule's start.
+  const usableAssignments = assignments.filter((assignment) => placeReachesWindow(
+    assignment,
+    { endsOn: assignment.seriesEndsOn },
+    [enrollment.trainingStartOn, assignment.effectiveFrom, assignment.seriesStartsOn]
+      .reduce((latest, value) => value > latest ? value : latest),
+    null,
+  ))
   if (!usableAssignments.length) blockers.push("Assign a matching session before completing fees.")
   // An ended first place: the Fee Plan stops after the month it ended. A term finished by date keeps it open.
   const placeLastMonth = (assignment: typeof usableAssignments[number]) => {
@@ -1314,11 +1310,11 @@ function buildOnboardingFinancePreview(
   }]
   const pausedPeriods: string[] = []
   relevantPeriods.forEach((period, index) => {
-    const covered = usableAssignments.some((assignment) => (
-      assignment.effectiveFrom <= monthEnd(period)
-      && (assignment.effectiveTo === null || assignment.effectiveTo > monthStart(period))
-      && assignment.seriesStartsOn <= monthEnd(period)
-      && (assignment.seriesEndsOn === null || assignment.seriesEndsOn >= monthStart(period))
+    const covered = usableAssignments.some((assignment) => placeReachesWindow(
+      assignment,
+      { endsOn: assignment.seriesEndsOn, startsOn: assignment.seriesStartsOn },
+      monthStart(period),
+      addCalendarDays(monthEnd(period), 1),
     ))
     // Pausing ends an assignment and resuming creates a new one, so a returning
     // player has real gaps in their assignment history. Those months carry no

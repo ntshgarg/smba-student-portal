@@ -85,6 +85,25 @@ describe("the fee plan in force", () => {
       fs.rmSync(temporaryDirectory, { force: true, recursive: true })
     })
 
+    // The overlap check used by creating, restoring and issuing a plan is the
+    // same rule over a range of days; each copy it replaced spelled it as below.
+    it.each([
+      ["2026-10-01", null],
+      ["2026-11-01", "2026-11-30"],
+      ["2026-11-30", "2026-12-01"],
+      ["2026-12-02", null],
+      ["2026-09-01", "2026-09-30"],
+    ] as const)("finds the plans in force from %s to %s", async (from, to) => {
+      const overlaps = (await import("@/lib/finance/plan-in-force")).feePlanOverlapsCondition
+      const fromQuery = database.select({ id: schema.feeAgreements.id }).from(schema.feeAgreements)
+        .where(and(eq(schema.feeAgreements.playerAccountId, playerId), overlaps(from, to)))
+        .all().map((row) => row.id).sort()
+      const handWritten = plans.filter((plan) => plan.status !== "paused"
+        && (to === null || plan.effectiveFrom <= to)
+        && (plan.effectiveTo === null || plan.effectiveTo >= from)).map((plan) => plan.id).sort()
+      expect(fromQuery).toEqual(handWritten)
+    })
+
     it.each(dates)("agrees with the code on %s", (dateKey) => {
       const fromQuery = database.select({ id: schema.feeAgreements.id }).from(schema.feeAgreements)
         .where(and(eq(schema.feeAgreements.playerAccountId, playerId), condition(dateKey)))

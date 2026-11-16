@@ -27,7 +27,6 @@ import {
   useMemberPortal,
   useSessionPortal,
 } from "@/components/coach/coach-portal-provider"
-import { calculateMonthlyAttendance } from "@/lib/attendance/domain"
 import {
   attendanceRegisterBatches,
   attendanceRegisterMonthParam,
@@ -45,6 +44,7 @@ const weekdayShortLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 export function PlayerAttendanceRegister({
   month: activeMonth,
+  monthlyPercents,
   referenceDate,
   referenceInstant: initialReferenceInstant,
   selection,
@@ -52,6 +52,12 @@ export function PlayerAttendanceRegister({
 }: {
   /** 1-12: the register shows one month of `selection.year` at a time. */
   month: number
+  /**
+   * Each player's % for the month, worked out on the server by the family
+   * page's own rule over all their places -- so a player who changed level or
+   * batch mid-month shows one figure on every tab, the one their family sees.
+   */
+  monthlyPercents: Readonly<Record<string, number | null>>
   referenceDate: string
   referenceInstant: number
   selection: AttendanceRegisterSelection
@@ -235,32 +241,7 @@ export function PlayerAttendanceRegister({
       }),
     }
   })
-  // The month's % uses the family page's own rule (`calculateMonthlyAttendance`),
-  // so a missed session that was made up counts as attended on both screens.
-  const monthKey = `${activeYear}-${attendanceRegisterMonthParam(activeMonth)}`
-  const monthOccurrences = categoryOccurrences.filter((occurrence) => (
-    occurrence.occurrenceDate.startsWith(`${monthKey}-`)
-  ))
-  const playerPercents = new Map<string, number | null>()
-  registerRows.forEach(({ player }) => {
-    const playerId = player.member.id
-    if (playerPercents.has(playerId)) return
-    playerPercents.set(playerId, calculateMonthlyAttendance({
-      month: monthKey,
-      referenceDate: todayKey,
-      referenceInstant: new Date(referenceInstant).toISOString(),
-      joinedOn: player.member.trainingStartOn,
-      assignments: registerRows
-        .filter((row) => row.player.member.id === playerId)
-        .map((row) => row.assignment),
-      occurrences: monthOccurrences,
-      records: monthOccurrences.flatMap((occurrence) => {
-        const choice = attendanceRecords[occurrence.id]?.[playerId]
-        return choice ? [{ occurrenceId: occurrence.id, choice }] : []
-      }),
-      adjustments: categoryAdjustmentsByPlayer.get(playerId) ?? [],
-    }).percentage)
-  })
+  const playerCount = new Set(registerRows.map((row) => row.player.member.id)).size
   const tableStyle = { "--register-columns": visibleDates.length } as CSSProperties
 
   // Advanced from the instant the server rendered with, by however much real
@@ -342,7 +323,7 @@ export function PlayerAttendanceRegister({
             <RegisterBand
               heading={<h2>{selectedProgramme} · {selectedBatch}</h2>}
               month={activeMonth}
-              subtitle={`${monthLabel} · ${playerPercents.size} ${playerPercents.size === 1 ? "player" : "players"}`}
+              subtitle={`${monthLabel} · ${playerCount} ${playerCount === 1 ? "player" : "players"}`}
               year={activeYear}
               yearOptions={yearOptions}
             />
@@ -409,7 +390,7 @@ export function PlayerAttendanceRegister({
                         const firstPlayerRow = rowIndex === 0
                           || registerRows[rowIndex - 1]?.player.member.id !== row.player.member.id
                         const percent = firstPlayerRow
-                          ? playerPercents.get(row.player.member.id) ?? null
+                          ? monthlyPercents[row.player.member.id] ?? null
                           : null
                         const slot = row.series.slots[0]
                         const sessionTimeLabel = formatSessionTimeRange({

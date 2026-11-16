@@ -1,8 +1,8 @@
 import "server-only"
 
-import { and, asc, desc, eq, exists, gt, gte, inArray, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, exists, inArray, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm"
 
-import { weekdayForDateKey } from "@/lib/date-keys"
+import { isValidDateKey, weekdayForDateKey } from "@/lib/date-keys"
 import { onboardingFinished } from "@/lib/coach/onboarding"
 import { academyIdSerial, formatAcademyId } from "@/lib/auth/identity"
 import type { SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -51,7 +51,7 @@ import {
   type PlayerReceiptView,
 } from "@/lib/finance/types"
 import { getAcademyDateKey } from "@/lib/format"
-import { feePlanInForce } from "@/lib/finance/plan-in-force"
+import { feePlanInForce, feePlanOverlapsCondition } from "@/lib/finance/plan-in-force"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
@@ -708,7 +708,7 @@ export function planRestoreAfterWithdrawalReversal(
   }
   const previous = metadata.previousAgreement
   const withdrawnOn = refund.withdrawalEffectiveOn
-  if (!metadata.agreementId || !previous || !withdrawnOn
+  if (!metadata.agreementId || !previous || !withdrawnOn || !isValidDateKey(withdrawnOn)
     || !["active", "ended"].includes(previous.status)
     || (previous.status === "ended" && !previous.effectiveTo)) return null
   const agreement = database.select().from(feeAgreements)
@@ -720,9 +720,8 @@ export function planRestoreAfterWithdrawalReversal(
   const overlapping = database.select({ id: feeAgreements.id }).from(feeAgreements).where(and(
     eq(feeAgreements.playerAccountId, agreement.playerAccountId),
     ne(feeAgreements.id, agreement.id),
-    ne(feeAgreements.status, "paused"),
-    restoredTo ? lte(feeAgreements.effectiveFrom, restoredTo) : undefined,
-    or(isNull(feeAgreements.effectiveTo), gt(feeAgreements.effectiveTo, withdrawnOn)),
+    // The restored days run from the day after the withdrawal.
+    feePlanOverlapsCondition(addCalendarDays(withdrawnOn, 1), restoredTo),
   )).get()
   if (overlapping) return null
   if (previous.status === "active" && readActiveFeeAgreement(database, agreement.playerAccountId)) {
@@ -1375,10 +1374,7 @@ export function listPlayersTrainingWithoutFeePlan(
         where ${feeAgreements.playerAccountId} = ${accounts.id}
           and (${feeAgreements.status} = 'active'
             or ${feeAgreements.effectiveFrom} > ${monthEnd(period)}
-            or (${feeAgreements.status} != 'paused'
-              and ${feeAgreements.effectiveFrom} <= ${monthEnd(period)}
-              and (${feeAgreements.effectiveTo} is null
-                or ${feeAgreements.effectiveTo} >= ${monthStart(period)})))
+            or ${feePlanOverlapsCondition(monthStart(period), monthEnd(period))})
       )`,
     )).all()
   return new Set(rows.map((row) => row.playerId))
@@ -1631,9 +1627,7 @@ export function listMonthlyPreparationCandidates(database: Executor, period: str
       eq(academyIdAllocations.accountId, feeAgreements.playerAccountId),
     )
     .where(and(
-      ne(feeAgreements.status, "paused"),
-      lte(feeAgreements.effectiveFrom, monthEnd(period)),
-      or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, monthStart(period))),
+      feePlanOverlapsCondition(monthStart(period), monthEnd(period)),
       eq(accounts.role, "player"),
       eq(accounts.approvalStatus, "approved"),
       isNull(accounts.archivedAt),

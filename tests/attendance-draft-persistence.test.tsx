@@ -508,6 +508,7 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
   }),
   useMemberPortal: () => ({ players: rosterPlayers }),
   useSessionPortal: () => ({
+    academyHolidays: [],
     sessionAssignments: rosterAssignments,
     sessionOccurrences: [recorderFixture.occurrence],
     sessionSeries: [recorderFixture.series],

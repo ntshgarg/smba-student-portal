@@ -212,4 +212,69 @@ describe("month-scoped occurrence reads", () => {
     if (!input) throw new Error("Player attendance input was not built.")
     expect(input.occurrences).toEqual([])
   })
+
+  /*
+   * The coach's register reads its whole roster at once and shows each player
+   * the family page's own figure. A player moved to another schedule mid-month
+   * gets one % over both places: present on 1 Dec on the first, absent on 29
+   * Dec on the second, so 50% -- not 100% on one tab and 0% on the other.
+   */
+  it("gives the register the family page's figure, one per player over all their places", () => {
+    const moverId = "month-range-mover"
+    database.insert(schema.accounts).values({
+      id: moverId,
+      fullName: moverId,
+      normalizedName: moverId,
+      requestedRole: "player",
+      role: "player",
+      approvalStatus: "approved",
+      approvedAt: setupNow,
+      createdAt: setupNow,
+      updatedAt: setupNow,
+    }).run()
+    database.insert(schema.playerEnrollments).values({
+      accountId: moverId,
+      level: "Adult",
+      batch: "Weekday",
+      academyPlan: "weekday-3-day",
+      status: "active",
+      trainingStartOn: "2025-12-01",
+      updatedAt: setupNow,
+    }).run()
+    ;[
+      { id: `${moverId}-first`, seriesId: assignedSeriesId, effectiveFrom: "2025-12-01", effectiveTo: "2025-12-15" },
+      { id: `${moverId}-second`, seriesId: otherSeriesId, effectiveFrom: "2025-12-15", effectiveTo: null },
+    ].forEach((place) => {
+      database.insert(schema.sessionAssignments).values({
+        ...place,
+        accountId: moverId,
+        assignedByAccountId: coachId,
+        assignedAt: setupNow,
+      }).run()
+      database.insert(schema.sessionAssignmentWeekdays).values({
+        id: `${place.id}-weekday`,
+        assignmentId: place.id,
+        weekday: 1,
+      }).run()
+    })
+    database.insert(schema.sessionAttendanceRecords).values([
+      { occurrenceId: `${assignedSeriesId}-2025-12-01`, choice: "present" as const },
+      { occurrenceId: `${otherSeriesId}-2025-12-29`, choice: "absent" as const },
+    ].map((record) => ({
+      ...record,
+      id: `${moverId}-${record.occurrenceId}`,
+      accountId: moverId,
+      createdAt: setupNow,
+      markedByAccountId: coachId,
+      updatedAt: setupNow,
+    }))).run()
+
+    const args = ["2025-12", "2025-12-31", "2025-12-31T23:59:59+05:30"] as const
+    const roster = [playerId, moverId, unassignedPlayerId]
+    const percents = attendanceDatabase.calculatePlayersAttendancePercentForMonth(roster, ...args)
+    expect(percents[moverId]).toBe(50)
+    roster.forEach((id) => {
+      expect(percents[id]).toBe(attendanceDatabase.calculatePlayerAttendanceForMonth(id, ...args)?.percentage ?? null)
+    })
+  })
 })
