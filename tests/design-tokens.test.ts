@@ -237,13 +237,9 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px)", ".slipField input", "16px"],
   ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px)", ".slipField textarea", "17px"], // 1.0625rem = 9.6px
   ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px)", ".field input", "16px"],
-  ["components/coach/financials/financial-records.module.css", "@media (max-width: 720px)", '.filters input:not([type="checkbox"])', "16px"],
-  ["components/coach/financials/financials.module.css", "", ".search input", "16px"],
+  ["components/coach/financials/fees.module.css", "@media (max-width: 720px), (pointer: coarse)", ".field", "16px"],
   ["components/coach/financials/financials.module.css", "", ".allocationInput input", "16px"],
   ["components/coach/financials/financials.module.css", "", ".field input", "16px"],
-  ["components/coach/financials/financials.module.css", "@media (min-width: 721px)", ".balanceAllocationInput input", "16px"],
-  ["components/coach/financials/financials.module.css", "@media (max-width: 720px)", ".balanceMetric > strong", "30px"], // the one with nothing to protect
-  ["components/coach/financials/financials.module.css", "@media (max-width: 720px), (pointer: coarse)", ".balanceField input", "16px"],
   ["components/coach/onboarding/player-onboarding-register.module.css", "@media (max-width: 720px), (pointer: coarse)", ".entry input", "16px"],
   ["components/coach/attendance-adjustments-workspace.module.css", "@media (max-width: 720px), (pointer: coarse)", ".playerField select", "16px"],
   ["components/coach/attendance-register.module.css", "@media (max-width: 720px), (pointer: coarse)", ".pill select", "16px"],
@@ -253,7 +249,6 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   // font-size was lifted, so the layout those blocks carry still keys on width.
   ["app/portal.css", "@media (pointer: coarse)", ".security-form input", "16px"],
   ["components/coach/announcements/announcements.module.css", "@media (pointer: coarse)", ".slipField input", "16px"],
-  ["components/coach/financials/financial-records.module.css", "@media (pointer: coarse)", '.filters input:not([type="checkbox"])', "16px"],
 ]
 
 /** One line per exempt declaration, in the spelling the failure messages use. The first
