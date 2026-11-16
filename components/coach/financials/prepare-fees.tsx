@@ -1,6 +1,5 @@
 "use client"
 
-import { ArrowUpRight, Check } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
@@ -14,7 +13,7 @@ import {
   resultFeedback,
   useIdempotencyKey,
 } from "./financials-client-utils"
-import styles from "./financials.module.css"
+import styles from "./fees.module.css"
 
 /**
  * `offerRetry` rides on the feedback so every existing `setFeedback(null)` also
@@ -31,12 +30,10 @@ function monthOnly(period: string) {
 }
 
 export function PrepareFees({
-  compact = false,
   currentPeriod,
   period,
   preparation,
 }: {
-  compact?: boolean
   /** The academy's current month; a later month's fees are not issued yet. */
   currentPeriod: string
   period: string
@@ -84,68 +81,56 @@ export function PrepareFees({
     }
   }
 
+  const month = monthOnly(period)
+  const players = (count: number) => `${count} ${count === 1 ? "player" : "players"}`
+
   return (
-    <section className={`${styles.preparation} ${compact ? styles.compactPreparation : ""}`} aria-labelledby="financial-preparation-title">
-      <div className={styles.preparationHeading}>
-        <div>
-          <span>Monthly fee issue</span>
-          <h2 id="financial-preparation-title">Issue {periodLabel(period)} fees</h2>
-        </div>
-        {!reviewOpen ? (
-          <button
-            type="button"
-            disabled={!canIssue}
-            onClick={() => setReviewOpen(true)}
-          >
-            {notYet
-              ? `Opens 1 ${monthOnly(period)}`
-              : preparation.ready > 0
-                ? "Review fee issue"
-                : preparation.alreadyPrepared > 0
-                  ? "Fees issued"
-                  : "No fees to issue"}
-            {canIssue ? <ArrowUpRight aria-hidden="true" /> : notYet ? null : <Check aria-hidden="true" />}
-          </button>
-        ) : null}
-      </div>
-
-      <dl className={styles.preparationCounts}>
-        <div><dt>Ready to issue</dt><dd>{preparation.ready}</dd></div>
-        <div><dt>Already issued</dt><dd>{preparation.alreadyPrepared}</dd></div>
-      </dl>
-
-      {preparation.waitingForChange > 0 && !notYet ? (
-        <p className={styles.preparationNote}>
-          {preparation.waitingForChange} {preparation.waitingForChange === 1 ? "player’s fee waits" : "players’ fees wait"} for a training change booked in Members; it is issued once the change happens.
-        </p>
-      ) : null}
-
-      {notYet ? (
-        <p className={styles.preparationNote}>
-          {periodLabel(period)} fees can be issued from 1 {monthOnly(period)}, so every change made before then still reaches them.
-        </p>
-      ) : null}
-
+    <section aria-label={`Issue ${periodLabel(period)} fees`}>
       {reviewOpen && canIssue ? (
-        <div className={styles.preparationReview}>
-          <div>
-            <strong>{preparation.ready} {preparation.ready === 1 ? "player is" : "players are"} ready</strong>
-            <p>Only missing monthly charges will be issued. Running this again will not duplicate them.</p>
-          </div>
-          <div>
-            <button className={styles.quietButton} type="button" disabled={pending} onClick={() => { requestKey.reset(); setReviewOpen(false) }}>
+        <div className={styles.confirm}>
+          <h2>Issue {periodLabel(period)} fees</h2>
+          <dl className={styles.confirmTiles}>
+            <div><dt>Ready to issue</dt><dd>{preparation.ready}</dd></div>
+            <div><dt>Already issued</dt><dd>{preparation.alreadyPrepared}</dd></div>
+          </dl>
+          <p>Only missing monthly charges will be issued. Running this again will not duplicate them.</p>
+          <div className={styles.actions}>
+            <button className={styles.button} type="button" disabled={pending} onClick={() => { requestKey.reset(); setReviewOpen(false) }}>
               Cancel
             </button>
-            <button className={styles.primaryButton} type="button" disabled={pending} onClick={() => void prepare()}>
+            <button className={`${styles.button} ${styles.light}`} type="button" disabled={pending} onClick={() => void prepare()}>
               {pending
                 ? "Issuing…"
                 : `Issue ${preparation.ready} ${preparation.ready === 1 ? "fee" : "fees"}${feedback?.offerRetry ? " again" : ""}`}
             </button>
           </div>
         </div>
+      ) : notYet ? (
+        <div className={styles.line}>
+          <p>{periodLabel(period)} fees can be issued from 1 {month}, so every change made before then still reaches them.</p>
+          <button className={styles.button} type="button" disabled>Opens 1 {month}</button>
+        </div>
+      ) : canIssue ? (
+        <div className={styles.line} data-tone="amber">
+          <p>
+            {month} fees are ready for {players(preparation.ready)}.{" "}
+            {preparation.alreadyPrepared > 0 ? `${players(preparation.alreadyPrepared)} already issued.` : "Nothing is issued yet."}
+          </p>
+          <button className={styles.primary} type="button" onClick={() => setReviewOpen(true)}>Review &amp; issue</button>
+        </div>
+      ) : preparation.alreadyPrepared > 0 ? (
+        <p className={styles.line} data-tone="green">✓ {month} fees issued for {players(preparation.alreadyPrepared)}.</p>
+      ) : (
+        <p className={styles.line}>No monthly fees to issue for {month}.</p>
+      )}
+
+      {preparation.waitingForChange > 0 && !notYet ? (
+        <p className={styles.note}>
+          {preparation.waitingForChange} {preparation.waitingForChange === 1 ? "player’s fee waits" : "players’ fees wait"} for a training change booked in Members; it is issued once the change happens.
+        </p>
       ) : null}
 
-      <InlineNotice action={feedback?.action} className={styles.notice} message={feedback?.message} reserveSpace={!compact} tone={feedback?.tone} />
+      <InlineNotice action={feedback?.action} message={feedback?.message} reserveSpace={false} tone={feedback?.tone} />
     </section>
   )
 }

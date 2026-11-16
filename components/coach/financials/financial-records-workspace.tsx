@@ -1,40 +1,36 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  Download,
-  FileClock,
-  FileText,
-  History,
-  ReceiptIndianRupee,
-  Search,
-  WalletCards,
-} from "lucide-react"
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Download, FileText, Search } from "lucide-react"
 import Link from "next/link"
 import type { ReactNode } from "react"
 
-
+import { monthEnd } from "@/lib/finance/domain"
+import { ACTIVITY_GROUPS, REGISTER_STATUS_FILTERS, activityGroupFor } from "@/lib/finance/records-filters"
 import {
   formatAcademyDate,
   formatAcademyTime,
   formatDateKey,
   formatInr,
+  getAcademyDateKey,
 } from "@/lib/format"
-import type {
-  FinanceActivityItem,
-  FinanceDayBookEvent,
-  FinanceDayBookSummary,
-  FinancePlayerScope,
-  FinanceRegisterMode,
-  FinanceRegisterRow,
-  FinanceRegisterSummary,
-  FinanceStatus,
-  PaymentMethod,
+import {
+  FINANCE_AUDIT_EVENTS,
+  isFinanceAuditEventType,
+  type FinanceActivityItem,
+  type FinanceAuditEventType,
+  type FinanceDayBookEvent,
+  type FinanceDayBookSummary,
+  type FinancePlayerScope,
+  type FinanceRegisterMode,
+  type FinanceRegisterRow,
+  type FinanceRegisterSummary,
+  type PaymentMethod,
 } from "@/lib/finance/types"
 
-import recordsStyles from "./financial-records.module.css"
-import financialStyles from "./financials.module.css"
+import { FeeRegisterList, type FeeRegisterListRow } from "./fee-register-list"
+import { FeesShell, type FeesTab } from "./fees-shell"
+import { FilterForm } from "./filter-form"
+import styles from "./fees.module.css"
 
-export type FinancialRecordsView = "fees" | "collections" | "activity"
+export type FinancialRecordsView = FeesTab
 
 export type FinancialRecordsPagination = {
   /** Said when there are later records but Next has reached its limit. */
@@ -52,7 +48,8 @@ export type FeeRegisterView = {
     period: string
     query: string
     scope: FinancePlayerScope
-    status: FinanceStatus | "all"
+    /** A status tile's key, one status from an older link, or "all". */
+    status: string
   }
   pagination: FinancialRecordsPagination
   preparation?: ReactNode
@@ -65,6 +62,8 @@ export type CollectionsDayBookEventView = FinanceDayBookEvent & {
 }
 
 export type CollectionsDayBookView = {
+  /** The academy's current month, for the This month / Last month picks. */
+  currentPeriod: string
   events: CollectionsDayBookEventView[]
   exportHref: string
   filters: {
@@ -78,7 +77,8 @@ export type CollectionsDayBookView = {
 
 export type FinancialActivityView = {
   coachOptions: Array<{ id: string; name: string }>
-  eventTypeOptions: Array<{ label: string; value: string }>
+  /** Events per type under the date and coach filters; null while a search is typed. */
+  counts: Partial<Record<FinanceAuditEventType, number>> | null
   filters: {
     coachId: string
     eventType: string
@@ -110,26 +110,6 @@ export type FinancialRecordsWorkspaceProps =
     dayBook?: never
     feeRegister?: never
   }
-
-const statusLabels: Record<FinanceStatus, string> = {
-  not_prepared: "Not issued",
-  overdue: "Overdue",
-  paid: "Paid",
-  partially_paid: "Partially paid",
-  pending: "Pending",
-  setup_required: "Setup required",
-  void: "Void",
-}
-
-const recordViews: Array<{
-  icon: typeof WalletCards
-  label: string
-  value: FinancialRecordsView
-}> = [
-  { icon: WalletCards, label: "Fee register", value: "fees" },
-  { icon: ReceiptIndianRupee, label: "Collections", value: "collections" },
-  { icon: History, label: "Activity", value: "activity" },
-]
 
 function recordsHref(
   view: FinancialRecordsView,
@@ -167,354 +147,149 @@ function formatPeriod(period: string) {
   return periodFormat.format(new Date(Date.UTC(year, month - 1, 1)))
 }
 
-function statusClass(status: FinanceStatus) {
-  if (status === "paid") return recordsStyles.statusPositive
-  if (status === "overdue" || status === "setup_required") return recordsStyles.statusAttention
-  if (status === "partially_paid" || status === "pending") return recordsStyles.statusPending
-  return recordsStyles.statusQuiet
+function shiftPeriod(period: string, months: number) {
+  const [year, month] = period.split("-").map(Number)
+  const shifted = new Date(Date.UTC(year, month - 1 + months, 1))
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`
 }
 
-function StatusLabel({ status }: { status: FinanceStatus }) {
-  return <span className={`${recordsStyles.status} ${statusClass(status)}`}>{statusLabels[status]}</span>
+function dayHeading(dateKey: string) {
+  return formatDateKey(dateKey, { day: "numeric", month: "short", weekday: "short", year: "numeric" })
 }
 
 function Pagination({ pagination }: { pagination: FinancialRecordsPagination }) {
   return (
-    <nav className={recordsStyles.pagination} aria-label="Record pages">
+    <nav className={styles.pager} aria-label="Record pages">
       <span>
         {pagination.label}
-        {pagination.endNote ? <small className={recordsStyles.paginationNote}>{pagination.endNote}</small> : null}
+        {pagination.endNote ? <small>{pagination.endNote}</small> : null}
       </span>
       <div>
         {pagination.previousHref ? (
-          <Link href={pagination.previousHref}><ArrowLeft aria-hidden="true" /> Previous</Link>
-        ) : (
-          <span aria-disabled="true"><ArrowLeft aria-hidden="true" /> Previous</span>
-        )}
+          <Link className={styles.button} href={pagination.previousHref}><ArrowLeft aria-hidden="true" /> Previous</Link>
+        ) : null}
         {pagination.nextHref ? (
-          <Link href={pagination.nextHref}>Next <ArrowRight aria-hidden="true" /></Link>
-        ) : (
-          <span aria-disabled="true">Next <ArrowRight aria-hidden="true" /></span>
-        )}
+          <Link className={styles.button} href={pagination.nextHref}>Next <ArrowRight aria-hidden="true" /></Link>
+        ) : null}
       </div>
     </nav>
-  )
-}
-
-function EmptyRecords({
-  body,
-  icon: Icon,
-  title,
-}: {
-  body: string
-  icon: typeof WalletCards
-  title: string
-}) {
-  return (
-    <div className={recordsStyles.emptyState} role="status">
-      <Icon aria-hidden="true" />
-      <strong>{title}</strong>
-      <p>{body}</p>
-    </div>
-  )
-}
-
-function RecordsNavigation({ activeView }: { activeView: FinancialRecordsView }) {
-  return (
-    <nav className={recordsStyles.viewNavigation} aria-label="Fee record views">
-      {recordViews.map(({ icon: Icon, label, value }) => (
-        <Link
-          key={value}
-          className={activeView === value ? recordsStyles.activeView : undefined}
-          href={recordsHref(value)}
-          aria-current={activeView === value ? "page" : undefined}
-        >
-          <Icon aria-hidden="true" />
-          <span>{label}</span>
-        </Link>
-      ))}
-    </nav>
-  )
-}
-
-function RegisterModeSwitch({
-  filterParams,
-  mode,
-}: {
-  filterParams: Record<string, string>
-  mode: FinanceRegisterMode
-}) {
-  return (
-    <div className={recordsStyles.modeSwitch} aria-label="Choose fee register" role="group">
-      <Link
-        className={mode === "monthly" ? recordsStyles.activeMode : undefined}
-        href={recordsHref("fees", { ...filterParams, mode: "monthly" })}
-        aria-current={mode === "monthly" ? "page" : undefined}
-      >
-        Monthly fees
-      </Link>
-      <Link
-        className={mode === "registration" ? recordsStyles.activeMode : undefined}
-        href={recordsHref("fees", { ...filterParams, mode: "registration" })}
-        aria-current={mode === "registration" ? "page" : undefined}
-      >
-        Registration fees
-      </Link>
-    </div>
-  )
-}
-
-function FeeTruthRail({
-  mode,
-  period,
-  summary,
-}: {
-  mode: FinanceRegisterMode
-  period: string
-  summary: FeeRegisterView["summary"]
-}) {
-  const isRegistration = mode === "registration"
-  const effective = formatInr(summary.effectiveAmountPaise)
-  const received = formatInr(summary.receivedPaise)
-  const outstanding = formatInr(summary.outstandingPaise)
-  const feeLabel = isRegistration ? "Net registration fees" : "Net monthly fees"
-
-  return (
-    <div className={recordsStyles.registrationTruthRail}>
-      <div className={recordsStyles.registrationRecordCount}>
-        <span>{isRegistration ? "One-time academy entry" : `${formatPeriod(period)} fee cycle`}</span>
-        <strong>{summary.totalRows} {summary.totalRows === 1 ? "record" : "records"}</strong>
-      </div>
-      <p className="sr-only">
-        {feeLabel} {effective}, minus received {received}, equals outstanding {outstanding}.
-      </p>
-      <div className={recordsStyles.registrationEquation} aria-hidden="true">
-        <div><span>{feeLabel}</span><strong>{effective}</strong></div>
-        <b>−</b>
-        <div className={summary.receivedPaise > 0 ? recordsStyles.figureReceived : undefined}>
-          <span>Received</span><strong>{received}</strong>
-        </div>
-        <b>=</b>
-        <div className={summary.outstandingPaise > 0 ? recordsStyles.figureOwed : undefined}>
-          <span>Outstanding</span><strong>{outstanding}</strong>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function FeeRegisterTable({
-  mode,
-  playerRecordHref,
-  register,
-}: {
-  mode: FinanceRegisterMode
-  playerRecordHref: (playerId: string) => string
-  register: FeeRegisterView
-}) {
-  const isRegistration = mode === "registration"
-  const visibleStart = Number.parseInt(register.pagination.label.match(/^\d+/u)?.[0] ?? "1", 10)
-
-  return (
-    <div
-      className={`${recordsStyles.tableWrap} ${recordsStyles.registrationTableWrap}`}
-      tabIndex={0}
-      role="region"
-      aria-label={isRegistration
-        ? "Scrollable registration fee register"
-        : "Scrollable monthly fee register"}
-    >
-      <table className={`${recordsStyles.recordsTable} ${recordsStyles.registrationTable}`}>
-        <caption className="sr-only">
-          {isRegistration ? "One-time academy registration fee records" : `${formatPeriod(register.filters.period)} monthly fee records`}
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">No.</th>
-            <th scope="col">Player</th>
-            <th scope="col">{isRegistration ? "Registration entry" : "Monthly fee"}</th>
-            <th scope="col">Amounts</th>
-            <th scope="col">Status</th>
-            <th scope="col"><span className="sr-only">Actions</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {register.rows.map((row, index) => {
-            const adjustments = [
-              row.creditAdjustmentsPaise
-                ? `${formatInr(row.creditAdjustmentsPaise)} credit`
-                : null,
-              row.debitAdjustmentsPaise
-                ? `${formatInr(row.debitAdjustmentsPaise)} debit`
-                : null,
-            ].filter(Boolean).join(" · ")
-            const dueLabel = row.dueDate
-              ? `Due ${formatDateKey(row.dueDate, { day: "numeric", month: "short", year: "numeric" })}`
-              : row.status === "setup_required"
-                ? "On a schedule with no fee plan"
-                : "No charge issued"
-
-            return (
-              <tr key={`${row.playerId}-${row.feeReference ?? "not-prepared"}`}>
-                <td className={recordsStyles.registrationFolio} data-label="Record number">
-                  {String(visibleStart + index).padStart(2, "0")}
-                </td>
-                <td className={recordsStyles.registrationPlayer} data-label="Player">
-                  <strong>{row.fullName}</strong>
-                  <small>{row.academyId}{row.archived ? " · Archived" : ""}</small>
-                </td>
-                <td className={recordsStyles.registrationEntry} data-label={isRegistration ? "Registration entry" : "Monthly fee"}>
-                  <strong>{row.feeReference ?? (row.status === "setup_required" ? "No fee plan" : "Not issued")}</strong>
-                  <small>{dueLabel}{adjustments ? ` · ${adjustments}` : " · No adjustments"}</small>
-                </td>
-                <td className={recordsStyles.registrationAmounts} data-label="Amounts">
-                  <dl>
-                    <div><dt>{isRegistration ? "Charged" : "Billed"}</dt><dd>{formatInr(row.originalAmountPaise)}</dd></div>
-                    <div><dt>Received</dt><dd>{formatInr(row.receivedPaise)}</dd></div>
-                    <div className={row.outstandingPaise > 0 ? recordsStyles.balanceOwed : undefined}><dt>Balance</dt><dd>{formatInr(row.outstandingPaise)}</dd></div>
-                  </dl>
-                </td>
-                <td className={recordsStyles.registrationStatus} data-label="Status">
-                  <StatusLabel status={row.status} />
-                </td>
-                <td className={recordsStyles.registrationAction} data-label="Record">
-                  <Link
-                    aria-label={`View fee record for ${row.fullName}`}
-                    className={recordsStyles.rowAction}
-                    href={playerRecordHref(row.playerId)}
-                  >
-                    <FileText aria-hidden="true" /> Open record
-                  </Link>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
   )
 }
 
 function FeeRegister({ register }: { register: FeeRegisterView }) {
-  const isRegistration = register.filters.mode === "registration"
-  const filterParams = {
-    period: register.filters.period,
-    q: register.filters.query,
-    scope: register.filters.scope,
-    status: register.filters.status,
+  const { filters, summary } = register
+  const isRegistration = filters.mode === "registration"
+  const keep = {
+    mode: filters.mode,
+    period: isRegistration ? undefined : filters.period,
+    q: filters.query || undefined,
+    scope: filters.scope === "active" ? undefined : filters.scope,
   }
-  const playerRecordHref = (playerId: string) => {
+  const statusParam = filters.status === "all" ? undefined : filters.status
+  const recordSearch = (playerId: string) => {
     const search = new URLSearchParams({
-      mode: register.filters.mode,
-      period: register.filters.period,
-      scope: register.filters.scope,
-      status: register.filters.status,
+      mode: filters.mode,
+      period: filters.period,
+      scope: filters.scope,
+      status: filters.status,
     })
-    if (register.filters.query) search.set("q", register.filters.query)
-    if (register.filters.cursors) search.set("cursors", register.filters.cursors)
+    if (filters.query) search.set("q", filters.query)
+    if (filters.cursors) search.set("cursors", filters.cursors)
     return `/coach/financials/players/${encodeURIComponent(playerId)}?${search.toString()}`
   }
+  const rows: FeeRegisterListRow[] = register.rows.map((row) => ({
+    ...row,
+    paymentHref: row.outstandingPaise > 0 && !row.archived
+      ? `/coach/financials/record?${new URLSearchParams({ player: row.playerId, query: row.academyId }).toString()}`
+      : null,
+    recordHref: recordSearch(row.playerId),
+  }))
+  const allCount = Object.values(summary.statusCounts).reduce((total, count) => total + (count ?? 0), 0)
+  const tiles = [
+    { count: allCount, key: "all", label: "All" },
+    ...REGISTER_STATUS_FILTERS.map((filter) => ({
+      count: filter.statuses.reduce((total, status) => total + (summary.statusCounts[status] ?? 0), 0),
+      key: filter.key,
+      label: filter.label,
+    })),
+  ].filter((tile) => tile.key !== "void" || tile.count > 0 || filters.status === "void")
+  const startNumber = Number.parseInt(register.pagination.label.match(/^\d+/u)?.[0] ?? "1", 10)
 
   return (
-    <section
-      className={`${recordsStyles.panel} ${recordsStyles.registrationPanel}`}
-      aria-labelledby="fee-register-title"
-    >
-      <header className={`${recordsStyles.panelHeader} ${recordsStyles.registrationPanelHeader}`}>
-        <div>
-          <span>Player fees</span>
-          <h2 id="fee-register-title">{isRegistration ? "Registration fees" : "Monthly fees"}</h2>
+    <section aria-label={isRegistration ? "Registration fees" : `${formatPeriod(filters.period)} monthly fees`}>
+      <FilterForm action="/coach/financials/records" className={styles.bar} label="Filter fees">
+        <input type="hidden" name="view" value="fees" />
+        <input type="hidden" name="mode" value={filters.mode} />
+        {statusParam ? <input type="hidden" name="status" value={statusParam} /> : null}
+        {isRegistration ? null : (
+          <span className={styles.month}>
+            <Link
+              aria-label={`Show ${formatPeriod(shiftPeriod(filters.period, -1))}`}
+              href={recordsHref("fees", { ...keep, period: shiftPeriod(filters.period, -1), status: statusParam })}
+            >
+              <ChevronLeft aria-hidden="true" />
+            </Link>
+            <input aria-label="Fee month" className={styles.field} defaultValue={filters.period} name="period" type="month" />
+            <Link
+              aria-label={`Show ${formatPeriod(shiftPeriod(filters.period, 1))}`}
+              href={recordsHref("fees", { ...keep, period: shiftPeriod(filters.period, 1), status: statusParam })}
+            >
+              <ChevronRight aria-hidden="true" />
+            </Link>
+          </span>
+        )}
+        <span className={styles.seg} role="group" aria-label="Choose fee register">
+          <Link aria-current={isRegistration ? undefined : "page"} href={recordsHref("fees", { ...keep, mode: "monthly", period: filters.period })}>Monthly</Link>
+          <Link aria-current={isRegistration ? "page" : undefined} href={recordsHref("fees", { ...keep, mode: "registration", period: undefined })}>Registration</Link>
+        </span>
+        <label className={styles.search}>
+          <Search aria-hidden="true" />
+          <span className="sr-only">Find a record</span>
+          <input defaultValue={filters.query} maxLength={120} name="q" placeholder="Player, Academy ID or fee reference" type="search" />
+        </label>
+        <select aria-label="Players" className={styles.field} defaultValue={filters.scope} name="scope">
+          <option value="active">Active players</option>
+          <option value="archived">Archived players</option>
+          <option value="all">All players</option>
+        </select>
+        <a className={`${styles.plainLink} ${styles.end}`} href={register.exportHref}>
+          <Download aria-hidden="true" /> Export CSV
+        </a>
+      </FilterForm>
+
+      <p className={styles.totals}>
+        <span>{isRegistration ? "Charged" : "Billed"}<b>{formatInr(summary.effectiveAmountPaise)}</b></span>
+        <span>Received<b>{formatInr(summary.receivedPaise)}</b></span>
+        <span className={summary.outstandingPaise > 0 ? styles.owed : undefined}>Outstanding<b>{formatInr(summary.outstandingPaise)}</b></span>
+      </p>
+
+      {!isRegistration && register.preparation ? register.preparation : null}
+
+      <nav className={styles.tiles} aria-label="Filter by status">
+        {tiles.map((tile) => (
+          <Link
+            key={tile.key}
+            aria-current={(filters.status === tile.key) ? "page" : undefined}
+            data-zero={tile.count === 0 ? "" : undefined}
+            href={recordsHref("fees", { ...keep, status: tile.key === "all" ? undefined : tile.key })}
+          >
+            <b>{tile.count}</b>
+            <span>{tile.label}</span>
+          </Link>
+        ))}
+      </nav>
+
+      {rows.length ? (
+        <FeeRegisterList rows={rows} startNumber={startNumber} />
+      ) : (
+        <div className={styles.empty} role="status">
+          No matching fee records
           <p>
-            {!isRegistration
-              ? `${formatPeriod(register.filters.period)} player fee cycle.`
-              : "One-time academy registration fee records."}
+            {isRegistration
+              ? "Change the filters to review another part of the registration fee record."
+              : "Change the month or filters to review another part of the fee record."}
           </p>
         </div>
-        <div className={recordsStyles.registrationHeaderActions}>
-          <RegisterModeSwitch filterParams={filterParams} mode={register.filters.mode} />
-          <a className={recordsStyles.downloadLink} href={register.exportHref}>
-            <Download aria-hidden="true" /> Export CSV
-          </a>
-        </div>
-      </header>
-
-      <FeeTruthRail
-        mode={register.filters.mode}
-        period={register.filters.period}
-        summary={register.summary}
-      />
-
-      {register.filters.mode === "monthly" && register.preparation ? (
-        <div className={recordsStyles.preparationEmbed}>
-          {register.preparation}
-        </div>
-      ) : null}
-
-      <form
-        className={`${recordsStyles.filters} ${recordsStyles.registrationFilters} ${!isRegistration ? recordsStyles.monthlyFilters : ""}`}
-        action="/coach/financials/records"
-        method="get"
-        role="search"
-      >
-        <input type="hidden" name="view" value="fees" />
-        <input type="hidden" name="mode" value={register.filters.mode} />
-        <label className={recordsStyles.searchField}>
-          <span>Find a record</span>
-          <span className={recordsStyles.searchInput}>
-            <Search aria-hidden="true" />
-            <input
-              defaultValue={register.filters.query}
-              maxLength={120}
-              name="q"
-              placeholder="Player, Academy ID or fee reference"
-              type="search"
-            />
-          </span>
-        </label>
-        {register.filters.mode === "monthly" ? (
-          <label>
-            <span>Fee month</span>
-            <input defaultValue={register.filters.period} name="period" type="month" />
-          </label>
-        ) : null}
-        <label>
-          <span>Status</span>
-          <select defaultValue={register.filters.status} name="status">
-            <option value="all">All statuses</option>
-            <option value="overdue">Overdue</option>
-            <option value="partially_paid">Partially paid</option>
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-            <option value="not_prepared">Not issued</option>
-            <option value="setup_required">Setup required</option>
-            <option value="void">Void</option>
-          </select>
-        </label>
-        <label>
-          <span>Players</span>
-          <select defaultValue={register.filters.scope} name="scope">
-            <option value="active">Active players</option>
-            <option value="archived">Archived players</option>
-            <option value="all">All players</option>
-          </select>
-        </label>
-        <button type="submit">Apply filters</button>
-      </form>
-
-      {register.rows.length ? (
-        <FeeRegisterTable
-          mode={register.filters.mode}
-          playerRecordHref={playerRecordHref}
-          register={register}
-        />
-      ) : (
-        <EmptyRecords
-          body={isRegistration
-            ? "Change the filters to review another part of the registration fee record."
-            : "Change the month or filters to review another part of the fee record."}
-          icon={WalletCards}
-          title="No matching fee records"
-        />
       )}
 
       <Pagination pagination={register.pagination} />
@@ -522,122 +297,166 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
   )
 }
 
-const paymentMethodOrder: PaymentMethod[] = ["upi", "cash", "bank_transfer", "card", "cheque", "other"]
+const paymentMethodOrder: PaymentMethod[] = ["upi", "cash", "card", "bank_transfer", "cheque", "other"]
+const methodSwatch: Record<PaymentMethod, string> = {
+  bank_transfer: "var(--steel)",
+  card: "var(--makeup-dark)",
+  cash: "var(--green)",
+  cheque: "var(--steel-dark)",
+  other: "var(--line-control)",
+  upi: "var(--navy)",
+}
 
-function CollectionsSummary({ summary }: { summary: CollectionsDayBookView["summary"] }) {
-  const methodTotals = paymentMethodOrder
+function CollectionsFigures({ summary }: { summary: FinanceDayBookSummary }) {
+  const methods = paymentMethodOrder
     .map((method) => ({ amountPaise: summary.byMethod[method], method }))
     .filter((item) => item.amountPaise !== 0)
+  const barTotal = methods.reduce((total, item) => total + Math.max(item.amountPaise, 0), 0)
 
   return (
-    <>
-      <dl className={recordsStyles.summaryGrid}>
-        <div><dt>Gross received</dt><dd>{formatInr(summary.grossReceivedPaise)}</dd></div>
-        <div><dt>Refunds</dt><dd>{formatInr(summary.refundsPaise)}</dd></div>
-        <div className={recordsStyles.summaryWide}><dt>Net collections</dt><dd>{formatInr(summary.netCollectionsPaise)}</dd></div>
-      </dl>
-      {methodTotals.length ? (
-        <dl className={recordsStyles.methodSummary} aria-label="Collections by payment method">
-          {methodTotals.map((item) => (
-            <div key={item.method}>
-              <dt>{formatFinancialPaymentMethod(item.method)}</dt>
-              <dd>{formatInr(item.amountPaise)}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-    </>
+    <dl className={styles.figures}>
+      <div><dt>Received</dt><dd>{formatInr(summary.grossReceivedPaise)}</dd></div>
+      <div className={summary.refundsPaise > 0 ? styles.refundFigure : undefined}><dt>Refunds</dt><dd>{formatInr(summary.refundsPaise)}</dd></div>
+      <div><dt>Net</dt><dd>{formatInr(summary.netCollectionsPaise)}</dd></div>
+      <div className={styles.methodCell}>
+        <dt>By method</dt>
+        <dd>
+          {methods.length ? (
+            <>
+              {barTotal > 0 ? (
+                <span className={styles.methodBar} aria-hidden="true">
+                  {methods.filter((item) => item.amountPaise > 0).map((item) => (
+                    <i key={item.method} style={{ width: `${(item.amountPaise / barTotal) * 100}%`, background: methodSwatch[item.method] }} />
+                  ))}
+                </span>
+              ) : null}
+              <dl className={styles.methodList} aria-label="Collections by payment method">
+                {methods.map((item) => (
+                  <div key={item.method} style={{ ["--swatch" as string]: methodSwatch[item.method] }}>
+                    <dt>{formatFinancialPaymentMethod(item.method)}</dt>
+                    <dd>{formatInr(item.amountPaise)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          ) : "No payments in this period."}
+        </dd>
+      </div>
+    </dl>
   )
 }
 
+function groupByDay<T>(items: T[], dateKeyOf: (item: T) => string) {
+  const days: Array<{ dateKey: string; items: T[] }> = []
+  for (const item of items) {
+    const dateKey = dateKeyOf(item)
+    const last = days.at(-1)
+    if (last?.dateKey === dateKey) last.items.push(item)
+    else days.push({ dateKey, items: [item] })
+  }
+  return days
+}
+
 function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
+  const thisMonth = { from: `${dayBook.currentPeriod}-01`, to: monthEnd(dayBook.currentPeriod) }
+  const lastPeriod = shiftPeriod(dayBook.currentPeriod, -1)
+  const lastMonth = { from: `${lastPeriod}-01`, to: monthEnd(lastPeriod) }
+  const reversed = dayBook.filters.includeReversed ? "true" : undefined
+  const isRange = (range: { from: string; to: string }) => (
+    dayBook.filters.from === range.from && dayBook.filters.to === range.to
+  )
+  const days = groupByDay(dayBook.events, (event) => event.eventDate)
+
   return (
-    <section className={recordsStyles.panel} aria-labelledby="collections-day-book-title">
-      <header className={recordsStyles.panelHeader}>
-        <div>
-          <span>Money movement</span>
-          <h2 id="collections-day-book-title">Collections Day Book</h2>
-          <p>Payments and refunds recorded during the selected period.</p>
-        </div>
-        <a className={recordsStyles.downloadLink} href={dayBook.exportHref}>
+    <section className={styles.panel} aria-label="Collections">
+      <FilterForm action="/coach/financials/records" className={`${styles.bar} ${styles.panelBar}`} label="Filter collections">
+        <input type="hidden" name="view" value="collections" />
+        <span className={styles.seg} role="group" aria-label="Choose dates">
+          <Link aria-current={isRange(thisMonth) ? "page" : undefined} href={recordsHref("collections", { ...thisMonth, includeReversed: reversed })}>This month</Link>
+          <Link aria-current={isRange(lastMonth) ? "page" : undefined} href={recordsHref("collections", { ...lastMonth, includeReversed: reversed })}>Last month</Link>
+        </span>
+        <input aria-label="From" className={styles.field} defaultValue={dayBook.filters.from} name="from" type="date" />
+        <input aria-label="To" className={styles.field} defaultValue={dayBook.filters.to} name="to" type="date" />
+        <label className={styles.toggle}>
+          <input defaultChecked={dayBook.filters.includeReversed} name="includeReversed" type="checkbox" value="true" />
+          Show reversed
+        </label>
+        <a className={`${styles.plainLink} ${styles.end}`} href={dayBook.exportHref}>
           <Download aria-hidden="true" /> Export CSV
         </a>
-      </header>
+      </FilterForm>
 
-      <form className={`${recordsStyles.filters} ${recordsStyles.dayBookFilters}`} action="/coach/financials/records" method="get">
-        <input type="hidden" name="view" value="collections" />
-        <label><span>From</span><input defaultValue={dayBook.filters.from} name="from" type="date" /></label>
-        <label><span>To</span><input defaultValue={dayBook.filters.to} name="to" type="date" /></label>
-        <label className={recordsStyles.checkboxField}>
-          <input defaultChecked={dayBook.filters.includeReversed} name="includeReversed" type="checkbox" value="true" />
-          <span>Include reversed records</span>
-        </label>
-        <button type="submit">Apply dates</button>
-      </form>
+      <CollectionsFigures summary={dayBook.summary} />
 
-      <CollectionsSummary summary={dayBook.summary} />
-
-      {dayBook.events.length ? (
-        <div
-          className={recordsStyles.tableWrap}
-          tabIndex={0}
-          role="region"
-          aria-label="Scrollable collections day book register"
-        >
-          <table className={recordsStyles.recordsTable}>
-            <caption className="sr-only">Payment and refund records</caption>
-            <thead>
-              <tr>
-                <th scope="col">Date</th>
-                <th scope="col">Reference</th>
-                <th scope="col">Player</th>
-                <th scope="col">Method</th>
-                <th scope="col">Fees</th>
-                <th scope="col">Amount</th>
-                <th scope="col">State</th>
-                <th scope="col"><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {dayBook.events.map((event) => (
+      <table className={styles.table}>
+        <caption className="sr-only">Payment and refund records</caption>
+        <thead>
+          <tr>
+            <th scope="col">Time</th>
+            <th scope="col">Player · receipt</th>
+            <th scope="col">Paid toward</th>
+            <th scope="col">Method</th>
+            <th scope="col" className={styles.num}>Amount</th>
+            <th scope="col"><span className="sr-only">Receipt</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {days.length ? days.map((day) => {
+            const payments = day.items.filter((event) => event.eventType === "payment")
+            const refunds = day.items.length - payments.length
+            const net = day.items.reduce((total, event) => (
+              total + (event.eventType === "refund" ? -event.amountPaise : event.amountPaise)
+            ), 0)
+            return [
+              <tr key={day.dateKey} className={styles.day}>
+                <th scope="colgroup" colSpan={6}>
+                  {dayHeading(day.dateKey)}
+                  <span>
+                    {[
+                      payments.length ? `${payments.length} ${payments.length === 1 ? "payment" : "payments"}` : null,
+                      refunds ? `${refunds} ${refunds === 1 ? "refund" : "refunds"}` : null,
+                    ].filter(Boolean).join(" · ")} · {net < 0 ? "−" : ""}{formatInr(Math.abs(net))}
+                  </span>
+                </th>
+              </tr>,
+              ...day.items.map((event) => (
                 <tr key={event.id}>
-                  <td data-label="Date">{formatDateKey(event.eventDate, { day: "numeric", month: "short", year: "numeric" })}</td>
-                  <td data-label="Reference">
-                    <strong>{event.reference}</strong>
-                    <small>{event.eventType === "payment" ? "Payment" : "Refund"}</small>
+                  <td data-hide-phone="">{formatAcademyTime(event.recordedAt)}</td>
+                  <td>
+                    <strong>{event.playerFullName}</strong>
+                    <small>{event.reference} · {event.academyId}</small>
                   </td>
-                  <td data-label="Player"><strong>{event.playerFullName}</strong><small>{event.academyId}</small></td>
-                  <td data-label="Method">{formatFinancialPaymentMethod(event.method)}</td>
-                  <td data-label="Fees" className={recordsStyles.feeReferences}>{event.coveredFeeReferences.join(" · ")}</td>
-                  <td data-label="Amount"><strong className={event.eventType === "refund" ? recordsStyles.refundAmount : undefined}>{event.eventType === "refund" ? "−" : ""}{formatInr(event.amountPaise)}</strong></td>
-                  <td data-label="State">
-                    <span className={`${recordsStyles.status} ${event.lifecycle === "reversed" ? recordsStyles.statusAttention : recordsStyles.statusPositive}`}>
-                      {event.lifecycle === "reversed" ? "Reversed" : "Recorded"}
-                    </span>
+                  <td data-wide=""><small>{event.eventType === "refund" ? "Refund · " : ""}{event.coveredFeeReferences.join(" · ")}</small></td>
+                  <td data-wide="">
+                    <span className={styles.tag}>{formatFinancialPaymentMethod(event.method)}</span>{" "}
+                    {event.lifecycle === "reversed" ? <span className={styles.tag} data-tone="red">Reversed</span> : null}
                   </td>
-                  <td data-label="Record">
+                  <td className={`${styles.num} ${event.eventType === "refund" ? styles.refund : ""}`}>
+                    <strong>{event.eventType === "refund" ? "−" : ""}{formatInr(event.amountPaise)}</strong>
+                  </td>
+                  <td data-wide="">
                     {event.eventType === "payment" && event.paymentId ? (
                       <a
                         aria-label={`Download receipt ${event.reference} for ${event.playerFullName}`}
-                        className={recordsStyles.rowAction}
+                        className={styles.rowLink}
                         href={`/coach/financials/receipts/${event.paymentId}/download`}
                       >
                         <FileText aria-hidden="true" /> Receipt
                       </a>
-                    ) : <span className={recordsStyles.noAction}>—</span>}
+                    ) : null}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyRecords
-          body="Try another date range or include reversed records."
-          icon={ReceiptIndianRupee}
-          title="No collections in this period"
-        />
-      )}
+              )),
+            ]
+          }) : (
+            <tr className={styles.emptyRow}>
+              <td colSpan={6} role="status">
+                No collections in this period. Try another date range or show reversed records.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
 
       <Pagination pagination={dayBook.pagination} />
     </section>
@@ -645,87 +464,111 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
 }
 
 function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
+  const keep = {
+    coachId: activity.filters.coachId === "all" ? undefined : activity.filters.coachId,
+    from: activity.filters.from || undefined,
+    q: activity.filters.query || undefined,
+    to: activity.filters.to || undefined,
+  }
+  const total = activity.counts
+    ? Object.values(activity.counts).reduce((sum, count) => sum + (count ?? 0), 0)
+    : null
+  const chips = [
+    { count: total, key: "all", label: "All" },
+    ...ACTIVITY_GROUPS.map((group) => ({
+      count: activity.counts
+        ? group.eventTypes.reduce((sum, type) => sum + (activity.counts?.[type] ?? 0), 0)
+        : null,
+      key: group.key,
+      label: group.label,
+    })),
+    // One event type from an older link still filters; its chip names it.
+    ...isFinanceAuditEventType(activity.filters.eventType) ? [{
+      count: activity.counts?.[activity.filters.eventType] ?? null,
+      key: activity.filters.eventType,
+      label: FINANCE_AUDIT_EVENTS[activity.filters.eventType].filterLabel,
+    }] : [],
+  ]
+  const days = groupByDay(activity.items, (item) => getAcademyDateKey(new Date(item.occurredAt)))
+
   return (
-    <section className={recordsStyles.panel} aria-labelledby="financial-activity-title">
-      <header className={recordsStyles.panelHeader}>
-        <div>
-          <span>Audit history</span>
-          <h2 id="financial-activity-title">Activity History</h2>
-          <p>A readable record of changes made to academy finances.</p>
-        </div>
+    <section className={styles.panel} aria-label="Activity">
+      <FilterForm action="/coach/financials/records" className={`${styles.bar} ${styles.panelBar}`} label="Filter activity">
+        <input type="hidden" name="view" value="activity" />
+        {activity.filters.eventType !== "all" ? <input type="hidden" name="eventType" value={activity.filters.eventType} /> : null}
+        <label className={styles.search}>
+          <Search aria-hidden="true" />
+          <span className="sr-only">Find activity</span>
+          <input defaultValue={activity.filters.query} maxLength={120} name="q" placeholder="Player or financial reference" type="search" />
+        </label>
+        <select aria-label="Coach" className={styles.field} defaultValue={activity.filters.coachId} name="coachId">
+          <option value="all">All coaches</option>
+          {activity.coachOptions.map((coach) => <option key={coach.id} value={coach.id}>{coach.name}</option>)}
+        </select>
+        <input aria-label="From" className={styles.field} defaultValue={activity.filters.from} name="from" type="date" />
+        <input aria-label="To" className={styles.field} defaultValue={activity.filters.to} name="to" type="date" />
         {activity.exportHref ? (
-          <a className={recordsStyles.downloadLink} href={activity.exportHref}>
+          <a className={`${styles.plainLink} ${styles.end}`} href={activity.exportHref}>
             <Download aria-hidden="true" /> Export CSV
           </a>
         ) : null}
-      </header>
+      </FilterForm>
 
-      <form className={`${recordsStyles.filters} ${recordsStyles.activityFilters}`} action="/coach/financials/records" method="get" role="search">
-        <input type="hidden" name="view" value="activity" />
-        <label className={recordsStyles.searchField}>
-          <span>Find activity</span>
-          <span className={recordsStyles.searchInput}>
-            <Search aria-hidden="true" />
-            <input
-              defaultValue={activity.filters.query}
-              maxLength={120}
-              name="q"
-              placeholder="Player or financial reference"
-              type="search"
-            />
-          </span>
-        </label>
-        <label>
-          <span>Event</span>
-          <select defaultValue={activity.filters.eventType} name="eventType">
-            <option value="all">All activity</option>
-            {activity.eventTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Coach</span>
-          <select defaultValue={activity.filters.coachId} name="coachId">
-            <option value="all">All coaches</option>
-            {activity.coachOptions.map((coach) => <option key={coach.id} value={coach.id}>{coach.name}</option>)}
-          </select>
-        </label>
-        <label><span>From</span><input defaultValue={activity.filters.from} name="from" type="date" /></label>
-        <label><span>To</span><input defaultValue={activity.filters.to} name="to" type="date" /></label>
-        <button type="submit">Apply filters</button>
-      </form>
+      <nav className={styles.chips} aria-label="Filter by kind">
+        {chips.map((chip) => (
+          <Link
+            key={chip.key}
+            aria-current={activity.filters.eventType === chip.key ? "page" : undefined}
+            href={recordsHref("activity", { ...keep, eventType: chip.key === "all" ? undefined : chip.key })}
+          >
+            {chip.label}{chip.count === null ? null : <b>{chip.count}</b>}
+          </Link>
+        ))}
+      </nav>
 
-      {activity.items.length ? (
-        <ol className={recordsStyles.activityList}>
-          {activity.items.map((item) => (
-            <li key={item.id}>
-              <div className={recordsStyles.activityTime}>
-                <FileClock aria-hidden="true" />
-                <time dateTime={item.occurredAt}>{formatFinancialActivityTime(item.occurredAt)}</time>
-              </div>
-              <div className={recordsStyles.activityBody}>
-                <span>Financial activity</span>
-                <h3>{item.action}</h3>
-                <p>
-                  {item.actorName}
-                  {item.playerName ? ` · ${item.playerName}` : ""}
-                  {item.academyId ? ` · ${item.academyId}` : ""}
-                  {item.reference ? ` · ${item.reference}` : ""}
-                </p>
-                {item.reason ? <blockquote>{item.reason}</blockquote> : null}
-              </div>
-              {item.amountPaise === null ? null : (
-                <strong className={recordsStyles.activityAmount}>{formatInr(item.amountPaise)}</strong>
-              )}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <EmptyRecords
-          body="Change the search or date filters to review another part of the audit history."
-          icon={History}
-          title="No matching activity"
-        />
-      )}
+      <table className={styles.table}>
+        <caption className="sr-only">Changes to academy finances</caption>
+        <thead>
+          <tr>
+            <th scope="col">Time</th>
+            <th scope="col">What happened</th>
+            <th scope="col">Player · reference</th>
+            <th scope="col">By</th>
+            <th scope="col" className={styles.num}>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {days.length ? days.map((day) => [
+            <tr key={day.dateKey} className={styles.day}>
+              <th scope="colgroup" colSpan={5}>
+                {dayHeading(day.dateKey)}
+                <span>{day.items.length} {day.items.length === 1 ? "change" : "changes"}</span>
+              </th>
+            </tr>,
+            ...day.items.map((item) => (
+              <tr key={item.id}>
+                <td data-hide-phone=""><time dateTime={item.occurredAt}>{formatAcademyTime(item.occurredAt)}</time></td>
+                <td data-wide=""><span className={styles.tag} data-group={activityGroupFor(item.eventType)?.key}>{item.action}</span></td>
+                <td>
+                  <strong>{[item.playerName, item.academyId].filter(Boolean).join(" · ") || "Academy"}</strong>
+                  {item.reference ? <small>{item.reference}</small> : null}
+                  {item.reason ? <q>{item.reason}</q> : null}
+                </td>
+                <td data-wide=""><small>{item.actorName}</small></td>
+                <td className={styles.num}>
+                  <strong>{item.amountPaise === null ? "—" : formatInr(item.amountPaise)}</strong>
+                </td>
+              </tr>
+            )),
+          ]) : (
+            <tr className={styles.emptyRow}>
+              <td colSpan={5} role="status">
+                No matching activity. Change the search or dates to review another part of the history.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
 
       <Pagination pagination={activity.pagination} />
     </section>
@@ -733,25 +576,11 @@ function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
 }
 
 export function FinancialRecordsWorkspace(props: FinancialRecordsWorkspaceProps) {
-  const { activeView } = props
   return (
-    <div className={`${financialStyles.workspace} ${financialStyles.recordsWorkspace} page-shell`}>
-      <div className={financialStyles.backRow}>
-        <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
-      </div>
-
-      <header className={`${financialStyles.rapidDeskHeader} ${financialStyles.recordsPageHeader}`}>
-        <span className="eyebrow">Financials</span>
-        <h1>Fee records</h1>
-        <p>Review fee records, collections and the history behind every change.</p>
-      </header>
-
-      <RecordsNavigation activeView={activeView} />
-
-
+    <FeesShell activeTab={props.activeView}>
       {props.activeView === "fees" ? <FeeRegister register={props.feeRegister} /> : null}
       {props.activeView === "collections" ? <CollectionsDayBook dayBook={props.dayBook} /> : null}
       {props.activeView === "activity" ? <ActivityHistory activity={props.activity} /> : null}
-    </div>
+    </FeesShell>
   )
 }

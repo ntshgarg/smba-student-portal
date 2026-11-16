@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   }),
 }))
 
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect, useRouter: () => ({ replace: vi.fn() }) }))
 vi.mock("@/lib/auth/coach-access", () => ({
   requireHeadAdminAccess: mocks.requireHeadAdminAccess,
 }))
@@ -37,25 +37,30 @@ vi.mock("@/lib/finance/service", () => ({
   getCoachMonthlyPreparationPreview: mocks.getCoachMonthlyPreparationPreview,
   getFeeRegister: mocks.getFeeRegister,
   getFinanceActivation: mocks.getFinanceActivation,
+  countFinancialActivity: () => ({}),
   getFinancialActivity: mocks.getFinancialActivity,
   listFinanceActivityCoaches: mocks.listFinanceActivityCoaches,
 }))
 
 import { GET as downloadActivity } from "@/app/coach/financials/records/activity.csv/route"
 import FinancialRecordsPage from "@/app/coach/financials/records/page"
+import { ACTIVITY_GROUPS } from "@/lib/finance/records-filters"
 import {
   FINANCE_AUDIT_EVENTS,
   FINANCE_AUDIT_EVENT_TYPES,
   type FinanceActivityInput,
 } from "@/lib/finance/types"
 
-async function renderActivityFilter() {
-  const page = await FinancialRecordsPage({ searchParams: Promise.resolve({ view: "activity" }) })
+async function renderActivityChips(search: Record<string, string> = {}) {
+  const page = await FinancialRecordsPage({ searchParams: Promise.resolve({ view: "activity", ...search }) })
   const markup = renderToStaticMarkup(page)
-  const select = /<select[^>]*name="eventType"[^>]*>([\s\S]*?)<\/select>/.exec(markup)
-  if (!select) throw new Error("The activity view rendered no event filter.")
-  return [...select[1].matchAll(/<option[^>]*value="([^"]*)"[^>]*>([^<]*)<\/option>/g)]
-    .map((option) => ({ label: option[2], value: option[1] }))
+  const chips = /<nav[^>]*aria-label="Filter by kind"[^>]*>([\s\S]*?)<\/nav>/.exec(markup)
+  if (!chips) throw new Error("The activity view rendered no kind filter.")
+  return [...chips[1].matchAll(/<a([^>]*)>([^<]*)/g)].map((chip) => ({
+    current: chip[1].includes('aria-current="page"'),
+    eventType: /eventType=([a-z_]+)/.exec(chip[1])?.[1] ?? "all",
+    label: chip[2],
+  }))
 }
 
 async function csvFilterFor(eventType: string) {
@@ -82,25 +87,31 @@ describe("finance audit event types reach every consumer", () => {
     mocks.getFinancialActivity.mockReturnValue({ items: [], nextCursor: null })
   })
 
-  it("offers every event type on screen, in declaration order, under its filter label", async () => {
-    const options = await renderActivityFilter()
+  it("puts every event type under exactly one kind chip", async () => {
+    const chips = await renderActivityChips()
 
-    expect(options[0]).toEqual({ label: "All activity", value: "all" })
-    expect(options.slice(1)).toEqual(FINANCE_AUDIT_EVENT_TYPES.map((value) => ({
-      label: FINANCE_AUDIT_EVENTS[value].filterLabel,
-      value,
-    })))
+    expect(chips.map((chip) => chip.eventType)).toEqual(["all", ...ACTIVITY_GROUPS.map((group) => group.key)])
+    for (const eventType of FINANCE_AUDIT_EVENT_TYPES) {
+      expect(ACTIVITY_GROUPS.filter((group) => (group.eventTypes as readonly string[]).includes(eventType)))
+        .toHaveLength(1)
+    }
   })
 
-  it("labels the filter with the filter vocabulary, not the activity-row vocabulary", async () => {
-    const options = await renderActivityFilter()
-    const labelFor = (value: string) => options.find((option) => option.value === value)?.label
-
-    expect(labelFor("training_start_redated")).toBe("Training start date corrected")
-    expect(labelFor("concession_reversed")).toBe("Concession reversed")
+  it("names one event type from an older link with the filter vocabulary, not the activity-row vocabulary", async () => {
+    for (const [eventType, label] of [
+      ["training_start_redated", "Training start date corrected"],
+      ["concession_reversed", "Concession reversed"],
+      ["fee_agreement_replaced", "Fee plan changed"],
+    ]) {
+      const chips = await renderActivityChips({ eventType })
+      expect(chips.find((chip) => chip.current)).toMatchObject({ eventType, label })
+    }
     expect(FINANCE_AUDIT_EVENTS.concession_reversed.action).toBe("Concession ended")
-    expect(labelFor("fee_agreement_replaced")).toBe("Fee plan changed")
     expect(FINANCE_AUDIT_EVENTS.fee_agreement_replaced.action).toBe("Fee plan replaced")
+  })
+
+  it.each(ACTIVITY_GROUPS)("exports a CSV filtered to the $label chip", async (group) => {
+    expect(await csvFilterFor(group.key)).toEqual(group.eventTypes)
   })
 
   it.each(FINANCE_AUDIT_EVENT_TYPES)("exports a CSV filtered to %s", async (eventType) => {
