@@ -28,11 +28,21 @@ export function feePlanInForce<Plan extends PlanDates>(plans: readonly Plan[], d
   return plans.find((plan) => feePlanCovers(plan, dateKey)) ?? null
 }
 
-/** feePlanCovers as a query condition on fee_agreements. */
-export function feePlanCoversCondition(dateKey: string) {
+/**
+ * A plan in force on any day from `from` to `to` (both included; a null `to`
+ * runs on with no end), as a query condition on fee_agreements. Plans must
+ * never overlap, so this is also the overlap check: a plan made, reopened or
+ * restored over these days must find no other plan of the player through it.
+ */
+export function feePlanOverlapsCondition(from: string, to: string | null) {
   return and(
     ne(feeAgreements.status, "paused"),
-    lte(feeAgreements.effectiveFrom, dateKey),
-    or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, dateKey)),
+    to === null ? undefined : lte(feeAgreements.effectiveFrom, to),
+    or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, from)),
   )
+}
+
+/** feePlanCovers as a query condition on fee_agreements. */
+export function feePlanCoversCondition(dateKey: string) {
+  return feePlanOverlapsCondition(dateKey, dateKey)
 }

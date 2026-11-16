@@ -154,7 +154,7 @@ import {
   IMPLAUSIBLE_TRAINING_START_MESSAGE,
   trainingStartIsImplausiblyEarly,
 } from "@/lib/training/training-start"
-import { feePlanCoversCondition } from "@/lib/finance/plan-in-force"
+import { feePlanCoversCondition, feePlanOverlapsCondition } from "@/lib/finance/plan-in-force"
 
 const MAX_MONEY_PAISE = 1_000_000_000
 const MAX_NOTE_LENGTH = 500
@@ -1020,13 +1020,9 @@ function createAgreement(
     .from(feeAgreements).where(and(
       eq(feeAgreements.playerAccountId, input.playerId),
       existing ? ne(feeAgreements.id, existing.id) : undefined,
-      // A paused plan never bills (pauseUnstartedFeeAgreementInTransaction),
-      // so it cannot overlap the new one.
-      ne(feeAgreements.status, "paused"),
-      or(
-        isNull(feeAgreements.effectiveTo),
-        gte(feeAgreements.effectiveTo, validated.effectiveFrom),
-      ),
+      // The new plan runs on with no end. A paused plan never bills
+      // (pauseUnstartedFeeAgreementInTransaction), so it cannot overlap it.
+      feePlanOverlapsCondition(validated.effectiveFrom, null),
     )).get()
   if (overlappingHistory) {
     financeError(
