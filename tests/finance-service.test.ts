@@ -770,7 +770,7 @@ describe("Financials V1 service", () => {
       eq(schema.feeAgreements.playerAccountId, activePlayerId),
       eq(schema.feeAgreements.status, "active"),
     )).get()
-    if (!activeAgreement) throw new Error("The active Fee Plan fixture is unavailable.")
+    if (!activeAgreement) throw new Error("The active Fee plan fixture is unavailable.")
 
     expect(() => finance.createOrReplaceFeeAgreement({
       playerId: activePlayerId,
@@ -839,7 +839,7 @@ describe("Financials V1 service", () => {
       eq(schema.feeAgreements.playerAccountId, activePlayerId),
       eq(schema.feeAgreements.status, "active"),
     )).get()
-    if (!agreement) throw new Error("The current Fee Plan fixture is unavailable.")
+    if (!agreement) throw new Error("The current Fee plan fixture is unavailable.")
     database.insert(schema.financialCharges).values({
       id: "finance-july-arrear",
       feeReference: "SMBA-2C4D6F8G",

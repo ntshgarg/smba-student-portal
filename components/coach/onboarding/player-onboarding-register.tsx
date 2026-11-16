@@ -53,13 +53,13 @@ function pillLabel(stage: PlayerOnboardingStage) {
 function caseMeta(item: PlayerOnboardingCase, open: boolean, removedInDays?: number) {
   if (item.stage === "request") {
     const removal = removalLabel(removedInDays)
-    if (!item.requestedAt) return open ? ["Join request", removal].filter(Boolean).join(" · ") : removal
+    if (!item.requestedAt) return open ? ["Join request", removal].filter(Boolean).join(" ·\u00a0") : removal
     return [
       open
         ? `Join request · ${item.requestedRole === "coach" ? "assistant coach" : "player"} · received ${shortInstant(item.requestedAt)}`
         : `Requested ${shortInstant(item.requestedAt)}`,
       removal,
-    ].filter(Boolean).join(" · ")
+    ].filter(Boolean).join(" ·\u00a0")
   }
   const trainingStart = shownTrainingStart(item)
   return [
@@ -67,8 +67,8 @@ function caseMeta(item: PlayerOnboardingCase, open: boolean, removedInDays?: num
     item.level,
     item.batch,
     open && item.academyPlan ? academyPlanLabel(item.academyPlan) : null,
-    open && trainingStart ? `from ${shortDate(trainingStart)}` : null,
-  ].filter(Boolean).join(" · ")
+    open && trainingStart ? `from ${shortDate(trainingStart)}`.replaceAll(" ", "\u00a0") : null,
+  ].filter(Boolean).join(" ·\u00a0")
 }
 
 function nextAction(item: PlayerOnboardingCase) {
@@ -79,11 +79,11 @@ function nextAction(item: PlayerOnboardingCase) {
       return ["Set level, batch and plan", "From the court assessment"]
     case "session":
       return ["Assign a schedule", item.feePlanRecorded
-        ? "Fee Plan already recorded"
+        ? "Fee plan already recorded"
         : "Choose the court time"]
     case "feePlan":
       return item.feePlanRecorded
-        ? ["Review existing Fee Plan", "Resolve the finance record"]
+        ? ["Review existing Fee plan", "Resolve the finance record"]
         : ["Confirm monthly fee", "Last step"]
   }
 }

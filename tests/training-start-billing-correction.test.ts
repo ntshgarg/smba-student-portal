@@ -222,7 +222,7 @@ describe("training start billing and correction", () => {
     })
 
     const { completed, preview } = onboard(playerId, onboardingNow)
-    expect(preview.warnings).toContain("No monthly charge is due now; the Fee Plan begins in 2026-11.")
+    expect(preview.warnings).toContain("No monthly charge is due now; the Fee plan begins in 2026-11.")
     expect(completed.firstMonthlyChargeId).toBeNull()
     expect(finance.getPlayerFeeRecord(playerId, { database, now: onboardingNow })).toMatchObject({
       monthlyCharges: [],

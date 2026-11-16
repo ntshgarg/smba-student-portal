@@ -117,7 +117,7 @@ function placeReport(item: PlayerOnboardingCase) {
       return {
         heading: `${item.fullName} is already assigned to ${schedule}, from ${from}.`,
         body: item.hasRecords
-          ? `Fixed: attendance or fees are already recorded. Finish onboarding on the Fee Plan step, then change ${firstName}’s schedule in Members.`
+          ? `Fixed: attendance or fees are already recorded. Finish onboarding on the Fee plan step, then change ${firstName}’s schedule in Members.`
           : "To use a different schedule or first training day, clear this one. Nothing is recorded for this player yet, so nothing is lost.",
         canFinish,
         clearLabel: "Clear this assignment",
@@ -125,14 +125,14 @@ function placeReport(item: PlayerOnboardingCase) {
     case "finished":
       return {
         heading: `${firstName}’s first term, ${schedule} from ${from}, finished on ${formatTermDate(place.endsOn ?? place.effectiveFrom)}.`,
-        body: `Finish onboarding with this first term: the Fee Plan step charges the registration fee and the months ${firstName} trained. Afterwards ${firstName} shows as “Term finished” in Members, where you move them to their next schedule.`,
+        body: `Finish onboarding with this first term: the Fee plan step charges the registration fee and the months ${firstName} trained. Afterwards ${firstName} shows as “Term finished” in Members, where you move them to their next schedule.`,
         canFinish,
         clearLabel: "Start again",
       }
     case "ended":
       return {
         heading: `${firstName}’s first schedule, ${schedule} from ${from}, has ended.`,
-        body: `Finish onboarding with this first term: the Fee Plan step charges the registration fee and the months ${firstName} trained, and no monthly fee after that. Afterwards, start ${firstName} on a new schedule in Members if they carry on.`,
+        body: `Finish onboarding with this first term: the Fee plan step charges the registration fee and the months ${firstName} trained, and no monthly fee after that. Afterwards, start ${firstName} on a new schedule in Members if they carry on.`,
         canFinish,
         clearLabel: "Start again",
       }
@@ -154,7 +154,7 @@ export function SessionStep({
   sessionSeries,
 }: {
   item: PlayerOnboardingCase
-  /** Opens the Fee Plan step; offered when the case has reached it. */
+  /** Opens the Fee plan step; offered when the case has reached it. */
   onGoToFeePlan?: () => void
   onSuccess: (input: { message: string }) => void
   referenceDate: string
@@ -315,8 +315,8 @@ export function SessionStep({
     }
     guard.navigateAfterCommit(() => onSuccess({
       message: item.feePlanRecorded
-        ? `${item.fullName}’s session is assigned. Their existing Fee Plan was retained.`
-        : `${item.fullName}’s session is assigned. Confirm the Fee Plan next.`,
+        ? `${item.fullName}’s session is assigned. Their existing Fee plan was retained.`
+        : `${item.fullName}’s session is assigned. Confirm the Fee plan next.`,
     }))
   }
 
@@ -347,7 +347,7 @@ export function SessionStep({
           {report.body}
         </p>
         {/*
-          * The reset lives here as well as on Fee Plan. This is the step whose
+          * The reset lives here as well as on Fee plan. This is the step whose
           * work it undoes, and sending a coach two steps forward to undo the
           * step they are standing on was a detour with nothing to recommend it.
           */}
@@ -360,7 +360,7 @@ export function SessionStep({
           ) : null}
           {report.canFinish && onGoToFeePlan ? (
             <button className={styles.primaryButton} disabled={busy} onClick={onGoToFeePlan} type="button">
-              Go to Fee Plan <ArrowRight aria-hidden="true" />
+              Go to Fee plan <ArrowRight aria-hidden="true" />
             </button>
           ) : null}
         </div>
@@ -405,7 +405,7 @@ export function SessionStep({
                   checked={series.id === seriesId}
                   onChange={() => chooseSeries(series)}
                 />
-                <strong>{series.title}</strong>
+                <strong>{series.programme} ·&nbsp;{series.batch}</strong>
                 <small>{[
                   series.venue,
                   firstSlot

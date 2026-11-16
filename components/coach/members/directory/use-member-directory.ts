@@ -61,11 +61,11 @@ export function feePlanEndRoute(
   hasPlace: boolean,
 ) {
   if (scheduled?.kind === "end" && scheduled.stopFees) {
-    return `wait for the End training booked for ${formatDateKey(scheduled.effectiveOn, { day: "numeric", month: "short", weekday: undefined, year: "numeric" })}, which ends the player’s Fee Plan`
+    return `wait for the End training booked for ${formatDateKey(scheduled.effectiveOn, { day: "numeric", month: "short", weekday: undefined, year: "numeric" })}, which ends the player’s Fee plan`
   }
-  if (scheduled) return "cancel the booked change on the Training tab, then end the player’s Fee Plan with Stop fees on the Fees tab"
-  if (hasPlace) return "end the player’s Fee Plan with End training on the Training tab (Stop fees after this month)"
-  return "end the player’s Fee Plan with Stop fees on the Fees tab"
+  if (scheduled) return "cancel the booked change on the Training tab, then end the player’s Fee plan with Stop fees on the Fees tab"
+  if (hasPlace) return "end the player’s Fee plan with End training on the Training tab (Stop fees after this month)"
+  return "end the player’s Fee plan with Stop fees on the Fees tab"
 }
 
 export function financialCloseoutMessage(

@@ -160,7 +160,7 @@ export async function completeOnboardingFinanceAction(
         ? "Onboarding fees were already issued"
         : result.createdMonthlyChargeIds.length
           ? `Onboarding completed; registration and ${result.createdMonthlyChargeIds.length} ${result.createdMonthlyChargeIds.length === 1 ? "monthly fee" : "monthly fees"} issued`
-          : "Onboarding completed; registration fee issued and the monthly Fee Plan starts in its derived month",
+          : "Onboarding completed; registration fee issued and the monthly Fee plan starts in its derived month",
     }
   })
   if (!result.ok || !completed.now || await emailOnboardingFinished(input.playerId)) return result

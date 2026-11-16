@@ -35,7 +35,7 @@
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 1;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* --- Buttons --- */
@@ -152,16 +152,18 @@
   padding: 14px var(--space-copy);
 }
 
+/* On a narrow bar the field's padding gives way before the month name does. */
 .month {
   display: inline-flex;
   max-width: 100%;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .month .field {
   flex: 1 1 auto;
   width: 100%;
+  padding-inline: clamp(6px, 2.5vw, 12px);
 }
 
 .month a {
@@ -231,6 +233,7 @@
 
 .seg {
   display: inline-flex;
+  max-width: 100%;
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
@@ -242,7 +245,9 @@
 .seg button {
   display: inline-flex;
   min-height: 36px;
+  flex: 1 1 auto;
   align-items: center;
+  justify-content: center;
   padding: 0 14px;
   border: 0;
   border-radius: var(--radius-pill);
@@ -317,7 +322,7 @@
 }
 
 .totals b {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   color: var(--ink);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 1.375rem;
@@ -360,7 +365,7 @@
 }
 
 .tiles span {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: var(--type-utility-label);
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -468,16 +473,21 @@
 .who {
   display: grid;
   min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.nowrap {
+  white-space: nowrap;
 }
 
 .who strong {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: 1.0625rem;
   font-weight: 700;
 }
 
 .who small {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   color: var(--steel);
   font-size: var(--type-utility-meta);
   font-weight: 600;
@@ -612,7 +622,7 @@
 
 .facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 92px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(4.5em, 30%)), 1fr));
   gap: var(--space-tight);
   margin: 0;
 }
@@ -635,7 +645,7 @@
 
 .facts dd {
   margin: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: 1.125rem;
   font-weight: 800;
 }
@@ -734,7 +744,7 @@
 
 .figures dd {
   margin: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 2rem;
   font-style: italic;
@@ -876,13 +886,13 @@
 
 .table td strong {
   display: block;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-weight: 700;
 }
 
 .table td small {
   display: block;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   color: var(--steel);
   font-size: var(--type-utility-label);
   font-weight: 600;
@@ -974,6 +984,7 @@
 /* --- A player's fee record and Record payment: the navy band --- */
 .band {
   margin-top: 12px;
+  container-type: inline-size;
   border-radius: 22px;
   box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--navy) 60%, transparent);
 }
@@ -1002,7 +1013,7 @@
 }
 
 .bandHead h2 {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: clamp(1.75rem, 3vw, 2.125rem);
   letter-spacing: -0.04em;
   line-height: 1.05;
@@ -1022,7 +1033,7 @@
   color: color-mix(in srgb, var(--ivory) 75%, transparent);
   font-size: var(--type-utility-meta);
   font-weight: 600;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .owe {
@@ -1091,9 +1102,9 @@
 
 .recordTabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin-top: var(--space-copy);
-  overflow-x: auto;
 }
 
 .recordTabs button {
@@ -1209,12 +1220,12 @@
 }
 
 .cardTitle b {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-weight: 700;
 }
 
 .cardTitle small {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   color: var(--steel);
   font-size: var(--type-utility-label);
   font-weight: 600;
@@ -1313,6 +1324,7 @@
 
 .payers {
   display: grid;
+  container-type: inline-size;
   gap: var(--space-tight);
   margin: 10px 0 0;
   padding: 0;
@@ -1563,14 +1575,14 @@ fieldset.q {
 }
 
 .splitRow strong {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .splitRow small {
   color: var(--steel);
   font-size: var(--type-utility-label);
   font-weight: 600;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .splitInput {
@@ -1771,9 +1783,15 @@ fieldset.q {
     padding: 14px;
   }
 
+  /* the status pill lines up with the amount's first line, and the due note wraps in even lines */
   .rowHead .money {
     grid-column: 1 / -1;
-    grid-template-columns: 104px minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .rowHead .amount small {
+    text-wrap: balance;
   }
 
   .rowHead .chev {
@@ -1860,12 +1878,15 @@ fieldset.q {
     row-gap: 10px;
   }
 
+  /* the status pill over the title, which has the card's full width */
   .card .cardTitle {
-    grid-column: 1 / 3;
+    grid-column: 1 / -1;
   }
 
   .card .pill {
-    justify-self: end;
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: start;
   }
 
   .card .cardNum {
@@ -1889,8 +1910,18 @@ fieldset.q {
     grid-template-columns: minmax(0, 1fr) 110px;
   }
 
+  /* the amount and status go under the name, so a long name has the row's width */
   .payer {
-    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-columns: 42px minmax(0, 1fr);
+    row-gap: 2px;
+  }
+
+  .payer .amount {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 2;
+    align-items: baseline;
+    gap: 0 var(--space-tight);
   }
 
   .payer .chev {
@@ -1939,5 +1970,47 @@ fieldset.q {
 
   .table td[data-hide-phone] {
     display: none;
+  }
+
+  /* the action tag shares its line with the amount, so a long one wraps rather than runs under it */
+  .table .tag {
+    white-space: normal;
+  }
+}
+
+/* A narrow fee record: the tabs wrap, so each is drawn as a whole chip rather than one joined to the body. */
+@container (max-width: 34em) {
+  .recordTabs {
+    padding-bottom: var(--space-tight);
+  }
+
+  .recordTabs button {
+    border-radius: 13px;
+  }
+}
+
+/* Very large text on a phone (the list or table only a few words wide): the initials give way and every part
+   takes the full width, so names and references wrap between words. */
+@container (max-width: 14em) {
+  .payer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payer .badge {
+    display: none;
+  }
+
+  .payer .amount {
+    grid-column: 1;
+  }
+
+  .table tr:not(.day) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table td.num {
+    grid-column: 1;
+    grid-row: auto;
+    text-align: left;
   }
 }

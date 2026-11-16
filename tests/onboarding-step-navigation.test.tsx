@@ -102,8 +102,8 @@ describe("moving back through onboarding before it is finished", () => {
 
     // Assessment is behind the case, so it is a way back.
     expect(html).toContain('aria-label="Go back to Assessment"')
-    // Fee Plan is ahead of it: nothing there can be filled in yet.
-    expect(html).not.toContain("Fee Plan\"")
+    // Fee plan is ahead of it: nothing there can be filled in yet.
+    expect(html).not.toContain("Fee plan\"")
   })
 
   it("does not call a step ahead of the coach a way back", () => {
@@ -118,7 +118,7 @@ describe("moving back through onboarding before it is finished", () => {
     )
 
     expect(html).toContain('aria-label="Go forward to Session"')
-    expect(html).toContain('aria-label="Go forward to Fee Plan"')
+    expect(html).toContain('aria-label="Go forward to Fee plan"')
     expect(html).not.toContain("Go back to")
   })
 
@@ -162,7 +162,7 @@ describe("moving back through onboarding before it is finished", () => {
   it("names each tab by the step, and keeps the painted name inside the accessible one", () => {
     /*
      * The tab reads "Fee plan" while the button's aria-label says "Go back to Fee
-     * Plan": the accessible name still contains what is painted, so speech input
+     * plan": the accessible name still contains what is painted, so speech input
      * matches it (WCAG 2.5.3).
      */
     const html = renderToStaticMarkup(
@@ -254,7 +254,7 @@ describe("a first schedule that ended before onboarding finished", () => {
 
     expect(html).toContain("first schedule, Advanced · Weekday from")
     expect(html).toContain("has ended")
-    expect(html).toContain("Go to Fee Plan")
+    expect(html).toContain("Go to Fee plan")
     expect(html).toContain("Start again")
     expect(html).not.toContain('name="effectiveFrom"')
     expect(html).not.toContain("court time is set")
@@ -268,7 +268,7 @@ describe("a first schedule that ended before onboarding finished", () => {
     }), () => undefined)
 
     expect(html).toContain("finished on 30 October 2026")
-    expect(html).toContain("Go to Fee Plan")
+    expect(html).toContain("Go to Fee plan")
     expect(html).not.toContain("Start again")
     expect(html).not.toContain("Clear this assignment")
   })

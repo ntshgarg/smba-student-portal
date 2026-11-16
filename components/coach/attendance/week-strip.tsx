@@ -50,75 +50,77 @@ export function WeekStrip({
   }
 
   return (
-    <nav className={styles.strip} aria-label="Choose a date">
-      <button
-        type="button"
-        className={styles.stripArrow}
-        aria-label="Previous week"
-        onClick={() => setWeekOffset(weekOffset - 1)}
-      >
-        <ChevronLeft aria-hidden="true" />
-      </button>
-      <ol className={styles.days}>
-        {days.map((dateKey) => (
-          <li key={dateKey}>
-            <button
-              type="button"
-              className={styles.day}
-              aria-current={dateKey === selectedDate ? "date" : undefined}
-              aria-label={`${formatDateKey(dateKey, { year: "numeric" })}${dateKey === today ? ", today" : ""}`}
-              data-today={dateKey === today ? "" : undefined}
-              onClick={() => choose(dateKey)}
-            >
-              <span>{formatDateKey(dateKey, { day: undefined, month: undefined, weekday: "short" })}</span>
-              <strong>{Number(dateKey.slice(8))}</strong>
-            </button>
-          </li>
-        ))}
-      </ol>
-      <button
-        type="button"
-        className={styles.stripArrow}
-        aria-label="Next week"
-        onClick={() => setWeekOffset(weekOffset + 1)}
-      >
-        <ChevronRight aria-hidden="true" />
-      </button>
-      {today ? (
+    <div className={styles.stripFrame}>
+      <nav className={styles.strip} aria-label="Choose a date">
         <button
           type="button"
-          className={`${styles.pick} ${styles.today}`}
-          disabled={selectedDate === today && weekOffset === 0}
-          onClick={() => choose(today)}
+          className={styles.stripArrow}
+          aria-label="Previous week"
+          onClick={() => setWeekOffset(weekOffset - 1)}
         >
-          Today
+          <ChevronLeft aria-hidden="true" />
         </button>
-      ) : null}
-      {onPick ? (
-        <button ref={pickButtonRef} type="button" className={styles.pick} onClick={onPick}>
+        <ol className={styles.days}>
+          {days.map((dateKey) => (
+            <li key={dateKey}>
+              <button
+                type="button"
+                className={styles.day}
+                aria-current={dateKey === selectedDate ? "date" : undefined}
+                aria-label={`${formatDateKey(dateKey, { year: "numeric" })}${dateKey === today ? ", today" : ""}`}
+                data-today={dateKey === today ? "" : undefined}
+                onClick={() => choose(dateKey)}
+              >
+                <span>{formatDateKey(dateKey, { day: undefined, month: undefined, weekday: "short" })}</span>
+                <strong>{Number(dateKey.slice(8))}</strong>
+              </button>
+            </li>
+          ))}
+        </ol>
+        <button
+          type="button"
+          className={styles.stripArrow}
+          aria-label="Next week"
+          onClick={() => setWeekOffset(weekOffset + 1)}
+        >
+          <ChevronRight aria-hidden="true" />
+        </button>
+        {today ? (
+          <button
+            type="button"
+            className={`${styles.pick} ${styles.today}`}
+            disabled={selectedDate === today && weekOffset === 0}
+            onClick={() => choose(today)}
+          >
+            Today
+          </button>
+        ) : null}
+        {onPick ? (
+          <button ref={pickButtonRef} type="button" className={styles.pick} onClick={onPick}>
+            <CalendarDays aria-hidden="true" />
+            <span>Pick a date</span>
+          </button>
+        ) : <label className={styles.pick}>
           <CalendarDays aria-hidden="true" />
           <span>Pick a date</span>
-        </button>
-      ) : <label className={styles.pick}>
-        <CalendarDays aria-hidden="true" />
-        <span>Pick a date</span>
-        <input
-          name="attendanceDate"
-          type="date"
-          value={selectedDate}
-          onChange={(event) => choose(event.target.value)}
-          onClick={(event) => {
-            // The field is the whole "Pick a date" pill, drawn invisible over it,
-            // so a click anywhere on the pill opens the calendar. Browsers that
-            // refuse (or open it themselves on a tap) need nothing more.
-            try {
-              event.currentTarget.showPicker()
-            } catch {
-              // The browser's own behaviour stands.
-            }
-          }}
-        />
-      </label>}
-    </nav>
+          <input
+            name="attendanceDate"
+            type="date"
+            value={selectedDate}
+            onChange={(event) => choose(event.target.value)}
+            onClick={(event) => {
+              // The field is the whole "Pick a date" pill, drawn invisible over it,
+              // so a click anywhere on the pill opens the calendar. Browsers that
+              // refuse (or open it themselves on a tap) need nothing more.
+              try {
+                event.currentTarget.showPicker()
+              } catch {
+                // The browser's own behaviour stands.
+              }
+            }}
+          />
+        </label>}
+      </nav>
+    </div>
   )
 }

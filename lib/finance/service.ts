@@ -259,7 +259,7 @@ function requirePaymentFeePlanHistory(
 ) {
   const agreement = readPaymentFeePlanHistory(database, playerId)
   if (!agreement) {
-    financeError("SETUP_REQUIRED", "Create the player’s Fee Plan first.", "playerId")
+    financeError("SETUP_REQUIRED", "Create the player’s Fee plan first.", "playerId")
   }
   return agreement
 }
@@ -691,14 +691,14 @@ function validateAgreementInput(input: CreateFeeAgreementInput) {
     financeError("INVALID_INPUT", "Choose a valid effective date.", "effectiveFrom")
   }
   if (!effectiveFrom.endsWith("-01")) {
-    financeError("INVALID_INPUT", "A Fee Plan must begin on the first day of a month.", "effectiveFrom")
+    financeError("INVALID_INPUT", "A Fee plan must begin on the first day of a month.", "effectiveFrom")
   }
   const monthlyDueDay = input.monthlyDueDay ?? DEFAULT_MONTHLY_DUE_DAY
   if (!Number.isInteger(monthlyDueDay) || monthlyDueDay < 1 || monthlyDueDay > 28) {
     financeError("INVALID_INPUT", "Choose a monthly due day from 1 to 28.", "monthlyDueDay")
   }
   if (!academyPlanIsValid(input.academyPlan, input.level, input.batch)) {
-    financeError("INVALID_INPUT", "The Fee Plan must match the player’s training plan.", "academyPlan")
+    financeError("INVALID_INPUT", "The Fee plan must match the player’s training plan.", "academyPlan")
   }
   return {
     effectiveFrom,
@@ -870,7 +870,7 @@ export function createFeeAgreementInTransaction(
 }
 
 /**
- * Corrects a Fee Plan in place: its training profile and monthly amount. Only
+ * Corrects a Fee plan in place: its training profile and monthly amount. Only
  * for "Correct this month" (lib/training/changes.ts), when the plan that is
  * wrong began this same month, so there is no earlier month to keep and a
  * replacement starting the same day is not possible. Issued charges are not
@@ -898,13 +898,13 @@ export function correctFeeAgreementInTransaction(
   const agreement = database.select().from(feeAgreements)
     .where(eq(feeAgreements.id, input.agreementId)).get()
   if (!agreement || agreement.status !== "active") {
-    financeError("NOT_FOUND", "Choose an active Fee Plan.")
+    financeError("NOT_FOUND", "Choose an active Fee plan.")
   }
   const player = requireActiveFinanceTarget(database, agreement.playerAccountId)
   if (player.academyPlan !== input.academyPlan
     || player.level !== input.level
     || player.batch !== input.batch) {
-    financeError("INVALID_INPUT", "The Fee Plan must match the player’s current training profile.")
+    financeError("INVALID_INPUT", "The Fee plan must match the player’s current training profile.")
   }
   const update = database.update(feeAgreements).set({
     academyPlan: input.academyPlan,
@@ -919,7 +919,7 @@ export function correctFeeAgreementInTransaction(
     eq(feeAgreements.recordRevision, agreement.recordRevision),
   )).run()
   if (update.changes !== 1) {
-    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before saving.")
+    financeError("CONFLICT", "This Fee plan changed elsewhere. Review it before saving.")
   }
   insertAudit(database, {
     actorId,
@@ -943,7 +943,7 @@ export function correctFeeAgreementInTransaction(
   })
   const corrected = database.select().from(feeAgreements)
     .where(eq(feeAgreements.id, agreement.id)).get()
-  if (!corrected) throw new Error("The corrected Fee Plan is unavailable.")
+  if (!corrected) throw new Error("The corrected Fee plan is unavailable.")
   return corrected
 }
 
@@ -990,7 +990,7 @@ function createAgreement(
   if (player.academyPlan !== input.academyPlan
     || player.level !== input.level
     || player.batch !== input.batch) {
-    financeError("INVALID_INPUT", "The Fee Plan must match the player’s current training profile.")
+    financeError("INVALID_INPUT", "The Fee plan must match the player’s current training profile.")
   }
   if (!placeChecked && !hasCurrentOrFutureMatchingAssignment(
     database,
@@ -1000,7 +1000,7 @@ function createAgreement(
   )) {
     financeError(
       "SETUP_REQUIRED",
-      "Assign the player to a matching current or future session before creating a Fee Plan.",
+      "Assign the player to a matching current or future session before creating a Fee plan.",
       "playerId",
     )
   }
@@ -1010,10 +1010,10 @@ function createAgreement(
   if (existing) {
     if (!Number.isInteger(input.expectedAgreementRevision)
       || input.expectedAgreementRevision !== existing.recordRevision) {
-      financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before saving.")
+      financeError("CONFLICT", "This Fee plan changed elsewhere. Review it before saving.")
     }
     if (validated.effectiveFrom <= existing.effectiveFrom) {
-      financeError("INVALID_INPUT", "A replacement Fee Plan must start after the current plan.", "effectiveFrom")
+      financeError("INVALID_INPUT", "A replacement Fee plan must start after the current plan.", "effectiveFrom")
     }
   }
 
@@ -1028,7 +1028,7 @@ function createAgreement(
   if (overlappingHistory) {
     financeError(
       "CONFLICT",
-      "The new Fee Plan overlaps an existing plan. Choose a later start month.",
+      "The new Fee plan overlaps an existing plan. Choose a later start month.",
       "effectiveFrom",
     )
   }
@@ -1045,7 +1045,7 @@ function createAgreement(
       eq(feeAgreements.recordRevision, existing.recordRevision),
     )).run()
     if (update.changes !== 1) {
-      financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before saving.")
+      financeError("CONFLICT", "This Fee plan changed elsewhere. Review it before saving.")
     }
     eventType = "fee_agreement_replaced"
   }
@@ -1112,14 +1112,14 @@ function monthsBetween(first: string, last: string) {
 }
 
 function onboardingTerms(input: OnboardingFinanceTerms) {
-  if (!input || typeof input !== "object") financeError("INVALID_INPUT", "Review the Fee Plan.")
+  if (!input || typeof input !== "object") financeError("INVALID_INPUT", "Review the Fee plan.")
   if (!input.playerId?.trim()) financeError("INVALID_INPUT", "Choose a player.", "playerId")
   const monthlyDueDay = input.monthlyDueDay ?? DEFAULT_MONTHLY_DUE_DAY
   if (!Number.isInteger(monthlyDueDay) || monthlyDueDay < 1 || monthlyDueDay > 28) {
     financeError("INVALID_INPUT", "Choose a monthly due day from 1 to 28.", "monthlyDueDay")
   }
   if (!academyPlanIsValid(input.academyPlan, input.level, input.batch)) {
-    financeError("INVALID_INPUT", "The Fee Plan must match the player’s training plan.", "academyPlan")
+    financeError("INVALID_INPUT", "The Fee plan must match the player’s training plan.", "academyPlan")
   }
   return {
     amountPaise: validateMoney(input.agreedMonthlyFeePaise, "agreedMonthlyFeePaise"),
@@ -1159,7 +1159,7 @@ function buildOnboardingFinancePreview(
   /*
    * A future training start is a warning, not a blocker. It used to be both: this
    * refused completion outright until the day arrived, on top of the
-   * "the Fee Plan begins in X" warning further down that already describes the
+   * "the Fee plan begins in X" warning further down that already describes the
    * same state and lets it through.
    *
    * The duplicate cost nothing while the start date was seeded to the approval
@@ -1176,7 +1176,7 @@ function buildOnboardingFinancePreview(
   if (enrollment.academyPlan !== input.academyPlan
     || enrollment.level !== input.level
     || enrollment.batch !== input.batch) {
-    blockers.push("The Fee Plan no longer matches the player’s confirmed assessment.")
+    blockers.push("The Fee plan no longer matches the player’s confirmed assessment.")
   }
 
   const assignments = database.select({
@@ -1204,7 +1204,7 @@ function buildOnboardingFinancePreview(
     null,
   ))
   if (!usableAssignments.length) blockers.push("Assign a matching session before completing fees.")
-  // An ended first place: the Fee Plan stops after the month it ended. A term finished by date keeps it open.
+  // An ended first place: the Fee plan stops after the month it ended. A term finished by date keeps it open.
   const placeLastMonth = (assignment: typeof usableAssignments[number]) => {
     const lastDays = [
       assignment.effectiveTo === null ? null : addCalendarDays(assignment.effectiveTo, -1),
@@ -1283,14 +1283,14 @@ function buildOnboardingFinancePreview(
         : `Their training is booked to end after ${lastMonth}, before their first month with a session. Cancel that booked end in Members to finish onboarding, or archive them if they are not joining.`)
     } else {
       warnings.push(endedBy === "place"
-        ? `The first schedule has ended, so the Fee Plan stops after ${lastMonth}: no monthly fee is issued after it. Change or end their training in Members afterwards.`
-        : `Their training ends after ${lastMonth}, as booked in Members, so the Fee Plan stops after ${lastMonth}: no monthly fee is issued after it.`)
+        ? `The first schedule has ended, so the Fee plan stops after ${lastMonth}: no monthly fee is issued after it. Change or end their training in Members afterwards.`
+        : `Their training ends after ${lastMonth}, as booked in Members, so the Fee plan stops after ${lastMonth}: no monthly fee is issued after it.`)
     }
   }
 
   const existingAgreements = database.select().from(feeAgreements)
     .where(eq(feeAgreements.playerAccountId, input.playerId)).all()
-  if (existingAgreements.length) blockers.push("An existing Fee Plan must be resolved in the finance record.")
+  if (existingAgreements.length) blockers.push("An existing Fee plan must be resolved in the finance record.")
   const existingCharges = database.select().from(financialCharges)
     .where(eq(financialCharges.playerAccountId, input.playerId)).all()
   if (existingCharges.some((charge) => (
@@ -1382,7 +1382,7 @@ function buildOnboardingFinancePreview(
     )
   }
   if (feePlanPeriod > academyPeriod) {
-    warnings.push(`No monthly charge is due now; the Fee Plan begins in ${feePlanPeriod}.`)
+    warnings.push(`No monthly charge is due now; the Fee plan begins in ${feePlanPeriod}.`)
   }
 
   const concessionState = database.select().from(concessions).where(and(
@@ -1659,15 +1659,15 @@ export function endFeeAgreementInTransaction(
 ): EndFeeAgreementResult {
   if (!input || typeof input !== "object" || typeof input.agreementId !== "string"
     || input.agreementId.trim().length === 0) {
-    financeError("INVALID_INPUT", "Choose the Fee Plan to end.")
+    financeError("INVALID_INPUT", "Choose the Fee plan to end.")
   }
   if (!isValidMonthKey(input.effectiveThroughPeriod)) {
     financeError("INVALID_INPUT", "Choose a valid final fee month.", "period")
   }
-  const reason = requireText(input.reason, "reason", "A reason for ending the Fee Plan")
+  const reason = requireText(input.reason, "reason", "A reason for ending the Fee plan")
   const expectedRevision = validateRevision(
     input.expectedRevision,
-    "Review the Fee Plan before ending it.",
+    "Review the Fee plan before ending it.",
   )
   const idempotencyKey = validateIdempotencyKey(input.idempotencyKey)
   const effectiveTo = monthEnd(input.effectiveThroughPeriod)
@@ -1692,21 +1692,21 @@ export function endFeeAgreementInTransaction(
     }
     const agreement = tx.select().from(feeAgreements)
       .where(eq(feeAgreements.id, input.agreementId)).get()
-    if (!agreement) throw new Error("The ended Fee Plan is unavailable.")
+    if (!agreement) throw new Error("The ended Fee plan is unavailable.")
     return { agreement: toFeeAgreementView(agreement), reused: true }
   }
 
   const agreement = tx.select().from(feeAgreements)
     .where(eq(feeAgreements.id, input.agreementId)).get()
   if (!agreement || agreement.status !== "active") {
-    financeError("NOT_FOUND", "Choose an active Fee Plan.")
+    financeError("NOT_FOUND", "Choose an active Fee plan.")
   }
   requireActiveFinanceTarget(tx, agreement.playerAccountId)
   if (agreement.recordRevision !== expectedRevision) {
-    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before ending it.")
+    financeError("CONFLICT", "This Fee plan changed elsewhere. Review it before ending it.")
   }
   if (input.effectiveThroughPeriod < agreement.effectiveFrom.slice(0, 7)) {
-    financeError("INVALID_INPUT", "The final fee month cannot precede the Fee Plan.", "period")
+    financeError("INVALID_INPUT", "The final fee month cannot precede the Fee plan.", "period")
   }
   const laterCharge = tx.select({ id: financialCharges.id })
     .from(financialCharges).where(and(
@@ -1718,7 +1718,7 @@ export function endFeeAgreementInTransaction(
   if (laterCharge) {
     financeError(
       "CONFLICT",
-      "A later monthly fee already exists. Review or void it before ending this Fee Plan.",
+      "A later monthly fee already exists. Review or void it before ending this Fee plan.",
       "period",
     )
   }
@@ -1734,7 +1734,7 @@ export function endFeeAgreementInTransaction(
     eq(feeAgreements.recordRevision, expectedRevision),
   )).run()
   if (update.changes !== 1) {
-    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before ending it.")
+    financeError("CONFLICT", "This Fee plan changed elsewhere. Review it before ending it.")
   }
   insertAudit(tx, {
     actorId,
@@ -1755,7 +1755,7 @@ export function endFeeAgreementInTransaction(
   })
   const ended = tx.select().from(feeAgreements)
     .where(eq(feeAgreements.id, agreement.id)).get()
-  if (!ended) throw new Error("The ended Fee Plan is unavailable.")
+  if (!ended) throw new Error("The ended Fee plan is unavailable.")
   return { agreement: toFeeAgreementView(ended), reused: false }
 }
 
@@ -1778,10 +1778,10 @@ export function pauseUnstartedFeeAgreementInTransaction(
   },
   { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
 ): EndFeeAgreementResult {
-  const reason = requireText(input.reason, "reason", "A reason for stopping the Fee Plan")
+  const reason = requireText(input.reason, "reason", "A reason for stopping the Fee plan")
   const expectedRevision = validateRevision(
     input.expectedRevision,
-    "Review the Fee Plan before stopping it.",
+    "Review the Fee plan before stopping it.",
   )
   const idempotencyKey = validateIdempotencyKey(input.idempotencyKey)
   const replay = readAuditEventByIdempotencyKey(tx, idempotencyKey)
@@ -1791,21 +1791,21 @@ export function pauseUnstartedFeeAgreementInTransaction(
     }
     const agreement = tx.select().from(feeAgreements)
       .where(eq(feeAgreements.id, input.agreementId)).get()
-    if (!agreement) throw new Error("The stopped Fee Plan is unavailable.")
+    if (!agreement) throw new Error("The stopped Fee plan is unavailable.")
     return { agreement: toFeeAgreementView(agreement), reused: true }
   }
 
   const agreement = tx.select().from(feeAgreements)
     .where(eq(feeAgreements.id, input.agreementId)).get()
   if (!agreement || agreement.status !== "active") {
-    financeError("NOT_FOUND", "Choose an active Fee Plan.")
+    financeError("NOT_FOUND", "Choose an active Fee plan.")
   }
   requireActiveFinanceTarget(tx, agreement.playerAccountId)
   if (agreement.recordRevision !== expectedRevision) {
-    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before stopping it.")
+    financeError("CONFLICT", "This Fee plan changed elsewhere. Review it before stopping it.")
   }
   if (!isValidDateKey(input.startsAfter) || agreement.effectiveFrom <= input.startsAfter) {
-    financeError("INVALID_INPUT", "This Fee Plan has already started.")
+    financeError("INVALID_INPUT", "This Fee plan has already started.")
   }
   const issued = tx.select({ id: financialCharges.id }).from(financialCharges).where(and(
     eq(financialCharges.feeAgreementId, agreement.id),
@@ -1814,7 +1814,7 @@ export function pauseUnstartedFeeAgreementInTransaction(
   if (issued) {
     financeError(
       "CONFLICT",
-      "A fee has already been issued on this Fee Plan. Review or void it before stopping the plan.",
+      "A fee has already been issued on this Fee plan. Review or void it before stopping the plan.",
     )
   }
   const update = tx.update(feeAgreements).set({
@@ -1828,7 +1828,7 @@ export function pauseUnstartedFeeAgreementInTransaction(
     eq(feeAgreements.recordRevision, expectedRevision),
   )).run()
   if (update.changes !== 1) {
-    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it before stopping it.")
+    financeError("CONFLICT", "This Fee plan changed elsewhere. Review it before stopping it.")
   }
   insertAudit(tx, {
     actorId,
@@ -1848,7 +1848,7 @@ export function pauseUnstartedFeeAgreementInTransaction(
   })
   const paused = tx.select().from(feeAgreements)
     .where(eq(feeAgreements.id, agreement.id)).get()
-  if (!paused) throw new Error("The stopped Fee Plan is unavailable.")
+  if (!paused) throw new Error("The stopped Fee plan is unavailable.")
   return { agreement: toFeeAgreementView(paused), reused: false }
 }
 
@@ -1864,14 +1864,14 @@ export function reopenReplacedFeeAgreementInTransaction(
   input: { agreementId: string; expectedRevision: number; reason: string },
   { actorId, createId, now }: { actorId: string; createId: () => string; now: Date },
 ) {
-  const reason = requireText(input.reason, "reason", "A reason for reopening the Fee Plan")
+  const reason = requireText(input.reason, "reason", "A reason for reopening the Fee plan")
   const agreement = tx.select().from(feeAgreements)
     .where(eq(feeAgreements.id, input.agreementId)).get()
   if (!agreement || agreement.status !== "ended" || agreement.recordRevision !== input.expectedRevision) {
-    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it and try again.")
+    financeError("CONFLICT", "This Fee plan changed elsewhere. Review it and try again.")
   }
   if (readActiveFeeAgreement(tx, agreement.playerAccountId)) {
-    financeError("CONFLICT", "This player already has a Fee Plan in force.")
+    financeError("CONFLICT", "This player already has a Fee plan in force.")
   }
   const laterCharge = agreement.effectiveTo
     ? tx.select({ id: financialCharges.id }).from(financialCharges).where(and(
@@ -1896,7 +1896,7 @@ export function reopenReplacedFeeAgreementInTransaction(
     eq(feeAgreements.recordRevision, input.expectedRevision),
   )).run()
   if (update.changes !== 1) {
-    financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it and try again.")
+    financeError("CONFLICT", "This Fee plan changed elsewhere. Review it and try again.")
   }
   insertAudit(tx, {
     actorId,
@@ -2052,7 +2052,7 @@ export function redateConfirmedTrainingStart(
       eq(sessionAssignments.effectiveFrom, enrollment.trainingStartOn),
     )).run()
 
-    // The earliest Fee Plan is extended back to the corrected month so the
+    // The earliest Fee plan is extended back to the corrected month so the
     // reopened months can be prepared. Later plans all start at or after it, so
     // widening the earliest cannot overlap them. A paused plan never bills
     // (pauseUnstartedFeeAgreementInTransaction), so widening one would report
@@ -2077,7 +2077,7 @@ export function redateConfirmedTrainingStart(
         eq(feeAgreements.recordRevision, earliest.recordRevision),
       )).run()
       if (planUpdate.changes !== 1) {
-        financeError("CONFLICT", "This Fee Plan changed elsewhere. Review it and try again.")
+        financeError("CONFLICT", "This Fee plan changed elsewhere. Review it and try again.")
       }
       agreementEffectiveFrom = reopenedFrom
     }
@@ -3477,7 +3477,7 @@ export function recordRefund(
     if (overlappingAgreement) {
       financeError(
         "CONFLICT",
-        "The corrected withdrawal date overlaps another Fee Plan.",
+        "The corrected withdrawal date overlaps another Fee plan.",
         "withdrawalEffectiveOn",
       )
     }

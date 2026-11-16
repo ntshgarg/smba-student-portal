@@ -183,7 +183,7 @@ type OnboardingSummaryInput = {
 }
 
 type OnboardingWorkspaceInput = Omit<OnboardingSummaryInput, "newRequestCount" | "players"> & {
-  /** Only to say whether a Fee Plan is recorded; completion reads the stamp alone. */
+  /** Only to say whether a Fee plan is recorded; completion reads the stamp alone. */
   feePlans: OnboardingFeePlan[]
   formerRecords?: OnboardingFormerRecord[]
   pendingRequests: OnboardingPendingRequest[]
@@ -230,7 +230,7 @@ function assignmentRange(assignment: OnboardingAssignment) {
 
 /**
  * The one answer to "has this player finished Player onboarding?": the stamp
- * Fee Plan completion sets on their enrolment (completeOnboardingFinance).
+ * Fee plan completion sets on their enrolment (completeOnboardingFinance).
  * Nothing else stands in for it -- not a place, a fee plan or a level, all of
  * which exist part-way through onboarding -- so every screen and server check
  * reads this and they cannot disagree.
@@ -315,7 +315,7 @@ function onboardingStage(
    * The date is confirmed by the same action that makes the assignment, so in
    * practice these move together. The second clause is what keeps a player
    * assigned from the Schedules screen -- which writes no date -- out of the Fee
-   * Plan step, where an unconfirmed start is refused anyway
+   * plan step, where an unconfirmed start is refused anyway
    * (lib/finance/service.ts:967).
    */
   if (!hasMatchingPlace(assignments, player)

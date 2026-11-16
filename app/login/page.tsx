@@ -50,13 +50,11 @@ export default async function LoginPage({
             height={488}
             priority
           />
-          <span>
-            Player <em>Journal</em>
-          </span>
+          <span>SMBA <em>Portal</em></span>
         </Link>
 
         <div className="login-copy">
-          <p className="eyebrow">SMBA portal</p>
+          <p className="eyebrow">Sign in</p>
           <h1 id="login-title">Welcome back.</h1>
           <p>Choose password or PIN to continue.</p>
         </div>

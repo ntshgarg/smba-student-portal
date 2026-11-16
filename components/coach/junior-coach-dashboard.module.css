@@ -57,7 +57,7 @@
 .ledgerBody {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(0, 620px);
-  align-items: start;
+  align-items: center;
   gap: clamp(30px, 3.5vw, var(--space-content));
   padding: 28px 30px 20px;
 }

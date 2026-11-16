@@ -160,7 +160,7 @@ export function FeePlanStep({
     return (
       <div className={styles.stepBody}>
         <div className={styles.emptyBox}>
-          <strong>This player already has a Fee Plan that needs a look</strong>
+          <strong>This player already has a Fee plan that needs a look</strong>
           <p>Check its dates or training type in their fee record.</p>
         </div>
         <div className={styles.formActions}>
@@ -168,7 +168,7 @@ export function FeePlanStep({
             className={styles.primaryButton}
             href={`/coach/financials/players/${encodeURIComponent(item.id)}?mode=monthly`}
           >
-            Review Fee Plan <ArrowRight aria-hidden="true" />
+            Review Fee plan <ArrowRight aria-hidden="true" />
           </Link>
         </div>
       </div>
@@ -268,7 +268,7 @@ export function FeePlanStep({
       const failure = describeSaveFailure({
         error,
         retained: "The fees are still on screen",
-        subject: "The Fee Plan",
+        subject: "The Fee plan",
       })
       setFeedback({
         action: failure.signIn,

@@ -1,5 +1,6 @@
 .page {
   padding-block: var(--space-block) var(--space-content);
+  container-type: inline-size;
 }
 
 .back a {
@@ -17,14 +18,15 @@
   height: 16px;
 }
 
+/* capped by the screen's width as well, so at 200% text the one word still fits a 320px phone */
 .title {
   margin-top: var(--space-tight);
   color: var(--navy);
-  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-size: min(clamp(2.25rem, 4vw, 2.75rem), 15vw);
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 1;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sub {
@@ -72,10 +74,21 @@
 }
 
 .filters span {
-  overflow-wrap: anywhere;
   font-size: var(--type-utility-label);
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+/* A narrow page: All takes the first row and the four stages share the rows under it, two to a row (one
+   when the text is large), so no stage is left alone on a row. */
+@container (max-width: 40em) {
+  .filters {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(7.5em, 40%)), 1fr));
+  }
+
+  .filters button:first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 .filters button[aria-pressed="true"] {
@@ -112,6 +125,7 @@
   /* A grid item is otherwise as wide as its widest content: the open record's
      tabs would push the whole list past a phone's width. */
   min-width: 0;
+  container-type: inline-size;
   border: var(--frost-border);
   border-radius: 20px;
   background: var(--frost-fill);
@@ -299,6 +313,7 @@
 /* The steps as tabs along the bottom of the band. */
 .stepRail {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin: 0;
   padding: var(--space-copy) var(--space-group) 0;
@@ -533,7 +548,7 @@
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
   gap: 10px;
 }
 
@@ -553,7 +568,6 @@
 }
 
 .cards strong {
-  overflow-wrap: anywhere;
   font-size: 0.9375rem;
 }
 
@@ -1091,10 +1105,6 @@
 }
 
 @media (max-width: 760px) {
-  .filters {
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  }
-
   .caseHead {
     grid-template-columns: 42px minmax(0, 1fr);
     gap: var(--space-tight) 12px;
@@ -1106,12 +1116,11 @@
     height: 42px;
   }
 
-  /* Pill then next step on one line; the step drops below when the text is large. */
+  /* The stage pill over the next step, the same on every row. */
   .step {
-    display: flex;
-    flex-wrap: wrap;
     grid-column: 1 / -1;
-    gap: 6px 12px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
   }
 
   .mark {
@@ -1126,10 +1135,8 @@
     display: grid;
   }
 
-  /* One line of tabs; it scrolls rather than wraps when the text is large. */
   .stepRail {
     gap: 2px;
-    overflow-x: auto;
     padding-inline: var(--space-tight);
   }
 
@@ -1207,5 +1214,17 @@
 
   .rejectedRow > .pill {
     justify-self: start;
+  }
+}
+
+/* A narrow record: the step tabs wrap onto a second line, so each tab is drawn as a whole chip rather than
+   one joined to the body below. */
+@container (max-width: 34em) {
+  .stepRail {
+    padding-bottom: var(--space-tight);
+  }
+
+  .stepRail li {
+    border-radius: 13px;
   }
 }

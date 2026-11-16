@@ -567,9 +567,13 @@ function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
             {day.items.map((item) => (
               <tr key={item.id}>
                 <td data-hide-phone=""><time dateTime={item.occurredAt}>{formatAcademyTime(item.occurredAt)}</time></td>
-                <td data-wide=""><span className={styles.tag} data-group={activityGroupFor(item.eventType)?.key}>{item.action}</span></td>
+                <td><span className={styles.tag} data-group={activityGroupFor(item.eventType)?.key}>{item.action}</span></td>
                 <td>
-                  <strong>{[item.playerName, item.academyId].filter(Boolean).join(" · ") || "Academy"}</strong>
+                  <strong>
+                    {item.playerName || (item.academyId ? null : "Academy")}
+                    {item.playerName && item.academyId ? " ·\u00a0" : null}
+                    {item.academyId ? <span className={styles.nowrap}>{item.academyId}</span> : null}
+                  </strong>
                   {item.reference ? <small>{item.reference}</small> : null}
                   {item.reason ? <q>{item.reason}</q> : null}
                 </td>

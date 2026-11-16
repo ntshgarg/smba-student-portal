@@ -28,7 +28,7 @@ import { onboardingFinished } from "@/lib/coach/onboarding"
 const RECORD_KINDS = [
   "marked attendance",
   "attendance correction",
-  "Fee Plan",
+  "Fee plan",
   "fee",
   "payment",
 ] as const
@@ -58,7 +58,7 @@ export function readOnboardingRecords(
     .forEach(({ playerId }) => add(playerId, "attendance correction"))
   database.select({ playerId: feeAgreements.playerAccountId }).from(feeAgreements)
     .where(inArray(feeAgreements.playerAccountId, playerIds)).all()
-    .forEach(({ playerId }) => add(playerId, "Fee Plan"))
+    .forEach(({ playerId }) => add(playerId, "Fee plan"))
   database.select({ playerId: financialCharges.playerAccountId }).from(financialCharges)
     .where(inArray(financialCharges.playerAccountId, playerIds)).all()
     .forEach(({ playerId }) => add(playerId, "fee"))
@@ -167,7 +167,7 @@ export function saveOnboardingAssessment({
         "BUSINESS_RULE",
         onboardingRecordsFor(tx, input.playerId).length
           ? "Level, batch and Training plan are fixed now that this player has a schedule with "
-            + "attendance or fees recorded. Finish onboarding on the Fee Plan step, then change "
+            + "attendance or fees recorded. Finish onboarding on the Fee plan step, then change "
             + "them in Members."
           : "Level, batch and Training plan are fixed while this player has a schedule. Use "
             + "Clear this assignment or Start again on the Session step first, then change them here.",
@@ -252,7 +252,7 @@ export function resetOnboardingSessionAssignment({
         "BUSINESS_RULE",
         `This player already has ${named} on record, and clearing their schedule would `
           + "leave them attached to nothing. Finish onboarding with this schedule on the Fee "
-          + "Plan step, then change their schedule in Members.",
+          + "plan step, then change their schedule in Members.",
         "playerId",
       )
     }

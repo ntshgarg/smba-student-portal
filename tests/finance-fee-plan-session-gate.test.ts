@@ -10,7 +10,7 @@ vi.mock("server-only", () => ({}))
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "smba-fee-session-gate-"))
 process.env.DB_FILE_NAME = path.join(temporaryDirectory, "fee-session-gate.db")
 
-describe("Fee Plan session-assignment gate", () => {
+describe("Fee plan session-assignment gate", () => {
   let database: ReturnType<typeof import("@/lib/db/client")["initializeDatabase"]>
   let finance: typeof import("@/lib/finance/service")
   let repository: typeof import("@/lib/finance/repository")
@@ -124,7 +124,7 @@ describe("Fee Plan session-assignment gate", () => {
     fs.rmSync(temporaryDirectory, { force: true, recursive: true })
   })
 
-  it("rejects both current and legacy Fee Plan creation paths before session assignment", () => {
+  it("rejects both current and legacy Fee plan creation paths before session assignment", () => {
     const currentPlayerId = createPlayer("No Current Assignment")
     const historicalPlayerId = createPlayer("No Historical Assignment")
 

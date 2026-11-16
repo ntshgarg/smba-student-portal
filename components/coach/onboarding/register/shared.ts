@@ -27,7 +27,7 @@ export const STAGES: Array<{
   { key: "request", label: "New requests", tabLabel: "Request", summaryKey: "newRequests" },
   { key: "assessment", label: "Assessment", tabLabel: "Assessment", summaryKey: "assessment" },
   { key: "session", label: "Session", tabLabel: "Session", summaryKey: "session" },
-  { key: "feePlan", label: "Fee Plan", tabLabel: "Fee plan", summaryKey: "feePlan" },
+  { key: "feePlan", label: "Fee plan", tabLabel: "Fee plan", summaryKey: "feePlan" },
 ]
 
 export function shortDate(value: string) {

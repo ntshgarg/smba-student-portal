@@ -21,14 +21,15 @@
   height: 16px;
 }
 
+/* capped by the screen's width as well, so very large text on a phone still keeps "Sessions" whole */
 .title {
   margin-top: var(--space-tight);
   color: var(--navy);
-  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-size: min(clamp(2.25rem, 4vw, 2.75rem), 15vw);
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 1;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* Calendar | Schedules, with the tab's own action on the right */
@@ -763,7 +764,7 @@
 /* --- Schedules --- */
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 7.5em), 1fr));
   gap: var(--space-tight);
   margin-bottom: 12px;
 }
@@ -795,7 +796,7 @@
 }
 
 .tiles span {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: var(--type-utility-label);
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -972,8 +973,11 @@
   outline-offset: 2px;
 }
 
+/* Weekday | Weekend: the two options wrap onto two lines rather than run past the form at large text */
 .switch {
   display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
   border-radius: var(--radius-pill);
@@ -983,7 +987,8 @@
 .switch label {
   position: relative;
   display: inline-flex;
-  min-width: 6.5rem;
+  min-width: min(6.5rem, 100%);
+  flex: 1 1 auto;
   min-height: 44px;
   align-items: center;
   justify-content: center;

@@ -456,9 +456,10 @@ a.tile:focus-visible {
     justify-content: center;
   }
 
-  /* Three pills share one row: the label sits above the value. */
+  /* The pills share a row while their values fit, and wrap to a second row rather than cut a value short;
+     the label sits above the value. */
   .pill {
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-width: 0;
     flex-direction: column;
     align-items: stretch;
