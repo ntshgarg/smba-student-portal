@@ -1970,6 +1970,11 @@ fieldset.q {
   .table td[data-hide-phone] {
     display: none;
   }
+
+  /* the action tag shares its line with the amount, so a long one wraps rather than runs under it */
+  .table .tag {
+    white-space: normal;
+  }
 }
 
 /* A narrow fee record: the tabs wrap, so each is drawn as a whole chip rather than one joined to the body. */
