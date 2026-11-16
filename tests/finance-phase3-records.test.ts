@@ -282,6 +282,20 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
     expect(finance.getFeeRegister({
       mode: "registration",
     }, { coachId, database, now }).rows).toHaveLength(0)
+
+    // A status filter narrows the rows and totals, but every status keeps its
+    // count, so the register's status tiles do not empty when one is chosen.
+    const overdue = finance.getFeeRegister({
+      mode: "monthly",
+      period: "2026-08",
+      statuses: ["overdue"],
+    }, { coachId, database, now })
+    expect(overdue.rows.map((row) => row.playerId)).toEqual([ashaId])
+    expect(overdue.summary).toMatchObject({
+      totalRows: 1,
+      outstandingPaise: 225_000,
+      statusCounts: { overdue: 1, not_prepared: 1 },
+    })
   })
 
   it("provides a lifecycle-aware collections day book and readable activity", () => {
@@ -375,6 +389,13 @@ describe("Financials Phase 3 records and fee-plan lifecycle", () => {
         reason: "Approved fee adjustment",
       }),
     ]))
+    // The kind chips count every event type under the date and coach filters.
+    expect(finance.countFinancialActivity({}, { coachId, database })).toMatchObject({
+      adjustment_created: 1,
+      payment_recorded: 1,
+    })
+    expect(finance.countFinancialActivity({ coachId: ashaId }, { coachId, database })).toEqual({})
+    expect(finance.countFinancialActivity({ from: "2026-09-01" }, { coachId, database })).toEqual({})
     expect(finance.listFinanceActivityCoaches({ coachId, database }))
       .toEqual([{ id: coachId, name: "Sathiya Moorthy" }])
     expect(() => finance.getFeeRegister({

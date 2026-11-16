@@ -2,11 +2,9 @@ import { isValidDateKey } from "@/lib/attendance/domain"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
 import { sessionProvider } from "@/lib/data"
 import { createActivityCsvStream } from "@/lib/finance/records-csv"
+import { activityEventTypesFor } from "@/lib/finance/records-filters"
 import { getFinancialActivity } from "@/lib/finance/service"
-import {
-  isFinanceAuditEventType,
-  type FinanceActivityInput,
-} from "@/lib/finance/types"
+import type { FinanceActivityInput } from "@/lib/finance/types"
 import {
   authorizeDownload,
   downloadFailureResponse,
@@ -41,8 +39,7 @@ export async function GET(request: Request) {
   if ((fromValue && !from) || (toValue && !to) || (from && to && from > to)) {
     return privateDownloadResponse("Choose a valid activity date range.", 400)
   }
-  const eventValue = url.searchParams.get("eventType")
-  const eventTypes = isFinanceAuditEventType(eventValue) ? [eventValue] : undefined
+  const eventTypes = activityEventTypesFor(url.searchParams.get("eventType"))
   const coachValue = url.searchParams.get("coachId")
   const input: FinanceActivityInput = {
     coachId: coachValue && coachValue !== "all" ? coachValue : undefined,

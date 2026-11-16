@@ -51,6 +51,7 @@ import {
   withdrawalCanClosePlan,
 } from "@/lib/finance/domain"
 import {
+  countFinancialActivityByType,
   FinanceRecordsCursorError,
   loadCollectionsDayBook,
   loadFeeRegister,
@@ -5308,6 +5309,19 @@ export function getFinancialActivity(
     cursor: validateRecordsCursor(input.cursor),
     limit: validateRecordsLimit(input.limit, 50),
   }))
+}
+
+/** Events per type under the same date and coach filters, for the activity chips. */
+export function countFinancialActivity(
+  input: Pick<FinanceActivityInput, "coachId" | "from" | "to"> = {},
+  {
+    coachId,
+    database = initializeDatabase(),
+  }: CoachContext,
+) {
+  requireCoach(database, coachId)
+  requireFinanceActive(database)
+  return countFinancialActivityByType(database, input)
 }
 
 export function listFinanceActivityCoaches(
