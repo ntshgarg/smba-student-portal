@@ -27,7 +27,7 @@ import { academyPlanLabel } from "@/lib/training/academy-plans"
 
 import styles from "./player-onboarding-register.module.css"
 import { OnboardingEditor } from "./register/onboarding-editor"
-import { filterCases, nextCase, shortDate, shortInstant, STAGES } from "./register/shared"
+import { filterCases, nextCase, removalLabel, shortDate, shortInstant, STAGES } from "./register/shared"
 import { RejectedRequests, type ExpiringRejectedRegistration } from "./rejected-requests"
 
 function onboardingHref(
@@ -46,13 +46,20 @@ function pillLabel(stage: PlayerOnboardingStage) {
   return stage === "request" ? "New request" : STAGES.find((item) => item.key === stage)?.tabLabel ?? stage
 }
 
-/** The line under the name: short in the queue, fuller once the record is open. */
-function caseMeta(item: PlayerOnboardingCase, open: boolean) {
+/**
+ * The line under the name: short in the queue, fuller once the record is open.
+ * An undecided request near the 90-day clean-up says so, as a rejected one does.
+ */
+function caseMeta(item: PlayerOnboardingCase, open: boolean, removedInDays?: number) {
   if (item.stage === "request") {
-    if (!item.requestedAt) return open ? "Join request" : null
-    return open
-      ? `Join request · ${item.requestedRole === "coach" ? "assistant coach" : "player"} · received ${shortInstant(item.requestedAt)}`
-      : `Requested ${shortInstant(item.requestedAt)}`
+    const removal = removalLabel(removedInDays)
+    if (!item.requestedAt) return open ? ["Join request", removal].filter(Boolean).join(" · ") : removal
+    return [
+      open
+        ? `Join request · ${item.requestedRole === "coach" ? "assistant coach" : "player"} · received ${shortInstant(item.requestedAt)}`
+        : `Requested ${shortInstant(item.requestedAt)}`,
+      removal,
+    ].filter(Boolean).join(" · ")
   }
   const trainingStart = shownTrainingStart(item)
   return [
@@ -85,12 +92,15 @@ export function PlayerOnboardingRegister({
   financeActive,
   referenceDate,
   rejectedRequests = [],
+  requestsExpiringSoon = {},
   sessionSeries,
   workspace,
 }: {
   financeActive: boolean
   referenceDate: string
   rejectedRequests?: ExpiringRejectedRegistration[]
+  /** Undecided requests the clean-up deletes within the week: days left, by id. */
+  requestsExpiringSoon?: Record<string, number>
   sessionSeries: TrainingSessionSeries[]
   workspace: PlayerOnboardingWorkspace
 }) {
@@ -194,7 +204,7 @@ export function PlayerOnboardingRegister({
             const expanded = selectedItem?.id === item.id
             const action = nextAction(item)
             const name = nameParts(item.fullName)
-            const meta = caseMeta(item, expanded)
+            const meta = caseMeta(item, expanded, requestsExpiringSoon[item.id])
             const href = onboardingHref(
               pathname,
               new URLSearchParams(searchParams.toString()),

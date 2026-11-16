@@ -109,6 +109,20 @@ describe("Player Onboarding Next-Step Register", () => {
     expect(html).not.toContain("View application")
   })
 
+  it("marks an undecided request the 90-day clean-up is about to delete, as a rejected one is", () => {
+    const html = renderToStaticMarkup(
+      <PlayerOnboardingRegister
+        financeActive
+        referenceDate="2026-08-16"
+        requestsExpiringSoon={{ "request-player": 3 }}
+        sessionSeries={[]}
+        workspace={workspace}
+      />,
+    )
+
+    expect(html).toContain("Requested 15 Aug · removed in 3 days")
+  })
+
   it("renders junior-coach requests as staff approval without player assessment copy", () => {
     const coachWorkspace: PlayerOnboardingWorkspace = {
       cases: [{

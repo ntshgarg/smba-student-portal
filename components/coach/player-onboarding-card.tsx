@@ -79,7 +79,7 @@ export function PlayerOnboardingCard({
 
           {expiringRequests ? (
             <p className={styles.expiring}>
-              {expiringRequests} join {expiringRequests === 1 ? "request" : "requests"} will be removed in 7 days.
+              {expiringRequests} join {expiringRequests === 1 ? "request" : "requests"} will be removed within 7 days.
               Decide {expiringRequests === 1 ? "it" : "them"}, or undo a rejection.
             </p>
           ) : null}

@@ -39,6 +39,13 @@ export function shortDate(value: string) {
   })
 }
 
+/** How long the 90-day clean-up leaves a request (lib/telemetry/retention.ts). */
+export function removalLabel(days: number | null | undefined) {
+  if (days === null || days === undefined) return null
+  if (days <= 0) return "removed soon"
+  return `removed in ${days} ${days === 1 ? "day" : "days"}`
+}
+
 /** For a moment in time (requested, rejected), read in India time; `shortDate` is for date-only keys. */
 export function shortInstant(value: string) {
   return formatAcademyDate(value, { month: "short", year: undefined })

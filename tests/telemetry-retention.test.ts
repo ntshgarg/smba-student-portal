@@ -14,6 +14,8 @@ import * as schema from "@/lib/db/schema"
 import { INITIAL_COACH_ACCOUNT_ID, seedDatabase } from "@/lib/db/seed"
 import {
   countRegistrationRequestsExpiringSoon,
+  daysUntilRegistrationRequestRemoved,
+  listPendingRegistrationRequestsExpiringSoon,
   purgeExpiredTelemetry,
   purgeExpiredTelemetryOccasionally,
   resetTelemetryPurgeThrottle,
@@ -315,6 +317,23 @@ describe("retention of rejected and abandoned registration requests", () => {
     expect(purgeExpiredTelemetry({ database, now: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000) })
       .registrationRequests).toBe(2)
     expect(accountIds()).toEqual([INITIAL_COACH_ACCOUNT_ID, "pending-later", "rejected-later"].sort())
+  })
+
+  it("counts the days left the way the purge does, rounding part of a day up", () => {
+    expect(daysUntilRegistrationRequestRemoved(day(84), NOW)).toBe(6)
+    expect(daysUntilRegistrationRequestRemoved(new Date(day(89).getTime() - 60 * 60 * 1000), NOW)).toBe(1)
+    expect(daysUntilRegistrationRequestRemoved(day(90), NOW)).toBe(0)
+  })
+
+  it("names the undecided requests going within the week, with the days each has left", () => {
+    addRegistrationRequest("pending-due", { createdAt: day(85) })
+    addRegistrationRequest("pending-later", { createdAt: day(82) })
+    addRegistrationRequest("rejected-due", { createdAt: day(200), rejectedAt: day(84) })
+    // Put back yesterday after an old rejection: its clock restarted, so it is not due.
+    addRegistrationRequest("put-back", { createdAt: day(200), rejectedAt: day(120) })
+    undoRegistrationRejection("put-back", INITIAL_COACH_ACCOUNT_ID, { database, now: day(1) })
+
+    expect(listPendingRegistrationRequestsExpiringSoon({ database, now: NOW })).toEqual({ "pending-due": 5 })
   })
 
   it("never deletes an approved or archived member, however old", () => {

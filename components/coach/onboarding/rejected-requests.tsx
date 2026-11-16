@@ -10,16 +10,10 @@ import type { RejectedRegistration } from "@/lib/auth/registration-form"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 
 import styles from "./player-onboarding-register.module.css"
-import { shortInstant } from "./register/shared"
+import { removalLabel, shortInstant } from "./register/shared"
 
 /** A rejected request with the days left before the 90-day clean-up deletes it. */
 export type ExpiringRejectedRegistration = RejectedRegistration & { removedInDays: number | null }
-
-function removalLabel(days: number | null) {
-  if (days === null) return null
-  if (days <= 0) return "removed soon"
-  return `removed in ${days} ${days === 1 ? "day" : "days"}`
-}
 
 /** Rejected requests, so a mistaken rejection can be found and undone. */
 export function RejectedRequests({

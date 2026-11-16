@@ -102,6 +102,39 @@ export function countRegistrationRequestsExpiringSoon({
     .where(registrationRequestExpired(cutoff)).get()?.requests ?? 0
 }
 
+/**
+ * Whole days, rounded up, before the purge deletes a request whose clock
+ * started at `since`: its rejection or, while undecided, its latest activity.
+ * Zero or less means it goes at the next purge.
+ */
+export function daysUntilRegistrationRequestRemoved(since: Date, now: Date) {
+  return Math.ceil((since.getTime() + REGISTRATION_REQUEST_RETENTION_DAYS * DAY_MS - now.getTime()) / DAY_MS)
+}
+
+/** The undecided requests the purge deletes within the warning window: days left, by request id. */
+export function listPendingRegistrationRequestsExpiringSoon({
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  const cutoff = new Date(
+    now.getTime() - (REGISTRATION_REQUEST_RETENTION_DAYS - REGISTRATION_REQUEST_WARNING_DAYS) * DAY_MS,
+  )
+  return Object.fromEntries(database.select({ createdAt: accounts.createdAt, id: accounts.id, updatedAt: accounts.updatedAt })
+    .from(accounts)
+    .where(and(registrationRequestExpired(cutoff), eq(accounts.approvalStatus, "pending")))
+    .all()
+    .map((request) => [
+      request.id,
+      daysUntilRegistrationRequestRemoved(
+        request.updatedAt > request.createdAt ? request.updatedAt : request.createdAt,
+        now,
+      ),
+    ]))
+}
+
 /** Deletes everything past its retention period. Returns how many rows went. */
 export function purgeExpiredTelemetry({
   database = initializeDatabase(),
