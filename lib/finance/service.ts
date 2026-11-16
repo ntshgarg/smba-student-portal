@@ -880,6 +880,8 @@ export function correctFeeAgreementInTransaction(
     agreedMonthlyFeePaise: number
     agreementId: string
     batch: CreateFeeAgreementInput["batch"]
+    /** Recorded on the audit row, for a caller that replays a retried submit by it. */
+    idempotencyKey?: string
     level: CreateFeeAgreementInput["level"]
     reason: string
   },
@@ -922,6 +924,7 @@ export function correctFeeAgreementInTransaction(
     entityId: agreement.id,
     entityType: "fee_agreement",
     eventType: "fee_agreement_corrected",
+    idempotencyKey: input.idempotencyKey,
     metadata: {
       agreementId: agreement.id,
       playerId: agreement.playerAccountId,

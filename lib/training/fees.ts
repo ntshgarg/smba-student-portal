@@ -23,6 +23,7 @@ import {
   reopenReplacedFeeAgreementInTransaction,
   reverseConcession,
 } from "@/lib/finance/service"
+import { readAuditEventByIdempotencyKey } from "@/lib/finance/repository"
 import { onboardingFinished } from "@/lib/coach/onboarding"
 import { getAcademyDateKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
@@ -150,14 +151,19 @@ export function changeMonthlyFee(
 
       if (active.effectiveFrom >= startsOn) {
         // A fee change for that month is already waiting; change its amount.
-        correctFeeAgreementInTransaction(tx, {
-          academyPlan: enrollment.academyPlan,
-          agreedMonthlyFeePaise: input.monthlyFeePaise,
-          agreementId: active.id,
-          batch: enrollment.batch,
-          level: enrollment.level,
-          reason: `Fee changed from ${monthLabel(startsOn)}`,
-        }, { actorId: coachId, createId, now })
+        // A retried submit finds its own correction by the request key and
+        // writes nothing more, as a new plan does (createFeeAgreement).
+        if (!readAuditEventByIdempotencyKey(tx, input.idempotencyKey)) {
+          correctFeeAgreementInTransaction(tx, {
+            academyPlan: enrollment.academyPlan,
+            agreedMonthlyFeePaise: input.monthlyFeePaise,
+            agreementId: active.id,
+            batch: enrollment.batch,
+            idempotencyKey: input.idempotencyKey,
+            level: enrollment.level,
+            reason: `Fee changed from ${monthLabel(startsOn)}`,
+          }, { actorId: coachId, createId, now })
+        }
       } else {
         createFeeAgreementInTransaction(tx, {
           academyPlan: enrollment.academyPlan,
