@@ -281,6 +281,18 @@ describe("production credential lifecycle", () => {
       .resolves.toBe(true)
   })
 
+  it("does not save a PIN for an account archived while the PIN was being hashed", async () => {
+    const playerId = "pin-archived-mid-save"
+    const { activationToken } = createApprovedPlayer(playerId, "Archived Pin Player")
+    await completeAccountActivation({ token: activationToken, password: PASSWORD }, { database, now: NOW })
+
+    const saving = setPinCredential({ accountId: playerId, pin: "618203" }, { database, now: NOW })
+    // The liveness check has run; Archive lands while the PIN is hashed.
+    database.update(schema.accounts).set({ archivedAt: NOW }).where(eq(schema.accounts.id, playerId)).run()
+    await expect(saving).rejects.toThrow("PIN login is unavailable for this account.")
+    expect(hasPinCredential(playerId, { database })).toBe(false)
+  })
+
   it("asks for a code exactly when a confirmed authenticator exists, whatever the flag says", async () => {
     const playerId = "pin-two-factor-drift"
     const { academyId, activationToken } = createApprovedPlayer(playerId, "Drift Player")
