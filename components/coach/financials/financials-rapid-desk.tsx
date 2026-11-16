@@ -584,6 +584,14 @@ export function FinancialsRapidDesk({
           ) : null}
 
           {workspace.players.length ? (
+            <p className="sr-only" role="status">
+              {workspace.players.length} {workspace.players.length === 1 ? "player" : "players"}
+              {workspace.scope === "outstanding"
+                ? " with payment due"
+                : workspace.scope === "overdue" ? " past their due date" : " in the directory"}
+            </p>
+          ) : null}
+          {workspace.players.length ? (
             <ul className={styles.payers} id="rapid-financial-player-results">
               {workspace.players.map((player) => {
                 // A player whose fee plans have all ended left or stopped
