@@ -27,7 +27,7 @@ import { academyPlanLabel } from "@/lib/training/academy-plans"
 
 import styles from "./player-onboarding-register.module.css"
 import { OnboardingEditor } from "./register/onboarding-editor"
-import { shortDate, shortInstant, STAGES } from "./register/shared"
+import { filterCases, nextCase, shortDate, shortInstant, STAGES } from "./register/shared"
 import { RejectedRequests, type ExpiringRejectedRegistration } from "./rejected-requests"
 
 function onboardingHref(
@@ -103,9 +103,7 @@ export function PlayerOnboardingRegister({
   const [stageFilter, setStageFilter] = useState<PlayerOnboardingStage | null>(null)
   const previousSelectionRef = useRef<string | null>(null)
   const { summary } = workspace
-  const shownCases = stageFilter
-    ? workspace.cases.filter((item) => item.stage === stageFilter)
-    : workspace.cases
+  const { activeFilter, shownCases } = filterCases(workspace, stageFilter, selectedItem?.id ?? null)
 
   // A link to someone with no onboarding step left opens nothing and says why.
   const missingPlayerId = selectedId && !selectedItem ? selectedId : null
@@ -116,7 +114,7 @@ export function PlayerOnboardingRegister({
     previousSelectionRef.current = `${selectedItem.id}:${selectedItem.stage}`
     if (!focusChanged) return
     window.requestAnimationFrame(() => {
-      document.getElementById(`onboarding-editor-title-${selectedItem.id}`)?.focus({
+      document.getElementById(`onboarding-current-step-${selectedItem.id}`)?.focus({
         preventScroll: true,
       })
     })
@@ -128,10 +126,10 @@ export function PlayerOnboardingRegister({
   }) {
     setNotice({ message: input.message, tone: "success" })
     if (input.remove && selectedItem) {
-      const currentIndex = workspace.cases.findIndex((item) => item.id === selectedItem.id)
-      const nextItem = workspace.cases[currentIndex + 1] ?? workspace.cases[currentIndex - 1] ?? null
+      const next = nextCase(shownCases, workspace.cases, selectedItem.id)
+      if (next.clearsFilter) setStageFilter(null)
       router.replace(
-        onboardingHref(pathname, new URLSearchParams(searchParams.toString()), nextItem?.id ?? null),
+        onboardingHref(pathname, new URLSearchParams(searchParams.toString()), next.item?.id ?? null),
         { scroll: false },
       )
     }
@@ -171,7 +169,7 @@ export function PlayerOnboardingRegister({
       ) : null}
 
       <div className={styles.filters} role="group" aria-label="Show people at a stage">
-        <button aria-pressed={stageFilter === null} onClick={() => setStageFilter(null)} type="button">
+        <button aria-pressed={activeFilter === null} onClick={() => setStageFilter(null)} type="button">
           <b>{summary.total}</b><span>All</span>
         </button>
         {STAGES.map((stage) => {
@@ -179,7 +177,7 @@ export function PlayerOnboardingRegister({
           return (
             <button
               key={stage.key}
-              aria-pressed={stageFilter === stage.key}
+              aria-pressed={activeFilter === stage.key}
               disabled={count === 0}
               onClick={() => setStageFilter(stage.key)}
               type="button"

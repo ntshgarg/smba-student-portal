@@ -1,5 +1,9 @@
 import type { ActionFeedback } from "@/components/inline-notice"
-import type { PlayerOnboardingStage } from "@/lib/coach/onboarding"
+import type {
+  PlayerOnboardingCase,
+  PlayerOnboardingStage,
+  PlayerOnboardingWorkspace,
+} from "@/lib/coach/onboarding"
 import { formatAcademyDate, formatDateKey } from "@/lib/format"
 
 /**
@@ -38,4 +42,37 @@ export function shortDate(value: string) {
 /** For a moment in time (requested, rejected), read in India time; `shortDate` is for date-only keys. */
 export function shortInstant(value: string) {
   return formatAcademyDate(value, { month: "short", year: undefined })
+}
+
+/**
+ * The queue under a stage filter. A stage that has emptied stops filtering, so
+ * the list never goes blank under a pressed tile. The open record is shown
+ * whatever the filter: approving, assessing or assigning moves a person to the
+ * next stage, and a link can name anyone, and hiding them would unmount a form
+ * mid-edit and drop focus on the page.
+ */
+export function filterCases(
+  { cases, summary }: PlayerOnboardingWorkspace,
+  stageFilter: PlayerOnboardingStage | null,
+  openId: string | null,
+) {
+  const stage = STAGES.find((item) => item.key === stageFilter)
+  const activeFilter = stage && summary[stage.summaryKey] > 0 ? stage.key : null
+  return {
+    activeFilter,
+    shownCases: activeFilter
+      ? cases.filter((item) => item.stage === activeFilter || item.id === openId)
+      : cases,
+  }
+}
+
+/**
+ * Who opens after the open record leaves the queue: a neighbour the coach can
+ * see, or, once the filtered list has nobody else, the whole queue's.
+ */
+export function nextCase(shownCases: PlayerOnboardingCase[], allCases: PlayerOnboardingCase[], leavingId: string) {
+  const clearsFilter = shownCases.length < 2 && shownCases !== allCases
+  const neighbours = clearsFilter ? allCases : shownCases
+  const index = neighbours.findIndex((item) => item.id === leavingId)
+  return { clearsFilter, item: neighbours[index + 1] ?? neighbours[index - 1] ?? null }
 }
