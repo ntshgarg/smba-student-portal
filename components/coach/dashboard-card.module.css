@@ -76,13 +76,16 @@
   box-shadow: var(--frost-shadow);
 }
 
+/* When the heading and its stamps cannot share a line, the stamps drop under the heading whole, rather than
+   being cut short with an ellipsis or stacked one under another beside it. */
 .masthead {
   display: flex;
   min-width: 0;
   min-height: 56px;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-copy);
+  gap: var(--space-tight) var(--space-copy);
   padding: 17px 22px 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
 }
@@ -97,11 +100,12 @@
   text-transform: uppercase;
 }
 
-/* the stamps sit together at the heading's end, and wrap under each other on the narrowest phones */
+/* the stamps stay together on one line, at the heading's end or under it */
 .statuses {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 6px;
 }
@@ -406,13 +410,27 @@
 
 .figures {
   min-width: 0;
+  container-type: inline-size;
 }
 
+/* Sized by the card column's width (its container), so the tiles shrink in step on any screen and at any
+   text size. Words never split: when the column is too narrow for every tile across, the row becomes two
+   columns, a lone last tile spanning both. */
 .tiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-tight);
+  gap: clamp(6px, 2cqi, var(--space-tight));
   margin: 14px 0 0;
+}
+
+@container (max-width: 21em) {
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tiles > div:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 .tiles > div {
@@ -421,7 +439,7 @@
   flex-direction: column-reverse;
   justify-content: flex-end;
   gap: 2px;
-  padding: 10px 12px;
+  padding: clamp(var(--space-tight), 2.6cqi, 10px) clamp(var(--space-tight), 3cqi, 12px);
   border: var(--frost-border);
   border-radius: 14px;
   background: color-mix(in srgb, var(--white) 55%, transparent);
@@ -433,22 +451,17 @@
   background: color-mix(in srgb, var(--red) 8%, var(--white));
 }
 
-/* quieter than a live count, but the label still has to read at 4.5:1 */
-.tiles > div[data-tone="zero"] {
-  background: transparent;
-  box-shadow: none;
-}
-
 .tiles dd {
   margin: 0;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.625rem;
+  font-size: clamp(1.25rem, 7cqi, 1.625rem);
   font-style: italic;
   font-weight: var(--weight-display-light);
   line-height: 1;
 }
 
+/* a zero keeps the same surface as its neighbours; only the figure goes quiet */
 .tiles > div[data-tone="zero"] dd {
   color: var(--steel);
 }
@@ -458,8 +471,10 @@
 }
 
 .tiles dt {
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  hyphens: manual;
   color: var(--steel-dark);
-  font-size: var(--type-utility-label);
+  font-size: clamp(0.6875rem, 3.6cqi, 0.75rem);
   font-weight: 700;
+  line-height: 1.25;
 }

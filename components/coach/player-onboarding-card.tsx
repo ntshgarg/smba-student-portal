@@ -12,7 +12,7 @@ const stages = [
   { key: "newRequests", label: "New requests" },
   { key: "assessment", label: "Assessment" },
   { key: "session", label: "Session" },
-  { key: "feePlan", label: "Fee Plan" },
+  { key: "feePlan", label: "Fee plan" },
 ] as const
 
 export function PlayerOnboardingCard({

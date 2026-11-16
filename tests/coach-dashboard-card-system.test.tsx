@@ -94,7 +94,7 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain("New requests")
     expect(html).toContain("Assessment")
     expect(html).toContain("Session")
-    expect(html).toContain("Fee Plan")
+    expect(html).toContain("Fee plan")
     expect(html).toContain(">Onboarding</h2>")
     expect(html).toContain("1 onboarded so far")
     expect(html).toContain('href="/coach/onboarding">Open onboarding')

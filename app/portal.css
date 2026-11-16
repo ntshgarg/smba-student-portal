@@ -2908,11 +2908,22 @@
 }
 
 .coach-welcome-scoreboard .coach-welcome-empty {
+  display: grid;
+  max-width: none;
+  align-content: center;
   align-self: stretch;
   margin: 0;
   padding: 28px clamp(28px, 4vw, 54px);
   border-left: 1px solid var(--line);
   font-size: clamp(25px, 2.5vw, 36px);
+}
+
+/* with no session left the line takes the two columns the session facts would have used, so it reads as
+   one sentence instead of a narrow stack beside an empty third */
+@media (min-width: 981px) {
+  .coach-welcome-scoreboard .coach-scoreboard-ribbon.is-empty {
+    grid-template-columns: minmax(190px, 1fr) minmax(0, 2.6fr);
+  }
 }
 
 .coach-welcome-scoreboard .scroll-cue {
@@ -2987,7 +2998,7 @@
     padding: 26px 34px 22px;
   }
 
-  .coach-welcome-scoreboard.coach-welcome-hero .coach-ribbon-date {
+  .coach-welcome-scoreboard.coach-welcome-hero .has-session > .coach-ribbon-date {
     grid-area: date;
   }
 

@@ -103,7 +103,7 @@ describe("moving back through onboarding before it is finished", () => {
     // Assessment is behind the case, so it is a way back.
     expect(html).toContain('aria-label="Go back to Assessment"')
     // Fee Plan is ahead of it: nothing there can be filled in yet.
-    expect(html).not.toContain("Fee Plan\"")
+    expect(html).not.toContain("Fee plan\"")
   })
 
   it("does not call a step ahead of the coach a way back", () => {
@@ -118,7 +118,7 @@ describe("moving back through onboarding before it is finished", () => {
     )
 
     expect(html).toContain('aria-label="Go forward to Session"')
-    expect(html).toContain('aria-label="Go forward to Fee Plan"')
+    expect(html).toContain('aria-label="Go forward to Fee plan"')
     expect(html).not.toContain("Go back to")
   })
 

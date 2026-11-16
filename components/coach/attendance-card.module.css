@@ -8,6 +8,7 @@
 
 .today {
   min-width: 0;
+  container-type: inline-size;
 }
 
 .bar {
@@ -25,46 +26,54 @@
   background: var(--green);
 }
 
+/* The same tiles as the Financials and Onboarding cards, sized by this column's width. */
 .counts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(6px, 2cqi, var(--space-tight));
   margin: var(--space-copy) 0 0;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
-  border-radius: 14px;
+}
+
+@container (max-width: 21em) {
+  .counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .counts > div:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 .counts > div {
   display: flex;
   min-width: 0;
   flex-direction: column-reverse;
-  align-items: center;
   justify-content: flex-end;
-  padding: 10px var(--space-tight);
-  text-align: center;
-}
-
-.counts > div + div {
-  border-left: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
+  gap: 2px;
+  padding: clamp(8px, 2.6cqi, 10px) clamp(8px, 3cqi, 12px);
+  border: var(--frost-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--white) 55%, transparent);
+  box-shadow: inset 0 1px 0 var(--white), 0 10px 20px -18px var(--navy);
 }
 
 .counts dd {
   margin: 0;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.625rem;
+  font-size: clamp(1.25rem, 7cqi, 1.625rem);
   font-style: italic;
-  font-weight: 470;
-  line-height: 1.1;
+  font-weight: var(--weight-display-light);
+  line-height: 1;
 }
 
 .counts dt {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
+  overflow-wrap: normal;
+  hyphens: manual;
+  color: var(--steel-dark);
+  font-size: clamp(var(--type-operational-floor), 3.6cqi, var(--type-utility-label));
   font-weight: 700;
-  letter-spacing: 0.1em;
-  line-height: 1.3;
-  text-transform: uppercase;
+  line-height: 1.25;
 }
 
 @media (max-width: 980px) {
