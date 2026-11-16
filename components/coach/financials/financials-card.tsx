@@ -2,6 +2,7 @@ import {
   CoachDashboardAction,
   CoachDashboardActions,
   CoachDashboardCard,
+  CoachDashboardFigures,
   CoachDashboardSummary,
 } from "@/components/coach/dashboard-card"
 import { formatInr } from "@/lib/format"
@@ -88,39 +89,28 @@ export function FinancialsCard({
       titleId="coach-financials-card-title"
     >
       {active ? (
-        <div className={styles.layout}>
-          <div className={styles.figures}>
-            <CoachDashboardSummary detail={preparationState}>
-              {summary}
-            </CoachDashboardSummary>
-            <dl className={styles.tiles} aria-label="Fees needing attention">
-              {tiles.map((tile) => (
-                <div
-                  key={tile.label}
-                  data-tone={tile.count === 0 ? "zero" : tile.attention ? "attention" : undefined}
-                >
-                  <dt>{tile.label}</dt>
-                  <dd>{tile.count}</dd>
-                </div>
-              ))}
-            </dl>
-            {/* A fee waiting on a booked training change is not issued until the
-                change happens, so it is named instead of silently missing from "to issue". */}
-            {preparation.waitingForChange > 0 ? (
-              <p className={styles.waiting}>
-                {preparation.waitingForChange} {preparation.waitingForChange === 1 ? "fee waits" : "fees wait"} for a booked training change.
-              </p>
-            ) : null}
-          </div>
-          <CoachDashboardActions ariaLabel="Financial actions">
-            <CoachDashboardAction href="/coach/financials/record" primary>
-              Record payment
-            </CoachDashboardAction>
-            <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>
-              Fees
-            </CoachDashboardAction>
-          </CoachDashboardActions>
-        </div>
+        <CoachDashboardFigures
+          actions={(
+            <CoachDashboardActions ariaLabel="Financial actions">
+              <CoachDashboardAction href="/coach/financials/record" primary>
+                Record payment
+              </CoachDashboardAction>
+              <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>
+                Fees
+              </CoachDashboardAction>
+            </CoachDashboardActions>
+          )}
+          label="Fees needing attention"
+          // A fee waiting on a booked training change is not issued until the
+          // change happens, so it is named instead of silently missing from "to issue".
+          note={preparation.waitingForChange > 0 ? (
+            <p className={styles.waiting}>
+              {preparation.waitingForChange} {preparation.waitingForChange === 1 ? "fee waits" : "fees wait"} for a booked training change.
+            </p>
+          ) : null}
+          summary={<CoachDashboardSummary detail={preparationState}>{summary}</CoachDashboardSummary>}
+          tiles={tiles}
+        />
       ) : (
         <>
           <CoachDashboardSummary detail="Choose the first month to start.">

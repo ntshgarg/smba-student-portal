@@ -9,6 +9,7 @@ import { MembersCard } from "@/components/coach/members-card"
 import { PlayerOnboardingCard } from "@/components/coach/player-onboarding-card"
 import { AssessmentsCard } from "@/components/coach/assessments-card"
 import { SessionsCard } from "@/components/coach/sessions-card"
+import styles from "@/components/coach/sessions-card.module.css"
 
 function renderDashboard() {
   return renderToStaticMarkup(
@@ -36,7 +37,14 @@ function renderDashboard() {
         preparation={{ alreadyPrepared: 8, ready: 0, waitingForChange: 0 }}
         setupRequiredCount={0}
       />
-      <SessionsCard nextSessionLabel="Beginner · Weekday · 6–7 am" todaySessionCount={8} />
+      <SessionsCard
+        cancelledThisWeek={0}
+        leftToday={3}
+        next={{ label: "Beginner · Weekday · SMBA Court", time: "4:00 pm" }}
+        runningSchedules={13}
+        scheduleCount={13}
+        todaySessionCount={8}
+      />
       <AssessmentsCard assessedCount={1} draftCount={0} playerCount={2} />
       <AnnouncementCard activeCount={0} />
       <MembersCard memberCount={39} />
@@ -65,9 +73,9 @@ describe("coach dashboard Court Operations Board", () => {
       previousIndex = index
     }
 
-    // 13 action buttons, plus the overdue stamp, which opens the late payers
-    expect(html.match(/<a class="[^"]*_action_/g)).toHaveLength(13)
-    expect(html.match(/<a /g)).toHaveLength(14)
+    // 12 action buttons, plus the overdue stamp, which opens the late payers
+    expect(html.match(/<a class="[^"]*_action_/g)).toHaveLength(12)
+    expect(html.match(/<a /g)).toHaveLength(13)
     expect(html).toContain('id="onboarding"')
     expect(html).toContain('id="attendance"')
     expect(html).toContain('aria-label="Attendance actions"')
@@ -91,7 +99,7 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain("1 onboarded so far")
     expect(html).toContain('href="/coach/onboarding">Open onboarding')
     expect(html).not.toContain("will be removed")
-    expect(html).toContain("Training calendar")
+    expect(html).toContain("8 sessions today")
     expect(html).toContain("8 today")
     expect(html).toContain("1 of 2 assessed")
     expect(html).toContain("Assess a player whenever you choose.")
@@ -176,27 +184,60 @@ describe("coach dashboard Court Operations Board", () => {
   })
 
   it.each([
-    [4, "Beginner · Weekday · 6–7 am", "4 today", "4 sessions today"],
-    [0, "Beginner · Weekday · 6–7 am", null, "Next · Beginner · Weekday · 6–7 am"],
-    [0, null, "Setup", "No training scheduled."],
+    [4, { label: "Beginner · Weekday · SMBA Court", time: "4:00 pm" }, "4 today", "4 sessions today"],
+    [0, { label: "Tue 17 Nov · Beginner · Weekday", time: "6:00 am" }, null, "No sessions today"],
   ] as const)(
-    "preserves the Sessions priority branches",
-    (todaySessionCount, nextSessionLabel, status, detail) => {
+    "matches Financials beside it: today's count, the next session, three tiles, Calendar and Schedules",
+    (todaySessionCount, next, status, headline) => {
       const html = renderToStaticMarkup(
         <SessionsCard
-          nextSessionLabel={nextSessionLabel}
+          cancelledThisWeek={2}
+          leftToday={todaySessionCount ? 3 : 0}
+          next={next}
+          runningSchedules={13}
+          scheduleCount={13}
           todaySessionCount={todaySessionCount}
         />,
       )
 
       if (status) expect(html).toContain(status)
-      else expect(html).not.toMatch(/status/)
-      expect(html).toContain(detail)
+      else expect(html).not.toMatch(/class="[^"]*_status_/)
+      expect(html).toContain(headline)
+      expect(html).toContain(`<span class="${styles.time}">${next.time}</span> ${next.label}`)
+      expect(html).toContain("<dt>Left today</dt>")
+      expect(html).toContain("<dt>Schedules</dt><dd>13</dd>")
+      // Cancellations, moves and holiday closures need nothing from the coach, so the tile is never red.
+      expect(html).toContain("<dt>Cancelled this week</dt><dd>2</dd>")
+      expect(html).not.toContain('data-tone="attention"')
       expect(html).toContain('href="/coach/calendar"')
-      expect(html).toContain('href="/coach/schedules/new"')
       expect(html).toContain('href="/coach/schedules"')
+      expect(html).not.toContain('href="/coach/schedules/new"')
     },
   )
+
+  it("keeps Setup and one way in, Create schedule, only while no schedule exists", () => {
+    const html = renderToStaticMarkup(
+      <SessionsCard cancelledThisWeek={0} leftToday={0} next={null} runningSchedules={0} scheduleCount={0} todaySessionCount={0} />,
+    )
+    expect(html).toContain("Setup")
+    expect(html).toContain("No training scheduled yet")
+    expect(html).toContain('href="/coach/schedules/new"')
+    expect(html).not.toContain('href="/coach/calendar"')
+    expect(html).not.toContain("<dl")
+  })
+
+  it("keeps Calendar and Schedules once every term has finished", () => {
+    // Nothing today and nothing ahead, but schedules exist: finished terms can
+    // still have players on them, and Schedules is where they are shown.
+    const html = renderToStaticMarkup(
+      <SessionsCard cancelledThisWeek={0} leftToday={0} next={null} runningSchedules={0} scheduleCount={4} todaySessionCount={0} />,
+    )
+    expect(html).not.toContain("Setup")
+    expect(html).toContain("No sessions today")
+    expect(html).toContain("No more sessions scheduled.")
+    expect(html).toContain('href="/coach/calendar"')
+    expect(html).toContain('href="/coach/schedules"')
+  })
 
   it("shows the exact outstanding balance rather than rounding it up", () => {
     /* The card carried its own `maximumFractionDigits: 0` formatter, so this

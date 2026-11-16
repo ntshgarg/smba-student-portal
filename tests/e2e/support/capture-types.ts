@@ -45,7 +45,7 @@ export type CaptureAction =
   | "public-trial-popup-blocked"
   | "register-validation-error"
   | "schedule-create-weekend"
-  | "schedule-programmes-collapse"
+  | "schedule-finished-filter"
   | "schedule-roster-open"
 
 export type CaptureViewport = {

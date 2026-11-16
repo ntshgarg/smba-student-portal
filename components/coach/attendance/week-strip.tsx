@@ -3,16 +3,10 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
 import { useState } from "react"
 
-import { weekdayForDateKey } from "@/lib/date-keys"
+import { shiftDateKey, weekdayForDateKey } from "@/lib/date-keys"
 import { formatDateKey } from "@/lib/format"
 
 import styles from "./mark.module.css"
-
-function shiftDateKey(dateKey: string, days: number) {
-  const date = new Date(`${dateKey}T00:00:00.000Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
-}
 
 /**
  * The Mark tab's dates: the selected day's week, Monday to Sunday, with ‹ ›
@@ -22,13 +16,25 @@ function shiftDateKey(dateKey: string, days: number) {
  *
  * No dot per day for how far its registers got: the Mark tab reads one day of
  * sessions and marks at a time, so the rest of the week is not on hand.
+ *
+ * The Sessions calendar passes `onPick`: there "Pick a date" opens its own
+ * month, which shows each day's sessions and holidays, in place of the browser's.
+ * It also passes `today`, which marks today in the strip and adds a "Today"
+ * button for getting back after moving weeks.
  */
 export function WeekStrip({
   onChoose,
+  onPick,
+  pickButtonRef,
   selectedDate,
+  today,
 }: {
   onChoose: (dateKey: string) => void
+  onPick?: () => void
+  /** Where the calendar returns focus when its month closes without a pick. */
+  pickButtonRef?: React.Ref<HTMLButtonElement>
   selectedDate: string
+  today?: string
 }) {
   // Weeks away from the selected day's own week.
   const [weekOffset, setWeekOffset] = useState(0)
@@ -60,7 +66,8 @@ export function WeekStrip({
               type="button"
               className={styles.day}
               aria-current={dateKey === selectedDate ? "date" : undefined}
-              aria-label={formatDateKey(dateKey, { year: "numeric" })}
+              aria-label={`${formatDateKey(dateKey, { year: "numeric" })}${dateKey === today ? ", today" : ""}`}
+              data-today={dateKey === today ? "" : undefined}
               onClick={() => choose(dateKey)}
             >
               <span>{formatDateKey(dateKey, { day: undefined, month: undefined, weekday: "short" })}</span>
@@ -77,7 +84,22 @@ export function WeekStrip({
       >
         <ChevronRight aria-hidden="true" />
       </button>
-      <label className={styles.pick}>
+      {today ? (
+        <button
+          type="button"
+          className={`${styles.pick} ${styles.today}`}
+          disabled={selectedDate === today && weekOffset === 0}
+          onClick={() => choose(today)}
+        >
+          Today
+        </button>
+      ) : null}
+      {onPick ? (
+        <button ref={pickButtonRef} type="button" className={styles.pick} onClick={onPick}>
+          <CalendarDays aria-hidden="true" />
+          <span>Pick a date</span>
+        </button>
+      ) : <label className={styles.pick}>
         <CalendarDays aria-hidden="true" />
         <span>Pick a date</span>
         <input
@@ -96,7 +118,7 @@ export function WeekStrip({
             }
           }}
         />
-      </label>
+      </label>}
     </nav>
   )
 }

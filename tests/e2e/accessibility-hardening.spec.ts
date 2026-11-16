@@ -84,9 +84,9 @@ test("operational controls remain zoom-safe and today controls are comfortably t
   }
 
   await page.goto("/coach/schedules/new", { waitUntil: "domcontentloaded" })
-  const scheduleControls = page.locator([
-    '.coach-series-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])',
-    ".coach-series-form select",
+  const scheduleControls = page.locator('form:has(input[name="venue"])').locator([
+    'input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])',
+    "select",
   ].join(", "))
   expect(await scheduleControls.count()).toBeGreaterThan(0)
   for (let index = 0; index < await scheduleControls.count(); index += 1) {
@@ -186,7 +186,7 @@ test("replacement validation stays inline in the production Server Action path",
   const upcomingDate = nextDateKey(await academyTodayFromCalendar(page))
   await page.goto(`/coach/calendar?date=${upcomingDate}`, { waitUntil: "domcontentloaded" })
 
-  const daySessions = page.locator('.coach-day-session > button[aria-expanded="false"]')
+  const daySessions = page.locator('[aria-labelledby="coach-day-view-title"] li > button[aria-expanded="false"]')
   await expect(
     daySessions,
     `${upcomingDate} carries no session card. The stress fixture schedules`
@@ -195,9 +195,9 @@ test("replacement validation stays inline in the production Server Action path",
   ).not.toHaveCount(0)
   await daySessions.first().click()
 
-  const detail = page.locator(".coach-occurrence-detail")
+  const detail = page.locator('[aria-labelledby="coach-day-view-title"] li:has(> button[aria-expanded="true"])')
   await expect(detail).toBeVisible()
-  await detail.locator("summary", { hasText: "Replace session" }).click()
+  await detail.getByRole("button", { name: "Replace session" }).click()
 
   // Counted before the submit and checked after it, because this case now reaches
   // the Server Action for real against the shared stress workspace that
@@ -205,10 +205,10 @@ test("replacement validation stays inline in the production Server Action path",
   // minutes acceptable would cancel this occurrence and add its replacement to the
   // same day -- one card more here, and a route payload budget two steps later
   // failing for a reason nothing in that suite could explain.
-  const dayCards = page.locator(".coach-day-session")
+  const dayCards = page.locator('[aria-labelledby="coach-day-view-title"] li:has(> button[aria-expanded])')
   const dayCardCount = await dayCards.count()
 
-  const duration = detail.getByLabel("Duration")
+  const duration = detail.getByLabel("Minutes")
   await detail.getByLabel("Time").fill("22:00")
   await duration.fill("300")
   page.once("dialog", (dialog) => dialog.accept())

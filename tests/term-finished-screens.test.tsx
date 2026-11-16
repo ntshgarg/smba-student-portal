@@ -323,15 +323,34 @@ describe("Schedules & rosters", () => {
   it("dates every schedule and moves a finished one to its own group below", () => {
     const html = renderToStaticMarkup(<SessionSchedules today={today} />)
 
-    expect(html).toContain("1 Jul 2026 – 31 Mar 2027")
-    expect(html).toContain("Term finished · 1 Jul 2026 – 31 Oct 2026")
-    expect(html).toContain("1 still on it")
+    // The year is left off a row: every schedule listed is this term's or the last.
+    expect(html).toContain("Mon · SMBA Court · 1 Jul – 31 Mar")
+    expect(html).toContain("Mon · SMBA Court · 1 Jul – 31 Oct")
+    expect(html).toContain('data-tone="finished">1 still on it<')
     expect(html).toContain(">Finished<")
     expect(html).toContain("1 schedule · 1 player still on it")
     // Running schedules come first; the ended one is not listed at all.
-    expect(html.indexOf("1 Jul 2026 – 31 Mar 2027")).toBeLessThan(html.indexOf(">Finished<"))
+    expect(html.indexOf("1 Jul – 31 Mar")).toBeLessThan(html.indexOf("1 schedule · 1 player still on it"))
     expect(html).not.toContain("30 Sept 2026")
     expect(html).not.toContain("30 Sep 2026")
+    expect(html).not.toContain("30 Sep<")
+  })
+
+  it("counts each level in a tile, Finished included, and reads a weekday run as one span", () => {
+    portal.sessionSeries = [
+      ...portal.sessionSeries,
+      series("weekdays", {
+        programme: "Advanced",
+        slots: [1, 2, 3, 4, 5].map((weekday) => ({ durationMinutes: 60, id: `w${weekday}`, startTime: "17:00", weekday })),
+      }),
+    ]
+    const html = renderToStaticMarkup(<SessionSchedules today={today} />)
+
+    expect(html).toMatch(/aria-pressed="true"[^>]*><b>3<\/b><span>All</u)
+    expect(html).toMatch(/<b>1<\/b><span>Beginner</u)
+    expect(html).toMatch(/<b>1<\/b><span>Finished</u)
+    expect(html).toMatch(/data-zero=""[^>]*><b>0<\/b><span>Intermediate</u)
+    expect(html).toContain("Mon–Fri · SMBA Court")
   })
 
   it("counts a player also on a running schedule as still on it, not as one to move", () => {

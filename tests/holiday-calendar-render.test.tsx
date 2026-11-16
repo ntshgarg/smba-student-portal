@@ -55,7 +55,7 @@ vi.mock("@/components/coach/coach-portal-provider", async (importOriginal) => {
   }
 })
 
-const { SessionCalendar } = await import("@/components/coach/calendar/session-calendar")
+const { MonthGrid, SessionCalendar } = await import("@/components/coach/calendar/session-calendar")
 const { CoachPortalProvider, useAttendancePortal, useSessionPortal } = await import("@/components/coach/coach-portal-provider")
 
 afterEach(() => {
@@ -116,39 +116,65 @@ function renderCalendar({
   )
 }
 
+function renderMonth(occurrences: TrainingSessionOccurrence[], holiday: AcademyHolidayRecord) {
+  return renderToStaticMarkup(
+    <MonthGrid
+      holidayByDate={new Map([[holiday.dateKey, holiday]])}
+      month="2026-11"
+      occurrences={occurrences}
+      onSelect={() => {}}
+      selectedDate="2026-11-13"
+      today="2026-11-13"
+    />,
+  )
+}
+
 describe("the month grid on a closed day", () => {
   const diwali = { dateKey: "2026-11-08", id: "holiday-1", label: "Diwali" }
 
-  it("reads Holiday when every session there is closed", () => {
-    const markup = renderCalendar({
-      academyHolidays: [diwali],
-      sessionOccurrences: [occurrence("2026-11-08", "cancelled", diwali.id)],
-    })
+  it("names the holiday when every session there is closed", () => {
+    const markup = renderMonth([occurrence("2026-11-08", "cancelled", diwali.id)], diwali)
 
     expect(markup).toContain('aria-label="Sunday 8 November, closed for Diwali"')
-    expect(markup).toContain('<small class="coach-month-holiday">Holiday</small>')
+    expect(markup).toContain("<strong>8</strong><small>Diwali</small>")
   })
 
-  // A live session left on a closed day is shown, not hidden behind "Holiday",
-  // so the grid cannot disagree with the day view underneath it.
+  // A live session left on a closed day is shown, not hidden behind the
+  // holiday, so the grid cannot disagree with the day list underneath it.
   it("still counts a session left scheduled there", () => {
-    const markup = renderCalendar({
-      academyHolidays: [diwali],
-      sessionOccurrences: [occurrence("2026-11-08", "scheduled")],
-    })
+    const markup = renderMonth([occurrence("2026-11-08", "scheduled")], diwali)
 
     expect(markup).toContain("Sunday 8 November, closed for Diwali, but 1 session is still scheduled")
-    expect(markup).toContain('<small class="coach-month-holiday">Holiday · 1</small>')
+    expect(markup).toContain("<small>Diwali · 1</small>")
   })
 
-  // On a phone the month and the day are shown one at a time, so the notice
-  // of what a holiday change did sits above both.
-  it("keeps the holiday notice outside the day pane", () => {
+  // The month opens over the week strip and closes on a pick, so the notice
+  // of what a holiday change did sits above the day list, not inside it.
+  it("keeps the holiday notice above the day list", () => {
     const markup = renderCalendar({ academyHolidays: [diwali], sessionOccurrences: [] })
 
-    const notice = markup.indexOf("coach-calendar-holiday-notice")
+    const notice = markup.indexOf("inline-notice-slot")
     expect(notice).toBeGreaterThan(-1)
-    expect(notice).toBeLessThan(markup.indexOf("coach-calendar-workspace"))
+    expect(notice).toBeLessThan(markup.indexOf('id="coach-day-view-title"'))
+  })
+})
+
+describe("the day list", () => {
+  // 13 Nov, 9:30 am in Mumbai: the 6 am session has run, the 5:30 pm one has not.
+  it("tags each session from what the data already says, in words", () => {
+    const later = { ...occurrence("2026-11-13", "scheduled"), id: "later", startsAt: "2026-11-13T12:00:00.000Z" }
+    const off = { ...occurrence("2026-11-13", "cancelled"), id: "off", startsAt: "2026-11-13T13:00:00.000Z" }
+    const markup = renderCalendar({
+      academyHolidays: [],
+      sessionOccurrences: [occurrence("2026-11-13", "scheduled"), later, off],
+    })
+
+    expect(markup).toMatch(/data-tone="done">Done</u)
+    expect(markup).toContain(">Later today<")
+    expect(markup).toMatch(/data-tone="off">Cancelled</u)
+    // The month opens in place from the week strip rather than a native picker.
+    expect(markup).toMatch(/<button type="button" class="[^"]*">(?:(?!<\/button>).)*<span>Pick a date<\/span><\/button>/u)
+    expect(markup).not.toContain('name="attendanceDate"')
   })
 })
 

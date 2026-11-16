@@ -5,7 +5,7 @@ import { academyToday } from "@/lib/clock"
 import { listOperationalPlayerRecords } from "@/lib/coach/database"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 
-export const metadata = { title: "Create schedule" }
+export const metadata = { title: "New schedule" }
 
 const programmes: TrainingProgramme[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite"]
 const batches: TrainingBatch[] = ["Weekday", "Weekend"]

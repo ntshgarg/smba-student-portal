@@ -1,0 +1,1221 @@
+/* The coach's Sessions pages (head coach, 16 Nov 2026): Calendar and Schedules under one heading, built from the
+   Attendance Mark tab (week strip, red serif times, one tag per row) and the Fees ledger panel (one framed panel,
+   divider rows, shaded group lines), plus New schedule. */
+
+.page {
+  padding-block: var(--space-block) var(--space-content);
+}
+
+.back a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.title {
+  margin-top: var(--space-tight);
+  color: var(--navy);
+  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+/* Calendar | Schedules, with the tab's own action on the right */
+.tabRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-tight) var(--space-copy);
+  margin-block: 18px var(--space-copy);
+}
+
+.tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 5px;
+  border: var(--frost-border);
+  border-radius: 16px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.tabs a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 20px;
+  border-radius: 12px;
+  color: var(--steel-dark);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.tabs a[aria-current="page"] {
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+/* --- Buttons --- */
+.button,
+.primary,
+.danger {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-tight);
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  color: var(--navy);
+  font: inherit;
+  font-size: var(--type-operational-action);
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.primary {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.danger {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+  color: var(--red-dark);
+}
+
+.button:disabled,
+.primary:disabled,
+.danger:disabled,
+.primary[aria-disabled="true"] {
+  border-color: var(--line-disabled);
+  background: var(--paper);
+  color: var(--steel);
+  cursor: default;
+}
+
+.tabs a:focus-visible,
+.button:focus-visible,
+.primary:focus-visible,
+.danger:focus-visible,
+.link:focus-visible,
+.rowHead:focus-visible,
+.tiles button:focus-visible,
+.cell:focus-visible,
+.monthNav button:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* A text link with a full-size tap target */
+.link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--navy);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* --- The panel: one framed list, like a Fees ledger --- */
+.panel {
+  min-width: 0;
+  overflow: hidden;
+  /* Rows stack by the panel's width in em, so 200% text stacks them as a narrow screen does. */
+  container-type: inline-size;
+  border: var(--frost-border);
+  border-radius: 22px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px var(--space-copy);
+  padding: var(--space-tight) var(--space-copy);
+  border-bottom: 1px solid var(--line);
+}
+
+.panelHead h2 {
+  color: var(--ink);
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.panelHead h2:focus {
+  outline: none;
+}
+
+.panelHead p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-copy);
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+/* a shaded group line: a day of the week, a level of schedules */
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px var(--space-copy);
+  padding: 7px var(--space-copy);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--navy) 6%, var(--white));
+  color: var(--navy);
+  font-size: var(--type-utility-meta);
+  font-weight: 800;
+}
+
+.group span {
+  color: var(--steel-dark);
+  font-weight: 700;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rows > li {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 70%, transparent);
+}
+
+.rows > li:last-child {
+  border-bottom: 0;
+}
+
+/* a row: the time in red serif, what it is, one tag, a chevron. The time
+   column is sized in rem, so it grows with enlarged text, and a range such as
+   "11:30 am–1:30 pm" wraps inside it rather than spilling into the name. */
+.rowHead {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 7rem minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: var(--space-copy);
+  padding: 10px var(--space-copy);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowHead:disabled {
+  cursor: default;
+}
+
+.time {
+  min-width: 0;
+  color: var(--red);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.25rem;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.copy {
+  display: grid;
+  min-width: 0;
+}
+
+.copy strong {
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.copy small {
+  overflow-wrap: anywhere;
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--steel-dark);
+}
+
+.struck :is(.time, .copy strong) {
+  color: var(--steel);
+  text-decoration: line-through;
+}
+
+.tag {
+  display: inline-flex;
+  justify-self: end;
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy) 7%, transparent);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tag[data-tone="done"] {
+  background: color-mix(in srgb, var(--green) 11%, transparent);
+  color: var(--green);
+}
+
+.tag[data-tone="off"] {
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  color: var(--red-dark);
+}
+
+.tag[data-tone="moved"],
+.tag[data-tone="finished"] {
+  background: color-mix(in srgb, var(--makeup) 15%, transparent);
+  color: var(--makeup-dark);
+}
+
+/* an open row: the head turns navy, its detail sits underneath */
+.open .rowHead {
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.open .time {
+  color: color-mix(in srgb, var(--red) 45%, var(--ivory));
+}
+
+.open .copy small {
+  color: color-mix(in srgb, var(--ivory) 72%, transparent);
+}
+
+.open .tag {
+  background: color-mix(in srgb, var(--white) 16%, transparent);
+  color: var(--white);
+}
+
+.open .chevron {
+  color: var(--ivory);
+  rotate: 180deg;
+}
+
+.open .rowHead:focus-visible {
+  outline-color: var(--ivory);
+  outline-offset: -4px;
+}
+
+.detail {
+  display: grid;
+  gap: 10px;
+  padding: 12px var(--space-copy) var(--space-copy) calc(104px + 2 * var(--space-copy));
+  background: var(--paper);
+}
+
+.label {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.help {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+/* the roster as name chips */
+.roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roster li {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-tight);
+  padding: 4px 12px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.initials {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--navy) 8%, transparent);
+  color: var(--navy);
+  font-size: var(--type-operational-floor);
+  font-weight: 800;
+}
+
+/* roster cards on a schedule: name, their days, since when */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cards li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-tight);
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+}
+
+.cards strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.cards small {
+  display: block;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 600;
+}
+
+.empty {
+  padding: 20px var(--space-copy);
+  color: var(--steel-dark);
+  font-weight: 700;
+  text-align: center;
+}
+
+.empty p {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+/* one amber line at the top of a panel or under a row: a holiday, a finished term */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-tight) var(--space-copy);
+  padding: 10px var(--space-copy);
+  border-bottom: 1px solid var(--line);
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.notice a {
+  color: inherit;
+}
+
+/* replacing a session: one line of fields */
+.replace {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: var(--space-tight);
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.field > span {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.field input[aria-invalid="true"],
+.field select[aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+.field input:focus-visible,
+.field select:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 1px;
+}
+
+/* --- The month: Pick a date swaps the week strip for it --- */
+.month {
+  container-type: inline-size;
+  padding: 12px;
+  border: var(--frost-border);
+  border-radius: 20px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.monthHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-tight);
+  margin: 0 4px var(--space-tight);
+}
+
+.monthHead h2 {
+  color: var(--ink);
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.monthHead h2:focus {
+  outline: none;
+}
+
+.monthNav {
+  display: flex;
+  gap: 6px;
+}
+
+.monthNav button {
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  place-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--type-utility-meta);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.monthNav svg {
+  width: 16px;
+  height: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.grid > span {
+  padding: 4px 0;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cell {
+  display: grid;
+  min-width: 0;
+  min-height: 52px;
+  align-content: space-between;
+  justify-items: start;
+  padding: 6px var(--space-tight);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cell strong {
+  font-size: 0.875rem;
+}
+
+.cell small {
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  font-weight: 700;
+}
+
+.cell[aria-current="date"] strong {
+  color: var(--red);
+}
+
+.cell[data-holiday] {
+  border-color: color-mix(in srgb, var(--makeup) 35%, transparent);
+  background: var(--makeup-soft);
+}
+
+/* the holiday's name on one line, cut short if the cell is narrow; the cell's
+   accessible name carries it in full */
+.cell[data-holiday] small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--makeup-dark);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* seven columns too narrow for "WED" (a phone at 200% text): one letter each */
+@container (max-width: 24em) {
+  .grid > span {
+    letter-spacing: 0;
+  }
+
+  .grid > span .word {
+    display: none;
+  }
+}
+
+.cell[aria-pressed="true"] {
+  border-color: var(--navy);
+  background: var(--navy);
+}
+
+.cell[aria-pressed="true"] :is(strong, small) {
+  color: var(--white);
+}
+
+/* --- Mark holiday: opens in place, a navy head over its fields --- */
+.sheet {
+  overflow: hidden;
+  border-radius: 20px;
+  box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--navy) 60%, transparent);
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-copy);
+  padding: 10px var(--space-copy);
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.sheetHead h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.sheetHead button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ivory) 25%, transparent);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--ivory);
+  cursor: pointer;
+}
+
+.sheetHead button:focus-visible {
+  outline: 2px solid var(--ivory);
+  outline-offset: 2px;
+}
+
+.sheetHead svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sheetBody {
+  display: grid;
+  gap: 10px;
+  padding: 12px var(--space-copy) var(--space-copy);
+  border: var(--frost-border);
+  border-top: 0;
+  border-radius: 0 0 20px 20px;
+  background: var(--paper);
+}
+
+.three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* what a closure will cancel, day by day */
+.impact {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+}
+
+.impact h3 {
+  padding: var(--space-tight) 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--navy) 4%, var(--white));
+  font-size: var(--type-utility-meta);
+  font-weight: 800;
+}
+
+.impact > p,
+.impact > ul {
+  margin: 0;
+  padding: var(--space-tight) 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--type-utility-meta);
+}
+
+.impact > :last-child {
+  border-bottom: 0;
+}
+
+.impact ul {
+  list-style: none;
+}
+
+.warning strong {
+  display: block;
+  color: var(--red-dark);
+}
+
+.dates li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px var(--space-copy);
+  padding: 2px 0;
+  font-weight: 600;
+}
+
+.dates strong {
+  font-weight: 700;
+}
+
+/* --- Schedules --- */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: var(--space-tight);
+  margin-bottom: 12px;
+}
+
+.tiles button {
+  display: grid;
+  justify-items: start;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  min-height: 44px;
+  gap: 2px;
+  padding: 12px 14px;
+  border: var(--frost-border);
+  border-radius: 18px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+  color: var(--steel-dark);
+}
+
+.tiles b {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.875rem;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.tiles span {
+  overflow-wrap: anywhere;
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.tiles button[data-zero] {
+  background: transparent;
+  box-shadow: none;
+}
+
+.tiles button[data-zero] b {
+  color: var(--steel);
+}
+
+.tiles button[aria-pressed="true"] {
+  border-color: var(--navy);
+  background: var(--navy);
+}
+
+.tiles button[aria-pressed="true"] :is(b, span) {
+  color: var(--ivory);
+}
+
+.guide {
+  margin-bottom: 12px;
+  padding: 10px var(--space-copy);
+  border: 1px solid color-mix(in srgb, var(--makeup) 30%, transparent);
+  border-radius: 14px;
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.guide:focus {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.guide strong {
+  color: var(--ink);
+}
+
+/* End schedule: what happens to each player, in plain sentences */
+.outcomes {
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  list-style: none;
+}
+
+.outcomes li {
+  display: grid;
+  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+  gap: 2px var(--space-copy);
+  padding: var(--space-tight) 12px;
+  border-top: 1px solid var(--line);
+  background: var(--white);
+  font-size: var(--type-utility-meta);
+}
+
+.outcomes li:first-child {
+  border-top: 0;
+}
+
+.outcomes strong {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.outcomes span {
+  color: var(--steel-dark);
+  font-weight: 600;
+}
+
+.outcomes .warn {
+  color: var(--red-dark);
+}
+
+/* --- New schedule: one dense card --- */
+.form {
+  display: grid;
+  gap: 12px;
+  padding: var(--space-copy) 18px;
+  border: var(--frost-border);
+  border-radius: 22px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.page > .form {
+  margin-top: 14px;
+}
+
+.form > .guide {
+  margin-bottom: 0;
+}
+
+.batch {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.formTop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-copy);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.chips legend,
+.batch legend,
+.daysLegend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.chips label {
+  position: relative;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 var(--space-copy);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chips input,
+.days input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chips label:has(input:checked),
+.days label:has(input:checked) {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: var(--white);
+}
+
+.chips label:has(input:disabled:not(:checked)),
+.days label:has(input:disabled:not(:checked)) {
+  border-style: dashed;
+  background: transparent;
+  color: var(--steel);
+  cursor: default;
+}
+
+.chips label:has(input:focus-visible),
+.days label:has(input:focus-visible) {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy) 6%, transparent);
+}
+
+.switch label {
+  position: relative;
+  display: inline-flex;
+  min-width: 6.5rem;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch label:has(input:checked) {
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: 0 4px 12px -6px var(--navy);
+}
+
+.switch label:has(input:disabled:not(:checked)) {
+  color: var(--steel);
+  cursor: default;
+}
+
+.switch label:has(input:focus-visible) {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.five {
+  display: grid;
+  grid-template-columns: 1fr 0.8fr 1.4fr 1.1fr 1.1fr;
+  gap: var(--space-tight);
+}
+
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.days label {
+  position: relative;
+  display: grid;
+  min-height: 44px;
+  place-items: center;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.formFoot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--navy) 4%, var(--white));
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.preview strong {
+  color: var(--ink);
+  font-size: 0.9375rem;
+}
+
+@container (max-width: 45em) {
+  .rowHead {
+    grid-template-columns: 5rem minmax(0, 1fr) 18px;
+    gap: 4px 10px;
+  }
+
+  .rowHead .tag {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .rowHead .chevron {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .time {
+    font-size: 1.0625rem;
+  }
+
+  .detail {
+    padding-left: var(--space-copy);
+  }
+
+  .replace {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .replace > button {
+    grid-column: 1 / -1;
+  }
+
+  .outcomes li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Narrower still (a small phone, or any phone at large text): the time takes
+   its own line above the name, so neither is squeezed into a sliver. */
+@container (max-width: 22em) {
+  .rowHead {
+    grid-template-columns: minmax(0, 1fr) 18px;
+  }
+
+  .rowHead .time {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .rowHead .copy {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .rowHead .tag {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .rowHead .chevron {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+/* iOS zooms on focus below 16px and never zooms back: the same floor as the
+   Mark tab's date field, for every typed field on these pages. */
+@media (max-width: 720px), (pointer: coarse) {
+  .field input,
+  .field select {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 720px) {
+  .tabs {
+    display: flex;
+  }
+
+  .tabs a {
+    flex: 1;
+    justify-content: center;
+    padding: 0 10px;
+  }
+
+  .three,
+  .formTop,
+  .formFoot {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .five {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .five > :nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .days {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .cell {
+    min-height: 44px;
+    padding: 4px 5px;
+  }
+
+  .cell .word {
+    display: none;
+  }
+
+  .actions > :is(.button, .primary, .danger) {
+    flex: 1;
+  }
+}
+
+@media (forced-colors: active) {
+  .tabs a[aria-current="page"],
+  .tiles button[aria-pressed="true"],
+  .cell[aria-pressed="true"],
+  .chips label:has(input:checked),
+  .days label:has(input:checked),
+  .switch label:has(input:checked) {
+    border: 2px solid Highlight;
+    outline: 2px solid Highlight;
+  }
+}
+
+/* Replace and Cancel side by side; Replace's one line of fields opens below them */
+.occurrenceActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-tight);
+}
+
+.occurrenceActions > .replace {
+  flex-basis: 100%;
+}
+
+button.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  cursor: pointer;
+}

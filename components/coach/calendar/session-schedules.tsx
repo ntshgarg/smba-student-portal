@@ -1,13 +1,6 @@
 "use client"
 
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  CalendarX2,
-  ChevronDown,
-  MapPin,
-  Users,
-} from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 
@@ -25,13 +18,14 @@ import {
   type ScheduleGroupKey,
 } from "@/components/coach/calendar/session-schedule-index"
 import { termFinishedMembersHref } from "@/components/coach/members/member-directory-query"
+import { SessionsShell } from "@/components/coach/sessions/sessions-shell"
+import styles from "@/components/coach/sessions/sessions.module.css"
 import {
   InlineNotice,
   type ActionFeedback,
 } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import {
-  SESSION_LABEL_SEPARATOR,
   formatDateKey,
   formatSessionLabel,
   sessionLabelParts,
@@ -71,15 +65,37 @@ function activeAssignedWeekdays(assignments: SessionAssignment[]) {
     .map((assignment) => assignment.weekdays))
 }
 
-function shortDate(dateKey: string) {
-  return formatDateKey(dateKey, { month: "short", weekday: undefined, year: "numeric" })
+/**
+ * "1 Jul", or "1 Jul 2024" when the year is not this one or the next: a term
+ * runs a season, so those two are the ones a coach reads without a year.
+ */
+export function shortDate(dateKey: string, today: string) {
+  const year = Number(dateKey.slice(0, 4))
+  const thisYear = Number(today.slice(0, 4))
+  return formatDateKey(dateKey, {
+    month: "short",
+    weekday: undefined,
+    year: year === thisYear || year === thisYear + 1 ? undefined : "numeric",
+  })
 }
 
-/** "1 Apr 2026 – 31 Oct 2026": a schedule's first and last day. */
-function scheduleDates(series: TrainingSessionSeries) {
+/** "1 Jul – 31 Mar": a schedule's first and last day. */
+export function scheduleDates(series: Pick<TrainingSessionSeries, "endsOn" | "startsOn">, today: string) {
   return series.endsOn
-    ? `${shortDate(series.startsOn)} – ${shortDate(series.endsOn)}`
-    : `From ${shortDate(series.startsOn)}`
+    ? `${shortDate(series.startsOn, today)} – ${shortDate(series.endsOn, today)}`
+    : `from ${shortDate(series.startsOn, today)}`
+}
+
+/** "Mon–Fri" for a run of days, "Mon · Wed · Fri" otherwise. */
+function scheduleDays(series: TrainingSessionSeries) {
+  const days = weekdays.filter((day) => series.slots.some((slot) => slot.weekday === day.value))
+  if (days.length > 2) {
+    const first = weekdays.indexOf(days[0])
+    if (days.every((day, index) => weekdays.indexOf(day) === first + index)) {
+      return `${days[0].short}–${days[days.length - 1].short}`
+    }
+  }
+  return days.map((day) => day.short).join(" · ")
 }
 
 function countLabel(count: number, one: string, many: string) {
@@ -97,7 +113,7 @@ function seriesLabel(series: TrainingSessionSeries) {
 }
 
 /*
- * Schedules & rosters shows who is on each schedule, and lets the head coach
+ * Schedules shows who is on each schedule, and lets the head coach
  * end a whole schedule. It no longer adds or removes single players: a
  * player's first schedule is chosen in onboarding's Session step, and later
  * changes move to the player's row in Members (head coach, 5 Oct 2026), so
@@ -220,12 +236,12 @@ export function SessionSchedules({
     )
   }
 
-  function toggleProgramme(programme: ScheduleGroupKey) {
+  // A level tile filters the list to that level; All (null) shows every group.
+  function chooseGroup(programme: ScheduleGroupKey | null) {
     if (hasPendingMutation) return
-    const nextProgramme = expandedProgramme === programme ? null : programme
-    setExpandedProgramme(nextProgramme)
+    setExpandedProgramme(programme)
     setExpandedSeriesId(null)
-    replaceExpandedScheduleUrl(nextProgramme, null)
+    replaceExpandedScheduleUrl(programme, null)
   }
 
   function guidanceNote() {
@@ -281,9 +297,8 @@ export function SessionSchedules({
     }
   }
 
-  function renderSeriesCard(series: TrainingSessionSeries, finished: boolean) {
+  function renderSeriesRow(series: TrainingSessionSeries, finished: boolean) {
     const isExpanded = expandedSeriesId === series.id
-    const groupKey: ScheduleGroupKey = finished ? "finished" : series.programme
     const roster = (assignmentIndex.activeBySeries.get(series.id) ?? []).flatMap(
       (assignment) => playerById.get(assignment.playerId) ?? [],
     )
@@ -291,75 +306,63 @@ export function SessionSchedules({
       ? endingFeedback
       : null
     const endingRetryIsSeries = Boolean(seriesEndingFeedback)
+    const { range } = sessionLabelParts(seriesLabel(series))
+    const playersLabel = finished
+      ? `${roster.length} still on it`
+      : countLabel(roster.length, "player", "players")
     return (
-      <article className="coach-series-roster-card" data-finished={finished || undefined} key={series.id}>
-        <button type="button" disabled={hasPendingMutation} aria-expanded={isExpanded} onClick={() => {
-          const opening = !isExpanded
-          setExpandedProgramme(groupKey)
-          setExpandedSeriesId(opening ? series.id : null)
-          replaceExpandedScheduleUrl(groupKey, opening ? series.id : null)
-        }}>
-          <span>
-            <strong>{(() => {
-              /* Same split the coach hero uses. The label ends in a clock
-                 range and the browser will break inside it -- at 320 this
-                 row read "Adult · Weekend · 10-" over "11 am", and four
-                 more orphaned a two-character meridiem onto a second line
-                 while up to 12px of the first sat empty. */
-              const { context, range } = sessionLabelParts(seriesLabel(series))
-              return range ? (
-                <>
-                  {context}
-                  {SESSION_LABEL_SEPARATOR}
-                  <span className="session-label-range">{range}</span>
-                </>
-              ) : seriesLabel(series)
-            })()}</strong>
-            <small className="coach-series-dates">
-              {finished ? "Term finished · " : ""}{scheduleDates(series)}
-            </small>
+      <li className={isExpanded ? styles.open : undefined} key={series.id}>
+        <button
+          className={styles.rowHead}
+          type="button"
+          disabled={hasPendingMutation}
+          aria-expanded={isExpanded}
+          onClick={() => {
+            const opening = !isExpanded
+            setExpandedSeriesId(opening ? series.id : null)
+            replaceExpandedScheduleUrl(expandedProgramme, opening ? series.id : null)
+          }}
+        >
+          <span className={styles.time}>{range}</span>
+          <span className={styles.copy}>
+            <strong>{series.programme} · {series.batch}</strong>
+            <small>{scheduleDays(series)} · {series.venue} · {scheduleDates(series, today)}</small>
           </span>
-          <span>
-            <Users aria-hidden="true" /> {finished
-              ? `${roster.length} still on it`
-              : countLabel(roster.length, "player", "players")} <ChevronDown aria-hidden="true" />
-          </span>
+          <span className={styles.tag} data-tone={finished ? "finished" : undefined}>{playersLabel}</span>
+          <ChevronDown className={styles.chevron} aria-hidden="true" />
         </button>
         {finished && series.endsOn ? (
-          <p className="coach-series-term-note">
-            Term finished on {formatTermDate(series.endsOn)}. Move each player on
-            in <Link href={termFinishedMembersHref}>Members</Link>, or press End schedule.
+          <p className={styles.notice}>
+            <span>
+              Term finished on {formatTermDate(series.endsOn)}. Move each player on
+              in <Link href={termFinishedMembersHref}>Members</Link>, or press End schedule.
+            </span>
           </p>
         ) : null}
         {isExpanded ? (
-          <div className="coach-series-roster-detail">
-            <div className="coach-series-rhythm">
-              {series.slots.map((slot) => (
-                <span key={slot.id}>{weekdays.find((day) => day.value === slot.weekday)?.short} · {slot.startTime}</span>
-              ))}
-              <span><MapPin aria-hidden="true" /> {series.venue}</span>
-            </div>
-            <div className="coach-roster-list">
-              {roster.length ? roster.map((player) => {
-                const assignment = assignmentIndex.activeByPlayerSeries.get(
-                  assignmentKey(player.member.id, series.id),
-                )
-                return (
-                  <div key={player.member.id}>
-                    <span className="coach-roster-initials">{player.member.initials}</span>
-                    <span>
-                      <strong>{player.member.fullName}</strong>
-                      <small>From {assignment?.effectiveFrom} · {assignmentDayLabel(assignment?.weekdays ?? [])}</small>
-                    </span>
-                  </div>
-                )
-              }) : <p>{finished
-                ? "No players are left on this schedule."
-                : "No players on this schedule. Players are added in Player onboarding."}</p>}
-            </div>
+          <div className={styles.detail}>
+            {roster.length ? (
+              <ul className={styles.cards} aria-label="Players on this schedule">
+                {roster.map((player) => {
+                  const assignment = assignmentIndex.activeByPlayerSeries.get(
+                    assignmentKey(player.member.id, series.id),
+                  )
+                  return (
+                    <li key={player.member.id}>
+                      <span className={styles.initials} aria-hidden="true">{player.member.initials}</span>
+                      <span>
+                        <strong>{player.member.fullName}</strong>
+                        <small>{assignmentDayLabel(assignment?.weekdays ?? [])}{assignment ? ` · since ${shortDate(assignment.effectiveFrom, today)}` : ""}</small>
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : <p className={styles.help}>{finished
+              ? "No players are left on this schedule."
+              : "No players on this schedule. Players are added in Player onboarding."}</p>}
             <InlineNotice
               action={endingFeedback?.seriesId === series.id ? endingFeedback.action : undefined}
-              className="coach-roster-end-notice"
               message={endingFeedback?.seriesId === series.id ? endingFeedback.message : null}
               reserveSpace={false}
               tone={endingFeedback?.seriesId === series.id ? endingFeedback.tone : "info"}
@@ -376,21 +379,24 @@ export function SessionSchedules({
                 today={today}
               />
             ) : (
-              <button
-                className="coach-series-end-action"
-                type="button"
-                disabled={hasPendingMutation}
-                onClick={() => {
-                  setEndingFeedback(null)
-                  setConfirmingSeriesId(series.id)
-                }}
-              >
-                <CalendarX2 aria-hidden="true" /> {endingRetryIsSeries ? "End schedule again" : "End schedule"}
-              </button>
+              <div className={styles.occurrenceActions}>
+                <Link className={styles.button} href="/coach/calendar">See in calendar</Link>
+                <button
+                  className={styles.danger}
+                  type="button"
+                  disabled={hasPendingMutation}
+                  onClick={() => {
+                    setEndingFeedback(null)
+                    setConfirmingSeriesId(series.id)
+                  }}
+                >
+                  {endingRetryIsSeries ? "End schedule again" : "End schedule"}
+                </button>
+              </div>
             )}
           </div>
         ) : null}
-      </article>
+      </li>
     )
   }
 
@@ -406,108 +412,93 @@ export function SessionSchedules({
     title: string
   }) {
     const finished = groupKey === "finished"
-    const isProgrammeOpen = expandedProgramme === groupKey
-    const programmeContentId = `schedule-programme-${groupKey.toLowerCase()}`
-
     return (
-      <section
-        className="coach-schedule-programme-group"
-        data-finished={finished || undefined}
-        key={groupKey}
-      >
-        <div className="coach-schedule-programme-heading">
-          <h3>{title}</h3>
-          <p>{summary}</p>
-        </div>
-        <h3 className="coach-schedule-programme-toggle-heading">
-          <button
-            type="button"
-            disabled={hasPendingMutation}
-            aria-expanded={isProgrammeOpen}
-            aria-controls={programmeContentId}
-            onClick={() => toggleProgramme(groupKey)}
-          >
-            <span>
-              <strong>{title}</strong>
-              <small>{summary}</small>
-            </span>
-            <ChevronDown aria-hidden="true" />
-          </button>
-        </h3>
-        <div
-          className="coach-schedule-programme-content"
-          id={programmeContentId}
-          data-expanded={isProgrammeOpen}
-        >
-          {series.map((item) => renderSeriesCard(item, finished))}
-        </div>
+      <section key={groupKey} aria-label={title}>
+        <h2 className={styles.group}>{title}<span>{summary}</span></h2>
+        <ul className={styles.rows}>
+          {series.map((item) => renderSeriesRow(item, finished))}
+        </ul>
       </section>
     )
   }
 
+  const groups = [
+    ...programmeGroups.map((group) => ({
+      groupKey: group.programme as ScheduleGroupKey,
+      series: group.series,
+      summary: `${countLabel(group.series.length, "schedule", "schedules")} · ${countLabel(group.playerCount, "player", "players")}`,
+      title: group.programme,
+    })),
+    ...finishedGroup.series.length ? [{
+      groupKey: "finished" as ScheduleGroupKey,
+      series: finishedGroup.series,
+      // Players still holding a place on these schedules, as each row
+      // counts them. Not "to move": a player with a place on a running
+      // schedule as well is still training, so the to-do and Members'
+      // "Term finished" leave them out.
+      summary: `${countLabel(finishedGroup.series.length, "schedule", "schedules")} · ${countLabel(finishedGroup.playerCount, "player", "players")} still on ${finishedGroup.series.length === 1 ? "it" : "them"}`,
+      title: "Finished",
+    }] : [],
+  ]
+  const tileKeys: ScheduleGroupKey[] = ["Beginner", "Intermediate", "Advanced", "Adult", "Elite", "finished"]
+  const runningCount = programmeGroups.reduce((total, group) => total + group.series.length, 0)
+  const tileCount = (key: ScheduleGroupKey) => key === "finished"
+    ? finishedGroup.series.length
+    : programmeGroups.find((group) => group.programme === key)?.series.length ?? 0
+  const shownGroups = expandedProgramme
+    ? groups.filter((group) => group.groupKey === expandedProgramme)
+    : groups
+
   return (
-    <div className="coach-calendar page-shell">
-      <nav className="coach-calendar-back-row coach-route-nav" aria-label="Schedule navigation">
-        <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
-        <Link href="/coach/calendar">Calendar <ArrowUpRight aria-hidden="true" /></Link>
-      </nav>
-
-      <header className="coach-calendar-header">
-        <div>
-          <span className="eyebrow">Training configuration</span>
-          <h1>Schedules &amp; Rosters</h1>
-        </div>
-        <Link className="coach-calendar-header-action" href="/coach/schedules/new">
-          Create schedule <ArrowUpRight aria-hidden="true" />
-        </Link>
-      </header>
-
+    <SessionsShell
+      action={<Link className={styles.primary} href="/coach/schedules/new">Create schedule</Link>}
+      activeTab="schedules"
+    >
       {guidedPlayer ? (
         <div
           ref={guidanceHeadingRef}
-          className="coach-assignment-guidance"
+          className={styles.guide}
           tabIndex={-1}
         >
-          <span>Player schedules</span>
-          <strong>{guidedPlayer.member.fullName}</strong>
-          <p>
-            {guidedPlayer.training.level} · {guidedPlayer.training.batch} · {academyPlanLabel(guidedPlayer.training.academyPlan)}. {guidanceNote()}
-          </p>
+          <strong>{guidedPlayer.member.fullName}</strong> · {guidedPlayer.training.level} · {guidedPlayer.training.batch} · {academyPlanLabel(guidedPlayer.training.academyPlan)}. {guidanceNote()}
         </div>
       ) : null}
 
-      <section className="coach-series-rosters coach-schedules-rosters" aria-labelledby="series-rosters-title">
-        <div className="coach-series-rosters-heading">
-          <span>Session assignments</span>
-          <h2 id="series-rosters-title">Recurring sessions &amp; rosters</h2>
-        </div>
-        {programmeGroups.length ? programmeGroups.map((group) => renderGroup({
-          groupKey: group.programme,
-          series: group.series,
-          summary: `${countLabel(group.series.length, "schedule", "schedules")} · ${countLabel(group.playerCount, "player", "players")}`,
-          title: group.programme,
-        })) : finishedGroup.series.length ? (
-          <div className="coach-series-rosters-empty">
+      <nav className={styles.tiles} aria-label="Schedules by level">
+        {[null, ...tileKeys].map((key) => {
+          const count = key === null ? runningCount + finishedGroup.series.length : tileCount(key)
+          return (
+            <button
+              key={key ?? "all"}
+              type="button"
+              aria-pressed={expandedProgramme === key}
+              data-zero={count === 0 ? "" : undefined}
+              disabled={hasPendingMutation}
+              onClick={() => chooseGroup(key)}
+            >
+              <b>{count}</b>
+              <span>{key === null ? "All" : key === "finished" ? "Finished" : key}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      <section className={styles.panel} aria-label="Schedules">
+        {!programmeGroups.length && finishedGroup.series.length && expandedProgramme === null ? (
+          <div className={styles.empty}>
             <p>No schedules are running now. Create the next one, then move each player onto it in Members.</p>
-            <Link href="/coach/schedules/new">Create schedule</Link>
+          </div>
+        ) : null}
+        {shownGroups.length ? shownGroups.map(renderGroup) : groups.length ? (
+          <div className={styles.empty}>
+            <p>No schedules at this level.</p>
           </div>
         ) : (
-          <div className="coach-series-rosters-empty">
+          <div className={styles.empty}>
             <p>No schedules yet. Create the first recurring schedule, then add players to it in Player onboarding.</p>
-            <Link href="/coach/schedules/new">Create schedule</Link>
           </div>
         )}
-        {finishedGroup.series.length ? renderGroup({
-          groupKey: "finished",
-          series: finishedGroup.series,
-          // Players still holding a place on these schedules, as each card
-          // counts them. Not "to move": a player with a place on a running
-          // schedule as well is still training, so the to-do and Members'
-          // "Term finished" leave them out.
-          summary: `${countLabel(finishedGroup.series.length, "schedule", "schedules")} · ${countLabel(finishedGroup.playerCount, "player", "players")} still on ${finishedGroup.series.length === 1 ? "it" : "them"}`,
-          title: "Finished",
-        }) : null}
       </section>
-    </div>
+    </SessionsShell>
   )
 }

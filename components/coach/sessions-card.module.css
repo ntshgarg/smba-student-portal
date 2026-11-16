@@ -1,0 +1,9 @@
+/* The next session's time, in the calendar's red serif. */
+.time {
+  color: var(--red);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.125rem;
+  font-style: italic;
+  font-weight: 500;
+  white-space: nowrap;
+}

@@ -191,7 +191,7 @@
   gap: 18px;
 }
 
-/* Outside a player's record (End schedule in Schedules & rosters, which has no
+/* Outside a player's record (End schedule in Sessions › Schedules, which has no
    back pill) the form is its own white card; on the record it sits on the
    tab's paper. */
 .form:not(:has(.back)) {

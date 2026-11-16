@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 
-import styles from "@/components/coach/calendar/end-schedule-panel.module.css"
 import { useSessionPortal } from "@/components/coach/coach-portal-provider"
 import { FormShell } from "@/components/coach/members/directory/form-shell"
+import styles from "@/components/coach/sessions/sessions.module.css"
 import formStyles from "@/components/coach/members/directory/member-training-actions.module.css"
 import { InlineNotice } from "@/components/inline-notice"
 import { isSessionExpiry, signInInNewTab } from "@/lib/client/network-failure"
@@ -32,34 +32,37 @@ function names(list: readonly { fullName: string }[]) {
   return list.map((item) => item.fullName).join(", ")
 }
 
-function playerNote(player: EndScheduleRosterPlayer) {
-  const notes: string[] = []
-  if (player.inOnboarding) notes.push("still in Player onboarding")
-  if (player.onAnotherSchedule) notes.push("also on another schedule: stays active, fees unchanged")
-  else if (player.placeElsewhere) notes.push("still on a schedule whose term has finished: stays Term finished")
-  if (player.bookingOntoThis) notes.push("booked change on this schedule: cancelled")
+/** What ending the schedule does to one player, in plain sentences (head coach, 16 Nov 2026). */
+export function playerOutcome(player: EndScheduleRosterPlayer) {
+  const sentences = [
+    player.onAnotherSchedule
+      ? "Keeps training on their other schedule."
+      : player.placeElsewhere
+        ? "Stays Term finished on their other schedule."
+        : "Stops training (this was their only schedule).",
+  ]
+  if (player.bookingOntoThis) sentences.push("Their booked change onto this schedule is cancelled.")
   else if (player.bookingKept) {
-    notes.push(player.bookingKept.kind === "end"
-      ? `end of training booked for ${dayName(player.bookingKept.effectiveOn)}: kept`
-      : `move booked for ${dayName(player.bookingKept.effectiveOn)}: kept`)
+    sentences.push(player.bookingKept.kind === "end"
+      ? `Their end of training booked for ${dayName(player.bookingKept.effectiveOn)} is kept.`
+      : `Their move booked for ${dayName(player.bookingKept.effectiveOn)} is kept.`)
   }
-  return notes.join(" · ")
+  if (player.inOnboarding) sentences.push("Still in Player onboarding.")
+  return sentences.join(" ")
 }
 
 /**
  * The groups the confirm panel counts, classified the way
- * endSessionSeriesRecords writes them: anyone with no place left on another
- * schedule (running or term-finished) is paused, booked change or not; the
- * fee choice applies to everyone not kept as they are.
+ * endSessionSeriesRecords writes them: the fee choice applies to everyone not
+ * kept as they are. Who is paused is said per player, by playerOutcome.
  */
 export function endScheduleGroups(roster: readonly EndScheduleRosterPlayer[]) {
   const keptActive = roster.filter((player) => player.onAnotherSchedule)
   const keptBooking = roster.filter((player) => !player.onAnotherSchedule && player.bookingKept && !player.bookingOntoThis)
-  const paused = roster.filter((player) => !player.placeElsewhere)
   const withFeePlans = roster.filter((player) => (
     player.hasFeePlan && !keptActive.includes(player) && !keptBooking.includes(player)
   ))
-  return { keptActive, keptBooking, paused, withFeePlans }
+  return { keptActive, keptBooking, withFeePlans }
 }
 
 /*
@@ -123,24 +126,20 @@ export function EndSchedulePanel({
   }, [previewEndSessionSeries, seriesId])
 
   const roster = preview?.players ?? []
-  const { keptActive, keptBooking, paused, withFeePlans } = endScheduleGroups(roster)
+  const { keptActive, keptBooking, withFeePlans } = endScheduleGroups(roster)
   const cancelled = [...roster.filter((player) => player.bookingOntoThis), ...(preview?.bookedOnto ?? [])]
   const askFees = Boolean(preview?.financeActive) && withFeePlans.length > 0
   const inOnboarding = roster.filter((player) => player.inOnboarding)
 
+  // What happens to each player is said on their own line, so this keeps only the rest.
   const summary = preview ? [
     finished
       ? "Its last day has passed, so there are no sessions left to cancel"
       : preview.upcomingSessions
         ? `Cancel ${preview.upcomingSessions} upcoming ${preview.upcomingSessions === 1 ? "session" : "sessions"}`
         : "Cancel its upcoming sessions (none are left)",
-    roster.length
-      ? `Take ${players(roster.length)} off it today`
-      : "Close it: nobody is on it",
-    ...(keptActive.length ? [`Keep ${players(keptActive.length)} training on their other schedule`] : []),
-    ...(keptBooking.length ? [`Leave the booked change of ${players(keptBooking.length)} as arranged`] : []),
+    ...(roster.length ? [] : ["Close it: nobody is on it"]),
     ...(cancelled.length ? [`Cancel ${cancelled.length === 1 ? "1 booking" : `${cancelled.length} bookings`} onto this schedule, with a note on each record`] : []),
-    ...(paused.length ? [`Pause ${players(paused.length)}`] : []),
     ...(askFees
       ? [stopFees
         ? `Stop fees after ${thisMonth} for ${players(withFeePlans.length)}`
@@ -150,89 +149,87 @@ export function EndSchedulePanel({
   ] : []
 
   return (
-    <div className={styles.panel}>
-      <FormShell
-        busy={busy}
-        confirmLabel={retry ? "End schedule again" : "End schedule"}
-        danger
-        disabled={!preview}
-        eyebrow="End schedule"
-        onCancel={onCancel}
-        // The choice is sent even when the question is hidden: the server
-        // works the groups out again, and a player whose booking or other
-        // place went away since this panel opened gets the stated default
-        // (Stop fees), not Keep. It has no effect on anyone kept as they are.
-        onConfirm={() => onConfirm(stopFees)}
-        summary={summary}
-        title={`End ${label}`}
-      >
-        {failure ? (
-          <InlineNotice
-            action={failure.expired ? signInInNewTab : undefined}
-            message={failure.message}
-            reserveSpace={false}
-            tone="error"
-          />
-        ) : !preview ? (
-          <p className={formStyles.help}>Checking who is on this schedule…</p>
-        ) : (
-          <>
+    <FormShell
+      busy={busy}
+      confirmLabel={retry ? "End schedule again" : "End schedule"}
+      danger
+      disabled={!preview}
+      eyebrow="End schedule"
+      onCancel={onCancel}
+      // The choice is sent even when the question is hidden: the server
+      // works the groups out again, and a player whose booking or other
+      // place went away since this panel opened gets the stated default
+      // (Stop fees), not Keep. It has no effect on anyone kept as they are.
+      onConfirm={() => onConfirm(stopFees)}
+      summary={summary}
+      title={`End ${label}`}
+    >
+      {failure ? (
+        <InlineNotice
+          action={failure.expired ? signInInNewTab : undefined}
+          message={failure.message}
+          reserveSpace={false}
+          tone="error"
+        />
+      ) : !preview ? (
+        <p className={formStyles.help}>Checking who is on this schedule…</p>
+      ) : (
+        <>
+          <div className={formStyles.field}>
+            <span className={formStyles.label}>What happens to its {players(roster.length)}</span>
+            {roster.length ? (
+              <ul className={styles.outcomes}>
+                {roster.map((player) => (
+                  <li key={player.playerId}>
+                    <strong>{player.fullName}</strong>
+                    <span className={player.inOnboarding || player.bookingOntoThis ? styles.warn : undefined}>
+                      {playerOutcome(player)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className={formStyles.help}>No players are left on this schedule.</p>}
+            {inOnboarding.length ? (
+              <p className={formStyles.help}>
+                {names(inOnboarding)} {inOnboarding.length === 1 ? "has" : "have"} not finished Player onboarding. Ending the schedule takes them off it too; finish their onboarding afterwards.
+              </p>
+            ) : null}
+          </div>
+          {preview.bookedOnto.length ? (
             <div className={formStyles.field}>
-              <span className={formStyles.label}>On this schedule</span>
-              {roster.length ? (
-                <ul className={styles.players}>
-                  {roster.map((player) => (
-                    <li key={player.playerId}>
-                      <span>{player.fullName}</span>
-                      {playerNote(player) ? (
-                        <small className={player.inOnboarding || player.bookingOntoThis ? styles.warn : undefined}>
-                          {playerNote(player)}
-                        </small>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className={formStyles.help}>No players are left on this schedule.</p>}
-              {inOnboarding.length ? (
+              <span className={formStyles.label}>Booked to move onto it</span>
+              <ul className={styles.outcomes}>
+                {preview.bookedOnto.map((player) => (
+                  <li key={player.playerId}>
+                    <strong>{player.fullName}</strong>
+                    <span className={styles.warn}>Their move booked for {dayName(player.effectiveOn)} is cancelled.</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {askFees ? (
+            <fieldset className={formStyles.field}>
+              <legend className={formStyles.label}>
+                {withFeePlans.length === 1 ? `${withFeePlans[0].fullName}’s fees` : `Fees for the ${players(withFeePlans.length)} coming off this schedule`}
+              </legend>
+              <label className={`${formStyles.option} ${stopFees ? formStyles.optionOn : ""}`}>
+                <input name={`end-fees-${seriesId}`} type="radio" checked={stopFees} onChange={() => setStopFees(true)} />
+                <span><strong>Stop fees after {thisMonth}</strong><small>{thisMonth}&apos;s fee stays as it is.</small></span>
+              </label>
+              <label className={`${formStyles.option} ${!stopFees ? formStyles.optionOn : ""}`}>
+                <input name={`end-fees-${seriesId}`} type="radio" checked={!stopFees} onChange={() => setStopFees(false)} />
+                <span><strong>Keep the fee plan</strong><small>For a break. No fee is issued while they are on no schedule.</small></span>
+              </label>
+              {keptActive.length || keptBooking.length ? (
                 <p className={formStyles.help}>
-                  {names(inOnboarding)} {inOnboarding.length === 1 ? "has" : "have"} not finished Player onboarding. Ending the schedule takes them off it too; finish their onboarding afterwards.
+                  Players still on another schedule, or with a change already booked, keep their fees as they are.
                 </p>
               ) : null}
-            </div>
-            {preview.bookedOnto.length ? (
-              <div className={formStyles.field}>
-                <span className={formStyles.label}>Booked to move onto it</span>
-                <ul className={styles.players}>
-                  {preview.bookedOnto.map((player) => (
-                    <li key={player.playerId}>
-                      <span>{player.fullName}</span>
-                      <small className={styles.warn}>move booked for {dayName(player.effectiveOn)}: cancelled</small>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {askFees ? (
-              <fieldset className={formStyles.field}>
-                <legend className={formStyles.label}>Fees</legend>
-                <label className={`${formStyles.option} ${stopFees ? formStyles.optionOn : ""}`}>
-                  <input name={`end-fees-${seriesId}`} type="radio" checked={stopFees} onChange={() => setStopFees(true)} />
-                  <span><strong>Stop fees after {thisMonth}</strong><small>{thisMonth}&apos;s fee stays as it is.</small></span>
-                </label>
-                <label className={`${formStyles.option} ${!stopFees ? formStyles.optionOn : ""}`}>
-                  <input name={`end-fees-${seriesId}`} type="radio" checked={!stopFees} onChange={() => setStopFees(false)} />
-                  <span><strong>Keep the fee plan</strong><small>For a break. No fee is issued while they are on no schedule.</small></span>
-                </label>
-                {keptActive.length || keptBooking.length ? (
-                  <p className={formStyles.help}>
-                    Players still on another schedule, or with a change already booked, keep their fees as they are.
-                  </p>
-                ) : null}
-              </fieldset>
-            ) : null}
-          </>
-        )}
-      </FormShell>
-    </div>
+            </fieldset>
+          ) : null}
+        </>
+      )}
+    </FormShell>
   )
 }

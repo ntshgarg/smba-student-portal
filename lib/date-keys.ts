@@ -13,6 +13,13 @@ export function weekdayForDateKey(dateKey: string) {
   return new Date(`${dateKey}T00:00:00.000Z`).getUTCDay()
 }
 
+/** A date key moved by whole days ("2026-11-16", -3 → "2026-11-13"). */
+export function shiftDateKey(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
 export function isValidMonthKey(month: string) {
   return /^\d{4}-(0[1-9]|1[0-2])$/u.test(month)
 }

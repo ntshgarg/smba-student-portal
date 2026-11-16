@@ -325,7 +325,7 @@ export const accessibilityStates: readonly AccessibilityState[] = [
   },
   {
     actor: "head-coach",
-    description: "Training calendar session detail",
+    description: "Session calendar session detail",
     id: "coach-calendar",
     interaction: "calendar-session-open",
     profile: "stress",

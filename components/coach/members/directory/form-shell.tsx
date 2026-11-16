@@ -6,7 +6,7 @@ import styles from "@/components/coach/members/directory/member-training-actions
 
 /**
  * The frame every confirm-before-saving form on a player's record uses, and
- * End schedule in Schedules & rosters: the choice in the body, then "You are
+ * End schedule in Sessions › Schedules: the choice in the body, then "You are
  * about to" with exactly what will happen, then Cancel and the one button
  * that does it.
  */

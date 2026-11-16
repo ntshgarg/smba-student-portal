@@ -394,24 +394,21 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       }
       break
     case "calendar-month":
-      await clickRequired(
-        page.getByRole("button", { name: /Back to month/i }),
-        action,
-      )
+      await clickRequired(page.getByRole("button", { name: "Pick a date" }), action)
       break
     case "calendar-replacement-open":
       await clickRequired(
-        page.locator('.coach-day-session > button[aria-expanded="false"]'),
+        page.locator('[aria-labelledby="coach-day-view-title"] li > button[aria-expanded="false"]'),
         action,
       )
       await clickRequired(
-        page.locator(".coach-occurrence-detail summary").filter({ hasText: "Replace session" }),
+        page.getByRole("button", { name: "Replace session" }),
         action,
       )
       break
     case "calendar-session-open":
       await clickRequired(
-        page.locator('.coach-day-session > button[aria-expanded="false"]'),
+        page.locator('[aria-labelledby="coach-day-view-title"] li > button[aria-expanded="false"]'),
         action,
       )
       break
@@ -549,28 +546,20 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       await pageAlert(page).waitFor({ state: "visible", timeout: 12_000 })
       break
     case "schedule-create-weekend":
-      await page.locator(".coach-series-form").getByLabel("Programme").selectOption("Adult")
-      await page.locator(".coach-series-form").getByLabel("Batch").selectOption("Weekend")
-      await page.locator(".coach-series-form").getByLabel("Start time").fill("08:00")
-      await page.locator(".coach-series-form").getByLabel("Duration").selectOption("120")
+      // the level and batch radios are visually hidden inside their chip labels, so check them without
+      // waiting for the input itself to be visible
+      await page.getByRole("radio", { name: "Adult" }).check({ force: true })
+      await page.getByRole("radio", { name: "Weekend" }).check({ force: true })
+      await page.getByLabel("Starts at").fill("08:00")
+      await page.getByLabel("Length").selectOption("120")
       break
-    case "schedule-programmes-collapse": {
-      const toggles = page.locator(".coach-schedule-programme-toggle-heading button")
-      const count = await toggles.count()
-      if (!count) throw new Error(`Capture action ${action} found no programme groups`)
-      for (let index = 0; index < count; index += 1) {
-        const toggle = toggles.nth(index)
-        if (await toggle.getAttribute("aria-expanded") === "true") await toggle.click()
-      }
+    case "schedule-finished-filter":
+      await clickRequired(page.getByRole("button", { name: /Finished/u }), action)
       break
-    }
     case "schedule-roster-open": {
-      const programme = page.locator(".coach-schedule-programme-toggle-heading button").first()
-      await programme.waitFor({ state: "visible", timeout: 12_000 })
-      if (await programme.getAttribute("aria-expanded") !== "true") await programme.click()
-      const roster = page.locator(".coach-series-roster-card > button").first()
+      const roster = page.locator('section[aria-label="Schedules"] li > button[aria-expanded="false"]').first()
       await roster.waitFor({ state: "visible", timeout: 12_000 })
-      if (await roster.getAttribute("aria-expanded") !== "true") await roster.click()
+      await roster.click()
       break
     }
   }
