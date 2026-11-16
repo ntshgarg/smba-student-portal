@@ -1324,6 +1324,7 @@
 
 .payers {
   display: grid;
+  container-type: inline-size;
   gap: var(--space-tight);
   margin: 10px 0 0;
   padding: 0;
@@ -1985,5 +1986,31 @@ fieldset.q {
 
   .recordTabs button {
     border-radius: 13px;
+  }
+}
+
+/* Very large text on a phone (the list or table only a few words wide): the initials give way and every part
+   takes the full width, so names and references wrap between words. */
+@container (max-width: 14em) {
+  .payer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payer .badge {
+    display: none;
+  }
+
+  .payer .amount {
+    grid-column: 1;
+  }
+
+  .table tr:not(.day) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table td.num {
+    grid-column: 1;
+    grid-row: auto;
+    text-align: left;
   }
 }

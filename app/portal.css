@@ -5424,6 +5424,7 @@ details[open] > :not(summary) {
 }
 
 .coach-member-item {
+  container-type: inline-size;
   border: var(--frost-border);
   border-radius: 22px;
   background: var(--frost-fill);
@@ -5471,7 +5472,7 @@ details[open] > :not(summary) {
 }
 
 .coach-member-name strong {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: 1.0625rem;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -6335,5 +6336,22 @@ details[open] > :not(summary) {
 
   .coach-member-tabs [role="tab"][aria-selected="true"] {
     outline: 2px solid Highlight;
+  }
+}
+
+/* Very large text on a phone: the status moves under the name, so the name has the row and wraps between words */
+@container (max-width: 12em) {
+  .coach-member-card-head {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .coach-member-item:not(.is-open) .coach-member-status {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .coach-member-item:not(.is-open) .coach-member-box {
+    grid-row: 3;
   }
 }

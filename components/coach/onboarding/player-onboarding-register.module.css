@@ -18,14 +18,15 @@
   height: 16px;
 }
 
+/* capped by the screen's width as well, so at 200% text the one word still fits a 320px phone */
 .title {
   margin-top: var(--space-tight);
   color: var(--navy);
-  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-size: min(clamp(2.25rem, 4vw, 2.75rem), 15vw);
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 1;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sub {

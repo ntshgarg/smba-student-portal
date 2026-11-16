@@ -185,7 +185,7 @@ export function PlayerLedger({
                             <span>
                               <b>{formatInr(payment.amountPaise)}</b> · {paymentMethodLabel(payment.method)}
                               {payment.reversed ? " · Reversed" : ""}
-                              {payment.reference ? ` · ${payment.reference}` : ""}
+                              {payment.reference ? <> ·&nbsp;<span className={styles.nowrap}>{payment.reference}</span></> : null}
                               {payment.internalNote ? ` · ${payment.internalNote}` : ""}
                             </span>
                             <time dateTime={payment.receivedOn}>{formatDueDate(payment.receivedOn)}</time>
