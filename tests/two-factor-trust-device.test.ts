@@ -207,6 +207,20 @@ describe("authenticator enrolment does not grant a trusted device", () => {
     }))
   })
 
+  it("refuses a trust opt-in posted from a PIN sign-in, which the screen never offers", async () => {
+    mocks.getRawAuthSession.mockResolvedValue(null)
+    mocks.requestHeaders.mockImplementation(() => new Headers({ cookie: "smba.two_factor=2fa-pin-id.sig%3D" }))
+    mocks.findVerificationValue.mockResolvedValue({
+      expiresAt: new Date(Date.now() + 60_000),
+      value: "head-coach",
+    })
+    await expect(verifyTotpSignIn(initialState, codeData("123456", "on")))
+      .rejects.toThrow("NEXT_REDIRECT:/coach")
+    expect(mocks.verifyTOTP).toHaveBeenCalledWith(expect.objectContaining({
+      body: { code: "123456", trustDevice: false },
+    }))
+  })
+
   it("tells a PIN sign-in's challenge from a password one, because only the latter honours trust", async () => {
     const challenge = (value: string) => new Headers({ cookie: `smba.two_factor=${value}` })
     await expect(challengeStartedWithPin(challenge("2fa-pin-id.sig%3D"))).resolves.toBe(true)
