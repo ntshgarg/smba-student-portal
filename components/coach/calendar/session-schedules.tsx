@@ -65,15 +65,25 @@ function activeAssignedWeekdays(assignments: SessionAssignment[]) {
     .map((assignment) => assignment.weekdays))
 }
 
-function shortDate(dateKey: string) {
-  return formatDateKey(dateKey, { month: "short", weekday: undefined, year: undefined })
+/**
+ * "1 Jul", or "1 Jul 2024" when the year is not this one or the next: a term
+ * runs a season, so those two are the ones a coach reads without a year.
+ */
+export function shortDate(dateKey: string, today: string) {
+  const year = Number(dateKey.slice(0, 4))
+  const thisYear = Number(today.slice(0, 4))
+  return formatDateKey(dateKey, {
+    month: "short",
+    weekday: undefined,
+    year: year === thisYear || year === thisYear + 1 ? undefined : "numeric",
+  })
 }
 
 /** "1 Jul – 31 Mar": a schedule's first and last day. */
-function scheduleDates(series: TrainingSessionSeries) {
+export function scheduleDates(series: Pick<TrainingSessionSeries, "endsOn" | "startsOn">, today: string) {
   return series.endsOn
-    ? `${shortDate(series.startsOn)} – ${shortDate(series.endsOn)}`
-    : `from ${shortDate(series.startsOn)}`
+    ? `${shortDate(series.startsOn, today)} – ${shortDate(series.endsOn, today)}`
+    : `from ${shortDate(series.startsOn, today)}`
 }
 
 /** "Mon–Fri" for a run of days, "Mon · Wed · Fri" otherwise. */
@@ -307,7 +317,6 @@ export function SessionSchedules({
           type="button"
           disabled={hasPendingMutation}
           aria-expanded={isExpanded}
-          aria-label={`${seriesLabel(series)}. ${finished ? "Term finished. " : ""}${playersLabel}.`}
           onClick={() => {
             const opening = !isExpanded
             setExpandedSeriesId(opening ? series.id : null)
@@ -317,7 +326,7 @@ export function SessionSchedules({
           <span className={styles.time}>{range}</span>
           <span className={styles.copy}>
             <strong>{series.programme} · {series.batch}</strong>
-            <small>{scheduleDays(series)} · {series.venue} · {scheduleDates(series)}</small>
+            <small>{scheduleDays(series)} · {series.venue} · {scheduleDates(series, today)}</small>
           </span>
           <span className={styles.tag} data-tone={finished ? "finished" : undefined}>{playersLabel}</span>
           <ChevronDown className={styles.chevron} aria-hidden="true" />
@@ -343,7 +352,7 @@ export function SessionSchedules({
                       <span className={styles.initials} aria-hidden="true">{player.member.initials}</span>
                       <span>
                         <strong>{player.member.fullName}</strong>
-                        <small>{assignmentDayLabel(assignment?.weekdays ?? [])}{assignment ? ` · since ${shortDate(assignment.effectiveFrom)}` : ""}</small>
+                        <small>{assignmentDayLabel(assignment?.weekdays ?? [])}{assignment ? ` · since ${shortDate(assignment.effectiveFrom, today)}` : ""}</small>
                       </span>
                     </li>
                   )

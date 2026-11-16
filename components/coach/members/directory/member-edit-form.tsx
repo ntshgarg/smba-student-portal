@@ -119,7 +119,7 @@ export function MemberEditForm({
             </select>
             {errors.relationship ? <small id={`member-${memberId}-relationship-error`}>{errors.relationship}</small> : null}
           </label>
-          <label className="is-wide">
+          <label>
             <span>Phone</span>
             <input
               id={`member-${memberId}-phone`}

@@ -211,7 +211,7 @@ export function EndSchedulePanel({
           {askFees ? (
             <fieldset className={formStyles.field}>
               <legend className={formStyles.label}>
-                {withFeePlans.length === 1 ? `${withFeePlans[0].fullName}’s fees` : `Fees for the ${players(withFeePlans.length)} who stop`}
+                {withFeePlans.length === 1 ? `${withFeePlans[0].fullName}’s fees` : `Fees for the ${players(withFeePlans.length)} coming off this schedule`}
               </legend>
               <label className={`${formStyles.option} ${stopFees ? formStyles.optionOn : ""}`}>
                 <input name={`end-fees-${seriesId}`} type="radio" checked={stopFees} onChange={() => setStopFees(true)} />
