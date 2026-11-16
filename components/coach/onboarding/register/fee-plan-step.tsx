@@ -48,6 +48,11 @@ export function FeePreviewBlockers({ blockers }: { blockers: readonly string[] }
   )
 }
 
+/** The confirm box's date, in the tense it is in: a start later than today has not happened yet. */
+export function trainingStartLine(trainingStartOn: string, referenceDate: string) {
+  return `${trainingStartOn > referenceDate ? "Training starts" : "Training started"} ${formatDateKey(trainingStartOn)}`
+}
+
 /**
  * Reset and the fee submit share one notice, so the retry prompt names which of
  * the two the coach should repeat.
@@ -370,7 +375,7 @@ export function FeePlanStep({
                 }}
               />
               <span>
-                <strong>Training started {formatDateKey(preview.trainingStartOn)}</strong>
+                <strong>{trainingStartLine(preview.trainingStartOn, referenceDate)}</strong>
                 I confirm this date. It can’t be changed after onboarding.
               </span>
             </label>

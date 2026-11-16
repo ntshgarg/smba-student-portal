@@ -21,6 +21,7 @@ vi.mock("@/components/unsaved-work-guard", () => ({
 import {
   FeePreviewBlockers,
   FeePreviewWarnings,
+  trainingStartLine,
 } from "@/components/coach/onboarding/register/fee-plan-step"
 
 /**
@@ -80,5 +81,14 @@ describe("what a fee preview refuses to let past", () => {
     expect(markup).not.toContain('role="alert"')
     expect(markup).not.toContain("Fix before finishing")
     expect(markup).toContain("The first month is partly billed.")
+  })
+})
+
+describe("the training start a coach confirms", () => {
+  // The box said "Training started" for a start date still ahead of today.
+  it("is in the future tense until the day arrives", () => {
+    expect(trainingStartLine("2026-12-01", "2026-11-16")).toBe("Training starts Tuesday 1 December")
+    expect(trainingStartLine("2026-11-16", "2026-11-16")).toBe("Training started Monday 16 November")
+    expect(trainingStartLine("2026-07-01", "2026-11-16")).toMatch(/^Training started /u)
   })
 })
