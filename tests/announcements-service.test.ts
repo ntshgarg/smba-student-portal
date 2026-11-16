@@ -248,6 +248,11 @@ describe("announcement presentation and withdrawal", () => {
       database,
       now: NOW,
     })
+    await setAnnouncementPinned({
+      announcementId: published.announcement.id,
+      pinned: true,
+      expectedPresentationRevision: 0,
+    }, { coachId: HEAD_COACH_ID, database, now: NOW })
     const withdrawn = await withdrawAnnouncement({
       announcementId: published.announcement.id,
       reason: "  Event cancelled  ",
@@ -257,7 +262,9 @@ describe("announcement presentation and withdrawal", () => {
       database,
       now: NOW,
     })
+    // Withdrawing unpins it; a pin left on it used to stay for good.
     expect(withdrawn.announcement).toMatchObject({
+      pinned: false,
       status: "withdrawn",
       withdrawal: { reason: "Event cancelled" },
     })
