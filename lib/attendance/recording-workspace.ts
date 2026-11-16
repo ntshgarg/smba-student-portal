@@ -100,6 +100,30 @@ export function rosterProgressForOccurrences({
   }))
 }
 
+/**
+ * How many of a day's sessions are marked: the one rule behind the dashboard's
+ * Attendance card and the Mark tab's day line, so the two never disagree.
+ *
+ * A cancelled session has no register and is left out of both counts. A
+ * session with nobody on its roster has nothing to mark, so it counts as
+ * marked rather than holding "sessions left" open for a register that cannot
+ * be filled. Everything else is marked once every eligible player has a
+ * saved mark.
+ */
+export function daySessionsMarked(
+  occurrences: TrainingSessionOccurrence[],
+  progress: Map<string, OccurrenceRosterProgress>,
+) {
+  const scheduled = occurrences.filter((occurrence) => occurrence.status === "scheduled")
+  return {
+    marked: scheduled.filter((occurrence) => {
+      const { eligible = 0, marked = 0 } = progress.get(occurrence.id) ?? {}
+      return marked === eligible
+    }).length,
+    total: scheduled.length,
+  }
+}
+
 export function resolvePlayerAttendanceSelection({
   occurrences,
   query,

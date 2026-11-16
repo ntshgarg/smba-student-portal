@@ -92,10 +92,11 @@ const saveDeadlineMs = 15_000
 /**
  * What the Mark tab asks of the open staff card before it opens another card or
  * changes the date: `release` answers false while a save is running or when the
- * coach keeps the unsaved marks, and otherwise discards them and answers true.
+ * coach keeps the unsaved marks, and otherwise discards them, runs `navigate`
+ * through this card's unsaved-work guard and answers true.
  */
 export type StaffRollCallHandle = {
-  release: () => boolean
+  release: (navigate: () => void) => boolean
 }
 
 /** Saved marks out of the coaches who can be marked on the day. */
@@ -124,6 +125,7 @@ export function staffRollCallProgress({
  * `release` its marks before it opens another or changes the date.
  */
 export function StaffRollCall({
+  accountId,
   closedFor,
   dateKey,
   initialRecords,
@@ -133,6 +135,8 @@ export function StaffRollCall({
   ref,
   referenceDate,
 }: {
+  /** The signed-in head coach; unsaved marks kept on the device are theirs alone. */
+  accountId: string
   /** The holiday's name when the academy was closed on this date. */
   closedFor: string | null
   dateKey: string
@@ -151,7 +155,7 @@ export function StaffRollCall({
   const [isSaving, setIsSaving] = useState(false)
   // Whether the device holds the marks on screen, from the last write or a restore.
   const [draftKeptOnDevice, setDraftKeptOnDevice] = useState<boolean | undefined>(undefined)
-  const { confirmDiscard } = useUnsavedWorkGuard({
+  const { confirmDiscard, navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty: drafts.length > 0,
     // Leaving the *page* discards nothing while an expiry stands: the marks are
     // on the device, the notice has just said so, and this register is the one
@@ -188,6 +192,8 @@ export function StaffRollCall({
   // not blur an element that already holds focus, so the save that just emptied
   // `drafts` still hands the next Tab to the control after this one.
   const saveOutOfReach = cannotSave && !isSaving
+  // Sticky on a phone only while there is something to save or to report, as on a session.
+  const footerPinned = Boolean(drafts.length || isSaving || feedback)
   const progress = staffRollCallProgress({ dateKey, juniorCoaches, records })
 
   // The roll call is one day of marks, so the stored copy is keyed by date and
@@ -214,7 +220,7 @@ export function StaffRollCall({
   useEffect(() => {
     if (!open || closedDay) return
     const timer = window.setTimeout(() => {
-      const stored = readStaffAttendanceDraft(dateKey)
+      const stored = readStaffAttendanceDraft(accountId, dateKey)
       if (!stored.length) return
       // Only marks for coaches this roll call can mark come back; others are named.
       const markable = new Set(juniorCoaches
@@ -228,7 +234,7 @@ export function StaffRollCall({
       )
       if (!rebased.changes.length) {
         if (leftOut) {
-          discardStaffAttendanceDraft(dateKey)
+          discardStaffAttendanceDraft(accountId, dateKey)
           setFeedback({
             message: leftOutAttendanceDraftNotice(leftOut),
             tone: "info",
@@ -250,20 +256,22 @@ export function StaffRollCall({
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [closedDay, dateKey, juniorCoaches, open, referenceDate, storedByCoach])
+  }, [accountId, closedDay, dateKey, juniorCoaches, open, referenceDate, storedByCoach])
 
   // A save in flight holds the card open, so its outcome can be shown.
   useImperativeHandle(ref, () => ({
-    release() {
+    release(navigate) {
       if (isSaving) {
         setSelectionNotice({ message: waitForSaveMessage, tone: "info" })
         return false
       }
       setSelectionNotice(null)
       if (drafts.length && !confirmDiscard(discardMarksPrompt)) return false
-      if (drafts.length) discardStaffAttendanceDraft(dateKey)
+      if (drafts.length) discardStaffAttendanceDraft(accountId, dateKey)
       setDrafts([])
       setFeedback(null)
+      // Through the guard, so stepping back its history entry cannot cancel the navigation.
+      navigateAfterCommit(navigate)
       return true
     },
   }))
@@ -296,7 +304,7 @@ export function StaffRollCall({
         expectedChoice: base,
       }]
     setDrafts(nextDrafts)
-    setDraftKeptOnDevice(persistStaffAttendanceDraft(dateKey, nextDrafts))
+    setDraftKeptOnDevice(persistStaffAttendanceDraft(accountId, dateKey, nextDrafts))
     setFeedback(feedbackAfterMark)
   }
 
@@ -315,7 +323,7 @@ export function StaffRollCall({
             // Read back rather than assumed: `chooseAttendance` persists on
             // every mark, but a device that refused the write leaves the coach
             // holding marks that only exist on this screen.
-            marksOnDevice: () => readStaffAttendanceDraft(dateKey).length > 0,
+            marksOnDevice: () => readStaffAttendanceDraft(accountId, dateKey).length > 0,
             place: "date",
             subject: "Staff attendance",
           }),
@@ -333,7 +341,7 @@ export function StaffRollCall({
           })),
         ]
       })
-      discardStaffAttendanceDraft(dateKey)
+      discardStaffAttendanceDraft(accountId, dateKey)
       setDrafts([])
       setFeedback({ message: "Staff attendance saved", tone: "success" })
     } catch (error) {
@@ -377,7 +385,7 @@ export function StaffRollCall({
       <button
         type="button"
         className={styles.head}
-        aria-controls="staff-roll-call-panel"
+        aria-controls={open ? "staff-roll-call-panel" : undefined}
         aria-expanded={open}
         onClick={onToggle}
       >
@@ -473,7 +481,7 @@ export function StaffRollCall({
             </ol>
           )}
 
-          <div className={styles.footer}>
+          <div className={`${styles.footer}${footerPinned ? ` ${styles.pinned}` : ""}`}>
             <InlineNotice
               action={feedback?.signIn}
               message={feedback?.message ?? (drafts.length

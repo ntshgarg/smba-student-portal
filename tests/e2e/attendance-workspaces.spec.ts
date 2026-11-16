@@ -89,8 +89,9 @@ async function expectDiscardPrompt(
   expect(message).toMatch(/discard|unsaved/i)
 }
 
-// A session card on the Mark tab that can be opened.
-const sessionHead = 'button[aria-controls="attendance-roster-panel"]:not([disabled])'
+// A session card on the Mark tab that can be opened: only a session's head
+// leads with its time, and only an openable one says whether it is expanded.
+const sessionHead = "button[aria-expanded]:has(> time)"
 
 test.beforeEach(async ({ page }) => {
   await loginAsCoach(page)
@@ -188,6 +189,73 @@ test("Record Attendance protects unsaved session-roster changes", async ({ page 
 
   await expectDiscardPrompt(page, () => backLink.click(), "accept")
   await expect(page).toHaveURL((url) => url.pathname === "/coach" && url.hash === "#attendance")
+})
+
+// Discarding unsaved marks makes the unsaved-work guard step back over the
+// history entry it added for them. The address change for the card or date the
+// coach chose has to survive that step, or a reload reopens the card left and a
+// date change shows "No sessions on this date" for a date that has sessions.
+test("Discarding unsaved marks moves the address to the chosen card and date", async ({ page }) => {
+  await page.goto("/coach/attendance/players/record?date=2026-08-03", {
+    waitUntil: "networkidle",
+  })
+  const sessions = page.locator(sessionHead)
+  const openSession = page.locator(`${sessionHead}[aria-expanded="true"]`)
+  const roster = page.locator("#attendance-roster-panel")
+  async function markOne() {
+    await roster.locator('[role="group"]').first().getByRole("button", { name: "Present" }).click()
+    await expect(roster.getByText(/^1 unsaved change$/u)).toBeVisible()
+  }
+
+  await expect(sessions.nth(1)).toBeVisible()
+  await sessions.first().click()
+  await expect(page).toHaveURL((url) => Boolean(url.searchParams.get("occurrence")))
+  await page.waitForLoadState("networkidle")
+  const firstOccurrence = new URL(page.url()).searchParams.get("occurrence")
+
+  // Session to session.
+  await markOne()
+  const nextSession = page.locator(`${sessionHead}[aria-expanded="false"]`).first()
+  const nextSessionName = await nextSession.locator("strong").textContent()
+  await expectDiscardPrompt(page, () => nextSession.click(), "accept")
+  await expect(page).toHaveURL((url) => {
+    const occurrence = url.searchParams.get("occurrence")
+    return Boolean(occurrence) && occurrence !== firstOccurrence
+  })
+  await page.reload({ waitUntil: "networkidle" })
+  await expect(openSession.locator("strong")).toHaveText(nextSessionName ?? "")
+
+  // Session to staff.
+  await markOne()
+  await expectDiscardPrompt(
+    page,
+    () => page.getByRole("button", { name: /Assistant coaches/u }).click(),
+    "accept",
+  )
+  await expect(page).toHaveURL((url) => (
+    url.searchParams.get("staff") === "open" && !url.searchParams.has("occurrence")
+  ))
+
+  // Another date.
+  await sessions.first().click()
+  await expect(roster).toBeVisible()
+  await page.waitForLoadState("networkidle")
+  await markOne()
+  await expectDiscardPrompt(
+    page,
+    () => page.getByRole("button", { name: /4 August 2026$/u }).click(),
+    "accept",
+  )
+  await expect(page).toHaveURL((url) => (
+    url.searchParams.get("date") === "2026-08-04" && !url.searchParams.has("occurrence")
+  ))
+  await page.waitForLoadState("networkidle")
+  const dayLine = page.locator("#attendance-day-title + p")
+  await expect(page.getByRole("heading", { name: /^Tuesday,? 4 August$/u })).toBeVisible()
+  await expect(dayLine).toBeVisible()
+  const shownForTheDate = await dayLine.textContent()
+  await page.reload({ waitUntil: "networkidle" })
+  await expect(dayLine).toHaveText(shownForTheDate ?? "")
 })
 
 test("stale player roll-call tabs cannot overwrite a newer save", async ({ context, page }) => {

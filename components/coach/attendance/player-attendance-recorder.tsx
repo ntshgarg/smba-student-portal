@@ -25,6 +25,7 @@ import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import { memberInitials } from "@/lib/coach/member-utils"
 import {
   chronologicalOccurrencesForDate,
+  daySessionsMarked,
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
   rosterProgressForOccurrences,
@@ -114,6 +115,7 @@ const staffCard = "staff"
  * can be, and leaving it asks first.
  */
 export function PlayerAttendanceRecorder({
+  accountId,
   initialDate,
   initialFromCalendar,
   initialOccurrenceId,
@@ -121,6 +123,8 @@ export function PlayerAttendanceRecorder({
   initialStaffOpen,
   staff,
 }: {
+  /** The signed-in coach; unsaved marks kept on the device are theirs alone. */
+  accountId: string
   initialDate: string
   initialFromCalendar: boolean
   initialOccurrenceId: string | null
@@ -166,7 +170,7 @@ export function PlayerAttendanceRecorder({
   const [isChangingDate, startDateChange] = useTransition()
   // Whether the device holds the marks on screen, from the last write or a restore.
   const [draftKeptOnDevice, setDraftKeptOnDevice] = useState<boolean | undefined>(undefined)
-  const { confirmDiscard } = useUnsavedWorkGuard({
+  const { confirmDiscard, navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty: draftChanges.length > 0,
     // Leaving the *page* discards nothing while an expiry stands: the marks are
     // on the device, the notice has just said so, and this register is the one
@@ -305,7 +309,7 @@ export function PlayerAttendanceRecorder({
     const timer = window.setTimeout(() => {
       if (restoredOccurrenceIdRef.current === selectedOccurrenceId) return
       restoredOccurrenceIdRef.current = selectedOccurrenceId
-      const stored = readPlayerAttendanceDraft(selectedOccurrenceId)
+      const stored = readPlayerAttendanceDraft(accountId, selectedOccurrenceId)
       if (!stored.length) return
       // A session cancelled since cannot be saved; the marks stay on the device.
       if (selectedOccurrence.status !== "scheduled") {
@@ -329,7 +333,7 @@ export function PlayerAttendanceRecorder({
       )
       if (!rebased.changes.length) {
         if (leftOut) {
-          discardPlayerAttendanceDraft(selectedOccurrenceId)
+          discardPlayerAttendanceDraft(accountId, selectedOccurrenceId)
           setFeedback({ message: leftOutAttendanceDraftNotice(leftOut), tone: "info" })
         }
         return
@@ -349,6 +353,7 @@ export function PlayerAttendanceRecorder({
 
     return () => window.clearTimeout(timer)
   }, [
+    accountId,
     activeSourceAdjustmentByPlayer,
     attendanceRecords,
     eligiblePlayerIds,
@@ -377,6 +382,9 @@ export function PlayerAttendanceRecorder({
   // so the save that just emptied `draftChanges` still hands the next Tab to
   // the control after this one.
   const saveOutOfReach = cannotSave && !isSaving
+  // On a phone the footer sticks to the foot of the screen only while there is
+  // something to save or to report, so an untouched register has no bar over it.
+  const footerPinned = Boolean(draftChanges.length || isSaving || feedback)
 
   function resolvedChoice(playerId: string) {
     if (!selectedOccurrence) return undefined
@@ -397,7 +405,7 @@ export function PlayerAttendanceRecorder({
   function discardDraftForSelectionChange() {
     if (!draftChanges.length) return true
     if (!confirmDiscard(discardMarksPrompt)) return false
-    if (selectedOccurrenceId) discardPlayerAttendanceDraft(selectedOccurrenceId)
+    if (selectedOccurrenceId) discardPlayerAttendanceDraft(accountId, selectedOccurrenceId)
     setDraftChanges([])
     setFeedback(null)
     return true
@@ -410,20 +418,27 @@ export function PlayerAttendanceRecorder({
     return true
   }
 
-  // The open card's marks, before another card opens or the date changes.
-  function releaseOpenCard() {
-    if (staffOpen) return staffRef.current?.release() ?? true
-    return discardDraftForSelectionChange()
+  // The open card's marks, before another card opens or the date changes. The
+  // address change goes through the guard that held them: discarding the marks
+  // steps the guard's extra history entry back, and that step would otherwise
+  // cancel the navigation, leaving the address -- and a reload -- on the old
+  // card or date.
+  function releaseOpenCard(navigate: () => void) {
+    if (staffOpen && staffRef.current) return staffRef.current.release(navigate)
+    if (!discardDraftForSelectionChange()) return false
+    navigateAfterCommit(navigate)
+    return true
   }
 
   function chooseDate(dateKey: string) {
     if (!dateKey || dateKey === selectedDate || blockedBySave()) return
-    if (!releaseOpenCard()) return
-    // The chosen date is shown at once — it is the coach's own input, and the
-    // week strip must not lag behind the picker. Only the navigation that fetches
-    // it is deferred, so `isChangingDate` is raised for the round trip in which
-    // the occurrence list on screen still belongs to the date the coach has
-    // left. It does not cover the whole of that mismatch: the commit remounts
+    // The chosen date is shown as soon as the guard lets the navigation go --
+    // it is the coach's own input, and the week strip must not lag behind the
+    // picker -- and in the same callback, so the new date is never drawn over
+    // the old date's list before `isChangingDate` is raised. Only the
+    // navigation that fetches it is deferred, so `isChangingDate` is raised for
+    // the round trip in which the occurrence list on screen still belongs to the
+    // date the coach has left. It does not cover the whole of that mismatch: the commit remounts
     // this component (`app/coach/attendance/players/record/page.tsx` keys it on
     // the selection) with a fresh, unset transition, while the provider re-seeds
     // `sessionOccurrences` from props a tick later, so the previous date's list
@@ -432,34 +447,30 @@ export function PlayerAttendanceRecorder({
     // for the reason the save button below does not: it is the element the coach
     // is standing on, and disabling it here would hand focus to `<body>` on a
     // slow venue connection.
-    setSelectedDate(dateKey)
-    setOpenCard(null)
-    setFeedback(null)
-    startDateChange(() => replaceSelection(dateKey, null))
+    releaseOpenCard(() => {
+      setSelectedDate(dateKey)
+      setOpenCard(null)
+      setFeedback(null)
+      startDateChange(() => replaceSelection(dateKey, null))
+    })
   }
 
+  // Tapping the open session closes it.
   function chooseOccurrence(occurrence: TrainingSessionOccurrence) {
     if (occurrence.status !== "scheduled" || occurrenceIsUpcoming(occurrence, referenceInstant)) return
     if (blockedBySave()) return
-    if (occurrence.id === selectedOccurrenceId) {
-      if (!discardDraftForSelectionChange()) return
-      setOpenCard(null)
-      setFeedback(null)
-      replaceSelection(selectedDate, null)
-      return
-    }
-    if (!releaseOpenCard()) return
-    setOpenCard(occurrence.id)
+    const next = occurrence.id === selectedOccurrenceId ? null : occurrence.id
+    if (!releaseOpenCard(() => replaceSelection(selectedDate, next))) return
+    setOpenCard(next)
     setFeedback(null)
-    replaceSelection(selectedDate, occurrence.id)
   }
 
   function toggleStaff() {
-    if (blockedBySave() || !releaseOpenCard()) return
+    if (blockedBySave()) return
     const next = staffOpen ? null : staffCard
+    if (!releaseOpenCard(() => replaceSelection(selectedDate, next))) return
     setOpenCard(next)
     setFeedback(null)
-    replaceSelection(selectedDate, next)
   }
 
   function chooseAttendance(playerId: string, choice: SessionAttendanceChoice) {
@@ -482,7 +493,7 @@ export function PlayerAttendanceRecorder({
         playerId,
       }]
     setDraftChanges(nextChanges)
-    setDraftKeptOnDevice(persistPlayerAttendanceDraft(selectedOccurrence.id, nextChanges))
+    setDraftKeptOnDevice(persistPlayerAttendanceDraft(accountId, selectedOccurrence.id, nextChanges))
     setFeedback(feedbackAfterMark)
   }
 
@@ -502,7 +513,7 @@ export function PlayerAttendanceRecorder({
             // every mark, but a device that refused the write leaves the coach
             // holding marks that only exist on this screen.
             marksOnDevice: () => (
-              readPlayerAttendanceDraft(selectedOccurrence.id).length > 0
+              readPlayerAttendanceDraft(accountId, selectedOccurrence.id).length > 0
             ),
             place: "session",
             subject: "Attendance",
@@ -511,7 +522,7 @@ export function PlayerAttendanceRecorder({
         })
         return
       }
-      discardPlayerAttendanceDraft(selectedOccurrence.id)
+      discardPlayerAttendanceDraft(accountId, selectedOccurrence.id)
       setDraftChanges([])
       setFeedback({ message: "Attendance saved", tone: "success" })
     } catch (error) {
@@ -536,18 +547,14 @@ export function PlayerAttendanceRecorder({
     juniorCoaches: staff.juniorCoaches,
     records: staff.records,
   })
-  const fullyMarked = dayOccurrences.filter((occurrence) => {
-    const progress = rosterProgressByOccurrence.get(occurrence.id)
-    return occurrence.status === "scheduled"
-      && !!progress?.eligible
-      && progress.marked === progress.eligible
-  }).length
+  // Counted by the dashboard card's rule: cancelled sessions are left out.
+  const sessionsMarked = daySessionsMarked(dayOccurrences, rosterProgressByOccurrence)
   const daySummary = [
     staff.closedFor
       ? "Academy closed"
       : staffProgress.total ? `Staff ${staffProgress.marked}/${staffProgress.total}` : null,
-    dayOccurrences.length
-      ? `${dayOccurrences.length} ${dayOccurrences.length === 1 ? "session" : "sessions"}, ${fullyMarked} fully marked`
+    sessionsMarked.total
+      ? `${sessionsMarked.total} ${sessionsMarked.total === 1 ? "session" : "sessions"}, ${sessionsMarked.marked} fully marked`
       : "No sessions",
   ].filter(Boolean).join(" · ")
 
@@ -599,7 +606,8 @@ export function PlayerAttendanceRecorder({
           type="button"
           className={styles.head}
           aria-expanded={unavailable ? undefined : isSelected}
-          aria-controls={unavailable ? undefined : "attendance-roster-panel"}
+          // Only an open card's register is on the page to point at.
+          aria-controls={!unavailable && isSelected ? "attendance-roster-panel" : undefined}
           disabled={unavailable}
           onClick={() => chooseOccurrence(occurrence)}
         >
@@ -708,7 +716,7 @@ export function PlayerAttendanceRecorder({
         </ol>
       )}
 
-      <div className={styles.footer}>
+      <div className={`${styles.footer}${footerPinned ? ` ${styles.pinned}` : ""}`}>
         <InlineNotice
           action={feedback?.signIn}
           reserveSpace={false}
@@ -773,6 +781,7 @@ export function PlayerAttendanceRecorder({
           <>
             <StaffRollCall
               ref={staffRef}
+              accountId={accountId}
               closedFor={staff.closedFor}
               dateKey={initialDate}
               initialRecords={staff.records}

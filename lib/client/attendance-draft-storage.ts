@@ -15,11 +15,11 @@ import type { SessionAttendanceChange } from "@/lib/sessions/types"
 const ATTENDANCE_DRAFT_KEY_PREFIX = "smba-attendance-draft-v1"
 
 /**
- * The key already pins a draft to one occurrence or one date, so no expiry is
- * needed to keep a draft out of the wrong register. What the key cannot express
- * is age: the same past register is reopened weeks later to correct it, and
- * marks abandoned back then would resurface as "unsaved" long after the coach
- * has forgotten making them. A week covers the operational cycle a register is
+ * The key already pins a draft to one account and one occurrence or date, so
+ * no expiry is needed to keep a draft out of the wrong register. What the key
+ * cannot express is age: the same past register is reopened weeks later to
+ * correct it, and marks abandoned back then would resurface as "unsaved" long
+ * after the coach has forgotten making them. A week covers the operational cycle a register is
  * finished within — same session, that evening, or after the weekend — and
  * bounds how many abandoned drafts a device can accumulate.
  */
@@ -44,7 +44,13 @@ type StoredAttendanceMark = {
   subject: string
 }
 
+/**
+ * `account` is the signed-in coach who made the marks. A tablet courtside is
+ * shared, so a draft is only ever restored to the account that made it: another
+ * coach saving it would record those marks as theirs.
+ */
 type StoredAttendanceDraft = {
+  account: string
   context: string
   marks: StoredAttendanceMark[]
   savedAt: number
@@ -70,12 +76,12 @@ export function attendanceDraftStorage(): Storage | null {
   }
 }
 
-export function playerAttendanceDraftKey(occurrenceId: string) {
-  return `${ATTENDANCE_DRAFT_KEY_PREFIX}:occurrence:${occurrenceId}`
+export function playerAttendanceDraftKey(accountId: string, occurrenceId: string) {
+  return `${ATTENDANCE_DRAFT_KEY_PREFIX}:account:${accountId}:occurrence:${occurrenceId}`
 }
 
-export function staffAttendanceDraftKey(dateKey: string) {
-  return `${ATTENDANCE_DRAFT_KEY_PREFIX}:staff-date:${dateKey}`
+export function staffAttendanceDraftKey(accountId: string, dateKey: string) {
+  return `${ATTENDANCE_DRAFT_KEY_PREFIX}:account:${accountId}:staff-date:${dateKey}`
 }
 
 function isDraftChoice(value: unknown): value is AttendanceDraftChoice {
@@ -95,6 +101,7 @@ export function parseAttendanceDraft(value: string | null): StoredAttendanceDraf
     if (!parsed || typeof parsed !== "object") return null
 
     const candidate = parsed as Record<string, unknown>
+    if (typeof candidate.account !== "string" || !candidate.account) return null
     if (typeof candidate.context !== "string" || !candidate.context) return null
     if (typeof candidate.savedAt !== "number" || !Number.isFinite(candidate.savedAt)) return null
     if (!Array.isArray(candidate.marks)) return null
@@ -108,7 +115,12 @@ export function parseAttendanceDraft(value: string | null): StoredAttendanceDraf
       marks.push({ choice: mark.choice, expected: mark.expected, subject: mark.subject })
     }
 
-    return { context: candidate.context, marks, savedAt: candidate.savedAt }
+    return {
+      account: candidate.account,
+      context: candidate.context,
+      marks,
+      savedAt: candidate.savedAt,
+    }
   } catch {
     return null
   }
@@ -143,8 +155,27 @@ export function pruneExpiredAttendanceDrafts(storage: Storage, now: number) {
   }
 }
 
+/**
+ * Sign-out clears every draft on the device, whoever made it: the next person
+ * to pick the tablet up has no business with them.
+ */
+export function clearAttendanceDrafts(storage = attendanceDraftStorage()) {
+  if (!storage) return
+  try {
+    const drafts: string[] = []
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index)
+      if (key?.startsWith(ATTENDANCE_DRAFT_KEY_PREFIX)) drafts.push(key)
+    }
+    for (const key of drafts) storage.removeItem(key)
+  } catch {
+    // Same tolerance as pruning; sign-out goes ahead either way.
+  }
+}
+
 function readDraftMarks(
   key: string,
+  account: string,
   context: string,
   { now = Date.now(), storage = attendanceDraftStorage() }: DraftStorageOptions,
 ) {
@@ -157,10 +188,10 @@ function readDraftMarks(
       storage.removeItem(key)
       return []
     }
-    // The key alone pins the context; the stored copy is compared as well so a
-    // record written under one occurrence or date can never be read back under
-    // another, however the key was assembled.
-    if (draft.context !== context || draftIsStale(draft, now)) {
+    // The key alone pins the account and context; the stored copy is compared
+    // as well so a record written for one account, occurrence or date can never
+    // be read back under another, however the key was assembled.
+    if (draft.account !== account || draft.context !== context || draftIsStale(draft, now)) {
       storage.removeItem(key)
       return []
     }
@@ -206,10 +237,16 @@ function clearDraft(key: string, storage: Storage | null) {
 }
 
 export function readPlayerAttendanceDraft(
+  accountId: string,
   occurrenceId: string,
   options: DraftStorageOptions = {},
 ): SessionAttendanceChange[] {
-  return readDraftMarks(playerAttendanceDraftKey(occurrenceId), occurrenceId, options)
+  return readDraftMarks(
+    playerAttendanceDraftKey(accountId, occurrenceId),
+    accountId,
+    occurrenceId,
+    options,
+  )
     .map((mark) => ({
       choice: mark.choice,
       expectedChoice: mark.expected,
@@ -219,16 +256,18 @@ export function readPlayerAttendanceDraft(
 }
 
 export function persistPlayerAttendanceDraft(
+  accountId: string,
   occurrenceId: string,
   changes: SessionAttendanceChange[],
   { now = Date.now(), storage = attendanceDraftStorage() }: DraftStorageOptions = {},
 ) {
-  const key = playerAttendanceDraftKey(occurrenceId)
+  const key = playerAttendanceDraftKey(accountId, occurrenceId)
   if (!changes.length) {
     clearDraft(key, storage)
     return false
   }
   return writeDraftMarks(key, {
+    account: accountId,
     context: occurrenceId,
     marks: changes.map((change) => ({
       choice: change.choice,
@@ -240,17 +279,19 @@ export function persistPlayerAttendanceDraft(
 }
 
 export function discardPlayerAttendanceDraft(
+  accountId: string,
   occurrenceId: string,
   { storage = attendanceDraftStorage() }: DraftStorageOptions = {},
 ) {
-  clearDraft(playerAttendanceDraftKey(occurrenceId), storage)
+  clearDraft(playerAttendanceDraftKey(accountId, occurrenceId), storage)
 }
 
 export function readStaffAttendanceDraft(
+  accountId: string,
   dateKey: string,
   options: DraftStorageOptions = {},
 ): StaffAttendanceChange[] {
-  return readDraftMarks(staffAttendanceDraftKey(dateKey), dateKey, options)
+  return readDraftMarks(staffAttendanceDraftKey(accountId, dateKey), accountId, dateKey, options)
     .map((mark) => ({
       choice: mark.choice,
       coachAccountId: mark.subject,
@@ -260,16 +301,18 @@ export function readStaffAttendanceDraft(
 }
 
 export function persistStaffAttendanceDraft(
+  accountId: string,
   dateKey: string,
   changes: StaffAttendanceChange[],
   { now = Date.now(), storage = attendanceDraftStorage() }: DraftStorageOptions = {},
 ) {
-  const key = staffAttendanceDraftKey(dateKey)
+  const key = staffAttendanceDraftKey(accountId, dateKey)
   if (!changes.length) {
     clearDraft(key, storage)
     return false
   }
   return writeDraftMarks(key, {
+    account: accountId,
     context: dateKey,
     marks: changes.map((change) => ({
       choice: change.choice,
@@ -281,10 +324,11 @@ export function persistStaffAttendanceDraft(
 }
 
 export function discardStaffAttendanceDraft(
+  accountId: string,
   dateKey: string,
   { storage = attendanceDraftStorage() }: DraftStorageOptions = {},
 ) {
-  clearDraft(staffAttendanceDraftKey(dateKey), storage)
+  clearDraft(staffAttendanceDraftKey(accountId, dateKey), storage)
 }
 
 /**

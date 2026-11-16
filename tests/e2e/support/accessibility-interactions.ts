@@ -84,7 +84,8 @@ export async function executeAccessibilityInteraction(
       const initialUrl = page.url()
       const selectedSession = await firstVisible(
         page.locator(
-          'button[aria-controls="attendance-roster-panel"]:not([disabled])',
+          // An openable session's head; it points at the register only once open.
+          "button[aria-expanded]:has(> time)",
         ),
         async (candidate) => await candidate.getAttribute("aria-expanded") === "false",
       )

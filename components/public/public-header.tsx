@@ -8,6 +8,7 @@ import { clearSession } from "@/app/login/actions"
 import { IconSwap } from "@/components/motion/icon-swap"
 import { usePresence } from "@/components/motion/use-presence"
 import type { SessionSummaryResponse } from "@/lib/auth/session-summary"
+import { clearAttendanceDrafts } from "@/lib/client/attendance-draft-storage"
 import { navItems } from "@/lib/public/navigation"
 
 const portalLoginHref = "/login"
@@ -160,14 +161,18 @@ export function Header({ homePath = "" }: { homePath?: "" | "/" }) {
                       {account.dashboardLabel}
                     </a>
                     {account.previewMode ? (
-                      <form action="/admin/preview/exit" method="post">
+                      <form
+                        action="/admin/preview/exit"
+                        method="post"
+                        onSubmit={() => clearAttendanceDrafts()}
+                      >
                         <input type="hidden" name="signOut" value="1" />
                         <button className="header-account-signout" type="submit">
                           Exit preview and sign out
                         </button>
                       </form>
                     ) : (
-                      <form action={clearSession}>
+                      <form action={clearSession} onSubmit={() => clearAttendanceDrafts()}>
                         <button
                           className="header-account-signout"
                           type="submit"

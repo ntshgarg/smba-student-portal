@@ -254,7 +254,10 @@ export function UnsavedWorkProvider({ children }: { children: React.ReactNode })
     function guardHistoryNavigation() {
       if (ignoreNextPopState.current) {
         ignoreNextPopState.current = false
-        committedNavigation.current?.finishBoundaryRelease()
+        // Released after the router's own popstate handler, which restores the
+        // entry this step landed on: a navigation sent before that restore is
+        // discarded by it, leaving the address where the step left it.
+        window.setTimeout(() => committedNavigation.current?.finishBoundaryRelease(), 0)
         return
       }
       if (

@@ -18,6 +18,8 @@ const captured = vi.hoisted(() => ({
   changingDate: false,
   elements: [] as Array<{ props: Record<string, unknown>; type: unknown }>,
   guardMessages: [] as Array<{ message: string; scope: string }>,
+  // Navigations each register handed to its unsaved-work guard, by scope.
+  guardedNavigations: [] as string[],
   isSaving: false,
   keptOnDevice: undefined as boolean | undefined,
   persistReturns: false,
@@ -79,7 +81,13 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/unsaved-work-guard", () => ({
   useUnsavedWorkGuard: ({ message, scope }: { message: string; scope: string }) => {
     captured.guardMessages.push({ message, scope })
-    return { confirmDiscard: vi.fn(() => true) }
+    return {
+      confirmDiscard: vi.fn(() => true),
+      navigateAfterCommit: (navigate: () => void) => {
+        captured.guardedNavigations.push(scope)
+        navigate()
+      },
+    }
   },
 }))
 
@@ -89,10 +97,10 @@ vi.mock("@/lib/client/attendance-draft-storage", async () => {
   >("@/lib/client/attendance-draft-storage")
   return {
     ...actual,
-    discardPlayerAttendanceDraft: (occurrenceId: string) => {
+    discardPlayerAttendanceDraft: (_accountId: string, occurrenceId: string) => {
       captured.discarded.push(occurrenceId)
     },
-    discardStaffAttendanceDraft: (dateKey: string) => {
+    discardStaffAttendanceDraft: (_accountId: string, dateKey: string) => {
       captured.discarded.push(dateKey)
     },
     persistPlayerAttendanceDraft: () => captured.persistReturns,
@@ -185,6 +193,7 @@ const ishaan = {
 function playerRegister(): ReactElement {
   return (
     <PlayerAttendanceRecorder
+      accountId="head-coach"
       initialDate="2026-08-21"
       initialFromCalendar={false}
       initialOccurrenceId="occurrence-1"
@@ -206,6 +215,7 @@ function rollCall(): ReactElement {
   return (
     <StaffRollCall
       ref={rollCallHandle as Ref<StaffRollCallHandle>}
+      accountId="head-coach"
       closedFor={null}
       dateKey="2026-08-20"
       initialRecords={[{ choice: "absent", coachAccountId: "coach-1" }]}
@@ -246,6 +256,7 @@ function lastMessage() {
 afterEach(() => {
   captured.changingDate = false
   captured.discarded.length = 0
+  captured.guardedNavigations.length = 0
   captured.isSaving = false
   captured.keptOnDevice = undefined
   captured.persistReturns = false
@@ -275,8 +286,9 @@ describe("a player register save in flight", () => {
 
     const otherSession = captured.elements.find((element) => (
       element.type === "button"
-      && element.props["aria-controls"] === "attendance-roster-panel"
       && element.props["aria-expanded"] === false
+      // a session's head; the staff card's carries no `disabled` at all
+      && element.props.disabled === false
     ))
     expect(otherSession, "the register rendered no other session to pick").toBeTruthy()
     ;(otherSession?.props.onClick as () => void)()
@@ -294,6 +306,66 @@ describe("a player register save in flight", () => {
 
     expect(captured.discarded).toEqual(["occurrence-1"])
     expect(captured.replaced).toHaveLength(1)
+  })
+})
+
+/*
+ * Discarding unsaved marks makes the unsaved-work guard step back over the
+ * history entry it added for them. A `router.replace` sent beside that step is
+ * cancelled by it, so the address -- and a reload -- stayed on the card or date
+ * the coach had left. Every selection change is therefore handed to the guard.
+ */
+describe("leaving a card with discarded marks", () => {
+  function sessionHead(expanded: boolean) {
+    return captured.elements.find((element) => (
+      element.type === "button"
+      && element.props["aria-expanded"] === expanded
+      && element.props.disabled === false
+    ))?.props.onClick as (() => void) | undefined
+  }
+
+  it("moves the address to another session through the guard", () => {
+    captured.unsavedMarks = oneUnsavedPlayerMark
+    render(playerRegister)
+
+    sessionHead(false)?.()
+
+    expect(captured.discarded).toEqual(["occurrence-1"])
+    expect(captured.guardedNavigations).toEqual(["record-player-attendance"])
+    expect(captured.replaced).toEqual([
+      "/coach/attendance/players/record?date=2026-08-21&occurrence=occurrence-2",
+    ])
+  })
+
+  it("closes the open session through the guard", () => {
+    captured.unsavedMarks = oneUnsavedPlayerMark
+    render(playerRegister)
+
+    sessionHead(true)?.()
+
+    expect(captured.guardedNavigations).toEqual(["record-player-attendance"])
+    expect(captured.replaced).toEqual(["/coach/attendance/players/record?date=2026-08-21"])
+  })
+
+  it("moves the address to another date through the guard", () => {
+    captured.unsavedMarks = oneUnsavedPlayerMark
+    render(playerRegister)
+
+    pickDate("2026-08-22")
+
+    expect(captured.guardedNavigations).toEqual(["record-player-attendance"])
+    expect(captured.replaced).toEqual(["/coach/attendance/players/record?date=2026-08-22"])
+  })
+})
+
+describe("the Mark tab's cards", () => {
+  // A closed card's panel is not on the page, so only the open card points at one.
+  it("point screen readers only at the open card's register", () => {
+    render(playerRegister)
+
+    expect(captured.elements
+      .filter((element) => element.type === "button" && element.props["aria-controls"])
+      .map((element) => element.props["aria-controls"])).toEqual(["attendance-roster-panel"])
   })
 })
 
@@ -342,9 +414,10 @@ describe("the staff card", () => {
     captured.unsavedMarks = oneUnsavedStaffMark
     render(rollCall)
 
-    expect(rollCallHandle.current?.release()).toBe(false)
+    expect(rollCallHandle.current?.release(() => captured.replaced.push("next"))).toBe(false)
 
     expect(captured.discarded).toEqual([])
+    expect(captured.replaced).toEqual([])
     expect(lastMessage()).toContain("Staff attendance is still saving")
   })
 
@@ -352,10 +425,14 @@ describe("the staff card", () => {
     captured.unsavedMarks = oneUnsavedStaffMark
     render(rollCall)
 
-    expect(rollCallHandle.current?.release()).toBe(true)
+    expect(rollCallHandle.current?.release(() => captured.replaced.push("next"))).toBe(true)
 
     expect(captured.discarded).toEqual(["2026-08-20"])
     expect(captured.stateUpdates).toContainEqual([])
+    // The next card's address goes through this card's guard, whose step back
+    // through history would otherwise cancel it.
+    expect(captured.guardedNavigations).toEqual(["staff-roll-call"])
+    expect(captured.replaced).toEqual(["next"])
   })
 
   // Between picking a day and the server answering for it, the records held

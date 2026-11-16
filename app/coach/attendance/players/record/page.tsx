@@ -76,6 +76,7 @@ export default async function RecordPlayerAttendancePage({
       >
         <PlayerAttendanceRecorder
           key={`${selection.dateKey}:${selection.occurrenceId ?? "none"}:${selection.staffOpen ? "staff" : "sessions"}:${selection.fromCalendar ? "calendar" : "dashboard"}`}
+          accountId={identity.subjectId}
           initialDate={selection.dateKey}
           initialFromCalendar={selection.fromCalendar}
           initialOccurrenceId={selection.occurrenceId}

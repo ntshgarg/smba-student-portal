@@ -107,6 +107,7 @@ describe("the staff card on a closed day", () => {
   function renderRollCall(closedFor: string | null) {
     hooks.reset()
     const tree = StaffRollCall({
+      accountId: "head-coach",
       closedFor,
       dateKey: "2026-11-10",
       initialRecords: [{ choice: "absent", coachAccountId: "ravi" }],
@@ -160,7 +161,7 @@ describe("the staff card on a closed day", () => {
     // An open day still restores them.
     renderRollCall(null)
     runEffects()
-    expect(portal.readStaffAttendanceDraft).toHaveBeenCalledWith("2026-11-10")
+    expect(portal.readStaffAttendanceDraft).toHaveBeenCalledWith("head-coach", "2026-11-10")
   })
 
   it("ignores a press on a closed day", () => {
