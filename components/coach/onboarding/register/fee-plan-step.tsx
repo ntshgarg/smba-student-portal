@@ -141,7 +141,7 @@ export function FeePlanStep({
     return (
       <div className={styles.stepBody}>
         <div className={styles.emptyBox}>
-          <strong>Financials isn’t set up yet</strong>
+          <strong>Fees aren’t tracked yet</strong>
           <p>{firstName} stays here; no onboarding information is lost.</p>
         </div>
         <div className={styles.formActions}>
@@ -149,7 +149,7 @@ export function FeePlanStep({
             className={styles.primaryButton}
             href={`/coach/financials?period=${referenceDate.slice(0, 7)}&player=${encodeURIComponent(item.id)}`}
           >
-            Set up Financials <ArrowRight aria-hidden="true" />
+            Start tracking fees <ArrowRight aria-hidden="true" />
           </Link>
         </div>
       </div>

@@ -147,7 +147,7 @@ function textResizeResult(advisories: readonly AccessibilityAdvisory[]): Accessi
     id: textResizeResultId("coach-monthly-fees"),
     profile: "stress",
     route: "/coach/financials/records?view=fees&mode=monthly&period=2026-08",
-    title: "Fee records",
+    title: "Fees",
     url: "http://127.0.0.1/coach/financials/records",
     viewport: accessibilityViewports[0],
   }
