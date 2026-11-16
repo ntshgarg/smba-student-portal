@@ -131,7 +131,7 @@ describe("focused player fee record", () => {
     }
 
     const html = renderToStaticMarkup(
-      <PlayerLedger focused ledger={setupLedger} period="2026-08" />,
+      <PlayerLedger ledger={setupLedger} period="2026-08" />,
     )
 
     expect(html).toContain("Complete this player’s onboarding first")
@@ -164,7 +164,7 @@ describe("focused player fee record", () => {
     }
 
     const html = renderToStaticMarkup(
-      <PlayerLedger focused ledger={setupLedger} period="2026-08" />,
+      <PlayerLedger ledger={setupLedger} period="2026-08" />,
     )
 
     expect(html).toContain("Complete this player’s onboarding first")
@@ -215,10 +215,11 @@ describe("a fee record once fee changes live in Members", () => {
 
   it("shows the plan and sends fee changes to the player's record in Members", () => {
     const html = renderToStaticMarkup(
-      <PlayerLedger focused ledger={activeLedger} period="2026-08" />,
+      <PlayerLedger ledger={activeLedger} period="2026-08" />,
     )
 
-    expect(html).toContain("Agreed monthly fee")
+    // the band carries the plan, its monthly fee and its standing
+    expect(html).toMatch(/· ₹[\d,]+ a month · Active</)
     expect(html).toContain(`/coach/members?player=${activeLedger.playerId}`)
     expect(html).not.toContain("Change fee plan")
     expect(html).not.toContain("End fee plan")

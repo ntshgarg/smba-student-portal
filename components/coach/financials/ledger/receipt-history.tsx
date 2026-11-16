@@ -7,7 +7,7 @@ import { formatInr } from "@/lib/format"
 import type { CoachReceiptView } from "@/lib/finance/types"
 
 import { formatDueDate, paymentMethodLabel } from "../financials-client-utils"
-import styles from "../financials.module.css"
+import styles from "../fees.module.css"
 import type { PlayerFinancialLedgerView } from "../types"
 import { RefundForm } from "./refund-form"
 import { RefundReversal } from "./refund-reversal"
@@ -26,13 +26,17 @@ function receiptOutcome(receipt: CoachReceiptView) {
   return "Recorded"
 }
 
+function outcomeTone(outcome: string) {
+  if (outcome === "Reversed") return "red"
+  if (outcome === "Recorded" || outcome === "Refund available") return "green"
+  return "amber"
+}
+
 export function ReceiptHistory({
-  focused = false,
   ledger,
   readOnly = false,
   showDownloads = false,
 }: {
-  focused?: boolean
   ledger: PlayerFinancialLedgerView
   readOnly?: boolean
   showDownloads?: boolean
@@ -40,112 +44,95 @@ export function ReceiptHistory({
   const receipts = ledger.management.receipts
   const refunds = ledger.management.refunds
 
+  if (!receipts.length) {
+    return <p className={styles.note}>No receipts have been recorded for this player yet.</p>
+  }
+
   return (
-    <section className={styles.receiptSection} aria-labelledby="receipt-history-title">
-      <div className={styles.sectionHeading}>
-        <div><span>Collection history</span><h3 id="receipt-history-title">Receipts and refunds</h3></div>
-        <p>{receipts.length} {receipts.length === 1 ? "receipt" : "receipts"}</p>
-      </div>
+    <div className={styles.cards}>
+      {receipts.map((receipt) => {
+        const receiptRefunds = refunds.filter((refund) => refund.paymentId === receipt.id)
+        const outcome = receiptOutcome(receipt)
+        return (
+          <details key={receipt.id} className={`${styles.card} ${styles.receiptCard}`}>
+            <summary>
+              <span className={styles.cardTitle}>
+                <b>{receipt.receiptReference}</b>
+                <small>{formatDueDate(receipt.receivedOn)} · {paymentMethodLabel(receipt.method)}</small>
+              </span>
+              <span className={styles.pill} data-tone={outcomeTone(outcome)}>{outcome}</span>
+              <span className={styles.cardNum}>{formatInr(receipt.amountPaise)}</span>
+              <span className={styles.chev} aria-hidden="true" />
+            </summary>
+            <div className={styles.cardBody}>
+              <ul className={styles.entries} aria-label="Paid toward">
+                {receipt.allocations.map((allocation) => (
+                  <li key={allocation.paymentAllocationId}>
+                    <span><b>{allocation.description}</b> · {allocation.feeReference}</span>
+                    <b>{formatInr(allocation.amountPaise)}</b>
+                  </li>
+                ))}
+                {receipt.externalReference ? <li><span>Reference · {receipt.externalReference}</span></li> : null}
+                {receipt.internalNote ? <li><span>Internal note · {receipt.internalNote}</span></li> : null}
+              </ul>
 
-      {receipts.length ? (
-        <div className={styles.receiptList}>
-          {receipts.map((receipt, index) => {
-            const receiptRefunds = refunds.filter((refund) => refund.paymentId === receipt.id)
-            return (
-              <details key={receipt.id} className={styles.receipt}>
-                <summary>
-                  {focused ? <span className={styles.receiptFolio} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span> : null}
-                  <span><strong>{receipt.receiptReference}</strong><small>{formatDueDate(receipt.receivedOn)} · {paymentMethodLabel(receipt.method)}</small></span>
-                  <span><strong>{formatInr(receipt.amountPaise)}</strong><small>{receiptOutcome(receipt)}</small></span>
-                </summary>
-                <div className={styles.receiptBody}>
-                  {showDownloads ? (
-                    <a
-                      aria-label={`Download receipt ${receipt.receiptReference}`}
-                      className={styles.receiptDownload}
-                      href={`/coach/financials/receipts/${receipt.id}/download`}
-                    >
-                      Download receipt
-                      <Download aria-hidden="true" />
-                    </a>
+              {receiptRefunds.map((refund) => (
+                <article key={refund.id} className={styles.notice} data-tone="amber">
+                  <p>
+                    {refund.purpose === "mid_term_withdrawal" ? "Mid-term withdrawal" : "Legacy refund"}
+                    {" · "}{refund.refundReference} · {formatInr(refund.receiptAmountPaise)}
+                  </p>
+                  <small>
+                    {refund.withdrawalEffectiveOn
+                      ? `Member withdrew ${formatDueDate(refund.withdrawalEffectiveOn)} · `
+                      : ""}
+                    Refunded {formatDueDate(refund.refundedOn)} · {paymentMethodLabel(refund.method)} · {refund.lifecycle === "reversed" ? "Reversed" : "Recorded"}
+                  </small>
+                  {refund.receiptAmountPaise !== refund.amountPaise ? (
+                    <small>
+                      {formatInr(refund.receiptAmountPaise)} of this {formatInr(refund.amountPaise)} refund
+                      came from this receipt; the rest from another receipt for the same fee.
+                    </small>
                   ) : null}
-                  {receipt.externalReference || receipt.internalNote ? (
-                    <dl className={styles.receiptMeta}>
-                      {receipt.externalReference ? <div><dt>Reference</dt><dd>{receipt.externalReference}</dd></div> : null}
-                      {receipt.internalNote ? <div><dt>Internal note</dt><dd>{receipt.internalNote}</dd></div> : null}
-                    </dl>
-                  ) : null}
+                  {refund.externalReference ? <small>Reference · {refund.externalReference}</small> : null}
+                  {refund.internalNote ? <small>{refund.internalNote}</small> : null}
+                  <ul className={styles.entries} aria-label={`Fees covered by refund ${refund.refundReference}`}>
+                    {refund.allocations.map((allocation) => (
+                      <li key={allocation.paymentAllocationId}>
+                        <span>{allocation.feeReference}</span>
+                        <b>{formatInr(allocation.amountPaise)}</b>
+                      </li>
+                    ))}
+                  </ul>
+                  {readOnly ? null : <RefundReversal refund={refund} />}
+                </article>
+              ))}
 
-                  <div className={styles.receiptAllocations}>
-                    <span>Allocated to</span>
-                    <ul>
-                      {receipt.allocations.map((allocation) => (
-                        <li key={allocation.paymentAllocationId}>
-                          <span><strong>{allocation.description}</strong><small>{allocation.feeReference}</small></span>
-                          <strong>{formatInr(allocation.amountPaise)}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {receiptRefunds.length ? (
-                    <div className={styles.refundHistory}>
-                      <span>Refunds</span>
-                      {receiptRefunds.map((refund) => (
-                        <article key={refund.id}>
-                          <div>
-                            <strong>
-                              {refund.purpose === "mid_term_withdrawal"
-                                ? "Mid-term withdrawal"
-                                : "Legacy refund"}
-                              {" · "}{refund.refundReference}
-                            </strong>
-                            <small>
-                              {refund.withdrawalEffectiveOn
-                                ? `Member withdrew ${formatDueDate(refund.withdrawalEffectiveOn)} · `
-                                : ""}
-                              Refunded {formatDueDate(refund.refundedOn)} · {paymentMethodLabel(refund.method)} · {refund.lifecycle === "reversed" ? "Reversed" : "Recorded"}
-                            </small>
-                          </div>
-                          <strong>{formatInr(refund.receiptAmountPaise)}</strong>
-                          {refund.receiptAmountPaise !== refund.amountPaise ? (
-                            <p>
-                              {formatInr(refund.receiptAmountPaise)} of this {formatInr(refund.amountPaise)} refund
-                              came from this receipt; the rest from another receipt for the same fee.
-                            </p>
-                          ) : null}
-                          {refund.externalReference ? <p>Reference · {refund.externalReference}</p> : null}
-                          {refund.internalNote ? <p>{refund.internalNote}</p> : null}
-                          <ul className={styles.refundAllocations} aria-label={`Fees covered by refund ${refund.refundReference}`}>
-                            {refund.allocations.map((allocation) => (
-                              <li key={allocation.paymentAllocationId}>
-                                <span>{allocation.feeReference}</span>
-                                <strong>{formatInr(allocation.amountPaise)}</strong>
-                              </li>
-                            ))}
-                          </ul>
-                          {readOnly ? null : <RefundReversal refund={refund} />}
-                        </article>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {receipt.canRefund && !readOnly ? <RefundForm receipt={receipt} /> : null}
-                  {receipt.refundNeedsTrainingEnded && !readOnly ? (
-                    <p className={styles.managedInMembers}>
-                      If this player is leaving, end their training in Members first, then record
-                      the refund here.{" "}
-                      <Link href={`/coach/members?player=${encodeURIComponent(ledger.playerId)}`}>
-                        Open in Members
-                      </Link>
-                    </p>
-                  ) : null}
+              {showDownloads ? (
+                <div>
+                  <a
+                    aria-label={`Download receipt ${receipt.receiptReference}`}
+                    className={styles.button}
+                    href={`/coach/financials/receipts/${receipt.id}/download`}
+                  >
+                    <Download aria-hidden="true" /> Download receipt
+                  </a>
                 </div>
-              </details>
-            )
-          })}
-        </div>
-      ) : <div className={styles.emptyLedger}>No receipts have been recorded for this player yet.</div>}
-    </section>
+              ) : null}
+              {receipt.canRefund && !readOnly ? <RefundForm receipt={receipt} /> : null}
+              {receipt.refundNeedsTrainingEnded && !readOnly ? (
+                <p className={styles.notice}>
+                  If this player is leaving, end their training in Members first, then record
+                  the refund here.{" "}
+                  <Link href={`/coach/members?player=${encodeURIComponent(ledger.playerId)}`}>
+                    Open in Members
+                  </Link>
+                </p>
+              ) : null}
+            </div>
+          </details>
+        )
+      })}
+    </div>
   )
 }
