@@ -150,39 +150,38 @@ describe("moving back through onboarding before it is finished", () => {
   })
 
   it("renders the rail as inert when no way back is supplied", () => {
-    // The rail is used as a progress indicator elsewhere; without onSelect it
-    // must not sprout buttons.
+    // Without onSelect it is a progress indicator and must not sprout buttons.
     const html = renderToStaticMarkup(
       <StepRail current="session" reachedStage="session" />,
     )
 
     expect(html).not.toContain("<button")
-    expect(html).toContain("Assess")
+    expect(html).toContain("Assessment")
   })
 
-  it("shows the short stage name but keeps the full one for a screen reader", () => {
+  it("names each tab by the step, and keeps the painted name inside the accessible one", () => {
     /*
-     * The rail gives each stage a quarter of the screen, and at 320px that is 55px
-     * against 63.5px of unbreakable "ASSESSMENT" -- it crossed into the step beside
-     * it, and "NEW REQUESTS" only fitted by wrapping, which is what pulled the four
-     * markers onto three different heights below 393px.
-     *
-     * The short form is visible-text only. Each one is a prefix of the full stage
-     * name that the button's aria-label carries, so the accessible name still
-     * contains what is painted and speech input matches it (WCAG 2.5.3).
+     * The tab reads "Fee plan" while the button's aria-label says "Go back to Fee
+     * Plan": the accessible name still contains what is painted, so speech input
+     * matches it (WCAG 2.5.3).
      */
     const html = renderToStaticMarkup(
       <StepRail current="feePlan" onSelect={() => undefined} reachedStage="feePlan" />,
     )
 
-    expect(html).toContain("<strong>Assess</strong>")
-    expect(html).toContain("<strong>Request</strong>")
+    expect(html).toContain("Request</li>")
     expect(html).toContain('aria-label="Go back to Assessment"')
-    expect(html).not.toContain("<strong>Assessment</strong>")
+    expect(html).toContain('aria-label="Go back to Session"')
+    expect(html).toContain("Fee plan</li>")
+  })
 
-    for (const [visible, full] of [["Request", "New requests"], ["Assess", "Assessment"]]) {
-      expect(full.toLowerCase()).toContain(visible.toLowerCase())
-    }
+  it("shows a staff request only its one step", () => {
+    const html = renderToStaticMarkup(
+      <StepRail current="request" onSelect={() => undefined} reachedStage="request" staff />,
+    )
+
+    expect(html.match(/<li/gu)).toHaveLength(1)
+    expect(html).not.toContain("Assessment")
   })
 })
 
@@ -281,7 +280,7 @@ describe("a first schedule that ended before onboarding finished", () => {
     }))
 
     expect(html).toContain("first term has finished")
-    expect(html).not.toContain("Changes save as normal")
+    expect(html).not.toContain("Changes are fine")
   })
 
   it("does not show a start date nobody has chosen yet", () => {
@@ -293,7 +292,26 @@ describe("a first schedule that ended before onboarding finished", () => {
       trainingStartOn: "2026-09-03",
     }))
 
-    expect(html).toContain("<dt>Training start</dt><dd>Pending</dd>")
+    expect(html).toContain("<strong>Training from</strong><small>Not set yet</small>")
+  })
+
+  it("names the start date and the fee by their labels alone", () => {
+    // The help and error text used to sit inside the <label>, so a screen reader read them as the field's name.
+    const session = editorMarkup(playerCase({ stage: "session" }))
+    expect(session).toMatch(/<label[^>]*for="onboarding-player-1-effective-from"[^>]*>Training starts on<\/label>/u)
+    expect(session).toContain('id="onboarding-player-1-effective-from"')
+
+    const fee = editorMarkup(playerCase({ stage: "feePlan" }))
+    expect(fee).toMatch(/<label[^>]*for="onboarding-player-1-fee"[^>]*>Monthly fee<\/label>/u)
+    expect(fee).toContain('aria-describedby="onboarding-player-1-fee-help"')
+  })
+
+  it("keeps the joining dates on every player step, not only the request", () => {
+    for (const stage of ["assessment", "session", "feePlan"] as const) {
+      expect(editorMarkup(playerCase({ stage }))).toContain('class="coach-member-joining"')
+    }
+    expect(editorMarkup(playerCase({ requestedRole: "coach", stage: "request" })))
+      .not.toContain('class="coach-member-joining"')
   })
 })
 

@@ -236,6 +236,7 @@ function ledger(overrides: Partial<PlayerFinancialLedgerView> = {}): PlayerFinan
     charges: [],
     enrollmentDefaults: null,
     feePlan: null,
+    feePlanMismatch: false,
     feePlanSetupReady: false,
     fullName: "Mira Rao",
     management: { concessions: [], receipts: [], refunds: [] },
@@ -318,6 +319,28 @@ describe("the coach's fee record", () => {
     expect(html).toContain("₹4,000")
     expect(html).toContain("Ends 31 Oct 2026")
     expect(html).toContain("From November 2026: Beginner · Weekday · 5-day plan, ₹4,500 a month.")
+  })
+
+  it("says when the fee plan is not for the player's training, so no fee is issued", () => {
+    const html = renderToStaticMarkup(<PlayerLedger ledger={ledger({
+      feePlan: {
+        academyPlan: "weekday-5-day",
+        agreedMonthlyFeePaise: 400_000,
+        batch: "Weekday",
+        effectiveFrom: "2026-07-01",
+        effectiveTo: null,
+        id: "plan-now",
+        label: "Beginner · Weekday · 5-day plan",
+        level: "Beginner",
+        recordRevision: 0,
+        standing: "running",
+        status: "active",
+        upcoming: null,
+      },
+      feePlanMismatch: true,
+    })} period="2026-10" />)
+    expect(html).toContain("not for their current level, batch and plan, so no monthly fee is")
+    expect(html).toContain("Set it again with Change fee")
   })
 
   it("lists a refund under a receipt with the share that came from it", () => {

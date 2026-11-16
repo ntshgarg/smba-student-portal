@@ -597,6 +597,25 @@ describe("archiving an assistant coach who has left", () => {
         { coachAccountId: SECOND_JUNIOR_ID, dateKey: "2026-08-07", choice: "present", expectedChoice: "cleared" },
       ],
     })
+    // A trusted browser, a code screen left open, and a PIN.
+    const signInRow = (id: string, identifier: string) => ({
+      createdAt: archivedAt,
+      expiresAt: new Date(archivedAt.getTime() + 86_400_000),
+      id,
+      identifier,
+      updatedAt: archivedAt,
+      value: SECOND_JUNIOR_ID,
+    })
+    database.insert(schema.authVerifications).values([
+      signInRow("trusted-browser", "trust-device-sha256:abc"),
+      signInRow("open-code-screen", "2fa-sha256:def"),
+    ]).run()
+    database.insert(schema.authPinCredentials).values({
+      accountId: SECOND_JUNIOR_ID,
+      createdAt: archivedAt,
+      pinHash: "hash",
+      updatedAt: archivedAt,
+    }).run()
 
     expect(memberService.archiveCoachRecord({
       coachId: HEAD_COACH_ID,
@@ -614,6 +633,10 @@ describe("archiving an assistant coach who has left", () => {
       .where(eq(schema.authMethods.accountId, SECOND_JUNIOR_ID)).get()?.revokedAt).toEqual(archivedAt)
     expect(database.select().from(schema.authCredentialStates)
       .where(eq(schema.authCredentialStates.accountId, SECOND_JUNIOR_ID)).get()?.status).toBe("revoked")
+    expect(database.select().from(schema.authVerifications)
+      .where(eq(schema.authVerifications.value, SECOND_JUNIOR_ID)).all()).toEqual([])
+    expect(database.select().from(schema.authPinCredentials)
+      .where(eq(schema.authPinCredentials.accountId, SECOND_JUNIOR_ID)).all()).toEqual([])
     expect(getCoachAccessProfile(SECOND_JUNIOR_ID, { database })).toBeNull()
     expect(listJuniorCoachProfiles({ database, requesterAccountId: HEAD_COACH_ID })
       .map((coach) => coach.accountId)).toEqual([FIRST_JUNIOR_ID])

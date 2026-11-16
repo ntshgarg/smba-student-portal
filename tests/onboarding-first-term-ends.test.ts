@@ -462,6 +462,26 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       expect.objectContaining({ effectiveTo: "2026-11-30", status: "ended" }),
     ])
 
+    // Onboarding is finished, so the fee and level refusals name the booked end,
+    // and the level change is refused before any schedule is touched.
+    expect(() => fees.changeMonthlyFee({
+      idempotencyKey: "fee-after-booked-end",
+      monthlyFeePaise: 350_000,
+      playerId: mira,
+    }, context())).toThrow(/fees stop from 1 December 2026/u)
+    const fiveDays = series("13:00", "2026-10-01", "2027-03-31", [1, 2, 3, 4, 5])
+    const placesBefore = places(mira)
+    expect(() => changes.changeScheduleThisMonth({
+      ...classification,
+      academyPlan: "weekday-5-day",
+      monthlyFeePaise: 400_000,
+      playerId: mira,
+      seriesId: fiveDays,
+      startsOn: today,
+      weekdays: [1, 2, 3, 4, 5],
+    }, context())).toThrow(/fees stop after 30 November 2026/u)
+    expect(places(mira)).toEqual(placesBefore)
+
     // On the 1st the end happens and nothing is left open for Archive to wait on.
     changes.applyDueTrainingChanges({ database, now: new Date("2026-12-01T05:00:00.000Z") })
     expect(database.select().from(schema.playerEnrollments)
@@ -508,6 +528,14 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       input: { expectedRevision: revision, memberId: pia },
       now,
     })).toMatchObject({ ok: false, message: expect.stringContaining("An End training is booked for 1 December 2026") })
+    // Its day has come but it is not applied yet: reloading may not help for
+    // up to an hour after a fault, so it says so instead of "Reload in a moment".
+    expect(members.archiveMemberRecord({
+      coachId,
+      database,
+      input: { expectedRevision: revision, memberId: pia },
+      now: new Date("2026-12-02T05:00:00.000Z"),
+    })).toMatchObject({ ok: false, message: expect.stringContaining("can take up to an hour") })
   })
 
   it("leaves a holiday out of an ended first term's last month, and counts it once removed", async () => {

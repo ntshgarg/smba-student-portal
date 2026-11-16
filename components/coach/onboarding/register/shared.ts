@@ -1,5 +1,9 @@
 import type { ActionFeedback } from "@/components/inline-notice"
-import type { PlayerOnboardingStage } from "@/lib/coach/onboarding"
+import type {
+  PlayerOnboardingCase,
+  PlayerOnboardingStage,
+  PlayerOnboardingWorkspace,
+} from "@/lib/coach/onboarding"
 import { formatAcademyDate, formatDateKey } from "@/lib/format"
 
 /**
@@ -9,31 +13,22 @@ import { formatAcademyDate, formatDateKey } from "@/lib/format"
 export type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
 
 /**
- * `railLabel` exists because the step rail is the one place these names are given
- * a quarter of the screen each. At 320px that track is 55px, and "ASSESSMENT" at
- * the rail's 9px sets 63.5px of unbreakable single word -- it crossed into the
- * step beside it. "NEW REQUESTS" fits only by wrapping to two lines, and that wrap
- * is what pulled the four markers onto three different heights below 393px.
- *
- * Shortening the rail alone rather than `label` everywhere: the same strings are
- * the queue's stage stamps and the stage-count captions, where they have room and
- * where "New requests" reads better than "Request".
+ * `label` counts a stage across the queue ("New requests"); `tabLabel` names the
+ * one step a person is on, in the open record's tabs and the queue row's pill.
+ * Each tab label is a prefix of its `label` or names the same step, so the tab
+ * buttons' aria-labels, which use `label`, still match what is painted.
  */
 export const STAGES: Array<{
   key: PlayerOnboardingStage
   label: string
-  railLabel: string
+  tabLabel: string
   summaryKey: "newRequests" | "assessment" | "session" | "feePlan"
 }> = [
-  { key: "request", label: "New requests", railLabel: "Request", summaryKey: "newRequests" },
-  { key: "assessment", label: "Assessment", railLabel: "Assess", summaryKey: "assessment" },
-  { key: "session", label: "Session", railLabel: "Session", summaryKey: "session" },
-  { key: "feePlan", label: "Fee Plan", railLabel: "Fee plan", summaryKey: "feePlan" },
+  { key: "request", label: "New requests", tabLabel: "Request", summaryKey: "newRequests" },
+  { key: "assessment", label: "Assessment", tabLabel: "Assessment", summaryKey: "assessment" },
+  { key: "session", label: "Session", tabLabel: "Session", summaryKey: "session" },
+  { key: "feePlan", label: "Fee Plan", tabLabel: "Fee plan", summaryKey: "feePlan" },
 ]
-
-export function folio(index: number) {
-  return String(index + 1).padStart(2, "0")
-}
 
 export function shortDate(value: string) {
   return formatDateKey(value.slice(0, 10), {
@@ -44,7 +39,47 @@ export function shortDate(value: string) {
   })
 }
 
+/** How long the 90-day clean-up leaves a request (lib/telemetry/retention.ts). */
+export function removalLabel(days: number | null | undefined) {
+  if (days === null || days === undefined) return null
+  if (days <= 0) return "removed soon"
+  return `removed in ${days} ${days === 1 ? "day" : "days"}`
+}
+
 /** For a moment in time (requested, rejected), read in India time; `shortDate` is for date-only keys. */
 export function shortInstant(value: string) {
   return formatAcademyDate(value, { month: "short", year: undefined })
+}
+
+/**
+ * The queue under a stage filter. A stage that has emptied stops filtering, so
+ * the list never goes blank under a pressed tile. The open record is shown
+ * whatever the filter: approving, assessing or assigning moves a person to the
+ * next stage, and a link can name anyone, and hiding them would unmount a form
+ * mid-edit and drop focus on the page.
+ */
+export function filterCases(
+  { cases, summary }: PlayerOnboardingWorkspace,
+  stageFilter: PlayerOnboardingStage | null,
+  openId: string | null,
+) {
+  const stage = STAGES.find((item) => item.key === stageFilter)
+  const activeFilter = stage && summary[stage.summaryKey] > 0 ? stage.key : null
+  return {
+    activeFilter,
+    shownCases: activeFilter
+      ? cases.filter((item) => item.stage === activeFilter || item.id === openId)
+      : cases,
+  }
+}
+
+/**
+ * Who opens after the open record leaves the queue: a neighbour the coach can
+ * see, or, once the filtered list has nobody else, the whole queue's.
+ */
+export function nextCase(shownCases: PlayerOnboardingCase[], allCases: PlayerOnboardingCase[], leavingId: string) {
+  const clearsFilter = shownCases.length < 2 && shownCases !== allCases
+  const neighbours = clearsFilter ? allCases : shownCases
+  const index = neighbours.findIndex((item) => item.id === leavingId)
+  return { clearsFilter, item: neighbours[index + 1] ?? neighbours[index - 1] ?? null }
 }

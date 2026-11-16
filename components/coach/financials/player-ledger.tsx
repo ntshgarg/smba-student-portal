@@ -72,7 +72,17 @@ export function PlayerLedger({
               {formatInr(ledger.feePlan.upcoming.agreedMonthlyFeePaise)} a month.
             </p>
           ) : null}
-          {ledger.archived ? null : (
+          {ledger.archived ? null : ledger.feePlanMismatch ? (
+            // Fee issuing passes over a plan that is not for the player's
+            // training, so this is the only place it would otherwise go unseen.
+            <p className={styles.managedInMembers} role="note">
+              This fee plan is not for their current level, batch and plan, so no monthly fee is
+              issued. Set it again with Change fee in the{" "}
+              <Link href={`/coach/members?player=${encodeURIComponent(ledger.playerId)}`}>
+                player&apos;s record in Members
+              </Link>.
+            </p>
+          ) : (
             // Fee changes, concessions and ending training are made from the
             // player's record in Members (head coach, 5 Oct 2026), next to the
             // schedule they usually change with. This record is for money.

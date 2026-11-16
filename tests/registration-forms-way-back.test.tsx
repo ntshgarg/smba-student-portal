@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
@@ -9,6 +12,7 @@ vi.mock("@/app/coach/actions", () => ({
 
 const { RejectedRequests } = await import("@/components/coach/onboarding/rejected-requests")
 const { RequestStep } = await import("@/components/coach/onboarding/register/request-step")
+const { OnboardingTimeline } = await import("@/components/coach/onboarding/register/onboarding-timeline")
 
 import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
 
@@ -22,6 +26,7 @@ describe("the head coach's Rejected list", () => {
           fullName: "Mira Rao",
           id: "request-1",
           rejectedAt: "2026-11-03T04:00:00.000Z",
+          removedInDays: 77,
           requestedRole: "player",
         }]}
       />,
@@ -31,6 +36,8 @@ describe("the head coach's Rejected list", () => {
     expect(html).toContain("Mira Rao")
     expect(html).toContain("mira.family@example.com")
     expect(html).toContain("Undo rejection")
+    // The 90-day clean-up deletes it; the head coach sees how long is left.
+    expect(html).toContain("removed in 77 days")
   })
 
   it("dates a rejection in India time, not UTC", () => {
@@ -43,6 +50,7 @@ describe("the head coach's Rejected list", () => {
           id: "request-1",
           // 01:30 on 13 Nov in India.
           rejectedAt: "2026-11-12T20:00:00.000Z",
+          removedInDays: 86,
           requestedRole: "player",
         }]}
       />,
@@ -89,12 +97,28 @@ describe("the duplicate hint on a request", () => {
     expect(html).toContain("Approving gives them a new Academy ID")
   })
 
+  it("keeps the contact details behind a toggle that stays in place", () => {
+    // The button used to remove itself when pressed, dropping keyboard focus on the page.
+    const html = renderToStaticMarkup(<RequestStep item={request} onSuccess={vi.fn()} />)
+
+    expect(html).toContain('aria-controls="onboarding-request-1-contact" aria-expanded="false"')
+    expect(html).toContain("Show contact")
+    expect(html).toMatch(/<dl id="onboarding-request-1-contact" hidden="">/u)
+  })
+
+  it("points a rejection at where Undo is on this page", () => {
+    const source = readFileSync(path.join(process.cwd(), "components/coach/onboarding/register/request-step.tsx"), "utf8")
+
+    expect(source).toContain("use Undo under Rejected requests further down this page")
+    expect(source).not.toContain("below the register")
+  })
+
   it("dates a request in India time, not UTC", () => {
     const html = renderToStaticMarkup(
       // 01:30 on 13 Nov in India.
-      <RequestStep item={{ ...request, requestedAt: "2026-11-12T20:00:00.000Z" }} onSuccess={vi.fn()} />,
+      <OnboardingTimeline item={{ ...request, requestedAt: "2026-11-12T20:00:00.000Z" }} />,
     )
 
-    expect(html).toContain("<dd>13 Nov</dd>")
+    expect(html).toContain("13 Nov 2026")
   })
 })

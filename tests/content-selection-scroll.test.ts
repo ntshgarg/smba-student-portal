@@ -12,7 +12,7 @@ describe("content selection focus", () => {
     const onboarding = source("components/coach/onboarding/player-onboarding-register.tsx")
 
     expect(onboarding).toMatch(
-      /onboarding-editor-title-\$\{selectedItem\.id\}`\)\?\.focus\(\{\s+preventScroll: true,?\s+\}\)/u,
+      /onboarding-current-step-\$\{selectedItem\.id\}`\)\?\.focus\(\{\s+preventScroll: true,?\s+\}\)/u,
     )
   })
 

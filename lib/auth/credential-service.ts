@@ -532,23 +532,30 @@ export async function setPinCredential(input: {
     throw new Error("PIN login is unavailable for this account.")
   }
   const pinHash = await hashPassword(input.pin)
-  const existing = hasPinCredential(input.accountId, { database })
-  database.insert(authPinCredentials).values({
-    accountId: input.accountId,
-    pinHash,
-    createdAt: now,
-    updatedAt: now,
-  }).onConflictDoUpdate({
-    target: authPinCredentials.accountId,
-    set: { pinHash, updatedAt: now },
-  }).run()
-  writeAuthSecurityEvent({
-    accountId: input.accountId,
-    actorAccountId: input.accountId,
-    eventType: existing ? "pin_changed" : "pin_created",
-    outcome: "success",
-  }, { database, now })
-  return { created: !existing }
+  return database.transaction((tx) => {
+    // Hashing takes a moment; an Archive in that gap must win, as it does for
+    // a password reset, not leave a PIN on an archived account.
+    if (!pinEligibleAccount(input.accountId, tx)) {
+      throw new Error("PIN login is unavailable for this account.")
+    }
+    const existing = hasPinCredential(input.accountId, { database: tx })
+    tx.insert(authPinCredentials).values({
+      accountId: input.accountId,
+      pinHash,
+      createdAt: now,
+      updatedAt: now,
+    }).onConflictDoUpdate({
+      target: authPinCredentials.accountId,
+      set: { pinHash, updatedAt: now },
+    }).run()
+    writeAuthSecurityEvent({
+      accountId: input.accountId,
+      actorAccountId: input.accountId,
+      eventType: existing ? "pin_changed" : "pin_created",
+      outcome: "success",
+    }, { database: tx, now })
+    return { created: !existing }
+  }, { behavior: "immediate" })
 }
 
 export function removePinCredential(accountId: string, {

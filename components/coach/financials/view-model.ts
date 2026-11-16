@@ -9,7 +9,7 @@ import type {
   FeePlanStanding,
   PlayerFeeRecord,
 } from "@/lib/finance/types"
-import { academyPlanLabel } from "@/lib/training/academy-plans"
+import { academyPlanLabel, feePlanMatchesTraining } from "@/lib/training/academy-plans"
 
 function planLabel(plan: NonNullable<FeePlanStanding["current"]>) {
   return `${plan.level} · ${plan.batch} · ${academyPlanLabel(plan.academyPlan)}`
@@ -77,6 +77,7 @@ function chargeView(charge: ChargeView): FinancialChargeView {
 }
 
 export function toPlayerFinancialLedgerView(ledger: PlayerFeeRecord): PlayerFinancialLedgerView {
+  const billingPlan = ledger.feePlans.upcoming ?? ledger.feePlans.current
   return {
     academyId: ledger.academyId,
     archived: "archived" in ledger ? Boolean(ledger.archived) : false,
@@ -85,6 +86,8 @@ export function toPlayerFinancialLedgerView(ledger: PlayerFeeRecord): PlayerFina
       .map(chargeView),
     feePlanSetupReady: ledger.feePlanSetupReady,
     feePlan: feePlanView(ledger.feePlans),
+    feePlanMismatch: Boolean(billingPlan && ledger.enrollmentDefaults
+      && !feePlanMatchesTraining(billingPlan, ledger.enrollmentDefaults)),
     onboardingComplete: ledger.onboardingComplete,
     enrollmentDefaults: ledger.enrollmentDefaults ? {
       ...ledger.enrollmentDefaults,

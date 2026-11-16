@@ -63,7 +63,6 @@ describe("onboarding reset guidance", () => {
      */
     const html = render(player())
     expect(html).toContain("Reset session assignment")
-    expect(html).toContain("set on the Session step")
     expect(html).toContain("level, batch or Training plan")
     expect(html).not.toContain("no other way back")
   })
@@ -90,7 +89,7 @@ describe("onboarding reset guidance", () => {
      */
     const html = render(player({ trainingStartOn: "2026-12-01" }))
     expect(html).not.toContain("Fee completion opens on")
-    expect(html).toContain("Review fee timeline")
+    expect(html).toContain("Review fees")
     expect(html).toContain("Reset session assignment")
   })
 
@@ -98,7 +97,7 @@ describe("onboarding reset guidance", () => {
     const html = render(player())
     const submit = /<button[^>]*type="submit"[^>]*>/u.exec(html)?.[0]
     expect(submit).toBeDefined()
-    expect(html).toContain("Review fee timeline")
+    expect(html).toContain("Review fees")
     expect(submit).toContain('aria-disabled="true"')
     // Held by aria-disabled, NOT the disabled attribute: a disabled button leaves
     // the tab order, so the coach cannot reach it to learn why it is held.

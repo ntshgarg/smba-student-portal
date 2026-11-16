@@ -244,7 +244,7 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["components/coach/financials/financials.module.css", "@media (min-width: 721px)", ".balanceAllocationInput input", "16px"],
   ["components/coach/financials/financials.module.css", "@media (max-width: 720px)", ".balanceMetric > strong", "30px"], // the one with nothing to protect
   ["components/coach/financials/financials.module.css", "@media (max-width: 720px), (pointer: coarse)", ".balanceField input", "16px"],
-  ["components/coach/onboarding/player-onboarding-register.module.css", "@media (max-width: 700px)", ".threeFieldGrid select", "16px"],
+  ["components/coach/onboarding/player-onboarding-register.module.css", "@media (max-width: 720px), (pointer: coarse)", ".entry input", "16px"],
   ["components/coach/attendance-adjustments-workspace.module.css", "@media (max-width: 720px), (pointer: coarse)", ".playerField select", "16px"],
   ["components/coach/attendance-register.module.css", "@media (max-width: 720px), (pointer: coarse)", ".pill select", "16px"],
   // The touch half of the focus-zoom floor, lifted out of the width-only blocks that

@@ -1,1591 +1,1211 @@
 .page {
-  min-height: calc(100vh - var(--portal-header-height));
-  padding: clamp(26px, 3.6vw, 52px) clamp(22px, 4.5vw, 68px) clamp(54px, 7vw, 96px);
-  border-top: 1px solid var(--line);
-  background: var(--ivory);
-  color: var(--navy);
+  padding-block: var(--space-block) var(--space-content);
 }
 
-.backRow a {
+.back a {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
-  gap: 9px;
-  color: var(--steel);
-  font-size: 0.6875rem;
-  font-weight: var(--weight-control);
-  text-decoration: none;
+  gap: 6px;
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
 }
 
-.backRow svg {
-  width: 15px;
-  height: 15px;
+.back svg {
+  width: 16px;
+  height: 16px;
 }
 
-.pageHeader {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.52fr);
-  align-items: end;
-  gap: clamp(36px, 8vw, 120px);
-  margin-top: clamp(26px, 3.8vw, var(--space-content));
-  padding-bottom: clamp(22px, 2.8vw, 34px);
-  border-bottom: 1px solid var(--line);
-}
-
-.pageHeader h1 {
-  max-width: 840px;
-  margin-top: 13px;
+.title {
+  margin-top: var(--space-tight);
   color: var(--navy);
-  font-size: clamp(48px, 5.2vw, 72px);
-  font-weight: 560;
-  letter-spacing: -0.065em;
-  line-height: 0.94;
+  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  overflow-wrap: anywhere;
 }
 
-.pageHeader > p {
-  max-width: 430px;
+.sub {
+  margin-top: 6px;
   color: var(--steel);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(17px, 1.55vw, 21px);
-  font-style: italic;
-  line-height: 1.42;
+  font-size: var(--type-operational-body);
+  font-weight: 600;
 }
 
 .workspaceNotice {
-  margin-top: 12px;
+  margin-top: var(--space-copy);
 }
 
-.dateTimeline {
+/* Stage counts that filter the list. */
+.filters {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  /* The 18px below it had no partner above, so the descenders of the paragraph
-     that introduces this grid rested about 1px off its top rule while every other
-     block boundary in the editor holds 12-20px. Symmetric now. */
-  margin-top: 18px;
-  margin-bottom: 18px;
-  border: 1px solid var(--line);
+  gap: var(--space-tight);
+  margin-block: 18px var(--space-copy);
 }
 
-.dateTimeline > div {
-  min-width: 0;
-  padding: 11px 12px;
-  border-right: 1px solid var(--line);
-}
-
-.dateTimeline > div:last-child {
-  border-right: 0;
-}
-
-.dateTimeline dt {
-  color: var(--red);
-  font-size: var(--type-operational-floor);
-  font-weight: 820;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.dateTimeline dd {
-  margin-top: 5px;
-  overflow-wrap: anywhere;
-  color: var(--navy);
-  font-size: var(--type-operational-floor);
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.stageSummary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: clamp(var(--space-group), 3vw, 38px);
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 64%, transparent);
-}
-
-.stageSummary > div {
-  position: relative;
+.filters button {
   display: grid;
   min-width: 0;
-  min-height: 86px;
-  /*
-   * `minmax(0, 1fr)`, not `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, so the
-   * caption track could never shrink below the min-content of its longest
-   * unbreakable word -- and "Assessment" is the only caption here that is one
-   * word. Below 350px it stopped shrinking, overran the cell and painted across
-   * the panel's right rule; at 320 about 2.8px of the final T sat outside the
-   * panel entirely. The other three captions are two words and wrapped instead,
-   * which is why only this one showed it.
-   *
-   * That overrun is new since 7396bf9. The caption is on --type-operational-floor,
-   * which went 10px -> 11px; measured at 320px it now ends 4.7px past the cell it
-   * had cleared by 2.9px before. The type raise did not cause the fragility, it
-   * spent the margin that was hiding it.
-   */
-  grid-template-columns: auto minmax(0, 1fr);
-  /*
-   * `baseline`, not `center`. When a caption wraps -- "New requests" does below
-   * 382px -- centring aligned the numeral against the middle of a two-line block,
-   * so it sat 6.9px off both of its own lines and off the single-line caption
-   * beside it. Baseline puts the numeral on the caption's first line at every
-   * width, wrapped or not.
-   */
-  align-items: baseline;
-  gap: 13px;
-  padding: var(--space-copy) 20px;
-  border-right: 1px solid var(--line);
-}
-
-.stageSummary > div:last-child {
-  border-right: 0;
-}
-
-.stageSummary > div::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 3px;
-  background: transparent;
-  content: "";
-}
-
-.stageSummary > .activeStage {
-  background: var(--ivory-deep);
-}
-
-.stageSummary > .activeStage::after {
-  background: var(--red);
-}
-
-.stageSummary strong {
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(30px, 2.8vw, 40px);
-  font-style: italic;
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  line-height: var(--leading-display-light);
-}
-
-.stageSummary p {
-  color: var(--navy);
-  font-size: 0.625rem;
-  font-weight: 820;
-  letter-spacing: var(--tracking-label);
-  line-height: 1.25;
-  text-transform: uppercase;
-}
-
-.register {
-  margin-top: 20px;
-  border: 1px solid var(--line);
-  background: var(--paper);
-}
-
-.registerHeading {
-  display: flex;
-  min-height: 52px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--line);
-}
-
-.registerHeading h2 {
-  color: var(--navy);
-  font-size: 0.6875rem;
-  font-weight: 830;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.registerHeading p {
-  color: var(--steel);
-  font-size: 0.625rem;
-  font-weight: var(--weight-emphasis);
-}
-
-.registerHeading p strong {
-  color: var(--navy);
-  font-weight: var(--weight-label);
-}
-
-.rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rows > li + li {
-  border-top: 1px solid var(--line);
-}
-
-.row {
-  display: grid;
-  min-height: 78px;
-  grid-template-columns: 44px minmax(180px, 1.15fr) minmax(96px, 0.58fr) minmax(190px, 1fr) 132px;
-  align-items: center;
-  gap: clamp(12px, 1.6vw, 26px);
-  padding: 12px var(--space-copy);
-  transition: background-color var(--duration-fast) var(--ease-standard);
-}
-
-.row:hover {
-  background: var(--ivory);
-}
-
-.expandedRow > .row {
-  background: var(--ivory-deep);
-  box-shadow: var(--shadow-keyline-bottom);
-}
-
-.folio {
-  color: var(--red);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.6875rem;
-  font-style: italic;
-  font-weight: 500;
-  line-height: var(--leading-display-light);
-}
-
-.identity,
-.nextAction {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.identity strong {
-  overflow: hidden;
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.3125rem;
-  font-weight: 620;
-  letter-spacing: -0.02em;
-  line-height: 1.08;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.identity small,
-.nextAction small {
-  overflow-wrap: anywhere;
-  color: var(--steel);
-  font-size: 0.625rem;
-  font-weight: 620;
-  line-height: 1.35;
-}
-
-.stageStamp {
-  justify-self: start;
-  padding: 6px 9px;
-  border: 1px solid var(--steel);
-  color: var(--navy);
-  font-size: var(--type-operational-floor);
-  font-weight: 830;
-  letter-spacing: var(--tracking-label);
-  line-height: var(--leading-display-light);
-  text-transform: uppercase;
-}
-
-.nextAction strong {
-  color: var(--navy);
-  font-size: 0.75rem;
-  font-weight: 780;
-  line-height: 1.25;
-}
-
-.openButton,
-.formActions > a,
-.formActions > button,
-.primaryButton {
-  display: inline-flex;
   min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  border: 1px solid var(--navy);
-  border-radius: 0;
-  background: transparent;
-  color: var(--navy);
-  font-family: inherit;
-  font-size: 0.6875rem;
-  font-weight: 790;
-  line-height: 1.2;
-  text-align: center;
-  text-decoration: none;
-  transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), var(--press-transition);
-}
-
-.openButton {
-  width: 100%;
-  padding: 0 13px;
-}
-
-.openButton svg,
-.formActions svg,
-.primaryButton svg {
-  width: 15px;
-  height: 15px;
-}
-
-.openButton:hover,
-.formActions > a:hover {
-  background: var(--navy);
-  color: var(--white);
-}
-
-.editor {
-  display: grid;
-  grid-template-columns: minmax(135px, 0.22fr) minmax(0, 1fr);
-  gap: clamp(var(--space-group), 3vw, 46px);
-  padding: clamp(22px, 3vw, 38px) clamp(18px, 3vw, 42px);
-  border-top: 1px solid var(--line);
-  background: var(--paper);
-}
-
-.stepRail {
-  display: grid;
-  align-content: start;
-  gap: 15px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.stepRail li,
-.stepRail li > button {
-  display: grid;
-  grid-template-columns: 29px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  color: var(--steel);
-}
-
-/*
- * A step the case has already reached is a button back to it. It must read as
- * part of the rail rather than as a control bolted onto it, so it borrows the
- * li's own grid and keeps none of the button chrome.
- */
-.stepRail li > button {
-  width: 100%;
-  /*
-   * Vertical padding rather than none: at 28px the marker alone left the target
-   * well under the 44px the rest of this workspace holds to, with a 15px rail
-   * gap as the only separation between two adjacent ones.
-   */
-  padding: var(--space-tight) 0;
-  margin: calc(-1 * var(--space-tight)) 0;
-  border: 0;
-  background: none;
+  gap: 2px;
+  padding: 12px 14px;
+  border: var(--frost-border);
+  border-radius: 18px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+  color: var(--steel-dark);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-/*
- * A pressable step has to look pressable before it is hovered. The first attempt
- * underlined the label in `--line`, which is the colour of a hairline rule --
- * near-invisible against uppercase 9px text. The head coach, looking straight at
- * a Fee Plan step with two live buttons above it, concluded the flow was a dead
- * end. So the cue is the navy the rest of the workspace uses for "this is a
- * control", carried on both the label and the marker.
- */
-.stepRail li > button strong {
+.filters b {
   color: var(--navy);
-  text-decoration: underline;
-  text-decoration-color: var(--navy-soft);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-.stepRail li > button span {
-  border-color: var(--navy);
-}
-
-.stepRail li > button:hover strong,
-.stepRail li > button:focus-visible strong {
-  color: var(--navy);
-  text-decoration-color: currentcolor;
-}
-
-.stepRail li > button:hover span {
-  border-color: currentcolor;
-}
-
-.stepRail li span {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-circle);
-  background: var(--white);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: var(--type-operational-floor);
+  font-size: 1.875rem;
   font-style: italic;
-  font-weight: var(--weight-emphasis);
+  font-weight: 500;
+  line-height: 1;
 }
 
-.stepRail li span svg {
-  width: 13px;
-  height: 13px;
+.filters span {
+  overflow-wrap: anywhere;
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
-/*
- * `place-items: center` centres the text's font box, and Newsreader italic lining
- * figures leave almost all of their 3px descent empty -- so the visible digits sat
- * about 1.5px above the middle while the tick, being a path with real geometry on
- * both sides, sat dead centre. 3px of padding moves the content box's centre down
- * half of it. Scoped away from `.completeStep`, which is the only state holding
- * the tick rather than a number.
- */
-.stepRail li:not(.completeStep) span {
-  padding-top: 3px;
+.filters button[aria-pressed="true"] {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: var(--ivory);
 }
 
-.stepRail li strong {
-  font-size: var(--type-operational-floor);
-  font-weight: 820;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+.filters button[aria-pressed="true"] b {
+  color: var(--ivory);
 }
 
-.stepRail .completeStep span {
-  border-color: var(--green);
-  background: var(--green-soft);
+.filters button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.filters button:focus-visible,
+.caseHead:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* --- The queue --- */
+.rows {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.case {
+  /* A grid item is otherwise as wide as its widest content: the open record's
+     tabs would push the whole list past a phone's width. */
+  min-width: 0;
+  border: var(--frost-border);
+  border-radius: 20px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.caseHead {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) minmax(0, 380px) 20px;
+  align-items: center;
+  gap: var(--space-copy);
+  padding: 14px 18px;
+  border-radius: 20px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.badge {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: var(--frost-border);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--white) 60%, transparent);
+  box-shadow: inset 0 1px 0 var(--white), 0 6px 14px -10px color-mix(in srgb, var(--navy) 50%, transparent);
+  color: var(--navy);
+  font-size: var(--type-operational-body);
+  font-weight: 800;
+}
+
+.name {
+  display: grid;
+  min-width: 0;
+}
+
+.name strong {
+  overflow-wrap: anywhere;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.name em {
+  font-style: normal;
+}
+
+.name small {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+/* The stage and the next step share one box, in the same column on every row. */
+.step {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--white) 80%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--white) 55%, transparent);
+  box-shadow: inset 0 1px 0 var(--white);
+}
+
+.next {
+  display: grid;
+  min-width: 0;
+  color: var(--steel-dark);
+  font-size: var(--type-operational-body);
+}
+
+.next small {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.pill {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy) 7%, transparent);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pill::before {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-circle);
+  background: currentColor;
+  content: "";
+}
+
+.pill[data-stage="request"] {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  color: var(--red-dark);
+}
+
+.pill[data-stage="session"] {
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+}
+
+.pill[data-stage="feePlan"] {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
   color: var(--green);
 }
 
-.stepRail .currentStep {
-  color: var(--navy);
+.mark {
+  display: grid;
+  place-items: center;
+  color: var(--steel-dark);
 }
 
-.stepRail .currentStep span {
-  border: 2px solid var(--red);
-  color: var(--red);
+.mark svg {
+  width: 18px;
+  height: 18px;
 }
 
-.editorWork {
-  min-width: 0;
+/* Open: the row's link is the top of the navy band. */
+.openCase {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--navy) 60%, transparent);
 }
 
-.editorHeading > span {
-  color: var(--red);
-  font-size: var(--type-operational-floor);
-  font-weight: 830;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.openCase .caseHead {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 20px var(--space-group) 0;
+  border-radius: 22px 22px 0 0;
+  background: var(--navy);
+  color: var(--ivory);
 }
 
-.editorHeading h3 {
-  margin-top: 6px;
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(27px, 2.5vw, 35px);
-  font-style: italic;
-  font-weight: 560;
-  letter-spacing: -0.025em;
+.openCase .caseHead:focus-visible {
+  outline-color: var(--ivory);
+  outline-offset: -4px;
+}
+
+.openCase :is(.badge, .step) {
+  display: none;
+}
+
+.openCase .name strong {
+  font-size: clamp(1.625rem, 3vw, 1.875rem);
+  letter-spacing: -0.045em;
   line-height: 1.05;
 }
 
-.editorHeading p {
-  margin-top: 5px;
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 620;
-  line-height: 1.45;
-}
-
-.compactForm,
-.sessionForm,
-.feePlanForm,
-.requestStep,
-.recoveryPanel {
-  margin-top: 20px;
-}
-
-.threeFieldGrid,
-.feeFields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid var(--line);
-}
-
-.threeFieldGrid > label,
-.feeFields > label {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-tight);
-  padding: 13px;
-  border-right: 1px solid var(--line);
-}
-
-.derivedFeeMonth {
-  display: grid;
-  min-width: 0;
-  align-content: center;
-  gap: 5px;
-  padding: 13px;
-}
-
-.derivedFeeMonth > span,
-.feePreview header span,
-.previewLines span {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 820;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.derivedFeeMonth strong {
-  color: var(--navy);
+.openCase .name em {
+  color: color-mix(in srgb, var(--red) 45%, var(--ivory));
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.1875rem;
   font-style: italic;
-  font-weight: 560;
+  font-weight: 500;
 }
 
-.derivedFeeMonth small {
+.openCase .name small {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--ivory) 72%, transparent);
+}
+
+.openCase .mark {
+  width: 42px;
+  height: 42px;
+  align-self: start;
+  border: 1px solid color-mix(in srgb, var(--ivory) 25%, transparent);
+  border-radius: 13px;
+  color: var(--ivory);
+}
+
+.editor {
+  overflow: hidden;
+  border-radius: 0 0 22px 22px;
+}
+
+/* The steps as tabs along the bottom of the band. */
+.stepRail {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: var(--space-copy) var(--space-group) 0;
+  background: var(--navy);
+  list-style: none;
+}
+
+.stepRail li {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 var(--space-copy);
+  border-radius: 13px 13px 0 0;
+  color: color-mix(in srgb, var(--ivory) 60%, transparent);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stepRail svg {
+  width: 14px;
+  height: 14px;
+}
+
+.stepRail .completeStep {
+  color: color-mix(in srgb, var(--green) 35%, var(--ivory));
+}
+
+.stepRail .currentStep {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.stepRail button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 5px;
+  margin: 0 -16px;
+  padding: 0 var(--space-copy);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stepRail:focus-visible,
+.stepRail button:focus-visible {
+  outline: 2px solid var(--ivory);
+  outline-offset: -4px;
+}
+
+/* The current tab sits on the paper, so its ring is navy. */
+.stepRail li:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: -4px;
+}
+
+.editorBody {
+  display: grid;
+  gap: 18px;
+  padding: 20px var(--space-group) var(--space-group);
+  background: var(--paper);
+}
+
+/* An empty notice keeps its live region but takes no room in the layout. */
+.editorBody :global(.inline-notice-slot[data-empty="true"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* --- Inside a step --- */
+.stepBody {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-tight);
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--makeup) 55%, transparent);
+  border-radius: 14px;
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.note[data-tone="lock"] {
+  border-color: color-mix(in srgb, var(--navy) 9%, transparent);
+  background: color-mix(in srgb, var(--navy) 4%, var(--white));
+  color: var(--steel-dark);
+}
+
+.note svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 2px;
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  /* A fieldset is otherwise never narrower than its content. */
+  min-inline-size: 0;
+  gap: var(--space-tight);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* An auto-fill grid's minimum is every column it could fit, not one row's worth. */
+.field > * {
+  min-width: 0;
+}
+
+.field legend,
+.label {
+  margin-bottom: var(--space-tight);
+  padding: 0;
   color: var(--steel);
   font-size: var(--type-operational-floor);
-  line-height: 1.35;
-}
-
-.threeFieldGrid > label:last-child,
-.feeFields > label:last-child {
-  border-right: 0;
-}
-
-.threeFieldGrid label > span,
-.feeFields label > span:first-child,
-.sessionDetails label > span,
-.seriesChoices legend,
-.sessionDetails legend {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 820;
-  letter-spacing: var(--tracking-label);
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.threeFieldGrid select,
-.feeFields input,
-.sessionDetails input {
-  width: 100%;
-  min-height: 46px;
-  padding: 0 13px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--white);
-  color: var(--navy);
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: var(--weight-emphasis);
+.label {
+  margin-bottom: 0;
 }
 
-.threeFieldGrid select:focus,
-.feeFields input:focus,
-.sessionDetails input:focus {
-  border-color: var(--red);
-  outline: 2px solid color-mix(in srgb, var(--red) 15%, transparent);
-  outline-offset: 1px;
+.field:disabled {
+  opacity: 0.5;
 }
 
-.threeFieldGrid select[aria-invalid="true"] {
-  border-color: var(--red);
-}
-
-.threeFieldGrid label > small {
+.fieldError {
   color: var(--red-dark);
-  font-size: var(--type-operational-floor);
-  font-weight: 660;
-  line-height: 1.35;
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
 }
 
-.formActions {
-  display: grid;
-  grid-template-columns: minmax(150px, 0.72fr) minmax(220px, 1fr);
-  gap: 10px;
-  margin-top: 14px;
+.help {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
 }
 
-.formActions > a,
-.formActions > button {
-  width: 100%;
+/* Radios and checkboxes drawn as chips, a switch, cards and day tiles: the
+   input stays in the label, invisible, so the label is the whole target. */
+:is(.chips, .switch, .cards, .days) input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:is(.chips, .switch, .cards, .days) label {
+  position: relative;
+  cursor: pointer;
+}
+
+:is(.chips, .switch, .cards, .days) label:has(:focus-visible) {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.field:disabled label {
+  cursor: default;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+}
+
+.chips label {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
   padding: 0 18px;
+  border: 1.5px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
 }
 
-.formActions > .primaryButton,
-.primaryButton {
+.chips label:has(:checked),
+.days label:has(:checked) {
   border-color: var(--navy);
   background: var(--navy);
   color: var(--white);
 }
 
-.formActions > .primaryButton:hover,
-.primaryButton:hover {
-  border-color: var(--red);
-  background: var(--red);
+.switch {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-self: start;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--navy) 6%, transparent);
 }
 
-.formActions button:disabled,
-.primaryButton:disabled {
+.switch label {
+  display: grid;
+  min-width: 120px;
+  min-height: 44px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  color: var(--steel-dark);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.switch label:has(:checked) {
+  background: var(--white);
+  box-shadow: 0 4px 12px -6px var(--navy);
+  color: var(--ink);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+}
+
+.cards label {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 14px;
+  border: 1.5px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: 16px;
+  background: var(--white);
+}
+
+.cards label:has(:checked) {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--navy) 12%, transparent);
+}
+
+.cards strong {
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+}
+
+.cards small {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.days {
+  display: grid;
+  max-width: 520px;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: var(--space-tight);
+}
+
+.days label {
+  display: grid;
+  min-height: 46px;
+  place-items: center;
+  border: 1.5px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: 14px;
+  background: var(--white);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.field[aria-invalid="true"] .days label {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+}
+
+.entry {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 46px;
+  justify-self: start;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1.5px solid var(--line-control);
+  border-radius: 14px;
+  background: var(--white);
+}
+
+.entry:focus-within {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.entry:has([aria-invalid="true"]) {
+  border-color: var(--red);
+}
+
+.entry b {
+  display: grid;
+  place-items: center;
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--navy) 5%, transparent);
+  font-size: 1rem;
+}
+
+.entry input {
+  width: 220px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+  outline: none;
+}
+
+/* A schedule already held, or a box standing in for a form that cannot apply. */
+.placed,
+.emptyBox {
+  display: grid;
+  gap: 4px;
+  padding: 14px var(--space-copy);
+  border-radius: 16px;
+  font-size: var(--type-utility-meta);
+}
+
+.placed {
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  background: var(--white);
+}
+
+.emptyBox {
+  border: 1.5px dashed color-mix(in srgb, var(--navy) 18%, transparent);
+}
+
+:is(.placed, .emptyBox) strong {
+  font-size: var(--type-operational-body);
+}
+
+:is(.placed, .emptyBox) p {
+  color: var(--steel);
+  font-weight: 600;
+}
+
+/* --- The join request --- */
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+  margin: 0;
+}
+
+.facts span {
+  padding: 7px 13px;
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.contactBox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px var(--space-copy);
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--white) 60%, transparent);
+  font-size: var(--type-operational-body);
+}
+
+.contactBox dl {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0;
+}
+
+.contactBox dl[hidden] {
+  display: none;
+}
+
+.contactBox dl div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-tight);
+}
+
+.contactBox dt {
+  color: var(--steel);
+}
+
+.contactBox dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.duplicate {
+  display: grid;
+  gap: 6px;
+  padding: 14px var(--space-copy);
+  border: 1px solid color-mix(in srgb, var(--makeup) 55%, transparent);
+  border-radius: 16px;
+  background: var(--makeup-soft);
+}
+
+.duplicate > strong {
+  color: var(--makeup-dark);
+  font-size: var(--type-operational-body);
+}
+
+.duplicate ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.duplicate li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: var(--space-tight) 10px;
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: 12px;
+  background: var(--white);
+  font-size: var(--type-utility-meta);
+}
+
+.duplicate li .badge {
+  width: 40px;
+  height: 40px;
+  font-size: var(--type-utility-label);
+}
+
+.duplicate li > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  color: var(--steel);
+  font-weight: 600;
+}
+
+.duplicate li strong {
+  color: var(--ink);
+  font-size: var(--type-operational-body);
+}
+
+.why {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--makeup) 30%, transparent);
+  color: var(--makeup-dark);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+}
+
+.duplicate > p {
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+}
+
+/* --- Fee plan --- */
+.bill {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  border-radius: 18px;
+  background: var(--white);
+}
+
+.bill > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-copy);
+  padding: 14px var(--space-copy);
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+  background: color-mix(in srgb, var(--navy) 4%, var(--white));
+}
+
+.bill > header strong {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.75rem;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.bill ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bill li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-copy);
+  padding: 10px var(--space-copy);
+  font-size: var(--type-operational-body);
+}
+
+.bill li + li {
+  border-top: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+}
+
+.bill li > span:first-child {
+  display: grid;
+  min-width: 0;
+}
+
+.bill small,
+.due {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.amount {
+  min-width: 72px;
+  text-align: right;
+}
+
+.previewWarnings,
+.previewBlockers,
+.confirm {
+  border-top: 1px solid color-mix(in srgb, var(--navy) 9%, transparent);
+}
+
+.previewWarnings {
+  display: grid;
+  gap: 4px;
+  padding: 12px var(--space-copy);
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.previewBlockers {
+  padding: 14px var(--space-copy);
+  background: var(--red-soft);
+  font-size: var(--type-utility-meta);
+}
+
+.previewBlockers strong {
+  color: var(--red-dark);
+  font-size: var(--type-operational-body);
+}
+
+.previewBlockers ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--steel-dark);
+  font-weight: 600;
+}
+
+.confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px var(--space-copy);
+  background: color-mix(in srgb, var(--navy) 3%, var(--white));
+  cursor: pointer;
+}
+
+.confirm input {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--navy);
+}
+
+.confirm span {
+  display: grid;
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.confirm strong {
+  color: var(--ink);
+  font-size: var(--type-operational-body);
+}
+
+/* --- Actions --- */
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.formActions > :first-child:not(:only-child) {
+  margin-right: auto;
+}
+
+.formActions > :is(a, button),
+.button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-tight);
+  padding: 0 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.formActions svg,
+.button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.formActions > .dangerButton {
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+  color: var(--red-dark);
+}
+
+.formActions > .primaryButton {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: var(--white);
+}
+
+.formActions button:disabled {
   cursor: wait;
   opacity: 0.58;
 }
 
-/* Two states, two mechanisms, following app/portal.css:1861 -- `:disabled` with
-   `cursor: wait` means busy, something is in flight and will finish;
-   `aria-disabled` means refused, and nothing will change until the coach does.
-   Pointing a spinner at an action only they can unblock reads as a hang.
-
-   aria-disabled rather than the disabled attribute on purpose: a disabled button
-   leaves the tab order, so a keyboard or screen-reader user cannot reach it to
-   discover why they are stuck. Held this way the click still reaches the submit
-   handler, which names the missing field and focuses it.
-
-   THE RULE, which this codebase has now reached three times independently (here,
-   app/portal.css:1861, and the type="number" comment in register/fee-plan-step.tsx):
-   hold an action back when the requirement is visible without explanation -- an
-   empty field, a closed list, a date range. Leave it live when the input needs
-   explaining, such as a typo: a button that silently will not press says nothing,
-   and native constraint validation blocks submit before the handler that would
-   have said something.
-
-   Faded to 60% navy rather than by opacity, so the fill is a known value: white
-   label text measures 4.63:1 on it and the boundary 4.25:1 on --ivory, both past
-   WCAG 1.4.3 and 1.4.11. Disabled controls are exempt; a control a coach must read
-   and act on should not need the exemption. */
-.formActions > .primaryButton[aria-disabled="true"],
-.primaryButton[aria-disabled="true"] {
+/* `:disabled` with `cursor: wait` means busy: something is in flight and will
+   finish. `aria-disabled` means held back until the coach supplies something;
+   it keeps the button in the tab order so the submit handler can still say what
+   is missing. Faded to 60% navy rather than by opacity, so white text keeps
+   4.63:1 on it. */
+.formActions > .primaryButton[aria-disabled="true"] {
   border-color: color-mix(in srgb, var(--navy) 60%, var(--white));
   background: color-mix(in srgb, var(--navy) 60%, var(--white));
-  color: var(--white);
   cursor: not-allowed;
-  opacity: 1;
 }
 
-.requestFacts,
-.trainingFacts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid var(--line);
-}
-
-.requestFacts > div,
-.trainingFacts > div {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-  padding: 14px;
-  border-right: 1px solid var(--line);
-}
-
-.requestFacts > div:last-child,
-.trainingFacts > div:last-child {
-  border-right: 0;
-}
-
-.requestFacts dt,
-.trainingFacts dt {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 820;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.requestFacts dd,
-.trainingFacts dd {
-  color: var(--navy);
-  font-size: 0.875rem;
-  font-weight: 720;
-  line-height: 1.3;
-}
-
-/*
- * A note, not a blocker. Registering several players on one address is ordinary,
- * so this takes the same plain keyline as .requestFacts directly above it rather
- * than an accent bar -- the coach is being told something, not stopped, and the
- * prose already reads as different from the fact grid it follows.
- */
-.duplicateSignal {
-  display: grid;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  color: var(--navy);
-  font-size: 0.75rem;
-  line-height: 1.45;
-}
-
-.duplicateSignal p,
-.duplicateSignal ul {
-  margin: 0;
-}
-
-.duplicateSignal ul {
-  display: grid;
-  gap: 3px;
-  padding-left: 17px;
-}
-
-.duplicateSignal strong {
-  font-weight: 760;
-}
-
-.duplicateSignal span {
-  color: var(--steel);
-}
-
-.duplicateSignalHelp {
-  color: var(--steel);
-  font-size: 0.6875rem;
-}
-
-.seriesChoices,
-.sessionDetails fieldset {
-  min-width: 0;
-  border: 0;
-}
-
-.seriesChoices {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
-}
-
-.seriesChoices legend {
-  margin-bottom: 9px;
-}
-
-.seriesChoices > label {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 68px;
-  padding: 11px 12px;
-  border: 1px solid var(--line);
-  background: var(--white);
-  cursor: pointer;
-}
-
-.seriesChoices > label.selectedChoice {
-  border-color: var(--navy);
-  background: var(--ivory-deep);
-  box-shadow: var(--shadow-keyline-bottom);
-}
-
-.seriesChoices input {
-  accent-color: var(--red);
-}
-
-.seriesChoices label > span {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.seriesChoices label strong {
-  overflow: hidden;
-  color: var(--navy);
-  font-size: 0.75rem;
-  font-weight: 780;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.seriesChoices label small,
-.seriesChoices label em {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-style: normal;
-  font-weight: 620;
-}
-
-.seriesChoices label em {
-  text-align: right;
-}
-
-.sessionDetails {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.42fr);
-  align-items: end;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.sessionDetails fieldset > legend {
-  margin-bottom: var(--space-tight);
-}
-
-.sessionDetails > label {
-  display: grid;
-  gap: var(--space-tight);
-}
-
-.weekdayChoices {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
-  gap: 7px;
-}
-
-.weekdayChoices label {
-  min-width: 0;
-  cursor: pointer;
-}
-
-.weekdayChoices input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  opacity: 0;
-}
-
-.weekdayChoices span {
-  display: grid;
-  min-height: 44px;
-  place-items: center;
-  border: 1px solid var(--line);
-  background: var(--white);
-  color: var(--steel);
-  font-size: 0.625rem;
-  font-weight: 780;
-}
-
-.weekdayChoices label.selectedDay span {
-  border-color: var(--navy);
-  background: var(--ivory-deep);
-  color: var(--navy);
-}
-
-.weekdayChoices input:focus-visible + span {
-  outline: 2px solid var(--red);
-  outline-offset: 2px;
-}
-
-.feeFields {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 12px;
-}
-
-.moneyInput {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  align-items: center;
-  border: 1px solid var(--line);
-  background: var(--white);
-}
-
-.moneyInput b {
-  display: grid;
-  height: 100%;
-  place-items: center;
-  border-right: 1px solid var(--line);
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.1875rem;
-  font-weight: 560;
-}
-
-.moneyInput input {
-  border: 0;
-}
-
-.feeNote {
-  margin-top: 9px;
-  color: var(--steel);
-  font-size: 0.625rem;
-  line-height: 1.4;
-}
-
-.feePreview {
-  margin-top: 14px;
-  border: 1px solid var(--line);
-  background: var(--white);
-}
-
-.feePreview > header {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: end;
-  gap: 18px;
-  padding: 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--ivory-deep);
-}
-
-.feePreview > header > div {
-  display: grid;
-  gap: 4px;
-}
-
-.feePreview > header > div:last-child {
-  text-align: right;
-}
-
-.feePreview h4,
-.feePreview header strong {
-  margin: 0;
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.25rem;
-  font-style: italic;
-  font-weight: 580;
-  line-height: 1.1;
-}
-
-.previewLines article {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.62fr);
-  gap: 18px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-.previewLines article > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.previewLines article > div:last-child {
-  text-align: right;
-}
-
-.previewLines strong {
-  color: var(--navy);
-  font-size: 0.75rem;
-  font-weight: 720;
-  line-height: 1.35;
-}
-
-.previewLines small {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  line-height: 1.3;
-}
-
-.previewWarnings,
-.previewBlockers {
-  display: grid;
-  gap: 5px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  color: var(--steel);
-  font-size: 0.6875rem;
-  line-height: 1.4;
-}
-
-.previewWarnings p,
-.previewBlockers ul {
-  margin: 0;
-}
-
-/*
- * The urgency is carried by the heading rather than by a bar down the side --
- * red type is how the rest of this workspace marks the thing to read first, and
- * an accent rail is a stock tell. Never colour alone: the block is role="alert"
- * and its heading says "Resolve before completion" in words.
- */
-.previewBlockers {
-  color: var(--navy);
-}
-
-.previewBlockers strong {
-  color: var(--red);
-}
-
-.previewBlockers ul {
-  padding-left: 17px;
-}
-
-.finalConfirmation {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  padding: 14px;
-  cursor: pointer;
-}
-
-.finalConfirmation input {
-  width: 18px;
-  height: 18px;
-  margin: 1px 0 0;
-  accent-color: var(--navy);
-}
-
-.finalConfirmation input[aria-invalid="true"] {
-  outline: 2px solid var(--red);
-  outline-offset: 2px;
-}
-
-.finalConfirmation span {
-  display: grid;
-  gap: 4px;
-  color: var(--steel);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-
-.finalConfirmation strong {
-  color: var(--navy);
-  font-size: 0.8125rem;
-}
-
-.backdateNote {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--makeup);
-  background: var(--makeup-soft);
-  color: var(--makeup-dark);
-  font-size: 0.625rem;
-  font-weight: var(--weight-emphasis);
-  line-height: 1.4;
-}
-
-.recoveryPanel {
-  display: grid;
-  gap: 7px;
-  padding: 17px;
-  border: 1px solid var(--line);
-  background: var(--ivory-deep);
-}
-
-.recoveryPanel strong {
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.25rem;
-  font-style: italic;
-  font-weight: var(--weight-display);
-}
-
-.recoveryPanel p {
-  color: var(--steel);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-
-.recoveryPanel .primaryButton {
-  justify-self: start;
-  margin-top: 4px;
-  padding: 0 18px;
-  text-decoration: none;
-}
-
+/* --- Empty queue and rejected requests --- */
 .emptyState {
   display: grid;
-  justify-items: center;
-  padding: clamp(38px, 6vw, 72px) 22px;
-  text-align: center;
+  justify-items: start;
+  gap: 6px;
+  padding: var(--space-group);
+  border: var(--frost-border);
+  border-radius: 20px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
 }
 
-.emptyState > svg {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  margin-bottom: 13px;
-  padding: var(--space-tight);
-  border: 1px solid var(--green);
-  border-radius: var(--radius-circle);
+.emptyState svg {
+  width: 22px;
+  height: 22px;
   color: var(--green);
 }
 
-.emptyState h3 {
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.6875rem;
-  font-style: italic;
-  font-weight: var(--weight-display);
+.emptyState h2 {
+  font-size: 1.125rem;
 }
 
 .emptyState p {
-  max-width: 470px;
-  margin-top: 5px;
   color: var(--steel);
-  font-size: 0.75rem;
-  line-height: 1.45;
+  font-size: var(--type-operational-body);
 }
 
 .emptyState a {
-  margin-top: 17px;
-  color: var(--navy);
-  font-size: 0.6875rem;
-  font-weight: 790;
-  text-underline-offset: 4px;
+  margin-top: 6px;
 }
 
-@media (max-width: 1000px) {
-  .pageHeader {
-    display: block;
+.rejected {
+  margin-top: var(--space-group);
+  padding-bottom: 6px;
+  border: var(--frost-border);
+  border-radius: 20px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.rejected > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px var(--space-copy);
+  padding: var(--space-copy) 18px 10px;
+}
+
+.rejected h2 {
+  font-size: 1rem;
+}
+
+.rejected header p {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.rejected ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rejected li {
+  border-top: 1px solid color-mix(in srgb, var(--navy) 8%, transparent);
+}
+
+.rejectedRow {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+}
+
+.rejectedRow .badge {
+  width: 42px;
+  height: 42px;
+  font-size: var(--type-utility-label);
+}
+
+.rejected li > :global(.inline-notice-slot) {
+  padding: 0 18px 10px;
+}
+
+/* High-contrast mode drops the fills that mark a choice, so the chosen one is
+   drawn in the system highlight, as on the sign-in switch (app/portal.css). */
+@media (forced-colors: active) {
+  :is(.chips, .switch, .cards, .days) label {
+    border: 1px solid CanvasText;
   }
 
-  .pageHeader > p {
-    margin-top: 11px;
+  :is(.chips, .switch, .cards, .days) label:has(:checked),
+  .filters button[aria-pressed="true"],
+  .stepRail .currentStep {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
   }
 
-  .row {
-    /* The stamp track was a flat 96px and the widest chip, "New requests", is
-       115.97px, so `.stageStamp` -- which is `justify-self: start` and therefore
-       shrink-to-fit -- was capped below its own content and broke onto two
-       lines. That left its label 10px from the left border and 21.14px from the
-       right, an 11.14px asymmetry, beside "Session" and "Fee Plan" chips in the
-       same column sitting at a symmetric 10/10. Three chips hugging their label
-       and three not is the same badge reading as two shapes.
-       `max-content` takes the width of the widest chip rather than a number
-       that has to be kept in step with the longest label. */
-    grid-template-columns: 38px minmax(145px, 1fr) minmax(96px, max-content) minmax(135px, 0.9fr) 112px;
-    gap: 10px;
-  }
-
-  .identity strong {
-    font-size: 1.1875rem;
-  }
-
-  .editor {
-    grid-template-columns: 118px minmax(0, 1fr);
-    gap: 22px;
-  }
-
-  .seriesChoices {
-    grid-template-columns: 1fr;
-  }
-
-  .seriesChoices > label {
-    grid-template-columns: 18px minmax(0, 1fr) minmax(90px, auto);
+  .cards label:has(:checked) small,
+  .filters button[aria-pressed="true"] :is(b, span) {
+    color: HighlightText;
   }
 }
 
-@media (max-width: 700px) {
-  .page {
-    padding: 20px 14px 54px;
+@media (hover: hover) {
+  .case:not(.openCase):hover {
+    background: color-mix(in srgb, var(--white) 70%, transparent);
+  }
+}
+
+@media (max-width: 720px), (pointer: coarse) {
+  /* At or over the 16px phones need so focusing a field does not zoom the page. */
+  .entry input {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 760px) {
+  .filters {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   }
 
-  .pageHeader {
-    margin-top: 20px;
-    padding-bottom: 19px;
+  .caseHead {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: var(--space-tight) 12px;
+    padding: 14px;
   }
 
-  .pageHeader h1 {
-    margin-top: 9px;
-    font-size: clamp(38px, 12vw, 48px);
-    line-height: var(--leading-display);
+  .badge {
+    width: 42px;
+    height: 42px;
   }
 
-  .pageHeader > p {
-    font-size: 1rem;
-    line-height: 1.35;
+  /* Pill then next step on one line; the step drops below when the text is large. */
+  .step {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+    gap: 6px 12px;
   }
 
-  .stageSummary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 20px;
-  }
-
-  .stageSummary > div {
-    min-height: 66px;
-    gap: 9px;
-    padding: 11px 12px;
-  }
-
-  .stageSummary > div:nth-child(2) {
-    border-right: 0;
-  }
-
-  .stageSummary > div:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--line);
-  }
-
-  .stageSummary strong {
-    font-size: 1.6875rem;
-  }
-
-  .stageSummary p {
-    font-size: var(--type-operational-floor);
-  }
-
-  .registerHeading {
-    align-items: flex-start;
-    padding: 12px;
-  }
-
-  .registerHeading p {
-    max-width: 105px;
-    text-align: right;
-  }
-
-  .row {
-    grid-template-areas:
-      "folio identity open"
-      "folio stamp open";
-    grid-template-columns: 36px minmax(0, 1fr) 44px;
-    gap: 7px 9px;
-    min-height: 84px;
-    padding: 11px 10px;
-  }
-
-  /*
-   * `padding-top: 3px` equalised the two boxes' TOPS, which is not the same as
-   * equalising their ink: the numeral is 24px on a 1.0 line-height and the name is
-   * 18px on 1.08, so matching tops left the numeral's baseline 8.0px below the
-   * name's and its cap-line 4.3px below -- aligned to neither. The row is a grid,
-   * so `align-self: baseline` puts the two on one baseline directly and the nudge
-   * that was approximating it is no longer needed.
-   */
-  .folio {
-    grid-area: folio;
-    align-self: baseline;
-    font-size: 1.5rem;
-  }
-
-  .identity {
-    grid-area: identity;
-    /* Baseline alignment in grid only groups items that both ask for it. With the
-       folio alone on `baseline` there was no one to align to and it fell back to
-       `start`, which left its baseline 5px below the name's. Both on it now, and
-       the open button keeps its own `align-self: center`. */
-    align-self: baseline;
-  }
-
-  .identity strong {
-    font-size: 1.125rem;
-  }
-
-  .identity small {
-    font-size: var(--type-operational-floor);
-  }
-
-  .stageStamp {
-    grid-area: stamp;
-    padding: 5px 7px;
-    font-size: var(--type-operational-floor);
-  }
-
-  .nextAction {
+  .mark {
     display: none;
   }
 
-  .openButton {
-    grid-area: open;
-    width: 44px;
-    padding: 0;
-    align-self: center;
-    font-size: 0;
-    /* `font-size: 0` hides the word but does not remove it: "Open" / "Continue" /
-       "Close" is still an anonymous flex item, so the 9px gap from the shared rule
-       above kept sitting between a zero-width box and the icon. `justify-content:
-       center` then centred the pair, which put the arrow 4.5px -- exactly half the
-       gap -- right of the middle of its own 44px tap square, with 18.5px of space
-       on its left and 9.5px on its right. Every row, every width from 320 to 430. */
-    gap: 0;
+  .openCase .caseHead {
+    padding: 18px var(--space-copy) 0;
   }
 
-  .openButton svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .editor {
-    display: block;
-    padding: 18px 10px 12px;
-  }
-
-  .stepRail {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    /* 6px, not 4: the focus ring sits 5px outside the box, so at 4px a focused
-       step's ring crossed into the step beside it. */
-    gap: 6px;
-    margin-bottom: 21px;
-  }
-
-  /*
-   * The button has to restate the stacked layout. The desktop rule gives it the
-   * li's two-column grid, and this breakpoint only re-declares the li -- so a
-   * navigable step kept marker-beside-label, left-aligned, inside a 64.5px
-   * track, while every inert step beside it stacked and centred.
-   */
-  /*
-   * `align-content: start` is the whole fix for the staggered markers, and it is
-   * not a tweak to the rule above -- it closes a hole the rule left open.
-   *
-   * `.stepRail` stretches all four `li` to one height, and the desktop rule at
-   * :331 gives them `align-items: center` which this block never re-declared. So
-   * each li had two auto rows stretched to fill 61.8px and centred its marker
-   * inside whichever row it landed in. "NEW REQUESTS" is the only label that
-   * wraps -- at 9px it needs a 73.1px track and gets less below 393px -- so its
-   * label row grew, its marker row shrank, and its marker rose while the other
-   * three stayed put. Markers at 930.4 / 937.6 / 934.0 / 934.0 at 390px: four
-   * circles on three lines, a quarter of a circle apart.
-   *
-   * The wrap is the trigger, not the button. With zero navigable steps on screen
-   * the spread is still 3.6px; the button doubles it to 7.2px because its own
-   * `padding: 6px 0; margin: -6px 0` adds a second stretched row. Both go with
-   * rows that no longer stretch. Verified 0px spread at 320, 390, 393 and 430,
-   * with and without a navigable step.
-   */
-  .stepRail li,
-  .stepRail li > button {
+  .openCase .mark {
     display: grid;
-    grid-template-columns: 1fr;
-    align-content: start;
-    justify-items: center;
-    gap: 6px;
-    text-align: center;
   }
 
-  .stepRail li > button {
-    padding: 6px 0;
-    margin: -6px 0;
+  /* One line of tabs; it scrolls rather than wraps when the text is large. */
+  .stepRail {
+    gap: 2px;
+    overflow-x: auto;
+    padding-inline: var(--space-tight);
   }
 
-  /* "Assessment" is the longest unbreakable label and the four-across track is
-     only 64.5px at 320px, so 10px would overrun it by 6px. 9px is the largest
-     size that still fits on one line. */
-  .stepRail li strong {
-    font-size: 0.5625rem;
-    letter-spacing: 0.03em;
+  .stepRail li {
+    padding: 0 var(--space-tight);
+    font-size: var(--type-utility-meta);
   }
 
-  .stepRail li span {
-    width: 27px;
-    height: 27px;
+  .stepRail button {
+    margin: 0 calc(var(--space-tight) * -1);
+    padding: 0 var(--space-tight);
   }
 
-  .editorHeading h3 {
-    font-size: 1.625rem;
+  .stepRail svg {
+    width: 12px;
+    height: 12px;
   }
 
-  .editorHeading p {
-    font-size: 0.625rem;
-  }
-
-  .dateTimeline {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .dateTimeline > div {
-    border-bottom: 1px solid var(--line);
-  }
-
-  .dateTimeline > div:nth-child(2n) {
-    border-right: 0;
-  }
-
-  .dateTimeline > div:last-child {
-    grid-column: 1 / -1;
-    border-bottom: 0;
-  }
-
-  .threeFieldGrid,
-  .feeFields,
-  .requestFacts,
-  .trainingFacts {
-    grid-template-columns: 1fr;
-  }
-
-  .threeFieldGrid > label,
-  .feeFields > label,
-  .derivedFeeMonth,
-  .requestFacts > div,
-  .trainingFacts > div {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .threeFieldGrid > label:last-child,
-  .feeFields > label:last-child,
-  .derivedFeeMonth:last-child,
-  .requestFacts > div:last-child,
-  .trainingFacts > div:last-child {
-    border-bottom: 0;
-  }
-
-  .threeFieldGrid select,
-  .feeFields input,
-  .sessionDetails input {
-    min-height: 48px;
-    font-size: 16px;
+  .editorBody {
+    padding: 18px var(--space-copy) var(--space-copy);
   }
 
   .formActions {
-    grid-template-columns: 1fr;
+    flex-direction: column-reverse;
   }
 
-  .formActions > a,
-  .formActions > button {
-    min-height: 48px;
-  }
-
-  .formActions > .primaryButton {
-    grid-row: 1;
-  }
-
-  .feePreview > header,
-  .previewLines article {
-    grid-template-columns: 1fr;
-    gap: 9px;
-  }
-
-  .feePreview > header > div:last-child,
-  .previewLines article > div:last-child {
-    text-align: left;
-  }
-
-  /*
-   * Dropping to two columns moves `em` onto a second grid row, and `align-items:
-   * center` from the base rule then centred the radio inside row 1 -- a two-line
-   * block of schedule name plus venue. The radio landed in the blank gap between
-   * those lines: 10.8px below the name's centre and 13.8px above the card's, level
-   * with no text on the card at all.
-   *
-   * `start` plus a 3px nudge puts it on the name, which is the line it selects.
-   * The nudge is half the difference between the name's 19.2px line box and the
-   * 13px control, so it is a centring on the first line rather than a fudge.
-   */
-  .seriesChoices > label {
-    grid-template-columns: 18px minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .seriesChoices > label input {
-    margin-top: 3px;
-  }
-
-  .seriesChoices label em {
-    grid-column: 2;
-    text-align: left;
-  }
-
-  .sessionDetails {
-    grid-template-columns: 1fr;
-  }
-
-  .weekdayChoices {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .recoveryPanel .primaryButton {
+  .formActions > :is(a, button) {
     width: 100%;
   }
-}
 
-/* Shown when the coach has gone back to a step the case already passed. */
-/*
- * The same treatment as .backdateNote, and for the same reason: this is the
- * coach being told something about the state they are in, not chrome. A quiet
- * steel note sat back into the page and was read past; the makeup family is
- * what this workspace uses for "notice this before you act".
- */
-.revisitNote {
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--makeup);
-  background: var(--makeup-soft);
-  color: var(--makeup-dark);
-  font-size: 0.625rem;
-  font-weight: var(--weight-emphasis);
-  line-height: 1.4;
-}
-
-/*
- * Why three fields are frozen. Same notice treatment as .revisitNote and
- * .backdateNote -- it answers "why can I not touch this", which the coach needs
- * before they try, not after the server refuses.
- *
- * This class was referenced from assessment-step.tsx without ever being declared
- * here, so the note rendered with `class="undefined"` and no styling at all.
- */
-.classificationLockNote {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--makeup);
-  background: var(--makeup-soft);
-  color: var(--makeup-dark);
-  font-size: 0.625rem;
-  font-weight: var(--weight-emphasis);
-  line-height: 1.4;
-}
-
-/* The fix offered under a blocking note, as a sibling of it -- see the comment
-   at its use site for why it is not inside the alert. */
-.backdateFix {
-  margin: 4px 0 0;
-}
-
-.inlineStepLink {
-  /*
-   * 8px of vertical padding, pulled back out with a negative margin, so the
-   * target clears the workspace's touch floor without moving the note.
-   */
-  padding: var(--space-tight) 0;
-  margin: calc(-1 * var(--space-tight)) 0;
-  border: 0;
-  background: none;
-  color: var(--navy);
-  font: inherit;
-  font-weight: var(--weight-emphasis);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.inlineStepLink:hover,
-.inlineStepLink:focus-visible {
-  color: var(--red);
-}
-
-/*
- * Below 340px the fact grid's two columns are 118px and "TRAINING START" is the
- * only label long enough to wrap. Each cell is a plain block, so nothing ties the
- * values across a row together: its value dropped 17.6px -- a whole line -- below
- * ACTIVATED beside it, leaving about 20px of dead space under the neighbour.
- *
- * Reserving two lines on the label equalises where every value starts. Scoped to
- * the widths where a label actually wraps, so nothing taller than 339px pays for
- * it; the finding was clean from 340 up.
- */
-@media (max-width: 339px) {
-  /*
-   * The numeral and its caption stop sharing a line here, because below this
-   * width they cannot. "Assessment" is the one caption that is a single
-   * unbreakable word: it needs 83.13px, and a 129px cell minus 24px of padding,
-   * a 29.56px numeral and a 13px gap leaves it 66.44px. It painted 16.69px past
-   * its own box, 4.69px past the cell and 3.69px past the panel's outer border,
-   * with about 2.8px of the final T outside the panel entirely.
-   *
-   * `minmax(0, 1fr)` on the caption track, added with the rest of this file's
-   * mobile work, is what lets the track shrink to 66.44px -- but a track that
-   * can shrink does not make an unbreakable word narrower, so the overrun
-   * survived it. Stacking is what actually fixes it: one column gives the
-   * caption the cell's full 105px and 21.87px to spare.
-   *
-   * `align-items` goes back to `start`, since a baseline shared between two rows
-   * of a single column means nothing.
-   */
-  .stageSummary > div {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 4px;
+  .formActions > :first-child:not(:only-child) {
+    margin-right: 0;
   }
 
-  .dateTimeline dt {
-    /* Two of its own line boxes. The label's line-height resolves to 17.6px on an
-       11px font, so two lines is 3.2em -- an earlier 2.4em assumed a 1.2 ratio and
-       reserved only 26.4px against the 35.2px "Training start" actually takes,
-       which narrowed the drop from 17.6px to 8.7px instead of closing it. */
-    min-height: 3.2em;
+  .entry {
+    justify-self: stretch;
   }
-}
 
-/* A link dressed as a button presses like one (--press-scale in app/globals.css). */
-.openButton:active,
-.formActions > a:active,
-.primaryButton:active {
-  scale: var(--press-scale);
+  .entry input {
+    width: 100%;
+    flex: 1;
+  }
+
+  .duplicate li {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .why {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .bill li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .due {
+    grid-row: 2;
+  }
+
+  .amount {
+    grid-row: 1 / 3;
+    grid-column: 2;
+  }
+
+  .rejectedRow {
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding-inline: 14px;
+  }
+
+  .rejectedRow > :is(.pill, button) {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .rejectedRow > .pill {
+    justify-self: start;
+  }
 }

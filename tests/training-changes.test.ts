@@ -403,6 +403,51 @@ describe("training changes from the player's record", () => {
       .toEqual([[evening, "2026-10-01", null]])
   })
 
+  it("judges a moved session by its first date when a change clears marks", async () => {
+    const { createSessionSeriesRecords } = await import("@/lib/sessions/service")
+    const midday = createSessionSeriesRecords({
+      coachId,
+      database,
+      now,
+      input: {
+        programme: "Beginner",
+        batch: "Weekday",
+        venue: "SMBA Court",
+        startsOn: "2026-07-01",
+        endsOn: "2027-03-31",
+        weekdays: [1, 2, 3, 4, 5],
+        startTime: "12:00",
+        durationMinutes: 60,
+      },
+    })
+    const kiran = "20000000-0000-4000-8000-0000000000a9"
+    addPlayer(kiran, "Kiran Rao", 9010, "2026-07-01")
+    assign(kiran, midday, "2026-07-01", [1, 2, 3, 4, 5])
+    const moveTo = (from: string, to: string) => {
+      const source = database.select().from(schema.sessionOccurrences).where(and(
+        eq(schema.sessionOccurrences.seriesId, midday),
+        eq(schema.sessionOccurrences.occurrenceDate, from),
+      )).get()!
+      database.update(schema.sessionOccurrences).set({ status: "cancelled" })
+        .where(eq(schema.sessionOccurrences.id, source.id)).run()
+      database.insert(schema.sessionOccurrences).values({
+        ...source,
+        id: `${source.id}-moved`,
+        occurrenceDate: to,
+        replacementForOccurrenceId: source.id,
+        status: "scheduled",
+      }).run()
+      mark(kiran, midday, to, "present")
+    }
+    // Wed 30 Sep held on Sat 3 Oct: the September place still covers it.
+    moveTo("2026-09-30", "2026-10-03")
+    // Fri 2 Oct held early on Sat 26 Sep: a change from the 1st takes it away.
+    moveTo("2026-10-02", "2026-09-26")
+
+    expect(changes.previewScheduleChange({ playerId: kiran, startsOn: "2026-10-01" }, context()).marks)
+      .toEqual([{ choice: "present", occurrenceDate: "2026-09-26" }])
+  })
+
   it("ends training today when the player has already left, and stops the fees after this month", () => {
     changes.endTrainingNow({ playerId: players.ravi, stopFees: true }, context())
     expect(openAssignments(players.ravi)).toHaveLength(0)
@@ -519,6 +564,40 @@ describe("training changes from the player's record", () => {
       status: "failed",
     })
     expect(openAssignments(tara).map((item) => item.seriesId)).toEqual([morning])
+  })
+
+  it("counts a fault against the booking as it stands, not as it was read", () => {
+    const veer = "20000000-0000-4000-8000-0000000000aa"
+    addPlayer(veer, "Veer Nair", 9011, "2026-07-01")
+    assign(veer, morning, "2026-07-01", [1, 2, 3, 4, 5])
+    const { changeId } = changes.scheduleTrainingChange({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: veer,
+      seriesId: evening,
+    }, context())
+    const row = () => database.select().from(schema.trainingChanges)
+      .where(eq(schema.trainingChanges.id, changeId)).get()
+    // One try left on the old booking...
+    database.update(schema.trainingChanges).set({ failedAttempts: 2 })
+      .where(eq(schema.trainingChanges.id, changeId)).run()
+    const spy = vi.spyOn(database, "transaction").mockImplementation(() => {
+      // ...when the coach books it again, which starts its tries afresh.
+      database.update(schema.trainingChanges).set({ failedAttempts: 0, lastFailedAt: null })
+        .where(eq(schema.trainingChanges.id, changeId)).run()
+      throw new Error("network blip")
+    })
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      changes.applyDueTrainingChanges({ database, now: new Date("2026-11-06T05:00:00.000Z") })
+    } finally {
+      spy.mockRestore()
+      error.mockRestore()
+    }
+    // The new booking used to be failed on its first fault.
+    expect(row()).toMatchObject({ failedAttempts: 1, status: "scheduled" })
+    database.update(schema.trainingChanges).set({ resolvedAt: new Date(), status: "cancelled" })
+      .where(eq(schema.trainingChanges.id, changeId)).run()
   })
 
   it("applies a change once the fault has passed, even days after its date", () => {

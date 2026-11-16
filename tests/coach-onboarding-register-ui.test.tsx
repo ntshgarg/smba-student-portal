@@ -90,15 +90,15 @@ describe("Player Onboarding Next-Step Register", () => {
       />,
     )
 
-    expect(html).toContain("Academy intake register.")
+    expect(html).toContain(">Onboarding</h1>")
+    expect(html).toContain("2 people need a next step · 1 onboarded")
     expect(html).toContain('aria-label="Academy onboarding progress"')
-    expect(html).toContain("One ordered queue")
-    expect(html).toContain("New requests")
-    expect(html).toContain("Assessment")
-    expect(html).toContain("Session")
-    expect(html).toContain("Fee Plan")
-    expect(html).toContain("01")
-    expect(html).toContain("02")
+    // The stage counts filter the list; a stage nobody is at cannot be chosen.
+    expect(html).toContain('aria-label="Show people at a stage"')
+    expect(html.match(/aria-pressed=/gu)).toHaveLength(5)
+    expect(html).toMatch(/<button aria-pressed="false" disabled="" type="button"><b>0<\/b><span>Session<\/span>/u)
+    expect(html).toContain("New request")
+    expect(html).toContain("Review request")
     expect(html).toContain("Complete Rohan’s assessment")
     expect(html).toContain("Training plan")
     expect(html).toContain("Save assessment &amp; continue")
@@ -107,6 +107,20 @@ describe("Player Onboarding Next-Step Register", () => {
     expect(html).toContain('aria-current="step"')
     expect(html).not.toContain("<main")
     expect(html).not.toContain("View application")
+  })
+
+  it("marks an undecided request the 90-day clean-up is about to delete, as a rejected one is", () => {
+    const html = renderToStaticMarkup(
+      <PlayerOnboardingRegister
+        financeActive
+        referenceDate="2026-08-16"
+        requestsExpiringSoon={{ "request-player": 3 }}
+        sessionSeries={[]}
+        workspace={workspace}
+      />,
+    )
+
+    expect(html).toContain("Requested 15 Aug · removed in 3 days")
   })
 
   it("renders junior-coach requests as staff approval without player assessment copy", () => {
@@ -178,11 +192,9 @@ describe("Player Onboarding Next-Step Register", () => {
 
     expect(html).not.toContain("First fee month")
     expect(html).not.toContain('type="month"')
-    expect(html).toContain("Fee timeline")
-    expect(html).toContain("Derived from training")
-    expect(html).toContain("Completing onboarding issues the registration fee")
-    expect(html).toContain("rounded once to the nearest ₹50")
-    expect(html).toContain("Review fee timeline")
+    expect(html).toContain("Monthly fee")
+    expect(html).toContain("rounded to ₹50")
+    expect(html).toContain("Review fees")
     expect(html).not.toContain("Monthly charges are prepared separately")
   })
 })

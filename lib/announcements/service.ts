@@ -301,7 +301,9 @@ export async function setAnnouncementPinned(
       .where(eq(broadcasts.id, announcementId))
       .get()
     if (!current) fail("NOT_FOUND", "The announcement could not be found.", "announcementId")
-    if (current.withdrawnAt) {
+    // Unpinning stays open, for a notice withdrawn while pinned before
+    // withdrawing unpinned it.
+    if (current.withdrawnAt && input.pinned) {
       fail("ALREADY_WITHDRAWN", "A withdrawn announcement cannot be pinned.", "announcementId")
     }
     if (current.pinned === input.pinned) return { reused: true }
@@ -387,6 +389,8 @@ export async function withdrawAnnouncement(
       withdrawnByAccountId: coachId,
       withdrawnAt: now,
     }).run()
+    // A withdrawn notice cannot be pinned again, so its pin goes with it.
+    tx.update(broadcasts).set({ pinned: false }).where(eq(broadcasts.id, announcementId)).run()
     return { reused: false }
   }, { behavior: "immediate" })
 

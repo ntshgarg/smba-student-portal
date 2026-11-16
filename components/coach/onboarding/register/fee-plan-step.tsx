@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Lock } from "lucide-react"
 import Link from "next/link"
 import { useRef, useState } from "react"
 
@@ -19,7 +19,6 @@ import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
 import { formatDateKey, formatInr, parseRupeesToPaise } from "@/lib/format"
 import type { OnboardingFinancePreview } from "@/lib/finance/types"
-import { academyPlanLabel } from "@/lib/training/academy-plans"
 
 import styles from "../player-onboarding-register.module.css"
 import type { SaveFeedback } from "./shared"
@@ -43,10 +42,15 @@ export function FeePreviewBlockers({ blockers }: { blockers: readonly string[] }
   if (!blockers.length) return null
   return (
     <div className={styles.previewBlockers} role="alert">
-      <strong>Resolve before completion</strong>
+      <strong>Fix before finishing</strong>
       <ul>{blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
     </div>
   )
+}
+
+/** The confirm box's date, in the tense it is in: a start later than today has not happened yet. */
+export function trainingStartLine(trainingStartOn: string, referenceDate: string) {
+  return `${trainingStartOn > referenceDate ? "Training starts" : "Training started"} ${formatDateKey(trainingStartOn)}`
 }
 
 /**
@@ -124,42 +128,54 @@ export function FeePlanStep({
 
   const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
   /*
-   * Nothing can be derived from an empty fee, so "Review fee timeline" is held
+   * Nothing can be derived from an empty fee, so "Review fees" is held
    * back rather than offered and then refused. A malformed amount is NOT held
    * back -- `parseRupeesToPaise` rejecting "35oo" is worth saying out loud, and a
    * button that silently will not press says nothing.
    */
   const awaitingFee = !preview && monthlyFee.trim() === ""
 
+  const firstName = item.fullName.split(/\s+/u)[0]
+
   if (!financeActive) {
     return (
-      <div className={styles.recoveryPanel}>
-        <strong>Activate Financials before recording this Fee Plan.</strong>
-        <p>The player will remain here; no onboarding information will be lost.</p>
-        <Link
-          className={styles.primaryButton}
-          href={`/coach/financials?period=${referenceDate.slice(0, 7)}&player=${encodeURIComponent(item.id)}`}
-        >
-          Set up Financials <ArrowRight aria-hidden="true" />
-        </Link>
+      <div className={styles.stepBody}>
+        <div className={styles.emptyBox}>
+          <strong>Financials isn’t set up yet</strong>
+          <p>{firstName} stays here; no onboarding information is lost.</p>
+        </div>
+        <div className={styles.formActions}>
+          <Link
+            className={styles.primaryButton}
+            href={`/coach/financials?period=${referenceDate.slice(0, 7)}&player=${encodeURIComponent(item.id)}`}
+          >
+            Set up Financials <ArrowRight aria-hidden="true" />
+          </Link>
+        </div>
       </div>
     )
   }
 
   if (item.feePlanRecorded) {
     return (
-      <div className={styles.recoveryPanel}>
-        <strong>An existing Fee Plan needs review.</strong>
-        <p>Open the player’s finance record to resolve its dates or training classification safely.</p>
-        <Link
-          className={styles.primaryButton}
-          href={`/coach/financials/players/${encodeURIComponent(item.id)}?mode=monthly`}
-        >
-          Review Fee Plan <ArrowRight aria-hidden="true" />
-        </Link>
+      <div className={styles.stepBody}>
+        <div className={styles.emptyBox}>
+          <strong>This player already has a Fee Plan that needs a look</strong>
+          <p>Check its dates or training type in their fee record.</p>
+        </div>
+        <div className={styles.formActions}>
+          <Link
+            className={styles.primaryButton}
+            href={`/coach/financials/players/${encodeURIComponent(item.id)}?mode=monthly`}
+          >
+            Review Fee Plan <ArrowRight aria-hidden="true" />
+          </Link>
+        </div>
       </div>
     )
   }
+
+  const termOver = item.assignedSession?.standing === "finished" || item.assignedSession?.standing === "ended"
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -200,7 +216,7 @@ export function FeePlanStep({
         const failure = describeSaveFailure({
           error,
           retained: "The agreed monthly fee is still on screen",
-          subject: "The fee timeline",
+          subject: "Working out the fees",
         })
         setFeedback({
           action: failure.signIn,
@@ -221,14 +237,14 @@ export function FeePlanStep({
       setConfirmed(false)
       setFeedback({
         message: previewResult.data.blockers.length
-          ? "Review the blockers below before completing onboarding."
-          : "Fee timeline ready. Confirm the permanent training start date to complete onboarding.",
+          ? "Fix the blockers below before completing onboarding."
+          : "Fees worked out. Confirm the training start date to complete onboarding.",
         tone: previewResult.data.blockers.length ? "error" : "success",
       })
       return
     }
     if (preview.blockers.length) {
-      setFeedback({ message: "Resolve every blocker, then generate a fresh fee timeline.", tone: "error" })
+      setFeedback({ message: "Fix every blocker, then review the fees again.", tone: "error" })
       return
     }
     if (!confirmed) {
@@ -251,7 +267,7 @@ export function FeePlanStep({
     } catch (error) {
       const failure = describeSaveFailure({
         error,
-        retained: "The fee timeline is still on screen",
+        retained: "The fees are still on screen",
         subject: "The Fee Plan",
       })
       setFeedback({
@@ -272,7 +288,7 @@ export function FeePlanStep({
       }
       setFeedback({
         message: result.code === "CONFLICT"
-          ? `${result.message} Generate a fresh fee timeline.`
+          ? `${result.message} Review the fees again.`
           : result.message,
         tone: "error",
       })
@@ -285,76 +301,65 @@ export function FeePlanStep({
   }
 
   return (
-    <form className={styles.feePlanForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
-      <dl className={styles.trainingFacts}>
-        <div><dt>Level</dt><dd>{item.level}</dd></div>
-        <div><dt>Batch</dt><dd>{item.batch}</dd></div>
-        <div><dt>Training plan</dt><dd>{academyPlanLabel(item.academyPlan)}</dd></div>
-      </dl>
-      <div className={styles.feeFields}>
-        <label>
-          <span>Agreed monthly fee</span>
-          <span className={styles.moneyInput}><b>₹</b><input
-            ref={monthlyFeeRef}
-            name="monthlyFee"
-            inputMode="decimal"
-            value={monthlyFee}
-            placeholder="3,500"
-            aria-invalid={monthlyFeeInvalid || undefined}
-            aria-describedby={monthlyFeeInvalid ? feedbackId : undefined}
-            onChange={(event) => {
-              setMonthlyFee(event.target.value)
-              setPreview(null)
-              setConfirmed(false)
-              setFeedback(null)
-            }}
-          /></span>
-        </label>
-        <div className={styles.derivedFeeMonth}>
-          <span>Fee timeline</span>
-          <strong>{preview ? formatBillingPeriod(preview.feePlanStartOn.slice(0, 7)) : "Derived from training"}</strong>
-          <small>The server uses the confirmed start date and session assignment.</small>
-        </div>
+    <form className={styles.stepBody} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
+      {termOver ? (
+        <p className={styles.note} role="note">
+          {item.assignedSession?.standing === "ended"
+            ? `${firstName}’s first schedule has ended. The fees cover only the months ${firstName} trained.`
+            : `${firstName}’s first term has finished. The fees cover only the months ${firstName} trained.`}
+        </p>
+      ) : null}
+      {/* The help sits outside the label, so the field's name is only "Monthly fee". */}
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor={`onboarding-${item.id}-fee`}>Monthly fee</label>
+        <span className={styles.entry}><b aria-hidden="true">₹</b><input
+          ref={monthlyFeeRef}
+          id={`onboarding-${item.id}-fee`}
+          name="monthlyFee"
+          inputMode="decimal"
+          value={monthlyFee}
+          placeholder="3,500"
+          aria-invalid={monthlyFeeInvalid || undefined}
+          aria-describedby={monthlyFeeInvalid ? feedbackId : `onboarding-${item.id}-fee-help`}
+          onChange={(event) => {
+            setMonthlyFee(event.target.value)
+            setPreview(null)
+            setConfirmed(false)
+            setFeedback(null)
+          }}
+        /></span>
+        <small className={styles.help} id={`onboarding-${item.id}-fee-help`}>
+          The first month is charged for the sessions left in it, rounded to ₹50.
+        </small>
       </div>
-      <p className={styles.feeNote}>
-        Review first. Completing onboarding issues the registration fee and every applicable monthly fee. The joining month is prorated by eligible scheduled sessions and rounded once to the nearest ₹50.
-      </p>
       {preview ? (
-        <section className={styles.feePreview} aria-labelledby={`onboarding-${item.id}-fee-preview-title`}>
+        <section className={styles.bill} aria-labelledby={`onboarding-${item.id}-fee-preview-title`}>
           <header>
-            <div>
-              <span>Derived fee timeline</span>
-              <h4 id={`onboarding-${item.id}-fee-preview-title`}>
-                {formatBillingPeriod(preview.feePlanStartOn.slice(0, 7))} onward
-              </h4>
-            </div>
-            <div>
-              <span>Issued now</span>
-              <strong>{formatInr(preview.totalIssuedPaise)}</strong>
-            </div>
+            <h3 className={styles.label} id={`onboarding-${item.id}-fee-preview-title`}>Issued when you finish</h3>
+            <strong>{formatInr(preview.totalIssuedPaise)}</strong>
           </header>
-          <div className={styles.previewLines}>
+          <ul>
             {preview.lines.map((line, index) => (
-              <article key={`${line.kind}:${line.period ?? "registration"}:${index}`}>
-                <div>
-                  <span>{line.period ? formatBillingPeriod(line.period) : "Registration"}</span>
-                  <strong>{line.description}</strong>
-                </div>
-                <div>
-                  <span>{line.kind === "before_tracking" ? "Record only" : line.dueDate ? `Due ${formatFinanceDate(line.dueDate)}` : "No charge due"}</span>
-                  <strong>{line.amountPaise === null ? "Before tracking" : formatInr(line.amountPaise)}</strong>
+              <li key={`${line.kind}:${line.period ?? "registration"}:${index}`}>
+                <span>
+                  <strong>{line.period ? formatBillingPeriod(line.period) : "Registration"}</strong>
+                  <small>{line.description}</small>
                   {line.numerator !== null && line.denominator !== null ? (
                     <small>{line.numerator} of {line.denominator} eligible sessions</small>
                   ) : null}
-                </div>
-              </article>
+                </span>
+                <span className={styles.due}>
+                  {line.kind === "before_tracking" ? "Record only" : line.dueDate ? `Due ${formatFinanceDate(line.dueDate)}` : "No charge due"}
+                </span>
+                <strong className={styles.amount}>{line.amountPaise === null ? "Before tracking" : formatInr(line.amountPaise)}</strong>
+              </li>
             ))}
-          </div>
+          </ul>
           <FeePreviewWarnings warnings={preview.warnings} />
           {preview.blockers.length ? (
             <FeePreviewBlockers blockers={preview.blockers} />
           ) : (
-            <label className={styles.finalConfirmation}>
+            <label className={styles.confirm}>
               <input
                 ref={confirmationRef}
                 type="checkbox"
@@ -370,8 +375,8 @@ export function FeePlanStep({
                 }}
               />
               <span>
-                <strong>Training start date: {formatDateKey(preview.trainingStartOn)}</strong>
-                I confirm this is the start of the player’s current continuous training period. It cannot be changed after onboarding is completed.
+                <strong>{trainingStartLine(preview.trainingStartOn, referenceDate)}</strong>
+                I confirm this date. It can’t be changed after onboarding.
               </span>
             </label>
           )}
@@ -379,21 +384,23 @@ export function FeePlanStep({
       ) : null}
       <InlineNotice action={feedback?.action} id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       {/*
-        * This used to read "there is no other way back to it", which was true
-        * while the step list was a picture. It is navigation now, so moving the
-        * training start earlier costs nothing -- the server refuses only a move
-        * *later* under an open assignment. Reset is still the only route for the
-        * level, batch and Training plan, and still stops being possible once
-        * academy records exist, so the warning stays; it just no longer claims to
-        * be the only door.
+        * Moving the training start earlier is the Session step's job, reached
+        * from the tabs. Reset is the only route for the level, batch and
+        * Training plan, and stops being possible once academy records exist.
         */}
-      <p className={styles.feeNote}>
-        {item.hasRecords
-          ? "The training start date and schedule are fixed now that attendance or fees are recorded. Complete onboarding, then make any change in Members."
-          : "The training start date is set on the Session step, with the schedule it belongs to. Reset the session assignment to choose them again, or to change the level, batch or Training plan. It stops being possible once the player has attendance, fees or a payment on record."}
-      </p>
+      {item.hasRecords ? (
+        <p className={styles.note} data-tone="lock">
+          <Lock aria-hidden="true" />
+          Schedule and start date are fixed: attendance or fees are already recorded. Complete onboarding, then make any change in Members.
+        </p>
+      ) : (
+        <p className={styles.help}>
+          Reset the session assignment to change the schedule, start date, level, batch or Training plan.
+          Not possible once the player has attendance, fees or a payment on record.
+        </p>
+      )}
       <div className={styles.formActions}>
-        {item.hasRecords ? <span aria-hidden="true" /> : (
+        {item.hasRecords ? null : (
           <button type="button" disabled={busy} onClick={() => void resetAssignment()}>
             {retryAction === "reset" ? "Reset session assignment again" : "Reset session assignment"}
           </button>
@@ -405,11 +412,11 @@ export function FeePlanStep({
           disabled={busy}
         >
           {busy
-            ? preview ? "Completing…" : "Building timeline…"
+            ? preview ? "Completing…" : "Working out fees…"
             : retryAction === "submit"
-              ? preview ? "Complete onboarding again" : "Review fee timeline again"
+              ? preview ? "Complete onboarding again" : "Review fees again"
               : !preview
-                ? "Review fee timeline"
+                ? "Review fees"
                 : preview.blockers.length
                   ? "Resolve blockers"
                   : "Complete onboarding & issue fees"} <ArrowRight aria-hidden="true" />

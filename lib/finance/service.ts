@@ -68,6 +68,7 @@ import {
   loadChargeViews,
   loadPeriodAssignmentIndex,
   loadPlayerFeeRecord,
+  loadRecordedWithdrawalChargeIds,
   planRestoreAfterWithdrawalReversal,
   playerTrainingHasEnded,
   readActiveFeeAgreement,
@@ -146,7 +147,7 @@ import {
   type FeeAgreementView,
 } from "@/lib/finance/types"
 import { formatDateKey, getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
-import { academyPlanIsValid } from "@/lib/training/academy-plans"
+import { academyPlanIsValid, feePlanMatchesTraining } from "@/lib/training/academy-plans"
 import {
   IMPLAUSIBLE_TRAINING_START_MESSAGE,
   trainingStartIsImplausiblyEarly,
@@ -754,11 +755,7 @@ function monthlyPreparationCandidates(
       waiting?.add(candidate.agreement.playerAccountId)
       return
     }
-    const matchesCurrentEnrollment = candidate.agreement.academyPlan
-        === candidate.enrollment.academyPlan
-      && candidate.agreement.level === candidate.enrollment.level
-      && candidate.agreement.batch === candidate.enrollment.batch
-    if (period >= currentPeriod && !matchesCurrentEnrollment) return
+    if (period >= currentPeriod && !feePlanMatchesTraining(candidate.agreement, candidate.enrollment)) return
     const playerId = candidate.agreement.playerAccountId
     const existing = candidatesByPlayer.get(playerId)
     if (!existing
@@ -883,6 +880,8 @@ export function correctFeeAgreementInTransaction(
     agreedMonthlyFeePaise: number
     agreementId: string
     batch: CreateFeeAgreementInput["batch"]
+    /** Recorded on the audit row, for a caller that replays a retried submit by it. */
+    idempotencyKey?: string
     level: CreateFeeAgreementInput["level"]
     reason: string
   },
@@ -925,6 +924,7 @@ export function correctFeeAgreementInTransaction(
     entityId: agreement.id,
     entityType: "fee_agreement",
     eventType: "fee_agreement_corrected",
+    idempotencyKey: input.idempotencyKey,
     metadata: {
       agreementId: agreement.id,
       playerId: agreement.playerAccountId,
@@ -3079,6 +3079,17 @@ function withdrawalRefundablePaymentAllocations(
 
 // Head coach, 13 Nov 2026: a withdrawal refund ends the fee plan, so it is
 // recorded only after the player's training has ended in Members.
+/**
+ * A withdrawal refund was capped on the fee as it stood, credits included.
+ * Taking a credit away underneath it would leave a balance due on a month the
+ * player has left, so the refund is reversed first -- as for a receipt.
+ */
+function requireNoWithdrawalRefund(database: SmbaDatabaseExecutor, chargeId: string) {
+  if (loadRecordedWithdrawalChargeIds(database, [chargeId]).size) {
+    financeError("CONFLICT", "Reverse the withdrawal Refund on this fee before removing its credit.")
+  }
+}
+
 function requireTrainingEnded(database: SmbaDatabaseExecutor, playerId: string, now: Date) {
   if (!playerTrainingHasEnded(database, playerId, getAcademyDateKey(now))) {
     financeError(
@@ -4176,6 +4187,7 @@ export function reverseConcessionApplication(
     if (!targetConcession) throw new Error("The Concession is unavailable.")
     requireActiveFinanceTarget(tx, targetConcession.playerId)
     if (application.reversedAt) financeError("CONFLICT", "Concession application is already reversed.")
+    requireNoWithdrawalRefund(tx, application.chargeId)
     const applicationUpdate = tx.update(concessionApplications).set({
       reversedByAccountId: coachId,
       reversedAt: now,
@@ -4481,6 +4493,7 @@ export function reverseChargeAdjustment(
     if (!targetCharge) throw new Error("The adjusted Charge is unavailable.")
     requireActiveFinanceTarget(tx, targetCharge.playerAccountId)
     if (adjustment.reversedAt) financeError("CONFLICT", "Adjustment is already reversed.")
+    if (adjustment.kind === "manual_credit") requireNoWithdrawalRefund(tx, adjustment.chargeId)
     if (adjustment.kind === "manual_debit") {
       const charge = loadChargeView(tx, adjustment.chargeId, now)
       if (!charge) throw new Error("The adjusted Charge is unavailable.")
@@ -4651,7 +4664,9 @@ export function readPlayerFinancialCloseoutState(
 /**
  * The first month, from when tracking began, whose fee Issue fees would still
  * issue for this player. Archiving drops a player from Issue fees, so a month
- * left unissued then could never be billed.
+ * left unissued then could never be billed. A month whose fee the coach voided
+ * counts as decided -- waived, as a voided registration fee already is --
+ * otherwise a waived month blocked Archive until it was billed after all.
  */
 export function readFirstUnissuedMonthLabel(
   database: SmbaDatabaseExecutor,
@@ -4661,7 +4676,14 @@ export function readFirstUnissuedMonthLabel(
   const activation = readFinanceActivation(database)
   if (!activation) return null
   const current = getAcademyMonthKey(now)
+  const voidedPeriods = new Set(database.select({ period: financialCharges.billingPeriod })
+    .from(financialCharges).where(and(
+      eq(financialCharges.playerAccountId, playerId),
+      eq(financialCharges.type, "monthly_training"),
+      eq(financialCharges.lifecycle, "void"),
+    )).all().map((row) => row.period))
   for (let period = activation.trackingMonth; period <= current; period = nextMonth(period)) {
+    if (voidedPeriods.has(period)) continue
     if (playersAwaitingMonthlyFee(database, period, now).has(playerId)) return monthKeyLabel(period)
   }
   return null

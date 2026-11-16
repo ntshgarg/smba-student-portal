@@ -23,6 +23,8 @@ import {
   reopenReplacedFeeAgreementInTransaction,
   reverseConcession,
 } from "@/lib/finance/service"
+import { readAuditEventByIdempotencyKey } from "@/lib/finance/repository"
+import { onboardingFinished } from "@/lib/coach/onboarding"
 import { getAcademyDateKey } from "@/lib/format"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
 import { formatTermDate, playerTrainingStatus } from "@/lib/sessions/term"
@@ -121,7 +123,16 @@ export function changeMonthlyFee(
         eq(feeAgreements.status, "active"),
       )).get()
       if (!active) {
-        operationalActionError("BUSINESS_RULE", "This player has no fee plan yet. Complete onboarding first.")
+        // Onboarding with a planned end of training ends the plan at that end,
+        // so a finished player can be here with fees stopping, not missing.
+        operationalActionError(
+          "BUSINESS_RULE",
+          !onboardingFinished(enrollment)
+            ? "This player has no fee plan yet. Complete onboarding first."
+            : waiting?.kind === "end"
+              ? `This player's training ends and their fees stop from ${formatTermDate(waiting.effectiveOn)}, so there is no later fee to change. Cancel the planned end first to change their fee.`
+              : "This player has no fee plan running. Set one up in Financials first.",
+        )
       }
       const thisMonthIssued = Boolean(tx.select({ id: financialCharges.id }).from(financialCharges).where(and(
         eq(financialCharges.playerAccountId, input.playerId),
@@ -140,14 +151,19 @@ export function changeMonthlyFee(
 
       if (active.effectiveFrom >= startsOn) {
         // A fee change for that month is already waiting; change its amount.
-        correctFeeAgreementInTransaction(tx, {
-          academyPlan: enrollment.academyPlan,
-          agreedMonthlyFeePaise: input.monthlyFeePaise,
-          agreementId: active.id,
-          batch: enrollment.batch,
-          level: enrollment.level,
-          reason: `Fee changed from ${monthLabel(startsOn)}`,
-        }, { actorId: coachId, createId, now })
+        // A retried submit finds its own correction by the request key and
+        // writes nothing more, as a new plan does (createFeeAgreement).
+        if (!readAuditEventByIdempotencyKey(tx, input.idempotencyKey)) {
+          correctFeeAgreementInTransaction(tx, {
+            academyPlan: enrollment.academyPlan,
+            agreedMonthlyFeePaise: input.monthlyFeePaise,
+            agreementId: active.id,
+            batch: enrollment.batch,
+            idempotencyKey: input.idempotencyKey,
+            level: enrollment.level,
+            reason: `Fee changed from ${monthLabel(startsOn)}`,
+          }, { actorId: coachId, createId, now })
+        }
       } else {
         createFeeAgreementInTransaction(tx, {
           academyPlan: enrollment.academyPlan,

@@ -15,10 +15,6 @@ const stages = [
   { key: "feePlan", label: "Fee Plan" },
 ] as const
 
-function displayCount(value: number) {
-  return String(value).padStart(2, "0")
-}
-
 export function PlayerOnboardingCard({
   expiringRequests = 0,
   summary,
@@ -52,34 +48,44 @@ export function PlayerOnboardingCard({
         : summary.total
           ? { count: summary.total, unit: "in progress" }
           : notStarted ? { state: "Setup" } : undefined}
-      title="Academy onboarding"
+      title="Onboarding"
       titleId="player-onboarding-card-title"
     >
       <div className={styles.layout}>
-        <CoachDashboardSummary
-          detail={expiringRequests
-            ? `${expiringRequests} join ${expiringRequests === 1 ? "request" : "requests"} will be removed in 7 days. Open onboarding to decide ${expiringRequests === 1 ? "it" : "them"}, or to undo a rejection.`
-            : notStarted
-              ? "Players and assistant coaches request access themselves. Their requests arrive here for approval, assessment, session and Fee Plan."
-              : "Approve staff access and move players through assessment, session and Fee Plan."}
-        >
-          {summary.total
-            ? `${summary.total} ${accountLabel} a next step`
-            : notStarted ? "No one to onboard yet" : "Academy onboarding is complete"}
-        </CoachDashboardSummary>
+        <div className={styles.queue}>
+          <CoachDashboardSummary
+            detail={notStarted
+              ? "Players and assistant coaches request access themselves; their requests land here."
+              : `${summary.onboarded} onboarded so far`}
+          >
+            {summary.total
+              ? `${summary.total} ${accountLabel} a next step`
+              : notStarted ? "No one to onboard yet" : "Everyone is onboarded"}
+          </CoachDashboardSummary>
 
-        <dl className={styles.stages} aria-label="Academy onboarding stages">
-          {stages.map(({ key, label }) => (
-            <div key={key} className={styles.stage}>
-              <dt>{label}</dt>
-              <dd aria-label={`${summary[key]} ${label.toLowerCase()}`}>
-                {displayCount(summary[key])}
-              </dd>
-            </div>
-          ))}
-        </dl>
+          {summary.total ? (
+            <dl className={styles.stages} aria-label="Onboarding stages">
+              {stages.map(({ key, label }) => (
+                <div
+                  key={key}
+                  data-tone={summary[key] === 0 ? "zero" : key === "newRequests" ? "attention" : undefined}
+                >
+                  <dt>{label}</dt>
+                  <dd aria-label={`${summary[key]} ${label.toLowerCase()}`}>{summary[key]}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
 
-        <CoachDashboardActions ariaLabel="Academy onboarding actions">
+          {expiringRequests ? (
+            <p className={styles.expiring}>
+              {expiringRequests} join {expiringRequests === 1 ? "request" : "requests"} will be removed within 7 days.
+              Decide {expiringRequests === 1 ? "it" : "them"}, or undo a rejection.
+            </p>
+          ) : null}
+        </div>
+
+        <CoachDashboardActions ariaLabel="Onboarding actions">
           <CoachDashboardAction href="/coach/onboarding" primary={summary.newRequests > 0 || expiringRequests > 0}>
             Open onboarding
           </CoachDashboardAction>

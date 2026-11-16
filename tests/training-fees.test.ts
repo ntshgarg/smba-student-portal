@@ -2,7 +2,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
@@ -98,6 +98,14 @@ describe("fee changes and concessions from the player's record", () => {
       .where(eq(schema.feeAgreements.playerAccountId, playerId)).all()
     expect(plans).toHaveLength(2)
     expect(plans.find((plan) => plan.status === "active")?.agreedMonthlyFeePaise).toBe(420_000)
+
+    // A retried submit writes nothing more: no second "Fee changed" entry.
+    expect(fees.changeMonthlyFee({ idempotencyKey: "member-fee:two-change", monthlyFeePaise: 420_000, playerId }, context()))
+      .toEqual({ startsOn: "2026-11-01" })
+    expect(database.select().from(schema.financialAuditEvents).where(and(
+      eq(schema.financialAuditEvents.eventType, "fee_agreement_corrected"),
+      eq(schema.financialAuditEvents.entityId, plans.find((plan) => plan.status === "active")!.id),
+    )).all()).toHaveLength(1)
   })
 
   it("leaves the fee to a scheduled training change that carries its own", () => {

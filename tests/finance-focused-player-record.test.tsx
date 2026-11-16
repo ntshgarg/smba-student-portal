@@ -19,6 +19,7 @@ const archivedLedger: PlayerFinancialLedgerView = {
   enrollmentDefaults: null,
   feePlanSetupReady: false,
   feePlan: null,
+  feePlanMismatch: false,
   onboardingComplete: false,
   fullName: "Aarav Bhat",
   management: {

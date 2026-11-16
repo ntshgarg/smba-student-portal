@@ -1,12 +1,13 @@
 "use client"
 
-import { ArrowRight, X } from "lucide-react"
+import { ArrowRight, Eye, EyeOff, X } from "lucide-react"
 import { useState } from "react"
 
 import {
   approveRegistrationAction,
   rejectRegistrationAction,
 } from "@/app/coach/actions"
+import { initials } from "@/components/coach/members/directory/shared"
 import { InlineNotice } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { OnboardingDuplicateSignal, PlayerOnboardingCase } from "@/lib/coach/onboarding"
@@ -25,11 +26,11 @@ type RequestStepFeedback = SaveFeedback & {
 function duplicateStandingLabel(signal: OnboardingDuplicateSignal) {
   switch (signal.standing) {
     case "archived":
-      return signal.academyId ? ` · was ${signal.academyId}, has left the academy` : " · has left the academy"
+      return signal.academyId ? `was ${signal.academyId}, has left the academy` : "has left the academy"
     case "pending":
-      return " · request waiting"
+      return "request waiting"
     case "approved":
-      return signal.academyId ? ` · ${signal.academyId}` : ""
+      return signal.academyId ?? null
   }
 }
 
@@ -45,6 +46,7 @@ export function RequestStep({
 }) {
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null)
   const [feedback, setFeedback] = useState<RequestStepFeedback | null>(null)
+  const [contactShown, setContactShown] = useState(false)
 
   async function approve() {
     if (busy) return
@@ -116,15 +118,28 @@ export function RequestStep({
       return
     }
     onSuccess({
-      message: `${item.fullName}’s request was rejected. To change your mind, open Rejected requests below the register.`,
+      message: `${item.fullName}’s request was rejected. To change your mind, use Undo under Rejected requests further down this page.`,
       remove: true,
     })
   }
 
   const retryAction = feedback?.offerRetry ? feedback.retryAction : undefined
+  const staff = item.requestedRole === "coach"
+  const contact = [
+    item.dateOfBirth ? { label: "Date of birth", value: shortDate(item.dateOfBirth) } : null,
+    item.contactEmail ? { label: "Email", value: item.contactEmail } : null,
+    item.contactPhone ? { label: "Mobile", value: item.contactPhone } : null,
+  ].filter((entry) => entry !== null)
 
   return (
-    <div className={styles.requestStep} aria-busy={Boolean(busy)}>
+    <div className={styles.stepBody} aria-busy={Boolean(busy)}>
+      {staff ? (
+        <p className={styles.facts}>
+          <span>Assistant coach</span>
+          <span>Coaching staff</span>
+          <span>Received {item.requestedAt ? shortInstant(item.requestedAt) : "recently"}</span>
+        </p>
+      ) : null}
       {/*
         * A name, a type and a date was everything an approval used to rest on --
         * two people of the same name were indistinguishable here. The contact
@@ -134,20 +149,30 @@ export function RequestStep({
         * All three are optional: requests made before registration collected them
         * still sit in this queue, and a coach entering someone by hand has none.
         */}
-      <dl className={styles.requestFacts}>
-        <div><dt>{item.requestedRole === "coach" ? "Assistant coach" : "Player"}</dt><dd>{item.fullName}</dd></div>
-        <div><dt>Request type</dt><dd>{item.requestedRole === "coach" ? "Coaching staff" : "Academy membership"}</dd></div>
-        <div><dt>Received</dt><dd>{item.requestedAt ? shortInstant(item.requestedAt) : "Recently"}</dd></div>
-        {item.dateOfBirth ? (
-          <div><dt>Date of birth</dt><dd>{shortDate(item.dateOfBirth)}</dd></div>
-        ) : null}
-        {item.contactEmail ? (
-          <div><dt>Contact email</dt><dd>{item.contactEmail}</dd></div>
-        ) : null}
-        {item.contactPhone ? (
-          <div><dt>Contact mobile</dt><dd>{item.contactPhone}</dd></div>
-        ) : null}
-      </dl>
+      {contact.length ? (
+        <div className={styles.contactBox}>
+          <div>
+            <span className={styles.label}>Contact</span>
+            <dl id={`onboarding-${item.id}-contact`} hidden={!contactShown}>
+              {contact.map((entry) => (
+                <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}</dd></div>
+              ))}
+            </dl>
+            {contactShown ? null : <p>{contact.map((entry) => entry.label).join(", ")}</p>}
+          </div>
+          {/* A toggle that stays put, so focus is not dropped when it is pressed. */}
+          <button
+            className={styles.button}
+            type="button"
+            aria-controls={`onboarding-${item.id}-contact`}
+            aria-expanded={contactShown}
+            onClick={() => setContactShown((shown) => !shown)}
+          >
+            {contactShown ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+            {contactShown ? "Hide contact" : "Show contact"}
+          </button>
+        </div>
+      ) : null}
       {/*
         * Shown, never enforced. The registration identity is the contact address
         * and the name together, so a second request under a differently spelled
@@ -158,26 +183,29 @@ export function RequestStep({
         * question is asked before it is.
         */}
       {item.duplicateSignals?.length ? (
-        <div className={styles.duplicateSignal} role="note">
-          <p>
+        <div className={styles.duplicate} role="note">
+          <strong>
             {item.duplicateSignals.length === 1
-              ? "Someone already on record may be this person:"
-              : "People already on record who may be this person:"}
-          </p>
+              ? "Someone already on record may be this person"
+              : "People already on record who may be this person"}
+          </strong>
           <ul>
             {item.duplicateSignals.map((signal, index) => (
               <li key={`${signal.fullName}-${signal.reason}-${signal.standing}-${signal.academyId ?? "none"}-${index}`}>
-                <strong>{signal.fullName}</strong>
-                {duplicateStandingLabel(signal)}
+                <span className={styles.badge} aria-hidden="true">{initials(signal.fullName)}</span>
                 <span>
+                  <strong>{signal.fullName}</strong>
+                  {duplicateStandingLabel(signal)}
+                </span>
+                <span className={styles.why}>
                   {signal.reason === "same-contact"
-                    ? " — same contact email"
-                    : " — same name and date of birth, different email"}
+                    ? "Same contact email"
+                    : "Same name and date of birth, different email"}
                 </span>
               </li>
             ))}
           </ul>
-          <p className={styles.duplicateSignalHelp}>
+          <p>
             {item.duplicateSignals.some((signal) => signal.standing === "archived")
               ? "Someone who has left may be registering again. Approving gives them a new Academy ID; their earlier attendance and fees stay on the old record. "
               : null}
@@ -188,7 +216,7 @@ export function RequestStep({
       ) : null}
       <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
-        <button type="button" disabled={Boolean(busy)} onClick={() => void reject()}>
+        <button className={styles.dangerButton} type="button" disabled={Boolean(busy)} onClick={() => void reject()}>
           <X aria-hidden="true" /> {busy === "reject"
             ? "Rejecting…"
             : retryAction === "reject" ? "Reject request again" : "Reject request"}
@@ -198,7 +226,7 @@ export function RequestStep({
             ? "Approving…"
             : retryAction === "approve"
               ? "Approve again"
-              : item.requestedRole === "coach" ? "Approve staff access" : "Approve & continue"} <ArrowRight aria-hidden="true" />
+              : staff ? "Approve staff access" : "Approve & continue"} <ArrowRight aria-hidden="true" />
         </button>
       </div>
     </div>

@@ -689,7 +689,7 @@ test("a second name on one address is approved knowingly, not silently", async (
   const note = coach.page.getByRole("note")
   await expect(note).toContainText("may be this person")
   await expect(note).toContainText(sibling)
-  await expect(note).toContainText("same contact email")
+  await expect(note).toContainText("Same contact email")
   // A note, not a gate: approval is still one click away.
   await expect(coach.page.getByRole("button", { name: "Approve & continue" })).toBeEnabled()
   await coach.context.close()

@@ -20,7 +20,7 @@ import {
   forgetTrustedDevices,
 } from "@/lib/auth/second-factor-reset"
 import { getRawAuthSession } from "@/lib/auth/session"
-import { challengedAccountId } from "@/lib/auth/two-factor-challenge"
+import { challengeStartedWithPin, challengedAccountId } from "@/lib/auth/two-factor-challenge"
 import { sessionProvider } from "@/lib/data"
 import {
   authSubjectHash,
@@ -515,9 +515,13 @@ export async function verifyTotpSignIn(
     recordSecondFactorRateLimited(requestHeaders, accountId, "sign_in")
     return { error: TOO_MANY_SECOND_FACTOR_ATTEMPTS }
   }
+  // The screen offers the tick only on a password sign-in; a PIN one posting it
+  // anyway would still get a 30-day trusted device for later password sign-ins.
+  const trustDevice = formData.get("trustDevice") === "on"
+    && !(await challengeStartedWithPin(requestHeaders))
   try {
     const response = await getAuth().api.verifyTOTP({
-      body: { code, trustDevice: formData.get("trustDevice") === "on" },
+      body: { code, trustDevice },
       headers: requestHeaders,
     })
     releaseSecondFactorAttempt(response.user.id)
