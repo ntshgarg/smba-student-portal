@@ -142,13 +142,15 @@ describe("operational mobile controls", () => {
     const markStyles = source("components/coach/attendance/mark.module.css")
     expect(markStyles.slice(markStyles.indexOf("@media (max-width: 720px), (pointer: coarse) {")))
       .toMatch(/\.pick input \{\s*font-size: 16px;/u)
-    expect(antiZoomRule).toContain(".coach-series-form input:not(")
+    // The Sessions forms (new schedule, replace session, mark a holiday) are
+    // floored in their own stylesheet.
+    const sessionStyles = source("components/coach/sessions/sessions.module.css")
+    expect(sessionStyles.slice(sessionStyles.indexOf("@media (max-width: 720px), (pointer: coarse) {")))
+      .toMatch(/\.field input,\s*\.field select \{\s*font-size: 16px;/u)
     expect(antiZoomRule).toContain(".coach-registration-approved p input:not(")
     expect(antiZoomRule).toContain(".coach-member-search input:not(")
     expect(antiZoomRule).toContain(".coach-member-filter select")
     expect(antiZoomRule).toContain(".coach-member-form-grid input:not(")
-    expect(antiZoomRule).toContain(".coach-calendar-controls input:not(")
-    expect(antiZoomRule).toContain(".coach-occurrence-actions input:not(")
     expect(antiZoomRule).toContain(':not([type="checkbox"]):not([type="radio"]):not([type="hidden"])')
     expect(antiZoomRule).toContain("font-size: 16px")
     expect(antiZoomRule).not.toContain(".coach-member-batch-field input")
