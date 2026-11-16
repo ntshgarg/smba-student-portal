@@ -1,9 +1,10 @@
 "use client"
 
-import { CalendarOff, CircleAlert, X } from "lucide-react"
+import { X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 import { useSessionPortal } from "@/components/coach/coach-portal-provider"
+import styles from "@/components/coach/sessions/sessions.module.css"
 import { InlineNotice, type ActionFeedback, type InlineNoticeAction } from "@/components/inline-notice"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import { formatDateKey } from "@/lib/format"
@@ -88,8 +89,7 @@ export function HolidayComposer({
   viewMonth: string
 }) {
   const { markAcademyHolidays, previewAcademyHolidays } = useSessionPortal()
-  const dialogRef = useRef<HTMLDialogElement>(null)
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const fromRef = useRef<HTMLInputElement>(null)
   const labelRef = useRef<HTMLInputElement>(null)
   const [from, setFrom] = useState(selectedDate)
   const [to, setTo] = useState(selectedDate)
@@ -98,22 +98,9 @@ export function HolidayComposer({
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
+  // It opens in place above the day, so focus goes to its first field rather than staying on the link that opened it.
   useEffect(() => {
-    const dialog = dialogRef.current
-    const previouslyFocused = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
-    const previousOverflow = document.body.style.overflow
-
-    if (dialog && !dialog.open) dialog.showModal()
-    document.body.style.overflow = "hidden"
-    closeButtonRef.current?.focus()
-
-    return () => {
-      document.body.style.overflow = previousOverflow
-      if (dialog?.open) dialog.close()
-      previouslyFocused?.focus()
-    }
+    fromRef.current?.focus()
   }, [])
 
   const dates = expandDateRange(from, to)
@@ -213,44 +200,26 @@ export function HolidayComposer({
     : []
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="coach-holiday-backdrop"
+    <section
+      className={styles.sheet}
       aria-labelledby="holiday-composer-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        dismiss()
-      }}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) dismiss()
+      onKeyDown={(event) => {
+        if (event.key === "Escape") dismiss()
       }}
     >
-      <section className="coach-holiday-panel" onMouseDown={(event) => event.stopPropagation()}>
-        <button
-          ref={closeButtonRef}
-          className="coach-holiday-close"
-          type="button"
-          onClick={dismiss}
-          disabled={busy}
-          aria-label="Close holiday panel"
-        >
+      <div className={styles.sheetHead}>
+        <h2 id="holiday-composer-title">Mark a holiday</h2>
+        <button type="button" onClick={dismiss} disabled={busy} aria-label="Close holiday panel">
           <X aria-hidden="true" />
         </button>
+      </div>
 
-        <header className="coach-holiday-heading">
-          <span className="eyebrow">Close the academy</span>
-          <h2 id="holiday-composer-title">Mark a holiday</h2>
-          <p>
-            Every session on the chosen dates is cancelled at once. Those days leave the
-            attendance count entirely, so nobody is marked absent and no percentage moves.
-            Monthly fees do not change.
-          </p>
-        </header>
-
-        <div className="coach-holiday-fields">
-          <label>
+      <div className={styles.sheetBody}>
+        <div className={styles.three}>
+          <label className={styles.field}>
             <span>First day</span>
             <input
+              ref={fromRef}
               name="holidayFrom"
               type="date"
               value={from}
@@ -258,7 +227,7 @@ export function HolidayComposer({
               onChange={(event) => editRange({ from: event.target.value })}
             />
           </label>
-          <label>
+          <label className={styles.field}>
             <span>Last day</span>
             <input
               name="holidayTo"
@@ -269,8 +238,8 @@ export function HolidayComposer({
               onChange={(event) => editRange({ to: event.target.value })}
             />
           </label>
-          <label>
-            <span>Holiday name</span>
+          <label className={styles.field}>
+            <span>Name</span>
             <input
               ref={labelRef}
               name="holidayLabel"
@@ -286,57 +255,52 @@ export function HolidayComposer({
           </label>
         </div>
 
-        {rangeInvalid ? (
-          <p className="coach-holiday-hint">Choose a last day on or after the first day.</p>
-        ) : rangeTooLong ? (
-          <p className="coach-holiday-hint">Close at most {MAX_DATES} days at a time.</p>
-        ) : (
-          <p className="coach-holiday-hint">
-            {dates.length === 1
-              ? formatDateKey(dates[0], { year: "numeric" })
-              : `${dates.length} days, ${formatDateKey(dates[0])} to ${formatDateKey(dates[dates.length - 1], { year: "numeric" })}`}
-          </p>
-        )}
+        <p className={styles.help}>
+          {rangeInvalid
+            ? "Choose a last day on or after the first day."
+            : rangeTooLong
+              ? `Close at most ${MAX_DATES} days at a time.`
+              : dates.length === 1
+                ? `${formatDateKey(dates[0], { year: "numeric" })}. Every session that day is cancelled. Nobody is marked absent, and fees don’t change.`
+                : `${dates.length} days, ${formatDateKey(dates[0])} to ${formatDateKey(dates[dates.length - 1], { year: "numeric" })}. Every session on these days is cancelled. Nobody is marked absent, and fees don’t change.`}
+        </p>
 
         {impact ? (
-          <div className="coach-holiday-impact">
+          <div className={styles.impact}>
             <h3>
               {impact.totals.datesToClose === 0
                 ? "Nothing left to close"
                 : `Closing ${impact.totals.datesToClose} day${impact.totals.datesToClose === 1 ? "" : "s"} cancels ${pluralSessions(impact.totals.scheduledSessions)}`}
             </h3>
             {impact.totals.datesAlreadyClosed > 0 ? (
-              <p className="coach-holiday-note">
+              <p>
                 {impact.totals.datesAlreadyClosed} of these days {impact.totals.datesAlreadyClosed === 1 ? "is" : "are"} already
                 a holiday and will be left as {impact.totals.datesAlreadyClosed === 1 ? "it is" : "they are"}.
               </p>
             ) : null}
             {closingPast ? (
-              <p className="coach-holiday-note">
+              <p>
                 This closure covers sessions that have already run. That is allowed, and it
                 is why the checks below matter.
               </p>
             ) : null}
 
             {warnings.length ? (
-              <ul className="coach-holiday-warnings">
+              <ul>
                 {warnings.map((warning) => (
-                  <li key={warning.key}>
-                    <CircleAlert aria-hidden="true" />
-                    <div>
-                      <strong>{warning.title}</strong>
-                      <p>{warning.body}</p>
-                    </div>
+                  <li key={warning.key} className={styles.warning}>
+                    <strong>{warning.title}</strong>
+                    {warning.body}
                   </li>
                 ))}
               </ul>
             ) : impact.totals.datesToClose > 0 ? (
-              <p className="coach-holiday-note">
+              <p>
                 No attendance has been recorded on {dayWord}, so nothing is being undone.
               </p>
             ) : null}
 
-            <ul className="coach-holiday-dates">
+            <ul className={styles.dates}>
               {impact.dates.map((date) => (
                 <li key={date.dateKey}>
                   <span>{formatDateKey(date.dateKey)}</span>
@@ -355,21 +319,20 @@ export function HolidayComposer({
 
         <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
 
-        <div className="coach-holiday-actions">
-          <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+        <div className={styles.actions}>
+          <button className={styles.button} type="button" onClick={onClose} disabled={busy}>Cancel</button>
           {impact ? (
             <button
-              className="coach-holiday-confirm"
+              className={styles.primary}
               type="button"
               onClick={() => void confirm()}
               disabled={busy || impact.totals.datesToClose === 0}
             >
-              <CalendarOff aria-hidden="true" />
-              {busy ? "Closing…" : "Close the academy"}
+              {busy ? "Closing…" : label.trim() ? `Close the academy for ${label.trim()}` : "Close the academy"}
             </button>
           ) : (
             <button
-              className="coach-holiday-confirm"
+              className={styles.primary}
               type="button"
               onClick={() => void check()}
               disabled={busy || rangeInvalid || rangeTooLong}
@@ -378,7 +341,7 @@ export function HolidayComposer({
             </button>
           )}
         </div>
-      </section>
-    </dialog>
+      </div>
+    </section>
   )
 }
