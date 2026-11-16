@@ -43,6 +43,7 @@ import {
   planThisMonthFeeCorrection,
 } from "@/lib/training/this-month-fee-plan"
 import { formatSessionLabel, getAcademyDateKey } from "@/lib/format"
+import { formatTermDate } from "@/lib/sessions/term"
 import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyPlanAssignmentLimit,
@@ -915,6 +916,18 @@ export function changeScheduleThisMonth(
           "This month's fee has already been paid, so only the session time can change this month. To change the level, batch or plan, start the change next month.",
         )
       }
+      // The fee plan is checked before any schedule is touched, so a change it
+      // cannot follow is refused up front rather than undone at the end.
+      const plans = financeActive && profileChanges ? agreementsAround(tx, input.playerId, monthStart) : null
+      if (plans?.active && plans.active.effectiveFrom > monthStart) {
+        nextMonthFeeRefusal(tx, input.playerId, today, "change this month")
+      }
+      if (plans?.covering?.effectiveTo && plans.covering.status !== "active") {
+        operationalActionError(
+          "CONFLICT",
+          `This player's fees stop after ${formatTermDate(plans.covering.effectiveTo)}, so the level, batch or plan cannot change this month. Cancel the planned end first, or change only the session time.`,
+        )
+      }
       const { weekdays } = validateSelection(tx, input, startsOn)
 
       // Every schedule that still covers a day from the start date is cut back,
@@ -984,14 +997,9 @@ export function changeScheduleThisMonth(
         newAmountPaise: null,
         startsOn,
       }
-      // A change of session time alone leaves the fee exactly as it is.
-      if (!financeActive || !profileChanges) return result
-
-      const { active, covering } = agreementsAround(tx, input.playerId, monthStart)
-      if (active && active.effectiveFrom > monthStart) {
-        nextMonthFeeRefusal(tx, input.playerId, getAcademyDateKey(now), "change this month")
-      }
-      // No fee plan covers this month, so there is no fee to change.
+      // A change of session time alone leaves the fee exactly as it is, and with
+      // no fee plan covering this month there is no fee to change.
+      const covering = plans?.covering
       if (!covering) return result
       const fee = validateFee(input.monthlyFeePaise, true) as number
       const monthLabel = new Intl.DateTimeFormat("en-IN", {
