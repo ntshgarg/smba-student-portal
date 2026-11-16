@@ -850,7 +850,7 @@ function TrainingForm({
               <small>{dayList([...new Set(item.slots.map((slot) => slot.weekday))])}{currentSeriesIds.includes(item.id) ? " · current schedule" : ""}</small>
             </span>
           </label>
-        )) : <p className={styles.help}>No {level} · {batch} schedule is running on {dayName(startsOn)}. Create one in Schedules &amp; rosters first.</p>}
+        )) : <p className={styles.help}>No {level} · {batch} schedule is running on {dayName(startsOn)}. Create one in Sessions › Schedules first.</p>}
       </fieldset>
 
       {chosen ? (

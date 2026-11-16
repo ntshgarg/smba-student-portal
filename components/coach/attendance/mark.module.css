@@ -87,6 +87,8 @@
   gap: var(--space-tight);
   padding: 0 14px;
   color: var(--ink);
+  font: inherit;
+  cursor: pointer;
   font-size: var(--type-utility-meta);
   font-weight: 700;
   white-space: nowrap;

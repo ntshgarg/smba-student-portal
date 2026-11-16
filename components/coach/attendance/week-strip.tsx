@@ -3,16 +3,10 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
 import { useState } from "react"
 
-import { weekdayForDateKey } from "@/lib/date-keys"
+import { shiftDateKey, weekdayForDateKey } from "@/lib/date-keys"
 import { formatDateKey } from "@/lib/format"
 
 import styles from "./mark.module.css"
-
-function shiftDateKey(dateKey: string, days: number) {
-  const date = new Date(`${dateKey}T00:00:00.000Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
-}
 
 /**
  * The Mark tab's dates: the selected day's week, Monday to Sunday, with ‹ ›
@@ -22,12 +16,19 @@ function shiftDateKey(dateKey: string, days: number) {
  *
  * No dot per day for how far its registers got: the Mark tab reads one day of
  * sessions and marks at a time, so the rest of the week is not on hand.
+ *
+ * The Sessions calendar passes `onPick`: there "Pick a date" opens its own
+ * month, which shows each day's sessions and holidays, in place of the browser's.
  */
 export function WeekStrip({
   onChoose,
+  onPick,
+  pickOpen = false,
   selectedDate,
 }: {
   onChoose: (dateKey: string) => void
+  onPick?: () => void
+  pickOpen?: boolean
   selectedDate: string
 }) {
   // Weeks away from the selected day's own week.
@@ -77,7 +78,12 @@ export function WeekStrip({
       >
         <ChevronRight aria-hidden="true" />
       </button>
-      <label className={styles.pick}>
+      {onPick ? (
+        <button type="button" className={styles.pick} aria-expanded={pickOpen} onClick={onPick}>
+          <CalendarDays aria-hidden="true" />
+          <span>Pick a date</span>
+        </button>
+      ) : <label className={styles.pick}>
         <CalendarDays aria-hidden="true" />
         <span>Pick a date</span>
         <input
@@ -96,7 +102,7 @@ export function WeekStrip({
             }
           }}
         />
-      </label>
+      </label>}
     </nav>
   )
 }

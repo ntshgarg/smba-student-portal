@@ -8,7 +8,7 @@ import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import { getCoachCalendarMonthSnapshot } from "@/lib/coach/session-read-models"
 
-export const metadata = { title: "Training calendar" }
+export const metadata = { title: "Calendar" }
 
 export default async function CoachCalendarPage({
   searchParams,

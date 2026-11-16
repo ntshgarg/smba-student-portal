@@ -6,7 +6,7 @@ import { academyToday } from "@/lib/clock"
 import { listOperationalPlayerRecords, playerIsInOnboarding } from "@/lib/coach/database"
 import { getCoachScheduleRosterSnapshot } from "@/lib/coach/session-read-models"
 
-export const metadata = { title: "Schedules & rosters" }
+export const metadata = { title: "Schedules" }
 
 export default async function CoachSchedulesPage({
   searchParams,
