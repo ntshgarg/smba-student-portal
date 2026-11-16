@@ -9,6 +9,7 @@ import {
   operationalActionError,
 } from "@/lib/actions/operational-result"
 import { requireHeadAdminAccess } from "@/lib/auth/coach-access"
+import { MAKEUP_WINDOW_DAYS } from "@/lib/attendance/domain"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
   initializeDatabase,
@@ -426,10 +427,10 @@ export function publishMakeupAttendanceAdjustment({
           "completionOccurrenceId",
         )
       }
-      if (completedOn > addCalendarDays(source.occurrenceDate, 14)) {
+      if (completedOn > addCalendarDays(source.occurrenceDate, MAKEUP_WINDOW_DAYS)) {
         operationalActionError(
           "BUSINESS_RULE",
-          "The make-up session must be within 14 days of the missed session.",
+          `The make-up session must be within ${MAKEUP_WINDOW_DAYS} days of the missed session.`,
           "completionOccurrenceId",
         )
       }

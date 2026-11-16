@@ -87,6 +87,9 @@ export function assertAttendanceBreakdown(
   }
 }
 
+/** A missed session can be made up on a training day up to this many days after it. */
+export const MAKEUP_WINDOW_DAYS = 14
+
 /**
  * The one attendance percentage: attended over marked (present + absent),
  * rounded; null when nothing is marked. Players, staff and the registers all

@@ -31,6 +31,7 @@ import {
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
 import type { AttendanceAdjustmentRecord } from "@/lib/attendance/adjustments"
+import { MAKEUP_WINDOW_DAYS } from "@/lib/attendance/domain"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 import {
   formatAcademyDate,
@@ -326,7 +327,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
   const completionOptions = useMemo(() => {
     if (!sourceOccurrence || !selectedPlayer) return []
     const min = shiftDateKey(sourceOccurrence.occurrenceDate, 1)
-    const max = [shiftDateKey(sourceOccurrence.occurrenceDate, 14), todayKey].sort()[0]
+    const max = [shiftDateKey(sourceOccurrence.occurrenceDate, MAKEUP_WINDOW_DAYS), todayKey].sort()[0]
     const playerAssignments = sessionAssignments.filter(
       (assignment) => assignment.playerId === selectedPlayerId,
     )
@@ -808,7 +809,7 @@ export const AttendanceAdjustmentsWorkspace = forwardRef<
                   aria-describedby={feedback?.field === "completionOccurrenceId" ? feedbackId : undefined}
                 >
                   <legend className={styles.label}>
-                    Made up on <span>(attended, within 14 days)</span>
+                    Made up on <span>(attended, within {MAKEUP_WINDOW_DAYS} days)</span>
                   </legend>
                   {!sourceOccurrence ? (
                     <p className={styles.placeholder}>Choose the missed session first</p>
