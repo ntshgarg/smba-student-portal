@@ -99,9 +99,9 @@ export function OnboardingEditor({
       role="region"
       aria-labelledby={`onboarding-editor-title-${item.id}`}
     >
-      <h3 className="sr-only" id={`onboarding-editor-title-${item.id}`}>
+      <h2 className="sr-only" id={`onboarding-editor-title-${item.id}`}>
         {editorTitle(item, viewStage)}
-      </h3>
+      </h2>
       <StepRail
         current={viewStage}
         currentId={`onboarding-current-step-${item.id}`}

@@ -335,7 +335,7 @@ export function FeePlanStep({
       {preview ? (
         <section className={styles.bill} aria-labelledby={`onboarding-${item.id}-fee-preview-title`}>
           <header>
-            <h4 className={styles.label} id={`onboarding-${item.id}-fee-preview-title`}>Issued when you finish</h4>
+            <h3 className={styles.label} id={`onboarding-${item.id}-fee-preview-title`}>Issued when you finish</h3>
             <strong>{formatInr(preview.totalIssuedPaise)}</strong>
           </header>
           <ul>

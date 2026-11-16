@@ -36,8 +36,14 @@
   background: color-mix(in srgb, var(--red) 8%, var(--white));
 }
 
+/* quieter than a live stage, but the label still has to read at 4.5:1 */
 .stages > div[data-tone="zero"] {
-  opacity: 0.55;
+  background: transparent;
+  box-shadow: none;
+}
+
+.stages > div[data-tone="zero"] dd {
+  color: var(--steel);
 }
 
 .stages dd {
