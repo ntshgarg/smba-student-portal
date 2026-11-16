@@ -1917,7 +1917,7 @@
   }
 
   .coach-panel {
-    padding: calc(var(--coach-overlap) + var(--space-copy)) 20px 24px;
+    padding: calc(var(--coach-overlap) + var(--space-copy)) 20px var(--space-group);
   }
 
   .coach-facts {
