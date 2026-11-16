@@ -28,8 +28,10 @@ import {
   accounts,
   authCredentialStates,
   authMethods,
+  authPinCredentials,
   authRuntimeSessions,
   authSessions,
+  authVerifications,
   coachProfiles,
   playerEnrollments,
   sessionAssignments,
@@ -577,6 +579,11 @@ function revokePortalAccess(
   )).run()
   tx.delete(authSessions).where(eq(authSessions.accountId, accountId)).run()
   tx.delete(authRuntimeSessions).where(eq(authRuntimeSessions.userId, accountId)).run()
+  // Trusted browsers and half-finished sign-ins (the code screen) are Better
+  // Auth verification rows holding the account id; a code entered on a screen
+  // left open used to start a session for the archived account. Its PIN goes too.
+  tx.delete(authVerifications).where(eq(authVerifications.value, accountId)).run()
+  tx.delete(authPinCredentials).where(eq(authPinCredentials.accountId, accountId)).run()
   tx.update(authCredentialStates).set({
     status: "revoked",
     updatedAt: now,
