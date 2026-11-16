@@ -4,12 +4,22 @@ import { Undo2 } from "lucide-react"
 import { useState } from "react"
 
 import { undoRegistrationRejectionAction } from "@/app/coach/actions"
+import { initials } from "@/components/coach/members/directory/shared"
 import { InlineNotice, type InlineNoticeAction } from "@/components/inline-notice"
 import type { RejectedRegistration } from "@/lib/auth/registration-form"
 import { describeSaveFailure } from "@/lib/client/network-failure"
 
 import styles from "./player-onboarding-register.module.css"
-import { folio, shortInstant } from "./register/shared"
+import { shortInstant } from "./register/shared"
+
+/** A rejected request with the days left before the 90-day clean-up deletes it. */
+export type ExpiringRejectedRegistration = RejectedRegistration & { removedInDays: number | null }
+
+function removalLabel(days: number | null) {
+  if (days === null) return null
+  if (days <= 0) return "removed soon"
+  return `removed in ${days} ${days === 1 ? "day" : "days"}`
+}
 
 /** Rejected requests, so a mistaken rejection can be found and undone. */
 export function RejectedRequests({
@@ -17,7 +27,7 @@ export function RejectedRequests({
   requests,
 }: {
   onRestored: (input: { message: string }) => void
-  requests: RejectedRegistration[]
+  requests: ExpiringRejectedRegistration[]
 }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{
@@ -64,27 +74,30 @@ export function RejectedRequests({
   }
 
   return (
-    <section className={styles.register} aria-labelledby="rejected-requests-title">
-      <div className={styles.registerHeading}>
-        <h2 id="rejected-requests-title">Rejected requests</h2>
-        <p><strong>{requests.length}</strong> not accepted · Undo puts a request back in review</p>
-      </div>
-      <ol className={styles.rows}>
-        {requests.map((request, index) => (
+    <section className={styles.rejected} aria-labelledby="rejected-requests-title">
+      <header>
+        <h2 id="rejected-requests-title">Rejected requests ({requests.length})</h2>
+        <p>Undo puts a request back in review</p>
+      </header>
+      <ol>
+        {requests.map((request) => (
           <li key={request.id}>
-            <div className={styles.row}>
-              <span className={styles.folio}>{folio(index)}</span>
-              <div className={styles.identity}>
+            <div className={styles.rejectedRow}>
+              <span className={styles.badge} aria-hidden="true">{initials(request.fullName)}</span>
+              <span className={styles.name}>
                 <strong>{request.fullName}</strong>
-                <small>{request.contactEmail}</small>
-              </div>
-              <span className={styles.stageStamp}>Rejected</span>
-              <div className={styles.nextAction}>
-                <strong>{request.requestedRole === "coach" ? "Assistant coach" : "Player"}</strong>
-                <small>{request.rejectedAt ? `Rejected ${shortInstant(request.rejectedAt)}` : "Rejected"}</small>
-              </div>
+                <small>
+                  {[
+                    request.requestedRole === "coach" ? "Assistant coach" : "Player",
+                    request.rejectedAt ? `Rejected ${shortInstant(request.rejectedAt)}` : "Rejected",
+                    removalLabel(request.removedInDays),
+                    request.contactEmail,
+                  ].filter(Boolean).join(" · ")}
+                </small>
+              </span>
+              <span className={styles.pill}>Rejected</span>
               <button
-                className={styles.openButton}
+                className={styles.button}
                 type="button"
                 disabled={Boolean(busyId) || restored.includes(rejectionKey(request))}
                 onClick={() => void undo(request)}

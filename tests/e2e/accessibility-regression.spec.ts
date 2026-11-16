@@ -1025,7 +1025,7 @@ async function reviewRegistration(
   await coachPage.setViewportSize(accessibilityViewports[0])
   await coachPage.goto("/coach/onboarding", { waitUntil: "domcontentloaded" })
   const row = coachPage.locator("ol > li").filter({ hasText: fullName }).first()
-  await row.getByRole("link", { name: /^(Open|Continue)$/u }).click()
+  await row.locator("a[href*='player=']").click()
   if (decision === "approve") {
     await row.getByRole("button", { name: "Approve & continue" }).click()
     await expect(coachPage.getByText(new RegExp(`${fullName} approved as SMBA-PL-`, "u")))

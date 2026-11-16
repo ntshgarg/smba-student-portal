@@ -9,64 +9,34 @@ import type { TrainingSessionSeries } from "@/lib/sessions/types"
 import styles from "../player-onboarding-register.module.css"
 import { AssessmentStep } from "./assessment-step"
 import { FeePlanStep } from "./fee-plan-step"
-import { OnboardingTimeline } from "./onboarding-timeline"
 import { RequestStep } from "./request-step"
 import { SessionStep } from "./session-step"
 import { StepRail } from "./step-rail"
 
-function editorCopy(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
+/**
+ * The record's name for screen readers and the focus target when it opens. The
+ * band already shows who it is and the open tab shows the step, so nothing here
+ * is painted.
+ */
+function editorTitle(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
   const firstName = item.fullName.split(/\s+/u)[0]
   switch (stage) {
     case "request":
-      if (item.requestedRole === "coach") {
-        return {
-          title: `Review ${firstName}’s staff request`,
-          body: "Approve the assistant coach to create their Academy ID and activate staff access.",
-        }
-      }
-      return {
-        title: `Review ${firstName}’s request`,
-        body: "Approve the player to create their Academy ID and begin assessment.",
-      }
+      return item.requestedRole === "coach"
+        ? `Review ${firstName}’s staff request`
+        : `Review ${firstName}’s request`
     case "assessment":
-      return {
-        title: `Complete ${firstName}’s assessment`,
-        body: "Record the level, batch and Training plan. The start date is set with the schedule.",
-      }
+      return `Complete ${firstName}’s assessment`
     case "session":
-      // Revisited, this step reports an assignment rather than offering to make
-      // one; a heading still saying "assign" describes work that is done.
-      if (item.assignedSession?.standing === "running") {
-        return {
-          title: `${firstName}’s court time is set`,
-          body: "The assigned schedule, and what it takes to change it.",
-        }
-      }
+      // Revisited, this step reports an assignment rather than offering to make one.
+      if (item.assignedSession?.standing === "running") return `${firstName}’s court time is set`
       if (item.assignedSession?.standing === "finished" || item.assignedSession?.standing === "ended") {
-        return {
-          title: `${firstName}’s first term is over`,
-          body: "Finish onboarding with it on the Fee Plan step, or start again if nothing is recorded yet.",
-        }
+        return `${firstName}’s first term is over`
       }
-      if (item.assignedSession) {
-        return {
-          title: `Start ${firstName}’s court time again`,
-          body: "Their schedule ended before their first training day.",
-        }
-      }
-      return {
-        title: `Assign ${firstName}’s court time`,
-        body: "Choose a matching recurring schedule, the attendance days, and the day training starts.",
-      }
+      if (item.assignedSession) return `Start ${firstName}’s court time again`
+      return `Assign ${firstName}’s court time`
     case "feePlan":
-      return {
-        title: `Confirm ${firstName}’s Fee Plan`,
-        body: item.assignedSession?.standing === "ended"
-          ? "Their first schedule has ended. Record the agreed monthly fee to complete onboarding for the months they trained."
-          : item.assignedSession?.standing === "finished"
-            ? "Their first term has finished. Record the agreed monthly fee to complete onboarding for the months they trained."
-            : "Record the agreed monthly training fee to complete onboarding.",
-      }
+      return `Confirm ${firstName}’s Fee Plan`
   }
 }
 
@@ -121,8 +91,6 @@ export function OnboardingEditor({
     document.getElementById(`onboarding-editor-title-${item.id}`)?.focus({ preventScroll: false })
   }
 
-  const copy = editorCopy(item, viewStage)
-
   return (
     <div
       className={styles.editor}
@@ -130,17 +98,20 @@ export function OnboardingEditor({
       role="region"
       aria-labelledby={`onboarding-editor-title-${item.id}`}
     >
-      <StepRail current={viewStage} onSelect={selectStage} reachedStage={item.stage} />
-      <div className={styles.editorWork}>
-        <div className={styles.editorHeading}>
-          <span>{revisiting ? "Revisiting" : "Next action"}</span>
-          <h3 id={`onboarding-editor-title-${item.id}`} tabIndex={-1}>{copy.title}</h3>
-          <p>{copy.body}</p>
-        </div>
-        <OnboardingTimeline item={item} />
-        {revisiting ? (
-          <p className={styles.revisitNote} role="note">
-            You are back on a completed step. Nothing is final until onboarding is completed.
+      <h3 className="sr-only" id={`onboarding-editor-title-${item.id}`} tabIndex={-1}>
+        {editorTitle(item, viewStage)}
+      </h3>
+      <StepRail
+        current={viewStage}
+        onSelect={selectStage}
+        reachedStage={item.stage}
+        staff={item.requestedRole === "coach"}
+      />
+      <div className={styles.editorBody}>
+        {/* Only where the step is still a form: a locked or assigned step says so itself. */}
+        {revisiting && viewStage === "assessment" && !item.assignedSession ? (
+          <p className={styles.note} role="note">
+            Already done. Changes are fine until onboarding is complete.
           </p>
         ) : null}
         {viewStage === "request" ? <RequestStep item={item} onSuccess={onSuccess} /> : null}

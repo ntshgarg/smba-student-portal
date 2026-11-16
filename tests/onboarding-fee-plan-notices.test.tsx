@@ -39,7 +39,7 @@ describe("what a fee preview refuses to let past", () => {
     // role="alert" and the wording carry this, never the colour: the styling
     // marks it with red type, and a coach who cannot see that still gets told.
     expect(markup).toContain('role="alert"')
-    expect(markup).toContain("Resolve before completion")
+    expect(markup).toContain("Fix before finishing")
     expect(markup).toContain("Assign a matching session before completing fees.")
   })
 
@@ -78,7 +78,7 @@ describe("what a fee preview refuses to let past", () => {
     )
 
     expect(markup).not.toContain('role="alert"')
-    expect(markup).not.toContain("Resolve before completion")
+    expect(markup).not.toContain("Fix before finishing")
     expect(markup).toContain("The first month is partly billed.")
   })
 })

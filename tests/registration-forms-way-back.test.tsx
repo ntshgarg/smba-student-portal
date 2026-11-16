@@ -22,6 +22,7 @@ describe("the head coach's Rejected list", () => {
           fullName: "Mira Rao",
           id: "request-1",
           rejectedAt: "2026-11-03T04:00:00.000Z",
+          removedInDays: 77,
           requestedRole: "player",
         }]}
       />,
@@ -31,6 +32,8 @@ describe("the head coach's Rejected list", () => {
     expect(html).toContain("Mira Rao")
     expect(html).toContain("mira.family@example.com")
     expect(html).toContain("Undo rejection")
+    // The 90-day clean-up deletes it; the head coach sees how long is left.
+    expect(html).toContain("removed in 77 days")
   })
 
   it("dates a rejection in India time, not UTC", () => {
@@ -43,6 +46,7 @@ describe("the head coach's Rejected list", () => {
           id: "request-1",
           // 01:30 on 13 Nov in India.
           rejectedAt: "2026-11-12T20:00:00.000Z",
+          removedInDays: 86,
           requestedRole: "player",
         }]}
       />,
@@ -95,6 +99,6 @@ describe("the duplicate hint on a request", () => {
       <RequestStep item={{ ...request, requestedAt: "2026-11-12T20:00:00.000Z" }} onSuccess={vi.fn()} />,
     )
 
-    expect(html).toContain("<dd>13 Nov</dd>")
+    expect(html).toContain("13 Nov 2026")
   })
 })

@@ -3,8 +3,6 @@
 import { shownTrainingStart, type PlayerOnboardingCase } from "@/lib/coach/onboarding"
 import { formatDateKey } from "@/lib/format"
 
-import styles from "../player-onboarding-register.module.css"
-
 const timelineDateFormat = new Intl.DateTimeFormat("en-IN", {
   day: "numeric",
   month: "short",
@@ -12,21 +10,33 @@ const timelineDateFormat = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
 })
 
-function timelineDate(value: string | null | undefined, fallback = "Pending") {
-  if (!value) return fallback
-  return timelineDateFormat.format(new Date(value))
-}
-
+/** The Members record's Joining line (app/portal.css), so the steps read the same in both places. */
 export function OnboardingTimeline({ item }: { item: PlayerOnboardingCase }) {
   // The date approval stamps is a stand-in until the Session step confirms one.
   const trainingStart = shownTrainingStart(item)
+  const steps = [
+    { label: "Requested", value: item.requestedAt ? timelineDateFormat.format(new Date(item.requestedAt)) : null },
+    { label: "Approved", value: item.approvedAt ? timelineDateFormat.format(new Date(item.approvedAt)) : null },
+    { label: "Account set up", value: item.activatedAt ? timelineDateFormat.format(new Date(item.activatedAt)) : null },
+    { label: "Training from", value: trainingStart ? formatDateKey(trainingStart) : null },
+    {
+      label: "Onboarded",
+      value: item.onboardingCompletedAt ? timelineDateFormat.format(new Date(item.onboardingCompletedAt)) : null,
+    },
+  ]
+
   return (
-    <dl className={styles.dateTimeline} aria-label="Onboarding dates">
-      <div><dt>Requested</dt><dd>{timelineDate(item.requestedAt)}</dd></div>
-      <div><dt>Approved</dt><dd>{timelineDate(item.approvedAt)}</dd></div>
-      <div><dt>Training start</dt><dd>{trainingStart ? formatDateKey(trainingStart) : "Pending"}</dd></div>
-      <div><dt>Activated</dt><dd>{timelineDate(item.activatedAt)}</dd></div>
-      <div><dt>Completed</dt><dd>{timelineDate(item.onboardingCompletedAt)}</dd></div>
-    </dl>
+    <div className="coach-member-joining">
+      <span>Joining</span>
+      <ol>
+        {steps.map((step) => (
+          <li key={step.label} className={step.value ? undefined : "is-pending"}>
+            <span className="coach-member-joining-mark" aria-hidden="true" />
+            <strong>{step.label}</strong>
+            <small>{step.value ?? (step.label === "Training from" ? "Not set yet" : "Not yet")}</small>
+          </li>
+        ))}
+      </ol>
+    </div>
   )
 }

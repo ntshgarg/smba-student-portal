@@ -9,31 +9,22 @@ import { formatAcademyDate, formatDateKey } from "@/lib/format"
 export type SaveFeedback = ActionFeedback & { offerRetry?: boolean }
 
 /**
- * `railLabel` exists because the step rail is the one place these names are given
- * a quarter of the screen each. At 320px that track is 55px, and "ASSESSMENT" at
- * the rail's 9px sets 63.5px of unbreakable single word -- it crossed into the
- * step beside it. "NEW REQUESTS" fits only by wrapping to two lines, and that wrap
- * is what pulled the four markers onto three different heights below 393px.
- *
- * Shortening the rail alone rather than `label` everywhere: the same strings are
- * the queue's stage stamps and the stage-count captions, where they have room and
- * where "New requests" reads better than "Request".
+ * `label` counts a stage across the queue ("New requests"); `tabLabel` names the
+ * one step a person is on, in the open record's tabs and the queue row's pill.
+ * Each tab label is a prefix of its `label` or names the same step, so the tab
+ * buttons' aria-labels, which use `label`, still match what is painted.
  */
 export const STAGES: Array<{
   key: PlayerOnboardingStage
   label: string
-  railLabel: string
+  tabLabel: string
   summaryKey: "newRequests" | "assessment" | "session" | "feePlan"
 }> = [
-  { key: "request", label: "New requests", railLabel: "Request", summaryKey: "newRequests" },
-  { key: "assessment", label: "Assessment", railLabel: "Assess", summaryKey: "assessment" },
-  { key: "session", label: "Session", railLabel: "Session", summaryKey: "session" },
-  { key: "feePlan", label: "Fee Plan", railLabel: "Fee plan", summaryKey: "feePlan" },
+  { key: "request", label: "New requests", tabLabel: "Request", summaryKey: "newRequests" },
+  { key: "assessment", label: "Assessment", tabLabel: "Assessment", summaryKey: "assessment" },
+  { key: "session", label: "Session", tabLabel: "Session", summaryKey: "session" },
+  { key: "feePlan", label: "Fee Plan", tabLabel: "Fee plan", summaryKey: "feePlan" },
 ]
-
-export function folio(index: number) {
-  return String(index + 1).padStart(2, "0")
-}
 
 export function shortDate(value: string) {
   return formatDateKey(value.slice(0, 10), {

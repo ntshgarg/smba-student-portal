@@ -24,7 +24,7 @@ async function loginAsCoach(page: import("@playwright/test").Page) {
   }
 }
 
-test("Academy Onboarding register is readable and contained at all three views", async ({ page }, testInfo) => {
+test("Onboarding is readable and contained at all three views", async ({ page }, testInfo) => {
   const consoleErrors: string[] = []
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text())
@@ -37,13 +37,13 @@ test("Academy Onboarding register is readable and contained at all three views",
     await page.goto("/coach/onboarding", { waitUntil: "networkidle" })
     await page.evaluate(() => document.fonts.ready)
 
-    await expect(page.getByRole("heading", { name: "Academy intake register." })).toBeVisible()
-    await expect(page.getByRole("region", { name: "Onboarding stage totals" }).locator(":scope > div")).toHaveCount(4)
-    await expect(page.getByRole("heading", { name: "People needing action" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Onboarding", level: 1 })).toBeVisible()
+    await expect(page.getByRole("group", { name: "Show people at a stage" }).getByRole("button")).toHaveCount(5)
 
-    const firstExpander = page.locator("a[aria-controls^='onboarding-editor-']").first()
-    if (await firstExpander.count()) {
-      await firstExpander.click()
+    const firstCase = page.getByRole("list", { name: "People needing a next step" })
+      .locator("a[href*='player=']").first()
+    if (await firstCase.count()) {
+      if (await firstCase.getAttribute("aria-expanded") !== "true") await firstCase.click()
       await expect(page.locator("[role='region'][id^='onboarding-editor-']")).toBeVisible()
     }
 

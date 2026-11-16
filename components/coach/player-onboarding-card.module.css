@@ -1,103 +1,86 @@
+/* The queue on the left, the one way in on the right; stacked below 980px. */
 .layout {
   display: grid;
-  min-width: 0;
-  flex: 1;
-  grid-template-columns:
-    minmax(240px, 0.92fr)
-    minmax(430px, 1.52fr)
-    minmax(180px, 0.56fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr);
   align-items: center;
-  gap: clamp(28px, 3.4vw, 50px);
+  gap: clamp(var(--space-group), 4vw, var(--space-section-sm));
 }
 
-.layout > nav {
-  margin-top: 0;
-  padding-top: 0;
+.queue {
+  min-width: 0;
 }
 
+/* The same tiles as the Onboarding page's stage filters. */
 .stages {
   display: grid;
-  min-width: 0;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.stage {
-  display: grid;
-  min-width: 0;
-  min-height: 78px;
-  grid-template-areas:
-    "value"
-    "label";
-  align-content: center;
-  justify-items: center;
   gap: var(--space-tight);
-  padding: 10px 14px;
-  text-align: center;
+  margin: 14px 0 0;
 }
 
-.stage + .stage {
-  border-left: 1px solid var(--line);
+.stages > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 10px 12px;
+  border: var(--frost-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--white) 55%, transparent);
+  box-shadow: inset 0 1px 0 var(--white), 0 10px 20px -18px var(--navy);
 }
 
-.stage dt {
-  grid-area: label;
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: var(--weight-label);
-  letter-spacing: 0.09em;
-  line-height: 1.25;
-  text-transform: uppercase;
+.stages > div[data-tone="attention"] {
+  border-color: color-mix(in srgb, var(--red) 25%, transparent);
+  background: color-mix(in srgb, var(--red) 8%, var(--white));
 }
 
-.stage dd {
-  grid-area: value;
+.stages > div[data-tone="zero"] {
+  opacity: 0.55;
+}
+
+.stages dd {
   margin: 0;
   color: var(--navy);
   font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.9375rem;
+  font-size: 1.625rem;
   font-style: italic;
   font-weight: var(--weight-display-light);
-  letter-spacing: -0.035em;
-  line-height: 0.9;
+  line-height: 1;
 }
 
-@media (min-width: 761px) and (max-width: 980px) {
+.stages > div[data-tone="attention"] dd {
+  color: var(--red);
+}
+
+.stages dt {
+  overflow-wrap: anywhere;
+  color: var(--steel-dark);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+}
+
+.expiring {
+  margin-top: 12px;
+  padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, var(--makeup) 55%, transparent);
+  border-radius: 12px;
+  background: var(--makeup-soft);
+  color: var(--makeup-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+@media (max-width: 980px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
-  }
-
-  .stage {
-    min-height: 66px;
+    gap: 0;
   }
 }
 
-@media (max-width: 760px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
-  }
-
+@media (max-width: 640px) {
   .stages {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-  }
-
-  .stage {
-    min-height: 76px;
-  }
-
-  .stage + .stage {
-    border-left: 0;
-  }
-
-  .stage:nth-child(even) {
-    border-left: 1px solid var(--line);
-  }
-
-  .stage:nth-child(n + 3) {
-    border-top: 1px solid var(--line);
   }
 }

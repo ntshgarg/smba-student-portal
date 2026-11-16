@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Lock } from "lucide-react"
 import Link from "next/link"
 import { useRef, useState } from "react"
 
@@ -13,6 +13,7 @@ import type { TrainingBatch, TrainingProgramme } from "@/lib/sessions/types"
 import {
   academyBatchesFor,
   academyPlanLabel,
+  academyPlanRequiredWeekdayCount,
   academyPlansFor,
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
@@ -43,18 +44,15 @@ export function AssessmentStep({
    * handler still validates: this is the affordance, not the check.
    */
   const classificationIncomplete = !level || !batch || !trainingPlan
-  const levelRef = useRef<HTMLSelectElement>(null)
-  const batchRef = useRef<HTMLSelectElement>(null)
-  const planRef = useRef<HTMLSelectElement>(null)
+  const levelRef = useRef<HTMLFieldSetElement>(null)
+  const batchRef = useRef<HTMLFieldSetElement>(null)
+  const planRef = useRef<HTMLFieldSetElement>(null)
   /*
    * Tracked the date and only the date before it moved, which meant a coach who
    * changed the level and navigated away lost it silently. With the date gone
    * the classification is all this step holds, so it is what the guard watches.
    */
   const isDirty = level !== (item.level ?? "")
-    || batch !== (item.batch ?? "")
-    || trainingPlan !== (item.academyPlan ?? "")
-    || level !== (item.level ?? "")
     || batch !== (item.batch ?? "")
     || trainingPlan !== (item.academyPlan ?? "")
   const guard = useUnsavedWorkGuard({
@@ -91,6 +89,13 @@ export function AssessmentStep({
     setErrors((current) => ({ ...current, batch: undefined, academyPlan: undefined }))
   }
 
+  // The checked option, or the first one when nothing is chosen yet.
+  function focusChoice(group: React.RefObject<HTMLFieldSetElement | null>) {
+    const inputs = group.current?.querySelectorAll<HTMLInputElement>("input:not(:disabled)")
+    if (!inputs?.length) return
+    ;([...inputs].find((input) => input.checked) ?? inputs[0]).focus()
+  }
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (busy) return
@@ -101,9 +106,9 @@ export function AssessmentStep({
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) {
       setFeedback({ message: "Review the highlighted assessment details.", tone: "error" })
-      if (nextErrors.level) levelRef.current?.focus()
-      else if (nextErrors.batch) batchRef.current?.focus()
-      else planRef.current?.focus()
+      if (nextErrors.level) focusChoice(levelRef)
+      else if (nextErrors.batch) focusChoice(batchRef)
+      else focusChoice(planRef)
       return
     }
     if (item.recordRevision === null) return
@@ -143,9 +148,9 @@ export function AssessmentStep({
       }
       setErrors(nextFieldErrors)
       setFeedback({ message: result.message, tone: "error" })
-      if (nextFieldErrors.level) levelRef.current?.focus()
-      else if (nextFieldErrors.batch) batchRef.current?.focus()
-      else if (nextFieldErrors.academyPlan) planRef.current?.focus()
+      if (nextFieldErrors.level) focusChoice(levelRef)
+      else if (nextFieldErrors.batch) focusChoice(batchRef)
+      else if (nextFieldErrors.academyPlan) focusChoice(planRef)
       return
     }
     /*
@@ -160,92 +165,126 @@ export function AssessmentStep({
     }))
   }
 
+  const locked = Boolean(item.assignedSession)
+  const errorId = (field: string) => `onboarding-${item.id}-${field}-error`
+
   return (
-    <form className={styles.compactForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
+    <form className={styles.stepBody} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
       {/*
         * The server refuses a level, batch or plan change while an assignment is
         * open (lib/coach/onboarding-service.ts:127-137) and offers reset as the
-        * remedy. Leaving the selects live meant the coach discovered that only
+        * remedy. Leaving the choices live meant the coach discovered that only
         * after submitting -- and `updateLevel` blanks batch and plan on the way,
-        * so a refused attempt also emptied two fields they then had to retype.
-        * The date beside them stays editable, because moving it earlier is
-        * exactly what the server does allow.
+        * so a refused attempt also emptied two fields they then had to redo.
         */}
       {item.assignedSession ? (
-        <p className={styles.classificationLockNote} role="note">
+        <p className={styles.note} data-tone="lock" role="note">
+          <Lock aria-hidden="true" />
           {item.hasRecords
-            ? "Level, batch and Training plan are fixed: this player has a schedule with attendance or fees recorded. Finish onboarding on the Fee Plan step, then change them in Members."
-            : `Level, batch and Training plan are fixed while this player has a schedule. To change them, use ${item.assignedSession.standing === "running" ? "Clear this assignment" : "Start again"} on the Session step first.`}
+            ? "Fixed: attendance or fees are already recorded. Finish onboarding on the Fee Plan step, then change them in Members."
+            : `Fixed while this player has a schedule. To change them, use ${item.assignedSession.standing === "running" ? "Clear this assignment" : "Start again"} on the Session step first.`}
         </p>
       ) : null}
-      <div className={styles.threeFieldGrid}>
-        <label>
-          <span>Level</span>
-          <select
-            ref={levelRef}
-            disabled={Boolean(item.assignedSession)}
-            name="level"
-            value={level}
-            aria-invalid={Boolean(errors.level)}
-            aria-describedby={errors.level ? `onboarding-${item.id}-level-error` : undefined}
-            onChange={(event) => updateLevel(event.target.value as TrainingProgramme | "")}
-          >
-            <option value="">Choose level</option>
-            {LEVELS.map((option) => <option key={option}>{option}</option>)}
-          </select>
-          {errors.level ? <small id={`onboarding-${item.id}-level-error`}>{errors.level}</small> : null}
-        </label>
-        <label>
-          <span>Batch</span>
-          <select
-            ref={batchRef}
-            disabled={Boolean(item.assignedSession)}
-            name="batch"
-            value={batch}
-            aria-invalid={Boolean(errors.batch)}
-            aria-describedby={errors.batch ? `onboarding-${item.id}-batch-error` : undefined}
-            onChange={(event) => updateBatch(event.target.value as TrainingBatch | "")}
-          >
-            <option value="">Choose batch</option>
-            {batches.map((option) => <option key={option}>{option}</option>)}
-          </select>
-          {errors.batch ? <small id={`onboarding-${item.id}-batch-error`}>{errors.batch}</small> : null}
-        </label>
-        <label>
-          <span>Training plan</span>
-          <select
-            ref={planRef}
-            name="academyPlan"
-            value={trainingPlan}
-            disabled={!level || !batch || Boolean(item.assignedSession)}
-            aria-invalid={Boolean(errors.academyPlan)}
-            aria-describedby={errors.academyPlan ? `onboarding-${item.id}-plan-error` : undefined}
-            onChange={(event) => {
-              setTrainingPlan(event.target.value as AcademyPlan | "")
-              setErrors((current) => ({ ...current, academyPlan: undefined }))
-            }}
-          >
-            <option value="">Choose plan</option>
-            {plans.map((plan) => <option key={plan} value={plan}>{academyPlanLabel(plan)}</option>)}
-          </select>
-          {errors.academyPlan ? <small id={`onboarding-${item.id}-plan-error`}>{errors.academyPlan}</small> : null}
-        </label>
-      </div>
+      <fieldset
+        className={styles.field}
+        disabled={locked}
+        ref={levelRef}
+        aria-invalid={Boolean(errors.level) || undefined}
+        aria-describedby={errors.level ? errorId("level") : undefined}
+      >
+        <legend>Level</legend>
+        <div className={styles.chips}>
+          {LEVELS.map((option) => (
+            <label key={option}>
+              <input
+                type="radio"
+                name="level"
+                value={option}
+                checked={level === option}
+                onChange={() => updateLevel(option)}
+              />
+              {option}
+            </label>
+          ))}
+        </div>
+        {errors.level ? <p className={styles.fieldError} id={errorId("level")}>{errors.level}</p> : null}
+      </fieldset>
+      <fieldset
+        className={styles.field}
+        disabled={locked}
+        ref={batchRef}
+        aria-invalid={Boolean(errors.batch) || undefined}
+        aria-describedby={errors.batch ? errorId("batch") : undefined}
+      >
+        <legend>Batch</legend>
+        <div className={styles.switch}>
+          {batches.map((option) => (
+            <label key={option}>
+              <input
+                type="radio"
+                name="batch"
+                value={option}
+                checked={batch === option}
+                onChange={() => updateBatch(option)}
+              />
+              {option}
+            </label>
+          ))}
+        </div>
+        {errors.batch ? <p className={styles.fieldError} id={errorId("batch")}>{errors.batch}</p> : null}
+      </fieldset>
+      <fieldset
+        className={styles.field}
+        disabled={locked}
+        ref={planRef}
+        aria-invalid={Boolean(errors.academyPlan) || undefined}
+        aria-describedby={errors.academyPlan ? errorId("plan") : undefined}
+      >
+        <legend>Training plan</legend>
+        {plans.length ? (
+          <div className={styles.cards}>
+            {plans.map((plan) => {
+              const days = academyPlanRequiredWeekdayCount(plan)
+              return (
+                <label key={plan}>
+                  <input
+                    type="radio"
+                    name="academyPlan"
+                    value={plan}
+                    checked={trainingPlan === plan}
+                    onChange={() => {
+                      setTrainingPlan(plan)
+                      setErrors((current) => ({ ...current, academyPlan: undefined }))
+                    }}
+                  />
+                  <strong>{academyPlanLabel(plan)}</strong>
+                  <small>{days === null ? "Sat and Sun" : `${days} sessions a week`}</small>
+                </label>
+              )
+            })}
+          </div>
+        ) : (
+          <p className={styles.help}>Choose a level and batch first.</p>
+        )}
+        {errors.academyPlan ? <p className={styles.fieldError} id={errorId("plan")}>{errors.academyPlan}</p> : null}
+      </fieldset>
       <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <Link href={`/coach/members?player=${encodeURIComponent(item.id)}`}>View member record</Link>
-        <button
-          className={styles.primaryButton}
-          type="submit"
-          aria-disabled={classificationIncomplete || undefined}
-          disabled={busy}
-        >
-          {busy
-            ? "Saving…"
-            : feedback?.offerRetry
-              ? "Save assessment again"
-              : "Save assessment & continue"} <ArrowRight aria-hidden="true" />
-        </button>
+        {locked ? null : (
+          <button
+            className={styles.primaryButton}
+            type="submit"
+            aria-disabled={classificationIncomplete || undefined}
+            disabled={busy}
+          >
+            {busy
+              ? "Saving…"
+              : feedback?.offerRetry
+                ? "Save assessment again"
+                : "Save assessment & continue"} <ArrowRight aria-hidden="true" />
+          </button>
+        )}
       </div>
     </form>
   )

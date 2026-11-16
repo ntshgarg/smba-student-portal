@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Lock } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useRef, useState } from "react"
 
@@ -17,6 +17,7 @@ import { formatTermDate } from "@/lib/sessions/term"
 import type { TrainingSessionSeries } from "@/lib/sessions/types"
 import {
   academyPlanAssignmentLimit,
+  academyPlanLabel,
   academyPlanRequiredWeekdayCount,
 } from "@/lib/training/academy-plans"
 
@@ -116,8 +117,8 @@ function placeReport(item: PlayerOnboardingCase) {
       return {
         heading: `${item.fullName} is already assigned to ${schedule}, from ${from}.`,
         body: item.hasRecords
-          ? `A schedule cannot be swapped in place, and this one now has attendance or fees recorded, so it stays. Finish onboarding on the Fee Plan step, then change ${firstName}’s schedule in Members.`
-          : "A schedule cannot be swapped in place. Clearing this one lets a different schedule and first training day be chosen. Nothing is recorded for this player yet, so nothing is lost.",
+          ? `Fixed: attendance or fees are already recorded. Finish onboarding on the Fee Plan step, then change ${firstName}’s schedule in Members.`
+          : "To use a different schedule or first training day, clear this one. Nothing is recorded for this player yet, so nothing is lost.",
         canFinish,
         clearLabel: "Clear this assignment",
       }
@@ -337,9 +338,14 @@ export function SessionStep({
   if (report) {
     const canClear = !item.hasRecords
     return (
-      <div className={styles.recoveryPanel}>
-        <strong>{report.heading}</strong>
-        <p>{report.body}</p>
+      <div className={styles.stepBody}>
+        <div className={styles.placed}>
+          <strong>{report.heading}</strong>
+        </div>
+        <p className={styles.note} data-tone="lock">
+          {canClear ? null : <Lock aria-hidden="true" />}
+          {report.body}
+        </p>
         {/*
           * The reset lives here as well as on Fee Plan. This is the step whose
           * work it undoes, and sending a coach two steps forward to undo the
@@ -351,7 +357,7 @@ export function SessionStep({
             <button disabled={busy} onClick={() => void resetAssignment()} type="button">
               {busy ? "Clearing…" : report.clearLabel}
             </button>
-          ) : <span aria-hidden="true" />}
+          ) : null}
           {report.canFinish && onGoToFeePlan ? (
             <button className={styles.primaryButton} disabled={busy} onClick={onGoToFeePlan} type="button">
               Go to Fee Plan <ArrowRight aria-hidden="true" />
@@ -365,10 +371,17 @@ export function SessionStep({
   if (!options.length) {
     const createHref = `/coach/schedules/new?programme=${encodeURIComponent(item.level ?? "")}&batch=${encodeURIComponent(item.batch ?? "")}&player=${encodeURIComponent(item.id)}&from=assignment`
     return (
-      <div className={styles.recoveryPanel}>
-        <strong>No assignable schedule matches this Training plan.</strong>
-        <p>Create a recurring schedule with enough attendance days, then return to this player.</p>
-        <Link className={styles.primaryButton} href={createHref}>Create matching schedule <ArrowRight aria-hidden="true" /></Link>
+      <div className={styles.stepBody}>
+        <div className={styles.emptyBox}>
+          <strong>
+            No schedule matches {[item.level, item.batch, item.academyPlan ? academyPlanLabel(item.academyPlan) : null]
+              .filter(Boolean).join(" · ")}
+          </strong>
+          <p>Create a recurring schedule with enough attendance days, then come back to this player.</p>
+        </div>
+        <div className={styles.formActions}>
+          <Link className={styles.primaryButton} href={createHref}>Create matching schedule <ArrowRight aria-hidden="true" /></Link>
+        </div>
       </div>
     )
   }
@@ -377,63 +390,68 @@ export function SessionStep({
   const requiredDays = item.academyPlan ? academyPlanRequiredWeekdayCount(item.academyPlan) : null
 
   return (
-    <form className={styles.sessionForm} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
-      <fieldset className={styles.seriesChoices}>
-        <legend>Matching recurring session</legend>
-        {options.map((series) => {
-          const firstSlot = [...series.slots].sort((a, b) => a.startTime.localeCompare(b.startTime))[0]
-          return (
-            <label key={series.id} className={series.id === seriesId ? styles.selectedChoice : ""}>
-              <input
-                type="radio"
-                name={`series-${item.id}`}
-                value={series.id}
-                checked={series.id === seriesId}
-                onChange={() => chooseSeries(series)}
-              />
-              <span>
+    <form className={styles.stepBody} autoComplete="off" onSubmit={(event) => void submit(event)} aria-busy={busy}>
+      <fieldset className={styles.field}>
+        <legend>Schedule</legend>
+        <div className={styles.cards}>
+          {options.map((series) => {
+            const firstSlot = [...series.slots].sort((a, b) => a.startTime.localeCompare(b.startTime))[0]
+            return (
+              <label key={series.id}>
+                <input
+                  type="radio"
+                  name={`series-${item.id}`}
+                  value={series.id}
+                  checked={series.id === seriesId}
+                  onChange={() => chooseSeries(series)}
+                />
                 <strong>{series.title}</strong>
-                <small>{series.venue} · {firstSlot
-                  ? formatSessionTimeRange({ startTime: firstSlot.startTime, durationMinutes: firstSlot.durationMinutes })
-                  : "Recurring time"}</small>
-              </span>
-              <em>{seriesWeekdays(series).map((day) => WEEKDAYS[day]).join(" · ")}</em>
-            </label>
-          )
-        })}
+                <small>{[
+                  series.venue,
+                  firstSlot
+                    ? formatSessionTimeRange({ startTime: firstSlot.startTime, durationMinutes: firstSlot.durationMinutes })
+                    : "Recurring time",
+                  seriesWeekdays(series).map((day) => WEEKDAYS[day]).join(" · "),
+                ].join(" · ")}</small>
+              </label>
+            )
+          })}
+        </div>
       </fieldset>
 
-      <div className={styles.sessionDetails}>
-        <fieldset
-          ref={weekdaysRef}
-          aria-invalid={weekdaysInvalid || undefined}
-          aria-describedby={weekdaysInvalid ? feedbackId : undefined}
-        >
-          <legend>Attendance days {requiredDays !== null ? `· choose ${requiredDays}` : "· up to 2"}</legend>
-          <div className={styles.weekdayChoices}>
-            {offeredWeekdays.map((weekday) => (
-              <label key={weekday} className={weekdays.includes(weekday) ? styles.selectedDay : ""}>
-                <input
-                  name="weekdays"
-                  type="checkbox"
-                  value={weekday}
-                  checked={weekdays.includes(weekday)}
-                  onChange={() => toggleWeekday(weekday)}
-                />
-                <span>{WEEKDAYS[weekday]}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <label>
-          {/*
-            * One date, not two. This was "Effective from" beside a "Training
-            * start date" on the Assessment step, and the pair could never
-            * legitimately disagree: the assignment was floored at the start
-            * date, and a start date below the schedule bought nothing except a
-            * first monthly fee dated before the player's first ever session.
-            */}
-          <span>Training starts on</span>
+      <fieldset
+        ref={weekdaysRef}
+        className={styles.field}
+        aria-invalid={weekdaysInvalid || undefined}
+        aria-describedby={weekdaysInvalid ? feedbackId : undefined}
+      >
+        <legend>Days {requiredDays !== null ? `· choose ${requiredDays}` : "· up to 2"}</legend>
+        <div className={styles.days}>
+          {offeredWeekdays.map((weekday) => (
+            <label key={weekday}>
+              <input
+                name="weekdays"
+                type="checkbox"
+                value={weekday}
+                checked={weekdays.includes(weekday)}
+                onChange={() => toggleWeekday(weekday)}
+              />
+              {WEEKDAYS[weekday]}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <label className={styles.field}>
+        {/*
+          * One date, not two. This was "Effective from" beside a "Training
+          * start date" on the Assessment step, and the pair could never
+          * legitimately disagree: the assignment was floored at the start
+          * date, and a start date below the schedule bought nothing except a
+          * first monthly fee dated before the player's first ever session.
+          */}
+        <span className={styles.label}>Training starts on</span>
+        <span className={styles.entry}>
           <input
             ref={effectiveFromRef}
             name="effectiveFrom"
@@ -446,32 +464,27 @@ export function SessionStep({
               setFeedback(null)
             }}
           />
-          <small id={effectiveFromHelpId}>
-            The player’s first day of training. This becomes permanent when onboarding is
-            completed, and the first month’s fee is worked out from it.
+        </span>
+        {rangeViolation ? (
+          <span className={styles.fieldError} id={rangeNoteId} role="alert">
+            {rangeViolation}
+          </span>
+        ) : (
+          <small className={styles.help} id={effectiveFromHelpId}>
+            {effectiveFrom > referenceDate
+              /*
+               * Said here rather than found on the fee screen. Onboarding completes
+               * today -- registration is charged on the day they sign up -- but no
+               * monthly fee is due until the training it bills for has begun.
+               */
+              ? `Starts later: onboarding can be completed today, and monthly fees begin from ${formatDateKey(effectiveFrom)}.`
+              : effectiveFrom < referenceDate
+                ? "This start date also makes earlier scheduled sessions eligible for attendance."
+                : "Their first day of training. The first month’s fee is worked out from it."}
           </small>
-        </label>
-      </div>
+        )}
+      </label>
       <InlineNotice action={feedback?.action} id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
-      {rangeViolation ? (
-        <p className={styles.backdateNote} id={rangeNoteId} role="alert">
-          {rangeViolation}
-        </p>
-      ) : effectiveFrom > referenceDate ? (
-        /*
-         * Said here rather than found on the fee screen. Onboarding completes
-         * today -- registration is charged on the day they sign up -- but no
-         * monthly fee is due until the training it bills for has begun.
-         */
-        <p className={styles.backdateNote}>
-          Training starts in the future. Onboarding can be completed today, and monthly
-          fees begin from {formatDateKey(effectiveFrom)}.
-        </p>
-      ) : effectiveFrom < referenceDate ? (
-        <p className={styles.backdateNote}>
-          This start date also makes earlier scheduled sessions eligible for attendance.
-        </p>
-      ) : null}
       <div className={styles.formActions}>
         <Link href="/coach/schedules">Review schedules</Link>
         <button

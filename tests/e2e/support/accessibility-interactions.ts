@@ -137,7 +137,8 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "onboarding-first-open": {
-      await clickFirstVisible(page.getByRole("link", { name: /^(Open|Continue)$/u }))
+      // Each queue row is one link that opens the person's record in place.
+      await clickFirstVisible(page.locator("a[href*='?player=']"))
       break
     }
     case "player-announcement-open": {

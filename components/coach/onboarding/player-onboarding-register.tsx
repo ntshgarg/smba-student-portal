@@ -2,8 +2,8 @@
 
 import {
   ArrowLeft,
-  ArrowRight,
   Check,
+  ChevronDown,
   X,
 } from "lucide-react"
 import Link from "next/link"
@@ -14,8 +14,8 @@ import {
   useState,
 } from "react"
 
+import { initials, nameParts } from "@/components/coach/members/directory/shared"
 import { InlineNotice, type ActionFeedback } from "@/components/inline-notice"
-import type { RejectedRegistration } from "@/lib/auth/registration-form"
 import {
   shownTrainingStart,
   type PlayerOnboardingCase,
@@ -23,11 +23,12 @@ import {
   type PlayerOnboardingWorkspace,
 } from "@/lib/coach/onboarding"
 import type { TrainingSessionSeries } from "@/lib/sessions/types"
+import { academyPlanLabel } from "@/lib/training/academy-plans"
 
 import styles from "./player-onboarding-register.module.css"
 import { OnboardingEditor } from "./register/onboarding-editor"
-import { folio, shortDate, shortInstant, STAGES } from "./register/shared"
-import { RejectedRequests } from "./rejected-requests"
+import { shortDate, shortInstant, STAGES } from "./register/shared"
+import { RejectedRequests, type ExpiringRejectedRegistration } from "./rejected-requests"
 
 function onboardingHref(
   pathname: string,
@@ -41,35 +42,42 @@ function onboardingHref(
   return `${pathname}${query ? `?${query}` : ""}`
 }
 
-function stageLabel(stage: PlayerOnboardingStage) {
-  return STAGES.find((item) => item.key === stage)?.label ?? stage
+function pillLabel(stage: PlayerOnboardingStage) {
+  return stage === "request" ? "New request" : STAGES.find((item) => item.key === stage)?.tabLabel ?? stage
 }
 
-function rowMeta(item: PlayerOnboardingCase) {
-  if (item.stage === "request" && item.requestedAt) {
-    return `Requested ${shortInstant(item.requestedAt)}`
+/** The line under the name: short in the queue, fuller once the record is open. */
+function caseMeta(item: PlayerOnboardingCase, open: boolean) {
+  if (item.stage === "request") {
+    if (!item.requestedAt) return open ? "Join request" : null
+    return open
+      ? `Join request · ${item.requestedRole === "coach" ? "assistant coach" : "player"} · received ${shortInstant(item.requestedAt)}`
+      : `Requested ${shortInstant(item.requestedAt)}`
   }
   const trainingStart = shownTrainingStart(item)
   return [
     item.academyId,
-    trainingStart ? `Training from ${shortDate(trainingStart)}` : null,
+    item.level,
+    item.batch,
+    open && item.academyPlan ? academyPlanLabel(item.academyPlan) : null,
+    open && trainingStart ? `from ${shortDate(trainingStart)}` : null,
   ].filter(Boolean).join(" · ")
 }
 
 function nextAction(item: PlayerOnboardingCase) {
   switch (item.stage) {
     case "request":
-      return ["Review registration", "Approve or reject the request"]
+      return [item.requestedRole === "coach" ? "Review staff request" : "Review request", "Approve or reject"]
     case "assessment":
-      return ["Set level, batch and plan", "Record the court assessment"]
+      return ["Set level, batch and plan", "From the court assessment"]
     case "session":
-      return ["Assign matching session", item.feePlanRecorded
-        ? "Fee Plan is already recorded"
-        : "Choose the recurring court time"]
+      return ["Assign a schedule", item.feePlanRecorded
+        ? "Fee Plan already recorded"
+        : "Choose the court time"]
     case "feePlan":
-      return [item.feePlanRecorded ? "Review existing Fee Plan" : "Confirm monthly fee", item.feePlanRecorded
-        ? "Resolve the existing finance record"
-        : "Complete player onboarding"]
+      return item.feePlanRecorded
+        ? ["Review existing Fee Plan", "Resolve the finance record"]
+        : ["Confirm monthly fee", "Last step"]
   }
 }
 
@@ -82,7 +90,7 @@ export function PlayerOnboardingRegister({
 }: {
   financeActive: boolean
   referenceDate: string
-  rejectedRequests?: RejectedRegistration[]
+  rejectedRequests?: ExpiringRejectedRegistration[]
   sessionSeries: TrainingSessionSeries[]
   workspace: PlayerOnboardingWorkspace
 }) {
@@ -92,8 +100,12 @@ export function PlayerOnboardingRegister({
   const selectedId = searchParams.get("player")
   const selectedItem = workspace.cases.find((item) => item.id === selectedId) ?? null
   const [notice, setNotice] = useState<ActionFeedback | null>(null)
-  const registerTitleRef = useRef<HTMLHeadingElement>(null)
+  const [stageFilter, setStageFilter] = useState<PlayerOnboardingStage | null>(null)
   const previousSelectionRef = useRef<string | null>(null)
+  const { summary } = workspace
+  const shownCases = stageFilter
+    ? workspace.cases.filter((item) => item.stage === stageFilter)
+    : workspace.cases
 
   // A link to someone with no onboarding step left opens nothing and says why.
   const missingPlayerId = selectedId && !selectedItem ? selectedId : null
@@ -128,17 +140,16 @@ export function PlayerOnboardingRegister({
 
   return (
     <div className={`${styles.page} page-shell`}>
-      <div className={styles.backRow}>
+      <nav className={styles.back} aria-label="Onboarding navigation">
         <Link href="/coach"><ArrowLeft aria-hidden="true" /> Back to dashboard</Link>
-      </div>
+      </nav>
 
-      <header className={styles.pageHeader}>
-        <div>
-          <span className="eyebrow">Academy onboarding</span>
-          <h1>Academy intake register.</h1>
-        </div>
-        <p>One ordered queue. Approve staff access or complete the next required player step.</p>
-      </header>
+      <h1 className={styles.title}>Onboarding</h1>
+      <p className={styles.sub}>
+        {summary.total
+          ? `${summary.total} ${summary.total === 1 ? "person needs" : "people need"} a next step`
+          : "Nobody needs a next step"} · {summary.onboarded} onboarded
+      </p>
 
       <InlineNotice
         className={styles.workspaceNotice}
@@ -159,85 +170,84 @@ export function PlayerOnboardingRegister({
         </div>
       ) : null}
 
-      <section className={styles.stageSummary} aria-label="Onboarding stage totals">
+      <div className={styles.filters} role="group" aria-label="Show people at a stage">
+        <button aria-pressed={stageFilter === null} onClick={() => setStageFilter(null)} type="button">
+          <b>{summary.total}</b><span>All</span>
+        </button>
         {STAGES.map((stage) => {
-          const count = workspace.summary[stage.summaryKey]
+          const count = summary[stage.summaryKey]
           return (
-            <div
-              className={selectedItem?.stage === stage.key ? styles.activeStage : ""}
+            <button
               key={stage.key}
+              aria-pressed={stageFilter === stage.key}
+              disabled={count === 0}
+              onClick={() => setStageFilter(stage.key)}
+              type="button"
             >
-              <strong aria-hidden="true">{String(count).padStart(2, "0")}</strong>
-              <span className="sr-only">{count}</span>
-              <p>{stage.label}</p>
-            </div>
+              <b>{count}</b><span>{stage.label}</span>
+            </button>
           )
         })}
-      </section>
+      </div>
 
-      <section className={styles.register} aria-labelledby="onboarding-register-title">
-        <div className={styles.registerHeading}>
-          <h2 ref={registerTitleRef} id="onboarding-register-title" tabIndex={-1}>People needing action</h2>
-          <p><strong>{workspace.summary.total}</strong> in progress · Ordered by next step</p>
-        </div>
-
-        {workspace.cases.length ? (
-          <ol className={styles.rows}>
-            {workspace.cases.map((item, index) => {
-              const expanded = selectedItem?.id === item.id
-              const action = nextAction(item)
-              const href = onboardingHref(
-                pathname,
-                new URLSearchParams(searchParams.toString()),
-                expanded ? null : item.id,
-              )
-              return (
-                <li className={expanded ? styles.expandedRow : ""} key={item.id}>
-                  <div className={styles.row}>
-                    <span className={styles.folio}>{folio(index)}</span>
-                    <div className={styles.identity}>
-                      <strong>{item.fullName}</strong>
-                      <small>{rowMeta(item)}</small>
-                    </div>
-                    <span className={styles.stageStamp}>{stageLabel(item.stage)}</span>
-                    <div className={styles.nextAction}>
+      {workspace.cases.length ? (
+        <ol className={styles.rows} aria-label="People needing a next step">
+          {shownCases.map((item) => {
+            const expanded = selectedItem?.id === item.id
+            const action = nextAction(item)
+            const name = nameParts(item.fullName)
+            const meta = caseMeta(item, expanded)
+            const href = onboardingHref(
+              pathname,
+              new URLSearchParams(searchParams.toString()),
+              expanded ? null : item.id,
+            )
+            return (
+              <li className={expanded ? `${styles.case} ${styles.openCase}` : styles.case} key={item.id}>
+                <Link
+                  className={styles.caseHead}
+                  href={href}
+                  scroll={false}
+                  aria-expanded={expanded}
+                  aria-controls={expanded ? `onboarding-editor-${item.id}` : undefined}
+                >
+                  <span className={styles.badge} aria-hidden="true">{initials(item.fullName)}</span>
+                  <span className={styles.name}>
+                    <strong>{name.first}{name.rest ? <> <em>{name.rest}</em></> : null}</strong>
+                    {meta ? <small>{meta}</small> : null}
+                  </span>
+                  <span className={styles.step}>
+                    <span className={styles.pill} data-stage={item.stage}>{pillLabel(item.stage)}</span>
+                    <span className={styles.next}>
                       <strong>{action[0]}</strong>
                       <small>{action[1]}</small>
-                    </div>
-                    <Link
-                      className={styles.openButton}
-                      href={href}
-                      scroll={false}
-                      aria-expanded={expanded}
-                      aria-controls={expanded ? `onboarding-editor-${item.id}` : undefined}
-                    >
-                      {expanded ? "Close" : index === 0 ? "Open" : "Continue"}
-                      {expanded ? <X aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-                    </Link>
-                  </div>
-                  {expanded ? (
-                    <OnboardingEditor
-                      key={`${item.id}:${item.stage}:${item.recordRevision ?? "request"}`}
-                      financeActive={financeActive}
-                      item={item}
-                      onSuccess={handleSuccess}
-                      referenceDate={referenceDate}
-                      sessionSeries={sessionSeries}
-                    />
-                  ) : null}
-                </li>
-              )
-            })}
-          </ol>
-        ) : (
-          <div className={styles.emptyState}>
-            <Check aria-hidden="true" />
-            <h3>Academy onboarding is complete.</h3>
-            <p>New staff or player requests and incomplete player setup steps will appear here.</p>
-            <Link href="/coach/members">Open Member Directory</Link>
-          </div>
-        )}
-      </section>
+                    </span>
+                  </span>
+                  <span className={styles.mark} aria-hidden="true">{expanded ? <X /> : <ChevronDown />}</span>
+                  <span className="sr-only">{expanded ? "Close" : "Open"}</span>
+                </Link>
+                {expanded ? (
+                  <OnboardingEditor
+                    key={`${item.id}:${item.stage}:${item.recordRevision ?? "request"}`}
+                    financeActive={financeActive}
+                    item={item}
+                    onSuccess={handleSuccess}
+                    referenceDate={referenceDate}
+                    sessionSeries={sessionSeries}
+                  />
+                ) : null}
+              </li>
+            )
+          })}
+        </ol>
+      ) : (
+        <div className={styles.emptyState}>
+          <Check aria-hidden="true" />
+          <h2>Academy onboarding is complete.</h2>
+          <p>New staff or player requests and incomplete player setup steps will appear here.</p>
+          <Link href="/coach/members">Open Member Directory</Link>
+        </div>
+      )}
 
       <RejectedRequests onRestored={handleSuccess} requests={rejectedRequests} />
     </div>
