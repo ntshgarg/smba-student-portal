@@ -546,8 +546,10 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       await pageAlert(page).waitFor({ state: "visible", timeout: 12_000 })
       break
     case "schedule-create-weekend":
-      await page.getByRole("radio", { name: "Adult" }).check()
-      await page.getByRole("radio", { name: "Weekend" }).check()
+      // the level and batch radios are visually hidden inside their chip labels, so check them without
+      // waiting for the input itself to be visible
+      await page.getByRole("radio", { name: "Adult" }).check({ force: true })
+      await page.getByRole("radio", { name: "Weekend" }).check({ force: true })
       await page.getByLabel("Starts at").fill("08:00")
       await page.getByLabel("Length").selectOption("120")
       break
