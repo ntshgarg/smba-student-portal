@@ -249,7 +249,36 @@ function ledger(overrides: Partial<PlayerFinancialLedgerView> = {}): PlayerFinan
   }
 }
 
+function ledgerCharge(id: string, description: string): PlayerFinancialLedgerView["charges"][number] {
+  return {
+    adjustments: [],
+    billingPeriod: "2026-08",
+    canVoid: true,
+    description,
+    dueDate: "2026-08-05",
+    effectiveAmountPaise: 400_000,
+    feeReference: `SMBA-FEE-${id}`,
+    id,
+    originalAmountPaise: 400_000,
+    outstandingPaise: 400_000,
+    payments: [],
+    receivedPaise: 0,
+    revision: 0,
+    status: "pending",
+    type: "monthly_training",
+  }
+}
+
 describe("the coach's fee record", () => {
+  it("starts Corrections on the fee 'Correct this fee' was pressed on", async () => {
+    const { CorrectionsPanel } = await import("@/components/coach/financials/ledger/corrections-panel")
+    const charges = [ledgerCharge("july", "July fee"), ledgerCharge("august", "August fee")]
+    const html = renderToStaticMarkup(
+      <CorrectionsPanel ledger={ledger({ charges })} startCharge={{ chargeId: "august" }} />,
+    )
+    expect(html).toMatch(/<option value="august" selected="">August fee/u)
+  })
+
   it("does not call a part-payment 'Settled'", () => {
     const html = renderToStaticMarkup(<PlayerLedger ledger={ledger({
       management: { concessions: [], receipts: [coachReceipt()], refunds: [] },

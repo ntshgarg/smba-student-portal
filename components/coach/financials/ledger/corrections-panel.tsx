@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { FormEvent } from "react"
 
 import {
@@ -36,7 +36,14 @@ type CorrectionFeedback = SaveFeedback & {
   field?: "amount" | "reason"
 }
 
-export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView }) {
+export function CorrectionsPanel({
+  ledger,
+  startCharge,
+}: {
+  ledger: PlayerFinancialLedgerView
+  /** "Correct this fee" on a fee card: start on that fee. A new object each press. */
+  startCharge?: { chargeId: string } | null
+}) {
   const router = useRouter()
   const activeCharges = ledger.charges.filter((charge) => charge.status !== "void")
   const receipts = ledger.management.receipts.filter((receipt) => (
@@ -67,6 +74,23 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
   const adjustmentId = adjustments.some(({ adjustment }) => adjustment.id === pickedAdjustmentId)
     ? pickedAdjustmentId
     : adjustments[0]?.adjustment.id ?? ""
+  const chargeRef = useRef<HTMLSelectElement>(null)
+  // A press of "Correct this fee" starts the form on that fee. The fee picker
+  // shows for these kinds only, and a void needs a fee that can be voided.
+  const [seenStart, setSeenStart] = useState<typeof startCharge>(null)
+  if (startCharge !== seenStart) {
+    setSeenStart(startCharge)
+    if (startCharge) {
+      const voidable = voidableCharges.some((charge) => charge.id === startCharge.chargeId)
+      if (!(mode === "manual_credit" || mode === "manual_debit" || (mode === "void_charge" && voidable))) {
+        setMode("manual_credit")
+      }
+      setChargeId(startCharge.chargeId)
+    }
+  }
+  useEffect(() => {
+    if (startCharge) window.requestAnimationFrame(() => chargeRef.current?.focus())
+  }, [startCharge])
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState("")
   const [dirty, setDirty] = useState(false)
@@ -262,7 +286,7 @@ export function CorrectionsPanel({ ledger }: { ledger: PlayerFinancialLedgerView
         ) : (
           <label className={styles.q}>
             <span>Charge</span>
-            <select name="chargeId" value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
+            <select ref={chargeRef} name="chargeId" value={chargeId} disabled={pending} onChange={(event) => { setChargeId(event.target.value); markDirty() }}>
               {chargeChoices.map((charge) => (
                 <option key={charge.id} value={charge.id}>{charge.description} · {charge.feeReference}</option>
               ))}

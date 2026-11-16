@@ -51,7 +51,8 @@ export function PlayerLedger({
   period: string
   showReceiptDownloads?: boolean
 }) {
-  const [tab, setTab] = useState<LedgerTab>("fees")
+  const [pickedTab, setTab] = useState<LedgerTab>("fees")
+  const [startCharge, setStartCharge] = useState<{ chargeId: string } | null>(null)
   // The corrections form needs a fee that is not void to act on.
   const canCorrect = !ledger.archived && ledger.charges.some((charge) => charge.status !== "void")
   const showConcessions = (!ledger.archived && Boolean(ledger.feePlan))
@@ -62,6 +63,8 @@ export function PlayerLedger({
     { count: ledger.management.concessions.length, label: "Concessions", value: "concessions" },
     ...canCorrect ? [{ label: "Corrections", value: "corrections" as const }] : [],
   ]
+  // A tab can leave (voiding the last open fee removes Corrections); the record then shows Fees.
+  const tab = tabs.some((item) => item.value === pickedTab) ? pickedTab : "fees"
   const meta = [
     ledger.academyId,
     ledger.archived ? "Archived" : null,
@@ -191,9 +194,16 @@ export function PlayerLedger({
                     ) : (
                       <p className={styles.note}>No payments yet.</p>
                     )}
-                    {canCorrect ? (
+                    {canCorrect && charge.status !== "void" ? (
                       <div>
-                        <button className={styles.button} type="button" onClick={() => setTab("corrections")}>
+                        <button
+                          className={styles.button}
+                          type="button"
+                          onClick={() => {
+                            setTab("corrections")
+                            setStartCharge({ chargeId: charge.id })
+                          }}
+                        >
                           Correct this fee
                         </button>
                       </div>
@@ -225,7 +235,7 @@ export function PlayerLedger({
 
         {canCorrect ? (
           <div className={styles.stack} id="ledger-panel-corrections" role="tabpanel" aria-labelledby="ledger-tab-corrections" hidden={tab !== "corrections"}>
-            <CorrectionsPanel ledger={ledger} />
+            <CorrectionsPanel ledger={ledger} startCharge={startCharge} />
           </div>
         ) : null}
       </div>
