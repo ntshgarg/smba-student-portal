@@ -50,7 +50,7 @@
   flex-direction: column-reverse;
   justify-content: flex-end;
   gap: 2px;
-  padding: clamp(8px, 2.6cqi, 10px) clamp(8px, 3cqi, 12px);
+  padding: clamp(var(--space-tight), 2.6cqi, 10px) clamp(var(--space-tight), 3cqi, 12px);
   border: var(--frost-border);
   border-radius: 14px;
   background: color-mix(in srgb, var(--white) 55%, transparent);
@@ -71,7 +71,7 @@
   overflow-wrap: normal;
   hyphens: manual;
   color: var(--steel-dark);
-  font-size: clamp(var(--type-operational-floor), 3.6cqi, var(--type-utility-label));
+  font-size: clamp(0.6875rem, 3.6cqi, 0.75rem);
   font-weight: 700;
   line-height: 1.25;
 }
