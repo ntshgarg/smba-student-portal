@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
@@ -101,6 +104,13 @@ describe("the duplicate hint on a request", () => {
     expect(html).toContain('aria-controls="onboarding-request-1-contact" aria-expanded="false"')
     expect(html).toContain("Show contact")
     expect(html).toMatch(/<dl id="onboarding-request-1-contact" hidden="">/u)
+  })
+
+  it("points a rejection at where Undo is on this page", () => {
+    const source = readFileSync(path.join(process.cwd(), "components/coach/onboarding/register/request-step.tsx"), "utf8")
+
+    expect(source).toContain("use Undo under Rejected requests further down this page")
+    expect(source).not.toContain("below the register")
   })
 
   it("dates a request in India time, not UTC", () => {

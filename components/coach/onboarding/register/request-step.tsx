@@ -118,7 +118,7 @@ export function RequestStep({
       return
     }
     onSuccess({
-      message: `${item.fullName}’s request was rejected. To change your mind, open Rejected requests below the register.`,
+      message: `${item.fullName}’s request was rejected. To change your mind, use Undo under Rejected requests further down this page.`,
       remove: true,
     })
   }
