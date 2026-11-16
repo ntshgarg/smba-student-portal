@@ -28,7 +28,6 @@ vi.mock("@/components/unsaved-work-guard", () => ({
 
 const { OnboardingEditor } = await import("@/components/coach/onboarding/register/onboarding-editor")
 const { StepRail } = await import("@/components/coach/onboarding/register/step-rail")
-const { OnboardingTimeline } = await import("@/components/coach/onboarding/register/onboarding-timeline")
 const { SessionStep } = await import(
   "@/components/coach/onboarding/register/session-step"
 )
@@ -286,14 +285,22 @@ describe("a first schedule that ended before onboarding finished", () => {
 
   it("does not show a start date nobody has chosen yet", () => {
     // Approval stamps the day it happened as a stand-in for the start date.
-    const html = renderToStaticMarkup(<OnboardingTimeline item={playerCase({
+    const html = editorMarkup(playerCase({
       assignedSession: null,
       stage: "session",
       trainingStartConfirmedAt: null,
       trainingStartOn: "2026-09-03",
-    })} />)
+    }))
 
     expect(html).toContain("<strong>Training from</strong><small>Not set yet</small>")
+  })
+
+  it("keeps the joining dates on every player step, not only the request", () => {
+    for (const stage of ["assessment", "session", "feePlan"] as const) {
+      expect(editorMarkup(playerCase({ stage }))).toContain('class="coach-member-joining"')
+    }
+    expect(editorMarkup(playerCase({ requestedRole: "coach", stage: "request" })))
+      .not.toContain('class="coach-member-joining"')
   })
 })
 

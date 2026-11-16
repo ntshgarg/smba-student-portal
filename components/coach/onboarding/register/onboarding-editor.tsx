@@ -9,6 +9,7 @@ import type { TrainingSessionSeries } from "@/lib/sessions/types"
 import styles from "../player-onboarding-register.module.css"
 import { AssessmentStep } from "./assessment-step"
 import { FeePlanStep } from "./fee-plan-step"
+import { OnboardingTimeline } from "./onboarding-timeline"
 import { RequestStep } from "./request-step"
 import { SessionStep } from "./session-step"
 import { StepRail } from "./step-rail"
@@ -109,6 +110,8 @@ export function OnboardingEditor({
         staff={item.requestedRole === "coach"}
       />
       <div className={styles.editorBody}>
+        {/* A staff request has no joining dates of its own; its step says what it is. */}
+        {item.requestedRole === "coach" ? null : <OnboardingTimeline item={item} />}
         {/* Only where the step is still a form: a locked or assigned step says so itself. */}
         {revisiting && viewStage === "assessment" && !item.assignedSession ? (
           <p className={styles.note} role="note">

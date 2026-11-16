@@ -9,6 +9,7 @@ vi.mock("@/app/coach/actions", () => ({
 
 const { RejectedRequests } = await import("@/components/coach/onboarding/rejected-requests")
 const { RequestStep } = await import("@/components/coach/onboarding/register/request-step")
+const { OnboardingTimeline } = await import("@/components/coach/onboarding/register/onboarding-timeline")
 
 import type { PlayerOnboardingCase } from "@/lib/coach/onboarding"
 
@@ -96,7 +97,7 @@ describe("the duplicate hint on a request", () => {
   it("dates a request in India time, not UTC", () => {
     const html = renderToStaticMarkup(
       // 01:30 on 13 Nov in India.
-      <RequestStep item={{ ...request, requestedAt: "2026-11-12T20:00:00.000Z" }} onSuccess={vi.fn()} />,
+      <OnboardingTimeline item={{ ...request, requestedAt: "2026-11-12T20:00:00.000Z" }} />,
     )
 
     expect(html).toContain("13 Nov 2026")

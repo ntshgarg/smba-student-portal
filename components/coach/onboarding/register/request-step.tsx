@@ -13,7 +13,6 @@ import { describeSaveFailure } from "@/lib/client/network-failure"
 import type { OnboardingDuplicateSignal, PlayerOnboardingCase } from "@/lib/coach/onboarding"
 
 import styles from "../player-onboarding-register.module.css"
-import { OnboardingTimeline } from "./onboarding-timeline"
 import { shortDate, shortInstant, type SaveFeedback } from "./shared"
 
 /**
@@ -140,7 +139,7 @@ export function RequestStep({
           <span>Coaching staff</span>
           <span>Received {item.requestedAt ? shortInstant(item.requestedAt) : "recently"}</span>
         </p>
-      ) : <OnboardingTimeline item={item} />}
+      ) : null}
       {/*
         * A name, a type and a date was everything an approval used to rest on --
         * two people of the same name were indistinguishable here. The contact
