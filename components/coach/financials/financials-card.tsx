@@ -6,6 +6,8 @@ import {
 } from "@/components/coach/dashboard-card"
 import { formatInr } from "@/lib/format"
 
+import styles from "./financials-card.module.css"
+
 const periodFormat = new Intl.DateTimeFormat("en-IN", {
   month: "long",
   timeZone: "UTC",
@@ -44,10 +46,10 @@ export function FinancialsCard({
   }
   setupRequiredCount: number
 }) {
-  const summary = attentionCount === 0
-    ? "Fee records are ready to review"
-    : outstandingPaise > 0
-      ? `${formatInr(outstandingPaise)} outstanding`
+  const summary = outstandingPaise > 0
+    ? `${formatInr(outstandingPaise)} outstanding`
+    : attentionCount === 0
+      ? "Nothing outstanding"
       : "Some players need a fee plan or this month’s fee"
   const month = formatPeriod(period)
   const preparationState = preparation.ready > 0
@@ -55,17 +57,11 @@ export function FinancialsCard({
     : preparation.alreadyPrepared > 0
       ? `${month} fees issued`
       : "No monthly fees to issue"
-  const detail = [
-    preparationState,
-    setupRequiredCount > 0
-      ? `${setupRequiredCount} ${setupRequiredCount === 1 ? "player" : "players"} without a fee plan`
-      : null,
-    // A fee waiting on a booked training change is not issued until the change
-    // happens, so it is named instead of silently missing from "to issue".
-    preparation.waitingForChange > 0
-      ? `${preparation.waitingForChange} waiting for a training change`
-      : null,
-  ].filter(Boolean).join(" · ")
+  const tiles = [
+    { count: preparation.ready, label: "To issue" },
+    { count: overdueCount, label: "Overdue", attention: true },
+    { count: setupRequiredCount, label: "No fee plan" },
+  ]
   // Each stamp opens the list behind its count: the month's fees not yet issued (where Issue fees sits),
   // and the Record payment list narrowed to late payers.
   const stamps = [
@@ -92,27 +88,49 @@ export function FinancialsCard({
       titleId="coach-financials-card-title"
     >
       {active ? (
-        <>
-          <CoachDashboardSummary detail={detail}>
-            {summary}
-          </CoachDashboardSummary>
-          <CoachDashboardActions ariaLabel="Financial actions">
-            <CoachDashboardAction href="/coach/financials/record" primary={overdueCount > 0}>
-              Record payment
-            </CoachDashboardAction>
-            <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>
-              Fee records
-            </CoachDashboardAction>
-          </CoachDashboardActions>
-        </>
+        <div className={styles.layout}>
+          <div className={styles.figures}>
+            <CoachDashboardSummary detail={preparationState}>
+              {summary}
+            </CoachDashboardSummary>
+            <dl className={styles.tiles} aria-label="Fees needing attention">
+              {tiles.map((tile) => (
+                <div
+                  key={tile.label}
+                  data-tone={tile.count === 0 ? "zero" : tile.attention ? "attention" : undefined}
+                >
+                  <dt>{tile.label}</dt>
+                  <dd aria-label={`${tile.count} ${tile.label.toLowerCase()}`}>{tile.count}</dd>
+                </div>
+              ))}
+            </dl>
+            {/* A fee waiting on a booked training change is not issued until the
+                change happens, so it is named instead of silently missing from "to issue". */}
+            {preparation.waitingForChange > 0 ? (
+              <p className={styles.waiting}>
+                {preparation.waitingForChange} {preparation.waitingForChange === 1 ? "fee waits" : "fees wait"} for a booked training change.
+              </p>
+            ) : null}
+          </div>
+          <div className={styles.spread}>
+            <CoachDashboardActions ariaLabel="Financial actions">
+              <CoachDashboardAction href="/coach/financials/record" primary>
+                Record payment
+              </CoachDashboardAction>
+              <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>
+                Fees
+              </CoachDashboardAction>
+            </CoachDashboardActions>
+          </div>
+        </div>
       ) : (
         <>
-          <CoachDashboardSummary detail="Set up Financials to begin the academy fee record.">
-            Financial records are not set up
+          <CoachDashboardSummary detail="Choose the first month to start.">
+            Fees aren’t tracked yet
           </CoachDashboardSummary>
           <CoachDashboardActions ariaLabel="Financial actions">
-            <CoachDashboardAction href={`/coach/financials?period=${period}`}>
-              Set up Financials
+            <CoachDashboardAction href={`/coach/financials?period=${period}`} primary>
+              Start tracking fees
             </CoachDashboardAction>
           </CoachDashboardActions>
         </>
