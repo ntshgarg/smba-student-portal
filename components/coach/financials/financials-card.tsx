@@ -112,16 +112,14 @@ export function FinancialsCard({
               </p>
             ) : null}
           </div>
-          <div className={styles.spread}>
-            <CoachDashboardActions ariaLabel="Financial actions">
-              <CoachDashboardAction href="/coach/financials/record" primary>
-                Record payment
-              </CoachDashboardAction>
-              <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>
-                Fees
-              </CoachDashboardAction>
-            </CoachDashboardActions>
-          </div>
+          <CoachDashboardActions ariaLabel="Financial actions">
+            <CoachDashboardAction href="/coach/financials/record" primary>
+              Record payment
+            </CoachDashboardAction>
+            <CoachDashboardAction href={`/coach/financials/records?view=fees&mode=monthly&period=${period}`}>
+              Fees
+            </CoachDashboardAction>
+          </CoachDashboardActions>
         </div>
       ) : (
         <>

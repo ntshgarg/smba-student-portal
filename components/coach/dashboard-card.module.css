@@ -263,11 +263,10 @@
   transform: translateX(3px);
 }
 
-/* The one action for something waiting on the coach: the sign-in pages' main button, navy with a centred
-   ivory label; red sweeps in from the left on hover and press (an inset shadow, as on .login-submit). */
+/* The one action for something waiting on the coach: navy with an ivory label, laid out like the other
+   actions (label left, arrow right); red sweeps in from the left on hover and press (an inset shadow, as
+   on .login-submit). */
 .primaryAction {
-  justify-content: center;
-  gap: 10px;
   border-color: transparent;
   background: var(--navy);
   color: var(--ivory);

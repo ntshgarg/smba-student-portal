@@ -75,8 +75,3 @@
   font-size: var(--type-utility-meta);
   font-weight: 700;
 }
-
-/* Both buttons read the same way: label on the left, arrow on the right. */
-.spread a {
-  justify-content: space-between;
-}
