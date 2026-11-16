@@ -298,6 +298,7 @@ export default async function CoachDashboardPage({
           leftToday={todaySessions.filter((occurrence) => occurrenceIsUpcoming(occurrence, now)).length}
           next={sessionsCardNext}
           runningSchedules={series.filter((item) => scheduleIsRunning(item, today)).length}
+          scheduleCount={series.length}
           todaySessionCount={todaySessions.length}
         />
         <AssessmentsCard

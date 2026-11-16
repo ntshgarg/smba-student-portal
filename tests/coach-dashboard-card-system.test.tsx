@@ -42,6 +42,7 @@ function renderDashboard() {
         leftToday={3}
         next={{ label: "Beginner · Weekday · SMBA Court", time: "4:00 pm" }}
         runningSchedules={13}
+        scheduleCount={13}
         todaySessionCount={8}
       />
       <AssessmentsCard assessedCount={1} draftCount={0} playerCount={2} />
@@ -194,6 +195,7 @@ describe("coach dashboard Court Operations Board", () => {
           leftToday={todaySessionCount ? 3 : 0}
           next={next}
           runningSchedules={13}
+          scheduleCount={13}
           todaySessionCount={todaySessionCount}
         />,
       )
@@ -204,23 +206,37 @@ describe("coach dashboard Court Operations Board", () => {
       expect(html).toContain(`<span class="${styles.time}">${next.time}</span> ${next.label}`)
       expect(html).toContain("<dt>Left today</dt>")
       expect(html).toContain("<dt>Schedules</dt><dd>13</dd>")
-      // A cancelled session this week is something to look at: the tile turns red.
-      expect(html).toMatch(/data-tone="attention"><dt>Cancelled this week<\/dt><dd>2</)
+      // Cancellations, moves and holiday closures need nothing from the coach, so the tile is never red.
+      expect(html).toContain("<dt>Cancelled this week</dt><dd>2</dd>")
+      expect(html).not.toContain('data-tone="attention"')
       expect(html).toContain('href="/coach/calendar"')
       expect(html).toContain('href="/coach/schedules"')
       expect(html).not.toContain('href="/coach/schedules/new"')
     },
   )
 
-  it("keeps Setup and one way in, Create schedule, while nothing is scheduled", () => {
+  it("keeps Setup and one way in, Create schedule, only while no schedule exists", () => {
     const html = renderToStaticMarkup(
-      <SessionsCard cancelledThisWeek={0} leftToday={0} next={null} runningSchedules={0} todaySessionCount={0} />,
+      <SessionsCard cancelledThisWeek={0} leftToday={0} next={null} runningSchedules={0} scheduleCount={0} todaySessionCount={0} />,
     )
     expect(html).toContain("Setup")
     expect(html).toContain("No training scheduled yet")
     expect(html).toContain('href="/coach/schedules/new"')
     expect(html).not.toContain('href="/coach/calendar"')
     expect(html).not.toContain("<dl")
+  })
+
+  it("keeps Calendar and Schedules once every term has finished", () => {
+    // Nothing today and nothing ahead, but schedules exist: finished terms can
+    // still have players on them, and Schedules is where they are shown.
+    const html = renderToStaticMarkup(
+      <SessionsCard cancelledThisWeek={0} leftToday={0} next={null} runningSchedules={0} scheduleCount={4} todaySessionCount={0} />,
+    )
+    expect(html).not.toContain("Setup")
+    expect(html).toContain("No sessions today")
+    expect(html).toContain("No more sessions scheduled.")
+    expect(html).toContain('href="/coach/calendar"')
+    expect(html).toContain('href="/coach/schedules"')
   })
 
   it("shows the exact outstanding balance rather than rounding it up", () => {

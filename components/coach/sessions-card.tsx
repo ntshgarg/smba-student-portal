@@ -18,14 +18,17 @@ export type SessionsCardNext = {
 /**
  * Sessions on the dashboard (head coach, 16 Nov 2026), beside Financials and
  * built from the same parts so the pair matches: today's count, the next
- * session, three tiles and the two Sessions tabs. A brand-new academy with
- * nothing scheduled gets Setup and one way in, Create schedule.
+ * session, three tiles and the two Sessions tabs. Only an academy that has
+ * never made a schedule gets Setup and one way in, Create schedule: one whose
+ * terms have all finished still needs Calendar and Schedules, where finished
+ * terms with players left on them are shown.
  */
 export function SessionsCard({
   cancelledThisWeek,
   leftToday,
   next,
   runningSchedules,
+  scheduleCount,
   todaySessionCount,
 }: {
   cancelledThisWeek: number
@@ -33,9 +36,11 @@ export function SessionsCard({
   leftToday: number
   next: SessionsCardNext | null
   runningSchedules: number
+  /** Every schedule ever made, running or not. */
+  scheduleCount: number
   todaySessionCount: number
 }) {
-  const setup = !todaySessionCount && !next
+  const setup = scheduleCount === 0
   return (
     <CoachDashboardCard
       area="sessions"
@@ -77,7 +82,7 @@ export function SessionsCard({
           tiles={[
             { count: leftToday, label: "Left today" },
             { count: runningSchedules, label: "Schedules" },
-            { count: cancelledThisWeek, label: "Cancelled this week", attention: true },
+            { count: cancelledThisWeek, label: "Cancelled this week" },
           ]}
         />
       )}
