@@ -6,7 +6,6 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }))
 
 import {
   FinancialRecordsWorkspace,
-  formatFinancialActivityTime,
   formatFinancialPaymentMethod,
   type CollectionsDayBookView,
   type FeeRegisterView,
@@ -141,12 +140,11 @@ const activity: FinancialActivityView = {
 }
 
 describe("Financial Records presentation", () => {
-  it("formats monetary, method and academy-time labels deterministically", () => {
+  it("formats monetary and method labels deterministically", () => {
     expect(formatInr(100_000)).toBe("₹1,000")
     expect(formatInr(100_050)).toBe("₹1,000.50")
     expect(formatFinancialPaymentMethod("upi")).toBe("UPI")
     expect(formatFinancialPaymentMethod("bank_transfer")).toBe("Bank transfer")
-    expect(formatFinancialActivityTime("2026-08-08T06:00:00.000Z")).toContain("11:30 am")
   })
 
   it("renders a filterable fee register with derived values supplied by the ledger", () => {

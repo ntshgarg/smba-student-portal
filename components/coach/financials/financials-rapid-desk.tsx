@@ -347,7 +347,7 @@ function PaymentForm({
           <span>Note <em>(staff only)</em></span>
           <textarea
             name="internalNote"
-            rows={1}
+            rows={2}
             value={internalNote}
             disabled={Boolean(pending)}
             placeholder="Visible only to authorised academy staff"

@@ -115,7 +115,9 @@ export function FeeRegisterList({
                   {rowNote(row)}
                 </p>
                 <div className={styles.actions}>
-                  <Link className={styles.button} href={row.recordHref}>Full fee record</Link>
+                  <Link aria-label={`Full fee record for ${row.fullName}`} className={styles.button} href={row.recordHref}>
+                    Full fee record
+                  </Link>
                   {row.paymentHref ? (
                     <Link className={styles.primary} href={row.paymentHref}>Record payment</Link>
                   ) : null}

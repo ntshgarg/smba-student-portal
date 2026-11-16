@@ -5,7 +5,6 @@ import type { ReactNode } from "react"
 import { monthEnd } from "@/lib/finance/domain"
 import { ACTIVITY_GROUPS, REGISTER_STATUS_FILTERS, activityGroupFor } from "@/lib/finance/records-filters"
 import {
-  formatAcademyDate,
   formatAcademyTime,
   formatDateKey,
   formatInr,
@@ -125,14 +124,6 @@ function recordsHref(
 export function formatFinancialPaymentMethod(method: PaymentMethod) {
   if (method === "upi") return "UPI"
   return method.replaceAll("_", " ").replace(/^./u, (letter) => letter.toUpperCase())
-}
-
-export function formatFinancialActivityTime(value: string) {
-  return `${formatAcademyDate(value, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })} · ${formatAcademyTime(value)}`
 }
 
 const periodFormat = new Intl.DateTimeFormat("en-IN", {

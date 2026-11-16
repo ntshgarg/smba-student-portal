@@ -64,11 +64,6 @@
   color: var(--ivory);
 }
 
-.danger {
-  border-color: color-mix(in srgb, var(--red) 40%, transparent);
-  color: var(--red-dark);
-}
-
 .button:disabled,
 .primary:disabled,
 .button[aria-disabled="true"] {
@@ -105,10 +100,6 @@
   justify-content: flex-end;
   gap: 10px;
   margin-top: var(--space-copy);
-}
-
-.grow {
-  margin-right: auto;
 }
 
 /* --- Register | Collections | Activity --- */
@@ -163,13 +154,19 @@
 
 .month {
   display: inline-flex;
+  max-width: 100%;
   align-items: center;
   gap: 6px;
 }
 
-.month a,
-.month span[aria-disabled] {
+.month .field {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.month a {
   display: grid;
+  flex: none;
   width: 44px;
   height: 44px;
   place-items: center;
@@ -300,15 +297,6 @@
   margin-left: auto;
 }
 
-.label {
-  display: block;
-  color: var(--steel);
-  font-size: var(--type-utility-label);
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 /* --- Totals --- */
 .totals {
   display: flex;
@@ -320,8 +308,16 @@
   font-weight: 700;
 }
 
+.totals > span {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+}
+
 .totals b {
-  margin-left: 6px;
+  overflow-wrap: anywhere;
   color: var(--ink);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 1.375rem;
@@ -616,7 +612,7 @@
 
 .facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 92px), 1fr));
   gap: var(--space-tight);
   margin: 0;
 }
@@ -1818,14 +1814,6 @@ fieldset.q {
   .actions {
     flex-direction: column-reverse;
     align-items: stretch;
-  }
-
-  .actions .grow {
-    margin-right: 0;
-  }
-
-  .facts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .facts div {
