@@ -97,7 +97,7 @@ describe("member archival financial closeout", () => {
     }, context)
     const agreement = database.select().from(schema.feeAgreements)
       .where(eq(schema.feeAgreements.id, completion.agreementId)).get()
-    if (!agreement) throw new Error("The completed onboarding Fee Plan is unavailable.")
+    if (!agreement) throw new Error("The completed onboarding Fee plan is unavailable.")
     database.update(schema.sessionAssignments).set({
       effectiveTo: "2026-08-19",
     }).where(eq(schema.sessionAssignments.accountId, playerId)).run()
@@ -248,7 +248,7 @@ describe("member archival financial closeout", () => {
     }))
   })
 
-  it("requires an open zero-balance Fee Plan to end before archival", () => {
+  it("requires an open zero-balance Fee plan to end before archival", () => {
     const { playerId } = createPlayer("Open Plan Player", "SMBA-CLSEABCE")
     const charge = finance.getCoachFinancePlayerRecord(playerId, {
       coachId,

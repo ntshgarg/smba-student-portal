@@ -301,7 +301,7 @@ describe("onboarding finance issuance", () => {
      */
     const preview = finance.previewPlayerOnboardingFinance(terms, context)
     expect(preview.blockers).toEqual([])
-    expect(preview.warnings).toContain("No monthly charge is due now; the Fee Plan begins in 2026-09.")
+    expect(preview.warnings).toContain("No monthly charge is due now; the Fee plan begins in 2026-09.")
 
     finance.completePlayerOnboardingFinance({
       ...terms,

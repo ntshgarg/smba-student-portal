@@ -37,7 +37,7 @@ function editorTitle(item: PlayerOnboardingCase, stage: PlayerOnboardingStage) {
       if (item.assignedSession) return `Start ${firstName}’s court time again`
       return `Assign ${firstName}’s court time`
     case "feePlan":
-      return `Confirm ${firstName}’s Fee Plan`
+      return `Confirm ${firstName}’s Fee plan`
   }
 }
 

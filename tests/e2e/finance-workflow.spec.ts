@@ -163,7 +163,7 @@ test("coach-to-player finance journey remains atomic, idempotent and private", a
 
   await login(page, COACH_ACADEMY_ID, "/coach")
   await page.goto(`/coach/onboarding?player=${fixture.playerId}`, { waitUntil: "networkidle" })
-  await expect(page.getByRole("heading", { name: /Confirm .+ Fee Plan/u })).toBeVisible()
+  await expect(page.getByRole("heading", { name: /Confirm .+ Fee plan/u })).toBeVisible()
   await page.getByLabel("Monthly fee").fill("3500")
   await page.getByRole("button", { name: "Review fees" }).click()
   await expect(page.getByRole("heading", { name: "Issued when you finish" })).toBeVisible()

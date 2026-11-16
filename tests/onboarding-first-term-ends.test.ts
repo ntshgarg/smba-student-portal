@@ -11,7 +11,7 @@ const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "smba-onboardin
 process.env.DB_FILE_NAME = path.join(temporaryDirectory, "smba-test.db")
 
 /*
- * A new player's first schedule ends before onboarding's Fee Plan step is done
+ * A new player's first schedule ends before onboarding's Fee plan step is done
  * (head coach, 12 Nov 2026): by End schedule, by Members' End training, or by
  * the schedule's last day simply passing. The coach finishes onboarding with
  * that first term -- registration fee plus the months trained -- and then moves
@@ -220,7 +220,7 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
 
     sessions.endSessionSeriesRecords({ coachId, database, now, seriesId: doomed, stopFees: true })
 
-    // The case stays at the Fee Plan step. It used to drop back to the
+    // The case stays at the Fee plan step. It used to drop back to the
     // Session step, where no start date could pass.
     expect(onboardingCase(asha)).toMatchObject({
       assignedSession: { standing: "ended" },
@@ -300,7 +300,7 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
 
     mark(dev, occurrenceOn(autumn, "2026-11-04"), "present")
     expect(() => assign(dev, winter, "2026-11-09"))
-      .toThrow(/Attendance is already marked for this player from 4 November 2026[^]*Fee Plan step/u)
+      .toThrow(/Attendance is already marked for this player from 4 November 2026[^]*Fee plan step/u)
     expect(places(dev)).toHaveLength(1)
   })
 
@@ -330,7 +330,7 @@ describe("onboarding when a first term ends, and the Members leftovers", () => {
       message = (error as Error).message
     }
     expect(message).toContain("1 marked attendance")
-    expect(message).toContain("Fee Plan step")
+    expect(message).toContain("Fee plan step")
     expect(message).not.toContain("Calendar")
   })
 

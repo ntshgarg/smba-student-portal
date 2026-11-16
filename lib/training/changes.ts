@@ -150,7 +150,7 @@ function requirePlayer(database: Executor, playerId: string) {
  * onboarding's back: the case then sat at the Session step for good (reset
  * and completion both refuse once a fee plan exists), so the player could never
  * sign in and the registration fee was never charged. A level change at the
- * Fee Plan step also left the weeks before it unbilled.
+ * Fee plan step also left the weeks before it unbilled.
  *
  * Ending training stays open: for a player who leaves part-way through, it is
  * sometimes the only way to take them off a schedule.

@@ -385,7 +385,7 @@ export type OnboardingFinancePreviewLine = {
 export type OnboardingFinancePreview = {
   academyDateKey: string
   blockers: string[]
-  /** The last month the new Fee Plan bills when the first place has ended; else null. */
+  /** The last month the new Fee plan bills when the first place has ended; else null. */
   feePlanEndsAfter: string | null
   feePlanStartOn: string
   fingerprint: string

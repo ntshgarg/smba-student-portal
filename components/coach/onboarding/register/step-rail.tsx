@@ -12,7 +12,7 @@ import { STAGES } from "./shared"
  * The steps, as tabs along the bottom of the open record's band. They used to
  * be a picture of progress with nothing to press, which made onboarding a
  * one-way street: once a step saved its form stopped existing, and the only way
- * back was the destructive reset in Fee Plan, refused outright once any
+ * back was the destructive reset in Fee plan, refused outright once any
  * attendance, fee or charge row exists.
  *
  * So a step the case has already reached is a button; a step ahead of it stays

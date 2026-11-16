@@ -434,7 +434,7 @@ export function assignSessionRecords({
         "BUSINESS_RULE",
         `Attendance is already marked for this player from ${formatTermDate(firstMarked)}, so `
           + "training cannot start later than that. Finish onboarding with their first schedule "
-          + "on the Fee Plan step, then move them in Members.",
+          + "on the Fee plan step, then move them in Members.",
         "effectiveFrom",
       )
     }

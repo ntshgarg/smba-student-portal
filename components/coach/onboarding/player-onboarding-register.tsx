@@ -79,11 +79,11 @@ function nextAction(item: PlayerOnboardingCase) {
       return ["Set level, batch and plan", "From the court assessment"]
     case "session":
       return ["Assign a schedule", item.feePlanRecorded
-        ? "Fee Plan already recorded"
+        ? "Fee plan already recorded"
         : "Choose the court time"]
     case "feePlan":
       return item.feePlanRecorded
-        ? ["Review existing Fee Plan", "Resolve the finance record"]
+        ? ["Review existing Fee plan", "Resolve the finance record"]
         : ["Confirm monthly fee", "Last step"]
   }
 }

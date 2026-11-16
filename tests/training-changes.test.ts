@@ -478,7 +478,7 @@ describe("training changes from the player's record", () => {
     const nisha = "20000000-0000-4000-8000-0000000000a5"
     addPlayer(nisha, "Nisha Rao", 9005, "2026-10-01")
     assign(nisha, morning, "2026-10-01", [1, 2, 3, 4, 5])
-    // Assessed and given a session, but the Fee Plan step is not done.
+    // Assessed and given a session, but the Fee plan step is not done.
     database.update(schema.playerEnrollments).set({ onboardingCompletedAt: null })
       .where(eq(schema.playerEnrollments.accountId, nisha)).run()
 

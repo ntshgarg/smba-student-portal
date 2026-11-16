@@ -66,7 +66,7 @@ describe("coach player onboarding summary", () => {
     })
   })
 
-  it("moves an assessed player from session to Fee Plan after assignment", () => {
+  it("moves an assessed player from session to Fee plan after assignment", () => {
     expect(summary({})).toMatchObject({ session: 1, feePlan: 0, total: 1 })
     expect(summary({ assignments: [assignment()] }))
       .toMatchObject({ session: 0, feePlan: 1, total: 1 })
@@ -82,7 +82,7 @@ describe("coach player onboarding summary", () => {
       .toMatchObject({ feePlan: 1, onboarded: 0, total: 1 })
   })
 
-  it("keeps completion after the assignment and Fee Plan end", () => {
+  it("keeps completion after the assignment and Fee plan end", () => {
     const finished = { ...assessedPlayer, onboardingCompletedAt: "2025-01-03T10:00:00.000Z" }
     expect(summary({
       assignments: [assignment({

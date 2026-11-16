@@ -156,7 +156,7 @@ export function AssessmentStep({
     /*
      * Reachable from two places now. Told to "assign the matching session next"
      * on a case that already has one, a coach goes looking for work that is
-     * done -- and the remount drops them on Fee Plan, which says otherwise.
+     * done -- and the remount drops them on Fee plan, which says otherwise.
      */
     guard.navigateAfterCommit(() => onSuccess({
       message: item.assignedSession
@@ -181,7 +181,7 @@ export function AssessmentStep({
         <p className={styles.note} data-tone="lock" role="note">
           <Lock aria-hidden="true" />
           {item.hasRecords
-            ? "Fixed: attendance or fees are already recorded. Finish onboarding on the Fee Plan step, then change them in Members."
+            ? "Fixed: attendance or fees are already recorded. Finish onboarding on the Fee plan step, then change them in Members."
             : `Fixed while this player has a schedule. To change them, use ${item.assignedSession.standing === "running" ? "Clear this assignment" : "Start again"} on the Session step first.`}
         </p>
       ) : null}

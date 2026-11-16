@@ -49,7 +49,7 @@ describe("what a fee preview refuses to let past", () => {
       <FeePreviewBlockers
         blockers={[
           "Assign a matching session before completing fees.",
-          "An existing Fee Plan must be resolved in the finance record.",
+          "An existing Fee plan must be resolved in the finance record.",
         ]}
       />,
     )
