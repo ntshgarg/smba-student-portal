@@ -5,10 +5,13 @@
 .mark {
   display: grid;
   gap: 12px;
+}
+
+/* the week strip, sized by its own frame on the Mark tab and in the Sessions calendar alike */
+.stripFrame {
   container-type: inline-size;
 }
 
-/* the week strip */
 .strip {
   display: flex;
   align-items: center;
@@ -734,6 +737,31 @@
     height: auto;
     overflow: visible;
     clip-path: none;
+  }
+
+  /* the Sessions calendar adds Today: it takes the middle, and "Pick a date" keeps to its calendar mark */
+  .strip:has(.today) {
+    grid-template-areas:
+      "days days days days"
+      "prev today pick next";
+    grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+  }
+
+  .pick.today {
+    grid-area: today;
+  }
+
+  .strip:has(.today) .pick:not(.today) {
+    width: 44px;
+    padding: 0;
+  }
+
+  .strip:has(.today) .pick span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 }
 

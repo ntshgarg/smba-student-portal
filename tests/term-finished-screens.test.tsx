@@ -328,9 +328,9 @@ describe("Schedules & rosters", () => {
     expect(html).toContain("Mon · SMBA Court · 1 Jul – 31 Oct")
     expect(html).toContain('data-tone="finished">1 still on it<')
     expect(html).toContain(">Finished<")
-    expect(html).toContain("1 schedule · 1 player still on it")
+    expect(html).toContain("1 schedule ·\u00a01 player still on it")
     // Running schedules come first; the ended one is not listed at all.
-    expect(html.indexOf("1 Jul – 31 Mar")).toBeLessThan(html.indexOf("1 schedule · 1 player still on it"))
+    expect(html.indexOf("1 Jul – 31 Mar")).toBeLessThan(html.indexOf("1 schedule ·\u00a01 player still on it"))
     expect(html).not.toContain("30 Sept 2026")
     expect(html).not.toContain("30 Sep 2026")
     expect(html).not.toContain("30 Sep<")
@@ -365,7 +365,7 @@ describe("Schedules & rosters", () => {
     const html = renderToStaticMarkup(<SessionSchedules today={today} />)
 
     expect(html).toContain("2 still on it")
-    expect(html).toContain("1 schedule · 2 players still on it")
+    expect(html).toContain("1 schedule ·\u00a02 players still on it")
     expect(html).not.toContain("to move")
   })
 

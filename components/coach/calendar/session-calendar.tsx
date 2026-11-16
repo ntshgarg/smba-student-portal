@@ -442,7 +442,7 @@ export function SessionCalendar({
       <section className={styles.panel} aria-labelledby="coach-day-view-title">
         <div className={styles.panelHead}>
           <h2 id="coach-day-view-title" ref={dayHeadingRef} tabIndex={-1}>
-            {selectedDate === today ? "Today · " : ""}{formatDateKey(selectedDate, { year: "numeric" })}
+            {selectedDate === today ? "Today ·\u00a0" : ""}{formatDateKey(selectedDate, { year: "numeric" })}
           </h2>
           <p>
             <span>{dayOccurrenceSummary(scheduledDayCount, cancelledDayCount)}</span>
@@ -540,7 +540,7 @@ export function SessionCalendar({
                   >
                     <time className={styles.time} dateTime={occurrence.startsAt}>{formatAcademyTime(occurrence.startsAt)}</time>
                     <span className={styles.copy}>
-                      <strong>{series.programme} · {series.batch}</strong>
+                      <strong>{series.programme} ·&nbsp;{series.batch}</strong>
                       <small>{occurrence.venue} · {playerCountLabel}</small>
                     </span>
                     <span className={styles.tag} data-tone={tag.tone}>{tag.label}</span>

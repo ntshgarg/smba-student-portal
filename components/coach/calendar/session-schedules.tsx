@@ -325,7 +325,7 @@ export function SessionSchedules({
         >
           <span className={styles.time}>{range}</span>
           <span className={styles.copy}>
-            <strong>{series.programme} · {series.batch}</strong>
+            <strong>{series.programme} ·&nbsp;{series.batch}</strong>
             <small>{scheduleDays(series)} · {series.venue} · {scheduleDates(series, today)}</small>
           </span>
           <span className={styles.tag} data-tone={finished ? "finished" : undefined}>{playersLabel}</span>
@@ -426,7 +426,7 @@ export function SessionSchedules({
     ...programmeGroups.map((group) => ({
       groupKey: group.programme as ScheduleGroupKey,
       series: group.series,
-      summary: `${countLabel(group.series.length, "schedule", "schedules")} · ${countLabel(group.playerCount, "player", "players")}`,
+      summary: `${countLabel(group.series.length, "schedule", "schedules")} ·\u00a0${countLabel(group.playerCount, "player", "players")}`,
       title: group.programme,
     })),
     ...finishedGroup.series.length ? [{
@@ -436,7 +436,7 @@ export function SessionSchedules({
       // counts them. Not "to move": a player with a place on a running
       // schedule as well is still training, so the to-do and Members'
       // "Term finished" leave them out.
-      summary: `${countLabel(finishedGroup.series.length, "schedule", "schedules")} · ${countLabel(finishedGroup.playerCount, "player", "players")} still on ${finishedGroup.series.length === 1 ? "it" : "them"}`,
+      summary: `${countLabel(finishedGroup.series.length, "schedule", "schedules")} ·\u00a0${countLabel(finishedGroup.playerCount, "player", "players")} still on ${finishedGroup.series.length === 1 ? "it" : "them"}`,
       title: "Finished",
     }] : [],
   ]
