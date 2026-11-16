@@ -1917,20 +1917,34 @@
   }
 
   .coach-panel {
-    padding: calc(var(--coach-overlap) + var(--space-copy)) 22px 26px;
+    padding: calc(var(--coach-overlap) + var(--space-copy)) 20px 24px;
   }
 
   .coach-facts {
     gap: var(--space-tight);
   }
 
+  /* figure and words sit together, so the three boxes read alike instead of a big figure over a gap */
   .coach-facts li {
-    min-height: 104px;
-    padding: 12px;
+    min-height: 0;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 12px 10px;
+    font-size: 0.75rem;
   }
 
   .coach-facts strong {
-    font-size: 1.625rem;
+    font-size: 1.5rem;
+  }
+
+  /* the handle stays on one line on a 320px phone */
+  .coach-instagram {
+    font-size: 0.875rem;
+  }
+
+  .coach-instagram > span {
+    overflow-wrap: normal;
+    white-space: nowrap;
   }
 
   /* on a phone the card rises over the photo as it scrolls into view (browsers that can tie an animation
