@@ -147,7 +147,7 @@ import {
   type FeeAgreementView,
 } from "@/lib/finance/types"
 import { formatDateKey, getAcademyDateKey, getAcademyMonthKey } from "@/lib/format"
-import { academyPlanIsValid } from "@/lib/training/academy-plans"
+import { academyPlanIsValid, feePlanMatchesTraining } from "@/lib/training/academy-plans"
 import {
   IMPLAUSIBLE_TRAINING_START_MESSAGE,
   trainingStartIsImplausiblyEarly,
@@ -755,11 +755,7 @@ function monthlyPreparationCandidates(
       waiting?.add(candidate.agreement.playerAccountId)
       return
     }
-    const matchesCurrentEnrollment = candidate.agreement.academyPlan
-        === candidate.enrollment.academyPlan
-      && candidate.agreement.level === candidate.enrollment.level
-      && candidate.agreement.batch === candidate.enrollment.batch
-    if (period >= currentPeriod && !matchesCurrentEnrollment) return
+    if (period >= currentPeriod && !feePlanMatchesTraining(candidate.agreement, candidate.enrollment)) return
     const playerId = candidate.agreement.playerAccountId
     const existing = candidatesByPlayer.get(playerId)
     if (!existing

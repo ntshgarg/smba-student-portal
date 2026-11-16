@@ -86,6 +86,8 @@ export type PlayerFinancialLedgerView = {
       label: string
     } | null
   } | null
+  /** The plan that bills next is not for the player's training, so fee issuing passes them over. */
+  feePlanMismatch: boolean
   onboardingComplete: boolean
   enrollmentDefaults: {
     academyPlan: import("@/lib/training/academy-plans").AcademyPlan

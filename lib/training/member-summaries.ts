@@ -27,6 +27,7 @@ import { feeChangeStartsOn } from "@/lib/training/fees"
 import { loadThisMonthFeeBases } from "@/lib/training/this-month-fee"
 import type { ThisMonthFeeBasis } from "@/lib/training/this-month-fee-plan"
 import { feePlanInForce } from "@/lib/finance/plan-in-force"
+import { feePlanMatchesTraining } from "@/lib/training/academy-plans"
 
 /*
  * What the Members directory shows on each player's record about their
@@ -80,10 +81,12 @@ export type MemberFeeSummary = {
    * running place reaches into next month and no booked move gives them one.
    * "term-finished" when the player's term has finished
    * (lib/sessions/term.ts), "schedule-ends" when a running schedule ends this
-   * month, "no-schedule" otherwise. Null when next month's fee is issued as
+   * month, "no-schedule" otherwise. "plan-mismatch" when they do train on but
+   * the plan is not for their level, batch and plan, which fee issuing passes
+   * over (feePlanMatchesTraining). Null when next month's fee is issued as
    * shown.
    */
-  nextMonthNoFee: "no-schedule" | "schedule-ends" | "term-finished" | null
+  nextMonthNoFee: "no-schedule" | "plan-mismatch" | "schedule-ends" | "term-finished" | null
   thisMonth: {
     amountPaise: number
     /**
@@ -220,6 +223,13 @@ export function listMemberTrainingSummaries(
     ne(feeAgreements.status, "paused"),
     or(isNull(feeAgreements.effectiveTo), gte(feeAgreements.effectiveTo, today)),
   )).all()
+  const trainingByPlayer = new Map(database.select({
+    academyPlan: playerEnrollments.academyPlan,
+    batch: playerEnrollments.batch,
+    level: playerEnrollments.level,
+    playerId: playerEnrollments.accountId,
+  }).from(playerEnrollments).where(inArray(playerEnrollments.accountId, playerIds)).all()
+    .map((row) => [row.playerId, row]))
   const charges = database.select({
     amountPaise: financialCharges.originalAmountPaise,
     dueDate: financialCharges.dueDate,
@@ -291,6 +301,8 @@ export function listMemberTrainingSummaries(
       && placeReachesWindow(place, place, nextMonthStart, monthAfterNextStart)
     )))
     const waitingFee = waitingFeeChangeOf(own, today)
+    const training = trainingByPlayer.get(playerId)
+    const planMismatch = Boolean(next && training && scheduledFee === null && !feePlanMatchesTraining(next, training))
     summaries[playerId].fee = {
       activeAgreementId: active?.id ?? null,
       activeAgreementRevision: active?.recordRevision ?? null,
@@ -309,13 +321,15 @@ export function listMemberTrainingSummaries(
         : nextMonthStart,
       monthlyFeePaise: current?.agreedMonthlyFeePaise ?? null,
       nextMonthFeePaise: feesStop ? null : scheduledFee ?? next?.agreedMonthlyFeePaise ?? null,
-      nextMonthNoFee: placeNextMonth || feesStop
+      nextMonthNoFee: feesStop
         ? null
-        : termFinishedOn(places, today)
-          ? "term-finished"
-          : places.some((place) => scheduleIsRunning(place, today) && place.endsOn && place.endsOn < nextMonthStart)
-            ? "schedule-ends"
-            : "no-schedule",
+        : placeNextMonth
+          ? planMismatch ? "plan-mismatch" : null
+          : termFinishedOn(places, today)
+            ? "term-finished"
+            : places.some((place) => scheduleIsRunning(place, today) && place.endsOn && place.endsOn < nextMonthStart)
+              ? "schedule-ends"
+              : "no-schedule",
       waitingFeeChange: waitingFee
         ? {
           agreementId: waitingFee.change.id,

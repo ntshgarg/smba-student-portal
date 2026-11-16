@@ -343,7 +343,9 @@ export function MemberTrainingActions({
                     ? "No fee: schedule ends this month"
                     : fee.nextMonthNoFee === "no-schedule"
                       ? "No fee: not on a schedule"
-                      : fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
+                      : fee.nextMonthNoFee === "plan-mismatch"
+                        ? "No fee: the fee plan is not for this training. Use Change fee to set it again."
+                        : fee.nextMonthFeePaise !== null ? formatInr(fee.nextMonthFeePaise) : "No fee"}</dd></div>
                 <div>
                   <dt>Concession</dt>
                   <dd>{fee.concession

@@ -63,6 +63,19 @@ export function academyPlanIsValid(
   return plan !== null && academyPlansFor(level, batch).includes(plan)
 }
 
+type Training = { academyPlan: AcademyPlan | null; batch: TrainingBatch | null; level: TrainingProgramme | null }
+
+/**
+ * Whether a fee plan is for the training a player is on: the same level, batch
+ * and plan. Fee issuing passes over a plan that is not (lib/finance/service.ts
+ * monthlyPreparationCandidates), so Members and the fee record say so too.
+ */
+export function feePlanMatchesTraining(plan: Training, training: Training) {
+  return plan.academyPlan === training.academyPlan
+    && plan.level === training.level
+    && plan.batch === training.batch
+}
+
 export function academyPlanLabel(plan: AcademyPlan | null) {
   return plan ? academyPlanLabels[plan] : "Needs review"
 }
