@@ -66,10 +66,6 @@ export type CoachAnnouncement = {
   withdrawal: AnnouncementWithdrawal | null
 }
 
-export type CoachAnnouncementArchiveItem = Omit<CoachAnnouncement, "content"> & {
-  preview: string
-}
-
 export type PublicAnnouncementSummary = {
   id: string
   title: string

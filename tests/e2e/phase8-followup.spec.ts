@@ -69,9 +69,10 @@ test("Announcement publication leaves the composer exactly once", async ({ page 
   await page.locator('input[placeholder="Holiday training schedule"]').fill(title)
   await page.locator('textarea[placeholder="Share the important details with the academy."]')
     .fill("This notice verifies reliable post-publication navigation.")
-  await page.getByRole("checkbox", { name: /Homepage/i }).check()
-  await page.getByRole("button", { name: "Review announcement" }).click()
-  await page.getByRole("button", { name: "Publish announcement" }).click()
+  // The chip's box is visually hidden; its label is what is seen and pressed.
+  await page.getByRole("checkbox", { name: /Homepage/i }).check({ force: true })
+  await page.getByRole("button", { name: "Review", exact: true }).click()
+  await page.getByRole("button", { name: "Publish", exact: true }).click()
 
   await page.waitForURL((url) => (
     /^\/coach\/announcements\/[^/]+$/u.test(url.pathname)

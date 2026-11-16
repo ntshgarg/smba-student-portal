@@ -11,7 +11,7 @@ import { requireHeadAdminPage } from "@/lib/auth/current-coach"
 import { academyCurrentMonth } from "@/lib/clock"
 
 export const metadata = {
-  title: "Published announcements",
+  title: "Announcements",
 }
 
 type AnnouncementSearchParams = {

@@ -1,1667 +1,948 @@
-.archiveToolbar > div > span,
-.withdrawDialog > span {
-  color: var(--red);
-  font-size: 0.625rem;
-  font-weight: var(--weight-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+/* The coach's Announcements pages (head coach, 16 Nov 2026): the list, one announcement and the
+   new-announcement form, built from the Sessions Schedules list (one framed panel, divider rows,
+   an open row turns navy with its detail underneath) and the New schedule form (one dense card). */
+
+.page {
+  padding-block: var(--space-block) var(--space-content);
 }
 
-.newAnnouncementLink {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 54px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 18px;
-  border: 1px solid var(--navy);
-  color: var(--navy);
-  font-size: 0.75rem;
-  font-weight: var(--weight-control);
-  transition: background var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard), var(--press-transition);
-}
-
-.newAnnouncementLink:hover {
-  background: var(--navy);
-  color: var(--white);
-}
-
-.newAnnouncementLink svg {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
-}
-
-.workspace {
-  padding: 28px 0 clamp(110px, 12vw, 170px);
-}
-
-.composerWorkspace {
-  padding: clamp(20px, 2.8vw, 34px) 0 clamp(76px, 9vw, 120px);
-}
-
-.composerBackRow a {
+.back a {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
-  gap: 9px;
-  color: var(--steel);
-  font-size: 0.6875rem;
-  font-weight: 750;
+  gap: 6px;
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
 }
 
-.composerBackRow svg {
-  width: 15px;
-  height: 15px;
-}
-
-.composerHeader {
-  width: 100%;
-  margin: clamp(18px, 2.7vw, 30px) 0 0;
-}
-
-.composerHeader h1 {
-  color: var(--navy);
-  font-size: clamp(32px, 3.2vw, 46px);
-  font-weight: 590;
-  letter-spacing: -0.055em;
-  line-height: 0.96;
-}
-
-/* Where a publish that settled after the review dialog closed is reported. The
-   Notice Slip composition has no reserved notice band, and an empty inline
-   notice still occupies its line box, so the slot is out of the flow entirely
-   until it has something to say. Slip width so the message starts on the same
-   left edge as the announcement it belongs to. */
-.composerNotice {
-  display: none;
-}
-
-.composerNotice:not([data-empty="true"]) {
-  display: block;
-  width: min(100%, 940px);
-  margin: clamp(14px, 2vw, 18px) auto 0;
-}
-
-.noticeSlip {
-  position: relative;
-  /* Left-aligned to the page, not centred in it. `margin-inline: auto` on a
-     940px cap kept the card under the heading only while the column was
-     narrower than the cap: at 990 the two were already 1px apart, at 1440 150px,
-     and at 2560 528.4px, with the back link and h1 still on the page's own edge.
-     The sibling archive page keeps both on one edge at every width. */
-  width: min(100%, 940px);
-  margin: clamp(18px, 2.4vw, 26px) 0 0;
-  border: 1px solid color-mix(in srgb, var(--navy) 48%, var(--line));
-  background: color-mix(in srgb, var(--white) 72%, var(--ivory));
-  overflow: hidden;
-}
-
-.noticeSlip::after {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-top: 25px solid var(--red);
-  border-left: 25px solid transparent;
-  content: "";
-  pointer-events: none;
-}
-
-.slipMasthead {
-  min-height: 38px;
-  padding: 12px 34px var(--space-tight);
-  text-align: right;
-}
-
-.slipMasthead > span,
-.slipDocketLabel,
-.slipField > span,
-.slipExpiryField > span {
-  color: var(--navy);
-  font-size: var(--type-operational-floor);
-  font-weight: var(--weight-label);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.slipBody {
-  display: grid;
-  gap: 0;
-  padding: 6px clamp(20px, 3.1vw, var(--space-block)) 0;
-}
-
-.slipField {
-  display: grid;
-  min-width: 0;
-  gap: 7px;
-  padding-bottom: 18px;
-}
-
-.slipField + .slipField {
-  padding-top: var(--space-copy);
-  border-top: 1px solid var(--line);
-}
-
-.slipField input,
-.slipField textarea,
-.slipExpiryField input {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--navy) 32%, var(--line));
-  border-radius: 0;
-  background: color-mix(in srgb, var(--white) 82%, transparent);
-  color: var(--navy);
-}
-
-.slipField input {
-  min-height: 46px;
-  padding: 0 14px;
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 16px;
-}
-
-.slipField textarea {
-  height: 164px;
-  min-height: 164px;
-  padding: 13px 14px;
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(17px, 1.6vw, 18px);
-  line-height: var(--leading-body);
-  resize: vertical;
-}
-
-.slipField input[aria-invalid="true"],
-.slipField textarea[aria-invalid="true"],
-.slipExpiryField input[aria-invalid="true"],
-.slipChannels[aria-invalid="true"] .slipChannelChoices {
-  border-color: color-mix(in srgb, var(--red) 76%, var(--line));
-}
-
-.slipFieldMeta {
-  display: grid;
-  min-height: 13px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  font-size: 0.625rem;
-  line-height: 1.45;
-}
-
-.slipFieldMeta > small {
-  font-size: inherit;
-}
-
-.slipFieldError {
-  color: var(--red);
-}
-
-.slipCounter {
-  color: var(--steel);
-  text-align: right;
-}
-
-.slipDocket {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--ivory) 62%, var(--white));
-}
-
-.slipChannels {
-  display: grid;
-  min-width: 0;
-  margin: 0;
-  grid-column: 1 / -1;
-  grid-row: 1;
-  grid-template-columns: max-content minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  align-items: stretch;
-  border: 0;
-}
-
-.slipDocketLabel {
-  display: flex;
-  min-height: 40px;
-  grid-column: 1;
-  grid-row: 1;
-  align-items: center;
-  padding: 0 clamp(20px, 3.1vw, var(--space-block));
-}
-
-.slipChannelChoices {
-  display: grid;
-  min-width: 0;
-  grid-column: 1 / -1;
-  grid-row: 2;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-}
-
-.slipChannelChoices label,
-.slipPinOption {
-  display: grid;
-  min-width: 0;
-  min-height: 58px;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  padding: var(--space-tight) 14px;
-  cursor: pointer;
-}
-
-.slipChannelChoices label + label {
-  border-left: 1px solid var(--line);
-}
-
-.slipChannelChoices input,
-.slipPinOption input {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  appearance: none;
-  place-content: center;
-  border: 1px solid color-mix(in srgb, var(--navy) 52%, var(--line));
-  border-radius: 0;
-  background: var(--white);
-}
-
-.slipChannelChoices input::before,
-.slipPinOption input::before {
-  width: 10px;
-  height: 10px;
-  background: var(--white);
-  clip-path: polygon(14% 44%, 0 60%, 40% 100%, 100% 18%, 82% 0, 38% 66%);
-  content: "";
-  transform: scale(0);
-}
-
-.slipChannelChoices input:checked,
-.slipPinOption input:checked {
-  border-color: var(--navy);
-  background: var(--navy);
-}
-
-.slipChannelChoices input:checked::before,
-.slipPinOption input:checked::before {
-  transform: scale(1);
-}
-
-.slipChannelChoices label > span {
-  color: var(--navy);
-  font-size: 0.6875rem;
-  font-weight: var(--weight-emphasis);
-  line-height: 1.35;
-}
-
-/*
- * The help line, which used to be sr-only unless something went wrong -- so the
- * one sentence explaining that "Homepage" means the public internet was read by
- * nobody. Same position as the error, deliberately quieter: it is standing
- * information, not a problem.
- */
-/* The audience under each choice: who actually reads this channel. */
-.slipChannelAudience {
-  display: block;
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 400;
-  letter-spacing: normal;
-  line-height: 1.3;
-  text-transform: none;
-}
-
-/*
- * Shown on the review screen only when a public channel is selected, so it stays
- * meaningful rather than becoming furniture the coach reads past.
- */
-.publicWarning {
-  /* The paragraph above ends exactly on this border -- 0px between the boxes,
-     so the descenders of "through" and "January" came within 1.47-1.49px of the
-     rule at every width, against 22px and 15px seams everywhere else in the same
-     dialog. The margin is the seam that was missing. */
-  margin: 14px 0 0;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  color: var(--navy);
-  font-size: 0.75rem;
-  line-height: 1.45;
-}
-
-.publicWarning strong {
-  color: var(--red);
-}
-
-.channelPills > span > small {
-  display: block;
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 400;
-  letter-spacing: normal;
-  text-transform: none;
-}
-
-.slipChannelMessage {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: center;
-  justify-self: end;
-  padding: 4px clamp(12px, 2vw, 20px);
-  color: var(--red);
-  font-size: var(--type-operational-floor);
-  line-height: 1.45;
-  text-align: right;
-}
-
-.slipPinOption {
-  min-height: 76px;
-  grid-column: 1;
-  grid-row: 2;
-  border-top: 1px solid var(--line);
-  border-right: 1px solid var(--line);
-}
-
-.slipPinOption > span {
-  min-width: 0;
-  color: var(--navy);
-  font-size: 0.6875rem;
-  font-weight: 720;
-}
-
-.slipExpiryError {
-  color: var(--red);
-  font-size: var(--type-operational-floor);
-  line-height: 1.35;
-}
-
-.slipExpiryField {
-  display: grid;
-  min-width: 0;
-  min-height: 76px;
-  align-content: center;
-  grid-column: 2;
-  grid-row: 2;
-  gap: 5px;
-  padding: 9px 14px;
-  border-top: 1px solid var(--line);
-}
-
-.slipExpiryField input {
-  min-height: 40px;
-  padding: 0 11px;
-  font: inherit;
-  font-size: 0.75rem;
-}
-
-.slipReviewButton {
-  display: inline-flex;
-  min-width: 0;
-  min-height: 52px;
-  grid-column: 1 / -1;
-  grid-row: 3;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  margin: 10px 12px 12px;
-  padding: 0 18px;
-  border: 0;
-  background: var(--navy);
-  color: var(--white);
-  font-size: 0.6875rem;
-  font-weight: var(--weight-control);
-}
-
-.slipReviewButton svg {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
-  color: var(--red);
-}
-
-.composerBackRow a:focus-visible,
-.slipChannels:focus-visible,
-.slipField input:focus-visible,
-.slipField textarea:focus-visible,
-.slipChannelChoices input:focus-visible,
-.slipPinOption input:focus-visible,
-.slipExpiryField input:focus-visible,
-.slipReviewButton:focus-visible {
-  outline: 2px solid var(--navy);
-  outline-offset: 3px;
-}
-
-.backRow a {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 9px;
-  color: var(--steel);
-  font-size: 0.6875rem;
-  font-weight: 750;
-}
-
-.backRow svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* `.detailHeader h1` is re-declared later in this module at the same 0-1-1
-   specificity with `font-size: clamp(48px, 6.5vw, 84px)`, so the size below
-   only ever governs `.archiveHeader h1`; the detail title renders at the 84px
-   ceiling. The other five declarations here still reach both headers. */
-.archiveHeader h1,
-.detailHeader h1 {
-  margin-top: var(--space-copy);
-  color: var(--navy);
-  font-size: var(--type-page-title);
-  font-weight: 545;
-  letter-spacing: -0.075em;
-  line-height: 0.9;
-}
-
-.archiveHeader > div > p {
-  max-width: 650px;
-  margin-top: 22px;
-  color: var(--steel);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(18px, 1.9vw, 22px);
-  font-style: italic;
-  line-height: 1.45;
-}
-
-.archivePanel,
-.detailPanel {
-  margin-top: clamp(42px, 6vw, 72px);
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 58%, transparent);
-}
-
-.archiveToolbar h2 {
-  margin-top: 9px;
-  color: var(--navy);
-  font-size: clamp(31px, 4vw, 48px);
-  font-weight: 590;
-  letter-spacing: -0.06em;
-  line-height: var(--leading-display);
-}
-
-.field {
-  display: grid;
-  gap: var(--space-tight);
-  min-width: 0;
-}
-
-.field > span {
-  color: var(--navy);
-  font-size: 0.625rem;
-  font-weight: 790;
-  letter-spacing: 0.075em;
-  text-transform: uppercase;
-}
-
-.field > span em {
-  margin-left: 5px;
-  color: var(--steel);
-  font-style: normal;
-  font-weight: var(--weight-emphasis);
-}
-
-.field input,
-.field textarea,
-.archiveSearch input,
-.archiveFilters select {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--white);
-  color: var(--navy);
-  font: inherit;
-  font-size: 0.875rem;
-}
-
-.field input {
-  min-height: 48px;
-  padding: 0 14px;
-}
-
-.field textarea {
-  min-height: 180px;
-  padding: 14px;
-  line-height: 1.65;
-  resize: vertical;
-}
-
-.field input[aria-invalid="true"],
-.field textarea[aria-invalid="true"] {
-  border-color: color-mix(in srgb, var(--red) 72%, var(--line));
-}
-
-.fieldMessage {
-  min-height: 17px;
-  color: var(--steel);
-  font-size: 0.625rem;
-  line-height: var(--leading-body);
-}
-
-[aria-invalid="true"] + .fieldMessage {
-  color: var(--red);
-}
-
-.dialogActions button,
-.detailActions button {
-  display: inline-flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  padding: 0 18px;
-  border: 1px solid var(--navy);
-  background: var(--navy);
-  color: var(--white);
-  font-size: 0.6875rem;
-  font-weight: var(--weight-control);
-}
-
-.dialogActions svg,
-.detailActions svg {
+.back svg {
   width: 16px;
   height: 16px;
 }
 
-.dialogBackdrop {
-  width: min(680px, calc(100vw - 32px));
-  max-height: min(780px, calc(100dvh - 32px));
+/* the page title, with New announcement on its right */
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-tight) var(--space-copy);
+  margin-block: var(--space-tight) 14px;
+}
+
+/* capped by the screen's width as well, so very large text on a phone keeps the word whole */
+.title {
+  min-width: 0;
+  color: var(--navy);
+  font-size: min(clamp(2.25rem, 4vw, 2.75rem), 12vw);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  overflow-wrap: break-word;
+}
+
+/* --- Buttons --- */
+.button,
+.primary,
+.danger {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-tight);
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  color: var(--navy);
+  font: inherit;
+  font-size: var(--type-operational-action);
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.primary {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.danger {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+  color: var(--red-dark);
+}
+
+.danger[data-solid] {
+  border-color: var(--red-dark);
+  background: var(--red-dark);
+  color: var(--white);
+}
+
+.button:disabled,
+.primary:disabled,
+.danger:disabled {
+  border-color: var(--line-disabled);
+  background: var(--paper);
+  color: var(--steel);
+  cursor: default;
+}
+
+.back a:focus-visible,
+.button:focus-visible,
+.primary:focus-visible,
+.danger:focus-visible,
+.rowHead:focus-visible,
+.monthNav a:focus-visible,
+.link:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+}
+
+/* --- The list: one framed panel --- */
+.panel {
+  min-width: 0;
+  overflow: hidden;
+  /* Rows stack by the panel's width in em, so 200% text stacks them as a narrow screen does. */
+  container-type: inline-size;
+  border: var(--frost-border);
+  border-radius: 22px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+/* month ‹ › · Search · Filter */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-tight);
+  padding: var(--space-tight) 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.monthNav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.monthNav h2 {
+  min-width: 8.5em;
+  color: var(--ink);
+  font-size: var(--type-operational-body);
+  font-weight: 800;
+  text-align: center;
+}
+
+.monthNav a,
+.monthNav > span {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+}
+
+.monthNav > span {
+  background: transparent;
+  color: var(--line-disabled);
+}
+
+.monthNav svg {
+  width: 16px;
+  height: 16px;
+}
+
+.search {
+  display: flex;
+  min-width: min(100%, 10em);
+  max-width: 20rem;
+  flex: 1 1 10em;
+  margin-left: auto;
+}
+
+.search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--type-operational-body);
+  font-weight: 600;
+}
+
+.search input:focus-visible,
+.field :is(input, textarea):focus-visible,
+.filters select:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 1px;
+}
+
+.toolbar > .button {
+  padding: 0 14px;
+  border-radius: 12px;
+}
+
+.toolbar > .button[aria-expanded="true"] {
+  border-color: var(--navy);
+}
+
+/* what a pin or withdrawal did, once the refresh has taken its row away */
+.outcome {
+  padding: 10px var(--space-copy);
+  border-bottom: 1px solid var(--line);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.outcome:empty,
+.filters[hidden] {
+  display: none;
+}
+
+.rows h3 {
+  margin: 0;
+  font: inherit;
+}
+
+/* Status and Shows on, under the bar */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-tight);
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.filters label {
+  display: grid;
+  min-width: min(100%, 11em);
+  flex: 1 1 11em;
+  gap: 4px;
+}
+
+.filters label > span,
+.label {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.filters select {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.resultBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--space-copy);
+  padding: 0 var(--space-copy);
+  border-bottom: 1px solid var(--line);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--navy);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rows > li {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 70%, transparent);
+}
+
+.rows > li:last-child {
+  border-bottom: 0;
+}
+
+/* a row: the date in serif, what it is and where it shows, one quiet state, a chevron */
+.rowHead {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: var(--space-copy);
+  padding: 11px var(--space-copy);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.date {
+  color: var(--steel-dark);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.25rem;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.copy {
+  display: grid;
+  min-width: 0;
+}
+
+.copy strong {
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.copy small {
+  overflow-wrap: anywhere;
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+/* Pinned, Expired: plain grey words. Only Withdrawn is a tag. */
+.state {
+  justify-self: end;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tag {
+  display: inline-flex;
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  color: var(--red-dark);
+}
+
+.chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--steel-dark);
+}
+
+.rows > li:is([data-status="withdrawn"], [data-status="expired"]):not(.open) :is(.date, .copy strong) {
+  color: var(--steel);
+}
+
+/* an open row: the head turns navy, the message and its actions sit underneath */
+.open .rowHead {
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.open :is(.date, .copy small, .state) {
+  color: color-mix(in srgb, var(--ivory) 78%, transparent);
+}
+
+.open .tag {
+  background: color-mix(in srgb, var(--white) 16%, transparent);
+  color: var(--white);
+}
+
+.open .chevron {
+  color: var(--ivory);
+  rotate: 90deg;
+}
+
+.open .rowHead:focus-visible {
+  outline-color: var(--ivory);
+  outline-offset: -4px;
+}
+
+.detail {
+  padding: 14px var(--space-copy) var(--space-copy) calc(5.5rem + 2 * var(--space-copy));
+  background: var(--paper);
+}
+
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: var(--space-group) var(--space-copy);
+  text-align: center;
+}
+
+.empty :is(h2, h3) {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.empty p {
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+/* --- One announcement: a navy band over its message --- */
+.single {
+  overflow: hidden;
+  margin-top: var(--space-tight);
+  border: var(--frost-border);
+  border-radius: 22px;
+  box-shadow: var(--frost-shadow);
+}
+
+.band {
+  padding: 18px 20px;
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.single:not([data-status="active"]) .band {
+  background: var(--steel-dark);
+}
+
+.band h1 {
+  font-size: clamp(1.5rem, 2.4vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.band p {
+  margin-top: 6px;
+  color: color-mix(in srgb, var(--ivory) 78%, transparent);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.single > .body {
+  padding: var(--space-copy) 20px 18px;
+  background: var(--paper);
+}
+
+/* the message, its state and its actions -- shared by the open row and the page */
+.body {
+  display: grid;
+  gap: 12px;
+}
+
+/* an empty notice slot takes no row, so the grid's gap is not doubled */
+:is(.body, .withdraw, .form, .page) > [data-empty="true"] {
+  display: none;
+}
+
+.message {
+  display: grid;
+  max-width: 68ch;
+  gap: 0.8em;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--navy) 5%, var(--white));
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.note[data-tone="red"] {
+  border-color: color-mix(in srgb, var(--red) 25%, transparent);
+  background: color-mix(in srgb, var(--red) 6%, var(--white));
+  color: var(--red-dark);
+}
+
+.note a {
+  color: inherit;
+}
+
+/* Withdraw opens in place and asks why */
+.withdraw {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--red) 25%, transparent);
+  border-radius: 16px;
+  background: var(--white);
+}
+
+.help {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 600;
+}
+
+/* --- New announcement: one dense card --- */
+.form {
+  display: grid;
+  gap: 14px;
+  padding: 18px 18px var(--space-copy);
+  border: var(--frost-border);
+  border-radius: 22px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.page > .form {
+  margin-top: 14px;
+}
+
+.composerNotice:not([data-empty="true"]) {
+  margin-top: 14px;
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.field > legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.fieldHead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 var(--space-tight);
+  padding: 0;
+}
+
+.fieldHead small {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+}
+
+.field input:not([type="checkbox"], [type="radio"]),
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.field textarea {
+  padding-block: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.form .field textarea {
+  min-height: 8rem;
+}
+
+.field [aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+.error {
+  color: var(--red-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+/* Show on · Last day · Pin to top */
+.settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  align-items: start;
+  gap: 12px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+}
+
+.chips label {
+  position: relative;
+  display: grid;
+  min-height: 46px;
+  flex: 1 1 auto;
+  align-content: center;
+  padding: 4px var(--space-copy);
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.chips small {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 600;
+}
+
+.chips input,
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chips label:has(input:checked) {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: var(--white);
+}
+
+.chips label:has(input:checked) small {
+  color: color-mix(in srgb, var(--ivory) 82%, transparent);
+}
+
+.chips label:has(input:focus-visible),
+.switch label:has(input:focus-visible) {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.field[aria-invalid="true"] .chips label {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+}
+
+.field[aria-invalid="true"]:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 4px;
+}
+
+/* No | Yes */
+.switch {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-self: start;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--navy) 6%, transparent);
+}
+
+.switch label {
+  position: relative;
+  display: inline-flex;
+  min-width: 4rem;
+  min-height: 44px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  color: var(--steel-dark);
+  font-size: var(--type-operational-action);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.switch label:has(input:checked) {
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: 0 4px 12px -6px var(--navy);
+}
+
+.formFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.preview {
+  display: flex;
+  min-height: 46px;
+  flex: 1 1 18rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 5px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--navy) 5%, var(--white));
+  color: var(--steel);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.preview strong {
+  color: var(--ink);
+}
+
+.formFoot > .actions {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+/* --- Review before publishing --- */
+.dialog {
+  width: min(620px, calc(100vw - 2 * var(--space-copy)));
+  max-height: calc(100dvh - 2 * var(--space-copy));
   margin: auto;
   padding: 0;
   border: 0;
-  background: transparent;
-  color: inherit;
-  overflow: visible;
+  border-radius: 22px;
+  background: var(--paper);
+  color: var(--ink);
   overscroll-behavior: contain;
+  box-shadow: 0 40px 80px -30px var(--navy);
 }
 
-.dialogBackdrop::backdrop {
+.dialog::backdrop {
   background: color-mix(in srgb, var(--navy) 58%, transparent);
 }
 
-/* Modals grow from their own centre (nothing on screen anchors them) while the
-   veil behind fades in, both on the shared entrance timing. */
-.dialogBackdrop[open] {
-  animation: dialogPanelIn var(--duration-enter) var(--ease-out);
+.dialog[open] {
+  animation: dialogIn var(--duration-enter) var(--ease-out);
 }
 
-.dialogBackdrop[open]::backdrop {
-  animation: dialogVeilIn var(--duration-enter) var(--ease-out);
+.dialog[open]::backdrop {
+  animation: veilIn var(--duration-enter) var(--ease-out);
 }
 
-@keyframes dialogPanelIn {
+@keyframes dialogIn {
   from {
     opacity: 0;
     scale: var(--popover-scale-from);
   }
 }
 
-@keyframes dialogVeilIn {
+@keyframes veilIn {
   from {
     opacity: 0;
   }
 }
 
-.reviewDialog,
-.withdrawDialog {
-  position: relative;
-  max-height: min(780px, calc(100dvh - 32px));
-  padding: clamp(28px, 5vw, var(--space-content));
-  border: 1px solid color-mix(in srgb, var(--white) 30%, var(--line));
-  background: var(--ivory);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+.dialog .band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: var(--space-tight);
 }
 
-.dialogClose {
-  position: absolute;
-  top: 14px;
-  right: 14px;
+.dialog .band h2 {
+  margin-bottom: 4px;
+  color: color-mix(in srgb, var(--red) 45%, var(--ivory));
+  font-size: var(--type-utility-label);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.dialog .band h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.close {
   display: grid;
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--ivory) 25%, transparent);
+  border-radius: 13px;
   background: transparent;
-  color: var(--navy);
+  color: var(--ivory);
+  cursor: pointer;
 }
 
-.dialogClose svg {
-  width: 19px;
-  height: 19px;
-}
-
-.reviewCopy h3,
-.withdrawDialog h2 {
-  max-width: calc(100% - 42px);
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(31px, 5vw, 46px);
-  font-weight: 500;
-  letter-spacing: -0.035em;
-  line-height: 1.02;
-}
-
-.reviewMessage {
-  display: grid;
-  gap: 14px;
-  margin-top: 26px;
-  color: var(--navy);
-  font-size: 0.875rem;
-  line-height: 1.75;
-  white-space: pre-wrap;
-}
-
-.reviewMeta {
-  display: grid;
-  gap: 15px;
-  margin-top: 30px;
-  padding-top: 22px;
-  border-top: 1px solid var(--line);
-}
-
-.reviewMeta > p {
-  color: var(--steel);
-  font-size: 0.6875rem;
-  line-height: 1.5;
-}
-
-.channelPills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.channelPills > span {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 9px;
-  border: 1px solid var(--line);
-  color: var(--navy);
-  font-size: var(--type-operational-floor);
-  font-weight: var(--weight-control);
-  letter-spacing: 0.035em;
-}
-
-.channelPills svg {
-  width: 12px;
-  height: 12px;
-}
-
-.dialogNotice {
-  margin-top: 10px;
-}
-
-.dialogActions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.dialogActions button:first-child {
-  background: transparent;
-  color: var(--navy);
-}
-
-.dialogActions button:disabled,
-.detailActions button:disabled,
-.dialogClose:disabled {
-  cursor: wait;
-  opacity: 0.58;
-}
-
-.dialogActions .dangerButton,
-.detailActions .withdrawButton {
-  border-color: var(--red);
-  background: transparent;
-  color: var(--red);
-}
-
-.withdrawDialog > p {
-  max-width: 500px;
-  margin: 18px 0 28px;
-  color: var(--steel);
-  font-size: 0.75rem;
-  line-height: 1.65;
-}
-
-.withdrawDialog > span {
-  display: block;
-  margin-bottom: 10px;
-}
-
-.withdrawDialog .field textarea {
-  min-height: 110px;
-}
-
-.archiveHeader {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: clamp(44px, 8vw, 120px);
-  margin-top: clamp(42px, 6vw, 76px);
-}
-
-.archiveHeader > div,
-.archiveToolbar > div {
-  min-width: 0;
-}
-
-.monthControl {
-  display: grid;
-  min-width: 300px;
-  grid-template-columns: 48px minmax(180px, 1fr) 48px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--white) 60%, transparent);
-}
-
-.monthControl > a,
-.disabledMonthControl {
-  display: grid;
-  min-height: 62px;
-  place-items: center;
-  color: var(--navy);
-}
-
-.monthControl > a:first-child,
-.monthControl > .disabledMonthControl:first-child,
-.monthControl > div {
-  border-right: 1px solid var(--line);
-}
-
-.monthControl > div {
-  display: grid;
-  place-content: center;
-  gap: 4px;
-  padding: var(--space-tight) 14px;
-  text-align: center;
-}
-
-.monthControl > div span {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 780;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.monthControl > div strong {
-  color: var(--navy);
-  font-size: 0.75rem;
-  font-weight: var(--weight-control);
-}
-
-.monthControl svg {
-  width: 17px;
-  height: 17px;
-}
-
-.disabledMonthControl {
-  color: color-mix(in srgb, var(--steel) 35%, transparent);
-}
-
-.archiveToolbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 28px;
-  /* The same clamp every other section of this panel uses. 3vw against 34px
-     reached 36px on a wide screen while its siblings stopped at 34px, so the
-     toolbar's title started 2.0px right of every row title below it and its
-     button ended 2.0px inside the rail they all share. */
-  padding: clamp(var(--space-group), 3vw, 34px);
-  border-bottom: 1px solid var(--line);
-}
-
-.newAnnouncementLink {
-  min-height: 46px;
-}
-
-.archiveSearch {
-  display: grid;
-  gap: var(--space-tight);
-  padding: 20px clamp(20px, 3vw, 34px);
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--ivory) 58%, var(--white));
-}
-
-.archiveSearch > label {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 790;
-  letter-spacing: 0.075em;
-  text-transform: uppercase;
-}
-
-.archiveSearch > div {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  border: 1px solid var(--line);
-  background: var(--white);
-}
-
-.archiveSearch > div:focus-within {
-  outline: 2px solid var(--navy);
+.close:focus-visible {
+  outline: 2px solid var(--ivory);
   outline-offset: 2px;
 }
 
-.archiveSearch svg {
-  width: 16px;
-  height: 16px;
-  margin-left: 13px;
-  color: var(--steel);
+.close svg {
+  width: 18px;
+  height: 18px;
 }
 
-.archiveSearch input {
-  min-height: 46px;
-  padding: 0 12px;
-  border: 0;
-  outline: 0;
+.dialog .body {
+  padding: var(--space-copy) 20px 18px;
 }
 
-.archiveSearch button,
-.archiveFilters button {
-  min-height: 46px;
-  padding: 0 17px;
-  border: 0;
-  background: var(--navy);
-  color: var(--white);
-  font-size: var(--type-operational-floor);
-  font-weight: var(--weight-control);
-}
-
-.archiveFilters {
-  border-bottom: 1px solid var(--line);
-}
-
-.archiveFilters summary {
-  display: inline-flex;
-  min-height: 46px;
-  align-items: center;
-  gap: var(--space-tight);
-  margin-left: clamp(20px, 3vw, 34px);
-  color: var(--navy);
-  font-size: var(--type-operational-floor);
-  font-weight: var(--weight-control);
-  cursor: pointer;
-  list-style: none;
-}
-
-.archiveFilters summary::-webkit-details-marker {
-  display: none;
-}
-
-.archiveFilters summary svg {
-  width: 14px;
-  height: 14px;
-}
-
-.archiveFilters > form {
-  display: grid;
-  /* Three tracks, not four. The fourth resolved to 0px and still took its 12px
-     gap, so "Apply filters" ended 12.0px inside the rail that the search field,
-     the row buttons and the result bar all share. */
-  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto;
-  align-items: end;
-  gap: 12px;
-  padding: 0 clamp(20px, 3vw, 34px) 20px;
-}
-
-.archiveFilters label {
-  display: grid;
-  gap: 7px;
-}
-
-.archiveFilters label > span {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 790;
-  letter-spacing: 0.075em;
-  text-transform: uppercase;
-}
-
-.archiveFilters select {
-  min-height: 46px;
-  padding: 0 11px;
-}
-
-.archiveFilters form > a {
-  display: grid;
-  min-height: 46px;
-  place-items: center;
-  padding: 0 12px;
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: var(--weight-control);
-}
-
-.resultBar {
+.facts {
   display: flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-copy);
-  padding: var(--space-tight) clamp(20px, 3vw, 34px);
-  border-bottom: 1px solid var(--line);
-  color: var(--steel);
-  font-size: 0.625rem;
-  font-weight: 700;
-}
-
-.resultBar a {
-  color: var(--navy);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.announcementList {
+  flex-wrap: wrap;
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.announcementList > li + li {
-  border-top: 1px solid var(--line);
+.facts li {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
 }
 
-.announcementRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr) auto;
-  align-items: center;
-  gap: 28px;
-  padding: var(--space-group) clamp(20px, 3vw, 34px);
-}
-
-.announcementIdentity {
-  min-width: 0;
-}
-
-.announcementIdentity > div:first-child {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.announcementIdentity > div:first-child > svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-  color: var(--red);
-  fill: color-mix(in srgb, var(--red) 20%, transparent);
-}
-
-.announcementIdentity h3 {
-  min-width: 0;
-  color: var(--navy);
-  font-size: 1.0625rem;
-  font-weight: 720;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-.announcementIdentity > p {
-  max-width: 660px;
-  margin-top: var(--space-tight);
+.facts span {
+  margin-right: 4px;
   color: var(--steel);
-  font-size: 0.6875rem;
-  line-height: var(--leading-body);
+  font-weight: 600;
 }
 
-.announcementIdentity .channelPills {
-  margin-top: 12px;
-}
-
-.rowMeta {
+.pair {
   display: grid;
-  grid-template-columns: repeat(2, minmax(90px, 1fr));
-  gap: 18px;
-  margin: 0;
-}
-
-.rowMeta > div {
-  display: grid;
-  gap: 6px;
-}
-
-.rowMeta dt,
-.detailMeta dt {
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-  font-weight: 790;
-  letter-spacing: 0.075em;
-  text-transform: uppercase;
-}
-
-.rowMeta dd,
-.detailMeta dd {
-  margin: 0;
-  color: var(--navy);
-  font-size: var(--type-operational-floor);
-  font-weight: 720;
-  line-height: 1.45;
-}
-
-.rowMeta dd[data-status="active"],
-.detailStatus[data-status="active"] {
-  color: var(--green);
-}
-
-.rowMeta dd[data-status="withdrawn"],
-.detailStatus[data-status="withdrawn"] {
-  color: var(--red);
-}
-
-.rowAction {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-tight);
-  padding: 0 13px;
-  border: 1px solid var(--navy);
-  color: var(--navy);
-  font-size: 0.625rem;
-  font-weight: var(--weight-control);
-}
-
-.rowAction svg {
-  width: 14px;
-  height: 14px;
-}
-
-.emptyState {
-  display: grid;
-  min-height: 330px;
-  place-items: center;
-  align-content: center;
-  padding: 52px var(--space-group);
-  text-align: center;
-}
-
-.emptyState > svg {
-  width: 28px;
-  height: 28px;
-  color: var(--red);
-  stroke-width: 1.4;
-}
-
-.emptyState h2,
-.emptyState h3 {
-  margin-top: 18px;
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: 1.75rem;
-  font-weight: 500;
-}
-
-.emptyState p {
-  margin-top: 9px;
-  color: var(--steel);
-  font-size: 0.6875rem;
-  line-height: var(--leading-body);
-}
-
-.emptyState a {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  margin-top: 20px;
-  padding: 14px var(--space-copy);
-  border: 1px solid var(--navy);
-  color: var(--navy);
-  font-size: 0.625rem;
-  font-weight: var(--weight-control);
-}
-
-.compactEmptyState {
-  min-height: 250px;
-}
-
-.detailHeader {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 36px;
-  margin-top: clamp(42px, 6vw, 76px);
-}
-
-.detailHeader h1 {
-  max-width: 880px;
-  font-size: clamp(48px, 6.5vw, 84px);
-  overflow-wrap: anywhere;
-}
-
-.detailStatus {
-  flex: 0 0 auto;
-  padding-bottom: 7px;
-  color: var(--steel);
-  font-size: 0.625rem;
-  font-weight: var(--weight-label);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.detailNotice {
-  margin-top: 18px;
-}
-
-.detailPanel {
-  padding: clamp(28px, 5vw, 58px);
-}
-
-.detailMessage {
-  display: grid;
-  gap: 18px;
-  max-width: 800px;
-  color: var(--navy);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(19px, 2vw, 24px);
-  line-height: var(--leading-body);
-  white-space: pre-wrap;
-}
-
-.detailMeta {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-group);
-  margin: clamp(38px, 6vw, 66px) 0 0;
-  padding-top: var(--space-group);
-  border-top: 1px solid var(--line);
-}
-
-.detailMeta > div {
-  display: grid;
-  align-content: start;
-  gap: var(--space-tight);
-  min-width: 0;
-}
-
-.detailMeta dd {
-  font-size: var(--type-operational-floor);
-}
-
-.withdrawalRecord {
-  margin-top: 28px;
-  padding: 18px 20px;
-  border-left: 3px solid var(--red);
-  background: color-mix(in srgb, var(--red) 5%, var(--ivory));
-}
-
-.withdrawalRecord > span {
-  color: var(--red);
-  font-size: var(--type-operational-floor);
-  font-weight: var(--weight-label);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-
-.withdrawalRecord p {
-  margin-top: var(--space-tight);
-  color: var(--navy);
-  font-size: 0.75rem;
-  line-height: var(--leading-body);
-}
-
-.withdrawalRecord time {
-  display: block;
-  margin-top: 6px;
-  color: var(--steel);
-  font-size: var(--type-operational-floor);
-}
-
-.detailActions {
-  display: flex;
-  flex-wrap: wrap;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
   gap: 10px;
-  margin-top: 30px;
 }
 
-.detailActions button:first-child {
-  background: transparent;
-  color: var(--navy);
-}
-
-@media (max-width: 900px) {
-  .slipReviewButton {
-    width: auto;
-    min-height: 54px;
+@container (max-width: 40em) {
+  .rowHead {
+    grid-template-columns: 4.25rem minmax(0, 1fr) 18px;
+    gap: 4px 10px;
   }
 
-  .archiveHeader {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .monthControl {
-    width: min(100%, 390px);
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .announcementRow {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .rowMeta {
-    grid-column: 1;
-    grid-row: 2;
-    max-width: 300px;
-  }
-
-  .rowAction {
+  .rowHead .state {
     grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .rowHead .chevron {
+    grid-column: 3;
     grid-row: 1 / span 2;
   }
 
-  .detailMeta {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .composerWorkspace {
-    padding-top: 12px;
-    padding-bottom: 84px;
-  }
-
-  .composerBackRow a {
-    min-height: 44px;
-    font-size: 0.625rem;
-  }
-
-  .composerHeader {
-    margin-top: 5px;
-  }
-
-  .composerHeader h1 {
-    font-size: clamp(27px, 8vw, 33px);
-  }
-
-  .noticeSlip {
-    margin-top: 9px;
-  }
-
-  .noticeSlip::after {
-    border-top-width: 21px;
-    border-left-width: 21px;
-  }
-
-  .slipMasthead {
-    min-height: 28px;
-    padding: var(--space-tight) 28px 4px 12px;
-  }
-
-  .slipBody {
-    gap: 0;
-    padding: 4px 12px 0;
-  }
-
-  .slipField {
-    padding-bottom: 12px;
-  }
-
-  .slipField + .slipField {
-    padding-top: 12px;
-  }
-
-  .slipField input,
-  .slipField textarea,
-  .slipExpiryField input {
-    font-size: 16px;
-  }
-
-  .slipField input {
-    min-height: 44px;
-    padding: 0 12px;
-  }
-
-  .slipField textarea {
-    height: 132px;
-    min-height: 132px;
-    padding: 12px;
-    font-size: 17px;
-  }
-
-  .slipChannels {
-    grid-template-columns: max-content minmax(0, 1fr);
-    padding: 0;
-  }
-
-  .slipDocketLabel {
-    min-height: 34px;
-    padding: 0;
-  }
-
-  .slipChannelChoices {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: 0;
-    border: 1px solid var(--line);
-  }
-
-  .slipChannelChoices label {
-    min-height: 46px;
-    padding: 6px 12px;
-  }
-
-  .slipChannelChoices label + label {
-    border-top: 0;
-    border-left: 1px solid var(--line);
-  }
-
-  /* The gap moves onto the grid, because the thing that was holding these two
-     apart was a child's padding and this block takes it away. `.slipChannels` is
-     `max-content minmax(0, 1fr)` with no column-gap, and the base rule gives the
-     message `padding: 4px clamp(12px, 2vw, 20px)`; with `padding: 4px 0` below
-     the only separation left was whatever slack the row happened to have. At
-     360px there was none: "Send to" ended at x=82.10 and the first glyph of
-     "Choose where the announcement should appear." began at x=82.10, so the two
-     painted as one string. */
-  .slipChannels {
-    column-gap: 12px;
-  }
-
-  .slipChannelMessage {
-    grid-column: 2;
-    grid-row: 1;
-    padding: 4px 0;
-  }
-
-  .slipDocket {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 0 12px 10px;
-  }
-
-  .slipPinOption {
-    grid-column: 1;
-    grid-row: 2;
-    min-height: 46px;
-    padding: 6px 12px;
-    border: 1px solid var(--line);
-    border-top: 0;
-  }
-
-  .slipExpiryField {
-    grid-column: 2;
-    grid-row: 2;
-    gap: 4px;
-    padding: var(--space-tight) 12px;
-    border: 1px solid var(--line);
-    border-top: 0;
-    border-left: 0;
-  }
-
-  .slipExpiryField input {
-    min-height: 44px;
-  }
-
-  .slipReviewButton {
-    min-width: 0;
-    min-height: 48px;
-    grid-column: 1 / -1;
-    grid-row: 3;
-    margin-top: var(--space-tight);
-    margin-right: 0;
-    margin-bottom: 0;
-    margin-left: 0;
-    padding-inline: 14px;
-  }
-
-  .workspace {
-    padding-top: 18px;
-  }
-
-  .workspaceHeader,
-  .archiveHeader,
-  .detailHeader {
-    margin-top: 30px;
-  }
-
-  .workspaceHeader h1,
-  .archiveHeader h1 {
-    font-size: clamp(47px, 14vw, 64px);
-  }
-
-  .workspaceHeader p,
-  .archiveHeader > div > p {
-    margin-top: var(--space-copy);
+  .date {
     font-size: 1.0625rem;
   }
 
-  .composerPanel,
-  .archivePanel,
-  .detailPanel {
-    margin-top: var(--space-block);
+  .detail {
+    padding-left: var(--space-copy);
   }
 
-  .composerPanel > .panelHeading {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+  .monthNav {
+    flex-basis: 100%;
+    justify-content: space-between;
   }
 
-  .panelHeading,
-  .composerFields,
-  .detailPanel {
-    padding: 22px;
+  .search {
+    max-width: none;
+    margin-left: 0;
+  }
+}
+
+/* Narrower still (a small phone at large text): the date takes its own line above the title. */
+@container (max-width: 20em) {
+  .rowHead {
+    grid-template-columns: minmax(0, 1fr) 18px;
   }
 
-  .composerFields {
-    gap: 25px;
-  }
-
-  .field input,
-  .field textarea,
-  .archiveSearch input,
-  .archiveFilters select {
-    font-size: 16px;
-  }
-
-  .locationFieldset > div,
-  .optionsGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .locationFieldset > div > label + label {
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
-
-  .composerActions {
-    display: grid;
-    padding: 18px 22px 22px;
-  }
-
-  .composerActions button {
-    width: 100%;
-  }
-
-  .dialogBackdrop {
-    width: calc(100vw - 20px);
-    max-height: calc(100dvh - 20px);
-  }
-
-  .reviewDialog,
-  .withdrawDialog {
-    max-height: calc(100dvh - 20px);
-    padding: 28px 20px 20px;
-  }
-
-  .reviewCopy h3,
-  .withdrawDialog h2 {
-    font-size: 2rem;
-  }
-
-  .dialogActions {
-    grid-template-columns: 1fr;
-  }
-
-  .dialogActions .primaryButton {
-    grid-row: 1;
-  }
-
-  .archiveToolbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-    padding: 22px;
-  }
-
-  .archiveHeader h1 {
-    font-size: clamp(38px, 11vw, 52px);
-    overflow-wrap: normal;
-    word-break: normal;
-  }
-
-  .newAnnouncementLink {
-    width: 100%;
-  }
-
-  .archiveSearch {
-    padding: 18px 22px;
-  }
-
-  .archiveSearch > div {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .archiveSearch button {
-    grid-column: 1 / -1;
-    margin: 0 -1px -1px;
-  }
-
-  .archiveFilters summary {
-    margin-left: 22px;
-  }
-
-  .archiveFilters > form {
-    grid-template-columns: 1fr;
-    padding: 0 22px 20px;
-  }
-
-  .announcementRow {
-    grid-template-columns: 1fr;
-    gap: 18px;
-    padding: 22px;
-  }
-
-  .rowMeta,
-  .rowAction {
+  .rowHead :is(.date, .copy, .state) {
     grid-column: 1;
     grid-row: auto;
   }
 
-  .rowAction {
-    width: 100%;
+  .rowHead .chevron {
+    grid-column: 2;
+    grid-row: 1;
   }
 
-  .detailHeader {
-    display: grid;
-  }
-
-  .detailHeader h1 {
-    font-size: clamp(42px, 12vw, 58px);
-  }
-
-  .detailStatus {
-    padding: 0;
-  }
-
-  .detailMeta {
-    grid-template-columns: 1fr;
-  }
-
-  .detailActions {
-    display: grid;
-  }
-
-  .detailActions button {
-    width: 100%;
-  }
-}
-
-@media (max-width: 380px) {
-  .slipChannelChoices label,
-  .slipPinOption {
-    gap: 7px;
-    padding-inline: var(--space-tight);
-  }
-
-  .slipChannelChoices label > span,
-  .slipPinOption > span {
-    font-size: 0.625rem;
-  }
-
-  .slipExpiryField {
-    padding-inline: var(--space-tight);
-  }
-
-  .slipExpiryField input {
-    padding-inline: 7px;
-    font-size: 0.6875rem;
-  }
-
-  .monthControl {
+  .monthNav h2 {
     min-width: 0;
-    grid-template-columns: 46px minmax(0, 1fr) 46px;
-  }
-
-  .monthControl > div {
-    padding-inline: 7px;
-  }
-
-  .monthControl > div strong {
-    font-size: 0.6875rem;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .cardActions a,
-  .newAnnouncementLink {
-    transition: none;
-  }
-}
-
-/* The 16px focus-zoom floor, repeated for touch at any width.
-   Its sibling rule sits in the width-only block above, which is right for the
-   layout it stacks and wrong for this: a phone in landscape is 844-956 CSS px
-   and an iPad 744-1024, so no width ceiling reaches them. Only the font-size is
-   lifted -- widening the whole block would apply the tablet layout to a
-   tablet-mode laptop at desktop width, which is the hazard the matching comment
-   in app/portal.css records. */
-@media (pointer: coarse) {
-  .slipField input,
-  .slipField textarea,
-  .slipExpiryField input,
+/* iOS zooms on focus below 16px and never zooms back: the same floor as the Sessions forms. */
+@media (max-width: 720px), (pointer: coarse) {
   .field input,
   .field textarea,
-  .archiveSearch input,
-  .archiveFilters select {
+  .search input {
     font-size: 16px;
   }
 }
 
-/* A link dressed as a button presses like one (--press-scale in app/globals.css). */
-.newAnnouncementLink:active {
-  scale: var(--press-scale);
+@media (max-width: 720px) {
+  .actions > :is(.button, .primary, .danger) {
+    flex: 1 1 auto;
+  }
+
+  .titleRow > .primary {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog[open],
+  .dialog[open]::backdrop {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .chips label:has(input:checked),
+  .switch label:has(input:checked) {
+    border: 2px solid Highlight;
+    outline: 2px solid Highlight;
+  }
 }

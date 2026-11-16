@@ -6,7 +6,6 @@ import type {
   AnnouncementChannel,
   CoachAnnouncement,
   CoachAnnouncementArchiveFilters,
-  CoachAnnouncementArchiveItem,
   PlayerAnnouncementDetail,
   PlayerAnnouncementSummary,
   PublicAnnouncementDetail,
@@ -228,7 +227,7 @@ export function listCoachAnnouncements(
     database = initializeDatabase(),
     now = academyNow(),
   }: CoachAnnouncementQueryOptions,
-): CoachAnnouncementArchiveItem[] {
+): CoachAnnouncement[] {
   requireHeadAdminAccess(coachId, { database })
   const search = filters.search?.trim().toLocaleLowerCase("en-IN") ?? ""
   const rows = database.select(baseSelection).from(broadcasts)
@@ -263,20 +262,7 @@ export function listCoachAnnouncements(
       .toLocaleLowerCase("en-IN").includes(search)) {
       return []
     }
-    return [{
-      id: announcement.id,
-      audience: announcement.audience,
-      channels: announcement.channels,
-      expiresOn: announcement.expiresOn,
-      pinned: announcement.pinned,
-      presentationRevision: announcement.presentationRevision,
-      preview: announcementPreview(announcement.content),
-      publishedAt: announcement.publishedAt,
-      publishedByAccountId: announcement.publishedByAccountId,
-      status: announcement.status,
-      title: announcement.title,
-      withdrawal: announcement.withdrawal,
-    }]
+    return [announcement]
   })
 }
 
@@ -371,6 +357,33 @@ export function listActivePlayerAnnouncements(
   }))
 }
 
+function playerAnnouncementDetail(
+  row: ReturnType<typeof activeChannelRows>[number],
+  now: Date,
+): PlayerAnnouncementDetail {
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    publishedAt: row.publishedAt.toISOString(),
+    expiresOn: row.expiresOn,
+    pinned: row.pinned,
+    isNew: isAnnouncementNew(row.publishedAt, now),
+  }
+}
+
+/** The player's live notices with their full message, for the list that opens each in place. */
+export function listActivePlayerAnnouncementDetails(
+  playerId: string,
+  options: AnnouncementQueryOptions = {},
+): PlayerAnnouncementDetail[] {
+  const database = options.database ?? initializeDatabase()
+  const now = options.now ?? academyNow()
+  if (!playerIsEligible(database, playerId)) return []
+  return activeChannelRows("player_dashboard", database, now)
+    .map((row) => playerAnnouncementDetail(row, now))
+}
+
 export function getActivePlayerAnnouncement(
   playerId: string,
   announcementId: string,
@@ -381,14 +394,5 @@ export function getActivePlayerAnnouncement(
   if (!playerIsEligible(database, playerId)) return null
   const row = activeChannelRows("player_dashboard", database, now)
     .find(({ id }) => id === announcementId)
-  if (!row) return null
-  return {
-    id: row.id,
-    title: row.title,
-    content: row.content,
-    publishedAt: row.publishedAt.toISOString(),
-    expiresOn: row.expiresOn,
-    pinned: row.pinned,
-    isNew: isAnnouncementNew(row.publishedAt, now),
-  }
+  return row ? playerAnnouncementDetail(row, now) : null
 }

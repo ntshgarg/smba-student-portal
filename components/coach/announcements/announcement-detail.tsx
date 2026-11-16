@@ -1,9 +1,9 @@
 "use client"
 
-import { ArrowLeft, Pin, PinOff, Undo2, X } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type RefObject } from "react"
 
 import {
   setAnnouncementPinnedAction,
@@ -14,11 +14,7 @@ import { announcementParagraphs } from "@/components/announcements/announcement-
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import { formatAcademyDate, formatDateKey } from "@/lib/format"
 
-import {
-  announcementChannelLabel,
-  announcementStatusLabel,
-  type CoachAnnouncementDetail,
-} from "./contracts"
+import type { AnnouncementChannel, CoachAnnouncementDetail } from "./contracts"
 import styles from "./announcements.module.css"
 
 /**
@@ -31,13 +27,31 @@ import styles from "./announcements.module.css"
  */
 const actionDeadlineMs = 20_000
 
-function WithdrawDialog({
+/** "Homepage and player home", "Homepage only" or "Player home only". */
+export function whereItShows(channels: readonly AnnouncementChannel[]) {
+  const homepage = channels.includes("homepage")
+  if (homepage && channels.includes("player_dashboard")) return "Homepage and player home"
+  return homepage ? "Homepage only" : "Player home only"
+}
+
+/** "23 Nov": the last day a notice shows. */
+export function lastDayLabel(expiresOn: string) {
+  return formatDateKey(expiresOn, { month: "short", weekday: undefined })
+}
+
+/** "12 Nov", or "12 Nov 2026": the day a notice went out or came down. */
+export function shortDayLabel(instant: string, withYear = false) {
+  return formatAcademyDate(instant, { month: "short", year: withYear ? "numeric" : undefined })
+}
+
+function WithdrawPanel({
   announcementId,
   onClose,
   onFailureAfterExit,
   onReasonChange,
   onWithdrawn,
   reason,
+  returnFocus,
 }: {
   announcementId: string
   onClose: () => void
@@ -45,38 +59,34 @@ function WithdrawDialog({
   onReasonChange: (reason: string) => void
   onWithdrawn: (message: string) => void
   reason: string
+  /** The Withdraw button, back on screen once this panel has gone. */
+  returnFocus: RefObject<HTMLButtonElement | null>
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   /**
-   * Set once this dialog has left the screen, for the reason given over the
+   * Set once this panel has left the screen, for the reason given over the
    * composer's review dialog: a failure that arrives afterwards has no notice
-   * here left to render it, so it is handed to the detail page's notice instead.
-   * A success needs no such treatment — `onWithdrawn` already writes to that
-   * same notice and moves no focus. Cleared on every mount because an effect
-   * cleanup also runs between Strict Mode's paired development mounts.
+   * here left to render it, so it is handed to the announcement's own notice
+   * instead. A success needs no such treatment — `onWithdrawn` already writes to
+   * that same notice and moves no focus. Cleared on every mount because an
+   * effect cleanup also runs between Strict Mode's paired development mounts.
    */
   const dismissed = useRef(false)
+  const fieldId = `withdraw-reason-${announcementId}`
 
   useEffect(() => {
-    const dialog = dialogRef.current
-    const previouslyFocused = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
-    const previousOverflow = document.body.style.overflow
     dismissed.current = false
-    if (dialog && !dialog.open) dialog.showModal()
-    document.body.style.overflow = "hidden"
     reasonRef.current?.focus()
     return () => {
       dismissed.current = true
-      document.body.style.overflow = previousOverflow
-      if (dialog?.open) dialog.close()
-      previouslyFocused?.focus()
+      // Read at cleanup on purpose: by then the Withdraw button has taken this
+      // panel's place, and it is that new button focus returns to.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      returnFocus.current?.focus()
     }
-  }, [])
+  }, [returnFocus])
 
   async function withdraw() {
     const normalizedReason = reason.trim()
@@ -94,8 +104,8 @@ function WithdrawDialog({
         actionDeadlineMs,
       )
       if (!result.ok) {
-        // Already withdrawn: the page behind is out of date, so leave the
-        // dialog and let the page show the withdrawal.
+        // Already withdrawn: the screen is out of date, so close the panel and
+        // let the refreshed announcement show the withdrawal.
         if (dismissed.current || result.code === "ALREADY_WITHDRAWN") {
           onFailureAfterExit(result.message)
           return
@@ -123,107 +133,97 @@ function WithdrawDialog({
   }
 
   /**
-   * Every exit below stays live while a withdrawal is in flight, for the reason
-   * given over the composer's review dialog: the server action's fetch carries
-   * no `AbortSignal` (lib/client/network-failure.ts:28-40), so a stalled
-   * connection neither resolves nor rejects and a `pending` gate here is a lock
-   * with no key. Leaving is safe because the reason the retry sends is the
-   * reason still on screen: `broadcast_withdrawals` is uniquely indexed per
-   * announcement and `withdrawAnnouncement` reports a repeat of the same reason
-   * as already done rather than withdrawing twice. The withdraw button is held
-   * for the length of one attempt; a coach who closes this dialog and reopens it
-   * gets a fresh one that can start a second, and that reason dedupe is what
-   * makes the second land on the first withdrawal instead of failing beside it.
+   * Keep it stays live while a withdrawal is in flight, for the reason given
+   * over the composer's review dialog: the server action's fetch carries no
+   * `AbortSignal` (lib/client/network-failure.ts:28-40), so a stalled connection
+   * neither resolves nor rejects and a `pending` gate here is a lock with no key.
+   * Leaving is safe because the reason the retry sends is the reason still on
+   * screen: `broadcast_withdrawals` is uniquely indexed per announcement and
+   * `withdrawAnnouncement` reports a repeat of the same reason as already done
+   * rather than withdrawing twice. Withdraw now is held for the length of one
+   * attempt; a coach who keeps it and presses Withdraw again gets a fresh panel
+   * that can start a second, and that reason dedupe is what makes the second
+   * land on the first withdrawal instead of failing beside it.
    */
   return (
-    <dialog
-      ref={dialogRef}
-      className={styles.dialogBackdrop}
-      aria-labelledby="withdraw-announcement-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        onClose()
-      }}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
-    >
-      <section className={styles.withdrawDialog} onMouseDown={(event) => event.stopPropagation()}>
+    <div className={styles.withdraw}>
+      <label className={styles.label} htmlFor={fieldId}>Why are you withdrawing it?</label>
+      <div className={styles.field}>
+        <textarea
+          ref={reasonRef}
+          id={fieldId}
+          name="withdrawalReason"
+          aria-describedby={`${fieldId}-help`}
+          maxLength={250}
+          onChange={(event) => {
+            onReasonChange(event.target.value)
+            setFeedback(null)
+          }}
+          placeholder="For example: the date changed"
+          rows={2}
+          value={reason}
+        />
+        <small id={`${fieldId}-help`} className={styles.help}>
+          {reason.length}/250 · only the head coach sees this
+        </small>
+      </div>
+      <InlineNotice
+        action={feedback?.action}
+        message={feedback?.message}
+        reserveSpace={false}
+        tone={feedback?.tone}
+      />
+      <div className={styles.actions}>
+        <button className={styles.button} type="button" onClick={onClose}>Keep it</button>
         <button
-          className={styles.dialogClose}
+          className={styles.danger}
+          data-solid=""
           type="button"
-          onClick={onClose}
-          aria-label="Close withdrawal dialog"
+          onClick={withdraw}
+          disabled={pending}
         >
-          <X aria-hidden="true" />
+          {pending ? "Withdrawing…" : "Withdraw now"}
         </button>
-        <span>Published announcement</span>
-        <h2 id="withdraw-announcement-title">Withdraw announcement?</h2>
-        <p>The notice will disappear from active academy surfaces but remain in this history.</p>
-        <label className={styles.field}>
-          <span>Private reason</span>
-          <textarea
-            ref={reasonRef}
-            name="withdrawalReason"
-            aria-describedby="withdraw-reason-help"
-            maxLength={250}
-            onChange={(event) => {
-              onReasonChange(event.target.value)
-              setFeedback(null)
-            }}
-            placeholder="Event cancelled, timing changed…"
-            rows={4}
-            value={reason}
-          />
-          <small id="withdraw-reason-help" className={styles.fieldMessage}>
-            {reason.length}/250 · visible only to the head coach
-          </small>
-        </label>
-        <InlineNotice action={feedback?.action} message={feedback?.message} tone={feedback?.tone} />
-        <div className={styles.dialogActions}>
-          <button type="button" onClick={onClose}>Keep announcement</button>
-          <button
-            className={styles.dangerButton}
-            type="button"
-            onClick={withdraw}
-            disabled={pending}
-          >
-            {pending ? "Withdrawing…" : "Withdraw announcement"}
-          </button>
-        </div>
-      </section>
-    </dialog>
+      </div>
+    </div>
   )
 }
 
-export function PublishedAnnouncementDetail({
+/**
+ * One announcement's message, what has become of it, and Pin to top / Withdraw
+ * while it is live. The same piece opens in place in the list and fills the
+ * announcement's own page.
+ */
+export function AnnouncementBody({
   announcement,
-  backHref,
-  publishedNow,
+  initialFeedback = null,
+  onDone,
 }: {
   announcement: CoachAnnouncementDetail
-  backHref: string
-  publishedNow?: boolean
+  initialFeedback?: ActionFeedback | null
+  /** A pin, unpin or withdrawal went through; the refresh may take this away. */
+  onDone?: (verb: "pinned" | "unpinned" | "withdrawn") => void
 }) {
   const router = useRouter()
   const [pinPending, setPinPending] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
-  // Outlives the dialog so closing one mid-withdrawal keeps the typed reason:
-  // it is both what the coach would have to retype and the value the service
+  // Outlives the panel so keeping it mid-withdrawal keeps the typed reason: it
+  // is both what the coach would have to retype and the value the service
   // dedupes a repeated withdrawal on.
   const [withdrawalReason, setWithdrawalReason] = useState("")
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(
-    publishedNow ? { message: "Announcement published", tone: "success" } : null,
-  )
+  const [feedback, setFeedback] = useState<ActionFeedback | null>(initialFeedback)
+  const withdrawButtonRef = useRef<HTMLButtonElement>(null)
+  const withdrawnNoteRef = useRef<HTMLParagraphElement>(null)
+  // Set by a withdrawal from here, so the note it brings back takes focus from
+  // the Withdraw button the refresh removes.
+  const focusWithdrawnNote = useRef<boolean | null>(null)
+  const { withdrawal } = announcement
 
-  // The success note is shown once; drop ?published=1 so a reload does not
-  // bring it back over a notice that may since have been withdrawn.
   useEffect(() => {
-    if (!publishedNow) return
-    const url = new URL(window.location.href)
-    url.searchParams.delete("published")
-    window.history.replaceState(null, "", url)
-  }, [publishedNow])
+    if (!withdrawal || !focusWithdrawnNote.current) return
+    focusWithdrawnNote.current = null
+    withdrawnNoteRef.current?.focus()
+  }, [withdrawal])
 
   async function togglePin() {
     if (pinPending || announcement.status !== "active") return
@@ -245,6 +245,7 @@ export function PublishedAnnouncementDetail({
         message: announcement.pinned ? "Announcement unpinned" : "Announcement pinned",
         tone: "success",
       })
+      onDone?.(announcement.pinned ? "unpinned" : "pinned")
       router.refresh()
     } catch (error) {
       const failure = describeSaveFailure({
@@ -262,110 +263,41 @@ export function PublishedAnnouncementDetail({
   function handleWithdrawn(message: string) {
     setWithdrawOpen(false)
     setFeedback({ message, tone: "success" })
+    focusWithdrawnNote.current = true
+    onDone?.("withdrawn")
     router.refresh()
   }
 
   return (
-    <div className={`${styles.workspace} page-shell`}>
-      <div className={styles.backRow}>
-        <Link href={backHref}><ArrowLeft aria-hidden="true" /> Back to published announcements</Link>
+    <div className={styles.body}>
+      {withdrawal ? (
+        <p ref={withdrawnNoteRef} className={styles.note} data-tone="red" tabIndex={-1}>
+          Withdrawn on <time dateTime={withdrawal.withdrawnAt}>{shortDayLabel(withdrawal.withdrawnAt)}</time>:{" "}
+          {withdrawal.reason}{/[.!?]$/u.test(withdrawal.reason) ? "" : "."} No one sees it now.
+        </p>
+      ) : announcement.status === "expired" && announcement.expiresOn ? (
+        <p className={styles.note}>
+          Its last day was {lastDayLabel(announcement.expiresOn)}. No one sees it now.
+        </p>
+      ) : null}
+
+      <div className={styles.message}>
+        {announcementParagraphs(announcement.content).map((paragraph, index) => (
+          <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
+        ))}
       </div>
 
-      <header className={styles.detailHeader}>
-        <div>
-          <span className="eyebrow">Published announcement</span>
-          <h1>{announcement.title}</h1>
-        </div>
-        <span className={styles.detailStatus} data-status={announcement.status}>
-          {announcementStatusLabel(announcement.status)}
-        </span>
-      </header>
+      <InlineNotice
+        action={feedback?.action}
+        message={feedback?.message}
+        reserveSpace={false}
+        tone={feedback?.tone}
+      />
 
-      <InlineNotice action={feedback?.action} className={styles.detailNotice} message={feedback?.message} tone={feedback?.tone} />
-
-      <article className={styles.detailPanel}>
-        <div className={styles.detailMessage}>
-          {announcementParagraphs(announcement.content).map((paragraph, index) => (
-            <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
-          ))}
-        </div>
-
-        <dl className={styles.detailMeta}>
-          <div>
-            <dt>Published</dt>
-            <dd>
-              <time dateTime={announcement.publishedAt}>
-                {formatAcademyDate(announcement.publishedAt, {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </time>
-            </dd>
-          </div>
-          {announcement.expiresOn ? (
-            <div>
-              <dt>Available through</dt>
-              <dd>{formatDateKey(announcement.expiresOn, {
-                day: "numeric",
-                month: "long",
-                weekday: undefined,
-                year: "numeric",
-              })}</dd>
-            </div>
-          ) : null}
-          <div>
-            <dt>Appears on</dt>
-            <dd className={styles.channelPills}>
-              {announcement.channels.map((channel) => (
-                <span key={channel}>{announcementChannelLabel(channel)}</span>
-              ))}
-            </dd>
-          </div>
-          {announcement.status === "active" ? (
-            <div>
-              <dt>Display priority</dt>
-              <dd>{announcement.pinned ? "Pinned" : "Standard"}</dd>
-            </div>
-          ) : null}
-        </dl>
-
-        {announcement.withdrawal ? (
-          <aside className={styles.withdrawalRecord}>
-            <span>Withdrawal record</span>
-            <p>{announcement.withdrawal.reason}</p>
-            <time dateTime={announcement.withdrawal.withdrawnAt}>
-              {formatAcademyDate(announcement.withdrawal.withdrawnAt, {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </time>
-          </aside>
-        ) : null}
-
-        {/* An expired notice is already off every screen, so there is nothing
-            left to pin or withdraw; it stays here as history. */}
-        {announcement.status === "active" ? (
-          <div className={styles.detailActions}>
-            <button type="button" onClick={togglePin} disabled={pinPending}>
-              {announcement.pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
-              {pinPending
-                ? "Updating…"
-                : announcement.pinned
-                  ? "Unpin announcement"
-                  : "Pin announcement"}
-            </button>
-            <button className={styles.withdrawButton} type="button" onClick={() => setWithdrawOpen(true)}>
-              <Undo2 aria-hidden="true" />
-              Withdraw announcement
-            </button>
-          </div>
-        ) : null}
-      </article>
-
-      {withdrawOpen ? (
-        <WithdrawDialog
+      {/* An expired or withdrawn notice is already off every screen, so there is
+          nothing left to pin or withdraw; it stays here as history. */}
+      {announcement.status !== "active" ? null : withdrawOpen ? (
+        <WithdrawPanel
           announcementId={announcement.id}
           onClose={() => setWithdrawOpen(false)}
           onFailureAfterExit={(message) => {
@@ -376,8 +308,68 @@ export function PublishedAnnouncementDetail({
           onReasonChange={setWithdrawalReason}
           onWithdrawn={handleWithdrawn}
           reason={withdrawalReason}
+          returnFocus={withdrawButtonRef}
         />
-      ) : null}
+      ) : (
+        <div className={styles.actions}>
+          <button className={styles.button} type="button" onClick={togglePin} disabled={pinPending}>
+            {pinPending ? "Updating…" : announcement.pinned ? "Unpin" : "Pin to top"}
+          </button>
+          <button
+            ref={withdrawButtonRef}
+            className={styles.danger}
+            type="button"
+            onClick={() => setWithdrawOpen(true)}
+          >
+            Withdraw
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function PublishedAnnouncementDetail({
+  announcement,
+  backHref,
+  publishedNow,
+}: {
+  announcement: CoachAnnouncementDetail
+  backHref: string
+  publishedNow?: boolean
+}) {
+  // The success note is shown once; drop ?published=1 so a reload does not
+  // bring it back over a notice that may since have been withdrawn.
+  useEffect(() => {
+    if (!publishedNow) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete("published")
+    window.history.replaceState(null, "", url)
+  }, [publishedNow])
+
+  return (
+    <div className={`${styles.page} page-shell`}>
+      <nav className={styles.back} aria-label="Announcement navigation">
+        <Link href={backHref}><ArrowLeft aria-hidden="true" /> Back to Announcements</Link>
+      </nav>
+
+      <article className={styles.single} data-status={announcement.status}>
+        <header className={styles.band}>
+          <h1>{announcement.title}</h1>
+          <p>
+            Published{" "}
+            <time dateTime={announcement.publishedAt}>
+              {shortDayLabel(announcement.publishedAt, true)}
+            </time>
+            {" · "}{whereItShows(announcement.channels).toLowerCase()}
+            {announcement.expiresOn ? ` · until ${lastDayLabel(announcement.expiresOn)}` : ""}
+          </p>
+        </header>
+        <AnnouncementBody
+          announcement={announcement}
+          initialFeedback={publishedNow ? { message: "Announcement published", tone: "success" } : null}
+        />
+      </article>
     </div>
   )
 }

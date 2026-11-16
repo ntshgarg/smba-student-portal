@@ -68,16 +68,16 @@ export async function executeAccessibilityInteraction(
         .fill("Accessibility review dialog announcement")
       await page.getByRole("textbox", { name: "Message" })
         .fill("The audit opens the review dialog to check its focus handling.")
-      await page.getByRole("checkbox", { name: "Homepage" }).check()
-      await openDialogFrom(page.getByRole("button", { name: "Review announcement" }))
+      // The chip's box is visually hidden; its label is what is seen and pressed.
+      await page.getByRole("checkbox", { name: "Homepage" }).check({ force: true })
+      await openDialogFrom(page.getByRole("button", { name: "Review", exact: true }))
       break
     }
     case "announcement-withdraw-open": {
-      // Scoped to the detail panel because the dialog it opens carries a button
-      // with the same accessible name.
-      await openDialogFrom(
-        page.locator("article").getByRole("button", { name: "Withdraw announcement" }),
-      )
+      // Withdraw opens in place, not as a dialog: the audited state is the
+      // question it asks, with focus already in the reason field.
+      await page.getByRole("button", { name: "Withdraw", exact: true }).click()
+      await expect(page.getByRole("textbox", { name: "Why are you withdrawing it?" })).toBeFocused()
       break
     }
     case "attendance-session-open": {
@@ -143,7 +143,9 @@ export async function executeAccessibilityInteraction(
       break
     }
     case "player-announcement-open": {
-      await clickIntoRoute(page.getByRole("link", { name: /Read announcement:/u }))
+      // A row opens in place; its own page is the link inside the open row.
+      await clickFirstVisible(page.locator("button[aria-controls^='announcement-']"))
+      await clickIntoRoute(page.getByRole("link", { name: "Open on its own page" }))
       break
     }
     case "profile-menu-open": {

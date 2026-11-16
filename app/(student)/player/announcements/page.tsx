@@ -3,10 +3,9 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ArrowLeft, Bell } from "lucide-react"
 
-import { PlayerAnnouncementList } from "@/components/announcements/player-announcements"
+import { PlayerAnnouncementList } from "./announcement-list"
 import styles from "@/components/announcements/announcements.module.css"
-import { PageIntro } from "@/components/page-intro"
-import { listActivePlayerAnnouncements } from "@/lib/announcements/queries"
+import { listActivePlayerAnnouncementDetails } from "@/lib/announcements/queries"
 import { getCurrentStudent } from "@/lib/student/current-student"
 
 export const metadata: Metadata = {
@@ -16,22 +15,16 @@ export default async function PlayerAnnouncementsPage() {
   const student = await getCurrentStudent()
   if (!student) redirect("/login")
 
-  const announcements = await listActivePlayerAnnouncements(student.identity.playerId)
+  const announcements = listActivePlayerAnnouncementDetails(student.identity.playerId)
 
   return (
-    <div className={`${styles.playerPage} interior-page page-shell`}>
-      <div className={styles.playerToolbar}>
-        <Link className="back-link" href="/player">
-          <ArrowLeft aria-hidden="true" />
-          Back to dashboard
-        </Link>
-      </div>
+    <div className={styles.page}>
+      <Link className="back-link" href="/player">
+        <ArrowLeft aria-hidden="true" />
+        Back to dashboard
+      </Link>
 
-      <PageIntro
-        eyebrow="Announcements"
-        title="Notices from the academy."
-        body="Current updates from your coach, together in one quiet record."
-      />
+      <h1 className={styles.title}>Announcements</h1>
 
       {announcements.length > 0 ? (
         <PlayerAnnouncementList announcements={announcements} />

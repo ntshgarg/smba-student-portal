@@ -119,92 +119,12 @@
   }
 }
 
-.playerListMeta,
-.detailMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-tight) 12px;
-}
-
-.labels > span,
-.detailMeta > span {
+.labels > span {
   color: var(--red);
   font-size: 0.625rem;
   font-weight: var(--weight-label);
   letter-spacing: 0.09em;
   text-transform: uppercase;
-}
-
-.playerListMeta time,
-.dashboardItemMeta time,
-.detailHeading > time {
-  color: var(--steel);
-  font-size: 0.6875rem;
-  font-weight: 680;
-}
-
-.playerListItem h2 {
-  overflow-wrap: anywhere;
-  color: var(--navy);
-  font-size: clamp(24px, 2.5vw, 32px);
-  font-weight: 610;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.12;
-}
-
-.playerListItem h2 a {
-  text-decoration-thickness: 1px;
-  text-underline-offset: 5px;
-}
-
-.playerListItem h2 a:hover {
-  text-decoration: underline;
-}
-
-.playerListItem > p {
-  display: -webkit-box;
-  max-width: 680px;
-  margin-top: 10px;
-  overflow: hidden;
-  color: var(--steel);
-  font-size: 0.8125rem;
-  line-height: 1.65;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.playerListOpen,
-.publicBack {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  /* The gap only has something to separate while the label is rendered. Below
-     720px the label goes and the gap stays, so it sat as leading space in front
-     of a lone arrow and pushed it 5.00px right of the circle's own centre --
-     19.50px of clearance on the left against 9.50px on the right. */
-  gap: 10px;
-  color: var(--navy);
-  font-size: 0.6875rem;
-  font-weight: var(--weight-label);
-}
-
-@media (max-width: 720px) {
-  .readLink:not(:has(> :not(svg))) {
-    gap: 0;
-  }
-}
-
-.playerListOpen svg,
-.publicBack svg {
-  width: 15px;
-  height: 15px;
-}
-
-.playerListOpen:hover,
-.publicBack:hover {
-  color: var(--red);
 }
 
 .dashboardCard {
@@ -388,116 +308,6 @@
   gap: 5px;
 }
 
-.labels svg {
-  width: 12px;
-  height: 12px;
-  color: var(--red);
-  fill: none;
-}
-
-.playerPage {
-  padding-top: clamp(28px, 4vw, 52px);
-}
-
-.playerToolbar {
-  margin-bottom: clamp(var(--space-content), 5vw, 72px);
-}
-
-.playerList {
-  margin-top: clamp(60px, 8vw, 100px);
-  border-top: 1px solid var(--line);
-}
-
-.playerListItem {
-  padding-block: clamp(26px, 3.5vw, var(--space-editorial));
-  border-bottom: 1px solid var(--line);
-}
-
-.playerListItem h2 {
-  max-width: 780px;
-  margin-top: 12px;
-}
-
-.playerListOpen {
-  width: fit-content;
-  margin-top: 15px;
-}
-
-.publicDetail,
-.playerDetail {
-  width: min(100% - 48px, 920px);
-  margin-inline: auto;
-}
-
-.publicDetail {
-  padding-block: clamp(54px, 8vw, 110px);
-}
-
-.playerDetail {
-  padding-block: clamp(30px, 5vw, 74px) clamp(84px, 10vw, 140px);
-}
-
-.publicBack {
-  justify-content: flex-start;
-  color: var(--steel);
-}
-
-.detailHeading {
-  margin-top: clamp(46px, 7vw, 84px);
-  padding-bottom: clamp(30px, 5vw, 52px);
-  border-bottom: 1px solid var(--line);
-}
-
-.detailMeta > p {
-  color: var(--red);
-  font-size: 0.6875rem;
-  font-weight: var(--weight-label);
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-}
-
-.detailMeta > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.detailMeta svg {
-  width: 12px;
-  height: 12px;
-}
-
-.detailHeading h1 {
-  max-width: 880px;
-  margin-top: 18px;
-  overflow-wrap: anywhere;
-  color: var(--navy);
-  font-size: clamp(48px, 7vw, 86px);
-  font-weight: var(--weight-display);
-  letter-spacing: -0.07em;
-  line-height: 0.96;
-}
-
-.detailHeading > time {
-  display: block;
-  margin-top: 26px;
-}
-
-.detailMessage {
-  max-width: 760px;
-  padding-block: clamp(34px, 6vw, 62px);
-  color: var(--ink);
-  font-family: var(--font-newsreader), Georgia, serif;
-  font-size: clamp(20px, 2.3vw, 27px);
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.detailMessage p + p {
-  margin-top: 1.2em;
-}
-
 @media (min-width: 761px) and (max-width: 980px) {
   .dashboardEmpty {
     grid-template-columns: minmax(0, 1fr) minmax(245px, 0.72fr);
@@ -607,47 +417,267 @@
   }
 }
 
-@media (max-width: 720px) {
-  .playerPage {
-    padding-top: var(--space-group);
+
+/* --- The player list and a single notice, player and public alike --- */
+.page {
+  width: min(100% - 2 * clamp(var(--space-copy), 4vw, var(--space-content)), 64rem);
+  margin-inline: auto;
+  padding-block: clamp(var(--space-group), 4vw, var(--space-block)) clamp(var(--space-content), 8vw, 112px);
+}
+
+.title {
+  margin-top: var(--space-tight);
+  color: var(--navy);
+  /* the vw cap keeps the one long word whole at 320px and at 200% text */
+  font-size: min(clamp(2.25rem, 4vw, 2.75rem), 12vw);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  overflow-wrap: break-word;
+}
+
+/* one frosted panel of rows, like the Sessions schedules list */
+.panel {
+  min-width: 0;
+  margin: var(--space-copy) 0 0;
+  padding: 0;
+  overflow: hidden;
+  /* Rows stack by the panel's width in em, so 200% text stacks them as a narrow screen does. */
+  container-type: inline-size;
+  border: var(--frost-border);
+  border-radius: 22px;
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+  list-style: none;
+}
+
+.panel > li {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--white) 70%, transparent);
+}
+
+.panel > li:last-child {
+  border-bottom: 0;
+}
+
+.panel h2 {
+  font: inherit;
+}
+
+/* a row: the day in quiet grey serif, the title, a New tag, a chevron */
+.rowHead {
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: var(--space-copy);
+  padding: 12px var(--space-copy);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowHead:focus-visible,
+.pageLink:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.date {
+  color: var(--steel-dark);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.25rem;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.rowTitle {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.tag {
+  justify-self: end;
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  color: var(--red-dark);
+  font-size: var(--type-utility-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.chevron {
+  grid-column: 4;
+  width: 18px;
+  height: 18px;
+  color: var(--steel-dark);
+  rotate: -90deg;
+}
+
+/* an open row: the head turns navy, the message sits underneath */
+.open .rowHead {
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.open .date {
+  color: color-mix(in srgb, var(--ivory) 78%, var(--navy));
+}
+
+.open .tag {
+  background: color-mix(in srgb, var(--white) 16%, transparent);
+  color: var(--white);
+}
+
+.open .chevron {
+  color: var(--ivory);
+  rotate: 0deg;
+}
+
+.open .rowHead:focus-visible {
+  outline-color: var(--ivory);
+  outline-offset: -4px;
+}
+
+.rowBody {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-tight);
+  padding: var(--space-copy) var(--space-copy) var(--space-tight) calc(5.5rem + 2 * var(--space-copy));
+  background: var(--paper);
+}
+
+.rowBody[hidden] {
+  display: none;
+}
+
+.message {
+  max-width: 68ch;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.message p + p {
+  margin-top: 1em;
+}
+
+/* the notice's own address, a quiet text link with a full-size tap target */
+.pageLink {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pageLink:hover {
+  color: var(--red);
+}
+
+@container (max-width: 34em) {
+  .rowHead {
+    grid-template-columns: 4rem minmax(0, 1fr) 18px;
+    gap: 4px 10px;
   }
 
-  .playerToolbar {
-    margin-bottom: 28px;
+  /* with the tag on its own line, the day and chevron stay centred on the whole row */
+  .rowHead:has(.tag) :is(.date, .chevron) {
+    grid-row: 1 / span 2;
   }
 
-  .playerList {
-    margin-top: 42px;
+  .tag {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
   }
 
-  .publicDetail,
-  .playerDetail {
-    width: min(100% - 32px, 920px);
+  .chevron {
+    grid-column: 3;
+    grid-row: 1;
   }
 
-  .publicDetail {
-    padding-block: 28px 80px;
+  .date {
+    font-size: 1.0625rem;
   }
 
-  .playerDetail {
-    padding-block: var(--space-group) 80px;
-  }
-
-  .detailHeading {
-    margin-top: 34px;
-  }
-
-  .detailHeading h1 {
-    font-size: clamp(44px, 13vw, 64px);
-  }
-
-  .detailMessage {
-    font-size: 1.25rem;
+  .rowBody {
+    padding-left: var(--space-copy);
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .playerListOpen {
-    transition: none;
+/* Narrower still (a small phone at large text): the day takes its own line above the title. */
+@container (max-width: 17em) {
+  .rowHead {
+    grid-template-columns: minmax(0, 1fr) 18px;
   }
+
+  .date,
+  .rowHead:has(.tag) .date {
+    grid-row: 1;
+  }
+
+  .rowTitle {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .tag {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .chevron {
+    grid-column: 2;
+  }
+}
+
+/* a single notice: a navy band with its title and date, then the full message */
+.single {
+  margin-top: var(--space-copy);
+  overflow: hidden;
+  border: var(--frost-border);
+  border-radius: 22px;
+  background: var(--paper);
+  box-shadow: var(--frost-shadow);
+}
+
+.band {
+  display: grid;
+  gap: 6px;
+  padding: clamp(var(--space-copy), 2.5vw, var(--space-group)) clamp(var(--space-copy), 2.5vw, var(--space-group));
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.band h1 {
+  overflow-wrap: anywhere;
+  font-size: clamp(1.375rem, 1rem + 1.4vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.band time {
+  color: color-mix(in srgb, var(--ivory) 78%, var(--navy));
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.singleBody {
+  padding: var(--space-copy) clamp(var(--space-copy), 2.5vw, var(--space-group)) clamp(var(--space-copy), 2.5vw, var(--space-group));
 }

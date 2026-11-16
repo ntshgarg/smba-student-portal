@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, ArrowUpRight, Pin } from "lucide-react"
+import { ArrowUpRight } from "lucide-react"
 
 import {
   announcementDate,
@@ -10,24 +10,14 @@ import type { AnnouncementSummary } from "@/components/announcements/types"
 import styles from "@/components/announcements/announcements.module.css"
 import { Reveal } from "@/components/reveal"
 
-function AnnouncementLabels({
-  announcement,
-  dashboard = false,
-}: {
-  announcement: AnnouncementSummary
-  dashboard?: boolean
-}) {
+function AnnouncementLabels({ announcement }: { announcement: AnnouncementSummary }) {
   const isNew = announcement.isNew ?? announcementIsNew(announcement.publishedAt)
 
   if (!announcement.pinned && !isNew) return null
 
   return (
-    <span className={`${styles.labels}${dashboard ? ` ${styles.dashboardLabels}` : ""}`}>
-      {announcement.pinned ? (
-        dashboard
-          ? <span>Pinned</span>
-          : <><Pin aria-hidden="true" /><span className="sr-only">Pinned</span></>
-      ) : null}
+    <span className={`${styles.labels} ${styles.dashboardLabels}`}>
+      {announcement.pinned ? <span>Pinned</span> : null}
       {isNew ? <span>New</span> : null}
     </span>
   )
@@ -108,7 +98,7 @@ export function PlayerAnnouncementsCard({
                   <time dateTime={announcement.publishedAt}>
                     {announcementDate(announcement.publishedAt)}
                   </time>
-                  <AnnouncementLabels announcement={announcement} dashboard />
+                  <AnnouncementLabels announcement={announcement} />
                 </span>
                 <strong className={styles.dashboardNoticeTitle}>{announcement.title}</strong>
                 <span className={styles.dashboardNoticeCopy}>{announcement.preview}</span>
@@ -126,42 +116,5 @@ export function PlayerAnnouncementsCard({
         </Link>
       </div>
     </Reveal>
-  )
-}
-
-export function PlayerAnnouncementList({
-  announcements,
-}: {
-  announcements: AnnouncementSummary[]
-}) {
-  const ordered = sortAnnouncements(announcements)
-
-  return (
-    <section className={styles.playerList} aria-label="Current announcements">
-      {ordered.map((announcement) => (
-        <article className={styles.playerListItem} key={announcement.id}>
-          <div className={styles.playerListMeta}>
-            <time dateTime={announcement.publishedAt}>
-              {announcementDate(announcement.publishedAt)}
-            </time>
-            <AnnouncementLabels announcement={announcement} />
-          </div>
-          <h2>
-            <Link href={`/player/announcements/${announcement.id}`}>
-              {announcement.title}
-            </Link>
-          </h2>
-          <p>{announcement.preview}</p>
-          <Link
-            className={styles.playerListOpen}
-            href={`/player/announcements/${announcement.id}`}
-            aria-label={`Read announcement: ${announcement.title}`}
-          >
-            Read announcement
-            <ArrowRight aria-hidden="true" />
-          </Link>
-        </article>
-      ))}
-    </section>
   )
 }

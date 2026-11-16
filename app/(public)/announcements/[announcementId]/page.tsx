@@ -68,7 +68,6 @@ export default async function PublicAnnouncementPage({
           announcement={announcement}
           backHref="/"
           backLabel="Back to academy"
-          publicView
         />
       </main>
     </div>

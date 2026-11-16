@@ -199,7 +199,7 @@ const SUBJECTS_A_CONTROL = /(?<![\w-])(?:input|select|textarea)(?![\w-])/u
    A reader who lowers the default (Chrome's slider bottoms out at 9px) would take a `1rem`
    control to 9px, drop under the threshold, and get the zoom-on-focus trap on the courtside
    register's date input and both money forms. Those are the surfaces the conversion was
-   made for, so these 21 declarations keep the unit that states the threshold literally.
+   made for, so the declarations below keep the unit that states the threshold literally.
 
    Named individually rather than left to the shape rule, and checked in both directions by
    the case below: the shape rule alone would silently absorb a new px `font-size` on any
@@ -234,10 +234,7 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["components/coach/sessions/sessions.module.css", "@media (max-width: 720px), (pointer: coarse)", ".field input", "16px"],
   ["app/public-home.css", "@media (max-width: 900px)", ".form-field input", "16px"],
   ["components/coach/attendance/mark.module.css", "@media (max-width: 720px), (pointer: coarse)", ".pick input", "16px"],
-  ["components/coach/announcements/announcements.module.css", "", ".slipField input", "16px"],
-  ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px)", ".slipField input", "16px"],
-  ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px)", ".slipField textarea", "17px"], // 1.0625rem = 9.6px
-  ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px)", ".field input", "16px"],
+  ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px), (pointer: coarse)", ".field input", "16px"],
   ["components/coach/financials/fees.module.css", "@media (max-width: 720px), (pointer: coarse)", ".field", "16px"],
   ["components/coach/financials/financials.module.css", "", ".allocationInput input", "16px"],
   ["components/coach/financials/financials.module.css", "", ".field input", "16px"],
@@ -249,7 +246,6 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   // (max-width: N) entry above it, repeated under (pointer: coarse) alone; only the
   // font-size was lifted, so the layout those blocks carry still keys on width.
   ["app/portal.css", "@media (pointer: coarse)", ".security-form input", "16px"],
-  ["components/coach/announcements/announcements.module.css", "@media (pointer: coarse)", ".slipField input", "16px"],
 ]
 
 /** One line per exempt declaration, in the spelling the failure messages use. The first
