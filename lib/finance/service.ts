@@ -108,6 +108,7 @@ import {
   type FinanceField,
   type FinanceRegisterInput,
   type FinanceRegisterResult,
+  type FinanceRegisterRow,
   type FinanceRapidScope,
   type FinanceServiceErrorCode,
   type FinanceStatus,
@@ -5250,6 +5251,93 @@ export function getFeeRegister(
   }, now, input.mode === "monthly" && input.period
     ? playersAwaitingMonthlyFee(database, input.period, now)
     : new Set()))
+}
+
+/**
+ * What the fee register adds to the rows on screen, read in three batched
+ * queries for the page rather than one per row:
+ * - `payablePlayerIds`: who the payment desk would open, by the desk's own rule
+ *   (the same answer as canRecordPaymentAtDesk), so a row never offers Record
+ *   payment for a player the desk then refuses.
+ * - `comingFees`: for a fee not issued yet, the amount and due date Issue fees
+ *   would give it now (monthlyChargeBasis, first-month proration included);
+ *   recurring concessions are applied after issuing, as on any issued fee.
+ * - `lastPayments`: the latest recorded payment toward each issued fee.
+ */
+export function getFeeRegisterRowExtras(
+  input: { period?: string; rows: FinanceRegisterRow[] },
+  {
+    coachId,
+    database = initializeDatabase(),
+    now = academyNow(),
+  }: CoachContext,
+) {
+  requireCoach(database, coachId)
+  requireFinanceActive(database)
+  const playerIds = new Set(input.rows.map((row) => row.playerId))
+  const payablePlayerIds = new Set(input.rows.some((row) => row.outstandingPaise > 0 && !row.archived)
+    ? listFinancePlayers(database, {
+      awaitingFeePlayerIds: new Set<string>(),
+      now,
+      period: getAcademyMonthKey(now),
+    })
+      .filter((player) => playerIds.has(player.playerId) && player.paymentEligible && !player.archived)
+      .map((player) => player.playerId)
+    : [])
+
+  const comingFees = new Map<string, { amountPaise: number; dueDate: string }>()
+  const awaiting = new Set(input.rows
+    .filter((row) => row.status === "not_prepared")
+    .map((row) => row.playerId))
+  if (input.period && isValidMonthKey(input.period) && awaiting.size) {
+    const period = input.period
+    const candidates = monthlyPreparationCandidates(database, period, now)
+      .filter(({ agreement, hasAssignment }) => hasAssignment && awaiting.has(agreement.playerAccountId))
+    const candidateIds = candidates.map(({ agreement }) => agreement.playerAccountId)
+    const billedEarlier = new Set(candidateIds.length
+      ? database.select({ playerId: financialCharges.playerAccountId }).from(financialCharges).where(and(
+        inArray(financialCharges.playerAccountId, candidateIds),
+        eq(financialCharges.type, "monthly_training"),
+        eq(financialCharges.lifecycle, "issued"),
+        lt(financialCharges.billingPeriod, period),
+      )).all().map((row) => row.playerId)
+      : [])
+    candidates.forEach(({ agreement, enrollment }) => {
+      const basis = monthlyChargeBasis(database, {
+        agreement,
+        isFirstBilledMonth: !billedEarlier.has(agreement.playerAccountId)
+          && period >= enrollment.trainingStartOn.slice(0, 7),
+        period,
+        trainingStartOn: enrollment.trainingStartOn,
+      })
+      if (basis.amountPaise > 0) {
+        comingFees.set(agreement.playerAccountId, { amountPaise: basis.amountPaise, dueDate: basis.dueDate })
+      }
+    })
+  }
+
+  const lastPayments = new Map<string, { amountPaise: number; method: PaymentMethod; receivedOn: string }>()
+  const chargeIds = input.rows.flatMap((row) => row.chargeId ? [row.chargeId] : [])
+  if (chargeIds.length) {
+    database.select({
+      amountPaise: paymentAllocations.amountPaise,
+      chargeId: paymentAllocations.chargeId,
+      method: payments.method,
+      receivedOn: payments.receivedOn,
+    })
+      .from(paymentAllocations)
+      .innerJoin(payments, eq(payments.id, paymentAllocations.paymentId))
+      .where(and(inArray(paymentAllocations.chargeId, chargeIds), eq(payments.lifecycle, "recorded")))
+      .orderBy(desc(payments.receivedOn), desc(payments.recordedAt))
+      .all()
+      .forEach((row) => {
+        if (!lastPayments.has(row.chargeId)) {
+          lastPayments.set(row.chargeId, { amountPaise: row.amountPaise, method: row.method, receivedOn: row.receivedOn })
+        }
+      })
+  }
+
+  return { comingFees, lastPayments, payablePlayerIds }
 }
 
 export function getCollectionsDayBook(

@@ -592,4 +592,34 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     expect(register.rows.find((row) => row.playerId === players.changer)?.status).toBe("not_prepared")
     expect(deskRow(players.changer, "2026-11", firstNovember)?.status).toBe("not_prepared")
   })
+  it("lets the fee register offer Record payment, the coming fee and the last payment by the ledger's own answers", () => {
+    const register = finance.getFeeRegister({ mode: "monthly", period: "2026-10", limit: 100, playerScope: "all" }, context())
+    const extras = finance.getFeeRegisterRowExtras({ period: "2026-10", rows: register.rows }, context())
+    // Record payment on a row is the desk's own rule, never the balance alone.
+    register.rows
+      .filter((row) => row.outstandingPaise > 0 && !row.archived)
+      .forEach((row) => {
+        expect(extras.payablePlayerIds.has(row.playerId), row.fullName)
+          .toBe(finance.canRecordPaymentAtDesk(coachRecord(row.playerId), context()))
+      })
+    // Every fee with money received names its latest payment toward that fee
+    // (as paid: a later refund lowers what was received, not what was paid).
+    register.rows
+      .filter((row) => row.chargeId && row.receivedPaise > 0)
+      .forEach((row) => {
+        expect(extras.lastPayments.get(row.chargeId!)?.amountPaise, row.fullName).toBeGreaterThan(0)
+      })
+
+    // A month not issued yet: each row Issue fees would bill shows what it would bill.
+    const firstNovember = new Date("2026-11-01T05:00:00.000Z")
+    const november = finance.getFeeRegister({ mode: "monthly", period: "2026-11", limit: 100, playerScope: "all" }, context(firstNovember))
+    const coming = finance.getFeeRegisterRowExtras({ period: "2026-11", rows: november.rows }, context(firstNovember)).comingFees
+    const waiting = november.rows.filter((row) => row.status === "not_prepared")
+    expect(waiting.length).toBeGreaterThan(0)
+    waiting.forEach((row) => {
+      const fee = coming.get(row.playerId)
+      expect(fee?.amountPaise, row.fullName).toBeGreaterThan(0)
+      expect(fee!.dueDate.startsWith("2026-11")).toBe(true)
+    })
+  })
 })

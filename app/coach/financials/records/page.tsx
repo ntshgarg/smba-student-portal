@@ -16,6 +16,7 @@ import {
   getCollectionsDayBook,
   getCoachMonthlyPreparationPreview,
   getFeeRegister,
+  getFeeRegisterRowExtras,
   getFinanceActivation,
   getFinancialActivity,
   isStaleRecordsCursor,
@@ -177,6 +178,10 @@ export default async function FinancialRecordsPage({
       query,
       statuses,
     }, { coachId: identity.subjectId, database }))
+    const extras = getFeeRegisterRowExtras({
+      period: mode === "monthly" ? period : undefined,
+      rows: register.rows,
+    }, { coachId: identity.subjectId, database })
     const preparation = mode === "monthly"
       ? getCoachMonthlyPreparationPreview(period, {
         coachId: identity.subjectId,
@@ -208,7 +213,12 @@ export default async function FinancialRecordsPage({
           preparation: preparation
             ? <PrepareFees currentPeriod={academyCurrentMonth()} period={period} preparation={preparation} />
             : null,
-          rows: register.rows,
+          rows: register.rows.map((row) => ({
+            ...row,
+            comingFee: extras.comingFees.get(row.playerId) ?? null,
+            lastPayment: row.chargeId ? extras.lastPayments.get(row.chargeId) ?? null : null,
+            payable: extras.payablePlayerIds.has(row.playerId),
+          })),
           summary: register.summary,
         }}
       />

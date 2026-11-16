@@ -7,6 +7,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }))
 import {
   FinancialRecordsWorkspace,
   formatFinancialPaymentMethod,
+  registerPaymentHref,
   type CollectionsDayBookView,
   type FeeRegisterView,
   type FinancialActivityView,
@@ -47,6 +48,9 @@ const feeRegister: FeeRegisterView = {
     receivedPaise: 200_000,
     status: "partially_paid",
     type: "monthly_training",
+    comingFee: null,
+    lastPayment: { amountPaise: 200_000, method: "upi", receivedOn: "2026-08-03" },
+    payable: true,
   }],
   summary: {
     effectiveAmountPaise: 350_000,
@@ -186,6 +190,56 @@ describe("Financial Records presentation", () => {
     expect(html).not.toContain("₹0")
   })
 
+  it("shows the fee Issue fees would bill, not a dash, once it is known", async () => {
+    const { FeeRegisterList } = await import("@/components/coach/financials/fee-register-list")
+    const row = {
+      ...feeRegister.rows[0],
+      chargeId: null,
+      comingFee: { amountPaise: 350_000, dueDate: "2026-11-05" },
+      dueDate: null,
+      effectiveAmountPaise: 0,
+      feeReference: null,
+      lastPayment: null,
+      originalAmountPaise: 0,
+      outstandingPaise: 0,
+      receivedPaise: 0,
+      status: "not_prepared" as const,
+    }
+    const html = renderToStaticMarkup(
+      <FeeRegisterList rows={[{ ...row, paymentHref: null, recordHref: "/coach/financials/players/player-42" }]} startNumber={1} />,
+    )
+    expect(html).toContain("₹3,500<small>due 5 Nov once issued</small>")
+  })
+
+  it("offers Record payment only when the payment desk would open the player", () => {
+    const row = feeRegister.rows[0]
+    expect(registerPaymentHref(row)).toBe("/coach/financials/record?player=player-42&query=SMBA%230042")
+    // Owing is not enough: an older player with no payment history is refused by the desk.
+    expect(registerPaymentHref({ ...row, payable: false })).toBeNull()
+    expect(registerPaymentHref({ ...row, outstandingPaise: 0 })).toBeNull()
+  })
+
+  it("lights the Due tile for an older single-status link", () => {
+    const html = renderToStaticMarkup(<FinancialRecordsWorkspace
+      activeView="fees"
+      feeRegister={{ ...feeRegister, filters: { ...feeRegister.filters, status: "pending" } }}
+    />)
+    expect(html).toMatch(/aria-current="page" href="[^"]*status=due"><b>1<\/b><span>Due<\/span>/u)
+  })
+
+  it("counts a day's reversed records as the summary does: not at all", () => {
+    const html = renderToStaticMarkup(<FinancialRecordsWorkspace
+      activeView="collections"
+      dayBook={{
+        ...dayBook,
+        events: [{ ...dayBook.events[0], lifecycle: "reversed" }, dayBook.events[1]],
+        filters: { ...dayBook.filters, includeReversed: true },
+      }}
+    />)
+    expect(html).toContain("1 refund · −₹500")
+    expect(html).toContain(">Reversed<")
+  })
+
   it("renders registration fees as their own register", () => {
     const registrationRegister: FeeRegisterView = {
       ...feeRegister,
@@ -213,7 +267,8 @@ describe("Financial Records presentation", () => {
     expect(html).toContain("This month")
     expect(html).toContain("Last month")
     // UPI received, cash refunded: both show under By method
-    expect(html).toContain('aria-label="Collections by payment method"')
+    // net of refunds, and said so: a refund in cash takes cash below zero
+    expect(html).toContain('aria-label="Collections by payment method, after refunds"')
     expect(html).toContain("<dt>UPI</dt><dd>₹2,000</dd>")
     expect(html).toContain("<dt>Cash</dt><dd>-₹500</dd>")
     expect(html).toContain("1 payment · 1 refund · ₹1,500")

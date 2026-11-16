@@ -52,8 +52,17 @@ export type FeeRegisterView = {
   }
   pagination: FinancialRecordsPagination
   preparation?: ReactNode
-  rows: FinanceRegisterRow[]
+  rows: FeeRegisterViewRow[]
   summary: FinanceRegisterSummary
+}
+
+export type FeeRegisterViewRow = FinanceRegisterRow & {
+  /** For a fee not issued yet: what Issue fees would give it now. */
+  comingFee: { amountPaise: number; dueDate: string } | null
+  /** The latest recorded payment toward this fee. */
+  lastPayment: { amountPaise: number; method: PaymentMethod; receivedOn: string } | null
+  /** Whether the payment desk opens this player (its own rule). */
+  payable: boolean
 }
 
 export type CollectionsDayBookEventView = FinanceDayBookEvent & {
@@ -167,6 +176,13 @@ function Pagination({ pagination }: { pagination: FinancialRecordsPagination }) 
   )
 }
 
+/** The desk, opened on this player: only when the desk itself would take them. */
+export function registerPaymentHref(row: FeeRegisterViewRow) {
+  return row.payable && row.outstandingPaise > 0
+    ? `/coach/financials/record?${new URLSearchParams({ player: row.playerId, query: row.academyId }).toString()}`
+    : null
+}
+
 function FeeRegister({ register }: { register: FeeRegisterView }) {
   const { filters, summary } = register
   const isRegistration = filters.mode === "registration"
@@ -190,9 +206,7 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
   }
   const rows: FeeRegisterListRow[] = register.rows.map((row) => ({
     ...row,
-    paymentHref: row.outstandingPaise > 0 && !row.archived
-      ? `/coach/financials/record?${new URLSearchParams({ player: row.playerId, query: row.academyId }).toString()}`
-      : null,
+    paymentHref: registerPaymentHref(row),
     recordHref: recordSearch(row.playerId),
   }))
   const allCount = Object.values(summary.statusCounts).reduce((total, count) => total + (count ?? 0), 0)
@@ -204,6 +218,10 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
       label: filter.label,
     })),
   ].filter((tile) => tile.key !== "void" || tile.count > 0 || filters.status === "void")
+  // An older link's single status lights the tile that holds it ("pending" → Due).
+  const currentTile = REGISTER_STATUS_FILTERS.find((filter) => (
+    filter.key === filters.status || (filter.statuses as readonly string[]).includes(filters.status)
+  ))?.key ?? filters.status
   const startNumber = Number.parseInt(register.pagination.label.match(/^\d+/u)?.[0] ?? "1", 10)
 
   return (
@@ -220,7 +238,7 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
             >
               <ChevronLeft aria-hidden="true" />
             </Link>
-            <input aria-label="Fee month" className={styles.field} defaultValue={filters.period} name="period" type="month" />
+            <input key={filters.period} aria-label="Fee month" className={styles.field} defaultValue={filters.period} name="period" type="month" />
             <Link
               aria-label={`Show ${formatPeriod(shiftPeriod(filters.period, 1))}`}
               href={recordsHref("fees", { ...keep, period: shiftPeriod(filters.period, 1), status: statusParam })}
@@ -238,7 +256,7 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
           <span className="sr-only">Find a record</span>
           <input defaultValue={filters.query} maxLength={120} name="q" placeholder="Player, Academy ID or fee reference" type="search" />
         </label>
-        <select aria-label="Players" className={styles.field} defaultValue={filters.scope} name="scope">
+        <select key={filters.scope} aria-label="Players" className={styles.field} defaultValue={filters.scope} name="scope">
           <option value="active">Active players</option>
           <option value="archived">Archived players</option>
           <option value="all">All players</option>
@@ -260,7 +278,7 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
         {tiles.map((tile) => (
           <Link
             key={tile.key}
-            aria-current={(filters.status === tile.key) ? "page" : undefined}
+            aria-current={currentTile === tile.key ? "page" : undefined}
             data-zero={tile.count === 0 ? "" : undefined}
             href={recordsHref("fees", { ...keep, status: tile.key === "all" ? undefined : tile.key })}
           >
@@ -271,7 +289,12 @@ function FeeRegister({ register }: { register: FeeRegisterView }) {
       </nav>
 
       {rows.length ? (
-        <FeeRegisterList rows={rows} startNumber={startNumber} />
+        <FeeRegisterList
+          // A new month, page or filter starts with every row closed.
+          key={[filters.mode, filters.period, filters.status, filters.scope, filters.query, filters.cursors].join("|")}
+          rows={rows}
+          startNumber={startNumber}
+        />
       ) : (
         <div className={styles.empty} role="status">
           No matching fee records
@@ -310,7 +333,7 @@ function CollectionsFigures({ summary }: { summary: FinanceDayBookSummary }) {
       <div className={summary.refundsPaise > 0 ? styles.refundFigure : undefined}><dt>Refunds</dt><dd>{formatInr(summary.refundsPaise)}</dd></div>
       <div><dt>Net</dt><dd>{formatInr(summary.netCollectionsPaise)}</dd></div>
       <div className={styles.methodCell}>
-        <dt>By method</dt>
+        <dt>By method, after refunds</dt>
         <dd>
           {methods.length ? (
             <>
@@ -321,7 +344,7 @@ function CollectionsFigures({ summary }: { summary: FinanceDayBookSummary }) {
                   ))}
                 </span>
               ) : null}
-              <dl className={styles.methodList} aria-label="Collections by payment method">
+              <dl className={styles.methodList} aria-label="Collections by payment method, after refunds">
                 {methods.map((item) => (
                   <div key={item.method} style={{ ["--swatch" as string]: methodSwatch[item.method] }}>
                     <dt>{formatFinancialPaymentMethod(item.method)}</dt>
@@ -366,10 +389,10 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
           <Link aria-current={isRange(thisMonth) ? "page" : undefined} href={recordsHref("collections", { ...thisMonth, includeReversed: reversed })}>This month</Link>
           <Link aria-current={isRange(lastMonth) ? "page" : undefined} href={recordsHref("collections", { ...lastMonth, includeReversed: reversed })}>Last month</Link>
         </span>
-        <input aria-label="From" className={styles.field} defaultValue={dayBook.filters.from} name="from" type="date" />
-        <input aria-label="To" className={styles.field} defaultValue={dayBook.filters.to} name="to" type="date" />
+        <input key={dayBook.filters.from} aria-label="From" className={styles.field} defaultValue={dayBook.filters.from} name="from" type="date" />
+        <input key={dayBook.filters.to} aria-label="To" className={styles.field} defaultValue={dayBook.filters.to} name="to" type="date" />
         <label className={styles.toggle}>
-          <input defaultChecked={dayBook.filters.includeReversed} name="includeReversed" type="checkbox" value="true" />
+          <input key={String(dayBook.filters.includeReversed)} defaultChecked={dayBook.filters.includeReversed} name="includeReversed" type="checkbox" value="true" />
           Show reversed
         </label>
         <a className={`${styles.plainLink} ${styles.end}`} href={dayBook.exportHref}>
@@ -393,9 +416,11 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
         </thead>
         <tbody>
           {days.length ? days.map((day) => {
-            const payments = day.items.filter((event) => event.eventType === "payment")
-            const refunds = day.items.length - payments.length
-            const net = day.items.reduce((total, event) => (
+            // Reversed records are listed when shown, but count as the summary counts them: not at all.
+            const recorded = day.items.filter((event) => event.lifecycle === "recorded")
+            const payments = recorded.filter((event) => event.eventType === "payment")
+            const refunds = recorded.length - payments.length
+            const net = recorded.reduce((total, event) => (
               total + (event.eventType === "refund" ? -event.amountPaise : event.amountPaise)
             ), 0)
             return [
@@ -406,7 +431,8 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
                     {[
                       payments.length ? `${payments.length} ${payments.length === 1 ? "payment" : "payments"}` : null,
                       refunds ? `${refunds} ${refunds === 1 ? "refund" : "refunds"}` : null,
-                    ].filter(Boolean).join(" · ")} · {net < 0 ? "−" : ""}{formatInr(Math.abs(net))}
+                      recorded.length ? `${net < 0 ? "−" : ""}${formatInr(Math.abs(net))}` : "all reversed",
+                    ].filter(Boolean).join(" · ")}
                   </span>
                 </th>
               </tr>,
@@ -492,12 +518,12 @@ function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
           <span className="sr-only">Find activity</span>
           <input defaultValue={activity.filters.query} maxLength={120} name="q" placeholder="Player or financial reference" type="search" />
         </label>
-        <select aria-label="Coach" className={styles.field} defaultValue={activity.filters.coachId} name="coachId">
+        <select key={activity.filters.coachId} aria-label="Coach" className={styles.field} defaultValue={activity.filters.coachId} name="coachId">
           <option value="all">All coaches</option>
           {activity.coachOptions.map((coach) => <option key={coach.id} value={coach.id}>{coach.name}</option>)}
         </select>
-        <input aria-label="From" className={styles.field} defaultValue={activity.filters.from} name="from" type="date" />
-        <input aria-label="To" className={styles.field} defaultValue={activity.filters.to} name="to" type="date" />
+        <input key={activity.filters.from} aria-label="From" className={styles.field} defaultValue={activity.filters.from} name="from" type="date" />
+        <input key={activity.filters.to} aria-label="To" className={styles.field} defaultValue={activity.filters.to} name="to" type="date" />
         {activity.exportHref ? (
           <a className={`${styles.plainLink} ${styles.end}`} href={activity.exportHref}>
             <Download aria-hidden="true" /> Export CSV

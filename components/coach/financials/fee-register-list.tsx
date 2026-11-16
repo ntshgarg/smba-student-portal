@@ -5,11 +5,14 @@ import Link from "next/link"
 import { useState } from "react"
 
 import { formatDateKey, formatInr } from "@/lib/format"
-import type { FinanceRegisterRow, FinanceStatus } from "@/lib/finance/types"
+import type { FinanceStatus } from "@/lib/finance/types"
+
+import type { FeeRegisterViewRow } from "./financial-records-workspace"
+import { paymentMethods } from "./financials-client-utils"
 
 import styles from "./fees.module.css"
 
-export type FeeRegisterListRow = FinanceRegisterRow & {
+export type FeeRegisterListRow = FeeRegisterViewRow & {
   /** The desk, opened on this player; only while this fee has money left on it. */
   paymentHref: string | null
   recordHref: string
@@ -34,8 +37,12 @@ function initials(name: string) {
 }
 
 /** The amount a row leads with and the few words under it. */
-function rowAmount(row: FinanceRegisterRow) {
-  if (row.status === "not_prepared") return { amount: "—", detail: "not issued yet" }
+function rowAmount(row: FeeRegisterViewRow) {
+  if (row.status === "not_prepared") {
+    return row.comingFee
+      ? { amount: formatInr(row.comingFee.amountPaise), detail: `due ${shortDate(row.comingFee.dueDate)} once issued` }
+      : { amount: "—", detail: "not issued yet" }
+  }
   if (row.status === "setup_required") return { amount: "—", detail: "no fee plan" }
   if (row.status === "void") return { amount: formatInr(0), detail: "voided" }
   if (row.status === "paid") return { amount: formatInr(row.effectiveAmountPaise), detail: "paid in full" }
@@ -45,7 +52,7 @@ function rowAmount(row: FinanceRegisterRow) {
   }
 }
 
-function rowNote(row: FinanceRegisterRow) {
+function rowNote(row: FeeRegisterViewRow) {
   const adjustments = [
     row.creditAdjustmentsPaise ? `${formatInr(row.creditAdjustmentsPaise)} credit` : null,
     row.debitAdjustmentsPaise ? `${formatInr(row.debitAdjustmentsPaise)} debit` : null,
@@ -55,7 +62,10 @@ function rowNote(row: FinanceRegisterRow) {
     : row.status === "setup_required"
       ? "On a schedule with no fee plan"
       : "No charge issued"
-  return [row.feeReference, due, adjustments || null].filter(Boolean).join(" · ")
+  const lastPaid = row.lastPayment
+    ? `Last paid ${formatInr(row.lastPayment.amountPaise)} by ${paymentMethods.find((method) => method.value === row.lastPayment?.method)?.label ?? "Other"} on ${shortDate(row.lastPayment.receivedOn)}`
+    : null
+  return [row.feeReference, due, adjustments || null, lastPaid].filter(Boolean).join(" · ")
 }
 
 /** The register's players: one opens in place at a time. */
