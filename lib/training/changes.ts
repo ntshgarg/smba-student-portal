@@ -52,6 +52,7 @@ import {
   type AcademyPlan,
 } from "@/lib/training/academy-plans"
 import { onboardingFinished } from "@/lib/coach/onboarding"
+import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 import { feePlanCoversCondition } from "@/lib/finance/plan-in-force"
 
 /*
@@ -823,23 +824,47 @@ export function previewScheduleChange(
   return { marks: marks.map((mark) => ({ choice: mark.choice, occurrenceDate: mark.occurrenceDate })) }
 }
 
+/*
+ * A place covers a session by the date it was first scheduled for, not the day
+ * it was moved to (assignmentCoversOccurrence), so what a change cuts off is
+ * judged the same way. Moved sessions can land either side of the start date,
+ * so they are always read and then sorted by their first date.
+ */
+function sessionsFrom(database: Executor, seriesIds: string[], from: string) {
+  if (!seriesIds.length) return []
+  const rows = database.select({
+    id: sessionOccurrences.id,
+    occurrenceDate: sessionOccurrences.occurrenceDate,
+    replacementForOccurrenceId: sessionOccurrences.replacementForOccurrenceId,
+    seriesId: sessionOccurrences.seriesId,
+  }).from(sessionOccurrences).where(and(
+    inArray(sessionOccurrences.seriesId, seriesIds),
+    or(gte(sessionOccurrences.occurrenceDate, from), isNotNull(sessionOccurrences.replacementForOccurrenceId)),
+  )).all()
+  return resolveOccurrenceEligibilityDates(database, rows)
+    .filter((occurrence) => occurrence.eligibilityDate >= from)
+}
+
 function marksFrom(database: Executor, playerId: string, seriesIds: string[], startsOn: string) {
-  if (!seriesIds.length || !/^\d{4}-\d{2}-\d{2}$/u.test(startsOn)) return []
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(startsOn)) return []
+  const sessions = new Map(sessionsFrom(database, seriesIds, startsOn)
+    .map((occurrence) => [occurrence.id, occurrence]))
+  if (!sessions.size) return []
   return database.select({
     choice: sessionAttendanceRecords.choice,
     id: sessionAttendanceRecords.id,
-    occurrenceDate: sessionOccurrences.occurrenceDate,
-    occurrenceId: sessionOccurrences.id,
+    occurrenceId: sessionAttendanceRecords.occurrenceId,
   }).from(sessionAttendanceRecords)
-    .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
     .where(and(
       eq(sessionAttendanceRecords.accountId, playerId),
-      inArray(sessionOccurrences.seriesId, seriesIds),
-      gte(sessionOccurrences.occurrenceDate, startsOn),
-      lte(sessionOccurrences.occurrenceDate, monthEndOf(startsOn)),
+      inArray(sessionAttendanceRecords.occurrenceId, [...sessions.keys()]),
       ne(sessionAttendanceRecords.choice, "cleared"),
     ))
     .all()
+    .map((mark) => {
+      const { eligibilityDate, occurrenceDate } = sessions.get(mark.occurrenceId)!
+      return { ...mark, eligibilityDate, occurrenceDate }
+    })
     .sort((first, second) => first.occurrenceDate.localeCompare(second.occurrenceDate))
 }
 
@@ -901,11 +926,9 @@ export function changeScheduleThisMonth(
         or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, startsOn)),
       )).all()
       const oldSeries = [...new Set(overlapping.map((item) => item.seriesId))]
-      const occurrenceIds = tx.select({ id: sessionOccurrences.id }).from(sessionOccurrences).where(and(
-        inArray(sessionOccurrences.seriesId, oldSeries),
-        gte(sessionOccurrences.occurrenceDate, startsOn),
-        lte(sessionOccurrences.occurrenceDate, monthEndOf(startsOn)),
-      )).all().map((row) => row.id)
+      const occurrenceIds = sessionsFrom(tx, oldSeries, startsOn)
+        .filter((occurrence) => occurrence.eligibilityDate <= monthEndOf(startsOn))
+        .map((occurrence) => occurrence.id)
       if (occurrenceIds.length) {
         const makeup = tx.select({ id: attendanceAdjustments.id }).from(attendanceAdjustments).where(and(
           eq(attendanceAdjustments.playerId, input.playerId),
@@ -1074,17 +1097,15 @@ export function endTrainingNow(
         tx.update(trainingChanges).set({ resolvedAt: now, status: "cancelled", updatedAt: now })
           .where(eq(trainingChanges.id, waiting.id)).run()
       }
-      // If today is already marked for them, end the place after today so the mark stays.
-      const markedToday = tx.select({ id: sessionAttendanceRecords.id }).from(sessionAttendanceRecords)
-        .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
-        .where(and(
-          eq(sessionAttendanceRecords.accountId, input.playerId),
-          ne(sessionAttendanceRecords.choice, "cleared"),
-          eq(sessionOccurrences.occurrenceDate, today),
-          inArray(sessionOccurrences.seriesId, open.map((assignment) => assignment.seriesId)),
-        ))
-        .get()
-      endOpenAssignments(tx, input.playerId, markedToday ? addCalendarDays(today, 1) : today)
+      // If today is already marked for them, the place ends after that session's
+      // first date -- the day a place is judged by -- so the mark stays.
+      const keptUntil = marksFrom(tx, input.playerId, open.map((assignment) => assignment.seriesId), today)
+        .filter((mark) => mark.occurrenceDate === today)
+        .reduce((latest, mark) => {
+          const kept = addCalendarDays(mark.eligibilityDate, 1)
+          return kept > latest ? kept : latest
+        }, today)
+      endOpenAssignments(tx, input.playerId, keptUntil)
       clearTrainingNotices(tx, input.playerId, now)
       tx.update(playerEnrollments).set({
         recordRevision: sql`${playerEnrollments.recordRevision} + 1`,
