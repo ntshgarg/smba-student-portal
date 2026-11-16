@@ -58,6 +58,7 @@ vi.mock("@/app/coach/financials/actions", () => ({}))
 import {
   EndSchedulePanel,
   endScheduleGroups,
+  playerOutcome,
 } from "@/components/coach/calendar/end-schedule-panel"
 import { MemberTrainingActions } from "@/components/coach/members/directory/member-training-actions"
 import { MemberTrainingProvider } from "@/components/coach/members/directory/member-training-context"
@@ -251,7 +252,7 @@ describe("End schedule's confirm panel", () => {
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>End schedule<\/button>/u)
   })
 
-  it("counts as paused everyone the write pauses, booked change or not", () => {
+  it("says what happens to each player, pausing everyone the write pauses", () => {
     const rosterPlayer = (fullName: string, overrides: Partial<EndScheduleRosterPlayer> = {}): EndScheduleRosterPlayer => ({
       bookingKept: null,
       bookingOntoThis: null,
@@ -272,7 +273,16 @@ describe("End schedule's confirm panel", () => {
       rosterPlayer("Hari", { placeElsewhere: true }),
     ])
     const names = (list: readonly { fullName: string }[]) => list.map((item) => item.fullName)
-    expect(names(groups.paused)).toEqual(["Asha", "Chitra"])
+    // Anyone with no place left elsewhere is paused, booked change or not.
+    expect(playerOutcome(rosterPlayer("Asha"))).toBe("Stops training (this was their only schedule).")
+    expect(playerOutcome(rosterPlayer("Bala", { onAnotherSchedule: true, placeElsewhere: true })))
+      .toBe("Keeps training on their other schedule.")
+    expect(playerOutcome(rosterPlayer("Chitra", { bookingKept: { effectiveOn: "2026-12-01", kind: "end" } })))
+      .toBe("Stops training (this was their only schedule). Their end of training booked for Tue 1 Dec is kept.")
+    expect(playerOutcome(rosterPlayer("Hari", { inOnboarding: true, placeElsewhere: true })))
+      .toBe("Stays Term finished on their other schedule. Still in Player onboarding.")
+    expect(playerOutcome(rosterPlayer("Isha", { bookingOntoThis: { effectiveOn: "2026-12-01", kind: "change" } })))
+      .toBe("Stops training (this was their only schedule). Their booked change onto this schedule is cancelled.")
     expect(names(groups.keptBooking)).toEqual(["Chitra"])
     expect(names(groups.withFeePlans)).toEqual(["Asha", "Hari"])
   })
