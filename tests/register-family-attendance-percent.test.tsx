@@ -82,7 +82,9 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
 const { PlayerAttendanceRegister } = await import("@/components/coach/player-attendance-register")
 
 describe("the register's monthly %", () => {
-  it("matches the family page's rule: a made-up absence counts as attended", () => {
+  // The % itself is worked out on the server by the family page's function
+  // (tests/attendance-month-range.test.ts holds that); the register shows it.
+  it("shows the family page's figure: a made-up absence counts as attended", () => {
     // What the family page computes from the same marks (lib/attendance/database.ts).
     const family = calculateMonthlyAttendance({
       month: "2026-07",
@@ -102,6 +104,7 @@ describe("the register's monthly %", () => {
     const html = renderToStaticMarkup(
       <PlayerAttendanceRegister
         month={7}
+        monthlyPercents={{ [PLAYER_ID]: family.percentage }}
         referenceDate="2026-07-31"
         referenceInstant={Date.parse("2026-07-31T12:00:00.000Z")}
         selection={{ batch: "Weekday", programme: "Beginner", year: 2026 }}

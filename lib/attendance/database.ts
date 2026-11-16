@@ -19,31 +19,43 @@ import {
 } from "@/lib/db/schema"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 
-export function getPlayerAttendanceInput(
-  accountId: string,
+/**
+ * Each player's month, read for many players at once: the family page reads
+ * one, the coach's register reads its whole roster, and both feed the same
+ * calculateMonthlyAttendance. A player with no enrolment has no entry.
+ */
+export function getPlayersAttendanceInputs(
+  accountIds: readonly string[],
   month: string,
   referenceDate: string,
   referenceInstant?: string,
   database?: SmbaDatabaseExecutor,
-): MonthlyAttendanceInput | null {
+): Map<string, MonthlyAttendanceInput> {
+  const inputs = new Map<string, MonthlyAttendanceInput>()
+  const ids = [...new Set(accountIds)]
+  if (!ids.length) return inputs
   const db = database ?? initializeDatabase()
   const bounds = monthDateBounds(month)
   const occurredInMonth = and(
     gte(sessionOccurrences.occurrenceDate, bounds.start),
     lt(sessionOccurrences.occurrenceDate, bounds.endExclusive),
   )
-  const enrollment = db.select({ trainingStartOn: playerEnrollments.trainingStartOn })
+  const enrollments = db.select({
+    accountId: playerEnrollments.accountId,
+    trainingStartOn: playerEnrollments.trainingStartOn,
+  })
     .from(playerEnrollments)
-    .where(eq(playerEnrollments.accountId, accountId))
-    .get()
-  if (!enrollment) return null
+    .where(inArray(playerEnrollments.accountId, ids))
+    .all()
+  if (!enrollments.length) return inputs
   const assignments = db.select({
+    accountId: sessionAssignments.accountId,
     id: sessionAssignments.id,
     seriesId: sessionAssignments.seriesId,
     effectiveFrom: sessionAssignments.effectiveFrom,
     effectiveTo: sessionAssignments.effectiveTo,
   }).from(sessionAssignments)
-    .where(eq(sessionAssignments.accountId, accountId))
+    .where(inArray(sessionAssignments.accountId, ids))
     .all()
   const assignmentWeekdays = assignments.length
     ? db.select().from(sessionAssignmentWeekdays).where(inArray(
@@ -80,53 +92,90 @@ export function getPlayerAttendanceInput(
         occurredInMonth,
       )).all()
     : []
-  const occurrences = resolveOccurrenceEligibilityDates(db, occurrenceRows)
+  const occurrences = resolveOccurrenceEligibilityDates(db, occurrenceRows).map((occurrence) => ({
+    ...occurrence,
+    startsAt: occurrence.startsAt.toISOString(),
+  }))
 
-  const records: AttendanceDomainRecord[] = db.select({
+  const records = db.select({
+    accountId: sessionAttendanceRecords.accountId,
     occurrenceId: sessionAttendanceRecords.occurrenceId,
     choice: sessionAttendanceRecords.choice,
   })
     .from(sessionAttendanceRecords)
     .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, sessionAttendanceRecords.occurrenceId))
     .where(and(
-      eq(sessionAttendanceRecords.accountId, accountId),
+      inArray(sessionAttendanceRecords.accountId, ids),
       occurredInMonth,
     ))
     .all()
 
   const adjustments = db.select({
+    playerId: attendanceAdjustments.playerId,
     id: attendanceAdjustments.id,
     sourceOccurrenceId: attendanceAdjustments.sourceOccurrenceId,
   })
     .from(attendanceAdjustments)
     .innerJoin(sessionOccurrences, eq(sessionOccurrences.id, attendanceAdjustments.sourceOccurrenceId))
     .where(and(
-      eq(attendanceAdjustments.playerId, accountId),
+      inArray(attendanceAdjustments.playerId, ids),
       isNull(attendanceAdjustments.voidedAt),
       occurredInMonth,
     ))
     .all()
 
-  return {
-    month,
-    referenceDate,
-    referenceInstant,
-    joinedOn: enrollment.trainingStartOn,
-    assignments: assignments.map((assignment) => ({
-      seriesId: assignment.seriesId,
-      effectiveFrom: assignment.effectiveFrom,
-      effectiveTo: assignment.effectiveTo,
-      weekdays: assignmentWeekdays
-        .filter((item) => item.assignmentId === assignment.id)
-        .map((item) => item.weekday),
-    })),
-    occurrences: occurrences.map((occurrence) => ({
-      ...occurrence,
-      startsAt: occurrence.startsAt.toISOString(),
-    })),
-    records,
-    adjustments,
-  }
+  enrollments.forEach((enrollment) => {
+    const accountId = enrollment.accountId
+    const playerAssignments = assignments.filter((assignment) => assignment.accountId === accountId)
+    const playerSeriesIds = new Set(playerAssignments.map((assignment) => assignment.seriesId))
+    inputs.set(accountId, {
+      month,
+      referenceDate,
+      referenceInstant,
+      joinedOn: enrollment.trainingStartOn,
+      assignments: playerAssignments.map((assignment) => ({
+        seriesId: assignment.seriesId,
+        effectiveFrom: assignment.effectiveFrom,
+        effectiveTo: assignment.effectiveTo,
+        weekdays: assignmentWeekdays
+          .filter((item) => item.assignmentId === assignment.id)
+          .map((item) => item.weekday),
+      })),
+      occurrences: occurrences.filter((occurrence) => playerSeriesIds.has(occurrence.seriesId)),
+      records: records
+        .filter((record) => record.accountId === accountId)
+        .map(({ occurrenceId, choice }): AttendanceDomainRecord => ({ occurrenceId, choice })),
+      adjustments: adjustments
+        .filter((adjustment) => adjustment.playerId === accountId)
+        .map(({ id, sourceOccurrenceId }) => ({ id, sourceOccurrenceId })),
+    })
+  })
+  return inputs
+}
+
+export function getPlayerAttendanceInput(
+  accountId: string,
+  month: string,
+  referenceDate: string,
+  referenceInstant?: string,
+  database?: SmbaDatabaseExecutor,
+): MonthlyAttendanceInput | null {
+  return getPlayersAttendanceInputs([accountId], month, referenceDate, referenceInstant, database)
+    .get(accountId) ?? null
+}
+
+/** Each player's monthly %, by the family page's own rule: the coach's register shows these. */
+export function calculatePlayersAttendancePercentForMonth(
+  accountIds: readonly string[],
+  month: string,
+  referenceDate: string,
+  referenceInstant?: string,
+): Record<string, number | null> {
+  const inputs = getPlayersAttendanceInputs(accountIds, month, referenceDate, referenceInstant)
+  return Object.fromEntries([...inputs].map(([accountId, input]) => [
+    accountId,
+    calculateMonthlyAttendance(input).percentage,
+  ]))
 }
 
 export function calculatePlayerAttendanceForMonth(
