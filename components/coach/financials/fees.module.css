@@ -699,6 +699,8 @@
 .panel {
   min-width: 0;
   overflow: hidden;
+  /* The ledgers stack by the panel's width in em, so 200% text stacks them as a narrow screen does. */
+  container-type: inline-size;
   border: var(--frost-border);
   border-radius: 22px;
   background: var(--frost-fill);
@@ -1852,48 +1854,6 @@ fieldset.q {
     margin-left: 0;
   }
 
-  /* A table row becomes a two-line entry. */
-  .table thead {
-    display: none;
-  }
-
-  .table,
-  .table tbody,
-  .table tr,
-  .table td,
-  .table th {
-    display: block;
-  }
-
-  .table tr:not(.day) {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 10px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--line);
-    background: var(--white);
-  }
-
-  .table tr:not(.day) td {
-    padding: 0;
-    border: 0;
-    background: none;
-  }
-
-  .table td[data-wide] {
-    grid-column: 1 / -1;
-  }
-
-  .table td.num {
-    grid-column: 2;
-    grid-row: 1;
-    text-align: right;
-  }
-
-  .table td[data-hide-phone] {
-    display: none;
-  }
-
   .card > summary,
   .cardHead {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1934,6 +1894,50 @@ fieldset.q {
   }
 
   .payer .chev {
+    display: none;
+  }
+}
+
+/* A table row becomes a two-line entry. */
+@container (max-width: 45em) {
+  .table thead {
+    display: none;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td,
+  .table th {
+    display: block;
+  }
+
+  .table tr:not(.day) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--white);
+  }
+
+  .table tr:not(.day) td {
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  .table td[data-wide] {
+    grid-column: 1 / -1;
+  }
+
+  .table td.num {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+  }
+
+  .table td[data-hide-phone] {
     display: none;
   }
 }

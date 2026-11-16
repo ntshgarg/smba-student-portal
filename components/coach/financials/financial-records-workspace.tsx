@@ -414,18 +414,18 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
             <th scope="col"><span className="sr-only">Receipt</span></th>
           </tr>
         </thead>
-        <tbody>
-          {days.length ? days.map((day) => {
-            // Reversed records are listed when shown, but count as the summary counts them: not at all.
-            const recorded = day.items.filter((event) => event.lifecycle === "recorded")
-            const payments = recorded.filter((event) => event.eventType === "payment")
-            const refunds = recorded.length - payments.length
-            const net = recorded.reduce((total, event) => (
-              total + (event.eventType === "refund" ? -event.amountPaise : event.amountPaise)
-            ), 0)
-            return [
-              <tr key={day.dateKey} className={styles.day}>
-                <th scope="colgroup" colSpan={6}>
+        {days.length ? days.map((day) => {
+          // Reversed records are listed when shown, but count as the summary counts them: not at all.
+          const recorded = day.items.filter((event) => event.lifecycle === "recorded")
+          const payments = recorded.filter((event) => event.eventType === "payment")
+          const refunds = recorded.length - payments.length
+          const net = recorded.reduce((total, event) => (
+            total + (event.eventType === "refund" ? -event.amountPaise : event.amountPaise)
+          ), 0)
+          return (
+            <tbody key={day.dateKey}>
+              <tr className={styles.day}>
+                <th scope="rowgroup" colSpan={6}>
                   {dayHeading(day.dateKey)}
                   <span>
                     {[
@@ -435,8 +435,8 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
                     ].filter(Boolean).join(" · ")}
                   </span>
                 </th>
-              </tr>,
-              ...day.items.map((event) => (
+              </tr>
+              {day.items.map((event) => (
                 <tr key={event.id}>
                   <td data-hide-phone="">{formatAcademyTime(event.recordedAt)}</td>
                   <td>
@@ -463,16 +463,18 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
                     ) : null}
                   </td>
                 </tr>
-              )),
-            ]
-          }) : (
+              ))}
+            </tbody>
+          )
+        }) : (
+          <tbody>
             <tr className={styles.emptyRow}>
               <td colSpan={6} role="status">
                 No collections in this period. Try another date range or show reversed records.
               </td>
             </tr>
-          )}
-        </tbody>
+          </tbody>
+        )}
       </table>
 
       <Pagination pagination={dayBook.pagination} />
@@ -554,15 +556,15 @@ function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
             <th scope="col" className={styles.num}>Amount</th>
           </tr>
         </thead>
-        <tbody>
-          {days.length ? days.map((day) => [
-            <tr key={day.dateKey} className={styles.day}>
-              <th scope="colgroup" colSpan={5}>
+        {days.length ? days.map((day) => (
+          <tbody key={day.dateKey}>
+            <tr className={styles.day}>
+              <th scope="rowgroup" colSpan={5}>
                 {dayHeading(day.dateKey)}
                 <span>{day.items.length} {day.items.length === 1 ? "change" : "changes"}</span>
               </th>
-            </tr>,
-            ...day.items.map((item) => (
+            </tr>
+            {day.items.map((item) => (
               <tr key={item.id}>
                 <td data-hide-phone=""><time dateTime={item.occurredAt}>{formatAcademyTime(item.occurredAt)}</time></td>
                 <td data-wide=""><span className={styles.tag} data-group={activityGroupFor(item.eventType)?.key}>{item.action}</span></td>
@@ -576,15 +578,17 @@ function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
                   <strong>{item.amountPaise === null ? "—" : formatInr(item.amountPaise)}</strong>
                 </td>
               </tr>
-            )),
-          ]) : (
+            ))}
+          </tbody>
+        )) : (
+          <tbody>
             <tr className={styles.emptyRow}>
               <td colSpan={5} role="status">
                 No matching activity. Change the search or dates to review another part of the history.
               </td>
             </tr>
-          )}
-        </tbody>
+          </tbody>
+        )}
       </table>
 
       <Pagination pagination={activity.pagination} />
