@@ -1056,6 +1056,27 @@
   padding: 0 18px 10px;
 }
 
+/* High-contrast mode drops the fills that mark a choice, so the chosen one is
+   drawn in the system highlight, as on the sign-in switch (app/portal.css). */
+@media (forced-colors: active) {
+  :is(.chips, .switch, .cards, .days) label {
+    border: 1px solid CanvasText;
+  }
+
+  :is(.chips, .switch, .cards, .days) label:has(:checked),
+  .filters button[aria-pressed="true"],
+  .stepRail .currentStep {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .cards label:has(:checked) small,
+  .filters button[aria-pressed="true"] :is(b, span) {
+    color: HighlightText;
+  }
+}
+
 @media (hover: hover) {
   .case:not(.openCase):hover {
     background: color-mix(in srgb, var(--white) 70%, transparent);
