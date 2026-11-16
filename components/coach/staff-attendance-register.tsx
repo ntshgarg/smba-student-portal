@@ -18,10 +18,10 @@ import {
   useScrollRegisterTodayOnOpen,
 } from "@/components/coach/attendance-register-chrome"
 import {
-  attendanceRegisterPercent,
   buildAttendanceRegisterMonthDates,
   formatAttendanceRegisterMonth,
 } from "@/components/coach/attendance-register-utils"
+import { attendancePercent } from "@/lib/attendance/domain"
 import { attendanceRegisterMonthParam } from "@/lib/attendance/register-workspace"
 
 type StaffRow = {
@@ -103,7 +103,7 @@ export function StaffAttendanceRegister({
     return {
       cells,
       coach,
-      percent: attendanceRegisterPercent(
+      percent: attendancePercent(
         marked.filter((cell) => cell.choice === "present").length,
         marked.length,
       ),

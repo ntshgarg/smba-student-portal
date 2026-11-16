@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   assertAttendanceBreakdown,
+  attendancePercent,
   calculateMonthlyAttendance,
 } from "@/lib/attendance/domain"
 
@@ -232,5 +233,17 @@ describe("session occurrence attendance domain", () => {
     expect(() => assertAttendanceBreakdown({
       eligible: 3, recorded: 2, attended: 2, absent: 1, pending: 1, percentage: 100,
     })).toThrow("Recorded attendance")
+  })
+})
+
+describe("attendancePercent", () => {
+  it("is the rule every register and dashboard used to write out: attended over marked, rounded, null when unmarked", () => {
+    const old = (attended: number, marked: number) => marked ? Math.round((attended / marked) * 100) : null
+    for (let marked = 0; marked <= 31; marked += 1) {
+      for (let attended = 0; attended <= marked; attended += 1) {
+        expect(attendancePercent(attended, marked)).toBe(old(attended, marked))
+      }
+    }
+    expect(attendancePercent(2, 3)).toBe(67)
   })
 })

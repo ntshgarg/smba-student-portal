@@ -18,6 +18,7 @@ import {
   shiftPlayerAttendanceMonth,
 } from "@/components/dashboard/player-attendance-query"
 import { Reveal } from "@/components/reveal"
+import { attendancePercent } from "@/lib/attendance/domain"
 
 import styles from "./junior-coach-dashboard.module.css"
 
@@ -87,7 +88,7 @@ export function JuniorCoachAttendanceCard({
     const recorded = present + absent
     return {
       absent,
-      percentage: recorded ? Math.round((present / recorded) * 100) : null,
+      percentage: attendancePercent(present, recorded),
       present,
       recorded,
     }

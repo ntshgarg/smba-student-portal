@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto"
 
 import { and, asc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm"
 
-import { isValidDateKey } from "@/lib/attendance/domain"
+import { attendancePercent, isValidDateKey } from "@/lib/attendance/domain"
 import { operationalActionError } from "@/lib/actions/operational-result"
 import {
   getCoachAccessProfile,
@@ -291,7 +291,7 @@ export function getStaffAttendanceSummary(
     present,
     absent,
     recorded,
-    percentage: recorded ? Math.round((present / recorded) * 100) : null,
+    percentage: attendancePercent(present, recorded),
   }
 }
 
