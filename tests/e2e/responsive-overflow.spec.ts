@@ -153,6 +153,8 @@ async function expectTableFitsPanel({
       clientWidth: panel.clientWidth,
       left: bounds.left,
       right: bounds.right,
+      // The ledgers stack by their panel's width in em (fees.module.css @container), not the viewport's.
+      stackWidth: 45 * parseFloat(window.getComputedStyle(panel).fontSize),
       tableDisplay: window.getComputedStyle(element).display,
       tableWidth: element.scrollWidth,
       viewportWidth: document.documentElement.clientWidth,
@@ -166,7 +168,7 @@ async function expectTableFitsPanel({
   expect(dimensions.tableWidth, `${testContext}: table should fit its panel`)
     .toBeLessThanOrEqual(dimensions.clientWidth + WIDTH_TOLERANCE_PX)
   expect(dimensions.tableDisplay, `${testContext}: table display`)
-    .toBe(dimensions.viewportWidth <= FEES_STACK_WIDTH ? "block" : "table")
+    .toBe(dimensions.clientWidth <= dimensions.stackWidth ? "block" : "table")
 }
 
 test("Coach dashboard tickets keep the selected responsive composition", async ({ page }) => {

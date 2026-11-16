@@ -905,16 +905,16 @@
   color: var(--red-dark);
 }
 
-.day th {
+/* A plain cell, not a header: a header spanning every column has no data cells of its own to describe. */
+.day td {
   padding: var(--space-tight) var(--space-copy);
   background: color-mix(in srgb, var(--navy) 6%, var(--white));
   color: var(--navy);
   font-size: var(--type-utility-meta);
-  letter-spacing: 0;
-  text-transform: none;
+  font-weight: 800;
 }
 
-.day th span {
+.day td span {
   float: right;
   color: var(--steel-dark);
   font-weight: 700;

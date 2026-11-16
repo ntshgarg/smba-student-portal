@@ -425,7 +425,7 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
           return (
             <tbody key={day.dateKey}>
               <tr className={styles.day}>
-                <th scope="rowgroup" colSpan={6}>
+                <td colSpan={6}>
                   {dayHeading(day.dateKey)}
                   <span>
                     {[
@@ -434,7 +434,7 @@ function CollectionsDayBook({ dayBook }: { dayBook: CollectionsDayBookView }) {
                       recorded.length ? `${net < 0 ? "−" : ""}${formatInr(Math.abs(net))}` : "all reversed",
                     ].filter(Boolean).join(" · ")}
                   </span>
-                </th>
+                </td>
               </tr>
               {day.items.map((event) => (
                 <tr key={event.id}>
@@ -559,10 +559,10 @@ function ActivityHistory({ activity }: { activity: FinancialActivityView }) {
         {days.length ? days.map((day) => (
           <tbody key={day.dateKey}>
             <tr className={styles.day}>
-              <th scope="rowgroup" colSpan={5}>
+              <td colSpan={5}>
                 {dayHeading(day.dateKey)}
                 <span>{day.items.length} {day.items.length === 1 ? "change" : "changes"}</span>
-              </th>
+              </td>
             </tr>
             {day.items.map((item) => (
               <tr key={item.id}>
