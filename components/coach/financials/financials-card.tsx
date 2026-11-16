@@ -100,7 +100,7 @@ export function FinancialsCard({
                   data-tone={tile.count === 0 ? "zero" : tile.attention ? "attention" : undefined}
                 >
                   <dt>{tile.label}</dt>
-                  <dd aria-label={`${tile.count} ${tile.label.toLowerCase()}`}>{tile.count}</dd>
+                  <dd>{tile.count}</dd>
                 </div>
               ))}
             </dl>

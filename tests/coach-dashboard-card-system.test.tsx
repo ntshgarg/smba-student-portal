@@ -253,9 +253,10 @@ describe("coach dashboard Court Operations Board", () => {
     expect(html).toContain('aria-label="4 overdue: show these players"')
     expect(html).toContain("November fees ready to issue")
     // the three counts sit in tiles: fees to issue, late payers in red, players without a fee plan
-    expect(html).toContain('aria-label="12 to issue"')
-    expect(html).toMatch(/data-tone="attention"><dt>Overdue<\/dt><dd aria-label="4 overdue">4</)
-    expect(html).toContain('aria-label="2 no fee plan"')
+    // the label is the term, so the count needs no aria-label (one on a <dd> is prohibited)
+    expect(html).toContain("<dt>To issue</dt><dd>12</dd>")
+    expect(html).toMatch(/data-tone="attention"><dt>Overdue<\/dt><dd>4</)
+    expect(html).toContain("<dt>No fee plan</dt><dd>2</dd>")
     expect(html).not.toContain("31")
   })
 
