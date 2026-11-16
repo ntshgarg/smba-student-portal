@@ -304,10 +304,12 @@ export function FeePlanStep({
             : `${firstName}’s first term has finished. The fees cover only the months ${firstName} trained.`}
         </p>
       ) : null}
-      <label className={styles.field}>
-        <span className={styles.label}>Monthly fee</span>
+      {/* The help sits outside the label, so the field's name is only "Monthly fee". */}
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor={`onboarding-${item.id}-fee`}>Monthly fee</label>
         <span className={styles.entry}><b aria-hidden="true">₹</b><input
           ref={monthlyFeeRef}
+          id={`onboarding-${item.id}-fee`}
           name="monthlyFee"
           inputMode="decimal"
           value={monthlyFee}
@@ -324,7 +326,7 @@ export function FeePlanStep({
         <small className={styles.help} id={`onboarding-${item.id}-fee-help`}>
           The first month is charged for the sessions left in it, rounded to ₹50.
         </small>
-      </label>
+      </div>
       {preview ? (
         <section className={styles.bill} aria-labelledby={`onboarding-${item.id}-fee-preview-title`}>
           <header>

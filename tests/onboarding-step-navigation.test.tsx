@@ -295,6 +295,17 @@ describe("a first schedule that ended before onboarding finished", () => {
     expect(html).toContain("<strong>Training from</strong><small>Not set yet</small>")
   })
 
+  it("names the start date and the fee by their labels alone", () => {
+    // The help and error text used to sit inside the <label>, so a screen reader read them as the field's name.
+    const session = editorMarkup(playerCase({ stage: "session" }))
+    expect(session).toMatch(/<label[^>]*for="onboarding-player-1-effective-from"[^>]*>Training starts on<\/label>/u)
+    expect(session).toContain('id="onboarding-player-1-effective-from"')
+
+    const fee = editorMarkup(playerCase({ stage: "feePlan" }))
+    expect(fee).toMatch(/<label[^>]*for="onboarding-player-1-fee"[^>]*>Monthly fee<\/label>/u)
+    expect(fee).toContain('aria-describedby="onboarding-player-1-fee-help"')
+  })
+
   it("keeps the joining dates on every player step, not only the request", () => {
     for (const stage of ["assessment", "session", "feePlan"] as const) {
       expect(editorMarkup(playerCase({ stage }))).toContain('class="coach-member-joining"')

@@ -442,7 +442,7 @@ export function SessionStep({
         </div>
       </fieldset>
 
-      <label className={styles.field}>
+      <div className={styles.field}>
         {/*
           * One date, not two. This was "Effective from" beside a "Training
           * start date" on the Assessment step, and the pair could never
@@ -450,10 +450,12 @@ export function SessionStep({
           * date, and a start date below the schedule bought nothing except a
           * first monthly fee dated before the player's first ever session.
           */}
-        <span className={styles.label}>Training starts on</span>
+        {/* The help and the range error sit outside the label, so neither becomes part of the field's name. */}
+        <label className={styles.label} htmlFor={`onboarding-${item.id}-effective-from`}>Training starts on</label>
         <span className={styles.entry}>
           <input
             ref={effectiveFromRef}
+            id={`onboarding-${item.id}-effective-from`}
             name="effectiveFrom"
             type="date"
             value={effectiveFrom}
@@ -483,7 +485,7 @@ export function SessionStep({
                 : "Their first day of training. The first month’s fee is worked out from it."}
           </small>
         )}
-      </label>
+      </div>
       <InlineNotice action={feedback?.action} id={feedbackId} message={feedback?.message} tone={feedback?.tone} reserveSpace={false} />
       <div className={styles.formActions}>
         <Link href="/coach/schedules">Review schedules</Link>
