@@ -14,6 +14,7 @@ export type PlayerAttendanceQuery = {
   date?: AttendanceQueryValue
   from?: AttendanceQueryValue
   occurrence?: AttendanceQueryValue
+  staff?: AttendanceQueryValue
 }
 
 export type PlayerAttendanceSelection = {
@@ -21,6 +22,8 @@ export type PlayerAttendanceSelection = {
   fromCalendar: boolean
   occurrenceId: string | null
   requiresCanonicalRedirect: boolean
+  /** The staff card is open; only one card is, so never beside an occurrence. */
+  staffOpen: boolean
 }
 
 function firstQueryValue(value: AttendanceQueryValue) {
@@ -97,6 +100,30 @@ export function rosterProgressForOccurrences({
   }))
 }
 
+/**
+ * How many of a day's sessions are marked: the one rule behind the dashboard's
+ * Attendance card and the Mark tab's day line, so the two never disagree.
+ *
+ * A cancelled session has no register and is left out of both counts. A
+ * session with nobody on its roster has nothing to mark, so it counts as
+ * marked rather than holding "sessions left" open for a register that cannot
+ * be filled. Everything else is marked once every eligible player has a
+ * saved mark.
+ */
+export function daySessionsMarked(
+  occurrences: TrainingSessionOccurrence[],
+  progress: Map<string, OccurrenceRosterProgress>,
+) {
+  const scheduled = occurrences.filter((occurrence) => occurrence.status === "scheduled")
+  return {
+    marked: scheduled.filter((occurrence) => {
+      const { eligible = 0, marked = 0 } = progress.get(occurrence.id) ?? {}
+      return marked === eligible
+    }).length,
+    total: scheduled.length,
+  }
+}
+
 export function resolvePlayerAttendanceSelection({
   occurrences,
   query,
@@ -109,6 +136,7 @@ export function resolvePlayerAttendanceSelection({
   const requestedDate = firstQueryValue(query.date)
   const requestedOccurrence = firstQueryValue(query.occurrence)
   const requestedFrom = firstQueryValue(query.from)
+  const requestedStaff = firstQueryValue(query.staff)
   const dateKey = requestedDate && isValidDateKey(requestedDate)
     ? requestedDate
     : today
@@ -119,16 +147,22 @@ export function resolvePlayerAttendanceSelection({
     : undefined
   const fromCalendar = requestedFrom === "calendar"
   const occurrenceId = occurrence?.id ?? null
+  const staffOpen = requestedStaff === "open" && !occurrenceId
   const canonicalDate = requestedDate === dateKey
   const canonicalOccurrence = requestedOccurrence === undefined
     || requestedOccurrence === occurrenceId
   const canonicalFrom = requestedFrom === undefined || fromCalendar
+  const canonicalStaff = requestedStaff === undefined || staffOpen
 
   return {
     dateKey,
     fromCalendar,
     occurrenceId,
-    requiresCanonicalRedirect: !canonicalDate || !canonicalOccurrence || !canonicalFrom,
+    requiresCanonicalRedirect: !canonicalDate
+      || !canonicalOccurrence
+      || !canonicalFrom
+      || !canonicalStaff,
+    staffOpen,
   }
 }
 
@@ -136,9 +170,11 @@ export function playerAttendanceRecordHref({
   dateKey,
   fromCalendar,
   occurrenceId,
+  staffOpen,
 }: Omit<PlayerAttendanceSelection, "requiresCanonicalRedirect">) {
   const query = new URLSearchParams({ date: dateKey })
   if (occurrenceId) query.set("occurrence", occurrenceId)
+  if (staffOpen) query.set("staff", "open")
   if (fromCalendar) query.set("from", "calendar")
   return `/coach/attendance/players/record?${query.toString()}`
 }

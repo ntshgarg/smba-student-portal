@@ -656,7 +656,7 @@ test("a assistant coach is approved from Academy onboarding and activates staff 
   await page.getByLabel("Confirm PIN").fill(pin)
   await page.getByRole("button", { name: "Set up PIN" }).click()
   await page.waitForURL((url) => url.pathname.startsWith("/coach"), { timeout: 20_000 })
-  await expect(page.getByRole("heading", { name: "Personal roll-call ledger" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "My attendance" })).toBeVisible()
 })
 
 test("a second name on one address is approved knowingly, not silently", async ({ browser, page }) => {

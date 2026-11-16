@@ -870,6 +870,9 @@ export const trainingChanges = sqliteTable("training_changes", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
   dismissedAt: integer("dismissed_at", { mode: "timestamp_ms" }),
+  // Tries that hit an unexpected fault, and when the last one did.
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lastFailedAt: integer("last_failed_at", { mode: "timestamp_ms" }),
 }, (table) => [
   index("training_changes_due_idx").on(table.status, table.effectiveOn),
   uniqueIndex("training_changes_one_scheduled_idx")

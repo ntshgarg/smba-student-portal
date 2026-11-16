@@ -1,10 +1,11 @@
-import type { ReactElement } from "react"
+import type { ReactElement, Ref } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 /**
- * What the two courtside registers do around a save that is still running,
- * and around a date change that has not landed yet.
+ * What the two courtside registers -- a session and the staff card on the Mark
+ * tab -- do around a save that is still running, and around a date change that
+ * has not landed yet.
  *
  * The suite has no DOM, so the approach is `tests/session-expiry-recovery`'s:
  * the JSX factory records every element the register creates, the handlers
@@ -13,15 +14,16 @@ import { afterEach, describe, expect, it, vi } from "vitest"
  */
 const captured = vi.hoisted(() => ({
   discarded: [] as string[],
+  // Set while a date change is between the tap and the server's answer.
+  changingDate: false,
   elements: [] as Array<{ props: Record<string, unknown>; type: unknown }>,
-  guardMessages: [] as string[],
+  guardMessages: [] as Array<{ message: string; scope: string }>,
+  // Navigations each register handed to its unsaved-work guard, by scope.
+  guardedNavigations: [] as string[],
   isSaving: false,
   keptOnDevice: undefined as boolean | undefined,
   persistReturns: false,
   replaced: [] as string[],
-  // The roll call's date state; when set, the register is between picking
-  // this date and the server answering for it.
-  rollCallSelectedDate: null as string | null,
   stateUpdates: [] as unknown[],
   unsavedMarks: [] as unknown[],
 }))
@@ -43,20 +45,22 @@ vi.mock("react", async () => {
   return {
     ...actual,
     useEffect: () => {},
+    // A server render runs no layout effects, so the handle the Mark tab asks
+    // of the staff card is built here, as React would after the commit.
+    useImperativeHandle: (ref: { current: unknown } | null | undefined, create: () => unknown) => {
+      if (ref) ref.current = create()
+    },
     // A server render cannot start a transition; the date change's navigation
     // runs straight through instead, so it reaches the router mock.
-    useTransition: () => [false, (run: () => void) => run()],
+    useTransition: () => [captured.changingDate, (run: () => void) => run()],
     useState: (initial: unknown) => {
       // Seams keyed on values each register holds once: the empty array is its
       // unsaved marks, `false` is `isSaving`, `undefined` is whether the device
-      // kept the draft, and the roll call's initial date is its selected date.
+      // kept the draft.
       let seed = initial
       if (Array.isArray(initial) && !initial.length) seed = captured.unsavedMarks
       if (initial === false) seed = captured.isSaving
       if (initial === undefined) seed = captured.keptOnDevice
-      if (initial === "2026-08-20" && captured.rollCallSelectedDate) {
-        seed = captured.rollCallSelectedDate
-      }
       const [value, set] = actual.useState(seed)
       return [value, (next: unknown) => {
         captured.stateUpdates.push(next)
@@ -75,9 +79,15 @@ vi.mock("next/navigation", () => ({
 }))
 
 vi.mock("@/components/unsaved-work-guard", () => ({
-  useUnsavedWorkGuard: ({ message }: { message: string }) => {
-    captured.guardMessages.push(message)
-    return { confirmDiscard: vi.fn(() => true) }
+  useUnsavedWorkGuard: ({ message, scope }: { message: string; scope: string }) => {
+    captured.guardMessages.push({ message, scope })
+    return {
+      confirmDiscard: vi.fn(() => true),
+      navigateAfterCommit: (navigate: () => void) => {
+        captured.guardedNavigations.push(scope)
+        navigate()
+      },
+    }
   },
 }))
 
@@ -87,10 +97,10 @@ vi.mock("@/lib/client/attendance-draft-storage", async () => {
   >("@/lib/client/attendance-draft-storage")
   return {
     ...actual,
-    discardPlayerAttendanceDraft: (occurrenceId: string) => {
+    discardPlayerAttendanceDraft: (_accountId: string, occurrenceId: string) => {
       captured.discarded.push(occurrenceId)
     },
-    discardStaffAttendanceDraft: (dateKey: string) => {
+    discardStaffAttendanceDraft: (_accountId: string, dateKey: string) => {
       captured.discarded.push(dateKey)
     },
     persistPlayerAttendanceDraft: () => captured.persistReturns,
@@ -154,6 +164,7 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
 
 const { describeRefusedSave } = await import("@/lib/client/session-expiry")
 const { StaffRollCall } = await import("@/components/coach/attendance/staff-roll-call")
+type StaffRollCallHandle = import("@/components/coach/attendance/staff-roll-call").StaffRollCallHandle
 const { PlayerAttendanceRecorder } = await import(
   "@/components/coach/attendance/player-attendance-recorder"
 )
@@ -172,32 +183,53 @@ const oneUnsavedStaffMark = [{
   expectedChoice: "cleared",
 }]
 
+const ishaan = {
+  accountId: "coach-1",
+  fullName: "Ishaan Rao",
+  initials: "IR",
+  joinedOn: "2026-01-05",
+}
+
 function playerRegister(): ReactElement {
   return (
     <PlayerAttendanceRecorder
+      accountId="head-coach"
       initialDate="2026-08-21"
       initialFromCalendar={false}
       initialOccurrenceId="occurrence-1"
       initialReferenceInstant={Date.parse("2026-08-21T12:00:00.000Z")}
+      initialStaffOpen={false}
+      staff={{
+        closedFor: null,
+        juniorCoaches: [ishaan],
+        records: [{ choice: "present", coachAccountId: "coach-1" }],
+        referenceDate: "2026-08-23",
+      }}
     />
   )
 }
 
+const rollCallHandle: { current: StaffRollCallHandle | null } = { current: null }
+
 function rollCall(): ReactElement {
   return (
     <StaffRollCall
+      ref={rollCallHandle as Ref<StaffRollCallHandle>}
+      accountId="head-coach"
       closedFor={null}
-      initialDate="2026-08-20"
+      dateKey="2026-08-20"
       initialRecords={[{ choice: "absent", coachAccountId: "coach-1" }]}
-      juniorCoaches={[{
-        accountId: "coach-1",
-        fullName: "Ishaan Rao",
-        initials: "IR",
-        joinedOn: "2026-01-05",
-      }]}
+      juniorCoaches={[ishaan]}
+      open
       referenceDate="2026-08-23"
+      onToggle={() => {}}
     />
   )
+}
+
+/** The player register's own leave prompt; the staff card on the tab has its own. */
+function playerGuardMessage() {
+  return captured.guardMessages.findLast(({ scope }) => scope === "record-player-attendance")?.message
 }
 
 function render(register: () => ReactElement) {
@@ -222,12 +254,14 @@ function lastMessage() {
 }
 
 afterEach(() => {
+  captured.changingDate = false
   captured.discarded.length = 0
+  captured.guardedNavigations.length = 0
   captured.isSaving = false
   captured.keptOnDevice = undefined
   captured.persistReturns = false
   captured.replaced.length = 0
-  captured.rollCallSelectedDate = null
+  rollCallHandle.current = null
   captured.unsavedMarks = []
 })
 
@@ -252,8 +286,9 @@ describe("a player register save in flight", () => {
 
     const otherSession = captured.elements.find((element) => (
       element.type === "button"
-      && element.props["aria-controls"] === "attendance-roster-panel"
       && element.props["aria-expanded"] === false
+      // a session's head; the staff card's carries no `disabled` at all
+      && element.props.disabled === false
     ))
     expect(otherSession, "the register rendered no other session to pick").toBeTruthy()
     ;(otherSession?.props.onClick as () => void)()
@@ -274,13 +309,73 @@ describe("a player register save in flight", () => {
   })
 })
 
+/*
+ * Discarding unsaved marks makes the unsaved-work guard step back over the
+ * history entry it added for them. A `router.replace` sent beside that step is
+ * cancelled by it, so the address -- and a reload -- stayed on the card or date
+ * the coach had left. Every selection change is therefore handed to the guard.
+ */
+describe("leaving a card with discarded marks", () => {
+  function sessionHead(expanded: boolean) {
+    return captured.elements.find((element) => (
+      element.type === "button"
+      && element.props["aria-expanded"] === expanded
+      && element.props.disabled === false
+    ))?.props.onClick as (() => void) | undefined
+  }
+
+  it("moves the address to another session through the guard", () => {
+    captured.unsavedMarks = oneUnsavedPlayerMark
+    render(playerRegister)
+
+    sessionHead(false)?.()
+
+    expect(captured.discarded).toEqual(["occurrence-1"])
+    expect(captured.guardedNavigations).toEqual(["record-player-attendance"])
+    expect(captured.replaced).toEqual([
+      "/coach/attendance/players/record?date=2026-08-21&occurrence=occurrence-2",
+    ])
+  })
+
+  it("closes the open session through the guard", () => {
+    captured.unsavedMarks = oneUnsavedPlayerMark
+    render(playerRegister)
+
+    sessionHead(true)?.()
+
+    expect(captured.guardedNavigations).toEqual(["record-player-attendance"])
+    expect(captured.replaced).toEqual(["/coach/attendance/players/record?date=2026-08-21"])
+  })
+
+  it("moves the address to another date through the guard", () => {
+    captured.unsavedMarks = oneUnsavedPlayerMark
+    render(playerRegister)
+
+    pickDate("2026-08-22")
+
+    expect(captured.guardedNavigations).toEqual(["record-player-attendance"])
+    expect(captured.replaced).toEqual(["/coach/attendance/players/record?date=2026-08-22"])
+  })
+})
+
+describe("the Mark tab's cards", () => {
+  // A closed card's panel is not on the page, so only the open card points at one.
+  it("point screen readers only at the open card's register", () => {
+    render(playerRegister)
+
+    expect(captured.elements
+      .filter((element) => element.type === "button" && element.props["aria-controls"])
+      .map((element) => element.props["aria-controls"])).toEqual(["attendance-roster-panel"])
+  })
+})
+
 describe("the player register's leave prompt", () => {
   it("says the marks are kept when the device kept them", () => {
     captured.unsavedMarks = oneUnsavedPlayerMark
     captured.keptOnDevice = true
     render(playerRegister)
 
-    expect(captured.guardMessages.at(-1)).toBe(
+    expect(playerGuardMessage()).toBe(
       "Leave this session? Your unsaved marks are kept on this device"
       + " and come back when you open it again.",
     )
@@ -291,7 +386,7 @@ describe("the player register's leave prompt", () => {
     captured.keptOnDevice = false
     render(playerRegister)
 
-    expect(captured.guardMessages.at(-1))
+    expect(playerGuardMessage())
       .toBe("Leave this session and discard the unsaved attendance changes?")
   })
 
@@ -300,7 +395,9 @@ describe("the player register's leave prompt", () => {
     render(playerRegister)
 
     const present = captured.elements.find((element) => (
-      element.type === "button" && element.props.className === "attendance-roster-choice is-present"
+      element.type === "button"
+      && element.props["aria-pressed"] !== undefined
+      && [element.props.children].flat().includes("Present")
     ))
     expect(present, "the register rendered no Present button").toBeTruthy()
     ;(present?.props.onClick as () => void)()
@@ -309,37 +406,51 @@ describe("the player register's leave prompt", () => {
   })
 })
 
-describe("the staff roll call", () => {
-  it("keeps the date where it is while a save is in flight", () => {
+describe("the staff card", () => {
+  // The Mark tab asks the open card to let go before it opens another card or
+  // changes the date; a running save holds it where it is.
+  it("keeps its marks and stays open while a save is in flight", () => {
     captured.isSaving = true
     captured.unsavedMarks = oneUnsavedStaffMark
     render(rollCall)
 
-    pickDate("2026-08-21")
+    expect(rollCallHandle.current?.release(() => captured.replaced.push("next"))).toBe(false)
 
-    expect(captured.replaced).toEqual([])
     expect(captured.discarded).toEqual([])
+    expect(captured.replaced).toEqual([])
     expect(lastMessage()).toContain("Staff attendance is still saving")
+  })
+
+  it("discards its marks when the coach lets them go", () => {
+    captured.unsavedMarks = oneUnsavedStaffMark
+    render(rollCall)
+
+    expect(rollCallHandle.current?.release(() => captured.replaced.push("next"))).toBe(true)
+
+    expect(captured.discarded).toEqual(["2026-08-20"])
+    expect(captured.stateUpdates).toContainEqual([])
+    // The next card's address goes through this card's guard, whose step back
+    // through history would otherwise cancel it.
+    expect(captured.guardedNavigations).toEqual(["staff-roll-call"])
+    expect(captured.replaced).toEqual(["next"])
   })
 
   // Between picking a day and the server answering for it, the records held
   // are the previous day's. They must not be shown as the new day's, nor be
   // the base a tap is resolved against.
   it("withholds the previous day's marks until the new day arrives", () => {
-    captured.rollCallSelectedDate = "2026-08-21"
-    const markup = render(rollCall)
+    captured.changingDate = true
+    const markup = render(playerRegister)
 
-    expect(markup).toContain("Loading roll call…")
+    expect(markup).toContain("Loading sessions…")
+    expect(markup).not.toContain("Assistant coaches")
     expect(markup).not.toContain('aria-pressed="true"')
-    expect(captured.elements.some((element) => (
-      element.type === "button" && element.props.children === "Absent"
-    ))).toBe(false)
   })
 
   it("shows the day's marks once the day it rendered for is the one selected", () => {
     const markup = render(rollCall)
 
-    expect(markup).not.toContain("Loading roll call…")
+    expect(markup).not.toContain("Loading sessions…")
     expect(markup).toContain('aria-pressed="true"')
   })
 })

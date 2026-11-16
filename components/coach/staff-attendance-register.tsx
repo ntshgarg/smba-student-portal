@@ -1,15 +1,28 @@
 "use client"
 
-import { ArrowLeft, CalendarOff, Check, CircleMinus, X } from "lucide-react"
-import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useMemo, useRef } from "react"
 import type { CSSProperties } from "react"
 
 import {
-  buildAttendanceRegisterDates,
-  groupAttendanceDatesByMonth,
+  RegisterBand,
+  RegisterFilterPill,
+  RegisterLegend,
+  RegisterMonthBar,
+  RegisterPercent,
+  RegisterToolbar,
+  TileMark,
+  registerStyles as styles,
+  scrollRegisterToday,
+  useRegisterHref,
+  useScrollRegisterTodayOnOpen,
+} from "@/components/coach/attendance-register-chrome"
+import {
+  attendanceRegisterPercent,
+  buildAttendanceRegisterMonthDates,
+  formatAttendanceRegisterMonth,
 } from "@/components/coach/attendance-register-utils"
-import { useAttendanceRegisterWindow } from "@/components/coach/use-attendance-register-window"
+import { attendanceRegisterMonthParam } from "@/lib/attendance/register-workspace"
 
 type StaffRow = {
   accountId: string
@@ -32,42 +45,31 @@ export function StaffAttendanceRegister({
   holidays,
   initialRecords,
   juniorCoaches,
+  month: activeMonth,
   referenceDate,
+  year: activeYear,
   yearOptions,
 }: {
   /** Days the academy was closed: nobody is marked on them. */
   holidays: Array<{ dateKey: string; label: string }>
   initialRecords: StaffRecord[]
   juniorCoaches: StaffRow[]
+  /** 1-12: one month of `year` at a time. */
+  month: number
   referenceDate: string
+  year: number
   yearOptions: number[]
 }) {
+  const router = useRouter()
+  const hrefFor = useRegisterHref()
+  const gridRef = useRef<HTMLDivElement>(null)
   const currentYear = Number(referenceDate.slice(0, 4))
-  const [activeYear, setActiveYear] = useState(currentYear)
-  const dates = useMemo(() => buildAttendanceRegisterDates(activeYear), [activeYear])
-  const todayIndex = dates.findIndex((date) => date.key === referenceDate)
-  const {
-    containerRef: registerScrollRef,
-    onScroll: handleRegisterScroll,
-    scrollToIndex,
-    visibleWindow,
-  } = useAttendanceRegisterWindow({
-    dateCount: dates.length,
-    // Opens on today in the current year, as the player register does.
-    initialIndex: activeYear === currentYear ? Math.max(todayIndex, 0) : 0,
-    resetKey: String(activeYear),
-    scrollOnReset: activeYear === currentYear,
-  })
-  const visibleDates = useMemo(
-    () => dates.slice(visibleWindow.start, visibleWindow.end),
-    [dates, visibleWindow.end, visibleWindow.start],
+  const currentMonth = Number(referenceDate.slice(5, 7))
+  const dates = useMemo(
+    () => buildAttendanceRegisterMonthDates(activeYear, activeMonth),
+    [activeMonth, activeYear],
   )
-  const visibleMonthGroups = useMemo(
-    () => groupAttendanceDatesByMonth(visibleDates),
-    [visibleDates],
-  )
-  const leadingDateCount = visibleWindow.start
-  const trailingDateCount = dates.length - visibleWindow.end
+  const monthLabel = formatAttendanceRegisterMonth(activeYear, activeMonth, "long")
   const storedByCell = useMemo(() => new Map(
     initialRecords.map((record) => [cellKey(record.coachAccountId, record.dateKey), record.choice]),
   ), [initialRecords])
@@ -75,241 +77,153 @@ export function StaffAttendanceRegister({
     () => new Map(holidays.map((holiday) => [holiday.dateKey, holiday.label])),
     [holidays],
   )
-  const tableStyle = {
-    "--staff-register-width": `${240 + dates.length * 54}px`,
-    "--register-mobile-width": `${148 + dates.length * 54}px`,
-  } as CSSProperties
+  const tableStyle = { "--register-columns": dates.length } as CSSProperties
 
-  function resolvedChoice(coachAccountId: string, dateKey: string) {
-    return storedByCell.get(cellKey(coachAccountId, dateKey))
-  }
+  const rows = juniorCoaches.map((coach) => {
+    const cells = dates.map((date) => {
+      const unavailable = date.key < coach.joinedOn
+        || date.key > referenceDate
+        || Boolean(coach.archivedOn && date.key > coach.archivedOn)
+      const stored = storedByCell.get(cellKey(coach.accountId, date.key))
+      const choice = stored === "cleared" ? undefined : stored
+      // A closed day reads as closed, never as "not recorded": there was
+      // nothing to record. A mark saved before the closure is kept but not
+      // counted, so it is not shown either.
+      const holiday = unavailable ? undefined : holidayByDate.get(date.key)
+      const state = unavailable
+        ? "not available"
+        : holiday
+          ? `academy closed for ${holiday}`
+          : choice ?? "not recorded"
+      return { choice, date, holiday, state, unavailable }
+    })
+    // Staff have no make-ups, so their % stays present ÷ (present + absent);
+    // players' % comes from `calculateMonthlyAttendance` instead.
+    const marked = cells.filter((cell) => !cell.unavailable && !cell.holiday && cell.choice)
+    return {
+      cells,
+      coach,
+      percent: attendanceRegisterPercent(
+        marked.filter((cell) => cell.choice === "present").length,
+        marked.length,
+      ),
+    }
+  })
 
-  function changeYear(year: number) {
-    if (year === activeYear) return
-    setActiveYear(year)
-  }
+  const showsToday = activeYear === currentYear && activeMonth === currentMonth
+  useScrollRegisterTodayOnOpen(gridRef, showsToday)
 
   function jumpToToday() {
-    if (activeYear !== currentYear) {
-      changeYear(currentYear)
+    if (!showsToday) {
+      router.replace(
+        hrefFor({ month: attendanceRegisterMonthParam(currentMonth), year: String(currentYear) }),
+        { scroll: false },
+      )
       return
     }
-    if (todayIndex >= 0) scrollToIndex(todayIndex, "smooth")
+    scrollRegisterToday(gridRef.current)
   }
 
   return (
-    <div className="coach-calendar coach-attendance-workspace page-shell">
-      <nav className="coach-calendar-back-row coach-route-nav" aria-label="Staff attendance navigation">
-        <Link href="/coach#attendance"><ArrowLeft aria-hidden="true" /> Back to Attendance</Link>
-      </nav>
+    <div className={styles.register}>
+      <RegisterToolbar people="staff" onJumpToToday={jumpToToday}>
+        <RegisterFilterPill
+          label="Year"
+          options={yearOptions}
+          value={activeYear}
+          onChange={(year) => router.replace(hrefFor({ month: null, year }), { scroll: false })}
+        />
+      </RegisterToolbar>
 
-      <header className="coach-calendar-header">
-        <div>
-          <span className="eyebrow">Attendance register</span>
-          <h1 id="staff-attendance-title">Staff attendance</h1>
-        </div>
-      </header>
+      <RegisterMonthBar month={activeMonth} year={activeYear} />
 
-      <article className="coach-attendance-card is-workspace">
-        <div className="coach-attendance-register staff-attendance-register">
-          <div className="coach-register-controls">
-            <div className="coach-year-selector" role="group" aria-label="Choose attendance year">
-              {yearOptions.map((year) => (
-                <button
-                  key={year}
-                  type="button"
-                  className={year === activeYear ? "is-active" : undefined}
-                  aria-pressed={year === activeYear}
-                  onClick={() => changeYear(year)}
-                >
-                  {year}
-                </button>
-              ))}
-            </div>
+      <div className={styles.card}>
+        <RegisterBand
+          heading={<h2>Assistant coaches</h2>}
+          month={activeMonth}
+          subtitle={`${monthLabel} · daily record`}
+          year={activeYear}
+          yearOptions={yearOptions}
+        />
+
+        {!juniorCoaches.length ? (
+          <div className={styles.empty}>
+            <h3>No assistant coaches yet.</h3>
+            <p>Provisioned assistant coaches will appear here for daily attendance.</p>
           </div>
-
-          <div className="coach-register-heading staff-attendance-heading">
-            <div>
-              <span>Staff</span>
-              <h2>Daily record</h2>
-            </div>
-            <div className="coach-register-period">
-              <span>Annual register</span>
-              <button type="button" onClick={jumpToToday}>Jump to today</button>
-            </div>
-          </div>
-
-          <div className="player-attendance-legend staff-attendance-legend" role="group" aria-label="Attendance status legend">
-            <span><i className="is-present" aria-hidden="true"><Check /></i>Present</span>
-            <span><i className="is-absent" aria-hidden="true"><CircleMinus /></i>Absent</span>
-            <span><i className="is-unmarked" aria-hidden="true" />Not recorded</span>
-            <span><i className="is-unavailable" aria-hidden="true" />Not available</span>
-            <span><i className="is-holiday" aria-hidden="true"><CalendarOff /></i>Holiday</span>
-          </div>
-
-          {!juniorCoaches.length ? (
-            <div className="coach-register-empty-category">
-              <h2>No assistant coaches yet.</h2>
-              <p>Provisioned assistant coaches will appear here for daily attendance.</p>
-            </div>
-          ) : (
+        ) : (
+          <>
+            <RegisterLegend items={["present", "absent", "holiday", "unmarked"]} />
             <div
-              className="coach-register-scroll staff-register-scroll"
-              ref={registerScrollRef}
-              onScroll={handleRegisterScroll}
+              className={styles.grid}
+              ref={gridRef}
               tabIndex={0}
               role="region"
-              aria-label={`Scrollable assistant coach attendance register for ${activeYear}`}
+              aria-label={`Assistant coach attendance, ${monthLabel}`}
             >
               <table
-                className="coach-register-table staff-register-table"
+                className={styles.table}
                 style={tableStyle}
-                aria-label={`Assistant coach attendance register for ${activeYear}`}
-                aria-colcount={dates.length + 1}
+                aria-label={`Assistant coach attendance register for ${monthLabel}`}
               >
-                <colgroup>
-                  <col className="coach-register-name-col" />
-                  {leadingDateCount ? (
-                    <col className="coach-register-date-col" span={leadingDateCount} />
-                  ) : null}
-                  {visibleDates.map((date) => (
-                    <col key={date.key} className="coach-register-date-col" />
-                  ))}
-                  {trailingDateCount ? (
-                    <col className="coach-register-date-col" span={trailingDateCount} />
-                  ) : null}
-                </colgroup>
                 <thead>
-                  <tr className="coach-register-month-row">
-                    <th className="coach-register-name-column" scope="col" rowSpan={2} aria-colindex={1}>Coach name</th>
-                    {leadingDateCount ? (
-                      <th
-                        className="coach-register-spacer-cell"
-                        colSpan={leadingDateCount}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    {visibleMonthGroups.map((month) => (
-                      <th key={month.label} scope="colgroup" colSpan={month.count}><span>{month.label}</span></th>
-                    ))}
-                    {trailingDateCount ? (
-                      <th
-                        className="coach-register-spacer-cell"
-                        colSpan={trailingDateCount}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </tr>
-                  <tr className="coach-register-date-row">
-                    {leadingDateCount ? (
-                      <th
-                        className="coach-register-spacer-cell"
-                        colSpan={leadingDateCount}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    {visibleDates.map((date, visibleIndex) => {
+                  <tr>
+                    <th className={styles.name} scope="col">Coach</th>
+                    {dates.map((date) => {
                       const holiday = holidayByDate.get(date.key)
                       return (
                         <th
                           key={date.key}
                           scope="col"
                           data-staff-register-date={date.key}
-                          aria-colindex={visibleWindow.start + visibleIndex + 2}
-                          className={[
-                            date.key === referenceDate ? "is-today" : "",
-                            date.key > referenceDate || holiday ? "is-unavailable" : "",
-                            holiday ? "is-holiday" : "",
-                          ].filter(Boolean).join(" ") || undefined}
+                          data-register-today={date.key === referenceDate || undefined}
+                          data-unavailable={date.key > referenceDate || holiday ? true : undefined}
                           title={holiday ? `${date.label}: closed for ${holiday}` : undefined}
                         >
                           <span>{date.day}</span>
                           <strong>{date.date}</strong>
-                          {holiday ? (
-                            <small className="coach-register-holiday-mark">
-                              <span className="sr-only">Closed for {holiday}</span>
-                              <CalendarOff aria-hidden="true" />
-                            </small>
-                          ) : null}
+                          {holiday ? <span className="sr-only">Closed for {holiday}</span> : null}
                         </th>
                       )
                     })}
-                    {trailingDateCount ? (
-                      <th
-                        className="coach-register-spacer-cell"
-                        colSpan={trailingDateCount}
-                        aria-hidden="true"
-                      />
-                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
-                  {juniorCoaches.map((coach) => (
+                  {rows.map(({ cells, coach, percent }) => (
                     <tr key={coach.accountId}>
-                      <th className="coach-register-name-column" scope="row" aria-colindex={1}>
-                        <strong>{coach.fullName}</strong>
+                      <th
+                        className={styles.name}
+                        scope="row"
+                        aria-label={`${coach.fullName}, assistant coach${percent === null ? "" : `, ${percent}% attended in ${monthLabel}`}`}
+                      >
+                        <span className={styles.who}>
+                          <strong>{coach.fullName}</strong>
+                          <RegisterPercent value={percent} />
+                        </span>
                         <small>Assistant coach</small>
                       </th>
-                      {leadingDateCount ? (
-                        <td
-                          className="coach-register-spacer-cell"
-                          colSpan={leadingDateCount}
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                      {visibleDates.map((date, visibleIndex) => {
-                        const unavailable = date.key < coach.joinedOn
-                          || date.key > referenceDate
-                          || Boolean(coach.archivedOn && date.key > coach.archivedOn)
-                        const choice = resolvedChoice(coach.accountId, date.key)
-                        // A closed day reads as closed, never as "not recorded": there was
-                        // nothing to record. A mark saved before the closure is kept but not
-                        // counted, so it is not shown either.
-                        const holiday = unavailable ? undefined : holidayByDate.get(date.key)
-                        const state = unavailable
-                          ? "not available"
-                          : holiday
-                            ? `academy closed for ${holiday}`
-                            : choice === "cleared" || !choice ? "not recorded" : choice
-                        return (
-                          <td
-                            key={date.key}
-                            aria-colindex={visibleWindow.start + visibleIndex + 2}
-                            className={[
-                              date.key === referenceDate ? "is-today" : "",
-                              unavailable || holiday ? "is-unavailable" : "",
-                              holiday ? "is-holiday" : "",
-                            ].filter(Boolean).join(" ") || undefined}
+                      {cells.map((cell) => (
+                        <td key={cell.date.key}>
+                          <span
+                            className={`${styles.tile} ${styles[
+                              cell.unavailable ? "none" : cell.holiday ? "holiday" : cell.choice ?? "unmarked"
+                            ]}`}
+                            role="img"
+                            aria-label={`${coach.fullName}, ${cell.date.label}: ${cell.state}.`}
+                            title={`${cell.date.label}: ${cell.state}`}
                           >
-                            <span
-                              className={`coach-register-cell-status${!holiday && choice && choice !== "cleared" ? ` is-${choice}` : ""}`}
-                              role="img"
-                              aria-label={`${coach.fullName}, ${date.label}: ${state}.`}
-                              title={`${date.label}: ${state}`}
-                            >
-                              {/* Same pairing as the player register: --green and --red measure
-                                  1.047:1 against each other, and X is already "not available". */}
-                              {unavailable ? <X aria-hidden="true" /> : holiday ? <CalendarOff aria-hidden="true" /> : choice === "present" ? <Check aria-hidden="true" /> : choice === "absent" ? <CircleMinus aria-hidden="true" /> : <span aria-hidden="true">—</span>}
-                            </span>
-                          </td>
-                        )
-                      })}
-                      {trailingDateCount ? (
-                        <td
-                          className="coach-register-spacer-cell"
-                          colSpan={trailingDateCount}
-                          aria-hidden="true"
-                        />
-                      ) : null}
+                            <TileMark kind={cell.unavailable ? "none" : cell.holiday ? "holiday" : cell.choice ?? "none"} />
+                          </span>
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-
-        </div>
-      </article>
+          </>
+        )}
+      </div>
     </div>
   )
 }

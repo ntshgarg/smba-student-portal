@@ -113,6 +113,9 @@ vi.mock("@/components/unsaved-work-guard", () => ({
   }),
 }))
 
+// The staff card on the tab saves through a server action this render never calls.
+vi.mock("@/app/coach/actions", () => ({ saveStaffAttendanceAction: vi.fn() }))
+
 vi.mock("@/components/coach/coach-portal-provider", () => ({
   useAttendancePortal: () => ({
     attendanceAdjustments: [],
@@ -131,14 +134,20 @@ const { PlayerAttendanceRecorder } = await import(
   "@/components/coach/attendance/player-attendance-recorder"
 )
 
-function renderRecorder(selectedDate: string) {
+// No assistant coaches, so the day line is the sessions' count alone.
+const noStaff = { closedFor: null, juniorCoaches: [], records: [], referenceDate: "2026-08-21" }
+
+function renderRecorder(selectedDate: string, referenceInstant = Date.parse("2026-08-21T12:00:00.000Z")) {
   recorderFixture.renderedProps.length = 0
   return renderToStaticMarkup(
     <PlayerAttendanceRecorder
+      accountId="head-coach"
       initialDate={selectedDate}
       initialFromCalendar={false}
       initialOccurrenceId={null}
-      initialReferenceInstant={Date.parse("2026-08-21T12:00:00.000Z")}
+      initialReferenceInstant={referenceInstant}
+      initialStaffOpen={false}
+      staff={noStaff}
     />,
   )
 }
@@ -148,7 +157,7 @@ function chooseDate(dateKey: string) {
     (props) => props.name === "attendanceDate",
   )
   const onChange = dateField?.onChange as ((event: unknown) => void) | undefined
-  if (!onChange) throw new Error("the recorder rendered no training date input")
+  if (!onChange) throw new Error("the recorder rendered no Pick a date input")
   onChange({ target: { value: dateKey } })
 }
 
@@ -167,9 +176,9 @@ describe("player attendance recorder date change", () => {
 
     expect(markup).not.toContain("No sessions on this date.")
     expect(markup).toContain("Loading sessions…")
-    // The count asserts the same thing the copy does, so it withholds too.
-    expect(markup).toContain("<strong>—</strong>")
-    expect(markup).not.toContain("<strong>0</strong>")
+    // The day line's count asserts the same thing the copy does, so it withholds too.
+    expect(markup).not.toContain("<p>No sessions</p>")
+    expect(markup).not.toContain("fully marked")
   })
 
   it("still calls a settled date empty when the server has answered for it", () => {
@@ -177,7 +186,7 @@ describe("player attendance recorder date change", () => {
 
     expect(markup).toContain("No sessions on this date.")
     expect(markup).not.toContain("Loading sessions…")
-    expect(markup).toContain("<strong>0</strong>")
+    expect(markup).toContain("<p>No sessions</p>")
   })
 
   it("keeps a settled date's own sessions on screen", () => {
@@ -185,7 +194,8 @@ describe("player attendance recorder date change", () => {
 
     expect(markup).not.toContain("No sessions on this date.")
     expect(markup).not.toContain("Loading sessions…")
-    expect(markup).toContain("<strong>1</strong>")
+    // Nobody is rostered on it, so it has nothing left to mark (`daySessionsMarked`).
+    expect(markup).toContain("<p>1 session, 1 fully marked</p>")
   })
 
   // What raises the pending flag above is the date change putting its navigation
@@ -209,26 +219,19 @@ describe("player attendance recorder date change", () => {
 
 /*
  * The fixture above renders one started occurrence with no assignments and no
- * players, which is exactly the shape that used to read "Available": a session
- * the coach could open, but with nobody in it to mark.
+ * players, which is exactly the shape that used to read "Available" (now "Not
+ * marked"): a session the coach could open, but with nobody in it to mark.
  */
 describe("player attendance recorder session picker", () => {
-  it("says a session is empty rather than calling it available", () => {
+  it("says a session is empty rather than calling it unmarked", () => {
     const html = renderRecorder("2026-08-21")
     expect(html).toContain("No players")
-    expect(html).not.toContain(">Available<")
+    expect(html).not.toContain(">Not marked<")
   })
 
-  it("still reserves Upcoming for a session that has not started", () => {
-    const html = renderToStaticMarkup(
-      <PlayerAttendanceRecorder
-        initialDate="2026-08-21"
-        initialFromCalendar={false}
-        initialOccurrenceId={null}
-        initialReferenceInstant={Date.parse("2026-08-21T06:00:00.000Z")}
-      />,
-    )
-    expect(html).toContain("Upcoming")
+  it("still says when a session that has not started opens", () => {
+    const html = renderRecorder("2026-08-21", Date.parse("2026-08-21T06:00:00.000Z"))
+    expect(html).toMatch(/Opens 5:00\W?pm/u)
     expect(html).not.toContain("No players")
   })
 })

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   ATTENDANCE_DRAFT_LIFETIME_MS,
   attendanceDraftStorage,
+  clearAttendanceDrafts,
   discardStaffAttendanceDraft,
   parseAttendanceDraft,
   persistPlayerAttendanceDraft,
@@ -18,6 +19,9 @@ import {
 import type { SessionAttendanceChange } from "@/lib/sessions/types"
 
 const markedAt = Date.parse("2026-08-21T13:00:00.000Z")
+
+// The signed-in head coach every draft below belongs to.
+const headCoach = "head-coach"
 
 const playerMarks: SessionAttendanceChange[] = [
   { choice: "present", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
@@ -65,18 +69,18 @@ function fakeStorage(
 
 describe("attendance draft storage keys", () => {
   it("pins a player draft to its occurrence and a staff draft to its date", () => {
-    expect(playerAttendanceDraftKey("occurrence-1"))
-      .toBe("smba-attendance-draft-v1:occurrence:occurrence-1")
-    expect(staffAttendanceDraftKey("2026-08-21"))
-      .toBe("smba-attendance-draft-v1:staff-date:2026-08-21")
+    expect(playerAttendanceDraftKey(headCoach, "occurrence-1"))
+      .toBe("smba-attendance-draft-v1:account:head-coach:occurrence:occurrence-1")
+    expect(staffAttendanceDraftKey(headCoach, "2026-08-21"))
+      .toBe("smba-attendance-draft-v1:account:head-coach:staff-date:2026-08-21")
   })
 
   it("round-trips a player register and re-attaches its occurrence", () => {
     const { storage } = fakeStorage()
 
-    persistPlayerAttendanceDraft("occurrence-1", playerMarks, { now: markedAt, storage })
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
 
-    expect(readPlayerAttendanceDraft("occurrence-1", { now: markedAt, storage }))
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { now: markedAt, storage }))
       .toEqual(playerMarks)
   })
 
@@ -86,35 +90,101 @@ describe("attendance draft storage keys", () => {
       { choice: "present" as const, coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "cleared" as const },
     ]
 
-    persistStaffAttendanceDraft("2026-08-21", drafts, { now: markedAt, storage })
+    persistStaffAttendanceDraft(headCoach, "2026-08-21", drafts, { now: markedAt, storage })
 
-    expect(readStaffAttendanceDraft("2026-08-21", { now: markedAt, storage })).toEqual(drafts)
+    expect(readStaffAttendanceDraft(headCoach, "2026-08-21", { now: markedAt, storage })).toEqual(drafts)
   })
 
   it("never surfaces a draft under another occurrence or date", () => {
     const { storage } = fakeStorage()
 
-    persistPlayerAttendanceDraft("occurrence-1", playerMarks, { now: markedAt, storage })
-    persistStaffAttendanceDraft("2026-08-21", [
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
+    persistStaffAttendanceDraft(headCoach, "2026-08-21", [
       { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "cleared" },
     ], { now: markedAt, storage })
 
-    expect(readPlayerAttendanceDraft("occurrence-2", { now: markedAt, storage })).toEqual([])
-    expect(readStaffAttendanceDraft("2026-08-22", { now: markedAt, storage })).toEqual([])
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-2", { now: markedAt, storage })).toEqual([])
+    expect(readStaffAttendanceDraft(headCoach, "2026-08-22", { now: markedAt, storage })).toEqual([])
   })
 
   it("discards a record whose stored context disagrees with its key", () => {
-    const key = staffAttendanceDraftKey("2026-08-22")
+    const key = staffAttendanceDraftKey(headCoach, "2026-08-22")
     const { entries, storage } = fakeStorage({
       [key]: JSON.stringify({
+        account: headCoach,
         context: "2026-08-21",
         marks: [{ choice: "present", expected: "cleared", subject: "coach-1" }],
         savedAt: markedAt,
       }),
     })
 
-    expect(readStaffAttendanceDraft("2026-08-22", { now: markedAt, storage })).toEqual([])
+    expect(readStaffAttendanceDraft(headCoach, "2026-08-22", { now: markedAt, storage })).toEqual([])
     expect(entries.has(key)).toBe(false)
+  })
+})
+
+// A courtside tablet is shared. A draft another coach left on it must never
+// come back for the next one, who would save those marks as their own.
+describe("attendance drafts belong to the account that made them", () => {
+  const otherCoach = "other-coach"
+
+  it("never restores another account's player or staff draft", () => {
+    const { storage } = fakeStorage()
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
+    persistStaffAttendanceDraft(headCoach, "2026-08-21", [
+      { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "cleared" },
+    ], { now: markedAt, storage })
+
+    expect(readPlayerAttendanceDraft(otherCoach, "occurrence-1", { now: markedAt, storage })).toEqual([])
+    expect(readStaffAttendanceDraft(otherCoach, "2026-08-21", { now: markedAt, storage })).toEqual([])
+    // Still there for the coach who made them.
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { now: markedAt, storage }))
+      .toEqual(playerMarks)
+    expect(readStaffAttendanceDraft(headCoach, "2026-08-21", { now: markedAt, storage }))
+      .toHaveLength(1)
+  })
+
+  it("discards a record whose stored account disagrees with its key", () => {
+    const key = playerAttendanceDraftKey(otherCoach, "occurrence-1")
+    const { entries, storage } = fakeStorage({
+      [key]: JSON.stringify({
+        account: headCoach,
+        context: "occurrence-1",
+        marks: [{ choice: "present", expected: "cleared", subject: "player-1" }],
+        savedAt: markedAt,
+      }),
+    })
+
+    expect(readPlayerAttendanceDraft(otherCoach, "occurrence-1", { now: markedAt, storage })).toEqual([])
+    expect(entries.has(key)).toBe(false)
+  })
+
+  it("prunes a draft stored before drafts carried their account", () => {
+    const legacy = "smba-attendance-draft-v1:occurrence:occurrence-1"
+    const { entries, storage } = fakeStorage({
+      [legacy]: JSON.stringify({
+        context: "occurrence-1",
+        marks: [{ choice: "present", expected: "cleared", subject: "player-1" }],
+        savedAt: markedAt,
+      }),
+    })
+
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { now: markedAt, storage })).toEqual([])
+    expect(entries.has(legacy)).toBe(false)
+  })
+
+  it("clears every account's drafts on sign-out and nothing else", () => {
+    const { entries, storage } = fakeStorage({ "smba-coach-report-resume-v1": "{}" })
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
+    persistPlayerAttendanceDraft(otherCoach, "occurrence-2", playerMarks, { now: markedAt, storage })
+    persistStaffAttendanceDraft(headCoach, "2026-08-21", [
+      { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "cleared" },
+    ], { now: markedAt, storage })
+
+    clearAttendanceDrafts(storage)
+
+    expect([...entries.keys()]).toEqual(["smba-coach-report-resume-v1"])
+    expect(() => clearAttendanceDrafts(null)).not.toThrow()
   })
 })
 
@@ -122,9 +192,9 @@ describe("attendance draft staleness", () => {
   it("keeps a draft inside its lifetime", () => {
     const { storage } = fakeStorage()
 
-    persistPlayerAttendanceDraft("occurrence-1", playerMarks, { now: markedAt, storage })
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
 
-    expect(readPlayerAttendanceDraft("occurrence-1", {
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", {
       now: markedAt + ATTENDANCE_DRAFT_LIFETIME_MS - 1_000,
       storage,
     })).toEqual(playerMarks)
@@ -133,9 +203,9 @@ describe("attendance draft staleness", () => {
   it("drops and removes a draft older than its lifetime", () => {
     const { entries, storage } = fakeStorage()
 
-    persistPlayerAttendanceDraft("occurrence-1", playerMarks, { now: markedAt, storage })
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
 
-    expect(readPlayerAttendanceDraft("occurrence-1", {
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", {
       now: markedAt + ATTENDANCE_DRAFT_LIFETIME_MS + 1,
       storage,
     })).toEqual([])
@@ -145,27 +215,27 @@ describe("attendance draft staleness", () => {
   it("drops a draft stamped in the future by a device whose clock moved back", () => {
     const { storage } = fakeStorage()
 
-    persistPlayerAttendanceDraft("occurrence-1", playerMarks, {
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, {
       now: markedAt + ATTENDANCE_DRAFT_LIFETIME_MS * 2,
       storage,
     })
 
-    expect(readPlayerAttendanceDraft("occurrence-1", { now: markedAt, storage })).toEqual([])
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { now: markedAt, storage })).toEqual([])
   })
 
   it("prunes expired drafts and leaves live ones and unrelated keys alone", () => {
     const { entries, storage } = fakeStorage({ "smba-coach-report-resume-v1": "{}" })
 
-    persistPlayerAttendanceDraft("occurrence-old", playerMarks, {
+    persistPlayerAttendanceDraft(headCoach, "occurrence-old", playerMarks, {
       now: markedAt - ATTENDANCE_DRAFT_LIFETIME_MS - 1,
       storage,
     })
-    persistPlayerAttendanceDraft("occurrence-1", playerMarks, { now: markedAt, storage })
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
 
     pruneExpiredAttendanceDrafts(storage, markedAt)
 
     expect([...entries.keys()].sort()).toEqual([
-      "smba-attendance-draft-v1:occurrence:occurrence-1",
+      "smba-attendance-draft-v1:account:head-coach:occurrence:occurrence-1",
       "smba-coach-report-resume-v1",
     ])
   })
@@ -177,35 +247,44 @@ describe("attendance draft payload validation", () => {
     expect(parseAttendanceDraft("not-json")).toBeNull()
     expect(parseAttendanceDraft(JSON.stringify({ context: "occurrence-1" }))).toBeNull()
     expect(parseAttendanceDraft(JSON.stringify({
+      account: headCoach,
       context: "occurrence-1",
       marks: [{ choice: "maybe", expected: "cleared", subject: "player-1" }],
       savedAt: markedAt,
     }))).toBeNull()
     expect(parseAttendanceDraft(JSON.stringify({
+      account: headCoach,
       context: "occurrence-1",
       marks: [{ choice: "present", expected: "cleared" }],
       savedAt: markedAt,
     }))).toBeNull()
     expect(parseAttendanceDraft(JSON.stringify({
+      account: headCoach,
       context: "occurrence-1",
       marks: [{ choice: "present", expected: "cleared", subject: "player-1" }],
       savedAt: "recently",
     }))).toBeNull()
+    // A draft from before drafts carried the account that made them.
+    expect(parseAttendanceDraft(JSON.stringify({
+      context: "occurrence-1",
+      marks: [{ choice: "present", expected: "cleared", subject: "player-1" }],
+      savedAt: markedAt,
+    }))).toBeNull()
   })
 
   it("removes a stored register it can no longer read", () => {
-    const key = playerAttendanceDraftKey("occurrence-1")
+    const key = playerAttendanceDraftKey(headCoach, "occurrence-1")
     const { entries, storage } = fakeStorage({ [key]: "{ truncated" })
 
-    expect(readPlayerAttendanceDraft("occurrence-1", { now: markedAt, storage })).toEqual([])
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { now: markedAt, storage })).toEqual([])
     expect(entries.has(key)).toBe(false)
   })
 
   it("clears the stored register when the last mark is undone", () => {
     const { entries, storage } = fakeStorage()
 
-    persistPlayerAttendanceDraft("occurrence-1", playerMarks, { now: markedAt, storage })
-    persistPlayerAttendanceDraft("occurrence-1", [], { now: markedAt, storage })
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", [], { now: markedAt, storage })
 
     expect(entries.size).toBe(0)
   })
@@ -229,43 +308,44 @@ describe("attendance draft storage failure modes", () => {
   })
 
   it("keeps the register working when storage is absent", () => {
-    expect(() => persistPlayerAttendanceDraft("occurrence-1", playerMarks, { storage: null }))
+    expect(() => persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { storage: null }))
       .not.toThrow()
-    expect(() => discardStaffAttendanceDraft("2026-08-21", { storage: null })).not.toThrow()
-    expect(readPlayerAttendanceDraft("occurrence-1", { storage: null })).toEqual([])
+    expect(() => discardStaffAttendanceDraft(headCoach, "2026-08-21", { storage: null })).not.toThrow()
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { storage: null })).toEqual([])
   })
 
   it("keeps the register working when every write is refused", () => {
     const { storage } = fakeStorage({}, () => true)
 
-    expect(() => persistPlayerAttendanceDraft("occurrence-1", playerMarks, {
+    expect(() => persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, {
       now: markedAt,
       storage,
     })).not.toThrow()
-    expect(readPlayerAttendanceDraft("occurrence-1", { now: markedAt, storage })).toEqual([])
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { now: markedAt, storage })).toEqual([])
   })
 
   // The registers word their leave prompt from this: "kept on this device" is
   // only said when the device really kept the marks.
   it("reports whether the device kept the draft", () => {
-    expect(persistPlayerAttendanceDraft("occurrence-1", playerMarks, {
+    expect(persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, {
       now: markedAt,
       storage: fakeStorage().storage,
     })).toBe(true)
-    expect(persistPlayerAttendanceDraft("occurrence-1", playerMarks, {
+    expect(persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, {
       now: markedAt,
       storage: fakeStorage({}, () => true).storage,
     })).toBe(false)
-    expect(persistStaffAttendanceDraft("2026-08-21", [
+    expect(persistStaffAttendanceDraft(headCoach, "2026-08-21", [
       { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "cleared" },
     ], { now: markedAt, storage: null })).toBe(false)
   })
 
   it("clears expired drafts and retries once when the quota is exhausted", () => {
-    const stale = playerAttendanceDraftKey("occurrence-old")
+    const stale = playerAttendanceDraftKey(headCoach, "occurrence-old")
     const { entries, storage, writeAttempts } = fakeStorage(
       {
         [stale]: JSON.stringify({
+          account: headCoach,
           context: "occurrence-old",
           marks: [{ choice: "present", expected: "cleared", subject: "player-9" }],
           savedAt: markedAt - ATTENDANCE_DRAFT_LIFETIME_MS - 1,
@@ -274,16 +354,16 @@ describe("attendance draft storage failure modes", () => {
       (current) => current.has(stale),
     )
 
-    persistPlayerAttendanceDraft("occurrence-1", playerMarks, { now: markedAt, storage })
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", playerMarks, { now: markedAt, storage })
 
     expect(writeAttempts()).toBe(2)
     expect(entries.has(stale)).toBe(false)
-    expect(readPlayerAttendanceDraft("occurrence-1", { now: markedAt, storage }))
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { now: markedAt, storage }))
       .toEqual(playerMarks)
   })
 
   it("returns no draft when a read throws mid-flight", () => {
-    const key = playerAttendanceDraftKey("occurrence-1")
+    const key = playerAttendanceDraftKey(headCoach, "occurrence-1")
     const { storage } = fakeStorage({ [key]: "{}" })
     const throwing: Storage = {
       ...storage,
@@ -293,7 +373,7 @@ describe("attendance draft storage failure modes", () => {
       },
     }
 
-    expect(readPlayerAttendanceDraft("occurrence-1", { now: markedAt, storage: throwing }))
+    expect(readPlayerAttendanceDraft(headCoach, "occurrence-1", { now: markedAt, storage: throwing }))
       .toEqual([])
   })
 })
@@ -439,6 +519,21 @@ const { PlayerAttendanceRecorder } = await import(
 )
 const { StaffRollCall } = await import("@/components/coach/attendance/staff-roll-call")
 
+const ishaan = {
+  accountId: "coach-1",
+  fullName: "Ishaan Rao",
+  initials: "IR",
+  joinedOn: "2026-01-05",
+}
+
+// The day's staff card, closed above the session as it sits on the Mark tab.
+const staffDay = {
+  closedFor: null,
+  juniorCoaches: [ishaan],
+  records: [{ choice: "present" as const, coachAccountId: "coach-1" }],
+  referenceDate: "2026-08-23",
+}
+
 /**
  * Both registers defer the read to a timer, as the report resume hint does, so
  * the stub collects timers and the test runs them where a browser would.
@@ -510,14 +605,17 @@ describe("attendance registers restore their own drafts", () => {
 
     stubBrowser(storage).mount(
       <PlayerAttendanceRecorder
+        accountId={headCoach}
         initialDate="2026-08-21"
         initialFromCalendar={false}
         initialOccurrenceId="occurrence-1"
         initialReferenceInstant={Date.parse("2026-08-21T12:00:00.000Z")}
+        initialStaffOpen={false}
+        staff={staffDay}
       />,
     )
 
-    expect(reads).toContain("smba-attendance-draft-v1:occurrence:occurrence-1")
+    expect(reads).toContain("smba-attendance-draft-v1:account:head-coach:occurrence:occurrence-1")
   })
 
   it("reads the staff draft for the selected date rather than today", () => {
@@ -525,21 +623,41 @@ describe("attendance registers restore their own drafts", () => {
 
     stubBrowser(storage).mount(
       <StaffRollCall
+        accountId={headCoach}
         closedFor={null}
-        initialDate="2026-08-21"
+        dateKey="2026-08-21"
         initialRecords={[]}
-        juniorCoaches={[{
-          accountId: "coach-1",
-          fullName: "Ishaan Rao",
-          initials: "IR",
-          joinedOn: "2026-01-05",
-        }]}
+        juniorCoaches={[ishaan]}
+        open
         referenceDate="2026-08-23"
+        onToggle={() => {}}
       />,
     )
 
-    expect(reads).toContain("smba-attendance-draft-v1:staff-date:2026-08-21")
-    expect(reads).not.toContain("smba-attendance-draft-v1:staff-date:2026-08-23")
+    expect(reads).toContain("smba-attendance-draft-v1:account:head-coach:staff-date:2026-08-21")
+    expect(reads).not.toContain("smba-attendance-draft-v1:account:head-coach:staff-date:2026-08-23")
+  })
+
+  // The staff card sits closed at the top of the Mark tab; its marks come back
+  // when it is opened, as a session's do when it is chosen, never into a card
+  // the coach cannot see.
+  it("leaves the staff draft alone while the staff card is closed", () => {
+    const { reads, storage } = fakeStorage()
+
+    stubBrowser(storage).mount(
+      <StaffRollCall
+        accountId={headCoach}
+        closedFor={null}
+        dateKey="2026-08-21"
+        initialRecords={[]}
+        juniorCoaches={[ishaan]}
+        open={false}
+        referenceDate="2026-08-23"
+        onToggle={() => {}}
+      />,
+    )
+
+    expect(reads).not.toContain("smba-attendance-draft-v1:account:head-coach:staff-date:2026-08-21")
   })
 
   // Four days is well inside the seven-day lifetime and long enough for the
@@ -554,7 +672,7 @@ describe("attendance registers restore their own drafts", () => {
   // elsewhere" is counted from, and both readers rebase, so correcting storage
   // would buy nothing and cost the warning.
   function seedMovedPlayerDraft(storage: Storage) {
-    persistPlayerAttendanceDraft("occurrence-1", [
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", [
       { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
       { choice: "present", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-2" },
     ], { now: markedFourDaysAgo(), storage })
@@ -567,16 +685,19 @@ describe("attendance registers restore their own drafts", () => {
   function mountRecorder(storage: Storage) {
     return stubBrowser(storage).mount(
       <PlayerAttendanceRecorder
+        accountId={headCoach}
         initialDate="2026-08-21"
         initialFromCalendar={false}
         initialOccurrenceId="occurrence-1"
         initialReferenceInstant={Date.parse("2026-08-21T12:00:00.000Z")}
+        initialStaffOpen={false}
+        staff={staffDay}
       />,
     )
   }
 
   function seedMovedStaffDraft(storage: Storage) {
-    persistStaffAttendanceDraft("2026-08-21", [
+    persistStaffAttendanceDraft(headCoach, "2026-08-21", [
       { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "cleared" },
     ], { now: markedFourDaysAgo(), storage })
   }
@@ -584,16 +705,14 @@ describe("attendance registers restore their own drafts", () => {
   function mountRollCall(storage: Storage) {
     return stubBrowser(storage).mount(
       <StaffRollCall
+        accountId={headCoach}
         closedFor={null}
-        initialDate="2026-08-21"
+        dateKey="2026-08-21"
         initialRecords={[{ choice: "present", coachAccountId: "coach-1" }]}
-        juniorCoaches={[{
-          accountId: "coach-1",
-          fullName: "Ishaan Rao",
-          initials: "IR",
-          joinedOn: "2026-01-05",
-        }]}
+        juniorCoaches={[ishaan]}
+        open
         referenceDate="2026-08-23"
+        onToggle={() => {}}
       />,
     )
   }
@@ -605,6 +724,18 @@ describe("attendance registers restore their own drafts", () => {
   const movedStaffNotice = "1 unsaved change restored from an earlier visit."
     + " 1 was marked differently elsewhere since."
     + " Nothing is recorded until you save staff attendance"
+
+  it("does not restore another account's draft into the register", () => {
+    const { storage } = fakeStorage()
+    persistPlayerAttendanceDraft("other-coach", "occurrence-1", [
+      { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
+    ], { now: markedFourDaysAgo(), storage })
+
+    const restore = mountRecorder(storage)
+
+    expect(restore.marks).toEqual([])
+    expect(restore.notice).toBeUndefined()
+  })
 
   it("restores a player draft the register it comes back to can still save", () => {
     const { storage } = fakeStorage()
@@ -679,7 +810,7 @@ describe("attendance registers restore their own drafts", () => {
    */
   it("leaves out restored marks the register cannot show, and says so", () => {
     const { storage } = fakeStorage()
-    persistPlayerAttendanceDraft("occurrence-1", [
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", [
       { choice: "present", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
       { choice: "present", expectedChoice: "absent", occurrenceId: "occurrence-1", playerId: "player-2" },
       { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-left" },
@@ -707,7 +838,7 @@ describe("attendance registers restore their own drafts", () => {
 
   it("drops a stored draft made only of marks the register cannot show", () => {
     const { entries, storage } = fakeStorage()
-    persistPlayerAttendanceDraft("occurrence-1", [
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", [
       { choice: "absent", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-left" },
     ], { now: markedFourDaysAgo(), storage })
 
@@ -718,14 +849,14 @@ describe("attendance registers restore their own drafts", () => {
       "Unsaved marks from an earlier visit were found."
       + " 1 mark was left out because it can no longer be marked here.",
     )
-    expect(entries.has(playerAttendanceDraftKey("occurrence-1"))).toBe(false)
+    expect(entries.has(playerAttendanceDraftKey(headCoach, "occurrence-1"))).toBe(false)
   })
 
   // A holiday recorded after the fact cancels the session; the register then
   // shows no roster and cannot save, so the marks are not put back on it.
   it("does not restore marks onto a session cancelled since", () => {
     const { entries, storage } = fakeStorage()
-    persistPlayerAttendanceDraft("occurrence-1", [
+    persistPlayerAttendanceDraft(headCoach, "occurrence-1", [
       { choice: "present", expectedChoice: "cleared", occurrenceId: "occurrence-1", playerId: "player-1" },
     ], { now: markedFourDaysAgo(), storage })
     recorderFixture.occurrence.status = "cancelled"
@@ -733,7 +864,7 @@ describe("attendance registers restore their own drafts", () => {
       const restore = mountRecorder(storage)
       expect(restore.marks).toEqual([])
       expect(restore.notice).toContain("cannot be saved because this session was cancelled")
-      expect(entries.has(playerAttendanceDraftKey("occurrence-1"))).toBe(true)
+      expect(entries.has(playerAttendanceDraftKey(headCoach, "occurrence-1"))).toBe(true)
     } finally {
       recorderFixture.occurrence.status = "scheduled"
     }
@@ -742,7 +873,7 @@ describe("attendance registers restore their own drafts", () => {
   // An assistant coach archived or promoted since has no row on the roll call.
   it("leaves out staff marks for an assistant coach no longer listed", () => {
     const { storage } = fakeStorage()
-    persistStaffAttendanceDraft("2026-08-21", [
+    persistStaffAttendanceDraft(headCoach, "2026-08-21", [
       { choice: "absent", coachAccountId: "coach-1", dateKey: "2026-08-21", expectedChoice: "present" },
       { choice: "present", coachAccountId: "coach-gone", dateKey: "2026-08-21", expectedChoice: "cleared" },
     ], { now: markedFourDaysAgo(), storage })

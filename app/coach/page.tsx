@@ -22,6 +22,11 @@ import {
 } from "@/lib/auth/current-coach"
 import { countActiveCoachAnnouncements } from "@/lib/announcements/queries"
 import { listAssessmentHome } from "@/lib/assessments/queries"
+import { countAttendanceAdjustmentsRequiringReview } from "@/lib/attendance/adjustments"
+import {
+  daySessionsMarked,
+  rosterProgressForOccurrences,
+} from "@/lib/attendance/recording-workspace"
 import { academyNow } from "@/lib/clock"
 import { getIndiaDateKey } from "@/lib/coach/attendance-rules"
 import {
@@ -31,7 +36,9 @@ import {
 } from "@/lib/coach/database"
 import {
   getStaffAttendanceSummary,
+  listJuniorCoachProfiles,
   listStaffAttendanceRecords,
+  listStaffAttendanceRecordsByCoach,
 } from "@/lib/coach/staff-attendance"
 import {
   getCoachFinanceDashboardSummary,
@@ -46,9 +53,12 @@ import {
   formatSessionLabel,
 } from "@/lib/format"
 import { currentGreeting } from "@/lib/greeting"
-import { listAcademyHolidaysInWindow } from "@/lib/sessions/database"
+import {
+  listAcademyHolidaysInWindow,
+  listSessionAttendanceRecordsForOccurrences,
+} from "@/lib/sessions/database"
 import { resolveNextScheduledOccurrence } from "@/lib/sessions/domain"
-import { scheduleIsRunning } from "@/lib/sessions/term"
+import { countRegistrationRequestsExpiringSoon } from "@/lib/telemetry/retention"
 import { listTermFinishedPlayersToMove } from "@/lib/training/member-summaries"
 
 export const metadata = {
@@ -102,12 +112,6 @@ export default async function CoachDashboardPage({
         `${years[years.length - 1]}-12-31`,
       ),
       joinedOn: access.joinedOn,
-      monthLabel: formatDateKey(`${month}-01`, {
-        day: undefined,
-        month: "long",
-        weekday: undefined,
-        year: "numeric",
-      }),
       referenceDate,
       records: records.map((record) => ({
         choice: record.choice,
@@ -200,12 +204,33 @@ export default async function CoachDashboardPage({
     now,
   })
   const playerRecords = listOperationalPlayerRecords(undefined, today)
+  // Today's registers, counted by the rule the Mark tab's day line uses.
+  const todaySessionsMarked = daySessionsMarked(todaySessions, rosterProgressForOccurrences({
+    assignments: sessionSnapshot.sessionAssignments,
+    occurrences: todaySessions,
+    players: playerRecords.members.map((member) => ({
+      id: member.id,
+      joinedOn: member.trainingStartOn,
+    })),
+    records: listSessionAttendanceRecordsForOccurrences(todaySessions.map((occurrence) => occurrence.id)),
+  }))
+  // Staff roll call as the Staff tab draws it: assistant coaches who had joined
+  // by today, and nobody to mark on a day the academy is closed.
+  const closedToday = listAcademyHolidaysInWindow(today, today).length > 0
+  const staffOnRoll = closedToday
+    ? []
+    : listJuniorCoachProfiles({ requesterAccountId: identity.subjectId })
+      .filter((coach) => coach.joinedOn <= today)
+  const staffMarkedCount = [...listStaffAttendanceRecordsByCoach({
+    requesterAccountId: identity.subjectId,
+    coachAccountIds: staffOnRoll.map((coach) => coach.accountId),
+    from: today,
+    to: today,
+  }).values()].filter((records) => records.some((record) => record.choice !== "cleared")).length
   // Players still on a schedule whose last day has passed. Nothing moves them
   // by itself, so they are the head coach's to-do until a move or an end is
   // booked for them in Members (or happens straight away).
   const termFinishedCount = listTermFinishedPlayersToMove(playerRecords.trainingProfiles).length
-  // Ended schedules and ones whose term has finished are not counted.
-  const runningScheduleCount = series.filter((item) => scheduleIsRunning(item, today)).length
   const assessments = listAssessmentHome(identity.subjectId)
   // The card counts only players training now.
   const assessablePlayers = assessments.players.filter((player) => !player.offSchedule)
@@ -235,8 +260,16 @@ export default async function CoachDashboardPage({
       />
       <CoachDashboardStack id="attendance">
         <TermFinishedCard playerCount={termFinishedCount} />
-        <AttendanceCard scheduleCount={runningScheduleCount} />
-        <PlayerOnboardingCard summary={onboardingSummary} />
+        <AttendanceCard
+          dateLabel={dateLabel}
+          makeupsToReview={countAttendanceAdjustmentsRequiringReview()}
+          sessions={todaySessionsMarked}
+          staff={{ marked: staffMarkedCount, total: staffOnRoll.length }}
+        />
+        <PlayerOnboardingCard
+          expiringRequests={countRegistrationRequestsExpiringSoon()}
+          summary={onboardingSummary}
+        />
         <FinancialsCard
           active={financeActive}
           attentionCount={finance.attentionCount}

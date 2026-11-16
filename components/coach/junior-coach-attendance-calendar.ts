@@ -5,6 +5,7 @@ export type JuniorCoachAttendanceCalendarState =
   | "present"
   | "absent"
   | "unmarked"
+  | "upcoming"
   | "unavailable"
   | "closed"
 
@@ -34,6 +35,7 @@ const stateLabels: Record<JuniorCoachAttendanceCalendarState, string> = {
   present: "present",
   absent: "absent",
   unmarked: "not recorded",
+  upcoming: "upcoming",
   unavailable: "not available",
   closed: "academy closed",
 }
@@ -56,15 +58,18 @@ export function buildJuniorCoachAttendanceCalendar(
 
   const days: JuniorCoachAttendanceCalendarDay[] = dateKeys.map((key) => {
     const keyYear = Number(key.slice(0, 4))
-    const available = loadedYears.has(keyYear)
-      && key >= attendance.joinedOn
-      && key <= attendance.referenceDate
+    const onRecord = loadedYears.has(keyYear) && key >= attendance.joinedOn
     // A closed day is closed, not "not recorded", and it leaves the count; a
-    // mark saved before the closure is kept but not shown.
-    const holiday = available ? holidayByDate.get(key) : undefined
-    const state: JuniorCoachAttendanceCalendarState = !available
+    // mark saved before the closure is kept but not shown. A closure already
+    // booked for a later day shows too.
+    const holiday = onRecord ? holidayByDate.get(key) : undefined
+    const state: JuniorCoachAttendanceCalendarState = !onRecord
       ? "unavailable"
-      : holiday ? "closed" : choices.get(key) ?? "unmarked"
+      : holiday
+        ? "closed"
+        : key > attendance.referenceDate
+          ? "upcoming"
+          : choices.get(key) ?? "unmarked"
 
     return {
       key,

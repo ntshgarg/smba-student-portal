@@ -20,8 +20,11 @@ function displayCount(value: number) {
 }
 
 export function PlayerOnboardingCard({
+  expiringRequests = 0,
   summary,
 }: {
+  /** Undecided or rejected requests deleted within a week (lib/telemetry/retention.ts). */
+  expiringRequests?: number
   summary: PlayerOnboardingSummary
 }) {
   const accountLabel = summary.total === 1 ? "person needs" : "people need"
@@ -54,9 +57,11 @@ export function PlayerOnboardingCard({
     >
       <div className={styles.layout}>
         <CoachDashboardSummary
-          detail={notStarted
-            ? "Players and assistant coaches request access themselves. Their requests arrive here for approval, assessment, session and Fee Plan."
-            : "Approve staff access and move players through assessment, session and Fee Plan."}
+          detail={expiringRequests
+            ? `${expiringRequests} join ${expiringRequests === 1 ? "request" : "requests"} will be removed in 7 days. Open onboarding to decide ${expiringRequests === 1 ? "it" : "them"}, or to undo a rejection.`
+            : notStarted
+              ? "Players and assistant coaches request access themselves. Their requests arrive here for approval, assessment, session and Fee Plan."
+              : "Approve staff access and move players through assessment, session and Fee Plan."}
         >
           {summary.total
             ? `${summary.total} ${accountLabel} a next step`
@@ -75,7 +80,7 @@ export function PlayerOnboardingCard({
         </dl>
 
         <CoachDashboardActions ariaLabel="Academy onboarding actions">
-          <CoachDashboardAction href="/coach/onboarding" primary={summary.newRequests > 0}>
+          <CoachDashboardAction href="/coach/onboarding" primary={summary.newRequests > 0 || expiringRequests > 0}>
             Open onboarding
           </CoachDashboardAction>
         </CoachDashboardActions>

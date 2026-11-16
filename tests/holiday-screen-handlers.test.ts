@@ -31,6 +31,7 @@ vi.mock("react", async () => {
     useEffect: (effect: () => void | (() => void)) => {
       hooks.effects.push(effect)
     },
+    useImperativeHandle: () => {},
     useMemo: (factory: () => unknown) => factory(),
     useRef: (initial: unknown) => ({ current: initial === undefined ? null : initial }),
     useState: (initial: unknown) => {
@@ -100,16 +101,19 @@ afterEach(() => {
   portal.readStaffAttendanceDraft.mockReturnValue([])
 })
 
-describe("the staff roll call on a closed day", () => {
+describe("the staff card on a closed day", () => {
   const ravi = { accountId: "ravi", fullName: "Ravi Kumar", initials: "RK", joinedOn: "2026-01-05" }
 
   function renderRollCall(closedFor: string | null) {
     hooks.reset()
     const tree = StaffRollCall({
+      accountId: "head-coach",
       closedFor,
-      initialDate: "2026-11-10",
+      dateKey: "2026-11-10",
       initialRecords: [{ choice: "absent", coachAccountId: "ravi" }],
       juniorCoaches: [ravi],
+      onToggle: () => {},
+      open: true,
       referenceDate: "2026-11-13",
     }) as AnyElement
     const all = elements(tree)
@@ -157,7 +161,7 @@ describe("the staff roll call on a closed day", () => {
     // An open day still restores them.
     renderRollCall(null)
     runEffects()
-    expect(portal.readStaffAttendanceDraft).toHaveBeenCalledWith("2026-11-10")
+    expect(portal.readStaffAttendanceDraft).toHaveBeenCalledWith("head-coach", "2026-11-10")
   })
 
   it("ignores a press on a closed day", () => {

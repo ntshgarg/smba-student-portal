@@ -230,9 +230,9 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["app/portal.css", "", ".login-field input", "16px"],
   ["app/portal.css", "@media (max-width: 760px)", ".security-form input", "16px"],
   ["app/portal.css", "@media (max-width: 430px)", ".admin-directory-search-field input", "16px"],
-  ["app/portal.css", "@media (max-width: 760px)", ".attendance-record-date-row input", "16px"],
-  ["app/portal.css", "@media (max-width: 720px), (pointer: coarse)", '.attendance-record-date-row input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])', "16px"],
+  ["app/portal.css", "@media (max-width: 720px), (pointer: coarse)", '.coach-series-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])', "16px"],
   ["app/public-home.css", "@media (max-width: 900px)", ".form-field input", "16px"],
+  ["components/coach/attendance/mark.module.css", "@media (max-width: 720px), (pointer: coarse)", ".pick input", "16px"],
   ["components/coach/announcements/announcements.module.css", "", ".slipField input", "16px"],
   ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px)", ".slipField input", "16px"],
   ["components/coach/announcements/announcements.module.css", "@media (max-width: 720px)", ".slipField textarea", "17px"], // 1.0625rem = 9.6px
@@ -245,6 +245,8 @@ const CONTROL_FLOOR: readonly ControlFloor[] = [
   ["components/coach/financials/financials.module.css", "@media (max-width: 720px)", ".balanceMetric > strong", "30px"], // the one with nothing to protect
   ["components/coach/financials/financials.module.css", "@media (max-width: 720px), (pointer: coarse)", ".balanceField input", "16px"],
   ["components/coach/onboarding/player-onboarding-register.module.css", "@media (max-width: 700px)", ".threeFieldGrid select", "16px"],
+  ["components/coach/attendance-adjustments-workspace.module.css", "@media (max-width: 720px), (pointer: coarse)", ".playerField select", "16px"],
+  ["components/coach/attendance-register.module.css", "@media (max-width: 720px), (pointer: coarse)", ".pill select", "16px"],
   // The touch half of the focus-zoom floor, lifted out of the width-only blocks that
   // could not reach a tablet or a landscape phone. Each is the same declaration as the
   // (max-width: N) entry above it, repeated under (pointer: coarse) alone; only the

@@ -13,6 +13,7 @@ import type { SmbaDatabase } from "@/lib/db/client"
 import * as schema from "@/lib/db/schema"
 import { INITIAL_COACH_ACCOUNT_ID, seedDatabase } from "@/lib/db/seed"
 import {
+  countRegistrationRequestsExpiringSoon,
   purgeExpiredTelemetry,
   purgeExpiredTelemetryOccasionally,
   resetTelemetryPurgeThrottle,
@@ -300,6 +301,20 @@ describe("retention of rejected and abandoned registration requests", () => {
 
     expect(purgeExpiredTelemetry({ database, now: NOW }).registrationRequests).toBe(1)
     expect(accountIds()).toEqual([INITIAL_COACH_ACCOUNT_ID, "pending-recent", "put-back"].sort())
+  })
+
+  it("tells the head coach how many requests go within the next 7 days", () => {
+    addRegistrationRequest("pending-due", { createdAt: day(85) })
+    addRegistrationRequest("rejected-due", { createdAt: day(200), rejectedAt: day(84) })
+    addRegistrationRequest("pending-later", { createdAt: day(82) })
+    addRegistrationRequest("rejected-later", { createdAt: day(200), rejectedAt: day(60) })
+
+    expect(countRegistrationRequestsExpiringSoon({ database, now: NOW })).toBe(2)
+    // Counting deletes nothing; a week on, the purge removes exactly those two.
+    expect(accountIds()).toHaveLength(5)
+    expect(purgeExpiredTelemetry({ database, now: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000) })
+      .registrationRequests).toBe(2)
+    expect(accountIds()).toEqual([INITIAL_COACH_ACCOUNT_ID, "pending-later", "rejected-later"].sort())
   })
 
   it("never deletes an approved or archived member, however old", () => {

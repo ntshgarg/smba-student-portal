@@ -1,9 +1,8 @@
 "use client"
 
-import { ArrowLeft, CalendarDays, Check, RotateCcw, UsersRound } from "lucide-react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { Check, ChevronRight, RotateCcw, UsersRound, X } from "lucide-react"
+import type { Ref } from "react"
+import { useEffect, useImperativeHandle, useMemo, useState } from "react"
 
 import { saveStaffAttendanceAction } from "@/app/coach/actions"
 import {
@@ -28,14 +27,16 @@ import type {
 } from "@/lib/coach/staff-attendance"
 import { formatDateKey } from "@/lib/format"
 
-type StaffMember = {
+import styles from "./mark.module.css"
+
+export type StaffMember = {
   accountId: string
   fullName: string
   initials: string
   joinedOn: string
 }
 
-type StaffRecord = {
+export type StaffRecord = {
   choice: StaffAttendanceChoice
   coachAccountId: string
 }
@@ -50,20 +51,20 @@ const choices: Array<{
 
 /**
  * The prompt for leaving with marks the coach has not saved. Hoisted because
- * `chooseDate` now hands it back to `confirmDiscard` explicitly: the surface
- * message the guard uses for everything else becomes the expiry's own wording
- * while a refused save stands, and that wording must not reach this path.
- * Confirming here really does discard the marks -- `chooseDate` clears the
- * stored draft for the date it is leaving -- so "kept on this device" would be
- * a lie exactly where it costs a register.
+ * `release` hands it back to `confirmDiscard` explicitly: the surface message
+ * the guard uses for everything else becomes the expiry's own wording while a
+ * refused save stands, and that wording must not reach this path. Confirming
+ * here really does discard the marks -- `release` clears the stored draft for
+ * the date -- so "kept on this device" would be a lie exactly where it costs a
+ * register.
  */
 const discardMarksPrompt = "Leave this date and discard the unsaved staff attendance changes?"
 
-/** Leaving the page keeps a stored draft; changing the date discards it. */
+/** Leaving the page keeps a stored draft; closing the card or changing the date discards it. */
 const keptMarksPrompt = "Leave this date? Your unsaved marks are kept on this device"
   + " and come back when you open it again."
 
-/** Shown when the head coach tries to change the date while a save is running. */
+/** Shown when the head coach tries to leave the card while a save is running. */
 const waitForSaveMessage = "Staff attendance is still saving. Wait for it to finish"
   + " before choosing another date."
 
@@ -88,31 +89,73 @@ type SaveFeedback = ActionFeedback & {
  */
 const saveDeadlineMs = 15_000
 
+/**
+ * What the Mark tab asks of the open staff card before it opens another card or
+ * changes the date: `release` answers false while a save is running or when the
+ * coach keeps the unsaved marks, and otherwise discards them, runs `navigate`
+ * through this card's unsaved-work guard and answers true.
+ */
+export type StaffRollCallHandle = {
+  release: (navigate: () => void) => boolean
+}
+
+/** Saved marks out of the coaches who can be marked on the day. */
+export function staffRollCallProgress({
+  dateKey,
+  juniorCoaches,
+  records,
+}: {
+  dateKey: string
+  juniorCoaches: StaffMember[]
+  records: StaffRecord[]
+}) {
+  const markable = juniorCoaches.filter((coach) => dateKey >= coach.joinedOn)
+  const marked = new Set(records
+    .filter((record) => record.choice !== "cleared")
+    .map((record) => record.coachAccountId))
+  return {
+    marked: markable.filter((coach) => marked.has(coach.accountId)).length,
+    total: markable.length,
+  }
+}
+
+/**
+ * The day's staff roll call, the first card on the Mark tab. It opens in place
+ * like a session; the tab keeps one card open at a time and asks this one to
+ * `release` its marks before it opens another or changes the date.
+ */
 export function StaffRollCall({
+  accountId,
   closedFor,
-  initialDate,
+  dateKey,
   initialRecords,
   juniorCoaches,
+  onToggle,
+  open,
+  ref,
   referenceDate,
 }: {
+  /** The signed-in head coach; unsaved marks kept on the device are theirs alone. */
+  accountId: string
   /** The holiday's name when the academy was closed on this date. */
   closedFor: string | null
-  initialDate: string
+  dateKey: string
   initialRecords: StaffRecord[]
   juniorCoaches: StaffMember[]
+  onToggle: () => void
+  open: boolean
+  ref?: Ref<StaffRollCallHandle>
   referenceDate: string
 }) {
-  const router = useRouter()
-  const [selectedDate, setSelectedDate] = useState(initialDate)
   const [records, setRecords] = useState(initialRecords)
   const [drafts, setDrafts] = useState<StaffAttendanceChange[]>([])
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
-  // Answers a date pick held back by a save, or a day that never arrived.
+  // Answers a card or date change held back by a save.
   const [selectionNotice, setSelectionNotice] = useState<ActionFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   // Whether the device holds the marks on screen, from the last write or a restore.
   const [draftKeptOnDevice, setDraftKeptOnDevice] = useState<boolean | undefined>(undefined)
-  const { confirmDiscard } = useUnsavedWorkGuard({
+  const { confirmDiscard, navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty: drafts.length > 0,
     // Leaving the *page* discards nothing while an expiry stands: the marks are
     // on the device, the notice has just said so, and this register is the one
@@ -123,9 +166,6 @@ export function StaffRollCall({
       ?? (draftKeptOnDevice ? keptMarksPrompt : discardMarksPrompt),
     scope: "staff-roll-call",
   })
-  // Until the new day's records arrive, `records` still belong to the old day,
-  // so the list is withheld and nothing can be marked.
-  const isChangingDate = selectedDate !== initialDate
   const storedByCoach = useMemo(
     () => new Map(records.map((record) => [record.coachAccountId, record.choice])),
     [records],
@@ -134,17 +174,17 @@ export function StaffRollCall({
     () => new Map(drafts.map((draft) => [draft.coachAccountId, draft.choice])),
     [drafts],
   )
-  const futureDate = selectedDate > referenceDate
+  const futureDate = dateKey > referenceDate
   // Nothing is marked on a closed day; a mark saved before the closure is
   // kept, uncounted and hidden, and returns if the holiday is removed.
-  const closedDay = Boolean(closedFor) && selectedDate === initialDate
+  const closedDay = Boolean(closedFor)
   // Carried on the save button as `aria-disabled` rather than `disabled`:
   // disabling the element that currently holds focus hands focus to `<body>`,
   // and it is the coach's own press that disables it — so every save, including
   // the failure whose "Save staff attendance again" below is the way back, would
   // send the next Tab to the top of the document. `saveRollCall` reads the same
   // constant, so a press that still reaches the handler does nothing.
-  const cannotSave = !drafts.length || isSaving || futureDate || closedDay || isChangingDate
+  const cannotSave = !drafts.length || isSaving || futureDate || closedDay
   // `aria-disabled` on its own would leave the button a permanent tab stop
   // whose press is a silent no-op, and the footer renders on a future date and
   // with nothing marked yet. So only the in-flight save keeps it tabbable: that
@@ -152,11 +192,16 @@ export function StaffRollCall({
   // not blur an element that already holds focus, so the save that just emptied
   // `drafts` still hands the next Tab to the control after this one.
   const saveOutOfReach = cannotSave && !isSaving
+  // Sticky on a phone only while there is something to save or to report, as on a session.
+  const footerPinned = Boolean(drafts.length || isSaving || feedback)
+  const progress = staffRollCallProgress({ dateKey, juniorCoaches, records })
 
   // The roll call is one day of marks, so the stored copy is keyed by date and
   // can only ever return to the date it was made for — yesterday's marks cannot
   // surface on today's register. Restoring is announced rather than silent:
-  // these are unsaved marks, not the saved record.
+  // these are unsaved marks, not the saved record. It waits for the card to
+  // open, as a session's register waits to be chosen, so marks never come back
+  // into a card the coach cannot see.
   //
   // Read after the mounting render rather than during it, so the server-rendered
   // roll call is what hydrates.
@@ -173,13 +218,13 @@ export function StaffRollCall({
   // twice: it only changes when this register's own save succeeds, and that
   // discards the draft before the effect can run again.
   useEffect(() => {
-    if (closedDay || isChangingDate) return
+    if (!open || closedDay) return
     const timer = window.setTimeout(() => {
-      const stored = readStaffAttendanceDraft(selectedDate)
+      const stored = readStaffAttendanceDraft(accountId, dateKey)
       if (!stored.length) return
       // Only marks for coaches this roll call can mark come back; others are named.
       const markable = new Set(juniorCoaches
-        .filter((coach) => selectedDate >= coach.joinedOn && selectedDate <= referenceDate)
+        .filter((coach) => dateKey >= coach.joinedOn && dateKey <= referenceDate)
         .map((coach) => coach.accountId))
       const restored = stored.filter((change) => markable.has(change.coachAccountId))
       const leftOut = stored.length - restored.length
@@ -189,7 +234,7 @@ export function StaffRollCall({
       )
       if (!rebased.changes.length) {
         if (leftOut) {
-          discardStaffAttendanceDraft(selectedDate)
+          discardStaffAttendanceDraft(accountId, dateKey)
           setFeedback({
             message: leftOutAttendanceDraftNotice(leftOut),
             tone: "info",
@@ -211,7 +256,25 @@ export function StaffRollCall({
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [closedDay, isChangingDate, juniorCoaches, referenceDate, selectedDate, storedByCoach])
+  }, [accountId, closedDay, dateKey, juniorCoaches, open, referenceDate, storedByCoach])
+
+  // A save in flight holds the card open, so its outcome can be shown.
+  useImperativeHandle(ref, () => ({
+    release(navigate) {
+      if (isSaving) {
+        setSelectionNotice({ message: waitForSaveMessage, tone: "info" })
+        return false
+      }
+      setSelectionNotice(null)
+      if (drafts.length && !confirmDiscard(discardMarksPrompt)) return false
+      if (drafts.length) discardStaffAttendanceDraft(accountId, dateKey)
+      setDrafts([])
+      setFeedback(null)
+      // Through the guard, so stepping back its history entry cannot cancel the navigation.
+      navigateAfterCommit(navigate)
+      return true
+    },
+  }))
 
   function resolvedChoice(coachAccountId: string) {
     if (closedDay) return "cleared"
@@ -220,29 +283,11 @@ export function StaffRollCall({
       ?? "cleared"
   }
 
-  function chooseDate(dateKey: string) {
-    if (!dateKey || dateKey === selectedDate) return
-    // A save in flight holds the date, so its outcome can be shown.
-    if (isSaving) {
-      setSelectionNotice({ message: waitForSaveMessage, tone: "info" })
-      return
-    }
-    setSelectionNotice(null)
-    if (drafts.length && !confirmDiscard(discardMarksPrompt)) return
-    if (drafts.length) discardStaffAttendanceDraft(selectedDate)
-    setDrafts([])
-    setFeedback(null)
-    setSelectedDate(dateKey)
-    router.replace(`/coach/attendance/staff/record?date=${encodeURIComponent(dateKey)}`, {
-      scroll: false,
-    })
-  }
-
   function chooseAttendance(
     coachAccountId: string,
     choice: StaffAttendanceChoice,
   ) {
-    if (isSaving || closedDay || isChangingDate) return
+    if (isSaving || closedDay) return
     const base = storedByCoach.get(coachAccountId) ?? "cleared"
     const current = resolvedChoice(coachAccountId)
     const next = current === choice ? "cleared" : choice
@@ -255,11 +300,11 @@ export function StaffRollCall({
       : [...rest, {
         choice: next,
         coachAccountId,
-        dateKey: selectedDate,
+        dateKey,
         expectedChoice: base,
       }]
     setDrafts(nextDrafts)
-    setDraftKeptOnDevice(persistStaffAttendanceDraft(selectedDate, nextDrafts))
+    setDraftKeptOnDevice(persistStaffAttendanceDraft(accountId, dateKey, nextDrafts))
     setFeedback(feedbackAfterMark)
   }
 
@@ -278,7 +323,7 @@ export function StaffRollCall({
             // Read back rather than assumed: `chooseAttendance` persists on
             // every mark, but a device that refused the write leaves the coach
             // holding marks that only exist on this screen.
-            marksOnDevice: () => readStaffAttendanceDraft(selectedDate).length > 0,
+            marksOnDevice: () => readStaffAttendanceDraft(accountId, dateKey).length > 0,
             place: "date",
             subject: "Staff attendance",
           }),
@@ -296,7 +341,7 @@ export function StaffRollCall({
           })),
         ]
       })
-      discardStaffAttendanceDraft(selectedDate)
+      discardStaffAttendanceDraft(accountId, dateKey)
       setDrafts([])
       setFeedback({ message: "Staff attendance saved", tone: "success" })
     } catch (error) {
@@ -316,158 +361,152 @@ export function StaffRollCall({
     }
   }
 
+  const summary = closedDay
+    ? `Academy closed · ${closedFor}`
+    : open
+      ? formatDateKey(dateKey)
+      : juniorCoaches.map((coach) => coach.fullName).join(" · ") || "No assistant coaches yet"
+  const counted = `${progress.marked}/${progress.total} marked`
+  // The open band always counts, as a session's does; closed, the card says how far the day got.
+  const [pillTone, pillLabel]: [string, string] = closedDay
+    ? [open ? "band" : "muted", "Closed"]
+    : futureDate
+      ? [open ? "band" : "upcoming", "Upcoming"]
+      : open
+        ? ["band", counted]
+        : !progress.total
+          ? ["muted", "Nobody to mark"]
+          : progress.marked === progress.total
+            ? ["done", counted]
+            : progress.marked ? ["part", counted] : ["todo", "Not marked"]
+
   return (
-    <div className="coach-calendar coach-attendance-workspace page-shell">
-      <nav className="coach-calendar-back-row coach-route-nav" aria-label="Staff attendance navigation">
-        <Link href="/coach#attendance"><ArrowLeft aria-hidden="true" /> Back to Attendance</Link>
-      </nav>
-
-      <header className="coach-calendar-header">
-        <div>
-          <span className="eyebrow">Staff attendance</span>
-          <h1 id="staff-roll-call-title">Staff roll call</h1>
-        </div>
-      </header>
-
-      <section
-        className="attendance-record-workspace staff-roll-call staff-roll-call-ledger"
-        aria-labelledby="staff-roll-call-title"
+    <li className={`${styles.card}${open ? ` ${styles.open}` : ""}`}>
+      <button
+        type="button"
+        className={styles.head}
+        aria-controls={open ? "staff-roll-call-panel" : undefined}
+        aria-expanded={open}
+        onClick={onToggle}
       >
-        <div className="attendance-record-date-row">
-          <label>
-            <span>Roll-call date</span>
-            <input
-              name="attendanceDate"
-              type="date"
-              max={referenceDate}
-              value={selectedDate}
-              onChange={(event) => chooseDate(event.target.value)}
+        <span className={styles.kind}>Staff</span>
+        <span className={styles.copy}>
+          <strong id="staff-roll-call-title">Assistant coaches</strong>
+          <small>{summary}</small>
+        </span>
+        <span className={`${styles.pill} ${styles[pillTone]}`}>
+          {pillTone === "done" ? <Check aria-hidden="true" /> : null}
+          {pillLabel}
+        </span>
+        <span className={styles.toggle} aria-hidden="true">
+          {open ? <X /> : <ChevronRight />}
+        </span>
+      </button>
+
+      {open ? (
+        <section
+          id="staff-roll-call-panel"
+          className={styles.panel}
+          aria-labelledby="staff-roll-call-title"
+        >
+          {selectionNotice ? (
+            <InlineNotice
+              message={selectionNotice.message}
+              reserveSpace={false}
+              tone={selectionNotice.tone}
             />
-          </label>
-          <p>{formatDateKey(selectedDate, { year: "numeric" })}</p>
-        </div>
-        {selectionNotice ? (
-          <InlineNotice
-            message={selectionNotice.message}
-            reserveSpace={false}
-            tone={selectionNotice.tone}
-          />
-        ) : null}
+          ) : null}
 
-        {closedDay ? (
-          <div className="coach-day-holiday">
-            <div>
-              <span>Academy closed</span>
-              <strong>{closedFor}</strong>
+          {!juniorCoaches.length ? (
+            <div className={styles.empty}>
+              <UsersRound aria-hidden="true" />
+              <h3>No assistant coaches yet.</h3>
+              <p>Provisioned staff will appear here for daily roll call.</p>
             </div>
-          </div>
-        ) : null}
-
-        <div className="attendance-record-section-heading staff-roll-call-heading">
-          <div>
-            <span>Daily staff record</span>
-            <h2>Assistant coaches</h2>
-          </div>
-          <strong>{juniorCoaches.length}</strong>
-        </div>
-
-        {isChangingDate ? (
-          <div className="attendance-record-empty is-roster" role="status">
-            <CalendarDays aria-hidden="true" />
-            <h3>Loading roll call…</h3>
-            <p>Checking staff attendance for this date.</p>
-          </div>
-        ) : !juniorCoaches.length ? (
-          <div className="attendance-record-empty is-roster">
-            <UsersRound aria-hidden="true" />
-            <h3>No assistant coaches yet.</h3>
-            <p>Provisioned staff will appear here for daily roll call.</p>
-          </div>
-        ) : (
-          <div className="staff-roll-call-list">
-            <div className="staff-roll-call-register-head" aria-hidden="true">
-              <span>No.</span>
-              <span>Coach</span>
-              <span>Attendance status</span>
-            </div>
-            {juniorCoaches.map((coach, index) => {
-              const unavailable = futureDate || closedDay || selectedDate < coach.joinedOn
-              const currentChoice = resolvedChoice(coach.accountId)
-              const folio = String(index + 1).padStart(2, "0")
-              return (
-                <article key={coach.accountId}>
-                  <span className="staff-roll-call-folio" aria-hidden="true">{folio}</span>
-                  <div className="staff-roll-call-person">
-                    <div>
+          ) : (
+            <ol className={styles.rows}>
+              {juniorCoaches.map((coach) => {
+                const unavailable = futureDate || closedDay || dateKey < coach.joinedOn
+                const currentChoice = resolvedChoice(coach.accountId)
+                return (
+                  <li key={coach.accountId} className={styles.row}>
+                    <span className={styles.badge} aria-hidden="true">{coach.initials}</span>
+                    <span className={styles.person}>
                       <strong>{coach.fullName}</strong>
                       <small>{unavailable
                         ? futureDate
                           ? "Future date"
                           : closedDay ? "Academy closed" : `Joined ${formatDateKey(coach.joinedOn)}`
                         : "Assistant coach"}</small>
-                    </div>
-                  </div>
-                  <div
-                    className="staff-roll-call-choice-box"
-                    role="group"
-                    aria-label={`Attendance for ${coach.fullName}`}
-                  >
-                    {/* `unavailable` stays on `disabled`: it is a property of
-                        the date rather than of a press, and it would otherwise
-                        leave two dead tab stops per coach on every date they
-                        cannot be marked on. The in-flight save is carried on
-                        `aria-disabled` alone, for the reason the save button
-                        below is: macOS Safari and Firefox do not move focus to
-                        a button on click, so a coach who marks with the
-                        keyboard and then clicks Save is still standing on a
-                        choice button when the save disables it, and a disabled
-                        element hands focus to `<body>`. `chooseAttendance`
-                        re-checks `isSaving`, so a press that still lands does
-                        nothing. */}
-                    {choices.map((choice) => (
-                      <button
-                        key={choice.value}
-                        type="button"
-                        className={currentChoice === choice.value ? `is-${choice.value}` : undefined}
-                        aria-pressed={currentChoice === choice.value}
-                        disabled={unavailable}
-                        aria-disabled={unavailable || isSaving}
-                        onClick={() => chooseAttendance(coach.accountId, choice.value)}
-                      >
-                        {choice.label}
-                      </button>
-                    ))}
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        )}
+                    </span>
+                    <span
+                      className={styles.choices}
+                      role="group"
+                      aria-label={`Attendance for ${coach.fullName}`}
+                    >
+                      {/* `unavailable` stays on `disabled`: it is a property of
+                          the date rather than of a press, and it would otherwise
+                          leave two dead tab stops per coach on every date they
+                          cannot be marked on. The in-flight save is carried on
+                          `aria-disabled` alone, for the reason the save button
+                          below is: macOS Safari and Firefox do not move focus to
+                          a button on click, so a coach who marks with the
+                          keyboard and then clicks Save is still standing on a
+                          choice button when the save disables it, and a disabled
+                          element hands focus to `<body>`. `chooseAttendance`
+                          re-checks `isSaving`, so a press that still lands does
+                          nothing. */}
+                      {choices.map((choice) => (
+                        <button
+                          key={choice.value}
+                          type="button"
+                          className={`${styles.choice} ${styles[choice.value]}`}
+                          aria-pressed={currentChoice === choice.value}
+                          disabled={unavailable}
+                          aria-disabled={unavailable || isSaving}
+                          onClick={() => chooseAttendance(coach.accountId, choice.value)}
+                        >
+                          {currentChoice === choice.value
+                            ? choice.value === "present"
+                              ? <Check aria-hidden="true" />
+                              : <X aria-hidden="true" />
+                            : null}
+                          {choice.label}
+                        </button>
+                      ))}
+                    </span>
+                  </li>
+                )
+              })}
+            </ol>
+          )}
 
-        <div className="attendance-record-footer">
-          <InlineNotice
-            action={feedback?.signIn}
-            message={feedback?.message ?? (drafts.length
-              ? `${drafts.length} unsaved ${drafts.length === 1 ? "change" : "changes"}`
-              : undefined)}
-            tone={feedback?.tone ?? (drafts.length ? "info" : undefined)}
-          />
-          <button
-            type="button"
-            aria-busy={isSaving}
-            aria-disabled={cannotSave}
-            tabIndex={saveOutOfReach ? -1 : undefined}
-            onClick={saveRollCall}
-          >
-            {feedback?.offerRetry
-              ? <RotateCcw aria-hidden="true" />
-              : <Check aria-hidden="true" />}
-            {isSaving
-              ? "Saving…"
-              : feedback?.offerRetry ? "Save staff attendance again" : "Save staff attendance"}
-          </button>
-        </div>
-      </section>
-    </div>
+          <div className={`${styles.footer}${footerPinned ? ` ${styles.pinned}` : ""}`}>
+            <InlineNotice
+              action={feedback?.signIn}
+              message={feedback?.message ?? (drafts.length
+                ? `${drafts.length} unsaved ${drafts.length === 1 ? "change" : "changes"}`
+                : undefined)}
+              tone={feedback?.tone ?? (drafts.length ? "info" : undefined)}
+            />
+            <button
+              type="button"
+              className={styles.save}
+              aria-busy={isSaving}
+              aria-disabled={cannotSave}
+              tabIndex={saveOutOfReach ? -1 : undefined}
+              onClick={saveRollCall}
+            >
+              {feedback?.offerRetry
+                ? <RotateCcw aria-hidden="true" />
+                : <Check aria-hidden="true" />}
+              {isSaving
+                ? "Saving…"
+                : feedback?.offerRetry ? "Save staff attendance again" : "Save staff attendance"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+    </li>
   )
 }

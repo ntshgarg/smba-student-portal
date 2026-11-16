@@ -1,7 +1,9 @@
+import { AttendanceShell } from "@/components/coach/attendance/attendance-shell"
 import { PlayerAttendanceRegister } from "@/components/coach/player-attendance-register"
 import { CoachPortalProvider } from "@/components/coach/coach-portal-provider"
 import {
   buildAttendanceRegisterYearOptions,
+  resolveAttendanceRegisterMonth,
   resolveAttendanceRegisterSelection,
   type AttendanceRegisterQuery,
 } from "@/lib/attendance/register-workspace"
@@ -39,26 +41,37 @@ export default async function PlayerAttendanceRegisterPage({
     today,
   })
   const snapshot = getCoachAttendanceRegisterSnapshot(selection, sessionSeries)
+  const month = resolveAttendanceRegisterMonth({
+    activeDateKeys: snapshot.sessionOccurrences
+      .filter((occurrence) => occurrence.status === "scheduled")
+      .map((occurrence) => occurrence.occurrenceDate),
+    query,
+    today,
+    year: selection.year,
+  })
   const providerKey = `${selection.year}:${selection.programme}:${selection.batch}`
 
   return (
-    <CoachPortalProvider
-      key={providerKey}
-      initialAcademyHolidays={snapshot.academyHolidays}
-      initialAttendanceAdjustments={snapshot.attendanceAdjustments}
-      initialAttendanceRecords={snapshot.attendanceRecords}
-      initialMembers={snapshot.members}
-      initialSessionAssignments={snapshot.sessionAssignments}
-      initialSessionOccurrences={snapshot.sessionOccurrences}
-      initialSessionSeries={snapshot.sessionSeries}
-      initialTrainingProfiles={snapshot.trainingProfiles}
-    >
-      <PlayerAttendanceRegister
-        referenceDate={today}
-        referenceInstant={now.getTime()}
-        selection={selection}
-        yearOptions={yearOptions}
-      />
-    </CoachPortalProvider>
+    <AttendanceShell activeTab="register">
+      <CoachPortalProvider
+        key={providerKey}
+        initialAcademyHolidays={snapshot.academyHolidays}
+        initialAttendanceAdjustments={snapshot.attendanceAdjustments}
+        initialAttendanceRecords={snapshot.attendanceRecords}
+        initialMembers={snapshot.members}
+        initialSessionAssignments={snapshot.sessionAssignments}
+        initialSessionOccurrences={snapshot.sessionOccurrences}
+        initialSessionSeries={snapshot.sessionSeries}
+        initialTrainingProfiles={snapshot.trainingProfiles}
+      >
+        <PlayerAttendanceRegister
+          month={month}
+          referenceDate={today}
+          referenceInstant={now.getTime()}
+          selection={selection}
+          yearOptions={yearOptions}
+        />
+      </CoachPortalProvider>
+    </AttendanceShell>
   )
 }

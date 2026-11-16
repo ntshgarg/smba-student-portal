@@ -6,6 +6,7 @@ import { LogOut } from "lucide-react"
 
 import { clearSession } from "@/app/login/actions"
 import { usePresence } from "@/components/motion/use-presence"
+import { clearAttendanceDrafts } from "@/lib/client/attendance-draft-storage"
 
 type AccountIdentity = {
   fullName: string
@@ -86,7 +87,7 @@ export function AccountMenu({
             </Link>
           )}
           {previewMode ? (
-            <form action="/admin/preview/exit" method="post">
+            <form action="/admin/preview/exit" method="post" onSubmit={() => clearAttendanceDrafts()}>
               <input type="hidden" name="signOut" value="1" />
               <button type="submit">
                 Exit preview and log out
@@ -94,7 +95,13 @@ export function AccountMenu({
               </button>
             </form>
           ) : (
-            <form action={clearSession} data-unsaved-work-navigation="true">
+            // Unsaved attendance marks stay on the device for whoever made
+            // them; signing out hands the device on, so they go with the session.
+            <form
+              action={clearSession}
+              data-unsaved-work-navigation="true"
+              onSubmit={() => clearAttendanceDrafts()}
+            >
               <button type="submit">
                 Log out
                 <LogOut aria-hidden="true" />

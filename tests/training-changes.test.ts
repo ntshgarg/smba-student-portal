@@ -479,4 +479,69 @@ describe("training changes from the player's record", () => {
     })
     expect(agreements(omar)).toHaveLength(0)
   })
+
+  it("retries a change hit by a passing fault by tries, not by days, and fails it after the last try", () => {
+    const tara = "20000000-0000-4000-8000-0000000000a7"
+    addPlayer(tara, "Tara Rao", 9007, "2026-07-01")
+    assign(tara, morning, "2026-07-01", [1, 2, 3, 4, 5])
+    const { changeId } = changes.scheduleTrainingChange({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: tara,
+      seriesId: evening,
+    }, context())
+    const row = () => database.select().from(schema.trainingChanges)
+      .where(eq(schema.trainingChanges.id, changeId)).get()
+    const faultyTry = (at: string) => {
+      const spy = vi.spyOn(database, "transaction").mockImplementation(() => {
+        throw new Error("network blip")
+      })
+      const error = vi.spyOn(console, "error").mockImplementation(() => {})
+      try {
+        return changes.applyDueTrainingChanges({ database, now: new Date(at) })
+      } finally {
+        spy.mockRestore()
+        error.mockRestore()
+      }
+    }
+
+    // Nobody opened a page until the 6th; the first try still leaves room to retry.
+    faultyTry("2026-11-06T05:00:00.000Z")
+    expect(row()).toMatchObject({ failedAttempts: 1, status: "scheduled" })
+    // Within the hour it is not tried again, so the tries are not used up at once.
+    faultyTry("2026-11-06T05:30:00.000Z")
+    expect(row()).toMatchObject({ failedAttempts: 1, status: "scheduled" })
+    faultyTry("2026-11-06T06:00:00.000Z")
+    expect(row()).toMatchObject({ failedAttempts: 2, status: "scheduled" })
+    faultyTry("2026-11-06T07:00:00.000Z")
+    expect(row()).toMatchObject({
+      failureReason: "Something went wrong each time it was tried. Make the change again from this record.",
+      status: "failed",
+    })
+    expect(openAssignments(tara).map((item) => item.seriesId)).toEqual([morning])
+  })
+
+  it("applies a change once the fault has passed, even days after its date", () => {
+    const uma = "20000000-0000-4000-8000-0000000000a8"
+    addPlayer(uma, "Uma Das", 9008, "2026-07-01")
+    assign(uma, morning, "2026-07-01", [1, 2, 3, 4, 5])
+    const { changeId } = changes.scheduleTrainingChange({
+      ...threeDayEvenings,
+      monthlyFeePaise: 250_000,
+      playerId: uma,
+      seriesId: evening,
+    }, context())
+    const spy = vi.spyOn(database, "transaction").mockImplementationOnce(() => {
+      throw new Error("network blip")
+    })
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    changes.applyDueTrainingChanges({ database, now: new Date("2026-11-09T05:00:00.000Z") })
+    spy.mockRestore()
+    error.mockRestore()
+
+    changes.applyDueTrainingChanges({ database, now: new Date("2026-11-10T05:00:00.000Z") })
+    expect(database.select().from(schema.trainingChanges)
+      .where(eq(schema.trainingChanges.id, changeId)).get()).toMatchObject({ status: "applied" })
+    expect(openAssignments(uma).map((item) => item.seriesId)).toEqual([evening])
+  })
 })

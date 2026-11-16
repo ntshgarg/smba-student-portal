@@ -325,33 +325,32 @@ test("Coach dashboard tickets keep the selected responsive composition", async (
       }
     }
 
-    const attendanceActionWidths = await grid
-      .locator('[data-area="attendance"] [role="group"]')
-      .evaluateAll((groups) => groups.map((group) => {
-        const groupBounds = group.getBoundingClientRect()
-        const actions = [...group.querySelectorAll("a")].map((action) => (
-          action.getBoundingClientRect()
-        ))
+    // The card's three ways in: "Mark today's attendance" first, then Register and Make-ups.
+    const attendanceActions = grid.locator('[data-area="attendance"]')
+      .getByRole("navigation", { name: "Attendance actions" })
+    await expect(attendanceActions.getByRole("link")).toHaveText([
+      "Mark today's attendance",
+      "Register",
+      "Make-ups",
+    ])
+    const attendanceActionGeometry = await attendanceActions.evaluate((actions) => ({
+      navWidth: actions.getBoundingClientRect().width,
+      actions: [...actions.querySelectorAll("a")].map((action) => {
+        const bounds = action.getBoundingClientRect()
+        return { height: bounds.height, width: bounds.width }
+      }),
+    }))
 
-        return {
-          actionHeights: actions.map((action) => action.height),
-          actionWidth: actions[0]?.width ?? 0,
-          groupWidth: groupBounds.width,
-        }
-      }))
-
-    expect(attendanceActionWidths).toHaveLength(2)
-    expect(attendanceActionWidths.every(({ actionHeights }) => (
-      actionHeights.every((height) => height >= 50)
-    ))).toBe(true)
+    expect(attendanceActionGeometry.actions.every(({ height }) => height >= 50)).toBe(true)
     if (viewport.mode === "mobile") {
-      for (const { actionWidth, groupWidth } of attendanceActionWidths) {
-        expect(Math.abs(actionWidth - groupWidth)).toBeLessThanOrEqual(2)
+      // Each link, "Mark today's attendance" included, spans the card.
+      for (const { width } of attendanceActionGeometry.actions) {
+        expect(Math.abs(width - attendanceActionGeometry.navWidth)).toBeLessThanOrEqual(2)
       }
     } else {
-      expect(Math.abs(
-        attendanceActionWidths[0].actionWidth - attendanceActionWidths[1].actionWidth,
-      )).toBeLessThanOrEqual(2)
+      for (const { width } of attendanceActionGeometry.actions.slice(1)) {
+        expect(Math.abs(width - attendanceActionGeometry.actions[0].width)).toBeLessThanOrEqual(2)
+      }
     }
 
     const actionHeights = await grid.getByRole("link").evaluateAll((links) => (

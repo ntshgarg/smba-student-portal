@@ -9,24 +9,24 @@ function source(relativePath: string) {
 
 describe("attendance return navigation", () => {
   it.each([
-    "components/coach/player-attendance-register.tsx",
-    "components/coach/staff-attendance-register.tsx",
-    "components/coach/attendance/staff-roll-call.tsx",
-    "app/coach/attendance/adjustments/page.tsx",
-  ])("returns %s to the Attendance dashboard section", (relativePath) => {
-    const component = source(relativePath)
-
-    expect(component).toContain('href="/coach#attendance"')
-    expect(component).toContain("Back to Attendance")
-    expect(component).not.toContain("Back to dashboard")
+    ["app/coach/attendance/players/register/page.tsx", "register"],
+    ["app/coach/attendance/staff/register/page.tsx", "register"],
+    ["app/coach/attendance/adjustments/page.tsx", "makeups"],
+  ])("puts %s under the Attendance shell, whose back link returns to the dashboard section", (relativePath, tab) => {
+    expect(source(relativePath)).toContain(`<AttendanceShell activeTab="${tab}">`)
+    expect(source("components/coach/attendance/attendance-shell.tsx"))
+      .toContain('backHref = "/coach#attendance"')
   })
 
-  it("keeps the player recorder contextual only when opened from Calendar", () => {
-    const recorder = source("components/coach/attendance/player-attendance-recorder.tsx")
+  // The Mark tab's back link is the Attendance shell's; the page only swaps it
+  // for the calendar's when the calendar opened it.
+  it("keeps the Mark tab contextual only when opened from Calendar", () => {
+    const shell = source("components/coach/attendance/attendance-shell.tsx")
+    const page = source("app/coach/attendance/players/record/page.tsx")
 
-    expect(recorder).toContain(': "/coach#attendance"')
-    expect(recorder).toContain('initialFromCalendar ? "Back to calendar" : "Back to Attendance"')
-    expect(recorder).toContain("`/coach/calendar?date=${encodeURIComponent(selectedDate)}`")
-    expect(recorder).not.toContain('"Back to dashboard"')
+    expect(shell).toContain('backHref = "/coach#attendance"')
+    expect(page).toContain("backHref={selection.fromCalendar")
+    expect(page).toContain("`/coach/calendar?date=${encodeURIComponent(selection.dateKey)}`")
+    expect(page).toContain('backLabel={selection.fromCalendar ? "Back to calendar" : undefined}')
   })
 })

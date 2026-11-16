@@ -71,9 +71,10 @@ describe("courtside save focus", () => {
   // do not move focus to a button on click and so leave the coach standing
   // there while the save disables the roster.
   const footerButton = (contents: string) => contents
-    .slice(contents.indexOf('className="attendance-record-footer"'))
+    .slice(contents.indexOf("className={`${styles.footer}"))
     .match(/<button[\s\S]*?<\/button>/u)?.[0] ?? ""
-  const styles = portalStyles()
+  // Both registers are cards on the Mark tab and share its stylesheet.
+  const styles = source("components/coach/attendance/mark.module.css")
 
   it("keeps the player register's save button focusable across a save", () => {
     const recorder = source("components/coach/attendance/player-attendance-recorder.tsx")
@@ -93,20 +94,12 @@ describe("courtside save focus", () => {
     expect(button).toContain("tabIndex={saveOutOfReach ? -1 : undefined}")
     expect(recorder).toContain("aria-disabled={isSaving}")
     expect(recorder).not.toMatch(/\sdisabled=\{isSaving\}/u)
-    expect(styles).toContain(
-      '.player-attendance-recorder .attendance-record-footer > button[aria-disabled="true"]',
-    )
-    expect(styles).toContain(
-      '.player-attendance-recorder .attendance-roster-choices button[aria-disabled="true"]',
-    )
+    expect(styles).toContain('.footer > button[aria-disabled="true"]')
+    expect(styles).toContain('.choices button[aria-disabled="true"]')
     // `opacity` composites the outline, so the dim would take the focus ring
     // under 1.4.11's 3:1 with it on the states this now makes reachable.
-    expect(styles).toContain(
-      '.player-attendance-recorder .attendance-record-footer > button[aria-disabled="true"]:focus-visible',
-    )
-    expect(styles).toContain(
-      '.player-attendance-recorder .attendance-roster-choices button[aria-disabled="true"]:focus-visible',
-    )
+    expect(styles).toContain('.footer > button[aria-disabled="true"]:focus-visible')
+    expect(styles).toContain('.choices button[aria-disabled="true"]:focus-visible')
   })
 
   it("keeps the staff roll call's save button focusable across a save", () => {
@@ -126,18 +119,9 @@ describe("courtside save focus", () => {
     expect(rollCall).toContain("disabled={unavailable}")
     expect(rollCall).toContain("aria-disabled={unavailable || isSaving}")
     expect(rollCall).not.toMatch(/\sdisabled=\{unavailable \|\| isSaving\}/u)
-    expect(styles).toContain(
-      '.attendance-record-footer > button[aria-disabled="true"]',
-    )
-    expect(styles).toContain(
-      '> .staff-roll-call-choice-box button[aria-disabled="true"]',
-    )
-    expect(styles).toContain(
-      '.attendance-record-footer > button[aria-disabled="true"]:focus-visible',
-    )
-    expect(styles).toContain(
-      '> .staff-roll-call-choice-box button[aria-disabled="true"]:focus-visible',
-    )
+    expect(rollCall).toContain("className={styles.choices}")
+    expect(styles).toContain('.footer > button[aria-disabled="true"]:focus-visible')
+    expect(styles).toContain('.choices button[aria-disabled="true"]:focus-visible')
   })
 })
 
@@ -153,16 +137,16 @@ describe("operational mobile controls", () => {
   it("uses 16px text for only the scoped visible inputs and selects", () => {
     expect(mediaStart).toBeGreaterThan(-1)
     // The courtside date input only reached 16px under (max-width: 760px), so an
-    // iPad or a phone in landscape still zoomed the roll call on focus (F-13).
-    expect(antiZoomRule).toContain(".attendance-record-date-row input:not(")
+    // iPad or a phone in landscape still zoomed the roll call on focus (F-13). It
+    // is the Mark tab's "Pick a date" field now, floored in that tab's stylesheet.
+    const markStyles = source("components/coach/attendance/mark.module.css")
+    expect(markStyles.slice(markStyles.indexOf("@media (max-width: 720px), (pointer: coarse) {")))
+      .toMatch(/\.pick input \{\s*font-size: 16px;/u)
     expect(antiZoomRule).toContain(".coach-series-form input:not(")
     expect(antiZoomRule).toContain(".coach-registration-approved p input:not(")
     expect(antiZoomRule).toContain(".coach-member-search input:not(")
     expect(antiZoomRule).toContain(".coach-member-filter select")
     expect(antiZoomRule).toContain(".coach-member-form-grid input:not(")
-    expect(antiZoomRule).toContain(".coach-adjustment-field select")
-    expect(antiZoomRule).not.toContain(".coach-adjustment-missed-calendar-toolbar select")
-    expect(antiZoomRule).toContain(".coach-adjustment-reason input:not(")
     expect(antiZoomRule).toContain(".coach-calendar-controls input:not(")
     expect(antiZoomRule).toContain(".coach-occurrence-actions input:not(")
     expect(antiZoomRule).toContain(':not([type="checkbox"]):not([type="radio"]):not([type="hidden"])')
@@ -170,8 +154,24 @@ describe("operational mobile controls", () => {
     expect(antiZoomRule).not.toContain(".coach-member-batch-field input")
   })
 
+  it("keeps the Make-ups player select and reason input at 16px on phones and tablets", () => {
+    const makeups = readFileSync(
+      path.join(process.cwd(), "components/coach/attendance-adjustments-workspace.module.css"),
+      "utf8",
+    )
+    const query = "@media (max-width: 720px), (pointer: coarse) {"
+    const rule = makeups.slice(makeups.indexOf(query), makeups.indexOf("\n}\n", makeups.indexOf(query)))
+
+    expect(makeups.indexOf(query)).toBeGreaterThan(-1)
+    expect(rule).toContain(".playerField select")
+    expect(rule).toContain(".change select")
+    expect(rule).toContain(".reason input")
+    expect(rule).toContain("font-size: 16px")
+  })
+
   it("gives register jump controls a real 44px target without changing their visual treatment", () => {
-    const registerButtonRule = styles.match(/\.coach-register-period button \{([^}]*)\}/)?.[1]
+    const registerButtonRule = source("components/coach/attendance-register.module.css")
+      .match(/\.today \{([^}]*)\}/)?.[1]
 
     expect(registerButtonRule).toContain("display: inline-flex")
     expect(registerButtonRule).toContain("min-height: 44px")

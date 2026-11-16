@@ -32,6 +32,7 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
   useMemberPortal: () => ({
     players: ["player-a", "player-b"].map((id) => ({
       member: { fullName: `Player ${id.slice(-1).toUpperCase()}`, id, trainingStartOn: "2026-08-01" },
+      training: { batch: "Weekday", level: "Beginner" },
     })),
   }),
   useSessionPortal: () => ({

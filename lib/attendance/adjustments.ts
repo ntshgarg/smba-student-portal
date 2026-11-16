@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomUUID } from "node:crypto"
 
-import { and, desc, eq, inArray, isNull } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm"
 
 import {
   OperationalActionError,
@@ -339,6 +339,18 @@ export function listAttendanceAdjustments({
     includeVoided ? undefined : isNull(attendanceAdjustments.voidedAt),
   ))
     .orderBy(desc(attendanceAdjustments.publishedAt), desc(attendanceAdjustments.id)).all()
+}
+
+/** Live make-ups a later change put in review (the Make-ups tab's "Requires review"), counted on its index. */
+export function countAttendanceAdjustmentsRequiringReview(
+  database: SmbaDatabaseExecutor = initializeDatabase(),
+) {
+  return database.select({ total: sql<number>`count(*)` }).from(attendanceAdjustments)
+    .where(and(
+      isNotNull(attendanceAdjustments.reviewRequiredAt),
+      isNull(attendanceAdjustments.voidedAt),
+    ))
+    .get()?.total ?? 0
 }
 
 export function listActiveAttendanceAdjustments(

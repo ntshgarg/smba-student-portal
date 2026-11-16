@@ -24,7 +24,8 @@ import {
   reverseConcession,
 } from "@/lib/finance/service"
 import { getAcademyDateKey } from "@/lib/format"
-import { formatTermDate } from "@/lib/sessions/term"
+import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import { formatTermDate, playerTrainingStatus } from "@/lib/sessions/term"
 import { monthStartOf, nextMonthStartOf, waitingFeeChangeOf } from "@/lib/training/changes"
 
 /*
@@ -104,6 +105,16 @@ export function changeMonthlyFee(
         operationalActionError("BUSINESS_RULE", "Set this player's level, batch and plan first.")
       }
       const today = getAcademyDateKey(now)
+      // A player on no schedule, or whose term has finished, has no fee to
+      // change (the Members record does not offer it either).
+      const { status } = playerTrainingStatus({
+        enrollmentStatus: enrollment.status,
+        openPlaces: loadOpenPlaces(tx, [input.playerId]).get(input.playerId) ?? [],
+        today,
+      })
+      if (status !== "active") {
+        operationalActionError("BUSINESS_RULE", "This player is not on a schedule now. Move them to a schedule first to change their fee.")
+      }
       const thisMonth = monthStartOf(today)
       const active = tx.select().from(feeAgreements).where(and(
         eq(feeAgreements.playerAccountId, input.playerId),

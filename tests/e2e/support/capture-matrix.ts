@@ -232,7 +232,7 @@ export const captureDefinitions: CaptureDefinition[] = [
   {
     actions: ["attendance-year-start"],
     actor: "coach",
-    description: "Occurrence attendance register scrolled to the start of the year",
+    description: "Attendance register on January of the first year offered",
     id: "coach-attendance-year-start",
     route: "/coach/attendance/players/register",
     scenarios: scheduledScenarios,
@@ -275,9 +275,9 @@ export const captureDefinitions: CaptureDefinition[] = [
   {
     actor: "coach",
     critical: true,
-    description: "Daily staff roll-call workspace",
+    description: "Daily staff roll call, the Mark tab's staff card open",
     id: "coach-staff-roll-call",
-    route: "/coach/attendance/staff/record?date={referenceDate}",
+    route: "/coach/attendance/players/record?date={referenceDate}&staff=open",
     scenarios: populatedScenarios,
   },
   {
@@ -292,7 +292,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     actions: ["adjustment-player-selected"],
     actor: "coach",
     critical: true,
-    description: "Missed-session month calendar after player selection",
+    description: "Missed-session list after player selection",
     id: "coach-attendance-adjustment-calendar",
     route: "/coach/attendance/adjustments",
     scenarios: ["loaded"],
@@ -302,7 +302,7 @@ export const captureDefinitions: CaptureDefinition[] = [
     actor: "coach",
     critical: true,
     description: "Missed session selected with completion-date choices revealed",
-    focusSelector: ".coach-adjustment-editor",
+    focusSelector: '[aria-labelledby="new-makeup-title"]',
     id: "coach-attendance-adjustment-source-selected",
     route: "/coach/attendance/adjustments",
     scenarios: ["loaded"],

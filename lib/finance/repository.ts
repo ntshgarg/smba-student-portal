@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, exists, gt, gte, inArray, isNull, lte, ne, notInArray, or, sql } from "drizzle-orm"
 
 import { weekdayForDateKey } from "@/lib/date-keys"
 import { onboardingFinished } from "@/lib/coach/onboarding"
@@ -55,6 +55,7 @@ import { feePlanInForce } from "@/lib/finance/plan-in-force"
 import { defaultMonthlyFeePaise } from "@/lib/finance/config"
 import { resolveOccurrenceEligibilityDates } from "@/lib/sessions/occurrence-lineage"
 import { loadOpenPlaces } from "@/lib/sessions/open-places"
+import { placeReachesWindowCondition } from "@/lib/sessions/place-coverage"
 import { termFinishedOn } from "@/lib/sessions/term"
 
 export const FINANCE_ACADEMY_ENTITY_ID = "smba"
@@ -138,11 +139,8 @@ export function readActiveFeeAgreement(database: Executor, playerId: string) {
  * An assignment that never covered a day (one that was due to start later and
  * was closed on its own start date) does not count.
  */
-function coversADay() {
-  return or(
-    isNull(sessionAssignments.effectiveTo),
-    gt(sessionAssignments.effectiveTo, sessionAssignments.effectiveFrom),
-  )
+function placeInMonth(period: string, options?: { schedule?: boolean }) {
+  return placeReachesWindowCondition(monthStart(period), addCalendarDays(monthEnd(period), 1), options)
 }
 
 export function hasAssignmentInPeriod(
@@ -161,14 +159,7 @@ export function hasAssignmentInPeriod(
       eq(sessionAssignments.accountId, playerId),
       training ? eq(sessionSeries.programme, training.programme) : undefined,
       training ? eq(sessionSeries.batch, training.batch) : undefined,
-      coversADay(),
-      lte(sessionAssignments.effectiveFrom, monthEnd(period)),
-      or(
-        isNull(sessionAssignments.effectiveTo),
-        gt(sessionAssignments.effectiveTo, monthStart(period)),
-      ),
-      lte(sessionSeries.startsOn, monthEnd(period)),
-      or(isNull(sessionSeries.endsOn), gte(sessionSeries.endsOn, monthStart(period))),
+      placeInMonth(period),
     )).get())
 }
 
@@ -199,14 +190,7 @@ export function loadPeriodAssignmentIndex(
       .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
       .where(and(
         inArray(sessionAssignments.accountId, [...new Set(playerIds)]),
-        coversADay(),
-        lte(sessionAssignments.effectiveFrom, monthEnd(period)),
-        or(
-          isNull(sessionAssignments.effectiveTo),
-          gt(sessionAssignments.effectiveTo, monthStart(period)),
-        ),
-        lte(sessionSeries.startsOn, monthEnd(period)),
-        or(isNull(sessionSeries.endsOn), gte(sessionSeries.endsOn, monthStart(period))),
+        placeInMonth(period),
       )).all()
       .forEach((row) => assigned.add(key(row.accountId, row)))
   }
@@ -254,9 +238,7 @@ export function readFirstMonthSessionProration(
       eq(sessionAssignments.accountId, playerId),
       eq(sessionSeries.programme, programme),
       eq(sessionSeries.batch, batch),
-      coversADay(),
-      lte(sessionAssignments.effectiveFrom, monthEnd(period)),
-      or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, monthStart(period))),
+      placeInMonth(period, { schedule: false }),
     )).all()
   if (!assignments.length) return { remainingSessions: 0, totalSessions: 0 }
 
@@ -381,8 +363,9 @@ export function playerTrainingHasEnded(
   const place = database.select({ id: sessionAssignments.id }).from(sessionAssignments).where(and(
     eq(sessionAssignments.accountId, playerId),
     // A place ending tomorrow covers only today: "They have left already"
-    // after today's attendance is marked ends it that way.
-    or(isNull(sessionAssignments.effectiveTo), gt(sessionAssignments.effectiveTo, addCalendarDays(todayKey, 1))),
+    // after today's attendance is marked ends it that way. One closed on its
+    // own first day (left before a later schedule started) covers no day.
+    placeReachesWindowCondition(addCalendarDays(todayKey, 1), null, { schedule: false }),
   )).get()
   if (place) return false
   return !database.select({ id: trainingChanges.id }).from(trainingChanges).where(and(
@@ -1384,17 +1367,9 @@ export function listPlayersTrainingWithoutFeePlan(
       eq(accounts.approvalStatus, "approved"),
       isNull(accounts.archivedAt),
       sql`${playerEnrollments.onboardingCompletedAt} is not null`,
-      sql`exists (
-        select 1 from ${sessionAssignments}
-        inner join ${sessionSeries} on ${sessionSeries.id} = ${sessionAssignments.seriesId}
-        where ${sessionAssignments.accountId} = ${accounts.id}
-          and ${sessionAssignments.effectiveFrom} <= ${monthEnd(period)}
-          and (${sessionAssignments.effectiveTo} is null
-            or (${sessionAssignments.effectiveTo} > ${monthStart(period)}
-              and ${sessionAssignments.effectiveTo} > ${sessionAssignments.effectiveFrom}))
-          and ${sessionSeries.startsOn} <= ${monthEnd(period)}
-          and (${sessionSeries.endsOn} is null or ${sessionSeries.endsOn} >= ${monthStart(period)})
-      )`,
+      exists(database.select({ id: sessionAssignments.id }).from(sessionAssignments)
+        .innerJoin(sessionSeries, eq(sessionSeries.id, sessionAssignments.seriesId))
+        .where(and(eq(sessionAssignments.accountId, accounts.id), placeInMonth(period)))),
       sql`not exists (
         select 1 from ${feeAgreements}
         where ${feeAgreements.playerAccountId} = ${accounts.id}

@@ -1,19 +1,14 @@
 "use client"
 
 import {
-  ArrowLeft,
   CalendarDays,
   Check,
   ChevronRight,
-  ChevronUp,
-  Clock3,
-  MapPin,
   RotateCcw,
-  Users,
+  X,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import type { CSSProperties } from "react"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 
 import {
@@ -27,8 +22,10 @@ import {
   type InlineNoticeAction,
 } from "@/components/inline-notice"
 import { useUnsavedWorkGuard } from "@/components/unsaved-work-guard"
+import { memberInitials } from "@/lib/coach/member-utils"
 import {
   chronologicalOccurrencesForDate,
+  daySessionsMarked,
   eligiblePlayerIdsForOccurrence,
   playerAttendanceRecordHref,
   rosterProgressForOccurrences,
@@ -43,19 +40,23 @@ import {
 } from "@/lib/client/attendance-draft-storage"
 import { describeSaveFailure, withSaveDeadline } from "@/lib/client/network-failure"
 import { describeRefusedSave, feedbackAfterMark } from "@/lib/client/session-expiry"
-import {
-  academyTimeInputValue,
-  formatAcademyTime,
-  formatDateKey,
-  formatSessionLabel,
-} from "@/lib/format"
+import { formatAcademyTime, formatDateKey } from "@/lib/format"
 import { occurrenceIsUpcoming } from "@/lib/sessions/occurrence-time"
 import type {
   SessionAttendanceChoice,
   SessionAttendanceChange,
   TrainingSessionOccurrence,
-  TrainingSessionSeries,
 } from "@/lib/sessions/types"
+
+import styles from "./mark.module.css"
+import {
+  StaffRollCall,
+  staffRollCallProgress,
+  type StaffMember,
+  type StaffRecord,
+  type StaffRollCallHandle,
+} from "./staff-roll-call"
+import { WeekStrip } from "./week-strip"
 
 const attendanceChoices = [
   { label: "Present", value: "present" },
@@ -104,28 +105,38 @@ type SaveFeedback = ActionFeedback & {
  */
 const saveDeadlineMs = 20_000
 
-function sessionLabel(
-  occurrence: TrainingSessionOccurrence,
-  series: TrainingSessionSeries,
-) {
-  return formatSessionLabel({
-    batch: series.batch,
-    durationMinutes: occurrence.durationMinutes,
-    programme: series.programme,
-    startTime: academyTimeInputValue(occurrence.startsAt),
-  })
-}
+/** The open card when it is the staff roll call rather than a session. */
+const staffCard = "staff"
 
+/**
+ * The Mark tab: a week strip, then one list for the day -- the staff roll call
+ * first, then every session -- where a tapped card opens in place. Only one card
+ * is open at a time, so the open card's unsaved marks are the only ones there
+ * can be, and leaving it asks first.
+ */
 export function PlayerAttendanceRecorder({
+  accountId,
   initialDate,
   initialFromCalendar,
   initialOccurrenceId,
   initialReferenceInstant,
+  initialStaffOpen,
+  staff,
 }: {
+  /** The signed-in coach; unsaved marks kept on the device are theirs alone. */
+  accountId: string
   initialDate: string
   initialFromCalendar: boolean
   initialOccurrenceId: string | null
   initialReferenceInstant: number
+  initialStaffOpen: boolean
+  /** The day's staff roll call, read for `initialDate`. */
+  staff: {
+    closedFor: string | null
+    juniorCoaches: StaffMember[]
+    records: StaffRecord[]
+    referenceDate: string
+  }
 }) {
   const { players } = useMemberPortal()
   const {
@@ -140,10 +151,14 @@ export function PlayerAttendanceRecorder({
   } = useSessionPortal()
   const router = useRouter()
   const [selectedDate, setSelectedDate] = useState(initialDate)
-  const [selectedOccurrenceId, setSelectedOccurrenceId] = useState(initialOccurrenceId)
+  // An occurrence id, `staffCard`, or null with every card closed.
+  const [openCard, setOpenCard] = useState(initialStaffOpen ? staffCard : initialOccurrenceId)
+  const staffOpen = openCard === staffCard
+  const selectedOccurrenceId = staffOpen ? null : openCard
+  const staffRef = useRef<StaffRollCallHandle>(null)
   const [draftChanges, setDraftChanges] = useState<SessionAttendanceChange[]>([])
   const [feedback, setFeedback] = useState<SaveFeedback | null>(null)
-  // Answers a date or session tap that a running save held back, beside the picker.
+  // Answers a date or session tap that a running save held back, beside the week strip.
   const [selectionNotice, setSelectionNotice] = useState<ActionFeedback | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [referenceInstant, setReferenceInstant] = useState(initialReferenceInstant)
@@ -155,7 +170,7 @@ export function PlayerAttendanceRecorder({
   const [isChangingDate, startDateChange] = useTransition()
   // Whether the device holds the marks on screen, from the last write or a restore.
   const [draftKeptOnDevice, setDraftKeptOnDevice] = useState<boolean | undefined>(undefined)
-  const { confirmDiscard } = useUnsavedWorkGuard({
+  const { confirmDiscard, navigateAfterCommit } = useUnsavedWorkGuard({
     isDirty: draftChanges.length > 0,
     // Leaving the *page* discards nothing while an expiry stands: the marks are
     // on the device, the notice has just said so, and this register is the one
@@ -230,9 +245,6 @@ export function PlayerAttendanceRecorder({
   const selectedOccurrence = dayOccurrences.find(
     (occurrence) => occurrence.id === selectedOccurrenceId,
   ) ?? null
-  const selectedSeries = selectedOccurrence
-    ? seriesById.get(selectedOccurrence.seriesId) ?? null
-    : null
   const eligiblePlayerIds = useMemo(() => (
     selectedOccurrence
       ? new Set(eligiblePlayerIdsForOccurrence({
@@ -297,7 +309,7 @@ export function PlayerAttendanceRecorder({
     const timer = window.setTimeout(() => {
       if (restoredOccurrenceIdRef.current === selectedOccurrenceId) return
       restoredOccurrenceIdRef.current = selectedOccurrenceId
-      const stored = readPlayerAttendanceDraft(selectedOccurrenceId)
+      const stored = readPlayerAttendanceDraft(accountId, selectedOccurrenceId)
       if (!stored.length) return
       // A session cancelled since cannot be saved; the marks stay on the device.
       if (selectedOccurrence.status !== "scheduled") {
@@ -321,7 +333,7 @@ export function PlayerAttendanceRecorder({
       )
       if (!rebased.changes.length) {
         if (leftOut) {
-          discardPlayerAttendanceDraft(selectedOccurrenceId)
+          discardPlayerAttendanceDraft(accountId, selectedOccurrenceId)
           setFeedback({ message: leftOutAttendanceDraftNotice(leftOut), tone: "info" })
         }
         return
@@ -341,6 +353,7 @@ export function PlayerAttendanceRecorder({
 
     return () => window.clearTimeout(timer)
   }, [
+    accountId,
     activeSourceAdjustmentByPlayer,
     attendanceRecords,
     eligiblePlayerIds,
@@ -369,6 +382,9 @@ export function PlayerAttendanceRecorder({
   // so the save that just emptied `draftChanges` still hands the next Tab to
   // the control after this one.
   const saveOutOfReach = cannotSave && !isSaving
+  // On a phone the footer sticks to the foot of the screen only while there is
+  // something to save or to report, so an untouched register has no bar over it.
+  const footerPinned = Boolean(draftChanges.length || isSaving || feedback)
 
   function resolvedChoice(playerId: string) {
     if (!selectedOccurrence) return undefined
@@ -377,18 +393,19 @@ export function PlayerAttendanceRecorder({
     return draft ?? attendanceRecords[selectedOccurrence.id]?.[playerId]
   }
 
-  function replaceSelection(dateKey: string, occurrenceId: string | null) {
+  function replaceSelection(dateKey: string, card: string | null) {
     router.replace(playerAttendanceRecordHref({
       dateKey,
       fromCalendar: initialFromCalendar,
-      occurrenceId,
+      occurrenceId: card === staffCard ? null : card,
+      staffOpen: card === staffCard,
     }), { scroll: false })
   }
 
   function discardDraftForSelectionChange() {
     if (!draftChanges.length) return true
     if (!confirmDiscard(discardMarksPrompt)) return false
-    if (selectedOccurrenceId) discardPlayerAttendanceDraft(selectedOccurrenceId)
+    if (selectedOccurrenceId) discardPlayerAttendanceDraft(accountId, selectedOccurrenceId)
     setDraftChanges([])
     setFeedback(null)
     return true
@@ -401,14 +418,27 @@ export function PlayerAttendanceRecorder({
     return true
   }
 
+  // The open card's marks, before another card opens or the date changes. The
+  // address change goes through the guard that held them: discarding the marks
+  // steps the guard's extra history entry back, and that step would otherwise
+  // cancel the navigation, leaving the address -- and a reload -- on the old
+  // card or date.
+  function releaseOpenCard(navigate: () => void) {
+    if (staffOpen && staffRef.current) return staffRef.current.release(navigate)
+    if (!discardDraftForSelectionChange()) return false
+    navigateAfterCommit(navigate)
+    return true
+  }
+
   function chooseDate(dateKey: string) {
     if (!dateKey || dateKey === selectedDate || blockedBySave()) return
-    if (!discardDraftForSelectionChange()) return
-    // The chosen date is shown at once — it is the coach's own input, and the
-    // date row must not lag behind the picker. Only the navigation that fetches
-    // it is deferred, so `isChangingDate` is raised for the round trip in which
-    // the occurrence list on screen still belongs to the date the coach has
-    // left. It does not cover the whole of that mismatch: the commit remounts
+    // The chosen date is shown as soon as the guard lets the navigation go --
+    // it is the coach's own input, and the week strip must not lag behind the
+    // picker -- and in the same callback, so the new date is never drawn over
+    // the old date's list before `isChangingDate` is raised. Only the
+    // navigation that fetches it is deferred, so `isChangingDate` is raised for
+    // the round trip in which the occurrence list on screen still belongs to the
+    // date the coach has left. It does not cover the whole of that mismatch: the commit remounts
     // this component (`app/coach/attendance/players/record/page.tsx` keys it on
     // the selection) with a fresh, unset transition, while the provider re-seeds
     // `sessionOccurrences` from props a tick later, so the previous date's list
@@ -417,26 +447,30 @@ export function PlayerAttendanceRecorder({
     // for the reason the save button below does not: it is the element the coach
     // is standing on, and disabling it here would hand focus to `<body>` on a
     // slow venue connection.
-    setSelectedDate(dateKey)
-    setSelectedOccurrenceId(null)
-    setFeedback(null)
-    startDateChange(() => replaceSelection(dateKey, null))
+    releaseOpenCard(() => {
+      setSelectedDate(dateKey)
+      setOpenCard(null)
+      setFeedback(null)
+      startDateChange(() => replaceSelection(dateKey, null))
+    })
   }
 
+  // Tapping the open session closes it.
   function chooseOccurrence(occurrence: TrainingSessionOccurrence) {
     if (occurrence.status !== "scheduled" || occurrenceIsUpcoming(occurrence, referenceInstant)) return
     if (blockedBySave()) return
-    if (occurrence.id === selectedOccurrenceId) {
-      if (!discardDraftForSelectionChange()) return
-      setSelectedOccurrenceId(null)
-      setFeedback(null)
-      replaceSelection(selectedDate, null)
-      return
-    }
-    if (!discardDraftForSelectionChange()) return
-    setSelectedOccurrenceId(occurrence.id)
+    const next = occurrence.id === selectedOccurrenceId ? null : occurrence.id
+    if (!releaseOpenCard(() => replaceSelection(selectedDate, next))) return
+    setOpenCard(next)
     setFeedback(null)
-    replaceSelection(selectedDate, occurrence.id)
+  }
+
+  function toggleStaff() {
+    if (blockedBySave()) return
+    const next = staffOpen ? null : staffCard
+    if (!releaseOpenCard(() => replaceSelection(selectedDate, next))) return
+    setOpenCard(next)
+    setFeedback(null)
   }
 
   function chooseAttendance(playerId: string, choice: SessionAttendanceChoice) {
@@ -459,7 +493,7 @@ export function PlayerAttendanceRecorder({
         playerId,
       }]
     setDraftChanges(nextChanges)
-    setDraftKeptOnDevice(persistPlayerAttendanceDraft(selectedOccurrence.id, nextChanges))
+    setDraftKeptOnDevice(persistPlayerAttendanceDraft(accountId, selectedOccurrence.id, nextChanges))
     setFeedback(feedbackAfterMark)
   }
 
@@ -479,7 +513,7 @@ export function PlayerAttendanceRecorder({
             // every mark, but a device that refused the write leaves the coach
             // holding marks that only exist on this screen.
             marksOnDevice: () => (
-              readPlayerAttendanceDraft(selectedOccurrence.id).length > 0
+              readPlayerAttendanceDraft(accountId, selectedOccurrence.id).length > 0
             ),
             place: "session",
             subject: "Attendance",
@@ -488,7 +522,7 @@ export function PlayerAttendanceRecorder({
         })
         return
       }
-      discardPlayerAttendanceDraft(selectedOccurrence.id)
+      discardPlayerAttendanceDraft(accountId, selectedOccurrence.id)
       setDraftChanges([])
       setFeedback({ message: "Attendance saved", tone: "success" })
     } catch (error) {
@@ -508,31 +542,30 @@ export function PlayerAttendanceRecorder({
     }
   }
 
-  const backHref = initialFromCalendar
-    ? `/coach/calendar?date=${encodeURIComponent(selectedDate)}`
-    : "/coach#attendance"
-  const backLabel = initialFromCalendar ? "Back to calendar" : "Back to Attendance"
-  const selectedOccurrenceIndex = dayOccurrences.findIndex(
-    (occurrence) => occurrence.id === selectedOccurrenceId,
-  )
-  const leadingOccurrences = selectedOccurrenceIndex >= 0
-    ? dayOccurrences.slice(0, selectedOccurrenceIndex + 1)
-    : dayOccurrences
-  const trailingOccurrences = selectedOccurrenceIndex >= 0
-    ? dayOccurrences.slice(selectedOccurrenceIndex + 1)
-    : []
-  const rosterListStyle = {
-    "--attendance-roster-rows": Math.ceil(roster.length / 2),
-  } as CSSProperties & { "--attendance-roster-rows": number }
+  const staffProgress = staffRollCallProgress({
+    dateKey: initialDate,
+    juniorCoaches: staff.juniorCoaches,
+    records: staff.records,
+  })
+  // Counted by the dashboard card's rule: cancelled sessions are left out.
+  const sessionsMarked = daySessionsMarked(dayOccurrences, rosterProgressByOccurrence)
+  const daySummary = [
+    staff.closedFor
+      ? "Academy closed"
+      : staffProgress.total ? `Staff ${staffProgress.marked}/${staffProgress.total}` : null,
+    sessionsMarked.total
+      ? `${sessionsMarked.total} ${sessionsMarked.total === 1 ? "session" : "sessions"}, ${sessionsMarked.marked} fully marked`
+      : "No sessions",
+  ].filter(Boolean).join(" · ")
 
-  function renderOccurrenceButton(occurrence: TrainingSessionOccurrence) {
+  function renderOccurrence(occurrence: TrainingSessionOccurrence) {
     const series = seriesById.get(occurrence.seriesId)
     if (!series) return null
     const upcoming = occurrenceIsUpcoming(occurrence, referenceInstant)
     const unavailable = occurrence.status !== "scheduled" || upcoming
     const isSelected = occurrence.id === selectedOccurrenceId
-    const progress = rosterProgressByOccurrence.get(occurrence.id)
-    // "Available" stays the honest word for a register nobody has touched: a
+    const { eligible = 0, marked = 0 } = rosterProgressByOccurrence.get(occurrence.id) ?? {}
+    // "Not marked" is the honest word for a register nobody has touched: a
     // session that has only just started has not failed at anything, and
     // "0/30 marked" on it would read as an accusation. Once there is progress
     // the count replaces it, and it keeps reading as progress at the end rather
@@ -541,273 +574,232 @@ export function PlayerAttendanceRecorder({
     //
     // An empty roster is the one case that reasoning does not cover. `0/0` is
     // not an untouched register, it is a session with nobody to mark, and
-    // calling it "Available" sent the coach in to find that out. On a Thursday
+    // calling it "Not marked" sent the coach in to find that out. On a Thursday
     // at an academy whose plans fall on other days, all four of the day's
-    // sessions read "Available" and all four were empty. `eligible` is already
+    // sessions read that way and all four were empty. `eligible` is already
     // resolved here for the count, so the empty case costs one more branch.
-    const state = occurrence.status === "cancelled"
-      ? "Cancelled"
-      : upcoming
-        ? "Upcoming"
-        : progress?.eligible === 0
-          ? "No players"
-          : progress?.marked
-            ? `${progress.marked}/${progress.eligible} marked`
-            : "Available"
+    //
+    // The open card shows what its own register holds instead -- deliberately
+    // the saved count, as `selectedProgress` explains.
+    const [tone, state]: [string, string] = isSelected
+      ? ["band", selectedProgress?.marked
+        ? `${selectedProgress.marked}/${roster.length} marked`
+        : `${roster.length} ${roster.length === 1 ? "player" : "players"}`]
+      : occurrence.status === "cancelled"
+        ? ["muted", "Cancelled"]
+        : upcoming
+          ? ["upcoming", `Opens ${formatAcademyTime(occurrence.startsAt)}`]
+          : !eligible
+            ? ["muted", "No players"]
+            : marked === eligible
+              ? ["done", `${marked}/${eligible} marked`]
+              : marked
+                ? ["part", `${marked}/${eligible} marked`]
+                : ["todo", "Not marked"]
 
     return (
-      <button
+      <li
         key={occurrence.id}
-        type="button"
-        className={[
-          isSelected ? "is-selected" : "",
-          unavailable ? "" : "is-available",
-        ].filter(Boolean).join(" ") || undefined}
-        aria-expanded={unavailable ? undefined : isSelected}
-        aria-controls={unavailable ? undefined : "attendance-roster-panel"}
-        disabled={unavailable}
-        onClick={() => chooseOccurrence(occurrence)}
+        className={`${styles.card}${isSelected ? ` ${styles.open}` : ""}`}
       >
-        <time dateTime={occurrence.startsAt}>{formatAcademyTime(occurrence.startsAt)}</time>
-        <span className="attendance-occurrence-copy">
-          <strong>{series.programme} · {series.batch}</strong>
-          <small><MapPin aria-hidden="true" /> {occurrence.venue}</small>
-        </span>
-        <span className="attendance-occurrence-state">
-          <em>{state}</em>
-          {unavailable ? null : isSelected
-            ? <ChevronUp aria-hidden="true" />
-            : <ChevronRight aria-hidden="true" />}
-        </span>
-      </button>
+        <button
+          type="button"
+          className={styles.head}
+          aria-expanded={unavailable ? undefined : isSelected}
+          // Only an open card's register is on the page to point at.
+          aria-controls={!unavailable && isSelected ? "attendance-roster-panel" : undefined}
+          disabled={unavailable}
+          onClick={() => chooseOccurrence(occurrence)}
+        >
+          <time className={styles.time} dateTime={occurrence.startsAt}>
+            {formatAcademyTime(occurrence.startsAt)}
+          </time>
+          <span className={styles.copy}>
+            <strong id={isSelected ? "attendance-roster-title" : undefined}>
+              {series.programme} · {series.batch}
+            </strong>
+            <small>{isSelected
+              ? `${occurrence.durationMinutes} min · ${occurrence.venue}`
+              : `${occurrence.venue} · ${eligible} ${eligible === 1 ? "player" : "players"}`}</small>
+          </span>
+          <span className={`${styles.pill} ${styles[tone]}`}>
+            {tone === "done" ? <Check aria-hidden="true" /> : null}
+            {state}
+          </span>
+          {unavailable ? null : (
+            <span className={styles.toggle} aria-hidden="true">
+              {isSelected ? <X /> : <ChevronRight />}
+            </span>
+          )}
+        </button>
+        {isSelected ? rosterPanel : null}
+      </li>
     )
   }
 
-  const rosterPanel = (
+  const rosterPanel = selectedOccurrence ? (
     <section
       id="attendance-roster-panel"
-      className={`attendance-roster-recorder${selectedOccurrence && selectedSeries ? " has-selection" : " is-awaiting-selection"}`}
+      className={styles.panel}
       aria-labelledby="attendance-roster-title"
     >
-      {!selectedOccurrence || !selectedSeries ? (
-        <div className="attendance-record-empty is-selection">
-          <Users aria-hidden="true" />
-          <h2 id="attendance-roster-title">Select a session.</h2>
-          <p>The eligible roster will appear here for attendance.</p>
+      {selectedUnavailable ? (
+        <div className={styles.empty}>
+          <h3>Attendance is not available.</h3>
+          <p>{selectedOccurrence.status === "cancelled"
+            ? "This session was cancelled."
+            : "Attendance opens when the session begins."}</p>
+        </div>
+      ) : !roster.length ? (
+        <div className={styles.empty}>
+          <h3>No eligible players.</h3>
+          <p>Only players assigned to this occurrence can be recorded.</p>
         </div>
       ) : (
-        <>
-          <div className="attendance-record-section-heading attendance-roster-heading">
-            <div>
-              <span>Session roster</span>
-              <h2 id="attendance-roster-title">
-                {sessionLabel(selectedOccurrence, selectedSeries)}
-              </h2>
-              <p>
-                <Clock3 aria-hidden="true" /> {selectedOccurrence.durationMinutes} minutes
-                <span aria-hidden="true">·</span>
-                <MapPin aria-hidden="true" /> {selectedOccurrence.venue}
-              </p>
-            </div>
-            {/*
-              * The same question the picker now answers, for the coach who has
-              * already opened the session: without it, "how far did I get?" is
-              * a scroll through the whole roster looking for "Not marked".
-              */}
-            <strong>{selectedProgress?.marked
-              ? `${selectedProgress.marked}/${roster.length} marked`
-              : `${roster.length} ${roster.length === 1 ? "player" : "players"}`}</strong>
-          </div>
+        <ol className={styles.rows}>
+          {roster.map((player) => {
+            const choice = resolvedChoice(player.member.id)
+            const adjustment = activeSourceAdjustmentByPlayer.get(player.member.id)
 
-          {selectedUnavailable ? (
-            <div className="attendance-record-empty is-roster">
-              <h3>Attendance is not available.</h3>
-              <p>{selectedOccurrence.status === "cancelled"
-                ? "This session was cancelled."
-                : "Attendance opens when the session begins."}</p>
-            </div>
-          ) : !roster.length ? (
-            <div className="attendance-record-empty is-roster">
-              <h3>No eligible players.</h3>
-              <p>Only players assigned to this occurrence can be recorded.</p>
-            </div>
-          ) : (
-            <ol className="attendance-record-roster-list" style={rosterListStyle}>
-              {roster.map((player, index) => {
-                const choice = resolvedChoice(player.member.id)
-                const adjustment = activeSourceAdjustmentByPlayer.get(player.member.id)
-                const folio = String(index + 1).padStart(2, "0")
-                const tabletColumnBreak = Math.ceil(roster.length / 2)
-                const rowClassName = [
-                  index >= tabletColumnBreak ? "is-second-column" : "",
-                  index === tabletColumnBreak ? "is-column-start" : "",
-                ].filter(Boolean).join(" ") || undefined
-
-                return (
-                  <li key={player.member.id} className={rowClassName}>
-                    <span className="attendance-roster-folio" aria-hidden="true">{folio}</span>
-                    <span className="attendance-roster-player">
-                      <strong>{player.member.fullName}</strong>
-                      <small>{adjustment ? "Rescheduled" : choice ? "Marked" : "Not marked"}</small>
-                    </span>
-                    {adjustment ? (
-                      <Link
-                        className="attendance-roster-adjustment"
-                        href={`/coach/attendance/adjustments?adjustment=${encodeURIComponent(adjustment.id)}&player=${encodeURIComponent(player.member.id)}`}
+            return (
+              <li key={player.member.id} className={styles.row}>
+                <span className={styles.badge} aria-hidden="true">
+                  {memberInitials(player.member.fullName)}
+                </span>
+                <span className={styles.person}>
+                  <strong>{player.member.fullName}</strong>
+                  <small>{adjustment ? "Rescheduled" : choice ? `Marked ${choice}` : "Not marked"}</small>
+                </span>
+                {adjustment ? (
+                  <Link
+                    className={styles.adjustment}
+                    href={`/coach/attendance/adjustments?adjustment=${encodeURIComponent(adjustment.id)}&player=${encodeURIComponent(player.member.id)}`}
+                  >
+                    Rescheduled <span aria-hidden="true">·</span> View
+                  </Link>
+                ) : (
+                  <span
+                    className={styles.choices}
+                    role="group"
+                    aria-label={`Attendance for ${player.member.fullName}`}
+                  >
+                    {/* `aria-disabled`, not `disabled`, for the reason the
+                        save button below carries it: macOS Safari and
+                        Firefox do not move focus to a button on click, so a
+                        coach who marks with the keyboard and then clicks
+                        Save is still standing on a roster button when the
+                        save disables it, and a disabled element hands focus
+                        to `<body>`. `chooseAttendance` re-checks `isSaving`,
+                        so a press that still lands does nothing. */}
+                    {attendanceChoices.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`${styles.choice} ${styles[option.value]}`}
+                        aria-pressed={choice === option.value}
+                        aria-disabled={isSaving}
+                        onClick={() => chooseAttendance(player.member.id, option.value)}
                       >
-                        Rescheduled <span aria-hidden="true">·</span> View
-                      </Link>
-                    ) : (
-                      <span
-                        className="attendance-roster-choices"
-                        role="group"
-                        aria-label={`Attendance for ${player.member.fullName}`}
-                      >
-                        {/* `aria-disabled`, not `disabled`, for the reason the
-                            save button below carries it: macOS Safari and
-                            Firefox do not move focus to a button on click, so a
-                            coach who marks with the keyboard and then clicks
-                            Save is still standing on a roster button when the
-                            save disables it, and a disabled element hands focus
-                            to `<body>`. `chooseAttendance` re-checks `isSaving`,
-                            so a press that still lands does nothing. */}
-                        {attendanceChoices.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            className={`attendance-roster-choice is-${option.value}`}
-                            aria-pressed={choice === option.value}
-                            aria-disabled={isSaving}
-                            onClick={() => chooseAttendance(player.member.id, option.value)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </span>
-                    )}
-                  </li>
-                )
-              })}
-            </ol>
-          )}
-
-          <div className="attendance-record-footer">
-            <InlineNotice
-              action={feedback?.signIn}
-              reserveSpace={false}
-              message={feedback?.message ?? (draftChanges.length
-                ? `${draftChanges.length} unsaved ${draftChanges.length === 1 ? "change" : "changes"}`
-                : undefined)}
-              tone={feedback?.tone ?? (draftChanges.length ? "info" : undefined)}
-            />
-            <button
-              type="button"
-              aria-busy={isSaving}
-              aria-disabled={cannotSave}
-              tabIndex={saveOutOfReach ? -1 : undefined}
-              onClick={saveAttendance}
-            >
-              {feedback?.offerRetry
-                ? <RotateCcw aria-hidden="true" />
-                : <Check aria-hidden="true" />}
-              {isSaving
-                ? "Saving…"
-                : feedback?.offerRetry ? "Save attendance again" : "Save attendance"}
-            </button>
-          </div>
-        </>
+                        {choice === option.value
+                          ? option.value === "present"
+                            ? <Check aria-hidden="true" />
+                            : <X aria-hidden="true" />
+                          : null}
+                        {option.label}
+                      </button>
+                    ))}
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ol>
       )}
+
+      <div className={`${styles.footer}${footerPinned ? ` ${styles.pinned}` : ""}`}>
+        <InlineNotice
+          action={feedback?.signIn}
+          reserveSpace={false}
+          message={feedback?.message ?? (draftChanges.length
+            ? `${draftChanges.length} unsaved ${draftChanges.length === 1 ? "change" : "changes"}`
+            : undefined)}
+          tone={feedback?.tone ?? (draftChanges.length ? "info" : undefined)}
+        />
+        <button
+          type="button"
+          className={styles.save}
+          aria-busy={isSaving}
+          aria-disabled={cannotSave}
+          tabIndex={saveOutOfReach ? -1 : undefined}
+          onClick={saveAttendance}
+        >
+          {feedback?.offerRetry
+            ? <RotateCcw aria-hidden="true" />
+            : <Check aria-hidden="true" />}
+          {isSaving
+            ? "Saving…"
+            : feedback?.offerRetry ? "Save attendance again" : "Save attendance"}
+        </button>
+      </div>
     </section>
-  )
+  ) : null
 
   return (
-    <div className="coach-calendar coach-attendance-workspace player-attendance-recorder page-shell">
-      <nav className="coach-calendar-back-row coach-route-nav" aria-label="Player attendance navigation">
-        <Link href={backHref}><ArrowLeft aria-hidden="true" /> {backLabel}</Link>
-      </nav>
+    <section className={styles.mark} aria-labelledby="attendance-day-title">
+      <WeekStrip selectedDate={selectedDate} onChoose={chooseDate} />
+      {selectionNotice ? (
+        <InlineNotice
+          message={selectionNotice.message}
+          reserveSpace={false}
+          tone={selectionNotice.tone}
+        />
+      ) : null}
 
-      <header className="coach-calendar-header">
-        <div>
-          <span className="eyebrow">Player attendance</span>
-          <h1 id="record-player-attendance-title">Record attendance</h1>
-        </div>
-      </header>
+      <div className={styles.dayLine}>
+        <h2 id="attendance-day-title">{formatDateKey(selectedDate)}</h2>
+        {/* The counts are the same claim the empty state below makes, so they
+            wait on the same flag rather than reporting the previous date's
+            list as this one's. */}
+        {isChangingDate ? null : <p>{daySummary}</p>}
+      </div>
 
-      <section className="attendance-record-workspace" aria-labelledby="record-player-attendance-title">
-        <div className="attendance-record-date-row">
-          <label>
-            <span>Training date</span>
-            <input
-              name="attendanceDate"
-              type="date"
-              value={selectedDate}
-              onChange={(event) => chooseDate(event.target.value)}
+      <ul className={styles.list}>
+        {isChangingDate ? (
+          // "No sessions on this date." is a statement about the coach's own
+          // schedule, and until the round trip lands the register has no basis
+          // for it — the provider is holding the previous date's sessions, not
+          // this date's absence of any. The staff card waits too: its marks
+          // are the previous date's as well. This branch withholds both for
+          // that round trip; see `chooseDate` for the single frame after the
+          // commit that it does not cover.
+          <li className={styles.empty} role="status">
+            <CalendarDays aria-hidden="true" />
+            <h3>Loading sessions…</h3>
+            <p>Checking the schedule for this date.</p>
+          </li>
+        ) : (
+          <>
+            <StaffRollCall
+              ref={staffRef}
+              accountId={accountId}
+              closedFor={staff.closedFor}
+              dateKey={initialDate}
+              initialRecords={staff.records}
+              juniorCoaches={staff.juniorCoaches}
+              open={staffOpen}
+              referenceDate={staff.referenceDate}
+              onToggle={toggleStaff}
             />
-          </label>
-          <p>{formatDateKey(selectedDate, { year: "numeric" })}</p>
-        </div>
-        {selectionNotice ? (
-          <InlineNotice
-            message={selectionNotice.message}
-            reserveSpace={false}
-            tone={selectionNotice.tone}
-          />
-        ) : null}
-
-        <div className="attendance-record-layout">
-          <section
-            className={`attendance-occurrence-picker${trailingOccurrences.length ? " has-trailing-occurrences" : ""}`}
-            aria-labelledby="attendance-session-picker-title"
-          >
-            <div className={`attendance-occurrence-lead${selectedOccurrenceIndex < 0 ? " is-without-selection" : ""}`}>
-              <div className="attendance-record-section-heading">
-                <div>
-                  <span>Scheduled sessions</span>
-                  <h2 id="attendance-session-picker-title">Choose one session</h2>
-                </div>
-                {/* The count is the same claim the empty state below makes, so
-                    it waits on the same flag rather than reporting the previous
-                    date's list as this one's. */}
-                <strong>{isChangingDate ? "—" : dayOccurrences.length}</strong>
-              </div>
-
-              {isChangingDate ? (
-                // "No sessions on this date." is a statement about the coach's
-                // own schedule, and until the round trip lands the register has
-                // no basis for it — the provider is holding the previous date's
-                // sessions, not this date's absence of any. This branch withholds
-                // it for that round trip; see `chooseDate` for the single frame
-                // after the commit that it does not cover.
-                <div className="attendance-record-empty" role="status">
-                  <CalendarDays aria-hidden="true" />
-                  <h3>Loading sessions…</h3>
-                  <p>Checking the schedule for this date.</p>
-                </div>
-              ) : !dayOccurrences.length ? (
-                <div className="attendance-record-empty">
-                  <CalendarDays aria-hidden="true" />
-                  <h3>No sessions on this date.</h3>
-                  <p>Choose another date or create the recurring schedule first.</p>
-                </div>
-              ) : (
-                <div className="attendance-occurrence-list">
-                  {leadingOccurrences.map(renderOccurrenceButton)}
-                </div>
-              )}
-            </div>
-
-            {rosterPanel}
-
-            {trailingOccurrences.length ? (
-              <div className="attendance-occurrence-tail">
-                <div className="attendance-occurrence-list">
-                  {trailingOccurrences.map(renderOccurrenceButton)}
-                </div>
-              </div>
-            ) : null}
-          </section>
-        </div>
-      </section>
-    </div>
+            {dayOccurrences.length ? dayOccurrences.map(renderOccurrence) : (
+              <li className={styles.empty}>
+                <CalendarDays aria-hidden="true" />
+                <h3>No sessions on this date.</h3>
+                <p>Choose another date or create the recurring schedule first.</p>
+              </li>
+            )}
+          </>
+        )}
+      </ul>
+    </section>
   )
 }

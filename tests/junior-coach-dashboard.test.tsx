@@ -25,7 +25,6 @@ import { JuniorCoachWelcomeHero } from "@/components/coach/junior-coach-welcome-
 const attendance: JuniorCoachAttendanceView = {
   holidays: [],
   joinedOn: "2026-08-01",
-  monthLabel: "August 2026",
   referenceDate: "2026-08-11",
   records: [
     { choice: "present", dateKey: "2026-08-01" },
@@ -62,26 +61,39 @@ describe("assistant coach dashboard", () => {
     expect(html).not.toContain("coach-scoreboard-ribbon")
   })
 
-  it("summarizes personal attendance as a roll-call ledger ticket", () => {
+  it("shows this month as a big percentage beside a calendar of full tiles", () => {
     const html = renderToStaticMarkup(
       <JuniorCoachAttendanceCard attendance={attendance} />,
     )
 
-    expect(html).toContain("Personal roll-call ledger")
+    expect(html).toContain(">My attendance</h2>")
     expect(html).toContain("August 2026")
     expect(html).toContain("75%")
-    expect(html).toContain("Recorded days")
-    expect(html).toContain(">04<")
-    expect(html).toContain("Present")
-    expect(html).toContain(">03<")
-    expect(html).toContain("Absent")
-    expect(html).toContain(">01<")
-    expect(html).toContain("Open attendance record")
-    expect(html).toContain('aria-expanded="false"')
-    expect(html).not.toContain('id="junior-coach-attendance-register"')
+    expect(html).toContain("Present on 3 of 4 marked days")
+    expect(html).toContain("<dt>Present</dt><dd>3</dd>")
+    expect(html).toContain("<dt>Absent</dt><dd>1</dd>")
+    expect(html).toContain('aria-label="Your attendance calendar for August 2026"')
+    expect(html.match(/role="columnheader"/g)).toHaveLength(7)
+    expect(html.match(/role="row"/g)).toHaveLength(7)
+    expect(html.match(/role="gridcell"/g)).toHaveLength(42)
+    expect(html).toContain('aria-rowcount="7"')
+    // August 2026 runs Saturday the 1st to Monday the 31st: 31 dated tiles
+    expect(html.match(/role="gridcell"[^>]*aria-label=/g)).toHaveLength(31)
+    expect(html).toContain('data-state="present" role="gridcell" aria-label="Saturday, 1 August 2026: present"')
+    expect(html).toContain('data-state="absent" role="gridcell" aria-label="Tuesday, 4 August 2026: absent"')
+    expect(html).toContain('data-state="unmarked" role="gridcell" aria-label="Wednesday, 5 August 2026: not recorded"')
+    expect(html).toContain('role="gridcell" aria-current="date" aria-label="Tuesday, 11 August 2026: not recorded"')
+    expect(html).toContain('data-state="upcoming" role="gridcell" aria-label="Wednesday, 12 August 2026: upcoming"')
+    for (const label of ["Present", "Absent", "Holiday", "Not recorded", "Upcoming"]) {
+      expect(html).toContain(`</i>${label}</span>`)
+    }
+    // nothing in August is before joining, so that key is left out
+    expect(html).not.toContain("Not available")
+    expect(html).toContain('aria-label="Earlier months: view July 2026"')
+    expect(html).not.toContain("Later month")
   })
 
-  it("keeps the ledger useful before the first recorded day", () => {
+  it("keeps the card useful before the first recorded day", () => {
     const html = renderToStaticMarkup(
       <JuniorCoachAttendanceCard
         attendance={{
@@ -97,28 +109,37 @@ describe("assistant coach dashboard", () => {
       />,
     )
 
+    expect(html).toContain("—")
     expect(html).toContain("Your record will appear after the head coach saves an attendance day.")
-    expect(html).toContain(">00<")
-    expect(html).toContain("Open attendance record")
+    expect(html).toContain("<dt>Present</dt><dd>0</dd>")
+    expect(html).toContain("Earlier months")
   })
 
-  it("opens the same focused monthly calendar pattern as the player record", () => {
-    navigation.search = "attendance=register"
+  it("opens an earlier month from the address and counts it from its tiles", () => {
+    navigation.search = "attendance=register&month=07"
     const html = renderToStaticMarkup(
-      <JuniorCoachAttendanceCard attendance={attendance} />,
+      <JuniorCoachAttendanceCard
+        attendance={{
+          ...attendance,
+          joinedOn: "2026-07-15",
+          holidays: [{ dateKey: "2026-07-20", label: "Bandh" }],
+          records: [
+            ...attendance.records,
+            { choice: "present", dateKey: "2026-07-15" },
+            { choice: "absent", dateKey: "2026-07-16" },
+            { choice: "present", dateKey: "2026-07-20" },
+          ],
+        }}
+      />,
     )
 
-    expect(html).toContain('id="junior-coach-attendance-register"')
-    expect(html).toContain("Your record")
-    expect(html).toContain("Annual attendance")
-    expect(html).toContain("Attendance month")
-    expect(html).toContain("August 2026")
-    expect(html).toContain("Not recorded")
-    expect(html).toContain("Not available")
-    expect(html.match(/role="columnheader"/g)).toHaveLength(7)
-    expect(html.match(/role="gridcell"/g)).toHaveLength(42)
-    expect(html).toContain('aria-rowcount="7"')
-    expect(html).not.toContain("player-attendance-register-scroll")
-    expect(html).not.toContain("player-attendance-register-table")
+    expect(html).toContain('aria-label="Your attendance calendar for July 2026"')
+    expect(html).toContain("50%")
+    expect(html).toContain("Present on 1 of 2 marked days")
+    expect(html).toContain('data-state="closed" role="gridcell" aria-label="Monday, 20 July 2026: academy closed for Bandh"')
+    expect(html).toContain('data-state="unavailable" role="gridcell" aria-label="Tuesday, 14 July 2026: not available"')
+    expect(html).toContain("Not available</span>")
+    expect(html).toContain('aria-label="Earlier months: view June 2026"')
+    expect(html).toContain('aria-label="Later month: view August 2026"')
   })
 })

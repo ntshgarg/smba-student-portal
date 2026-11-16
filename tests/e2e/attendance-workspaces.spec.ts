@@ -28,7 +28,7 @@ async function loginAsCoach(page: Page) {
 }
 
 async function chooseAPlayerWithAnAbsence(page: Page) {
-  const playerSelect = page.locator(".coach-adjustment-field select").first()
+  const playerSelect = page.getByRole("combobox", { name: /player/i })
   await expect(playerSelect).toBeVisible()
 
   const playerIds = await playerSelect.locator("option").evaluateAll((options) => (
@@ -43,9 +43,9 @@ async function chooseAPlayerWithAnAbsence(page: Page) {
     await playerSelect.selectOption(playerId)
     await expect(page).toHaveURL((url) => url.searchParams.get("player") === playerId)
     await page.waitForLoadState("networkidle")
-    await expect(page.locator(".coach-adjustment-choice-group").first()).toBeVisible()
-    const calendar = page.locator(".coach-adjustment-missed-calendar")
-    if (await calendar.isVisible()) return
+    const missedSessions = page.getByRole("group", { name: "Missed session" })
+    await expect(missedSessions).toBeVisible()
+    if (await missedSessions.getByRole("button").first().isVisible()) return
   }
 
   throw new Error("The loaded fixture contains no player with an unreconciled absence")
@@ -54,25 +54,24 @@ async function chooseAPlayerWithAnAbsence(page: Page) {
 async function makeRescheduleDraftDirty(page: Page) {
   await chooseAPlayerWithAnAbsence(page)
 
-  await page
-    .locator(".coach-adjustment-missed-calendar-grid")
-    .getByRole("button", { name: /^Select .*missed session/i })
-    .first()
-    .click()
+  const missedSessions = page.getByRole("group", { name: "Missed session" })
+  await missedSessions.getByRole("button").first().click()
 
-  const sourceChoice = page
-    .locator(".coach-adjustment-choice-list.is-source-slots")
+  // A date with two missed sessions asks for the exact one before the next step opens.
+  const exactSession = missedSessions
+    .getByText("Choose the exact missed session")
+    .locator("xpath=ancestor::div[1]")
     .getByRole("button")
     .first()
-  const completionStep = page.getByRole("group", { name: /Completed on/i })
+  const lockedCompletion = page.getByText("Choose the missed session first")
 
   await expect.poll(async () => (
-    Number(await sourceChoice.isVisible().catch(() => false))
-    + Number(await completionStep.isVisible().catch(() => false))
+    Number(await exactSession.isVisible().catch(() => false))
+    + Number(!(await lockedCompletion.isVisible().catch(() => true)))
   )).toBeGreaterThan(0)
 
-  if (await sourceChoice.isVisible()) await sourceChoice.click()
-  await expect(completionStep).toBeVisible()
+  if (await exactSession.isVisible()) await exactSession.click()
+  await expect(lockedCompletion).toHaveCount(0)
 }
 
 async function expectDiscardPrompt(
@@ -90,6 +89,10 @@ async function expectDiscardPrompt(
   expect(message).toMatch(/discard|unsaved/i)
 }
 
+// A session card on the Mark tab that can be opened: only a session's head
+// leads with its time, and only an openable one says whether it is expanded.
+const sessionHead = "button[aria-expanded]:has(> time)"
+
 test.beforeEach(async ({ page }) => {
   await loginAsCoach(page)
 })
@@ -98,46 +101,44 @@ test("Attendance card launches the focused player and staff workspaces", async (
   await page.goto("/coach#attendance", { waitUntil: "domcontentloaded" })
   const card = page.locator("#attendance [data-area=\"attendance\"]")
 
-  const players = card.getByRole("group", { name: "Players" })
-  const staff = card.getByRole("group", { name: "Staff" })
-  await expect(players.getByRole("link", { name: "Attendance register" })).toHaveAttribute(
-    "href",
-    "/coach/attendance/players/register",
-  )
-  await expect(players.getByRole("link", { name: "Record attendance" })).toHaveAttribute(
+  // Mark, Register and Make-ups are the tabs of the one Attendance page; staff
+  // roll call and the staff register are reached from inside it.
+  const actions = card.getByRole("navigation", { name: "Attendance actions" })
+  await expect(actions.getByRole("link")).toHaveCount(3)
+  await expect(actions.getByRole("link", { name: "Mark today's attendance" })).toHaveAttribute(
     "href",
     "/coach/attendance/players/record",
   )
-  await expect(players.getByRole("link", { name: "Reschedule attendance" })).toHaveAttribute(
+  await expect(actions.getByRole("link", { name: "Register" })).toHaveAttribute(
+    "href",
+    "/coach/attendance/players/register",
+  )
+  await expect(actions.getByRole("link", { name: "Make-ups" })).toHaveAttribute(
     "href",
     "/coach/attendance/adjustments",
   )
-  await expect(staff.getByRole("link", { name: "Attendance register" })).toHaveAttribute(
-    "href",
-    "/coach/attendance/staff/register",
-  )
-  await expect(staff.getByRole("link", { name: "Staff roll call" })).toHaveAttribute(
-    "href",
-    "/coach/attendance/staff/record",
-  )
+  await expect(card.getByText(/^(No sessions today|\d+ of \d+ sessions marked)$/u)).toBeVisible()
+  await expect(card.getByRole("term")).toHaveText(["Sessions", "Staff", /^Make-ups? to review$/u])
   await expect(card.locator("#attendance-register")).toHaveCount(0)
   await expect(card.locator("#attendance-adjustments-workspace")).toHaveCount(0)
 
-  await players.getByRole("link", { name: "Record attendance" }).click()
+  await actions.getByRole("link", { name: "Mark today's attendance" }).click()
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/players/record")
-  await expect(page.getByRole("heading", { name: "Record attendance" })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "Choose one session" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Attendance" })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "Attendance sections" })
+    .getByRole("link", { name: "Mark" })).toHaveAttribute("aria-current", "page")
   await expect(page.locator("#attendance-register")).toHaveCount(0)
 
   await page.goto("/coach#attendance", { waitUntil: "domcontentloaded" })
   await page.locator("#attendance [data-area=\"attendance\"]")
-    .getByRole("link", { name: "Reschedule attendance" })
+    .getByRole("link", { name: "Make-ups" })
     .click()
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/adjustments")
-  await expect(page.getByRole("heading", { name: "Reschedule attendance" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Attendance" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Make-ups" })).toHaveAttribute("aria-current", "page")
   await expect(page.locator("#attendance-adjustments-workspace")).toBeVisible()
 
-  await expect(page.locator(".coach-adjustment-field select").first()).toBeVisible()
+  await expect(page.getByRole("combobox", { name: /player/i })).toBeVisible()
 })
 
 test("Record Attendance protects unsaved session-roster changes", async ({ page }) => {
@@ -145,12 +146,12 @@ test("Record Attendance protects unsaved session-roster changes", async ({ page 
     waitUntil: "networkidle",
   })
   const firstAvailableSession = page
-    .locator(".attendance-occurrence-list > button.is-available")
+    .locator(sessionHead)
     .first()
   await expect(firstAvailableSession).toBeVisible()
   await firstAvailableSession.click()
   const firstRosterPlayer = page
-    .locator(".attendance-record-roster-list [role=\"group\"]")
+    .locator("#attendance-roster-panel [role=\"group\"]")
     .first()
   const presentChoice = firstRosterPlayer.getByRole("button", { name: "Present" })
   const absentChoice = firstRosterPlayer.getByRole("button", { name: "Absent" })
@@ -161,30 +162,28 @@ test("Record Attendance protects unsaved session-roster changes", async ({ page 
   if (!await page.getByRole("button", { name: "Save attendance" }).isEnabled()) {
     await absentChoice.click()
   }
-  const playerChoicePresentation = await firstRosterPlayer.evaluate((group) => {
-    const buttons = Array.from(group.querySelectorAll("button"))
-    const boxes = buttons.map((button) => {
+  // One Present | Absent switch: both halves on one line, the same size, and
+  // only the chosen half filled.
+  const playerChoicePresentation = await firstRosterPlayer.evaluate((group) => (
+    Array.from(group.querySelectorAll("button")).map((button) => {
       const box = button.getBoundingClientRect()
       return {
-        boxShadow: getComputedStyle(button).boxShadow,
-        left: box.left,
-        right: box.right,
+        backgroundColor: getComputedStyle(button).backgroundColor,
+        height: box.height,
+        pressed: button.getAttribute("aria-pressed") === "true",
+        top: box.top,
       }
     })
-    const style = getComputedStyle(group)
-    return {
-      borderTopWidth: style.borderTopWidth,
-      boxes,
-    }
-  })
-  expect(playerChoicePresentation.borderTopWidth).toBe("1px")
-  expect(Math.abs(
-    playerChoicePresentation.boxes[1].left - playerChoicePresentation.boxes[0].right,
-  )).toBeLessThanOrEqual(1)
-  expect(playerChoicePresentation.boxes.map((box) => box.boxShadow)).toEqual(["none", "none"])
+  ))
+  expect(Math.abs(playerChoicePresentation[0].top - playerChoicePresentation[1].top))
+    .toBeLessThanOrEqual(1)
+  expect(playerChoicePresentation[0].height).toBe(playerChoicePresentation[1].height)
+  expect(playerChoicePresentation.filter((choice) => choice.pressed)).toHaveLength(1)
+  expect(playerChoicePresentation.find((choice) => !choice.pressed)?.backgroundColor)
+    .toBe("rgba(0, 0, 0, 0)")
   await expect(page.getByRole("button", { name: "Save attendance" })).toBeEnabled()
 
-  const backLink = page.getByRole("link", { name: "Back to Attendance" })
+  const backLink = page.getByRole("link", { name: "Back to dashboard" })
   await expectDiscardPrompt(page, () => backLink.click(), "dismiss")
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/players/record")
 
@@ -192,15 +191,82 @@ test("Record Attendance protects unsaved session-roster changes", async ({ page 
   await expect(page).toHaveURL((url) => url.pathname === "/coach" && url.hash === "#attendance")
 })
 
+// Discarding unsaved marks makes the unsaved-work guard step back over the
+// history entry it added for them. The address change for the card or date the
+// coach chose has to survive that step, or a reload reopens the card left and a
+// date change shows "No sessions on this date" for a date that has sessions.
+test("Discarding unsaved marks moves the address to the chosen card and date", async ({ page }) => {
+  await page.goto("/coach/attendance/players/record?date=2026-08-03", {
+    waitUntil: "networkidle",
+  })
+  const sessions = page.locator(sessionHead)
+  const openSession = page.locator(`${sessionHead}[aria-expanded="true"]`)
+  const roster = page.locator("#attendance-roster-panel")
+  async function markOne() {
+    await roster.locator('[role="group"]').first().getByRole("button", { name: "Present" }).click()
+    await expect(roster.getByText(/^1 unsaved change$/u)).toBeVisible()
+  }
+
+  await expect(sessions.nth(1)).toBeVisible()
+  await sessions.first().click()
+  await expect(page).toHaveURL((url) => Boolean(url.searchParams.get("occurrence")))
+  await page.waitForLoadState("networkidle")
+  const firstOccurrence = new URL(page.url()).searchParams.get("occurrence")
+
+  // Session to session.
+  await markOne()
+  const nextSession = page.locator(`${sessionHead}[aria-expanded="false"]`).first()
+  const nextSessionName = await nextSession.locator("strong").textContent()
+  await expectDiscardPrompt(page, () => nextSession.click(), "accept")
+  await expect(page).toHaveURL((url) => {
+    const occurrence = url.searchParams.get("occurrence")
+    return Boolean(occurrence) && occurrence !== firstOccurrence
+  })
+  await page.reload({ waitUntil: "networkidle" })
+  await expect(openSession.locator("strong")).toHaveText(nextSessionName ?? "")
+
+  // Session to staff.
+  await markOne()
+  await expectDiscardPrompt(
+    page,
+    () => page.getByRole("button", { name: /Assistant coaches/u }).click(),
+    "accept",
+  )
+  await expect(page).toHaveURL((url) => (
+    url.searchParams.get("staff") === "open" && !url.searchParams.has("occurrence")
+  ))
+
+  // Another date.
+  await sessions.first().click()
+  await expect(roster).toBeVisible()
+  await page.waitForLoadState("networkidle")
+  await markOne()
+  await expectDiscardPrompt(
+    page,
+    () => page.getByRole("button", { name: /4 August 2026$/u }).click(),
+    "accept",
+  )
+  await expect(page).toHaveURL((url) => (
+    url.searchParams.get("date") === "2026-08-04" && !url.searchParams.has("occurrence")
+  ))
+  await page.waitForLoadState("networkidle")
+  const dayLine = page.locator("#attendance-day-title + p")
+  await expect(page.getByRole("heading", { name: /^Tuesday,? 4 August$/u })).toBeVisible()
+  await expect(dayLine).toBeVisible()
+  const shownForTheDate = await dayLine.textContent()
+  await page.reload({ waitUntil: "networkidle" })
+  await expect(dayLine).toHaveText(shownForTheDate ?? "")
+})
+
 test("stale player roll-call tabs cannot overwrite a newer save", async ({ context, page }) => {
   await page.goto("/coach/attendance/players/record?date=2026-07-31", {
     waitUntil: "networkidle",
   })
-  await page.locator(".attendance-occurrence-list > button.is-available").first().click()
+  await page.locator(sessionHead).first().click()
   await page.waitForLoadState("networkidle")
 
   const firstTabGroup = page
-    .locator(".attendance-record-roster-list [role=\"group\"]")
+    .locator("#attendance-roster-panel [role=\"group\"]")
     .filter({ has: page.locator('button[aria-pressed="true"]') })
     .first()
   await expect(firstTabGroup).toBeVisible()
@@ -237,50 +303,49 @@ test("stale player roll-call tabs cannot overwrite a newer save", async ({ conte
   await stalePage.close({ runBeforeUnload: false })
 })
 
-test("Record Attendance keeps the selected roster attached on tablet and split on web", async ({ page }) => {
+test("Record Attendance opens the selected session in place on tablet and web", async ({ page }) => {
   await page.setViewportSize({ height: 1024, width: 820 })
   await page.goto("/coach/attendance/players/record?date=2026-08-03", {
     waitUntil: "networkidle",
   })
   const firstAvailableSession = page
-    .locator(".attendance-occurrence-list > button.is-available")
+    .locator(sessionHead)
     .first()
   await firstAvailableSession.click()
   await expect(page).toHaveURL((url) => Boolean(url.searchParams.get("occurrence")))
   await page.waitForLoadState("networkidle")
 
+  // The session's head becomes the band over its register, at both widths.
   const roster = page.locator("#attendance-roster-panel")
   await expect(roster).toBeVisible()
-  const selectedSession = page.locator(".attendance-occurrence-list button.is-selected")
+  const selectedSession = page.locator(`${sessionHead}[aria-expanded="true"]`)
   await expect(selectedSession).toBeVisible()
-  const selectedBox = await selectedSession.boundingBox()
-  const rosterBox = await roster.boundingBox()
-  expect(selectedBox).not.toBeNull()
-  expect(rosterBox).not.toBeNull()
-  expect(Math.abs((selectedBox?.y ?? 0) + (selectedBox?.height ?? 0) - (rosterBox?.y ?? 0)))
-    .toBeLessThanOrEqual(2)
-  await expect(roster.locator(".attendance-roster-folio").first()).toHaveText("01")
-  await expect(roster.locator(".attendance-record-roster-list")).not.toContainText(/\bAB\b/)
-
-  await page.setViewportSize({ height: 900, width: 1440 })
-  await expect.poll(async () => {
-    const sessionBox = await selectedSession.boundingBox()
-    const desktopRosterBox = await roster.boundingBox()
-    if (!sessionBox || !desktopRosterBox) return false
-    return desktopRosterBox.x > sessionBox.x + sessionBox.width
-  }).toBe(true)
+  for (const viewport of [{ height: 1024, width: 820 }, { height: 900, width: 1440 }]) {
+    await page.setViewportSize(viewport)
+    const selectedBox = await selectedSession.boundingBox()
+    const rosterBox = await roster.boundingBox()
+    expect(selectedBox).not.toBeNull()
+    expect(rosterBox).not.toBeNull()
+    expect(Math.abs((selectedBox?.y ?? 0) + (selectedBox?.height ?? 0) - (rosterBox?.y ?? 0)))
+      .toBeLessThanOrEqual(2)
+    expect(Math.abs((selectedBox?.x ?? 0) - (rosterBox?.x ?? 0))).toBeLessThanOrEqual(2)
+  }
 })
 
 test("Staff Roll Call matches the player roster choice controls across responsive views", async ({ page }) => {
+  // The old address opens the Mark tab's staff card on the same date.
   await page.goto("/coach/attendance/staff/record?date=2026-08-03", {
     waitUntil: "networkidle",
   })
+  await expect(page).toHaveURL((url) => (
+    url.pathname === "/coach/attendance/players/record"
+    && url.searchParams.get("date") === "2026-08-03"
+    && url.searchParams.get("staff") === "open"
+  ))
 
-  const ledger = page.locator(".staff-roll-call-ledger")
-  const rows = ledger.locator(".staff-roll-call-list > article")
+  const ledger = page.locator("#staff-roll-call-panel")
+  const rows = ledger.getByRole("listitem")
   await expect(rows).toHaveCount(2)
-  await expect(ledger.locator(".staff-roll-call-folio")).toHaveText(["01", "02"])
-  await expect(ledger.locator(".staff-roll-call-person > span")).toHaveCount(0)
 
   const arunChoices = ledger.getByRole("group", { name: "Attendance for Arun Kumar" })
   const meeraChoices = ledger.getByRole("group", { name: "Attendance for Meera Nair" })
@@ -324,13 +389,6 @@ test("Staff Roll Call matches the player roster choice controls across responsiv
     )
 
     const controls = arunChoices.getByRole("button")
-    const groupPresentation = await arunChoices.evaluate((group) => {
-      const style = getComputedStyle(group)
-      return {
-        borderTopWidth: style.borderTopWidth,
-        columnGap: style.columnGap,
-      }
-    })
     const boxes = await controls.evaluateAll((buttons) => buttons.map((button) => {
       const box = button.getBoundingClientRect()
       return {
@@ -342,12 +400,11 @@ test("Staff Roll Call matches the player roster choice controls across responsiv
         top: box.top,
       }
     }))
-    expect(groupPresentation.borderTopWidth).toBe("1px")
-    expect(groupPresentation.columnGap).toBe("0px")
     expect(Math.max(...boxes.map((box) => box.top)) - Math.min(...boxes.map((box) => box.top)))
       .toBeLessThanOrEqual(1)
-    expect(Math.abs(boxes[1].left - boxes[0].right)).toBeLessThanOrEqual(1)
-    expect(boxes[0].boxShadow).toBe("none")
+    expect(boxes[1].left).toBeGreaterThan(boxes[0].right - 1)
+    // Arun is marked present, so only that half is filled.
+    expect(boxes[1].boxShadow).toBe("none")
     /*
      * Both halves, not just the first. This assertion only ever read boxes[0],
      * which is why it sat green while the pair rendered at 11px and 8px on every
@@ -357,7 +414,7 @@ test("Staff Roll Call matches the player roster choice controls across responsiv
      * this line; pinned here so it cannot come back unseen.
      */
     expect(boxes[1].fontSize).toBe(boxes[0].fontSize)
-    expect(boxes[0].fontSize).toBe("12px")
+    expect(boxes[0].fontSize).toBe("14px")
     if (viewport.width <= 760) {
       expect(Math.min(...boxes.map((box) => box.height))).toBeGreaterThanOrEqual(44)
     }
@@ -368,7 +425,7 @@ test("Reschedule Attendance protects its dirty draft", async ({ page }) => {
   await page.goto("/coach/attendance/adjustments", { waitUntil: "domcontentloaded" })
   await makeRescheduleDraftDirty(page)
 
-  const backLink = page.getByRole("link", { name: "Back to Attendance" })
+  const backLink = page.getByRole("link", { name: "Back to dashboard" })
   await expectDiscardPrompt(page, () => backLink.click(), "dismiss")
   await expect(page).toHaveURL((url) => url.pathname === "/coach/attendance/adjustments")
 
@@ -388,7 +445,7 @@ test("Legacy dashboard deep links preserve standalone adjustment parameters", as
     && url.searchParams.get("player") === "missing-player"
   ))
   await expect(page.locator("#attendance-adjustments-workspace")).toBeVisible()
-  await expect(page.locator(".coach-adjustment-field select").first()).toHaveValue("")
+  await expect(page.getByRole("combobox", { name: /player/i })).toHaveValue("")
   await expect(page.getByText(/not found|invalid adjustment|invalid player/i)).toHaveCount(0)
 
   await page.goto("/coach?attendance=register#attendance", {
@@ -402,10 +459,10 @@ test("A valid adjustment deep link expands and focuses its published record", as
   await page.goto("/coach/attendance/adjustments", { waitUntil: "domcontentloaded" })
 
   const historyDisclosure = page.getByRole("button", {
-    name: /Previous reschedules \(\d+\)/i,
+    name: /Past make-ups \(\d+\)/i,
   })
   await historyDisclosure.click()
-  const firstHistoryItem = page.locator(".coach-adjustment-history-item > button").first()
+  const firstHistoryItem = page.locator("#attendance-adjustment-history article > button").first()
   await expect(firstHistoryItem).toBeVisible()
   await firstHistoryItem.click()
   await expect(firstHistoryItem).toHaveAttribute("aria-expanded", "true")
@@ -420,25 +477,24 @@ test("A valid adjustment deep link expands and focuses its published record", as
   )
 
   await expect(page.getByRole("button", {
-    name: /Previous reschedules \(\d+\)/i,
+    name: /Past make-ups \(\d+\)/i,
   })).toHaveAttribute("aria-expanded", "true")
   const requestedHistoryItem = page.locator(`[aria-controls="${detailsId}"]`)
   await expect(requestedHistoryItem).toHaveAttribute("aria-expanded", "true")
   await expect(requestedHistoryItem).toBeFocused()
 })
 
-test("Collapsed reschedule rows tint the bar while keeping status boxes white", async ({ page }) => {
+test("Collapsed make-up rows tint the bar while keeping status pills steady", async ({ page }) => {
   await page.goto("/coach/attendance/adjustments", { waitUntil: "domcontentloaded" })
 
   await page.getByRole("button", {
-    name: /Previous reschedules \(\d+\)/i,
+    name: /Past make-ups \(\d+\)/i,
   }).click()
 
   const collapsedRow = page.locator(
-    '.coach-adjustment-history-item:has(> button[aria-expanded="false"]):has(.coach-adjustment-history-status.is-published), '
-      + '.coach-adjustment-history-item:has(> button[aria-expanded="false"]):has(.coach-adjustment-history-status.is-voided)',
+    '#attendance-adjustment-history article:is([data-status="published"], [data-status="voided"]):has(> button[aria-expanded="false"])',
   ).first()
-  const status = collapsedRow.locator(".coach-adjustment-history-status")
+  const status = collapsedRow.getByText(/^(Published|Voided)$/)
   await expect(status).toBeVisible()
 
   const restingRowBackground = await collapsedRow.evaluate((element) => (
@@ -447,7 +503,6 @@ test("Collapsed reschedule rows tint the bar while keeping status boxes white", 
   const restingStatusBackground = await status.evaluate((element) => (
     getComputedStyle(element).backgroundColor
   ))
-  expect(restingStatusBackground).toBe("rgb(255, 255, 255)")
 
   await collapsedRow.locator(":scope > button").hover()
   await expect.poll(() => collapsedRow.evaluate((element) => (
@@ -459,15 +514,15 @@ test("Collapsed reschedule rows tint the bar while keeping status boxes white", 
 test("A player without missed sessions gets a compact empty step", async ({ page }) => {
   await page.goto("/coach/attendance/adjustments", { waitUntil: "domcontentloaded" })
 
-  const playerSelect = page.locator(".coach-adjustment-field select").first()
+  const playerSelect = page.getByRole("combobox", { name: /player/i })
   const playerIds = await playerSelect.locator("option").evaluateAll((options) => (
     options
       .map((option) => (option as HTMLOptionElement).value)
       .filter(Boolean)
   ))
-  const missedSessionStep = page.locator(".coach-adjustment-choice-group").first()
-  const compactEmptyStep = missedSessionStep.locator(".coach-adjustment-empty-step.is-compact")
-  const missedCalendar = missedSessionStep.locator(".coach-adjustment-missed-calendar")
+  const missedSessionStep = page.getByRole("group", { name: "Missed session" })
+  const compactEmptyStep = missedSessionStep.getByText("has no unreconciled absences")
+  const missedCalendar = missedSessionStep.getByRole("button").first()
   let compactEmptyStepFound = false
 
   for (const playerId of playerIds) {
@@ -479,12 +534,10 @@ test("A player without missed sessions gets a compact empty step", async ({ page
     await expect(playerSelect).toHaveValue(playerId)
     await expect(compactEmptyStep.or(missedCalendar)).toBeVisible()
 
-    const emptyStep = await missedSessionStep.evaluate((fieldset) => {
-      const step = fieldset.querySelector(".coach-adjustment-empty-step.is-compact")
-      if (!step) return null
-      return { height: step.getBoundingClientRect().height, text: step.textContent ?? "" }
-    })
-    if (!emptyStep) continue
+    if (!(await compactEmptyStep.isVisible())) continue
+    const emptyStep = await compactEmptyStep.evaluate((step) => (
+      { height: step.getBoundingClientRect().height, text: step.textContent ?? "" }
+    ))
 
     compactEmptyStepFound = true
     expect(emptyStep.text).toContain("has no unreconciled absences")

@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, eq, inArray, isNull, lt, or } from "drizzle-orm"
+import { and, count, eq, inArray, isNull, lt, or } from "drizzle-orm"
 import { SQLiteTransaction } from "drizzle-orm/sqlite-core"
 
 import { initializeDatabase, type SmbaDatabaseExecutor } from "@/lib/db/client"
@@ -32,6 +32,8 @@ export const AUTH_SECURITY_EVENT_RETENTION_DAYS = 180
 export const EXPIRED_SIGN_IN_RECORD_RETENTION_DAYS = 90
 // And rejected or abandoned registration requests, 90 days after the final decision or activity.
 export const REGISTRATION_REQUEST_RETENTION_DAYS = 90
+// How far ahead the head coach is told about requests about to go.
+export const REGISTRATION_REQUEST_WARNING_DAYS = 7
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -53,28 +55,51 @@ let lastPurgeAt = 0
  * the row also frees its registration identity, so the person can ask again.
  * One transaction, so an approval cannot land half-way through.
  */
+function registrationRequestExpired(cutoff: Date) {
+  return and(
+    inArray(accounts.requestedRole, ["player", "coach"]),
+    isNull(accounts.role),
+    isNull(accounts.approvedAt),
+    isNull(accounts.archivedAt),
+    or(
+      and(eq(accounts.approvalStatus, "rejected"), lt(accounts.rejectedAt, cutoff)),
+      and(
+        eq(accounts.approvalStatus, "pending"),
+        lt(accounts.createdAt, cutoff),
+        lt(accounts.updatedAt, cutoff),
+      ),
+    ),
+  )
+}
+
 function purgeExpiredRegistrationRequests(database: SmbaDatabaseExecutor, cutoff: Date) {
   return database.transaction((tx) => {
-    const expired = tx.select({ id: accounts.id }).from(accounts).where(and(
-      inArray(accounts.requestedRole, ["player", "coach"]),
-      isNull(accounts.role),
-      isNull(accounts.approvedAt),
-      isNull(accounts.archivedAt),
-      or(
-        and(eq(accounts.approvalStatus, "rejected"), lt(accounts.rejectedAt, cutoff)),
-        and(
-          eq(accounts.approvalStatus, "pending"),
-          lt(accounts.createdAt, cutoff),
-          lt(accounts.updatedAt, cutoff),
-        ),
-      ),
-    ))
+    const expired = tx.select({ id: accounts.id }).from(accounts).where(registrationRequestExpired(cutoff))
     tx.update(authSecurityEvents).set({ accountId: null })
       .where(inArray(authSecurityEvents.accountId, expired)).run()
     tx.delete(authRecoveryEmails).where(inArray(authRecoveryEmails.accountId, expired)).run()
     tx.delete(authActivationClaims).where(inArray(authActivationClaims.accountId, expired)).run()
     return tx.delete(accounts).where(inArray(accounts.id, expired)).run().changes
   }, { behavior: "immediate" })
+}
+
+/**
+ * How many undecided or rejected requests the purge deletes within the next
+ * few days (any already past the line go at the next purge), so the head
+ * coach hears about them before they go.
+ */
+export function countRegistrationRequestsExpiringSoon({
+  database = initializeDatabase(),
+  now = new Date(),
+}: {
+  database?: SmbaDatabaseExecutor
+  now?: Date
+} = {}) {
+  const cutoff = new Date(
+    now.getTime() - (REGISTRATION_REQUEST_RETENTION_DAYS - REGISTRATION_REQUEST_WARNING_DAYS) * DAY_MS,
+  )
+  return database.select({ requests: count() }).from(accounts)
+    .where(registrationRequestExpired(cutoff)).get()?.requests ?? 0
 }
 
 /** Deletes everything past its retention period. Returns how many rows went. */

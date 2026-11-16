@@ -1,0 +1,526 @@
+/* The attendance register (players and staff): one month of full tiles. */
+
+.register {
+  display: grid;
+  gap: 14px;
+}
+
+/* --- Players | Staff, filter pills and Jump to today --- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-tight);
+}
+
+.switch,
+.months,
+.pill,
+.card {
+  border: var(--frost-border);
+  background: var(--frost-fill);
+  box-shadow: var(--frost-shadow);
+}
+
+.switch {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 6px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+}
+
+.switch a {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.switch a[aria-current="page"] {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.pill {
+  position: relative;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-tight);
+  padding-left: 14px;
+  border-radius: var(--radius-pill);
+}
+
+.pill > span {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 600;
+}
+
+.pill select {
+  min-height: 42px;
+  padding: 0 34px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  appearance: none;
+  cursor: pointer;
+}
+
+.pill > svg {
+  position: absolute;
+  right: 12px;
+  width: 15px;
+  height: 15px;
+  pointer-events: none;
+}
+
+.pill:focus-within,
+.switch a:focus-visible,
+.months a:focus-visible,
+.step a:focus-visible,
+.today:focus-visible,
+.grid:focus-visible,
+a.tile:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.today {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--red);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* --- Month bar --- */
+
+.months {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 16px;
+  overflow-x: auto;
+}
+
+.months a {
+  display: grid;
+  flex: 1;
+  min-width: 52px;
+  min-height: 40px;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--steel-dark);
+  font-size: var(--type-utility-meta);
+  font-weight: 700;
+}
+
+.months a[aria-current="page"] {
+  background: var(--navy);
+  color: var(--white);
+}
+
+/* --- Card: navy band, legend, grid --- */
+
+.card {
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+.band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px var(--space-copy);
+  padding: var(--space-copy) 20px;
+  background: var(--navy);
+  color: var(--ivory);
+}
+
+.band h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.band p,
+.step a {
+  color: color-mix(in srgb, var(--ivory) 78%, transparent);
+  font-size: var(--type-utility-meta);
+  font-weight: 600;
+}
+
+.step {
+  display: flex;
+  gap: 14px;
+}
+
+.step a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--space-copy);
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--steel-dark);
+  font-size: var(--type-utility-label);
+  font-weight: 600;
+}
+
+.legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend .tile {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+}
+
+.legend .tile svg {
+  width: 9px;
+  height: 9px;
+}
+
+.legend .corner {
+  top: 1px;
+  right: 1px;
+}
+
+.grid {
+  overflow-x: auto;
+  background: var(--paper);
+}
+
+.table {
+  --name-width: 230px;
+  width: 100%;
+  min-width: calc(var(--name-width) + var(--register-columns) * 30px);
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.table th,
+.table td {
+  padding: 0;
+  text-align: center;
+}
+
+/* Positioned so a visually hidden holiday reason stays inside the scroller
+   instead of stretching the document. */
+.table thead th {
+  position: relative;
+  padding: 10px 0 var(--space-tight);
+  background: var(--paper);
+  color: var(--steel);
+  font-size: var(--type-operational-floor);
+  font-weight: 700;
+}
+
+.table thead th > strong {
+  display: block;
+  color: var(--ink);
+  font-size: var(--type-operational-body);
+}
+
+/* No session to mark that day: muted, still 4.5:1 on --paper. */
+.table thead th[data-unavailable] > strong {
+  color: #45515b;
+}
+
+.table thead th[data-register-today] > strong {
+  color: var(--red);
+}
+
+.table tbody td {
+  height: 52px;
+  padding: 3px;
+  border-top: 1px solid var(--line);
+}
+
+.table .name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: var(--name-width);
+  padding: 10px var(--space-copy);
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+  text-align: left;
+}
+
+.table thead .name {
+  color: var(--steel);
+}
+
+.table tbody .name {
+  border-top: 1px solid var(--line);
+}
+
+.continuation .name,
+.table tbody tr.continuation td {
+  border-top-style: dashed;
+}
+
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+}
+
+.who strong {
+  color: var(--ink);
+  font-size: var(--type-operational-body);
+  font-weight: 700;
+}
+
+.name small {
+  display: block;
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+  font-weight: 600;
+}
+
+.percent {
+  padding: 1px var(--space-tight);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--green) 11%, transparent);
+  color: var(--green);
+  font-size: var(--type-operational-floor);
+  font-weight: 700;
+}
+
+.percent.low {
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  color: var(--red);
+}
+
+/* --- Tiles: each day fills its cell --- */
+
+.tile {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--steel-dark);
+}
+
+.tile svg {
+  width: 14px;
+  height: 14px;
+}
+
+.present {
+  background: var(--green);
+  color: var(--white);
+}
+
+.absent {
+  background: var(--red);
+  color: var(--white);
+}
+
+.makeup {
+  background: var(--makeup);
+  color: var(--makeup-dark);
+}
+
+.completion {
+  background: var(--makeup-soft);
+  box-shadow: inset 0 0 0 1.5px var(--makeup);
+  color: var(--makeup-dark);
+}
+
+.holiday {
+  background: color-mix(in srgb, var(--navy) 16%, transparent);
+}
+
+.unmarked {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--navy) 14%, transparent) 0 3px,
+    transparent 3px 7px
+  );
+}
+
+/* Not scheduled for this person that day: nothing to show. */
+.none {
+  background: transparent;
+}
+
+.upcoming {
+  background: color-mix(in srgb, var(--navy) 6%, transparent);
+}
+
+.review {
+  box-shadow: inset 0 0 0 2px var(--white), 0 0 0 2px var(--red);
+}
+
+.tile .corner {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  stroke-width: 3;
+}
+
+.tile .flag {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--red);
+  stroke-width: 2.6;
+}
+
+.count {
+  font-size: var(--type-operational-floor);
+  font-weight: 800;
+}
+
+/* --- Empty states inside the card --- */
+
+.empty {
+  display: grid;
+  min-height: 230px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: var(--space-block) var(--space-copy);
+  background: var(--paper);
+  text-align: center;
+}
+
+.empty h3 {
+  color: var(--navy);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 400;
+}
+
+.empty p {
+  color: var(--steel);
+  font-size: var(--type-utility-label);
+}
+
+.empty a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--red);
+  font-size: var(--type-utility-label);
+  font-weight: 780;
+}
+
+@media (max-width: 720px) {
+  .switch {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+
+  .switch a {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Three pills share one row: the label sits above the value. */
+  .pill {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 4px 0 4px 14px;
+    border-radius: 16px;
+  }
+
+  .pill > span {
+    font-size: var(--type-operational-floor);
+    line-height: 1.2;
+  }
+
+  .pill select {
+    width: 100%;
+    min-height: 24px;
+    padding-right: 28px;
+    text-overflow: ellipsis;
+  }
+
+  .pill > svg {
+    right: 10px;
+    bottom: 10px;
+  }
+
+  .today {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .band {
+    padding: 14px var(--space-copy);
+  }
+
+  .legend {
+    padding: 10px var(--space-copy);
+  }
+
+  .table {
+    --name-width: 132px;
+    min-width: calc(var(--name-width) + var(--register-columns) * 40px);
+  }
+
+  .table .name {
+    padding: var(--space-tight) 10px;
+  }
+
+  .who {
+    display: grid;
+    justify-items: start;
+  }
+
+  .name small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* iOS zooms on focus below 16px: phones, and tablets through (pointer: coarse), as on Mark and Make-ups. */
+@media (max-width: 720px), (pointer: coarse) {
+  .pill select {
+    font-size: 16px;
+  }
+}
