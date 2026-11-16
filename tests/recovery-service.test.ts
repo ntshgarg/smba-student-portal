@@ -314,6 +314,33 @@ describe("verified recovery email", () => {
     expect(getRecoveryEmail("player-two", { database })?.email).toBe(SHARED_EMAIL)
   })
 
+  it("confirms a recovery address once when the same code is sent twice at once", async () => {
+    const accountId = "player-email-double"
+    await createActiveAccount({ academyId: "SMBA-PL-1011", accountId, role: "player" })
+    const subjectKey = recoverySubjectKeyForAccount(accountId)
+    const mailer = new CapturingMailer()
+    await requestRecoveryEmailVerification({
+      accountId,
+      email: "double@example.com",
+      mailer,
+      subjectKey,
+    }, { database, now: NOW })
+    // The other submit has read the same open code and burns it first.
+    const racing = Object.create(database) as typeof database
+    racing.transaction = ((run, config) => {
+      database.update(schema.authEmailChallenges).set({ consumedAt: NOW })
+        .where(eq(schema.authEmailChallenges.email, "double@example.com")).run()
+      return database.transaction(run, config)
+    }) as typeof database.transaction
+    expect(confirmRecoveryEmailVerification({
+      accountId,
+      code: mailer.verification[0].code,
+      email: "double@example.com",
+      subjectKey,
+    }, { database: racing, now: NOW })).toBeNull()
+    expect(getRecoveryEmail(accountId, { database })).toBeNull()
+  })
+
   it("keeps the active address until its replacement is verified and rejects expired codes", async () => {
     const accountId = "player-email-change"
     await createActiveAccount({

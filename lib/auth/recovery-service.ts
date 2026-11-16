@@ -463,8 +463,20 @@ export function confirmRecoveryEmailVerification(input: {
   recordLoginSuccess(attempt.subjectHash, { database })
 
   if (input.accountId) {
-    const existing = getRecoveryEmail(input.accountId, { database })
-    database.transaction((tx) => {
+    return database.transaction((tx) => {
+      // The code is burned first and only once: a double submit that read the
+      // same open code used to save twice, with two security events and two
+      // "address replaced" emails.
+      const burned = tx.update(authEmailChallenges).set({
+        consumedAt: now,
+        verifiedAt: now,
+        updatedAt: now,
+      }).where(and(
+        eq(authEmailChallenges.id, challenge.id),
+        isNull(authEmailChallenges.consumedAt),
+      )).run()
+      if (burned.changes !== 1) return null
+      const existing = getRecoveryEmail(input.accountId!, { database: tx })
       tx.insert(authRecoveryEmails).values({
         accountId: input.accountId!,
         email,
@@ -475,11 +487,6 @@ export function confirmRecoveryEmailVerification(input: {
         target: authRecoveryEmails.accountId,
         set: { email, verifiedAt: now, updatedAt: now },
       }).run()
-      tx.update(authEmailChallenges).set({
-        consumedAt: now,
-        verifiedAt: now,
-        updatedAt: now,
-      }).where(eq(authEmailChallenges.id, challenge.id)).run()
       if (existing && existing.email !== email) {
         retireRecoveryWorkForOldAddress(input.accountId!, email, tx, now)
       }
@@ -490,12 +497,12 @@ export function confirmRecoveryEmailVerification(input: {
         outcome: "success",
         userAgent: input.security?.userAgent,
       }, { database: tx, now })
+      return {
+        email,
+        previousEmail: existing && existing.email !== email ? existing.email : null,
+        receiptToken: null,
+      }
     }, { behavior: "immediate" })
-    return {
-      email,
-      previousEmail: existing && existing.email !== email ? existing.email : null,
-      receiptToken: null,
-    }
   }
 
   const receiptToken = randomBytes(32).toString("base64url")
