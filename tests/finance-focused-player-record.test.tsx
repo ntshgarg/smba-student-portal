@@ -219,7 +219,7 @@ describe("a fee record once fee changes live in Members", () => {
     )
 
     // the band carries the plan, its monthly fee and its standing
-    expect(html).toMatch(/·\u00a0<span[^>]*>₹[\d,]+ a month<\/span> ·\u00a0<span[^>]*>Active</)
+    expect(html.replace(/<[^>]+>/gu, "")).toMatch(/·\u00a0₹[\d,]+ a month ·\u00a0Active/)
     expect(html).toContain(`/coach/members?player=${activeLedger.playerId}`)
     expect(html).not.toContain("Change fee plan")
     expect(html).not.toContain("End fee plan")

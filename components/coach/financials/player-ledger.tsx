@@ -26,10 +26,15 @@ function planDate(dateKey: string | null) {
     : ""
 }
 
-/** A "·"-separated line that breaks only between its parts, and never mid-ID or mid-period. */
+/** A "·"-separated line that breaks only between words, never inside an ID or period at its hyphen. */
 function KeptParts({ text }: { text: string }) {
   return text.split(" · ").map((part, index) => (
-    <Fragment key={index}>{index ? " ·\u00a0" : null}<span className={styles.nowrap}>{part}</span></Fragment>
+    <Fragment key={index}>
+      {index ? " ·\u00a0" : null}
+      {part.split(" ").map((word, wordIndex) => (
+        <Fragment key={wordIndex}>{wordIndex ? " " : null}<span className={styles.nowrap}>{word}</span></Fragment>
+      ))}
+    </Fragment>
   ))
 }
 
