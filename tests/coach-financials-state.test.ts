@@ -14,7 +14,7 @@ describe("coach Financials player state isolation", () => {
     )
 
     expect(source).toMatch(
-      /<div key=\{workspace\.selectedLedger\.playerId\}>/u,
+      /<section className=\{styles\.band\} key=\{workspace\.selectedLedger\.playerId\}/u,
     )
     expect(source).not.toContain("showPaymentEntry")
   })

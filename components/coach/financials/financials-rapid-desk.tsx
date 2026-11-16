@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, ChevronDown, Search } from "lucide-react"
+import { ArrowLeft, Search } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -26,7 +26,7 @@ import {
   statusLabels,
   useIdempotencyKey,
 } from "./financials-client-utils"
-import styles from "./financials.module.css"
+import styles from "./fees.module.css"
 import type {
   FinancialChargeView,
   PlayerFinancialLedgerView,
@@ -262,218 +262,190 @@ function PaymentForm({
   }
 
   return (
-    <section className={styles.balancePaymentPanel} aria-labelledby="quick-payment-title">
-      <form className={styles.balanceForm} autoComplete="off" onSubmit={(event) => void submit(event)}>
-        <div className={styles.balanceEquation}>
-          <div className={styles.balanceMetric}>
-            <span>Outstanding</span>
-            <strong>{formatInr(totalOutstandingPaise)}</strong>
-            <small>Current outstanding fees</small>
+    <form className={styles.bandBody} autoComplete="off" onSubmit={(event) => void submit(event)}>
+      <label className={styles.q}>
+        <span>Amount received</span>
+        <span className={styles.bigAmount} data-invalid={amountInvalid ? "" : undefined}>
+          <span aria-hidden="true">₹</span>
+          <input
+            ref={amountRef}
+            name="amountReceived"
+            inputMode="decimal"
+            autoComplete="off"
+            value={amount}
+            disabled={Boolean(pending)}
+            aria-invalid={amountInvalid || undefined}
+            aria-describedby={amountInvalid
+              ? `payment-amount-help ${RAPID_DESK_FEEDBACK_ID}`
+              : "payment-amount-help"}
+            onChange={(event) => editAmount(event.target.value)}
+          />
+        </span>
+      </label>
+      <p className={styles.leaves} id="payment-amount-help">
+        {projectedBalancePaise === null
+          ? <>Total outstanding {formatInr(totalOutstandingPaise)}</>
+          : projectedBalancePaise < 0
+            ? <>Exceeds balance by <b>{formatInr(Math.abs(projectedBalancePaise))}</b></>
+            : <>Leaves <b>{formatInr(projectedBalancePaise)}</b> owed of {formatInr(totalOutstandingPaise)}</>}
+      </p>
+
+      <div className={`${styles.q} ${styles.dateMethod}`}>
+        <label className={styles.q}>
+          <span>Received on</span>
+          <input
+            name="receivedOn"
+            type="date"
+            max={getAcademyDateKey()}
+            value={receivedOn}
+            disabled={Boolean(pending)}
+            onChange={(event) => {
+              receivedOnChosen.current = true
+              setReceivedOn(event.target.value)
+              resetMutation()
+            }}
+          />
+        </label>
+        <fieldset className={styles.q}>
+          <legend>Method</legend>
+          <div className={styles.methods}>
+            {paymentMethods.map((item) => (
+              <label key={item.value}>
+                <input
+                  checked={method === item.value}
+                  disabled={Boolean(pending)}
+                  name="paymentMethod"
+                  type="radio"
+                  value={item.value}
+                  onChange={() => {
+                    setMethod(item.value)
+                    resetMutation()
+                  }}
+                />
+                {item.label}
+              </label>
+            ))}
           </div>
+        </fieldset>
+      </div>
 
-          <span className={styles.balanceOperator} aria-hidden="true">−</span>
+      <div className={`${styles.q} ${styles.two}`}>
+        <label className={styles.q}>
+          <span>Reference <em>(optional)</em></span>
+          <input
+            name="externalReference"
+            value={externalReference}
+            disabled={Boolean(pending)}
+            placeholder="UPI or cheque reference"
+            onChange={(event) => {
+              setExternalReference(event.target.value)
+              resetMutation()
+            }}
+          />
+        </label>
+        <label className={styles.q}>
+          <span>Note <em>(staff only)</em></span>
+          <textarea
+            name="internalNote"
+            rows={1}
+            value={internalNote}
+            disabled={Boolean(pending)}
+            placeholder="Visible only to authorised academy staff"
+            onChange={(event) => {
+              setInternalNote(event.target.value)
+              resetMutation()
+            }}
+          />
+        </label>
+      </div>
 
-          <label className={`${styles.balanceMetric} ${styles.balanceAmountMetric}`}>
-            <span>Amount received</span>
-            <span className={styles.balanceMoneyInput}>
-              <span aria-hidden="true">₹</span>
-              <input
-                ref={amountRef}
-                name="amountReceived"
-                inputMode="decimal"
-                autoComplete="off"
-                value={amount}
-                disabled={Boolean(pending)}
-                aria-invalid={amountInvalid || undefined}
-                aria-describedby={amountInvalid
-                  ? `payment-amount-help ${RAPID_DESK_FEEDBACK_ID}`
-                  : "payment-amount-help"}
-                onChange={(event) => editAmount(event.target.value)}
-              />
-            </span>
-            <small id="payment-amount-help">Total outstanding {formatInr(totalOutstandingPaise)}</small>
-          </label>
-
-          <span className={styles.balanceOperator} aria-hidden="true">=</span>
-
-          <div className={`${styles.balanceMetric} ${styles.balanceProjectedMetric}`}>
-            <span>Projected balance</span>
-            <strong>
-              {projectedBalancePaise === null || projectedBalancePaise < 0
-                ? "—"
-                : formatInr(projectedBalancePaise)}
-            </strong>
-            <small>
-              {projectedBalancePaise !== null && projectedBalancePaise < 0
-                ? `Exceeds balance by ${formatInr(Math.abs(projectedBalancePaise))}`
-                : "After this payment is recorded"}
-            </small>
-          </div>
-        </div>
-
-        <div className={styles.balanceMetadata}>
-          <label className={styles.balanceField}>
-            <span>Received on</span>
-            <input
-              name="receivedOn"
-              type="date"
-              max={getAcademyDateKey()}
-              value={receivedOn}
-              disabled={Boolean(pending)}
-              onChange={(event) => {
-                receivedOnChosen.current = true
-                setReceivedOn(event.target.value)
-                resetMutation()
-              }}
-            />
-          </label>
-
-          <label className={styles.balanceField}>
-            <span>Payment method</span>
-            <select
-              aria-label="Offline payment method"
-              name="paymentMethod"
-              value={method}
-              disabled={Boolean(pending)}
-              onChange={(event) => {
-                setMethod(event.target.value as PaymentMethod)
-                resetMutation()
-              }}
-            >
-              {paymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-          </label>
-
-          <label className={styles.balanceField}>
-            <span>Reference <em>Optional</em></span>
-            <input
-              name="externalReference"
-              value={externalReference}
-              disabled={Boolean(pending)}
-              placeholder="UPI or cheque reference"
-              onChange={(event) => {
-                setExternalReference(event.target.value)
-                resetMutation()
-              }}
-            />
-          </label>
-
-          <label className={`${styles.balanceField} ${styles.balanceNoteField}`}>
-            <span>Internal note <em>Optional</em></span>
-            <textarea
-              name="internalNote"
-              rows={2}
-              value={internalNote}
-              disabled={Boolean(pending)}
-              placeholder="Visible only to authorised academy staff"
-              onChange={(event) => {
-                setInternalNote(event.target.value)
-                resetMutation()
-              }}
-            />
-          </label>
-        </div>
-
-        {reviewedAmountPaise === null ? (
-          <div className={styles.balanceReviewPrompt}>
-            <InlineNotice
-              action={feedback?.action}
-              className={styles.notice}
-              id={RAPID_DESK_FEEDBACK_ID}
-              message={feedback?.message}
-              reserveSpace={false}
-              tone={feedback?.tone}
-            />
-            <div>
-              <span>Allocation review</span>
-              <p>Review exactly how this payment will be applied.</p>
-            </div>
+      {reviewedAmountPaise === null ? (
+        <>
+          <InlineNotice
+            action={feedback?.action}
+            id={RAPID_DESK_FEEDBACK_ID}
+            message={feedback?.message}
+            reserveSpace={false}
+            tone={feedback?.tone}
+          />
+          <div className={styles.actions}>
             <button
-              className={styles.primaryButton}
+              className={styles.primary}
               type="button"
               disabled={Boolean(pending)}
               onClick={() => void reviewAllocation()}
             >
               {pending === "preview"
                 ? "Reviewing…"
-                : feedback?.offerRetry ? "Review allocation again" : "Review allocation"}
+                : feedback?.offerRetry ? "Review split again" : "Review split"}
             </button>
           </div>
-        ) : (
-          <div className={styles.balanceAllocationReview}>
-            <div className={styles.balanceAllocationHeading}>
-              <div>
-                <span>Allocation review</span>
-                <strong>{formatInr(reviewedAmountPaise)} across outstanding fees</strong>
-              </div>
-              <button type="button" disabled={Boolean(pending)} onClick={() => editAmount(amount)}>
+        </>
+      ) : (
+        <>
+          <div className={styles.split}>
+            <div className={styles.splitHead}>
+              <span>Goes to · {formatInr(reviewedAmountPaise)}</span>
+              <button className={styles.plainLink} type="button" disabled={Boolean(pending)} onClick={() => editAmount(amount)}>
                 Recalculate
               </button>
             </div>
-
-            <div className={styles.balanceAllocationRows}>
-              {payableCharges.map((charge) => (
-                <label key={charge.id} className={styles.balanceAllocationRow}>
-                  <span>
-                    <strong>{charge.description}</strong>
-                    <small>{charge.feeReference} · Available {formatInr(charge.outstandingPaise)}</small>
-                  </span>
-                  <span className={styles.balanceAllocationInput}>
-                    <span aria-hidden="true">₹</span>
-                    <input
-                      id={`payment-allocation-${charge.id}`}
-                      name={`allocation.${charge.id}`}
-                      inputMode="decimal"
-                      aria-label={`Amount allocated to ${charge.description}`}
-                      value={allocationValues[charge.id] ?? "0"}
-                      disabled={Boolean(pending)}
-                      onChange={(event) => {
-                        setAllocationValues((current) => ({
-                          ...current,
-                          [charge.id]: event.target.value,
-                        }))
-                        resetMutation()
-                      }}
-                    />
-                  </span>
-                </label>
-              ))}
-            </div>
-
-            <div className={styles.balancePaymentFooter}>
-              <InlineNotice
-                action={feedback?.action}
-                className={styles.notice}
-                message={feedback?.message ?? (
-                  allocationValidation && !allocationValidation.ok
-                    ? allocationValidation.message
-                    : undefined
-                )}
-                reserveSpace={false}
-                tone={feedback?.tone ?? (
-                  allocationValidation && !allocationValidation.ok ? "error" : undefined
-                )}
-              />
-              <div className={styles.balanceAllocationTotal}>
-                <span>Allocated</span>
-                <strong>
-                  {formatInr(allocationValidation?.totalPaise ?? 0)} of {formatInr(reviewedAmountPaise)}
-                </strong>
-              </div>
-              <button
-                className={styles.primaryButton}
-                type="submit"
-                disabled={Boolean(pending) || !allocationValidation?.ok}
-              >
-                {pending === "record"
-                  ? "Recording…"
-                  : feedback?.offerRetry ? "Record payment again" : "Record payment"}
-              </button>
-            </div>
+            {payableCharges.map((charge) => (
+              <label key={charge.id} className={styles.splitRow}>
+                <span>
+                  <strong>{charge.description}</strong>
+                  <small>{charge.feeReference} · {formatInr(charge.outstandingPaise)} left</small>
+                </span>
+                <span className={styles.splitInput}>
+                  <span aria-hidden="true">₹</span>
+                  <input
+                    id={`payment-allocation-${charge.id}`}
+                    name={`allocation.${charge.id}`}
+                    inputMode="decimal"
+                    aria-label={`Amount allocated to ${charge.description}`}
+                    value={allocationValues[charge.id] ?? "0"}
+                    disabled={Boolean(pending)}
+                    onChange={(event) => {
+                      setAllocationValues((current) => ({
+                        ...current,
+                        [charge.id]: event.target.value,
+                      }))
+                      resetMutation()
+                    }}
+                  />
+                </span>
+              </label>
+            ))}
           </div>
-        )}
-      </form>
-    </section>
+          <InlineNotice
+            action={feedback?.action}
+            message={feedback?.message ?? (
+              allocationValidation && !allocationValidation.ok
+                ? allocationValidation.message
+                : undefined
+            )}
+            reserveSpace={false}
+            tone={feedback?.tone ?? (
+              allocationValidation && !allocationValidation.ok ? "error" : undefined
+            )}
+          />
+          <div className={styles.actions}>
+            <span className={styles.placed}>
+              {formatInr(allocationValidation?.totalPaise ?? 0)} of {formatInr(reviewedAmountPaise)} placed
+            </span>
+            <button
+              className={styles.primary}
+              type="submit"
+              disabled={Boolean(pending) || !allocationValidation?.ok}
+            >
+              {pending === "record"
+                ? "Recording…"
+                : feedback?.offerRetry ? "Record payment again" : "Record payment"}
+            </button>
+          </div>
+        </>
+      )}
+    </form>
   )
 }
 
@@ -506,8 +478,6 @@ export function FinancialsRapidDesk({
     setAddressQuery(initialQuery)
     setQuery(initialQuery.slice(0, 120))
   }
-  // The dashboard's overdue stamp opens this list, so it opens showing those players
-  const [resultsExpanded, setResultsExpanded] = useState(Boolean(initialQuery) || workspace.scope === "overdue")
   const [completionFeedback, setCompletionFeedback] = useState<ActionFeedback | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectedPlayerId = workspace.selectedLedger?.playerId ?? null
@@ -534,235 +504,174 @@ export function FinancialsRapidDesk({
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setResultsExpanded(true)
     navigate(rapidDeskHref({ query, scope: workspace.scope }))
   }
 
   function readyForNextPlayer(message: string) {
     setCompletionFeedback({ message, tone: "success" })
     setQuery("")
-    setResultsExpanded(true)
     router.replace(rapidDeskHref({ query: "", scope: workspace.scope }))
     window.setTimeout(() => searchInputRef.current?.focus(), 0)
   }
 
+  const scopes = [
+    ["outstanding", "Owes money"],
+    ["overdue", "Overdue"],
+    ["all", "All players"],
+  ] as const
+
   return (
-    <div className={`${styles.workspace} page-shell`}>
-      <div className={styles.backRow}>
+    <div className={`${styles.page} page-shell`}>
+      <div className={styles.back}>
         <Link href={workspace.selectedLedger ? finderHref : "/coach"}>
           <ArrowLeft aria-hidden="true" />
           {workspace.selectedLedger ? "Back to player list" : "Back to dashboard"}
         </Link>
       </div>
 
-      <header className={`${styles.rapidDeskHeader} ${styles.balanceHeader}`}>
-        <div>
-          <span className="eyebrow">Financials</span>
-          <h1>Record offline payment</h1>
-        </div>
-        <p>Find a player and record a payment the coach has already received outside the portal.</p>
-      </header>
+      <div className={styles.head}>
+        <h1 className={styles.title}>Record payment</h1>
+      </div>
 
       {completionFeedback ? (
         <InlineNotice
-          className={styles.rapidCompletionNotice}
           message={completionFeedback.message}
           reserveSpace={false}
           tone={completionFeedback.tone}
         />
       ) : null}
 
-      <section
-        className={workspace.selectedLedger ? styles.balanceWorkspace : styles.rapidDesk}
-        aria-labelledby={workspace.selectedLedger ? "quick-payment-title" : "rapid-desk-search-title"}
-      >
-        {!workspace.selectedLedger ? (
-          <div className={styles.rapidSearchPanel}>
-            <div className={styles.rapidFinderToolbar}>
-              <div className={styles.directoryHeading}>
-                <span>Quick record</span>
-                <h2 id="rapid-desk-search-title">Find a player</h2>
-              </div>
-
-              <div className={styles.rapidFinderControls}>
-                <form className={styles.search} role="search" onSubmit={submitSearch}>
-                  <Search aria-hidden="true" />
-                  <label className="sr-only" htmlFor="rapid-financial-player-search">Search players</label>
-                  <input
-                    ref={searchInputRef}
-                    id="rapid-financial-player-search"
-                    name="q"
-                    type="search"
-                    autoComplete="off"
-                    maxLength={120}
-                    value={query}
-                    placeholder="Name, Academy ID or fee reference"
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                  <button type="submit">Search</button>
-                </form>
-
-                <div className={styles.rapidScope} role="group" aria-label="Choose payment list">
-                  {([
-                    ["outstanding", "Outstanding"],
-                    ["overdue", "Overdue"],
-                    ["all", "All players"],
-                  ] as const).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={workspace.scope === value}
-                      className={workspace.scope === value ? styles.activeRapidScope : undefined}
-                      onClick={() => {
-                        setResultsExpanded(true)
-                        navigate(rapidDeskHref({
-                          playerId: selectedPlayerCanPay ? selectedPlayerId ?? undefined : undefined,
-                          query: initialQuery,
-                          scope: value,
-                        }))
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {workspace.scope === "all" ? (
-                  <p className={styles.rapidScopeHelp}>
-                    Only players with an outstanding registration or monthly fee can be selected.
-                  </p>
-                ) : null}
-              </div>
+      {!workspace.selectedLedger ? (
+        <section className={styles.finder} aria-labelledby="rapid-desk-search-title">
+          <h2 className="sr-only" id="rapid-desk-search-title">Find a player</h2>
+          <div className={styles.finderTop}>
+            <form className={styles.search} role="search" onSubmit={submitSearch}>
+              <Search aria-hidden="true" />
+              <label className="sr-only" htmlFor="rapid-financial-player-search">Search players</label>
+              <input
+                ref={searchInputRef}
+                id="rapid-financial-player-search"
+                name="q"
+                type="search"
+                autoComplete="off"
+                maxLength={120}
+                value={query}
+                placeholder="Name, Academy ID or fee reference"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </form>
+            <div className={styles.seg} role="group" aria-label="Choose payment list">
+              {scopes.map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={workspace.scope === value}
+                  onClick={() => navigate(rapidDeskHref({
+                    playerId: selectedPlayerCanPay ? selectedPlayerId ?? undefined : undefined,
+                    query: initialQuery,
+                    scope: value,
+                  }))}
+                >
+                  {label}{workspace.scope === value ? ` ${workspace.players.length}` : ""}
+                </button>
+              ))}
             </div>
+          </div>
+          {workspace.scope === "all" ? (
+            <p className={styles.finderNote}>
+              Only players with an outstanding registration or monthly fee can be selected.
+            </p>
+          ) : null}
 
-            <div className={styles.rapidResults}>
-              {workspace.players.length ? (
-                <>
-                  <button
-                    type="button"
-                    className={styles.rapidResultsToggle}
-                    aria-controls={resultsExpanded ? "rapid-financial-player-results" : undefined}
-                    aria-expanded={resultsExpanded}
-                    onClick={() => setResultsExpanded((current) => !current)}
-                  >
-                    <span>
-                      <strong role="status">
-                        {workspace.players.length} {workspace.players.length === 1 ? "player" : "players"}
-                      </strong>
-                      <small>
-                        {workspace.scope === "outstanding"
-                          ? "With payment due"
-                          : workspace.scope === "overdue" ? "Past their due date" : "Current directory"}
+          {workspace.players.length ? (
+            <ul className={styles.payers} id="rapid-financial-player-results">
+              {workspace.players.map((player) => {
+                // A player whose fee plans have all ended left or stopped
+                // fees; they need no plan set up.
+                const showsStatus = player.paymentEligible
+                  || player.hasActiveFeePlan
+                  || player.feePlanEnded
+                const content = (
+                  <>
+                    <span className={styles.badge} aria-hidden="true">
+                      {player.fullName.split(/\s+/u).slice(0, 2).map((part) => part[0]).join("")}
+                    </span>
+                    <span className={styles.who}>
+                      <strong>{player.fullName}</strong>
+                      <small>{player.academyId}</small>
+                    </span>
+                    <span className={styles.amount}>
+                      {formatInr(player.outstandingPaise)}
+                      <small data-status={showsStatus ? player.status : "setup_required"}>
+                        {showsStatus ? statusLabels[player.status] : "Fee plan required"}
                       </small>
                     </span>
-                    <span>
-                      {resultsExpanded ? "Hide list" : "Show list"}
-                      <ChevronDown aria-hidden="true" />
-                    </span>
-                  </button>
-                  {resultsExpanded ? (
-                    <div id="rapid-financial-player-results">
-                      <ul className={styles.playerList}>
-                        {workspace.players.map((player) => {
-                          // A player whose fee plans have all ended left or stopped
-                          // fees; they need no plan set up.
-                          const showsStatus = player.paymentEligible
-                            || player.hasActiveFeePlan
-                            || player.feePlanEnded
-                          const displayStatus = showsStatus
-                            ? statusLabels[player.status]
-                            : "Fee plan required"
-                          const displayStatusClass = styles[showsStatus
-                            ? `status_${player.status}`
-                            : "status_setup_required"]
-                          const content = (
-                            <>
-                              <span className={styles.playerInitials} aria-hidden="true">
-                                {player.fullName.split(/\s+/u).slice(0, 2).map((part) => part[0]).join("")}
-                              </span>
-                              <span>
-                                <strong>{player.fullName}</strong>
-                                <small>{player.academyId}</small>
-                              </span>
-                              <span className={styles.playerAmount}>
-                                <strong>{formatInr(player.outstandingPaise)}</strong>
-                                <small className={displayStatusClass}>{displayStatus}</small>
-                              </span>
-                            </>
-                          )
+                  </>
+                )
 
-                          if (!player.paymentEligible) {
-                            return (
-                              <li key={player.playerId}>
-                                <div className={styles.staticPlayer}>{content}</div>
-                              </li>
-                            )
-                          }
+                if (!player.paymentEligible) {
+                  return (
+                    <li key={player.playerId}>
+                      <div className={styles.payer}>{content}</div>
+                    </li>
+                  )
+                }
 
-                          return (
-                            <li key={player.playerId}>
-                              <button
-                                type="button"
-                                className={selectedPlayerId === player.playerId ? styles.activePlayer : undefined}
-                                aria-current={selectedPlayerId === player.playerId ? "true" : undefined}
-                                onClick={() => navigate(rapidDeskHref({
-                                  query: initialQuery,
-                                  playerId: player.playerId,
-                                  scope: workspace.scope,
-                                }))}
-                              >
-                                {content}
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <p role="status">
-                  {workspace.scope === "outstanding"
-                    ? "No outstanding payments match this search."
-                    : workspace.scope === "overdue"
-                      ? "No overdue payments match this search."
-                      : "No matching players. Check the name or Academy ID and try again."}
-                </p>
-              )}
+                return (
+                  <li key={player.playerId}>
+                    <button
+                      type="button"
+                      className={styles.payer}
+                      aria-current={selectedPlayerId === player.playerId ? "true" : undefined}
+                      onClick={() => navigate(rapidDeskHref({
+                        query: initialQuery,
+                        playerId: player.playerId,
+                        scope: workspace.scope,
+                      }))}
+                    >
+                      {content}
+                      <span className={styles.chev} aria-hidden="true" />
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className={styles.finderNote} role="status">
+              {workspace.scope === "outstanding"
+                ? "No outstanding payments match this search."
+                : workspace.scope === "overdue"
+                  ? "No overdue payments match this search."
+                  : "No matching players. Check the name or Academy ID and try again."}
+            </p>
+          )}
+        </section>
+      ) : (
+        <section className={styles.band} key={workspace.selectedLedger.playerId} aria-labelledby="quick-payment-title">
+          <div className={`${styles.bandTop} ${styles.bandTopPad}`}>
+            <div className={styles.bandHead}>
+              <div>
+                <h2 id="quick-payment-title" tabIndex={-1}>{workspace.selectedLedger.fullName}</h2>
+                <p>{workspace.selectedLedger.academyId} · {statusLabels[workspace.selectedLedger.status]}</p>
+              </div>
+              <div className={styles.owe}>
+                <b>{formatInr(workspace.selectedLedger.outstandingPaise)}</b>
+                <span>owed</span>
+              </div>
+            </div>
+            <div className={styles.bandActions}>
+              <button className={styles.button} type="button" onClick={() => navigate(finderHref)}>
+                Change player
+              </button>
             </div>
           </div>
-        ) : null}
-
-        {workspace.selectedLedger ? (
-          <div className={styles.balancePaymentWorkspace}>
-            <div key={workspace.selectedLedger.playerId}>
-              <header className={styles.balancePlayerRail}>
-                <span className={styles.balancePlayerLabel}>Selected player</span>
-                <div className={styles.balancePlayerIdentity}>
-                  <h2 id="quick-payment-title" tabIndex={-1}>{workspace.selectedLedger.fullName}</h2>
-                  <span>
-                    {workspace.selectedLedger.academyId} · {statusLabels[workspace.selectedLedger.status]}
-                  </span>
-                </div>
-                <div className={styles.balancePlayerOutstanding}>
-                  <span>Outstanding</span>
-                  <strong>{formatInr(workspace.selectedLedger.outstandingPaise)}</strong>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate(finderHref)}
-                >
-                  Change player
-                </button>
-              </header>
-              <PaymentForm
-                charges={workspace.selectedLedger.charges}
-                onRecorded={readyForNextPlayer}
-                player={workspace.selectedLedger}
-              />
-            </div>
-          </div>
-        ) : null}
-      </section>
+          <PaymentForm
+            charges={workspace.selectedLedger.charges}
+            onRecorded={readyForNextPlayer}
+            player={workspace.selectedLedger}
+          />
+        </section>
+      )}
     </div>
   )
 }
