@@ -514,6 +514,7 @@
   align-items: center;
   justify-content: center;
   gap: 2px 14px;
+  margin-top: var(--space-group);
   color: var(--steel);
   font-size: 0.8125rem;
   line-height: 1.6;

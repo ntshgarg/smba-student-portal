@@ -50,7 +50,7 @@ export default async function ActivatePage() {
             height={488}
             priority
           />
-          <span>Player <em>Journal</em></span>
+          <span>SMBA <em>Portal</em></span>
         </Link>
 
         <div className="login-copy">
