@@ -132,7 +132,7 @@ async function openFeeIssue(page: Page, period: string) {
   await page.goto(`/coach/financials/records?view=fees&mode=monthly&period=${period}`, {
     waitUntil: "networkidle",
   })
-  await page.getByRole("button", { name: "Review fee issue" }).click()
+  await page.getByRole("button", { name: "Review & issue" }).click()
   await expect(page.getByRole("button", { name: "Issue 1 fee" })).toBeVisible()
 }
 
@@ -142,8 +142,8 @@ async function recordCashPayment(page: Page, playerId: string, amount: string) {
   })
   await expect(page.getByRole("heading", { name: "Finance Regression Player" })).toBeVisible()
   await page.getByLabel("Amount received").fill(amount)
-  await page.getByLabel("Offline payment method").selectOption({ label: "Cash" })
-  await page.getByRole("button", { name: "Review allocation" }).click()
+  await page.getByRole("radio", { name: "Cash" }).check()
+  await page.getByRole("button", { name: "Review split" }).click()
   await expect(page.getByRole("button", { name: "Record payment" })).toBeEnabled()
 }
 

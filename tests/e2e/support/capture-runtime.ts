@@ -416,15 +416,16 @@ export async function executeCaptureAction(page: Page, action: CaptureAction) {
       )
       break
     case "financial-player-record-open": {
+      await clickRequired(page.locator('ol button[aria-expanded="false"]').first(), action)
       await clickRequired(
-        page.getByRole("link", { name: /View fee record for/i }).first(),
+        page.getByRole("link", { name: /Full fee record for/i }).first(),
         action,
       )
       await page.waitForURL((url) => (
         url.pathname.startsWith("/coach/financials/players/")
         && url.searchParams.has("period")
       ), { timeout: 12_000 })
-      await page.getByRole("heading", { name: "Player fee record", exact: true })
+      await page.getByRole("heading", { name: /^Fee record for / })
         .waitFor({ state: "visible", timeout: 12_000 })
       break
     }
