@@ -219,11 +219,13 @@
   border-bottom: 0;
 }
 
-/* a row: the time in red serif, what it is, one tag, a chevron */
+/* a row: the time in red serif, what it is, one tag, a chevron. The time
+   column is sized in rem, so it grows with enlarged text, and a range such as
+   "11:30 am–1:30 pm" wraps inside it rather than spilling into the name. */
 .rowHead {
   display: grid;
   width: 100%;
-  grid-template-columns: 104px minmax(0, 1fr) auto 18px;
+  grid-template-columns: 7rem minmax(0, 1fr) auto 18px;
   align-items: center;
   gap: var(--space-copy);
   padding: 10px var(--space-copy);
@@ -240,12 +242,14 @@
 }
 
 .time {
+  min-width: 0;
   color: var(--red);
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 1.25rem;
   font-style: italic;
   font-weight: 500;
-  white-space: nowrap;
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
 .copy {
@@ -616,9 +620,14 @@
   background: var(--makeup-soft);
 }
 
+/* the holiday's name on one line, cut short if the cell is narrow; the cell's
+   accessible name carries it in full */
 .cell[data-holiday] small {
-  overflow-wrap: anywhere;
+  max-width: 100%;
+  overflow: hidden;
   color: var(--makeup-dark);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* seven columns too narrow for "WED" (a phone at 200% text): one letter each */
@@ -975,7 +984,7 @@
   position: relative;
   display: inline-flex;
   min-width: 6.5rem;
-  min-height: 40px;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-pill);
@@ -1059,7 +1068,7 @@
 
 @container (max-width: 45em) {
   .rowHead {
-    grid-template-columns: 76px minmax(0, 1fr) 18px;
+    grid-template-columns: 5rem minmax(0, 1fr) 18px;
     gap: 4px 10px;
   }
 
@@ -1067,6 +1076,8 @@
     grid-column: 2;
     grid-row: 2;
     justify-self: start;
+    max-width: 100%;
+    white-space: normal;
   }
 
   .rowHead .chevron {
@@ -1092,6 +1103,34 @@
 
   .outcomes li {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Narrower still (a small phone, or any phone at large text): the time takes
+   its own line above the name, so neither is squeezed into a sliver. */
+@container (max-width: 22em) {
+  .rowHead {
+    grid-template-columns: minmax(0, 1fr) 18px;
+  }
+
+  .rowHead .time {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .rowHead .copy {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .rowHead .tag {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .rowHead .chevron {
+    grid-column: 2;
+    grid-row: 1;
   }
 }
 
