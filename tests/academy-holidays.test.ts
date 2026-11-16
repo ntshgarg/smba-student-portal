@@ -16,10 +16,8 @@ import {
   expandDateRange,
   holidayClosedMessage,
 } from "@/components/coach/calendar/holiday-composer"
-import {
-  cancellationLabel,
-  holidayRemovedMessage,
-} from "@/components/coach/calendar/session-calendar"
+import { holidayRemovedMessage } from "@/components/coach/calendar/session-calendar"
+import { cancellationLabel } from "@/lib/sessions/cancellation"
 import {
   listAcademyHolidays,
   markAcademyHolidays,

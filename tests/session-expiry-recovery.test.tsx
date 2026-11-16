@@ -128,6 +128,7 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
   }),
   useMemberPortal: () => ({ players: [] }),
   useSessionPortal: () => ({
+    academyHolidays: [],
     sessionAssignments: [],
     sessionOccurrences: [{
       durationMinutes: 90,

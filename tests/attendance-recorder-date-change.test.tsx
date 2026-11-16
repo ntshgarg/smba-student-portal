@@ -19,6 +19,10 @@ const { recorderFixture } = vi.hoisted(() => ({
     // have reached the router.
     queuedTransitions: [] as Array<() => void>,
     replaced: [] as string[],
+    // What the session picker reads besides the one occurrence: holidays and
+    // other occurrences (a move's replacement), for the cancelled-reason tests.
+    holidays: [] as Array<{ dateKey: string; label: string }>,
+    otherOccurrences: [] as Array<Record<string, unknown>>,
     occurrence: {
       durationMinutes: 90,
       eligibilityDate: "2026-08-21",
@@ -124,8 +128,9 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
   }),
   useMemberPortal: () => ({ players: [] }),
   useSessionPortal: () => ({
+    academyHolidays: recorderFixture.holidays,
     sessionAssignments: [],
-    sessionOccurrences: [recorderFixture.occurrence],
+    sessionOccurrences: [recorderFixture.occurrence, ...recorderFixture.otherOccurrences],
     sessionSeries: [recorderFixture.series],
   }),
 }))
@@ -233,5 +238,43 @@ describe("player attendance recorder session picker", () => {
     const html = renderRecorder("2026-08-21", Date.parse("2026-08-21T06:00:00.000Z"))
     expect(html).toMatch(/Opens 5:00\W?pm/u)
     expect(html).not.toContain("No players")
+  })
+})
+
+/*
+ * A cancelled session on the Mark tab says why, the way the calendar says it
+ * (cancellationLabel): closed for a holiday, moved, or plainly cancelled.
+ */
+describe("player attendance recorder cancelled sessions", () => {
+  const scheduled = { ...recorderFixture.occurrence }
+
+  afterEach(() => {
+    recorderFixture.occurrence = scheduled
+    recorderFixture.holidays = []
+    recorderFixture.otherOccurrences = []
+  })
+
+  it("names the holiday that closed the day", () => {
+    recorderFixture.occurrence = { ...scheduled, holidayId: "holiday-1", status: "cancelled" } as typeof scheduled
+    recorderFixture.holidays = [{ dateKey: "2026-08-21", label: "Diwali" }]
+    expect(renderRecorder("2026-08-21")).toContain("Closed for Diwali")
+  })
+
+  it("says Moved when a replacement session runs", () => {
+    recorderFixture.occurrence = { ...scheduled, status: "cancelled" }
+    recorderFixture.otherOccurrences = [{
+      ...scheduled,
+      id: "occurrence-2",
+      occurrenceDate: "2026-08-23",
+      replacementForOccurrenceId: "occurrence-1",
+      startsAt: "2026-08-23T11:30:00.000Z",
+      status: "scheduled",
+    }]
+    expect(renderRecorder("2026-08-21")).toContain(">Moved<")
+  })
+
+  it("still says Cancelled for an ordinary cancellation", () => {
+    recorderFixture.occurrence = { ...scheduled, status: "cancelled" }
+    expect(renderRecorder("2026-08-21")).toContain(">Cancelled<")
   })
 })

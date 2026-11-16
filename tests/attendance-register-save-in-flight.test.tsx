@@ -136,6 +136,7 @@ vi.mock("@/components/coach/coach-portal-provider", () => ({
     players: [{ member: { fullName: "Asha Rao", id: "player-1", trainingStartOn: "2026-08-01" } }],
   }),
   useSessionPortal: () => ({
+    academyHolidays: [],
     sessionAssignments: [{
       effectiveFrom: "2026-08-01",
       effectiveTo: null,
