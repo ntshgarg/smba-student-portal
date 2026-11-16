@@ -120,7 +120,7 @@ describe("Player Onboarding Next-Step Register", () => {
       />,
     )
 
-    expect(html).toContain("Requested 15 Aug · removed in 3 days")
+    expect(html).toContain("Requested 15 Aug ·\u00a0removed in 3 days")
   })
 
   it("renders junior-coach requests as staff approval without player assessment copy", () => {

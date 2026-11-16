@@ -405,7 +405,7 @@ export function SessionStep({
                   checked={series.id === seriesId}
                   onChange={() => chooseSeries(series)}
                 />
-                <strong>{series.title}</strong>
+                <strong>{series.programme} ·&nbsp;{series.batch}</strong>
                 <small>{[
                   series.venue,
                   firstSlot
