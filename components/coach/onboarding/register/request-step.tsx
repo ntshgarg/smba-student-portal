@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, Eye, X } from "lucide-react"
+import { ArrowRight, Eye, EyeOff, X } from "lucide-react"
 import { useState } from "react"
 
 import {
@@ -153,21 +153,24 @@ export function RequestStep({
         <div className={styles.contactBox}>
           <div>
             <span className={styles.label}>Contact</span>
-            {contactShown ? (
-              <dl id={`onboarding-${item.id}-contact`}>
-                {contact.map((entry) => (
-                  <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}</dd></div>
-                ))}
-              </dl>
-            ) : (
-              <p>{contact.map((entry) => entry.label).join(", ")}</p>
-            )}
+            <dl id={`onboarding-${item.id}-contact`} hidden={!contactShown}>
+              {contact.map((entry) => (
+                <div key={entry.label}><dt>{entry.label}</dt><dd>{entry.value}</dd></div>
+              ))}
+            </dl>
+            {contactShown ? null : <p>{contact.map((entry) => entry.label).join(", ")}</p>}
           </div>
-          {contactShown ? null : (
-            <button className={styles.button} type="button" onClick={() => setContactShown(true)}>
-              <Eye aria-hidden="true" /> Show contact
-            </button>
-          )}
+          {/* A toggle that stays put, so focus is not dropped when it is pressed. */}
+          <button
+            className={styles.button}
+            type="button"
+            aria-controls={`onboarding-${item.id}-contact`}
+            aria-expanded={contactShown}
+            onClick={() => setContactShown((shown) => !shown)}
+          >
+            {contactShown ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+            {contactShown ? "Hide contact" : "Show contact"}
+          </button>
         </div>
       ) : null}
       {/*

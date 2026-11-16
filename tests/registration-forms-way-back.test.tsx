@@ -94,6 +94,15 @@ describe("the duplicate hint on a request", () => {
     expect(html).toContain("Approving gives them a new Academy ID")
   })
 
+  it("keeps the contact details behind a toggle that stays in place", () => {
+    // The button used to remove itself when pressed, dropping keyboard focus on the page.
+    const html = renderToStaticMarkup(<RequestStep item={request} onSuccess={vi.fn()} />)
+
+    expect(html).toContain('aria-controls="onboarding-request-1-contact" aria-expanded="false"')
+    expect(html).toContain("Show contact")
+    expect(html).toMatch(/<dl id="onboarding-request-1-contact" hidden="">/u)
+  })
+
   it("dates a request in India time, not UTC", () => {
     const html = renderToStaticMarkup(
       // 01:30 on 13 Nov in India.

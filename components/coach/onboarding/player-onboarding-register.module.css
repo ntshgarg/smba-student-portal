@@ -692,6 +692,10 @@
   margin: 4px 0 0;
 }
 
+.contactBox dl[hidden] {
+  display: none;
+}
+
 .contactBox dl div {
   display: flex;
   flex-wrap: wrap;
