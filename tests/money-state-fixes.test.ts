@@ -44,6 +44,7 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
     legacy: "31000000-0000-4000-8000-0000000000cb",
     returner: "31000000-0000-4000-8000-0000000000cc",
     rejoiner: "31000000-0000-4000-8000-0000000000cd",
+    leaver: "31000000-0000-4000-8000-0000000000ce",
   }
   const serials: Record<string, number> = {}
   let nextMutation = 0
@@ -549,6 +550,19 @@ describe("fee plans, withdrawal refunds, receipts and fee status", () => {
       refundWindow: null,
     })
   })
+  it("lets Archive pass a month whose fee was voided as a waiver", () => {
+    const october = charge(players.leaver, "2026-10")
+    expect(finance.readFirstUnissuedMonthLabel(database, players.leaver, now)).toBeNull()
+    finance.voidCharge({
+      chargeId: october.id,
+      expectedChargeRevision: october.recordRevision,
+      idempotencyKey: "void-leaver-october",
+      reason: "Left on the 2nd; October waived",
+    }, context())
+    // It used to read "October 2026 fees are not issued" for good.
+    expect(finance.readFirstUnissuedMonthLabel(database, players.leaver, now)).toBeNull()
+  })
+
   it("reads a voided month as not issued in the register, as everywhere else", () => {
     const firstNovember = new Date("2026-11-01T05:00:00.000Z")
     const november = charge(players.changer, "2026-11")

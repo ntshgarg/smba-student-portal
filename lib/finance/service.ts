@@ -4665,7 +4665,9 @@ export function readPlayerFinancialCloseoutState(
 /**
  * The first month, from when tracking began, whose fee Issue fees would still
  * issue for this player. Archiving drops a player from Issue fees, so a month
- * left unissued then could never be billed.
+ * left unissued then could never be billed. A month whose fee the coach voided
+ * counts as decided -- waived, as a voided registration fee already is --
+ * otherwise a waived month blocked Archive until it was billed after all.
  */
 export function readFirstUnissuedMonthLabel(
   database: SmbaDatabaseExecutor,
@@ -4675,7 +4677,14 @@ export function readFirstUnissuedMonthLabel(
   const activation = readFinanceActivation(database)
   if (!activation) return null
   const current = getAcademyMonthKey(now)
+  const voidedPeriods = new Set(database.select({ period: financialCharges.billingPeriod })
+    .from(financialCharges).where(and(
+      eq(financialCharges.playerAccountId, playerId),
+      eq(financialCharges.type, "monthly_training"),
+      eq(financialCharges.lifecycle, "void"),
+    )).all().map((row) => row.period))
   for (let period = activation.trackingMonth; period <= current; period = nextMonth(period)) {
+    if (voidedPeriods.has(period)) continue
     if (playersAwaitingMonthlyFee(database, period, now).has(playerId)) return monthKeyLabel(period)
   }
   return null
